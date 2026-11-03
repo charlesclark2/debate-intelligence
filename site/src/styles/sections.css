@@ -701,3 +701,60 @@
 .recent-results__where {
   font-size: var(--font-size-small);
 }
+
+/*
+ * Announcements (v1-e37-t03): the home page's band, the /news/ list and an announcement's own page.
+ * Each summary is a panel like a results group, so the two lists read as one family.
+ */
+.announcement-list {
+  display: grid;
+  gap: var(--space-4);
+  margin: 0 0 var(--space-5);
+  padding: 0;
+  list-style: none;
+}
+
+.section--tinted .announcement-list {
+  margin-bottom: 0;
+}
+
+.announcement-summary {
+  padding: var(--space-4) var(--space-5);
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-medium);
+  overflow-wrap: anywhere;
+}
+
+.announcement-summary__title {
+  margin: 0;
+}
+
+.announcement-summary__meta,
+.announcement-date {
+  margin: var(--space-1) 0 var(--space-2);
+  color: var(--color-text-heading);
+  font-weight: var(--font-weight-bold);
+}
+
+.announcement-summary__pinned {
+  display: inline-block;
+  margin-left: var(--space-2);
+  padding: 0 var(--space-2);
+  border: 2px solid var(--color-brand-warm);
+  border-radius: var(--radius-small);
+  color: var(--color-text-body);
+}
+
+.announcement-summary__summary,
+.announcement-empty {
+  margin: 0;
+}
+
+.announcement-figure {
+  margin: 0 0 var(--space-5);
+}
+
+.announcement-back {
+  margin-top: var(--space-5);
+}

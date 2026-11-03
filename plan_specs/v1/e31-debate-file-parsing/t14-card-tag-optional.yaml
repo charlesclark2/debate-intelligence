@@ -50,9 +50,10 @@ spec:
       description: >-
         Added by the PM, 2026-10-15, from v1-e31-t11's Follow-up work 8: the `fingerprint_version`
         field description in `debate_core/domain/card_occurrence.py` says the exact digest is the
-        same in card-fingerprint-v1, v2 and v3.
+        same in card-fingerprint-v1, v2, v3 and v4. Amended by the PM, 2026-10-19: v4 came with
+        v1-e31-t20, which changed clusters only, so the description names it too.
 status:
-  phase: Pending
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

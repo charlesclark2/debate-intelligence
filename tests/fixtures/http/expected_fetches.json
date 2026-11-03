@@ -1,0 +1,90 @@
+{
+  "news-article": {
+    "access_status": "ACCESSIBLE",
+    "exit_code": 0,
+    "canonical_url": "https://www.dailymeridian.example/science/2026/09/14/mammoth-revival-years-away",
+    "title": "Scientists Say Mammoth Revival Is Years Away",
+    "identifiers": {},
+    "paragraph_count": 5,
+    "extractor": "trafilatura",
+    "marker_id": null,
+    "reason_starts": "The text was extracted"
+  },
+  "think-tank-report": {
+    "access_status": "ACCESSIBLE",
+    "exit_code": 0,
+    "canonical_url": "https://www.harwell-institute.example/research/opportunity-cost-of-de-extinction",
+    "title": "The Opportunity Cost of De-Extinction",
+    "identifiers": {},
+    "paragraph_count": 10,
+    "extractor": "trafilatura",
+    "marker_id": null,
+    "reason_starts": "The text was extracted"
+  },
+  "government-press-release": {
+    "access_status": "ACCESSIBLE",
+    "exit_code": 0,
+    "canonical_url": "https://www.fosw.example.gov/news/2026/06/agency-announces-grants",
+    "title": "Agency Announces Grants for Habitat Protection | Federal Office of Synthetic Wildlife",
+    "identifiers": {},
+    "paragraph_count": 4,
+    "extractor": "trafilatura",
+    "marker_id": null,
+    "reason_starts": "The text was extracted"
+  },
+  "open-access-pdf": {
+    "access_status": "ACCESSIBLE",
+    "exit_code": 0,
+    "canonical_url": "https://journal.synthetic-conservation.example/doi/pdf/10.5555/jscs.2026.0012",
+    "title": "https://journal.synthetic-conservation.example/doi/pdf/10.5555/jscs.2026.0012",
+    "identifiers": {"doi": "10.5555/jscs.2026.0012"},
+    "paragraph_count": 16,
+    "extractor": "pypdf",
+    "marker_id": null,
+    "reason_starts": "The text was extracted"
+  },
+  "paywalled": {
+    "access_status": "PAYWALLED",
+    "exit_code": 3,
+    "canonical_url": "https://www.harborreview.example/politics/2026/10/inside-the-tariff-talks",
+    "title": "https://www.harborreview.example/politics/2026/10/inside-the-tariff-talks",
+    "identifiers": {},
+    "paragraph_count": null,
+    "extractor": null,
+    "marker_id": "extractor-is-accessible-for-free",
+    "reason_starts": "The page declares itself paywalled"
+  },
+  "robots-disallowed": {
+    "access_status": "ROBOTS_DISALLOWED",
+    "exit_code": 3,
+    "canonical_url": "https://www.closed-stacks.example/archive/2026/water-rights-ruling",
+    "title": "https://www.closed-stacks.example/archive/2026/water-rights-ruling",
+    "identifiers": {},
+    "paragraph_count": null,
+    "extractor": null,
+    "marker_id": null,
+    "reason_starts": "robots.txt keeps the platform from this URL"
+  },
+  "not-found": {
+    "access_status": "NOT_FOUND",
+    "exit_code": 3,
+    "canonical_url": "https://www.prairiedispatch.example/news/2026/10/county-fair-moved",
+    "title": "https://www.prairiedispatch.example/news/2026/10/county-fair-moved",
+    "identifiers": {},
+    "paragraph_count": null,
+    "extractor": null,
+    "marker_id": null,
+    "reason_starts": "The server has no document at this URL (404)"
+  },
+  "bot-challenge": {
+    "access_status": "BLOCKED",
+    "exit_code": 3,
+    "canonical_url": "https://www.northwindpost.example/world/2026/10/ferry-strike-ends",
+    "title": "https://www.northwindpost.example/world/2026/10/ferry-strike-ends",
+    "identifiers": {},
+    "paragraph_count": null,
+    "extractor": null,
+    "marker_id": "cloudflare-interstitial-title",
+    "reason_starts": "The server refused the request (403)"
+  }
+}

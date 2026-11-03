@@ -38,7 +38,7 @@ from debate_core.application.ports.suppression import (
     SuppressionEntry,
 )
 from debate_core.integrations.s3 import SHA256_METADATA_NAME, S3EvidenceObjectStore
-from debate_core.testing.fakes import InMemoryAppendOnlyRecord, empty_suppression_list
+from debate_core.testing.fakes.suppression import InMemoryAppendOnlyRecord, empty_suppression_list
 
 if TYPE_CHECKING:  # pragma: no cover - import for the type checker only
     from mypy_boto3_s3.client import S3Client

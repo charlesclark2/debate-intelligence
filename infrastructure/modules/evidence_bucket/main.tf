@@ -15,8 +15,9 @@
 #      ADR-0010 rule 4 — prod evidence unreadable by a dev-scoped credential — is enforced by a
 #      key policy and a name-scoped IAM deny rather than by convention.
 #   3. No lifecycle rule ever expires a current object version, except under exports/, which
-#      holds regenerable zip downloads. Evidence is deleted on request (docs/runbooks/caselist-removal.md)
-#      or not at all.
+#      holds regenerable zip downloads, and under parsed/ an object the operator has tagged as part of
+#      a superseded version directory (v1-e31-t16), which is derived and reproducible. Evidence is
+#      deleted on request (docs/runbooks/caselist-removal.md) or not at all.
 #
 # The key layout that lives in this bucket is documented in
 # docs/architecture/evidence-store-layout.md; local.evidence_prefixes below is the machine-readable
@@ -46,6 +47,28 @@ locals {
   # current versions a lifecycle rule may expire.
   export_prefix          = "exports/"
   export_expiration_days = 1
+
+  # Superseded parsed-store version directories (v1-e31-t16). `debate-research caselist retire
+  # --bucket` tags every object of one with this tag, under the everyday permission set, which can
+  # tag but not delete; debate_core's ports/version_directories.py writes the same pair, and a test
+  # there reads it from this file.
+  #
+  # An Expiration counts days from an object's creation, not from when it was tagged, so a grace
+  # period written there would be gone already for a directory older than it. So the current
+  # version expires a day after creation, which for any directory worth retiring is the next
+  # lifecycle run, and the grace period is how long the version is then kept as noncurrent,
+  # counted from that day. Within it the directory is restored by copying a version back; before
+  # the first lifecycle run, by setting the tag to `restored` (docs/runbooks/parsed-store-retention.md).
+  retired_parsed_prefix            = "parsed/"
+  retired_parsed_tags              = { "debate-retention" = "superseded" }
+  retired_parsed_expiration_days   = 1
+  retired_parsed_grace_period_days = 30
+
+  # The weekly run's lock object (v1-e40-t04, ADR-0020 (4)): which runner holds a lease to write to
+  # this bucket. debate_core's RUN_LOCK_KEY (application/caselist/run_lock.py) names the same key,
+  # and every write of it there is a conditional PutObject. The bucket policy below refuses any
+  # other kind of write to it (v1-e40-t07).
+  run_lock_key = "reports/sync/run-lock.json"
 
   # Nothing here is large enough that an abandoned multipart upload should be paid for for a week
   # and a day. Parts of an incomplete upload are billed and are invisible in a normal listing.
@@ -282,6 +305,52 @@ resource "aws_s3_bucket_lifecycle_configuration" "evidence" {
       days_after_initiation = local.abort_incomplete_multipart_upload_days
     }
   }
+
+  # The one rule beside exports/ that expires current versions, and only those the operator tagged:
+  # a superseded parsed/ version directory, which nothing reads and `caselist parse` can rebuild from
+  # the sources (v1-e31-t16). Untagged parsed/ objects, the current directory among them, are never
+  # touched by it. In prod its noncurrent expiry is shorter than the 365 days of the rule above; the
+  # earlier deletion applies. Last in the list, so adding it changes no rule before it in a plan.
+  rule {
+    id     = "expire-retired-parsed-version-directories"
+    status = "Enabled"
+
+    filter {
+      and {
+        prefix = local.retired_parsed_prefix
+        tags   = local.retired_parsed_tags
+      }
+    }
+
+    expiration {
+      days = local.retired_parsed_expiration_days
+    }
+
+    noncurrent_version_expiration {
+      noncurrent_days = local.retired_parsed_grace_period_days
+    }
+  }
+
+  # Expiring a retired object's current version leaves a delete marker in its place, and once the
+  # grace period has deleted the version behind it the marker is orphaned: an "expired object delete
+  # marker", which hides nothing. The rule above cannot remove it: a delete marker carries no tags,
+  # and S3 refuses ExpiredObjectDeleteMarker in a rule with a tag filter. No other rule covers
+  # parsed/ (the exports/ rule's Days clean up markers under exports/ only). So this rule, on the
+  # prefix alone, removes them and does nothing else: it expires no object (v1-e31-t16, PM ruling
+  # 2026-10-16). A takedown deletes every version of what it removes, markers included, so it
+  # leaves none for this rule.
+  rule {
+    id     = "remove-orphaned-parsed-delete-markers"
+    status = "Enabled"
+
+    filter {
+      prefix = local.retired_parsed_prefix
+    }
+
+    expiration {
+      expired_object_delete_marker = true
+    }
+  }
 }
 
 # The bucket policy. jsonencode, for the same reason as the key policy: the tests have to be able
@@ -333,6 +402,31 @@ locals {
           Condition = {
             Null            = { "s3:x-amz-server-side-encryption-aws-kms-key-id" = "false" }
             StringNotEquals = { "s3:x-amz-server-side-encryption-aws-kms-key-id" = aws_kms_key.evidence.arn }
+          }
+        },
+        {
+          # The run lock changes only by compare-and-swap (v1-e40-t07): a PutObject of its key must
+          # carry If-Match or If-None-Match, so a tool or a hand command that writes it blind is
+          # refused instead of overwriting a live holder. The two Null tests are ANDed: the deny
+          # bites only when both headers are absent. The condition keys are AWS's own
+          # (https://docs.aws.amazon.com/AmazonS3/latest/userguide/conditional-writes-enforce.html).
+          #
+          # s3:PutObject also authorises CompleteMultipartUpload, which carries the headers, and
+          # CopyObject, CreateMultipartUpload and UploadPart, which cannot: so a copy or a multipart
+          # upload onto this key is refused whatever it sends. The lock is one small PutObject.
+          # s3:ObjectCreationOperation, which AWS's example uses to let the parts through, is left
+          # out on purpose. One key, no wildcard, and nothing but PutObject: a release is a
+          # conditional PutObject of state "free", never a delete.
+          Sid       = "DenyUnconditionalWritesOfTheRunLock"
+          Effect    = "Deny"
+          Principal = { AWS = "*" }
+          Action    = "s3:PutObject"
+          Resource  = "${aws_s3_bucket.evidence.arn}/${local.run_lock_key}"
+          Condition = {
+            Null = {
+              "s3:if-match"      = "true"
+              "s3:if-none-match" = "true"
+            }
           }
         },
       ],

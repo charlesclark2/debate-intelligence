@@ -99,6 +99,8 @@ class TableSpec:
     rows: Sequence[Sequence[str]]
     title: str | None = None
     caption: str | None = None
+    lines_below: Sequence[str] = ()
+    """Printed after the table, one per line, as written; none, and nothing follows the table."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -113,6 +115,13 @@ class CommandFailure:
             exit_code=ExitCode.DOMAIN_FAILURE,
             details={"unverified": 3, "total": 12},
         )
+
+    The panel prints each of `details` as a line, and the JSON envelope carries them whole. Where
+    `details` are a whole report, as `caselist status`'s are, `panel_details` is what the panel
+    prints instead: counts and digest prefixes a person reads, while the envelope's `details` keep
+    every field (`v1-e30-t24`). Where the message itself names every failed digest, as `caselist
+    publish`'s and `caselist pull`'s do, `panel_message` is the panel's first line in its place,
+    and the envelope's `message` is unchanged (`v1-e30-t27`).
     """
 
     code: str
@@ -120,6 +129,10 @@ class CommandFailure:
     exit_code: ExitCode
     details: Mapping[str, JsonValue] = field(default_factory=dict)
     hint: str | None = None
+    panel_details: Mapping[str, JsonValue] | None = None
+    """What the panel prints in place of :attr:`details`, or `None` to print them. Never in the JSON."""
+    panel_message: str | None = None
+    """What the panel prints in place of :attr:`message`, or `None` to print it. Never in the JSON."""
 
     @classmethod
     def from_exception(cls, exception: BaseException, *, hint: str | None = None) -> CommandFailure:
@@ -188,6 +201,7 @@ class CliOutput:
         self._mode = mode
         self._verbose = verbose
         self._stdout = stdout
+        self._stderr = stderr
         self._reported = False
         # Results are for whoever consumes the command; diagnostics are for whoever is watching.
         # highlight=False keeps Rich from colouring numbers and paths inside our own strings.
@@ -226,6 +240,8 @@ class CliOutput:
             return
         if isinstance(display, TableSpec):
             self._results.print(_render_table(display))
+            for line in display.lines_below:
+                self._results.print(line, markup=False, soft_wrap=True)
         elif display is not None:
             self._results.print(display, markup=False, soft_wrap=True)
 
@@ -265,6 +281,27 @@ class CliOutput:
             return
         self._reported = True
         self._diagnostics.print(_render_failure(failure))
+
+    def event_line(self, command: str, event: str, data: Mapping[str, JsonValue], *, text: str) -> None:
+        """Write one line of a long command's progress to stderr as it happens (`v1-e40-t32`).
+
+        In JSON mode, an object of the envelope's shape with an `event` where a result has its
+        `status`: a log read by its `command` finds it, and a reader of results, who reads `status`,
+        passes over it. In Rich mode, `text`. Stdout keeps its one result either way. Flushed at once,
+        so that a process killed for memory has nothing of it left in a buffer.
+        """
+        if not self.is_json:
+            self._diagnostics.print(text, markup=False, soft_wrap=True)
+            return
+        line: dict[str, JsonValue] = {
+            "schema_version": SCHEMA_VERSION,
+            "command": command,
+            "event": event,
+            "data": dict(data),
+        }
+        stream = self._stderr if self._stderr is not None else sys.stderr
+        stream.write(json.dumps(line, ensure_ascii=False, default=str) + "\n")
+        stream.flush()
 
     def detail(self, message: str) -> None:
         """Write a diagnostic that is only interesting with `--verbose` (stderr, both modes)."""
@@ -315,8 +352,9 @@ def _render_table(spec: TableSpec) -> Table:
 
 
 def _render_failure(failure: CommandFailure) -> Panel:
-    body = Text(failure.message)
-    for key, value in failure.details.items():
+    body = Text(failure.message if failure.panel_message is None else failure.panel_message)
+    shown = failure.details if failure.panel_details is None else failure.panel_details
+    for key, value in shown.items():
         body.append(f"\n{key}: {value}", style="dim")
     if failure.hint is not None:
         body.append(f"\n\n{failure.hint}", style="italic")

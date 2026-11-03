@@ -117,6 +117,12 @@ describe('the header navigation is the list in content/site.yaml', () => {
       }
     })
 
+    it('puts the news after the results and before how to join', () => {
+      // The coach's decision of 2026-11-02 (v1-e37-t15): News is in the header, not only the footer.
+      expect(position('news')).toBeGreaterThan(position('results'))
+      expect(position('news')).toBeLessThan(position('join'))
+    })
+
     it('explains the team before the events, and the events before how to join', () => {
       expect(position('about')).toBeLessThan(position('events'))
       expect(position('results')).toBeLessThan(position('join'))
@@ -166,6 +172,31 @@ describe('the footer carries the utility pages', () => {
     expect(inFooter).toEqual(
       navigation.utility.map((link) => withoutTrailingSlash(link.href)),
     )
+  })
+
+  /**
+   * News is in the header since v1-e37-t15 and stays in the footer, where it was before. The
+   * footer is still "every published page the header does not carry"; content/site.yaml's
+   * alwaysInFooter adds the pages it keeps besides, and nothing else.
+   */
+  it('keeps the header pages content/site.yaml names in alwaysInFooter', () => {
+    expect(settings.alwaysInFooter).toContain('news')
+    const footerHrefs = navigation.utility.map((link) => link.href)
+    for (const slug of settings.alwaysInFooter) {
+      const route = pages.find((page) => page.slug === slug)!.route
+      expect(navigation.primary.map((link) => link.href), `${slug} is not in the header`).toContain(
+        route,
+      )
+      expect(footerHrefs, `${slug} is not in the footer`).toContain(route)
+    }
+  })
+
+  it('moves no other header page into the footer', () => {
+    const kept = new Set(settings.alwaysInFooter)
+    const notInHeader = pages
+      .filter((page) => kept.has(page.slug) || !settings.primaryNavigation.includes(page.slug))
+      .map((page) => page.route)
+    expect(navigation.utility.map((link) => link.href)).toEqual(notInHeader)
   })
 
   /**
@@ -323,6 +354,27 @@ describe('a navigation that does not match the content fails the build', () => {
   it('fails when the same page is listed twice', () => {
     expect(() => buildNavigation(fixture('navigation-duplicate'))).toThrowError(
       /content\/site\.yaml: primaryNavigation lists "alpha" twice/,
+    )
+  })
+
+  it('keeps a header page in the footer when alwaysInFooter names it, in the footer order', () => {
+    const fixtureNavigation = buildNavigation(fixture('footer-keeps-a-header-page'))
+    expect(fixtureNavigation.primary.map((link) => link.href)).toEqual(['/', '/alpha/'])
+    expect(fixtureNavigation.utility.map((link) => link.href)).toEqual(['/alpha/', '/zulu/'])
+  })
+
+  it('fails, naming the slug, when alwaysInFooter lists a page that is not published', () => {
+    expect(() => buildNavigation(fixture('footer-unknown-page'))).toThrowError(
+      ContentValidationError,
+    )
+    expect(() => buildNavigation(fixture('footer-unknown-page'))).toThrowError(
+      /content\/site\.yaml: alwaysInFooter lists "ghost", which is not a published page/,
+    )
+  })
+
+  it('fails when alwaysInFooter lists the same page twice', () => {
+    expect(() => buildNavigation(fixture('footer-duplicate'))).toThrowError(
+      /content\/site\.yaml: alwaysInFooter lists "alpha" twice/,
     )
   })
 

@@ -1,0 +1,13 @@
+position_id,label,kind,weekly_teams,weekly_share,previous_teams,previous_share,delta_points,trend_label,held_back_by_team_floor
+single-payer-aff,Single payer,aff,1,0.333,2,0.500,-16.7,STEADY,true
+costs-advantage,Costs advantage,advantage,0,0.000,3,0.750,-75.0,FALLING,false
+innovation-advantage,Innovation advantage,advantage,3,1.000,2,0.500,50.0,RISING,false
+condo-bad,Condo bad,theory,0,0.000,1,0.250,-25.0,STEADY,true
+election-da,Midterms DA,da,0,0.000,1,0.250,-25.0,STEADY,true
+hospital-closures-da,Hospital closures DA,da,0,0.000,1,0.250,-25.0,STEADY,true
+provider-strikes-da,Provider strikes DA,da,0,0.000,1,0.250,-25.0,STEADY,true
+spending-da,Spending DA,da,1,0.333,1,0.250,8.3,STEADY,true
+courts-cp,Courts CP,cp,1,0.333,0,0.000,33.3,NEW,false
+states-cp,States CP,cp,0,0.000,1,0.250,-25.0,STEADY,true
+cap-k,Capitalism K,k,3,1.000,1,0.250,75.0,RISING,false
+nhi-t,T: national health insurance,t,0,0.000,1,0.250,-25.0,STEADY,true

@@ -1,0 +1,75 @@
+# TASK v1-e07-t11-congress-gov-bill-details - A bill found by search shows its latest action and committees from Congress.gov
+# Epic: E07 Discovery Provider Adapters | Release: v1.4 (Federated research from the CLI) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e07-t11-congress-gov-bill-details
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.4
+    debate/epic: v1-e07-discovery-adapters
+  annotations:
+    debate/title: "A bill found by search shows its latest action and committees from Congress.gov"
+spec:
+  # Filed by the PM, 2026-11-02, from v1-e07-t07's ruling 1 (the PM's review, 2026-11-02).
+  description: >-
+    Congress.gov's API v3 has no keyword search, so bills are found through GovInfo
+    (v1-e07-t07). Congress.gov does answer by bill: congress, type and number, which BillNumber
+    reads from a BILLS package id. For each bill a search returns, look up its latest action
+    (date and text) and its committees on Congress.gov, with the same api.data.gov key, and show
+    them beside the result. Read Congress.gov's current documentation first (no API call by the
+    session) and count the requests one search would add against the key's hourly limit; propose
+    a cap before building.
+  priority: 3
+  constraints:
+    packages: [debate_core.integrations.discovery, debate_core.application, debate_cli, packages/debate_core/tests, packages/debate_cli/tests]
+    forbidden:
+      - Logging or committing the api.data.gov key
+      - Live API calls in tests
+      - A request per bill without a cap
+  context:
+    - kind: TaskRef
+      name: v1-e07-t07-government-adapters
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        A search's bill results carry their latest action and committees from Congress.gov
+        when the key is set, within a stated cap, and are unchanged without it, by tests on
+        hand-written fixtures shown failing first.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e07-t11-congress-gov-bill-details-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.4
+    debate/epic: v1-e07-discovery-adapters
+spec:
+  description: >-
+    A bill found by search shows its latest action and committees from Congress.gov.
+  goalRef:
+    name: v1-e07-t11-congress-gov-bill-details
+  graph:
+    nodes:
+      - id: congress-gov-bill-details
+        kind: Task
+        name: Bill details
+        description: >-
+          A bill found by search shows its latest action and committees from Congress.gov.
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Bill details tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests, -k, congress]
+status:
+  phase: Pending

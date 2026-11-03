@@ -45,6 +45,29 @@ from debate_core.domain.enums import (
     SpanStyle,
     VerificationStatus,
 )
+from debate_core.domain.model_contracts import (
+    EmbeddingResponse,
+    ModelParams,
+    ModelPrompt,
+    ModelProvider,
+    ModelRequest,
+    ModelResponse,
+    ModelUsage,
+    RenderedPrompt,
+    RerankResponse,
+    RerankResult,
+    ResolvedRoute,
+    TaskClass,
+)
+from debate_core.domain.prompt_spec import (
+    PROMPT_ID_PATTERN,
+    PROMPT_VERSION_PATTERN,
+    ChangelogEntry,
+    PromptSpec,
+    PromptStatus,
+    prompt_version_key,
+)
+from debate_core.domain.provenance import GeneratedArtifactMetadata
 from debate_core.domain.schema_export import EXPORTED_MODELS, render_schemas, schema_filename
 from debate_core.domain.search import Search, SearchFilters, SearchResult
 from debate_core.domain.style_profile import (
@@ -69,6 +92,25 @@ from debate_core.domain.style_profile import (
 )
 
 __all__ = [
+    "EmbeddingResponse",
+    "ModelParams",
+    "ModelPrompt",
+    "ModelProvider",
+    "ModelRequest",
+    "ModelResponse",
+    "ModelUsage",
+    "RenderedPrompt",
+    "RerankResponse",
+    "RerankResult",
+    "ResolvedRoute",
+    "TaskClass",
+    "PROMPT_ID_PATTERN",
+    "PROMPT_VERSION_PATTERN",
+    "ChangelogEntry",
+    "GeneratedArtifactMetadata",
+    "PromptSpec",
+    "PromptStatus",
+    "prompt_version_key",
     "CROCKFORD_BASE32_ALPHABET",
     "DEFAULT_FORMAT_PROFILE",
     "EXPORTED_MODELS",

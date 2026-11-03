@@ -1,0 +1,81 @@
+# TASK v1-e40-t27-store-sync-leaves-the-run-state-alone - store sync never moves reports/sync/, so a push of pulled copies cannot overwrite the run's lock or state files
+# Epic: E40 — Weekly Caselist Run in the Cloud | Release: v1.8 (Weekly caselist run in the cloud) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e40-t27-store-sync-leaves-the-run-state-alone
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.8
+    debate/epic: v1-e40-cloud-caselist-run
+  annotations:
+    debate/title: "store sync never moves reports/sync/, so a push of pulled copies cannot overwrite the run's lock or state files"
+spec:
+  # Filed by the PM, 2026-11-01, from v1-e40-t07's writer inventory and PM question 1 (the PM's review, 2026-11-01).
+  description: >-
+    `EvidenceSyncService` plans `reports/` like any named-object prefix and skips only
+    `manifests/_run-state/`, `manifests/_suppression/` and `parsed/`. So a bucket-mode `store
+    sync --pull` copies the run lock and the five state files under `reports/sync/state/` into
+    `objects/`, and a later `store sync --push --apply` uploads those stale copies: the lock
+    with no condition (since v1-e40-t07 the bucket refuses that, and the push stops at that
+    object), and the state files blind, which no deny covers, overwriting the cloud run's live
+    state. Make `store sync` never move `reports/sync/` in either direction, in either mode, as
+    it never moves `manifests/_run-state/`, and say so in its dry run's counts. Add a test in
+    `packages/debate_core` that ties `RUN_LOCK_KEY` to the Terraform literal `run_lock_key` in
+    `infrastructure/modules/evidence_bucket/main.tf`, so the deny cannot silently guard a key
+    the code no longer uses.
+  priority: 2
+  constraints:
+    packages: [debate_core.application, debate_core.integrations, packages/debate_core/tests, debate_cli, packages/debate_cli/tests, docs/runbooks]
+    forbidden:
+      - A push or a pull that moves anything under reports/sync/
+      - Network or AWS access in any test
+  context:
+    - kind: TaskRef
+      name: v1-e40-t07-lock-writes-conditional-at-the-bucket
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        A bucket-mode and a local-mode `store sync`, pull and push, plan and move nothing
+        under `reports/sync/`, and a push after a pull that copied it leaves the bucket's
+        lock and state files as they were; the dry run says what it left out; `RUN_LOCK_KEY`
+        and the Terraform literal are held equal by test; tests shown failing first.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e40-t27-store-sync-leaves-the-run-state-alone-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.8
+    debate/epic: v1-e40-cloud-caselist-run
+spec:
+  description: >-
+    store sync never moves reports/sync/, so a push of pulled copies cannot overwrite the run's
+    lock or state files.
+  goalRef:
+    name: v1-e40-t27-store-sync-leaves-the-run-state-alone
+  graph:
+    nodes:
+      - id: store-sync-leaves-the-run-state-alone
+        kind: Task
+        name: Run state left alone
+        description: >-
+          store sync never moves reports/sync/, so a push of pulled copies cannot
+          overwrite the run's lock or state files.
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Run state left alone tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests, -k, evidence_sync]
+status:
+  phase: Pending

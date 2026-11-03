@@ -17,6 +17,7 @@ from typing import Any
 import pytest
 from hypothesis import event, given, settings
 from hypothesis import strategies as st
+from tests.evals.parser import labeller as labeller_module
 from tests.evals.parser.digests import text_digest
 from tests.evals.parser.docx_render import RenderedParagraph, RenderedRun
 from tests.evals.parser.labeller import (
@@ -58,7 +59,7 @@ from tests.evals.parser.synthetic import (
     UNDERLINED,
     build_synthetic_file,
 )
-from tests.evals.parser.worksheets import read_worksheet
+from tests.evals.parser.worksheets import read_worksheet, write_worksheet_csv
 
 from debate_core.domain.debate_files import CardCompleteness
 from debate_core.domain.style_profile import StructuralUnit as U
@@ -412,7 +413,9 @@ def test_cut_is_offered_only_for_the_first_and_last_card_of_a_block() -> None:
 
 
 def test_problems_with_a_card_are_named_on_its_rows() -> None:
-    reading = read_cards(_rows("TAG* EVIDENCE TAG CITE EVIDENCE* CITE"), ((0, 5),), {})
+    # The ANALYTIC keeps row 2's card inside the block: a TAG whose card runs on to the block's end
+    # is cut off there, and gets no warning (v1-e31-t25).
+    reading = read_cards(_rows("TAG* EVIDENCE TAG CITE EVIDENCE* CITE ANALYTIC"), ((0, 6),), {})
 
     assert any("no CITE" in note for note in reading.notes[0])
     assert any("no completeness" in note for note in reading.notes[0])
@@ -961,3 +964,224 @@ def test_the_guide_regenerates_then_labels_in_the_page_and_keeps_the_spreadsheet
     finish_step = _guide_blocks("### 6. The finish", "### The fallback: a spreadsheet")
     assert any("mark-reviewed" in block for block in finish_step)
     assert any("--write-baseline" in block for block in finish_step)
+
+
+# --------------------------------------------------------------------------------------------
+# v1-e31-t25: what the first sittings tripped over, each a warning or a refusal
+# --------------------------------------------------------------------------------------------
+
+
+def test_in_blind_mode_k_straight_after_n_gives_the_card_its_completeness(evaluation: _Evaluation) -> None:
+    """(1) Row 3 has no unit yet when `n` marks it: the start is a card all the same, so `k` sets it."""
+    app = evaluation.app(blind=True)
+    _keys(app, "p", "h", "b", "n")
+
+    state = _press(app, "k")
+
+    assert state["message"] == ""
+    assert state["row"]["index"] == 3
+    assert state["row"]["label"]["card_state"] == "FULL"
+    assert _press(app, "t")["rows"][3] == {"unit": "TAG", "checked": True}
+    assert _press(app, "Backspace")["row"]["label"]["card_state"] == "FULL"
+
+
+def test_a_start_with_no_unit_yet_is_a_card_start() -> None:
+    rows = [RowLabel(index=0, unit=None, starts_card=True), RowLabel(index=1, unit=None)]
+
+    reading = read_cards(rows, ((0, 1),), {0: CardState.FULL})
+
+    assert [(card.start, card.members, card.state) for card in reading.cards] == [(0, (0,), CardState.FULL)]
+
+
+def test_a_cite_start_directly_under_a_tag_says_the_tag_is_left_outside_its_card(
+    evaluation: _Evaluation,
+) -> None:
+    """(3) Row 3 is the pre-label card's TAG; `n` on its CITE, row 4, splits the card there."""
+    app = evaluation.app()
+    _keys(app, *["Enter"] * 4)
+
+    state = _press(app, "n")
+
+    assert state["row"]["index"] == 4 and state["row"]["label"]["starts_card"] is True
+    notes = state["row"]["label"]["notes"]
+    assert any("paragraph 3" in note and "outside" in note and "press n here" in note for note in notes), (
+        notes
+    )
+
+
+def test_n_on_a_row_that_starts_a_card_says_the_card_is_gone_and_how_to_put_it_back(
+    evaluation: _Evaluation,
+) -> None:
+    """(4) Row 3 starts the pre-label's FULL card 0. `n` there takes the card away, and says so."""
+    app = evaluation.app()
+    _keys(app, *["Enter"] * 3)
+
+    state = _press(app, "n")
+
+    assert state["row"]["label"]["starts_card"] is False
+    assert "no longer starts a card" in state["message"]
+    assert "press n again" in state["message"] and "FULL" in state["message"]
+    back = _press(app, "n")
+    assert back["message"] == "" and back["row"]["label"]["starts_card"] is True
+
+
+#: The synthetic file labeled with its second card written body first: row 8 EVIDENCE, row 9 its
+#: CITE, row 10 an analytic, all three in no card (`n` on row 8 removes the pre-label's card).
+_BODY_FIRST_KEYS = (*["Enter"] * 8, "n", "e", "Enter", "a")
+
+
+def test_a_cite_in_no_card_is_a_warning_on_the_page_and_in_check_and_import_takes_it(
+    evaluation: _Evaluation, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """(5) A body-first card is the legitimate case: warned about, never refused."""
+    app = evaluation.app()
+    state = _keys(app, *_BODY_FIRST_KEYS)
+    assert state["progress"]["left"] == 0 and state["finished"]["problems"] == []
+    headers = {**HOST, "X-Labeller-Token": app.token}
+    app.handle("POST", "/goto", headers, json.dumps({"row": 9}).encode())
+    assert any("CITE in no card" in note for note in _state(app)["row"]["label"]["notes"])
+    capsys.readouterr()
+
+    assert evaluation.run("check", evaluation.prefix, "--worksheet", str(evaluation.csv)) == 0
+
+    printed = capsys.readouterr().out
+    assert "warning: row 11, card: a CITE in no card" in printed
+    assert "ready to import" in printed
+    imported = ["import", evaluation.prefix, "--worksheet", str(evaluation.csv), "--corrected-by", "coach"]
+    assert evaluation.run(*imported) == 0
+    assert [(p.unit, p.card) for p in load_label_file(evaluation.label_file).paragraphs][8:] == [
+        (U.EVIDENCE, None),
+        (U.CITE, None),
+        (U.ANALYTIC, None),
+    ]
+
+
+@pytest.mark.parametrize(
+    "layout, block, warned",
+    [
+        # A card written body first, between two analytics: its CITE is in no card.
+        ("TAG* CITE EVIDENCE ANALYTIC EVIDENCE CITE ANALYTIC", (0, 6), [5]),
+        # A TAG nobody started, with its card wholly inside the block.
+        ("TAG* CITE EVIDENCE TAG CITE EVIDENCE ANALYTIC", (0, 6), [3, 4]),
+        # Its card runs past the end of the block: cut off, so no warning.
+        ("TAG* CITE EVIDENCE ANALYTIC TAG CITE EVIDENCE", (0, 6), []),
+        # The tag of the card at the top of the block is above it: cut off, so no warning.
+        ("UNDERTAG CITE EVIDENCE ANALYTIC TAG* CITE EVIDENCE", (0, 6), []),
+        # Two cards nobody started at the end of a block: a card never runs on through a TAG, so
+        # only the last is cut off.
+        ("TAG* CITE EVIDENCE ANALYTIC TAG CITE EVIDENCE TAG CITE EVIDENCE", (0, 9), [4, 5]),
+        # A TAG at the top of the block starts a card the block holds whole: warned.
+        ("TAG CITE EVIDENCE ANALYTIC TAG* CITE EVIDENCE", (0, 6), [0, 1]),
+    ],
+)
+def test_a_tag_or_cite_in_no_card_is_warned_unless_cut_off_at_a_block_edge(
+    layout: str, block: tuple[int, int], warned: list[int]
+) -> None:
+    reading = read_cards(_rows(layout), (block,), {0: CardState.FULL, 4: CardState.FULL})
+
+    assert sorted(i for i, notes in reading.notes.items() if any("in no card" in n for n in notes)) == warned
+
+
+def _corrected_once(evaluation: _Evaluation) -> bytes:
+    """Label the file by `_SHOWN_KEYS` (4 rows changed) and import it. Returns the pre-label's bytes."""
+    prelabel_bytes = evaluation.label_file.read_bytes()
+    _keys(evaluation.app(), *_SHOWN_KEYS)
+    imported = ["import", evaluation.prefix, "--worksheet", str(evaluation.csv), "--corrected-by", "coach"]
+    assert evaluation.run(*imported) == 0
+    assert load_label_file(evaluation.label_file).header.rows_changed_from_prelabel == 4
+    return prelabel_bytes
+
+
+def test_import_refuses_a_label_file_already_corrected_naming_its_status_and_the_flag(
+    evaluation: _Evaluation, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """(2) The second import of one worksheet used to rewrite the file and record 0 rows changed."""
+    _corrected_once(evaluation)
+    corrected = evaluation.label_file.read_bytes()
+    capsys.readouterr()
+
+    again = ["import", evaluation.prefix, "--worksheet", str(evaluation.csv), "--corrected-by", "coach"]
+    assert evaluation.run(*again) == 1
+
+    refused = capsys.readouterr().err
+    assert "CORRECTED" in refused and "--replace" in refused
+    assert evaluation.label_file.read_bytes() == corrected
+
+
+def test_import_replace_counts_against_the_stored_pre_label_not_the_label_file(
+    evaluation: _Evaluation,
+) -> None:
+    """The first import keeps the pre-label at labels/prelabels/<digest>.jsonl. Row 6 changed
+    again makes 5 rows changed from the pre-label; against the corrected file it would be 1."""
+    prelabel_bytes = _corrected_once(evaluation)
+    stored = evaluation.labels / "prelabels" / f"{evaluation.digest}.jsonl"
+    assert stored.exists(), "the first import kept no pre-label"
+    assert stored.read_bytes() == prelabel_bytes
+    worksheet = read_worksheet(evaluation.csv)
+    rows = tuple({**row, "unit": "ANALYTIC"} if row["index"] == "6" else row for row in worksheet.rows)
+    write_worksheet_csv(evaluation.csv, replace(worksheet, rows=rows))
+
+    replaced = ["import", evaluation.prefix, "--worksheet", str(evaluation.csv), "--corrected-by", "coach"]
+    assert evaluation.run(*replaced, "--replace") == 0
+
+    labels = load_label_file(evaluation.label_file)
+    assert labels.paragraphs[6].unit is U.ANALYTIC
+    assert labels.header.rows_changed_from_prelabel == 5
+    assert stored.read_bytes() == prelabel_bytes
+
+
+def test_import_replace_with_no_stored_pre_label_records_no_count_and_drops_the_review(
+    evaluation: _Evaluation, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A file corrected before import kept its pre-label has none to count against: the count is
+    left unrecorded, as for a file that never had one, rather than counted against itself."""
+    _corrected_once(evaluation)
+    stored = evaluation.labels / "prelabels" / f"{evaluation.digest}.jsonl"
+    assert stored.exists(), "the first import kept no pre-label"
+    stored.unlink()
+    labels = load_label_file(evaluation.label_file)
+    header = labels.header.model_copy(
+        update={"status": LabelStatus.COACH_REVIEWED, "reviewed_by": ReviewerRole.COACH}
+    )
+    evaluation.label_file.write_text(replace(labels, header=header).to_jsonl(), encoding="utf-8")
+    capsys.readouterr()
+
+    replaced = ["import", evaluation.prefix, "--worksheet", str(evaluation.csv), "--corrected-by", "coach"]
+    assert evaluation.run(*replaced, "--replace") == 0
+
+    after = load_label_file(evaluation.label_file).header
+    assert (after.status, after.reviewed_by, after.rows_changed_from_prelabel) == (
+        LabelStatus.CORRECTED,
+        None,
+        None,
+    )
+    printed = capsys.readouterr().out
+    assert "no pre-label is stored" in printed and "mark-reviewed" in printed
+
+
+def test_the_labellers_help_names_every_warning(
+    evaluation: _Evaluation, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """ac2: on the page, in `label --help` and in the guide."""
+    warnings = getattr(labeller_module, "WARNINGS", {})
+    assert warnings, "the labeller lists no warnings"
+    page = evaluation.app().handle("GET", "/", HOST, b"").body.decode()
+    with pytest.raises(SystemExit):
+        prelabel.main(["label", "--help"])
+    printed = " ".join(capsys.readouterr().out.split())
+    guide = " ".join((LABELS_DIRECTORY / "README.md").read_text(encoding="utf-8").split())
+
+    for name in warnings:
+        assert name in page, name
+        assert name in printed, name
+        assert name in guide, name
+
+
+def test_the_guide_writes_down_the_card_written_body_first() -> None:
+    """ac2 (6): EVIDENCE then its CITE, both labeled with a blank card."""
+    guide = (LABELS_DIRECTORY / "README.md").read_text(encoding="utf-8")
+    conventions = guide[guide.index("## Ambiguous conventions") : guide.index("## Spans")]
+
+    cases = [part for part in conventions.split("\n\n") if "body first" in part]
+    assert cases, "the Ambiguous conventions section has no card written body first"
+    assert "`EVIDENCE`" in cases[0] and "`CITE`" in cases[0] and "blank `card`" in cases[0]

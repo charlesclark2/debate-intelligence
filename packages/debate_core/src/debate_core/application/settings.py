@@ -78,10 +78,13 @@ their `DEBATE_ENV` is a bug in the program.
 from __future__ import annotations
 
 import os
+import re
 import tempfile
 import tomllib
-from collections.abc import Callable, Iterator, Mapping
+from collections.abc import Callable, Iterator, Mapping, Sequence
+from datetime import timedelta
 from enum import StrEnum
+from fnmatch import fnmatchcase
 from pathlib import Path
 from typing import Any, Final, cast
 from urllib.parse import urlsplit
@@ -94,6 +97,7 @@ from pydantic import (
     SecretStr,
     ValidationError,
     field_validator,
+    model_validator,
 )
 from pydantic_settings import (
     BaseSettings,
@@ -104,8 +108,8 @@ from pydantic_settings import (
 )
 
 from debate_core.application.errors import DomainError
-from debate_core.domain.caselist import Event
-from debate_core.evidence.near_duplicates import NearDuplicateThresholds
+from debate_core.domain.caselist import CASELIST_SLUG_PATTERN, Event
+from debate_core.domain.model_contracts import ModelProvider
 
 __all__ = [
     "BUILTIN_PROFILES",
@@ -116,10 +120,13 @@ __all__ = [
     "ENV_PREFIX",
     "PROFILE_DIRECTORY_VARIABLE",
     "PROFILE_SUBDIRECTORY",
+    "RESERVED_SETTING_PATTERNS",
     "SECRET_PLACEHOLDER",
+    "FIRST_BACKFILE_SEASON_START",
     "MAX_CASELIST_BULK_DOWNLOADS_PER_DAY",
     "MAX_CASELIST_DOWNLOADS_PER_MINUTE",
     "OPENCASELIST_API_BASE_URL",
+    "ArticleSettings",
     "CardFingerprintSettings",
     "CaselistTokenBackend",
     "ConfigurationError",
@@ -131,8 +138,11 @@ __all__ = [
     "ProviderSettings",
     "S3StorageSettings",
     "SearchProviderName",
+    "TOPIC_ENABLED_PROVIDERS",
     "Settings",
     "StorageSettings",
+    "RunStateMode",
+    "SNS_TOPIC_ARN_PATTERN",
     "SyncNotifierKind",
     "environment_for_build_channel",
     "find_repository_root",
@@ -175,6 +185,29 @@ operator can still set a lower value, or a higher one through `DEBATE_MODELS__BU
 their own machine, and `config show` names where it came from.
 """
 
+MONTHLY_MODEL_BUDGET_CEILING_USD: Final = 50.0
+"""The coach's ceiling on model spend, in USD a calendar month, across dev and prod (2026-10-27).
+
+`models.budget_usd_monthly` holds a month to it, in America/Chicago (v1-e05-t15). Both bundled
+profiles set exactly this until the promotion, because only one environment calls models today, and
+prod's daily limit is it over thirty days, rounded down to $1.50. No committed profile sets a model
+budget above it, which `test_settings_environments.py` checks. The AWS Budgets alarm
+(v1-e05-t16) watches the account's real total, which no one machine's usage log can see.
+"""
+
+RESERVED_SETTING_PATTERNS: Final = ("providers.*_api_key", "providers.*_token")
+"""Settings names this build keeps for settings a newer build may add (`v1-e41-t01`), as dotted globs.
+
+A name this build does not know is refused whatever it is: `extra="forbid"` is the typo protection,
+and a newer build's setting is no exception. A refused name that matches one of these also gets a
+hint saying a newer build may define it, and how to get past it. Each pattern is a spelling the
+providers group already uses for a credential, `openalex_api_key` and `semantic_scholar_api_key`,
+and `caselist_token`: credentials are what a `.env` carries (they are never committed to a profile),
+and a `.env` is read from the folder a command runs in, so it is where a newer checkout's setting
+reaches an older installed build. Few and written out, so that adding one is a decision a reviewer
+sees, and so that a typo elsewhere is never told an upgrade would fix it.
+"""
+
 type SourceLabeller = Callable[[str], str]
 """A layer that labels itself per field, given the field's dotted path."""
 
@@ -188,11 +221,16 @@ class ConfigurationError(DomainError):
     profile file that is not valid TOML.
     """
 
-    def __init__(self, message: str, *, field: str | None = None, source: str | None = None) -> None:
+    def __init__(
+        self, message: str, *, field: str | None = None, source: str | None = None, hint: str | None = None
+    ) -> None:
         self.field = field
         """Dotted path of the offending setting, when the failure is about one setting."""
         self.source = source
         """Where the offending value came from: a file path, an environment variable name."""
+        self.hint = hint
+        """What to do about it, when there is something to say: an unknown name a newer build may
+        define (:data:`RESERVED_SETTING_PATTERNS`)."""
         super().__init__(message)
 
 
@@ -235,7 +273,21 @@ class SearchProviderName(StrEnum):
     CROSSREF = "crossref"
     SEMANTIC_SCHOLAR = "semantic_scholar"
     RSS = "rss"
+    GOOGLE_NEWS = "google_news"
     GDELT = "gdelt"
+    FEDERAL_REGISTER = "federal_register"
+    GOVINFO = "govinfo"
+
+
+TOPIC_ENABLED_PROVIDERS: Final[frozenset[SearchProviderName]] = frozenset(
+    {SearchProviderName.FEDERAL_REGISTER, SearchProviderName.GOVINFO}
+)
+"""The providers a search asks only when its topic lists them, as well as `providers.enabled` (v1-e07-t07).
+
+The government sources are worth asking on a policy topic and noise on most others, so enabling one in
+settings is not enough: a topic's feed file names it in `government_providers` (`config/feeds/`), and a
+search with no topic, or on a topic that does not list it, never asks it.
+"""
 
 
 class SettingsGroup(BaseModel):
@@ -327,6 +379,20 @@ class S3StorageSettings(SettingsGroup):
         """:attr:`multipart_threshold_mb` in the bytes the S3 adapters take."""
         return self.multipart_threshold_mb * 1024 * 1024
 
+    @field_validator("aws_profile")
+    @classmethod
+    def _blank_is_none(cls, value: str | None) -> str | None:
+        """An empty value is no profile: botocore's credential chain, the task role in the cloud.
+
+        The committed dev and prod profiles name the operator's SSO profile, and an environment
+        variable can only override a value, never remove one. So the cloud run sets
+        `DEBATE_STORAGE__S3__AWS_PROFILE=` to sign with its task role (ADR-0020 (5)); botocore
+        itself would take an empty name for a profile called "" and refuse it.
+        """
+        if value is not None and not value.strip():
+            return None
+        return value
+
     @field_validator("endpoint_url")
     @classmethod
     def _on_this_machine(cls, value: str | None) -> str | None:
@@ -357,6 +423,16 @@ class StorageSettings(SettingsGroup):
     s3: S3StorageSettings = Field(
         default_factory=S3StorageSettings,
         description="The cloud evidence store for this environment, or the defaults when it has none.",
+    )
+    volume_warning_percent: int | None = Field(
+        default=None,
+        ge=1,
+        le=99,
+        description=(
+            "Past this share of the data directory's volume used after any stage, `caselist pull` "
+            "warns in its summary. The cloud run sets 70 for its fixed ephemeral volume (ADR-0020 "
+            "(1) 2). Unset, the default, reads no volume: a laptop's disk is not the run's to judge."
+        ),
     )
 
     @field_validator("data_dir")
@@ -398,6 +474,33 @@ class HttpSettings(SettingsGroup):
     max_retries: int = Field(
         default=2, ge=0, le=10, description="Retries for an idempotent request that failed transiently."
     )
+    backoff_base_seconds: float = Field(
+        default=1.0,
+        gt=0,
+        le=60,
+        description="First backoff wait when the server gives no Retry-After; doubles per retry, jittered.",
+    )
+    backoff_max_seconds: float = Field(
+        default=30.0, gt=0, le=600, description="Ceiling on one backoff wait the fetcher chose itself."
+    )
+    max_retry_wait_seconds: float = Field(
+        default=120.0,
+        ge=0,
+        le=3600,
+        description=(
+            "Longest Retry-After the fetcher will sit through. A longer one ends the fetch with the "
+            "server's answer instead of being slept on."
+        ),
+    )
+    max_response_bytes: int = Field(
+        default=25 * 1024 * 1024,
+        ge=1024,
+        le=512 * 1024 * 1024,
+        description="Largest body the fetcher reads; a larger one is abandoned, never truncated.",
+    )
+    max_redirects: int = Field(
+        default=5, ge=0, le=20, description="Redirects one fetch may follow; each one is a new request."
+    )
 
     @field_validator("contact_url")
     @classmethod
@@ -425,15 +528,51 @@ class ProviderSettings(SettingsGroup):
     enabled: tuple[SearchProviderName, ...] = Field(
         default=(), description="Discovery providers this environment may call, in no order."
     )
+    timeout_seconds: float = Field(
+        default=10.0, gt=0, le=120, description="How long one discovery call may take before it is cancelled."
+    )
+    search_deadline_seconds: float = Field(
+        default=15.0,
+        gt=0,
+        le=300,
+        description=(
+            "How long a whole federated search may take, every provider and query together; a call "
+            "still running then is cancelled and reported as a timeout (v1-e08-t05)."
+        ),
+    )
+    breaker_failure_threshold: int = Field(
+        default=3, ge=1, le=100, description="Consecutive failures after which a provider is skipped."
+    )
+    breaker_cooldown_seconds: float = Field(
+        default=60.0,
+        gt=0,
+        le=3600,
+        description="How long a skipped provider waits before one probe call is let through.",
+    )
     contact_email: SecretStr | None = Field(
         default=None,
         description=(
-            "Address sent to OpenAlex and Crossref for their polite pools. Redacted like a "
-            "secret: it is not one, but it is a person's email address (§14)."
+            "Address sent to Crossref for its polite pool. Redacted like a secret: it is not one, "
+            "but it is a person's email address (§14). OpenAlex retired its polite pool in "
+            "February 2026 and is not sent it."
+        ),
+    )
+    openalex_api_key: SecretStr | None = Field(
+        default=None,
+        description=(
+            "OpenAlex API key, free from openalex.org. Optional: without one OpenAlex allows about "
+            "100 searches a day, with one about 1,000 (PM ruling 2026-10-21)."
         ),
     )
     semantic_scholar_api_key: SecretStr | None = Field(
         default=None, description="Semantic Scholar API key, if the account has one."
+    )
+    api_data_gov_key: SecretStr | None = Field(
+        default=None,
+        description=(
+            "api.data.gov key, free from api.data.gov/signup, for GovInfo (v1-e07-t07). Without one "
+            "GovInfo is not configured; api.data.gov's shared DEMO_KEY is never used in its place."
+        ),
     )
     caselist_token: SecretStr | None = Field(
         default=None,
@@ -446,6 +585,12 @@ class ProviderSettings(SettingsGroup):
 
 MAX_CASELIST_DOWNLOADS_PER_MINUTE: Final = 10
 """The OpenCaselist maintainer's rate limit: file downloads per minute (policy clause 12)."""
+
+FIRST_BACKFILE_SEASON_START: Final = 2021
+"""The first season data-use policy 1.17 keeps as a backfile, 2021-22, by the year it starts.
+
+Seasons before it are not imported (Retention). A caselist slug ends in the two digits of the year
+its season starts: `hspolicy21` is 2021-22."""
 
 MAX_CASELIST_BULK_DOWNLOADS_PER_DAY: Final = 5
 """OpenCaselist's own ceiling on bulk archive downloads per user per day.
@@ -465,6 +610,9 @@ class CaselistTokenBackend(StrEnum):
     """The OS keychain (the macOS login keychain on the operator's Mac), through `keyring`."""
     FILE = "file"
     """A 0600 file under a gitignored `secrets/` directory."""
+    SECRETSMANAGER = "secretsmanager"
+    """The environment's AWS Secrets Manager secret, `debate-<env>-caselist-token`, which the weekly
+    cloud run reads (ADR-0020 (2)). Never chosen by `auto`."""
 
 
 class SyncNotifierKind(StrEnum):
@@ -476,6 +624,26 @@ class SyncNotifierKind(StrEnum):
     """Always `osascript` `display notification`."""
     NONE = "none"
     """Nothing: the run log and `caselist runs` only."""
+    SNS = "sns"
+    """The environment's alert topic, `debate-<env>-caselist-run-alerts`, which emails the coach
+    (`v1-e40-t05`, ADR-0020 (6)): what the cloud run and the cloud login set. Needs
+    `caselist.alert_topic_arn`. Never chosen by `auto`."""
+
+
+SNS_TOPIC_ARN_PATTERN: Final = r"^arn:aws[a-z-]*:sns:[a-z0-9-]+:[0-9]{12}:[A-Za-z0-9_-]{1,256}$"
+"""An SNS topic's ARN: partition, region, account and name. The region is the topic's, and the
+`sns` notifier publishes there."""
+
+
+class RunStateMode(StrEnum):
+    """Where a caselist run's state is kept between runs (`v1-e40-t04`, ADR-0020 (3) and (4))."""
+
+    LOCAL = "local"
+    """In this machine's data directory, as every run before the cloud run kept it. The default."""
+    BUCKET = "bucket"
+    """In the evidence bucket: a run restores a working copy at its start, saves its state back,
+    and every command that writes to the bucket takes the bucket's run lock first. Only the cloud
+    run sets it until the cutover (`v1-e40-t06`)."""
 
 
 class CaselistSettings(SettingsGroup):
@@ -597,7 +765,8 @@ class CaselistSettings(SettingsGroup):
         default=CaselistTokenBackend.AUTO,
         description=(
             "Where `caselist auth login` keeps the caselist_token: the OS keychain, a 0600 file, "
-            "or `auto` (the keychain when one is usable, otherwise the file)."
+            "`auto` (the keychain when one is usable, otherwise the file), or `secretsmanager`, the "
+            "environment's Secrets Manager secret the weekly cloud run reads."
         ),
     )
     secret_file: Path | None = Field(
@@ -607,6 +776,30 @@ class CaselistSettings(SettingsGroup):
             "caselist_token`. Any path named `caselist_token`, or under a `secrets/` directory, is "
             "gitignored."
         ),
+    )
+    token_secret_id: str | None = Field(
+        default=None,
+        min_length=1,
+        description=(
+            "The Secrets Manager secret the `secretsmanager` backend keeps the caselist_token in. "
+            "Unset means `debate-<environment>-caselist-token`, the secret Terraform creates "
+            "(ADR-0020 (2)). A name, not a credential."
+        ),
+    )
+    password_secret_id: str | None = Field(
+        default=None,
+        min_length=1,
+        description=(
+            "The Secrets Manager secret holding the Tabroom username and password, which "
+            "`caselist auth set-password` writes and the scheduled login (`caselist auth renew`) "
+            "reads. Unset means `debate-<environment>-caselist-tabroom-password`. A name, not a "
+            "credential: the value is never in a setting."
+        ),
+    )
+    secrets_region: str = Field(
+        default="us-east-1",
+        min_length=1,
+        description="Region of the two caselist secrets. ADR-0010 pins everything to us-east-1.",
     )
 
     # --- The weekly scheduled sync (v1-e34-t02-scheduled-sync) ----------------------------------
@@ -623,6 +816,16 @@ class CaselistSettings(SettingsGroup):
             "slug in a committed file would make it ours. A list in a profile file; JSON in the "
             "environment, as every list setting is: "
             'DEBATE_CASELIST__SYNC_CASELISTS=["hsld26","hspolicy26"].'
+        ),
+    )
+    backfile_caselists: tuple[str, ...] = Field(
+        default=(),
+        description=(
+            "Caselist slugs kept as backfiles (data-use policy 1.17, Permitted uses 8): earlier "
+            "seasons, from 2021-22 on, imported once from their complete archive by `caselist "
+            "backfile-import`. `caselist pull` and the weekly run never pull one, `landscape report` "
+            "never reads one, and the annual purge keeps them. Never one of sync_caselists. A list in "
+            'a profile file; JSON in the environment: DEBATE_CASELIST__BACKFILE_CASELISTS=["hspolicy25"].'
         ),
     )
     inbox_dir: Path | None = Field(
@@ -695,13 +898,63 @@ class CaselistSettings(SettingsGroup):
         ),
     )
 
+    # --- The search pilot's weekly index (v1-e39-t09-weekly-index-refresh) ----------------------
+
+    refresh_search_index: bool = Field(
+        default=True,
+        description=(
+            "Whether `caselist pull` keeps the student search pilot's index current where the "
+            "environment names a bucket: rebuilt when the parsed store changed, and published to "
+            "this environment's bucket when current.json is behind it. On by default and in the "
+            "dev and prod profiles, which is what the installed agent reads. Off, the stage is "
+            "still in the run summary and `caselist runs`, skipped with this setting's name as the "
+            "reason; `tub index build` and `tub index publish` do the same work by hand."
+        ),
+    )
+    search_index_minimum_share_percent: int = Field(
+        default=90,
+        ge=0,
+        le=100,
+        description=(
+            "The share of each store's documents in the published search index that a new index "
+            "must keep, in percent, for `tub index publish` and the weekly run to publish it "
+            "(v1-e39-t14). Below it, or at 0 documents for a store the current index holds, the "
+            "publish is refused and current.json stays; `tub index publish --allow-shrink "
+            '"<reason>"` publishes a real shrink by hand. An index built from a store whose '
+            "aggregates hold no rows is refused whatever this says."
+        ),
+    )
+
+    # --- Where a run keeps its state (v1-e40-t04, ADR-0020 (3) and (4)) -------------------------
+
+    run_state: RunStateMode = Field(
+        default=RunStateMode.LOCAL,
+        description=(
+            "Where `caselist pull` keeps its state between runs: `local`, this machine's data "
+            "directory, or `bucket`, the evidence bucket, restored at a run's start and saved back, "
+            "with every command that writes to the bucket holding its run lock "
+            "(reports/sync/run-lock.json). The cloud run sets `bucket`; the Mac stays `local` until "
+            "the cutover."
+        ),
+    )
+
     # --- Monitoring the weekly sync (v1-e34-t03-sync-monitoring) ------------------------------
 
     notifier: SyncNotifierKind = Field(
         default=SyncNotifierKind.AUTO,
         description=(
             "Where a failed or stuck `caselist pull` is announced: `macos` (Notification Centre), "
-            "`none`, or `auto` (macOS on a Mac, never in the test environment)."
+            "`sns` (the alert topic, which emails the coach; the cloud run and login), `none`, or "
+            "`auto` (macOS on a Mac, never in the test environment)."
+        ),
+    )
+    alert_topic_arn: str | None = Field(
+        default=None,
+        pattern=SNS_TOPIC_ARN_PATTERN,
+        description=(
+            "The SNS topic the `sns` notifier publishes to: debate-<environment>-caselist-run-alerts, "
+            "which Terraform creates with the coach's email as its one subscription (ADR-0020 (6)). "
+            "Required by `notifier = sns` and read by nothing else. An ARN, not a credential."
         ),
     )
     stale_after_days: int = Field(
@@ -724,7 +977,7 @@ class CaselistSettings(SettingsGroup):
             )
         return value
 
-    @field_validator("sync_caselists", mode="before")
+    @field_validator("sync_caselists", "backfile_caselists", mode="before")
     @classmethod
     def _one_slug_or_many(cls, value: object) -> object:
         """Accept a bare slug as well as a list, so `sync_caselists = "hsld26"` in a profile works.
@@ -733,6 +986,22 @@ class CaselistSettings(SettingsGroup):
         any validator here sees it, which is true of every list setting in this module.
         """
         return (value,) if isinstance(value, str) else value
+
+    @field_validator("backfile_caselists")
+    @classmethod
+    def _backfiles_from_2021_22_on(cls, value: tuple[str, ...]) -> tuple[str, ...]:
+        for slug in value:
+            if not re.fullmatch(CASELIST_SLUG_PATTERN, slug):
+                raise ValueError(f"{slug!r} is not a caselist slug")
+            if 2000 + int(slug[-2:]) < FIRST_BACKFILE_SEASON_START:
+                raise ValueError(
+                    f"{slug} is of a season before 2021-22, which data-use policy 1.17 does not import"
+                )
+        return value
+
+    def is_backfile(self, caselist: str) -> bool:
+        """Whether `caselist` is kept as a backfile: what pull, the landscape and the purge each ask."""
+        return caselist in self.backfile_caselists
 
     @field_validator("inbox_dir")
     @classmethod
@@ -766,6 +1035,27 @@ class CaselistSettings(SettingsGroup):
             return None
         return Path(os.path.expandvars(str(value))).expanduser().absolute()
 
+    @model_validator(mode="after")
+    def _a_backfile_is_never_pulled(self) -> CaselistSettings:
+        """A slug in both lists would be pulled weekly and classified: refused at startup (`v1-e34-t34`)."""
+        both = sorted(set(self.sync_caselists) & set(self.backfile_caselists))
+        if both:
+            raise ValueError(
+                f"caselist.backfile_caselists and caselist.sync_caselists both name {', '.join(both)}; "
+                "a backfile is never pulled by the weekly run"
+            )
+        return self
+
+    @model_validator(mode="after")
+    def _sns_needs_its_topic(self) -> CaselistSettings:
+        """`notifier = sns` with no topic would announce nothing, silently: refused at startup."""
+        if self.notifier is SyncNotifierKind.SNS and self.alert_topic_arn is None:
+            raise ValueError(
+                "caselist.notifier = sns needs caselist.alert_topic_arn, the environment's alert "
+                "topic (debate-<environment>-caselist-run-alerts)"
+            )
+        return self
+
 
 class CardFingerprintSettings(SettingsGroup):
     """When two card bodies count as one card (`v1-e31-t04-card-fingerprints`).
@@ -790,12 +1080,6 @@ class CardFingerprintSettings(SettingsGroup):
             "card cut a paragraph shorter in its cluster."
         ),
     )
-
-    def thresholds(self) -> NearDuplicateThresholds:
-        """The thresholds as the clusterer takes them."""
-        return NearDuplicateThresholds(
-            jaccard=self.near_duplicate_jaccard, containment=self.near_duplicate_containment
-        )
 
 
 class ParseSettings(SettingsGroup):
@@ -864,17 +1148,59 @@ class ParseSettings(SettingsGroup):
 class ModelSettings(SettingsGroup):
     """What the ModelRouter is allowed to do and which file tells it where to route.
 
-    The routing file itself is validated by :mod:`debate_core.application.routing_config`; this
-    group only says which file to read and what the day may cost.
+    The routing file itself is validated by :mod:`debate_core.integrations.models.routing_policy`; this
+    group only says which file to read, what the day may cost, and whether the router is a real
+    provider or the offline fake.
     """
 
+    provider: ModelProvider = Field(
+        default=ModelProvider.BEDROCK,
+        description=(
+            "`fake` answers every call from committed fixtures and never reaches a model; `bedrock` "
+            "routes through the routing file, and then whether a call is recorded, replayed or made "
+            "live is the --model-mode option or DEBATE_MODEL_MODE, never a setting "
+            "(debate_core.integrations.models.factory, v1-e05-t03-fake-replay-models)."
+        ),
+    )
     routing_file: Path = Field(description="YAML file mapping each model task class to a route.")
-    budget_usd_daily: float = Field(
-        default=0.0,
+    budget_usd_daily: float | None = Field(
+        default=None,
         ge=0,
         description=(
-            "Ceiling on model spend per day, in USD. Enforced by the E05 BudgetGuard; the dev and "
-            "prod values are set by v1-e01-t09-dev-prerelease-channel."
+            "Ceiling on model spend per local day, across every run on this machine, in USD; unset is "
+            "no limit. Enforced by the BudgetGuard (debate_core.application.budget, v1-e05-t07) "
+            "against the day's usage log. Dev's is $2, the capped sample's allowance; prod's $1.50, "
+            "the coach's $50 a month over thirty days (v1-e05-t15). With a limit, a model with no "
+            "price in config/model_pricing.yaml is refused rather than treated as free."
+        ),
+    )
+    budget_usd_monthly: float | None = Field(
+        default=None,
+        ge=0,
+        description=(
+            "Ceiling on model spend per calendar month in America/Chicago, across every run on this "
+            "machine, in USD; unset is no limit. Enforced by the BudgetGuard as the daily limit is, "
+            "against every record of the month in the usage log, each placed by its own timestamp "
+            "(v1-e05-t15). With a limit, a model with no price in config/model_pricing.yaml is "
+            "refused rather than treated as free."
+        ),
+    )
+    budget_usd_per_run: float | None = Field(
+        default=None,
+        ge=0,
+        description=(
+            "Ceiling on model spend by one run (one command), in USD; unset is no limit. A command's "
+            "--max-cost option sets it for that command (v1-e05-t07)."
+        ),
+    )
+    aws_profile: str | None = Field(
+        default=None,
+        description=(
+            "Profile in the operator's shared AWS config that every Bedrock call is signed with, from "
+            "the bedrock_profile_name Terraform output (debate-dev-bedrock / debate-prod-bedrock, "
+            "v1-e05-t08). The Bedrock client is built from this and never from AWS_PROFILE. None uses "
+            "botocore's credential chain with AWS_PROFILE ignored, which is what a role on an "
+            "instance or a task is."
         ),
     )
 
@@ -882,6 +1208,90 @@ class ModelSettings(SettingsGroup):
     @classmethod
     def _expand(cls, value: Path) -> Path:
         return Path(os.path.expandvars(str(value))).expanduser()
+
+    @field_validator("aws_profile")
+    @classmethod
+    def _blank_is_none(cls, value: str | None) -> str | None:
+        """An empty value is no profile, as it is for `storage.s3.aws_profile`: an environment
+        variable can override the committed profile but never remove it, so a run with a role of its
+        own sets `DEBATE_MODELS__AWS_PROFILE=`."""
+        if value is not None and not value.strip():
+            return None
+        return value
+
+
+class ArticleSettings(SettingsGroup):
+    """How ArticleService retrieves, classifies and extracts a source (`v1-e04-t05-article-service`).
+
+    Three kinds of value. `refetch_after_hours` is the re-fetch policy: a source retrieved more
+    recently than that is answered from its stored snapshot without asking the publisher again,
+    unless the caller asks for a refresh. The two `access_*` values are the access classifier's
+    truncation heuristic (`debate_core.retrieval.access.AccessThresholds`, v1-e04-t03), which
+    ArticleService builds from them. The `html_*` and `pdf_*` values are the extractors' fallback
+    minimum and limits (`debate_core.integrations.html_extractor` and `pdf_extractor`, v1-e04-t04),
+    which the composition root passes to them (v1-e04-t06). Every default is the value those tasks
+    chose as their own default.
+    """
+
+    refetch_after_hours: float = Field(
+        default=168.0,
+        gt=0,
+        le=24 * 365,
+        description=(
+            "A source whose last retrieval was readable and is younger than this is not fetched again; "
+            "its stored snapshot is the answer. `--refresh` fetches it anyway."
+        ),
+    )
+    access_minimum_characters: int = Field(
+        default=500,
+        ge=1,
+        le=1_000_000,
+        description="Fewer extracted characters than this is too little to be an article: ERROR.",
+    )
+    access_truncation_ratio: float = Field(
+        default=0.5,
+        gt=0,
+        le=1,
+        description=(
+            "Fewer extracted words than this share of the length the page declares is a truncated "
+            "page: PAYWALLED."
+        ),
+    )
+    html_fallback_minimum_characters: int = Field(
+        default=250,
+        ge=1,
+        le=1_000_000,
+        description="When trafilatura extracts fewer characters than this, the readability fallback runs.",
+    )
+    html_max_bytes: int = Field(
+        default=10 * 1024 * 1024,
+        ge=1024,
+        le=512 * 1024 * 1024,
+        description="An HTML document larger than this is refused before it is parsed (v1-e04-t06).",
+    )
+    pdf_max_bytes: int = Field(
+        default=50 * 1024 * 1024,
+        ge=1024,
+        le=512 * 1024 * 1024,
+        description="A PDF larger than this is refused before it is parsed.",
+    )
+    pdf_max_pages: int = Field(
+        default=500,
+        ge=1,
+        le=100_000,
+        description="A PDF with more pages than this is refused before any is read.",
+    )
+    pdf_max_stream_bytes: int = Field(
+        default=20_000_000,
+        ge=1024,
+        le=512 * 1024 * 1024,
+        description="A PDF stream that expands past this many bytes is refused: the PDF-bomb ceiling.",
+    )
+
+    @property
+    def refetch_after(self) -> timedelta:
+        """`refetch_after_hours` as a duration."""
+        return timedelta(hours=self.refetch_after_hours)
 
 
 class Settings(BaseSettings):
@@ -930,6 +1340,7 @@ class Settings(BaseSettings):
     caselist: CaselistSettings = Field(default_factory=CaselistSettings)
     fingerprints: CardFingerprintSettings = Field(default_factory=CardFingerprintSettings)
     parse: ParseSettings = Field(default_factory=ParseSettings)
+    articles: ArticleSettings = Field(default_factory=ArticleSettings)
 
     @classmethod
     def settings_customise_sources(
@@ -1047,6 +1458,7 @@ def _builtin_profiles() -> dict[Environment, dict[str, Any]]:
             "models": {
                 "routing_file": Path("config/model_routing.dev.yaml"),
                 "budget_usd_daily": DEV_DAILY_BUDGET_CAP_USD,
+                "budget_usd_monthly": MONTHLY_MODEL_BUDGET_CEILING_USD,
             },
         },
         Environment.PROD: {
@@ -1057,7 +1469,8 @@ def _builtin_profiles() -> dict[Environment, dict[str, Any]]:
             },
             "models": {
                 "routing_file": Path("config/model_routing.prod.yaml"),
-                "budget_usd_daily": 20.0,
+                "budget_usd_daily": 1.5,
+                "budget_usd_monthly": MONTHLY_MODEL_BUDGET_CEILING_USD,
             },
         },
         Environment.TEST: {
@@ -1065,6 +1478,7 @@ def _builtin_profiles() -> dict[Environment, dict[str, Any]]:
             "storage": {"data_dir": _temporary_data_dir()},
             "providers": {"enabled": ()},
             "models": {
+                "provider": ModelProvider.FAKE,
                 "routing_file": Path("config/model_routing.example.yaml"),
                 "budget_usd_daily": 0.0,
             },
@@ -1259,12 +1673,17 @@ def load_settings(
     for label, values in layers:
         _merge_into(merged, values)
         _record_sources(sources, values, label)
-    _anchor_relative_paths(merged, config_root)
+    _anchor_relative_paths(merged, config_root if config_root is not None else _source_checkout())
 
     try:
         settings = Settings(**merged)
     except ValidationError as error:
-        raise _configuration_error(error, sources) from error
+        refusal = _configuration_error(error, sources)
+        if any(detail["type"] == _UNKNOWN_SETTING for detail in error.errors()):
+            # Pydantic's own report quotes every input, and an unknown name's value can be a
+            # credential a newer build reads (v1-e41-t01): the refusal names it and chains nothing.
+            raise refusal from None
+        raise refusal from error
 
     _refuse_stand_in_endpoints_outside_dev(settings, sources)
     settings.attach_field_sources(sources)
@@ -1309,14 +1728,22 @@ def _refused_setting(field: str, sources: Mapping[str, str], refusal: str, reaso
     )
 
 
+def _source_checkout() -> Path | None:
+    """The checkout this module was imported from, when it runs from source rather than a wheel."""
+    return find_repository_root(Path(__file__).resolve().parent)
+
+
 def _anchor_relative_paths(merged: dict[str, Any], config_root: Path | None) -> None:
     """Make a relative `models.routing_file` mean "relative to the configuration", not to the shell.
 
     `config/model_routing.dev.yaml` in a profile file is written relative to the checkout it is
     committed in, so it has to keep meaning that from whatever directory the command was run in.
     `config_root` is that checkout, or the configuration an installed build carries in its wheel,
-    which is laid out the same way. With neither, the value is left alone and is resolved against
-    the working directory.
+    which is laid out the same way. A source checkout's code run from outside any checkout, as
+    the smoke tier and the launchd installer run it, passes the checkout it was imported from
+    (`v1-e05-t03-fake-replay-models`, where the CLI started validating the routing file at
+    startup). With none of these, the value is left alone and is resolved against the working
+    directory.
     """
     if config_root is None:
         return
@@ -1441,21 +1868,70 @@ def _walk_leaves(values: Mapping[str, Any], prefix: str = "") -> Iterator[tuple[
             yield path, value
 
 
+#: Pydantic's error type for a name the model does not declare.
+_UNKNOWN_SETTING: Final = "extra_forbidden"
+
+
 def _configuration_error(error: ValidationError, sources: Mapping[str, str]) -> ConfigurationError:
-    """Turn Pydantic's report into one that names the field and where its value came from."""
+    """Turn Pydantic's report into one that names the field and where its value came from.
+
+    Never quotes a value: `msg` is Pydantic's sentence about the field, and the input stays out.
+    """
     problems: list[str] = []
+    reserved: list[tuple[str, str]] = []
     first_field: str | None = None
     for detail in error.errors():
         field = ".".join(str(part) for part in detail["loc"])
         first_field = first_field or field
         origin = sources.get(field, "default")
         problems.append(f"{field} (from {origin}): {detail['msg']}")
+        if detail["type"] == _UNKNOWN_SETTING and _reserved_pattern_of(field) is not None:
+            reserved.append((field, origin))
     joined = "; ".join(problems)
     return ConfigurationError(
         f"invalid configuration: {joined}",
         field=first_field,
         source=sources.get(first_field or "", None),
+        hint=_newer_build_hint(reserved),
     )
+
+
+def _reserved_pattern_of(field: str) -> str | None:
+    """The first of :data:`RESERVED_SETTING_PATTERNS` that `field` matches whole, or `None`."""
+    return next((pattern for pattern in RESERVED_SETTING_PATTERNS if fnmatchcase(field, pattern)), None)
+
+
+def _newer_build_hint(reserved: Sequence[tuple[str, str]]) -> str | None:
+    """The hint for unknown names a newer build may define, each with where it came from, or `None`.
+
+    Names and sources only, never a value. Says the names are refused all the same, and gives each
+    source's way past it: a `.env` is read from the folder a command runs in, so another folder; a
+    variable can be unset; a file can be edited. Upgrading fixes every one of them.
+    """
+    if not reserved:
+        return None
+    names = " and ".join(field for field, _ in reserved)
+    patterns = " and ".join(dict.fromkeys(_reserved_pattern_of(field) or "" for field, _ in reserved))
+    fixes = " ".join(dict.fromkeys(_way_past(origin) for _, origin in reserved))
+    return (
+        f"A newer build may define {names}: this build keeps names matching {patterns} for settings "
+        f"added after it, and refuses each one it does not know. {fixes}"
+    )
+
+
+def _way_past(origin: str) -> str:
+    """How to get past a refused name from `origin`, a source label, short of upgrading."""
+    kind, _, where = origin.partition(":")
+    if kind == "dotenv":
+        return (
+            "The .env file is read from the checkout or folder a command runs in, so run the command "
+            "from another folder, or install the newer build."
+        )
+    if kind == "env":
+        return f"Unset {where} in this shell, or install the newer build."
+    if kind == "profile":
+        return f"Remove it from the profile file {where}, or install the newer build."
+    return f"Remove it from {origin}, or install the newer build."
 
 
 def _walk_fields(model: BaseModel, prefix: str = "") -> Iterator[tuple[str, Any]]:

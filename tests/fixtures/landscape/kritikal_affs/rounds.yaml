@@ -1,0 +1,38 @@
+schools:
+  Ashgrove Fictional: [AA, BB]
+  Birchwood Fictional: [CC, DD, EE]
+rounds:
+- {team: AA, side: AFF, tournament: Fictional Invitational, round: R1, files: [c1], assigned: kritikal-aff, method: KRITIKAL_AFF_MARKER}
+- {team: AA, side: AFF, tournament: Imaginary Classic, round: R1, files: [c2], assigned: kritikal-aff, method: KRITIKAL_AFF_CARRY}
+- {team: AA, side: AFF, tournament: Pretend Open, round: R1, files: [c3], refused_by_advantage: true}
+- {team: BB, side: AFF, tournament: Fictional Invitational, round: R1, files: [c4, c5], assigned: kritikal-aff, method: KRITIKAL_AFF_MARKER}
+- {team: CC, side: AFF, tournament: Fictional Invitational, round: R1, files: [d1], assigned: single-payer-aff, method: PLAN_TEXT}
+- {team: DD, side: AFF, tournament: Fictional Invitational, round: R1, files: [d2]}
+- {team: EE, side: AFF, tournament: Fictional Invitational, round: R1, files: [e1]}
+- {team: EE, side: NEG, tournament: Imaginary Classic, round: R1, files: [f1]}
+files:
+  c1: []
+  c2: []
+  c3: [costs-advantage]
+  c4: [costs-advantage]
+  c5: []
+  d1: []
+  d2: []
+  e1: [single-payer-aff]
+  f1: [cap-k]
+kritikal:
+  position_id: kritikal-aff
+  families:
+    cap: Capitalism
+    settler-colonialism: Settler colonialism
+    afropessimism: Afropessimism
+    feminism: Feminism
+    queer: Queer theory
+  marker_files: [c1, c4, d1, e1, f1]
+  heading_families:
+    c1: [cap, settler-colonialism]
+    c2: [cap]
+    c3: [queer]
+    c4: [afropessimism]
+    c5: [cap]
+    d2: [feminism]

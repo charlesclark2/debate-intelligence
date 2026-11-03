@@ -1,0 +1,139 @@
+# TASK v1-e40-t06-cutover - Cut over: the cloud run takes the schedule and the Mac stops
+# Epic: E40 — Weekly Caselist Run in the Cloud | Release: v1.8 (Weekly caselist run in the cloud) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e40-t06-cutover
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.8
+    debate/epic: v1-e40-cloud-caselist-run
+  annotations:
+    debate/title: "Cut over: the cloud run takes the schedule and the Mac stops"
+spec:
+  # Filed by the PM, 2026-10-22, from ADR-0020.
+  description: >-
+    Run the cloud job beside a Mac run once in dev and compare their records, parse counts and
+    index document counts; then turn the Mac's launchd schedule off, confirm the lock leaves
+    exactly one runner able to publish, and repeat in prod at its promotion. The runbooks say
+    which machine runs the week and how to fall back to the Mac for a week if the cloud run is
+    down.
+    (PM amendment 2026-10-23 (ADR-0020).) The comparison is not a second run of the same week,
+    which would download its archives and publish twice: after a dev cloud run, the Mac restores
+    the working copy under the lock and re-parses and rebuilds the index offline into a scratch
+    data directory, downloading and publishing nothing. The cutover follows ADR-0020 (4): the
+    Mac's last scheduled run completes, its agent is unloaded and its `--caselist` arguments
+    removed in favour of `caselist.sync_caselists`, a build with the bucket lock is installed and
+    the Mac's state seeded, one cloud run is started by hand, then the cloud schedule and the
+    late-run alarm's actions are enabled. Until the pilot's promotion, prod is published by hand
+    from a working copy restored from the dev bucket under the lock. At the promotion the run's
+    home moves to prod (ADR-0020 (7)): under the dev lock the run-state bundle and state files
+    are copied to the prod bucket, the prod lock object is seeded, the dev lock object is held
+    for good by a `moved` holder, the dev schedule is deleted and the prod one enabled.
+    (PM ruling 2026-10-23.) The cutover waits until `t04`'s purge of the run-state bundle's
+    noncurrent versions by `caselist remove` is merged, since policy 1.12 promises it from its
+    merge.
+    (PM ruling 2026-10-24, from v1-e40-t02's question 3.) Each scheduled login asks OpenCaselist
+    for a new token, and nothing recorded says whether that ends the token the Mac's keychain
+    holds. On the Wednesday of the first scheduled login (apply B in dev), the operator runs
+    `debate-research caselist auth status --check` on the Mac. If the Mac's session was ended, the
+    Mac is logged in by hand each week until this task unloads its schedule. Either way the answer
+    is recorded in ADR-0020 and in this task's report, and the cutover's runbook says which.
+    (PM amendment 2026-10-24.) That question is answered: in dev on 2026-10-24, before any
+    scheduled login, a hand login into the token secret left the Mac's keychain token working
+    (ADR-0020 (2), amended). So the Mac needs no hand login because of the cloud login. Its own
+    token lasts about 14 days, though, so until this cutover the Mac is logged in by hand at least
+    every two weeks. The cutover also carries these, from the PM's rulings on v1-e40-t03 and
+    v1-e40-t04:
+    * `caselist.sync_caselists` goes into `config/profiles/dev.toml` (and `prod.toml` at the home
+      move) in the same pull request that removes the slugs from the plist. Committing the slugs is
+      ADR-0020 (5)'s decision, and code never hardcodes them.
+    * The seed, `debate-research caselist seed-run-state` (v1-e40-t04), runs at cutover step 4,
+      after the agent is unloaded, never earlier: a dry run, then `--execute`, as working agreement
+      11 asks. v1-e40-t03's hand run (its ac2) is step 5's run, and v1-e40-t04's task-definition
+      change (bucket mode in the run's environment) is applied after the seed.
+    * Before the cutover, the run image's two base images (`python:3.12-slim-bookworm` and the
+      pinned uv image) are pinned by digest rather than tag, in `ops/caselist_run/Dockerfile`, and a
+      new image is pushed and its digest applied.
+    (PM amendment 2026-10-24, from v1-e40-t04's PM review, item 7.) The cutover also carries:
+    * `debate-research caselist restore-run-state`, a command over v1-e40-t04's built
+      `RunState.restore`, for the comparison's restored working copy and for a hand publish to prod
+      from a copy restored under the dev lock (ADR-0020 (4) and (7)). It takes the lock, writes
+      only into the named data directory, and is tested against moto.
+    * A JSON plan check for the bucket-mode apply, in the style of v1-e40-t02's and t03's: `PLAN OK`
+      only for the two task definitions replaced and the two schedules repointed to them (`2 to
+      add, 4 to change, 2 to destroy`), with the run's schedule still `DISABLED`, tested on
+      synthetic plans. The PM reads the plan before the apply.
+    * The first cloud run's logs are read for a process-pool parse stopping within 120 seconds of
+      SIGTERM. If it does not, that is recorded and filed (v1-e40-t04's follow-up).
+  priority: 1
+  constraints:
+    # PM amendment 2026-10-25, from the PM's review (question 4, Deviation 1): restore-run-state and
+    # the shared lock helper, the dev profile's caselists and bucket mode, and their tests.
+    packages: [docs/runbooks, docs/data, ops, tests/smoke, debate_core.application, packages/debate_core/tests, debate_cli, packages/debate_cli/tests, config/profiles, tests/integration, tests/scripts, tests/docs]
+    forbidden:
+      - Two runners publishing in the same week
+      - Removing the Mac's ability to run by hand
+  context:
+    - kind: TaskRef
+      name: v1-e40-t02-secrets-token-store-and-login
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e40-t03-run-image-and-schedule
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e40-t04-run-state-on-s3
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e40-t05-run-alerts
+      relation: dependsOn
+  acceptanceCriteria:
+    # PM amendment 2026-10-23 (ADR-0020): the Mac reproduces the cloud run's derivations offline,
+    # instead of running the same week a second time.
+    - id: ac1
+      description: >-
+        A dev cloud run and the Mac's offline reproduction of its parse and index from the
+        same inputs agree on records, parse counts and index document count, recorded in
+        docs/data (operator).
+    - id: ac2
+      description: >-
+        The Mac's schedule is off, a second runner is refused by the lock, and the runbooks
+        give the fallback; prod follows at promotion (operator).
+status:
+  # PM record 2026-10-26: ac1 accepted with the comparison's one difference explained; prod follows at the promotion (v1-e40-t11).
+  phase: Succeeded
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e40-t06-cutover-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.8
+    debate/epic: v1-e40-cloud-caselist-run
+spec:
+  description: >-
+    Compare a cloud run with a Mac run, then move the schedule and document the fallback.
+  goalRef:
+    name: v1-e40-t06-cutover
+  graph:
+    nodes:
+      - id: cutover
+        kind: Task
+        name: Cutover
+        description: >-
+          Compare a cloud run with a Mac run, then move the schedule and document the
+          fallback.
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Smoke checks collect
+            command: uv
+            args: [run, pytest, tests/smoke, --collect-only, -q]
+status:
+  phase: Pending

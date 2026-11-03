@@ -1,0 +1,1846 @@
+<!-- docs-index: The weekly cloud run's container: applying its network, cluster, repository and deployer, checking whether a new login ends the Mac's token, pushing its image, the login and run tasks with their schedules, a dry-run rehearsal, one run by hand, and the backfile imports started by hand on the run's task definition -->
+# Runbook: the weekly caselist run as a container on a schedule
+
+How the weekly caselist run becomes a Fargate task in the team's AWS account: its network, cluster,
+image repository and deployer permission set; a hand login that shows whether a new login ends the
+Mac's token; its image, built from a release and pushed; the login and run task definitions with
+their Wednesday schedules (apply B); a dry-run rehearsal in the cloud; and one run started by hand.
+Spec: [`v1-e40-t03-run-image-and-schedule`](../../plan_specs/v1/e40-cloud-caselist-run/t03-run-image-and-schedule.yaml).
+Decision: [ADR-0020](../adr/0020-weekly-caselist-run-in-the-cloud.md) (1), (5). The credentials and
+the login are [caselist-cloud-credentials.md](caselist-cloud-credentials.md)'s (`v1-e40-t02`). The
+module: [`infrastructure/modules/caselist_run`](../../infrastructure/modules/caselist_run/README.md).
+
+Written for the adult maintainer with administrator access to the account. **Every step here is run
+by a human.** CI builds the image and runs it against stand-ins, but has no AWS credentials, and an
+agent session never applies, pushes or calls AWS.
+
+## What this sets up
+
+| | dev | prod |
+|---|---|---|
+| The run's VPC, subnets, security group | `debate-dev-caselist-run`: two public subnets, no inbound rule, outbound HTTPS, an S3 gateway endpoint | the same, `debate-prod-caselist-run`, at the promotion |
+| Cluster, image repository, log group | `debate-dev-caselist-run` | `debate-prod-caselist-run` |
+| Run task definition | `debate-dev-caselist-run`: Fargate, arm64, 8 vCPU, 16 GB, 100 GiB, `debate-research --json caselist pull` under a 6-hour deadline, as the run role | the same |
+| Run schedule (apply B) | `debate-dev-caselist-run`, Wednesdays 06:00 America/Chicago, **created disabled** | the same |
+| Login task and schedule (apply B) | t02's, Wednesdays 03:00 America/Chicago, now on this network and image | the same |
+| The deployer: pushes the image, registers a run task definition, starts a run | `DebateDevCaselistRunDeployer` | `DebateProdCaselistRunDeployer` |
+| Its SSO profile | `debate-dev-caselist-run-deployer` | `debate-prod-caselist-run-deployer` |
+
+The run role (t02's `debate-<env>-caselist-run`) now holds the everyday evidence permissions, the
+EvidenceOperator permission set's own document, beside its read of the token: it lists, reads and
+publishes, and never deletes, and it never reads the password. The deployer may pass the run's two
+roles to ECS and is refused the login's, so nobody but the schedule ever starts the login.
+
+## The order
+
+1. `v1-e40-t02`'s apply A in dev: the key, the secrets, the roles, the writer
+   ([caselist-cloud-credentials.md](caselist-cloud-credentials.md), steps 1 to 4).
+2. **This runbook's steps 1 and 2**: the network, the cluster, the repository, the run's execution
+   role and log group, the run role's evidence policy and the deployer. No image is needed.
+3. Step 3, **the token check** (PM ruling, 2026-10-24): does a new login end the Mac's keychain
+   token? A hand login as the writer answers it before the login's schedule exists, and puts a
+   token in the secret. If it does, apply B pauses the login until `v1-e40-t06`.
+4. Steps 4 and 5: the deployer's profile, and the first image, built from a release and pushed.
+5. Step 6, **apply B**: both task definitions, pinned by that image's digest, the login's schedule
+   enabled (unless step 3 paused it) and the run's disabled.
+6. Step 7, **the cloud rehearsal**: one run started by the deployer as a dry run, which lists and
+   writes nothing.
+7. Step 8, at the cutover (`v1-e40-t06`), after `v1-e40-t04`: **the seed**, once the Mac's agent is
+   unloaded; then the run task **in bucket mode**, applied; then **one run by hand**. Until bucket
+   mode and its lock are applied, a cloud run would start from an empty data directory, download
+   every archive again and publish without the bucket's lock (the PM's rulings on t04's plan,
+   2026-10-24). Step 8 says so again.
+8. The run's schedule is enabled at the cutover (`v1-e40-t06`), never before.
+
+The alerts that email the coach when a run or the login fails, a run is late or a schedule cannot
+start (`v1-e40-t05`) are applied after apply B, with an image that has them:
+[caselist-run-alerts.md](caselist-run-alerts.md).
+
+**Every dev apply here runs from `dev`, after `v1-e40-t03` has merged, never from a task branch**,
+for the reason t02's runbook gives: an apply from a configuration without these resources would plan
+to destroy them.
+
+## Before you start
+
+**The same worktree as t02's applies**, `caselist-credentials-dev`, moved to `origin/dev`, and the
+check that this task's module is merged in it. Its gitignored `owner.auto.tfvars` is the one apply A
+used.
+
+```bash
+WT="$HOME/Documents/debate/debate-intelligence-tool/debate-intelligence-worktrees/caselist-credentials-dev"
+SSO_USER_NAME='your-identity-center-user-name'
+
+cd "$WT" || { echo "WT does not exist: $WT"; }
+git fetch origin
+git switch --detach origin/dev
+test -f infrastructure/modules/caselist_run/run_task.tf && test -f ops/caselist_run/Dockerfile \
+  && echo "ok: $(pwd) at origin/dev $(git rev-parse --short HEAD), the run merged" \
+  || echo "NOT MERGED: origin/dev has no infrastructure/modules/caselist_run/run_task.tf; wait for v1-e40-t03 to merge"
+git status --porcelain | grep -v 'owner.auto.tfvars' | head -3
+```
+Success looks like: `ok: <the worktree> at origin/dev <commit>, the run merged`, and nothing after
+it. If the worktree does not exist, make it as t02's runbook does ("Before you start") and copy
+`owner.auto.tfvars` from the checkout that last applied dev.
+
+**Sign in as break-glass**, which every apply here runs as.
+
+**Operator command** (expected runtime ~1 min)
+Where: your Mac, anywhere
+```bash
+aws sso login --sso-session debate
+aws sts get-caller-identity --profile debate-admin --query Arn --output text
+```
+Success looks like: an ARN containing `AWSReservedSSO_DebateBreakGlassAdmin`.
+
+**The deployer's line in `owner.auto.tfvars`**, beside every person it already names. A plan made
+without one of them would remove that person's account assignment.
+
+**Operator command** (expected runtime ~1 min)
+Where: `$WT`
+```bash
+cd "$WT"
+grep -q '^caselist_run_deployer_user_names' infrastructure/envs/dev/owner.auto.tfvars \
+  || printf 'caselist_run_deployer_user_names = ["%s"]\n' "$SSO_USER_NAME" >> infrastructure/envs/dev/owner.auto.tfvars
+terraform fmt infrastructure/envs/dev
+grep -c -E '^(owner|site_publisher_user_names|evidence_operator_user_names|evidence_removal_user_names|evidence_search_deployer_user_names|evidence_search_accounts_user_names|caselist_credential_writer_user_names|caselist_run_deployer_user_names) ' infrastructure/envs/dev/owner.auto.tfvars
+grep -c '^caselist_image_digest' infrastructure/envs/dev/owner.auto.tfvars
+```
+Success looks like `8`, then `0`. Fewer than 8: a line is missing, so find it in the checkout that
+last applied dev before planning. A `1` on the second line means an image digest is already set,
+which belongs to step 6: take that line out for step 1's plan.
+
+## Step 1 — Plan the run's network, cluster, repository and deployer
+
+Saved to a file, so what step 2 applies is exactly what was read here.
+
+**Operator command** (expected runtime ~2 min)
+Where: `$WT`
+```bash
+cd "$WT"
+if env | grep -qE '^(TF_VAR_|TF_WORKSPACE=|TF_DATA_DIR=|TF_CLI_ARGS)'; then echo "STOP: a Terraform override is set in this shell:"; env | grep -oE '^(TF_VAR_[A-Za-z_]*|TF_WORKSPACE|TF_DATA_DIR|TF_CLI_ARGS[A-Za-z_]*)'; else AWS_PROFILE=debate-admin terraform -chdir=infrastructure/envs/dev init -input=false && AWS_PROFILE=debate-admin terraform -chdir=infrastructure/envs/dev plan -input=false -no-color -out=caselist-run.tfplan | tee /tmp/caselist-run-plan.txt | tail -5; fi
+grep -E '^Plan:|must be replaced|will be destroyed' /tmp/caselist-run-plan.txt
+grep -E '^  # ' /tmp/caselist-run-plan.txt | grep -v 'module.caselist_run' | head
+grep -E '^  # .* will be updated in-place' /tmp/caselist-run-plan.txt
+```
+
+**What to read, and what stops you.** Send the whole plan (`/tmp/caselist-run-plan.txt`) to the PM
+before step 2. No `Plan:` line at all means the plan failed: read the end of the file.
+
+* The first `grep` prints exactly `Plan: 23 to add, 1 to change, 0 to destroy.`, and **no line saying
+  `must be replaced` or `will be destroyed`**. A destroyed or replaced `aws_ssoadmin_account_assignment`
+  or `aws_ssoadmin_permission_set` anywhere means `owner.auto.tfvars` is missing a line: **stop, fix
+  the file, plan again, never apply.**
+* The second `grep` prints nothing: every change is under `module.caselist_run`.
+* The third prints exactly one line, `module.caselist_run.aws_iam_role_policies_exclusive.run will be
+  updated in-place`: the run role's policy list gains `everyday-evidence`.
+* The 23 are: the VPC, its default security group (taken over with no rule), the internet gateway,
+  two subnets, the route table, its internet route, two route table associations, the S3 gateway
+  endpoint and the security group (11); the cluster, the repository and its lifecycle policy (3);
+  the run's log group and its execution role with one inline policy and two exclusive-policy
+  resources (5); the run role's `everyday-evidence` policy (1); the `DebateDevCaselistRunDeployer`
+  permission set, its inline policy and one account assignment (3).
+* `Plan: 40 to add` means t02's apply A has not been applied: stop, and do that first.
+* There is no task definition and no schedule yet: those need an image (step 6).
+
+## Step 2 — Apply the saved plan
+
+Only after the PM's word on step 1's plan.
+
+**Operator command** (expected runtime ~2 min)
+Where: `$WT`
+```bash
+cd "$WT"
+AWS_PROFILE=debate-admin terraform -chdir=infrastructure/envs/dev apply -input=false caselist-run.tfplan
+AWS_PROFILE=debate-admin terraform -chdir=infrastructure/envs/dev output caselist_run_deployer_permission_set_name
+AWS_PROFILE=debate-admin terraform -chdir=infrastructure/envs/dev output caselist_run_repository_url
+```
+Success looks like `Apply complete! Resources: 23 added, 1 changed, 0 destroyed.`, then
+`"DebateDevCaselistRunDeployer"` and the repository's URL ending `/debate-dev-caselist-run`. A stale
+plan (`Saved plan is stale`) means something changed in between: go back to step 1.
+
+## Step 3 — Does a new login end the Mac's token? (before apply B)
+
+Apply B (step 6) creates the login's schedule enabled, and from then on the login task logs in
+afresh every Wednesday at 03:00. The Mac's agent still runs the weeks on the token in its keychain.
+If OpenCaselist ends a token when the same account logs in again, the Mac's next run fails with
+`CASELIST_AUTH_EXPIRED`. This step finds out by hand before the schedule can (PM ruling,
+2026-10-24). It checks the Mac's token, logs in once as the writer into the token secret, exactly as
+the scheduled login would, and checks the Mac's token again. That hand login also puts the token in
+the secret that step 7's rehearsal reads. Nothing in AWS changes but the token secret. Each check
+makes one request to OpenCaselist.
+
+**The Mac's token, as the agent runs.** The plist's `PATH` and `DEBATE_ENV` and nothing of your
+shell's.
+
+**Operator command** (expected runtime ~1 min)
+Where: your Mac, anywhere
+```bash
+PLIST="$HOME/Library/LaunchAgents/com.debate-intelligence.caselist-sync.plist"
+AGENT_PATH=$(plutil -extract EnvironmentVariables.PATH raw "$PLIST")
+AGENT_ENV=$(plutil -extract EnvironmentVariables.DEBATE_ENV raw "$PLIST")
+env -i HOME="${HOME}" PATH="${AGENT_PATH}" DEBATE_ENV="${AGENT_ENV}" sh -c 'debate-research --json caselist auth status --check' 2>&1 | grep -oE '"status": "(ok|error)"|"backend": "[a-z]+"|"checked_now": true|"code": "[A-Z_]+"'
+```
+Success looks like `"status": "ok"`, `"backend": "keyring"`, `"checked_now": true`. A
+`"code": "CASELIST_AUTH_EXPIRED"` here means the Mac's token had already ended, and this step can
+tell nothing: log the Mac in again (the first block under "If it does not" below), run this block
+again, and go on only when it prints `"status": "ok"`.
+
+**The hand login, as the writer, into the token secret.** It prompts for the Tabroom username and
+password, as `caselist auth login` always has, and stores only the token.
+
+**Operator command** (expected runtime ~1 min)
+Where: `$WT`
+```bash
+cd "$WT"
+if env | grep -q '^DEBATE_'; then echo "STOP: DEBATE_ overrides are set in this shell"; else DEBATE_ENV=dev DEBATE_CASELIST__API_ENABLED=true uv run debate-research caselist auth login --token-backend secretsmanager --aws-profile debate-dev-caselist-writer; fi
+```
+Success looks like: `Logged in. The caselist_token is stored in the secretsmanager backend (Secrets
+Manager secret debate-dev-caselist-token) ... The password was not stored.` An `AccessDenied` means
+the writer's session has expired: `aws sso login --sso-session debate`, then run it again.
+
+**The Mac's token again**, straight after.
+
+**Operator command** (expected runtime ~1 min)
+Where: your Mac, anywhere
+```bash
+PLIST="$HOME/Library/LaunchAgents/com.debate-intelligence.caselist-sync.plist"
+AGENT_PATH=$(plutil -extract EnvironmentVariables.PATH raw "$PLIST")
+AGENT_ENV=$(plutil -extract EnvironmentVariables.DEBATE_ENV raw "$PLIST")
+env -i HOME="${HOME}" PATH="${AGENT_PATH}" DEBATE_ENV="${AGENT_ENV}" sh -c 'debate-research --json caselist auth status --check' 2>&1 | grep -oE '"status": "(ok|error)"|"backend": "[a-z]+"|"checked_now": true|"code": "[A-Z_]+"'
+```
+
+**What to read.** Either way, send the PM the three blocks' output: it answers `v1-e40-t06`'s token
+question for ADR-0020.
+
+* **`"status": "ok"`**: a new login leaves the Mac's token working. Go on to step 4, and apply B
+  as written.
+* **`"code": "CASELIST_AUTH_EXPIRED"`**: the new login ended the Mac's token. Do the two blocks
+  below, then go on to step 4.
+
+**If it does not: log the Mac in again**, into its keychain, as the agent runs. It prompts as above.
+
+**Operator command** (expected runtime ~1 min)
+Where: your Mac, anywhere
+```bash
+PLIST="$HOME/Library/LaunchAgents/com.debate-intelligence.caselist-sync.plist"
+AGENT_PATH=$(plutil -extract EnvironmentVariables.PATH raw "$PLIST")
+AGENT_ENV=$(plutil -extract EnvironmentVariables.DEBATE_ENV raw "$PLIST")
+env -i HOME="${HOME}" PATH="${AGENT_PATH}" DEBATE_ENV="${AGENT_ENV}" sh -c 'debate-research caselist auth login'
+```
+Success looks like `Logged in. The caselist_token is stored in the keyring backend (...)`. Then the
+check block above prints `"status": "ok"` again.
+
+**And pause the weekly login until `v1-e40-t06`**, so it cannot end the Mac's token on Wednesday.
+The line goes in the gitignored `owner.auto.tfvars`, which step 6's plan reads; t06 takes it out.
+
+**Operator command** (expected runtime ~1 min)
+Where: `$WT`
+```bash
+cd "$WT"
+grep -q '^caselist_login_schedule_enabled' infrastructure/envs/dev/owner.auto.tfvars || printf 'caselist_login_schedule_enabled = false\n' >> infrastructure/envs/dev/owner.auto.tfvars
+grep -cE '^caselist_login_schedule_enabled += +false$' infrastructure/envs/dev/owner.auto.tfvars
+```
+Success looks like `1`. `0` means the file already sets the login schedule another way: make that
+line `caselist_login_schedule_enabled = false` by hand. Step 6's plan then shows the login's
+schedule `DISABLED`, and step 7's rehearsal waits for t06 (it says why).
+
+## Step 4 — The deployer's SSO profile
+
+Once per Mac.
+
+**Operator command** (expected runtime ~1 min)
+Where: your Mac, anywhere
+```bash
+ACCOUNT_ID=$(aws sts get-caller-identity --profile debate-admin --query Account --output text)
+aws configure set profile.debate-dev-caselist-run-deployer.sso_session debate
+aws configure set profile.debate-dev-caselist-run-deployer.sso_account_id "$ACCOUNT_ID"
+aws configure set profile.debate-dev-caselist-run-deployer.sso_role_name DebateDevCaselistRunDeployer
+aws configure set profile.debate-dev-caselist-run-deployer.region us-east-1
+aws sso login --sso-session debate
+aws sts get-caller-identity --profile debate-dev-caselist-run-deployer --query Arn --output text
+```
+Success looks like: an ARN containing `AWSReservedSSO_DebateDevCaselistRunDeployer`. Identity Center
+can take a minute to provision a new set's role; if the last line says the role does not exist, wait
+a minute and run it again.
+
+## Step 5 — Build the first image and push it
+
+The image is the installed CLI from one release, built for arm64 on this Mac (no emulation). Use a
+dev pre-release that contains `v1-e40-t03`'s merge and whose validate-dev run, image job included,
+is green. List the newest three, and set `TAG` in this shell to the newest:
+
+```bash
+cd "$WT"
+gh release list --repo charlesclark2/debate-intelligence --limit 3 --json tagName,createdAt --jq '.[] | .tagName + " " + .createdAt'
+TAG="$(gh release list --repo charlesclark2/debate-intelligence --limit 1 --json tagName --jq '.[0].tagName')"
+echo "TAG=$TAG"
+```
+If the newest is not the one to use, set the one that is in the same shell, for example
+`TAG='v1.1.0-dev.140'`. The next two blocks read `TAG` and stop if it is empty.
+
+**The dry run first**: it downloads the release's wheels, builds the image and checks it offline
+(arm64, an unprivileged user, no credential in its environment or files, `debate-research` and
+`timeout` on `PATH`, the tag, SQLite with FTS5 at 3.40.0 or later). It makes no AWS call. Docker
+Desktop must be running.
+
+**Operator command** (expected runtime ~1 min: 26 s on the operator's Mac for `v1.1.0-dev.134`,
+2026-10-24)
+Where: `$WT`, in the shell that set `TAG`
+```bash
+cd "$WT"
+if [ -z "$TAG" ]; then echo "STOP: TAG is not set; run the listing block first"; elif env | grep -qE '^(CASELIST_RUN_DEPLOY_PROFILE|DEBATE_RELEASE_REPO)='; then echo "STOP: a deploy override is set in this shell"; else time scripts/caselist_run_deploy.sh dev "$TAG" --dry-run; fi
+```
+Success looks like seven `ok:` lines (six before `v1-e40-t06` added the base image's Python), the last `ok: SQLite 3.x.y with FTS5`, then `Dry run complete.
+debate-dev-caselist-run:<tag> built and checked`. Any `check image:` line says what is wrong, and
+nothing was pushed. Note the `real` time for the PM: it is the build's measured runtime.
+
+**Then the push.** It pushes the image as the deployer, tagged with the release, and stops before
+registering a task definition, because none exists before apply B. It prints the digest.
+
+**Operator command** (expected runtime ~3 min)
+Where: `$WT`
+```bash
+cd "$WT"
+aws sso login --sso-session debate
+if [ -z "$TAG" ]; then echo "STOP: TAG is not set; run the listing block first"; elif env | grep -qE '^(CASELIST_RUN_DEPLOY_PROFILE|DEBATE_RELEASE_REPO)='; then echo "STOP: a deploy override is set in this shell"; else scripts/caselist_run_deploy.sh dev "$TAG" 2>&1 | tee /tmp/caselist-run-deploy.txt | tail -8; fi
+grep -E '^pushed: |caselist_image_digest = ' /tmp/caselist-run-deploy.txt
+```
+Success looks like `pushed: <account>.dkr.ecr.us-east-1.amazonaws.com/debate-dev-caselist-run@sha256:<64
+hex digits>`, then the line `caselist_image_digest = "sha256:<the same digits>"` under "before the
+environment's apply B". No `pushed:` line means the push failed: the lines above it say why.
+
+## Step 6 — Apply B: the login and run tasks and their schedules
+
+Apply B is t02's and this task's together: the login task definition and its Wednesday 03:00
+schedule, and the run task definition and its Wednesday 06:00 schedule, both pinned by the digest
+step 5 printed. The digest goes in the gitignored `owner.auto.tfvars`, which every later dev apply
+already carries; a plan without it would destroy both tasks, and the plan check below stops that.
+
+**Operator command** (expected runtime ~1 min)
+Where: `$WT`
+```bash
+cd "$WT"
+DIGEST='sha256:the-64-hex-digits-step-5-printed'
+grep -q '^caselist_image_digest' infrastructure/envs/dev/owner.auto.tfvars && echo "STOP: owner.auto.tfvars already names an image digest" || printf 'caselist_image_digest = "%s"\n' "$DIGEST" >> infrastructure/envs/dev/owner.auto.tfvars
+terraform fmt infrastructure/envs/dev
+grep -cE '^caselist_image_digest += "sha256:[0-9a-f]{64}"$' infrastructure/envs/dev/owner.auto.tfvars
+```
+Success looks like `1`. `0` means the digest is not 64 hex digits: correct the line by hand.
+
+**The plan.**
+
+**Operator command** (expected runtime ~2 min)
+Where: `$WT`
+```bash
+cd "$WT"
+if env | grep -qE '^(TF_VAR_|TF_WORKSPACE=|TF_DATA_DIR=|TF_CLI_ARGS)'; then echo "STOP: a Terraform override is set in this shell"; else AWS_PROFILE=debate-admin terraform -chdir=infrastructure/envs/dev plan -input=false -no-color -out=caselist-tasks.tfplan | tee /tmp/caselist-tasks-plan.txt | tail -5; fi
+grep -E '^Plan:|must be replaced|will be destroyed' /tmp/caselist-tasks-plan.txt
+grep -E '^  # ' /tmp/caselist-tasks-plan.txt | grep -v 'module.caselist_run' | head
+grep -E '^ +[+] (schedule_expression|state) ' /tmp/caselist-tasks-plan.txt
+grep -cE '^ +[+~] secrets ' /tmp/caselist-tasks-plan.txt
+```
+
+**What to read, and what stops you.** Send the plan to the PM; apply only after the PM's word.
+
+* `Plan: 19 to add, 0 to change, 0 to destroy.` in a fresh environment (dev's re-plan after its
+  partial apply is below), no line saying `must be replaced` or `will be destroyed`, and nothing
+  printed by the second `grep`.
+* The third prints the login's `cron(0 3 ? * WED *)` with `ENABLED`, and the run's `cron(0 6 ? * WED
+  *)` with **`DISABLED`**. A run schedule `ENABLED` here is wrong: stop. If step 3 paused the
+  login, its schedule shows `DISABLED` too; `ENABLED` then is wrong: stop.
+* The last prints `0`: no secret reaches either task through ECS.
+* The 19: t02's 12 and the run's 7.
+  * t02's 12: the login's log group; its execution role and the scheduler role, each with one
+    inline policy and two exclusive-policy resources; its task definition; its schedule group,
+    `debate-dev-caselist-login`; and its schedule.
+  * The run's 7: its task definition, whose image ends `@` and the digest; its scheduler role, with
+    one inline policy and two exclusive-policy resources; its schedule group,
+    `debate-dev-caselist-run`; and its schedule.
+
+**In dev, re-planning after apply B's partial apply of 2026-10-24.** The first apply B in dev,
+with the `v1.1.0-dev.137` digest, created 15 of the 17 resources it then planned and destroyed
+nothing. It stopped at both `aws_scheduler_schedule` resources with `ValidationException: The
+execution role you provide must allow AWS EventBridge Scheduler to assume the role`. Each scheduler
+role trusted its schedule's own ARN (`schedule/default/<name>`). EventBridge Scheduler assumes a
+schedule's role with `aws:SourceArn` set to the ARN of the schedule's **group**, never the schedule's
+own ARN ("Confused deputy prevention in EventBridge Scheduler",
+<https://docs.aws.amazon.com/scheduler/latest/UserGuide/cross-service-confused-deputy-prevention.html>).
+Now each schedule sits alone in its own group, `debate-dev-caselist-login` and
+`debate-dev-caselist-run`, and each scheduler role trusts exactly its own group's ARN.
+
+With the fix merged, the re-plan creates the two groups and the two schedules, and updates the two
+scheduler roles' trust policies in place. The plan block above still applies. Its first `grep` must
+print exactly `Plan: 4 to add, 2 to change, 0 to destroy.`, with no `must be replaced` or `will be
+destroyed`, and its second must print nothing. Then this block checks the plan itself. It prints
+`PLAN STOP` with the reason for anything but exactly that shape. The login's schedule must be
+`ENABLED`, or `DISABLED` if `owner.auto.tfvars` pauses it (step 3), and the run's `DISABLED`:
+
+**Operator command** (expected runtime ~1 min)
+Where: `$WT`
+```bash
+cd "$WT"
+AWS_PROFILE=debate-admin terraform -chdir=infrastructure/envs/dev show -json caselist-tasks.tfplan > /tmp/caselist-tasks-plan.json
+python3 -I - /tmp/caselist-tasks-plan.json infrastructure/envs/dev/owner.auto.tfvars <<'PLANCHECK'
+import json, re, sys
+plan = json.load(open(sys.argv[1]))
+paused = re.search(r"^caselist_login_schedule_enabled\s*=\s*false\s*$", open(sys.argv[2]).read(), re.M) is not None
+login_state = "DISABLED" if paused else "ENABLED"
+m = "module.caselist_run."
+expected_creates = {
+    m + "aws_scheduler_schedule_group.login[0]",
+    m + "aws_scheduler_schedule_group.run[0]",
+    m + "aws_scheduler_schedule.login[0]",
+    m + "aws_scheduler_schedule.run[0]",
+}
+expected_updates = {m + "aws_iam_role.scheduler[0]": "login", m + "aws_iam_role.run_scheduler[0]": "run"}
+schedules = {"login": (login_state, "cron(0 3 ? * WED *)"), "run": ("DISABLED", "cron(0 6 ? * WED *)")}
+def unknown(value):
+    if value is True:
+        return True
+    if isinstance(value, dict):
+        return any(unknown(v) for v in value.values())
+    if isinstance(value, list):
+        return any(unknown(v) for v in value)
+    return False
+def trust(policy):
+    try:
+        statements = json.loads(policy)["Statement"]
+        return statements[0] if len(statements) == 1 else None
+    except (TypeError, ValueError, KeyError, IndexError):
+        return None
+changes = [c for c in plan.get("resource_changes", []) if c["change"]["actions"] not in (["no-op"], ["read"])]
+creates = {c["address"]: c["change"] for c in changes if c["change"]["actions"] == ["create"]}
+updates = {c["address"]: c["change"] for c in changes if c["change"]["actions"] == ["update"]}
+others = sorted(c["address"] + " " + "/".join(c["change"]["actions"]) for c in changes if c["change"]["actions"] not in (["create"], ["update"]))
+outside = sorted(c["address"] for c in changes if not c["address"].startswith(m))
+problems = []
+if outside:
+    problems.append("changes outside module.caselist_run " + str(outside))
+if set(creates) != expected_creates:
+    problems.append("creates missing " + str(sorted(expected_creates - set(creates))) + ", unexpected " + str(sorted(set(creates) - expected_creates)))
+else:
+    for which, (state, cron) in schedules.items():
+        group = creates[m + "aws_scheduler_schedule_group." + which + "[0]"]["after"] or {}
+        schedule = creates[m + "aws_scheduler_schedule." + which + "[0]"]["after"] or {}
+        name = "debate-dev-caselist-" + which
+        if group.get("name") != name or schedule.get("group_name") != name:
+            problems.append("the " + which + " schedule is in group " + str(schedule.get("group_name")) + " of " + str(group.get("name")) + ", expected " + name)
+        if schedule.get("state") != state or schedule.get("schedule_expression") != cron:
+            problems.append("the " + which + " schedule is " + str(schedule.get("state")) + " " + str(schedule.get("schedule_expression")) + ", expected " + state + " " + cron)
+if set(updates) != set(expected_updates):
+    problems.append("updates are " + str(sorted(updates)) + ", expected only the two scheduler roles")
+else:
+    for address, which in expected_updates.items():
+        change = updates[address]
+        before, after = change["before"] or {}, change["after"] or {}
+        changed = sorted(k for k in set(before) | set(after) if before.get(k) != after.get(k))
+        unknowns = sorted(k for k, v in (change.get("after_unknown") or {}).items() if unknown(v))
+        if changed != ["assume_role_policy"] or unknowns:
+            problems.append(address + " changes " + str(changed) + " with unknown " + str(unknowns) + ", expected only assume_role_policy")
+            continue
+        old, new = trust(before["assume_role_policy"]), trust(after["assume_role_policy"])
+        account = ((old or {}).get("Condition") or {}).get("StringEquals", {}).get("aws:SourceAccount")
+        wanted = {"StringEquals": {"aws:SourceAccount": account, "aws:SourceArn": "arn:aws:scheduler:us-east-1:" + str(account) + ":schedule-group/debate-dev-caselist-" + which}}
+        if account is None or new is None or new.get("Principal") != {"Service": "scheduler.amazonaws.com"} or new.get("Condition") != wanted:
+            problems.append(address + " trusts " + json.dumps((new or {}).get("Condition")) + ", expected " + json.dumps(wanted))
+if others:
+    problems.append("other actions " + str(others))
+print("PLAN OK: the two schedule groups and two schedules created, the two scheduler roles' trust updated in place to their own groups, the login's schedule " + login_state + " and the run's DISABLED, nothing else" if not problems else "PLAN STOP: " + "; ".join(problems))
+PLANCHECK
+```
+Success looks like `PLAN OK: the two schedule groups and two schedules created, the two scheduler
+roles' trust updated in place to their own groups, the login's schedule ENABLED and the run's
+DISABLED, nothing else` (with `DISABLED` for the login if step 3 paused it). The 4 to add are
+`aws_scheduler_schedule_group.login[0]` and `.run[0]` and `aws_scheduler_schedule.login[0]` and
+`.run[0]`. The 2 to change are `aws_iam_role.scheduler[0]` and `aws_iam_role.run_scheduler[0]`, each
+changing only `assume_role_policy`, to `StringEquals` on `aws:SourceAccount` and on `aws:SourceArn`,
+its own group's ARN. **`PLAN STOP` stops everything**: send its line and the plan to the PM, and do
+not apply.
+
+
+**Operator command** (expected runtime ~1 min)
+Where: `$WT`
+```bash
+cd "$WT"
+AWS_PROFILE=debate-admin terraform -chdir=infrastructure/envs/dev apply -input=false caselist-tasks.tfplan
+AWS_PROFILE=debate-admin terraform -chdir=infrastructure/envs/dev output caselist_run_schedule_state
+```
+Success looks like `Apply complete! Resources: 19 added, 0 changed, 0 destroyed.` in a fresh
+environment, or `Apply complete! Resources: 4 added, 2 changed, 0 destroyed.` for dev's re-plan,
+then `"DISABLED"`. The first scheduled login runs the next Wednesday at 03:00 Chicago time, unless step 3
+paused it; t02's runbook, step 5's last block, checks it.
+
+**If an apply stops partway**, recover only by re-planning from the same worktree. Move it to
+`origin/dev` again ([Before you start](#before-you-start)), plan with the block above, and read the
+new counts with the PM before applying. Never `-target`, and never create or delete a resource by
+hand. The saved plan from the same configuration is what keeps the state and the account in step.
+
+## Step 7 — A cloud rehearsal: one dry-run pull (after apply B)
+
+The deployer starts the run task once, with its command overridden to `--json caselist pull
+--dry-run --caselist <slug>`, under the same six-hour entry point. The image, the network, the run
+role and the token read from Secrets Manager all take part. A dry run lists what it would download
+and downloads, writes and records nothing, so it is safe before `v1-e40-t04` (PM ruling,
+2026-10-24). It lists from an empty data directory, so it wants every week: that count is expected.
+
+It needs a working token in the token secret: step 3's hand login put one there, and after a
+Wednesday the scheduled login has. **If step 3 found that a new login ends the Mac's token, wait for
+`v1-e40-t06`**: logging the Mac in again there ended the secret's token in turn, and the login
+schedule is paused, so the rehearsal would stop at `CASELIST_AUTH_EXPIRED`.
+
+**The network and one of the agent's caselists.** The network is the schedule's, from the root's
+outputs; the slug is the first the Mac's agent pulls.
+
+**Operator command** (expected runtime ~1 min)
+Where: `$WT`
+```bash
+cd "$WT"
+SUBNETS=$(AWS_PROFILE=debate-admin terraform -chdir=infrastructure/envs/dev output -json caselist_run_subnet_ids | tr -d '[]" \n')
+SECURITY_GROUP=$(AWS_PROFILE=debate-admin terraform -chdir=infrastructure/envs/dev output -raw caselist_run_security_group_id)
+SLUG=$(plutil -extract ProgramArguments json -o - "$HOME/Library/LaunchAgents/com.debate-intelligence.caselist-sync.plist" | python3 -c 'import json, sys; a = json.load(sys.stdin); print(a[a.index("--caselist") + 1] if "--caselist" in a else "")')
+echo "subnets ${SUBNETS}; security group ${SECURITY_GROUP}; caselist ${SLUG}"
+```
+Success looks like two `subnet-` ids joined by a comma, one `sg-` id and one caselist slug, such as
+`hsld26`. No slug means the plist names none: set one the agent pulls by hand, for example
+`SLUG='hsld26'`.
+
+**Start it**, as the deployer, on the run's cluster, the newest revision of the run's family.
+
+**Operator command** (expected runtime ~1 min to start)
+Where: `$WT`, in the shell that set `SLUG`
+```bash
+cd "$WT"
+OVERRIDES=$(printf '{"containerOverrides":[{"name":"run","command":["--json","caselist","pull","--dry-run","--caselist","%s"]}]}' "$SLUG")
+if [ -z "$SLUG" ]; then echo "STOP: SLUG is not set; run the block above first"; else TASK=$(aws ecs run-task --profile debate-dev-caselist-run-deployer --region us-east-1 --cluster debate-dev-caselist-run --task-definition debate-dev-caselist-run --launch-type FARGATE --platform-version LATEST --count 1 --network-configuration "awsvpcConfiguration={subnets=[${SUBNETS}],securityGroups=[${SECURITY_GROUP}],assignPublicIp=ENABLED}" --overrides "$OVERRIDES" --query 'tasks[0].taskArn' --output text); echo "started ${TASK}"; fi
+```
+Success looks like `started arn:aws:ecs:us-east-1:<account>:task/debate-dev-caselist-run/<id>`.
+`None` means it did not start: run it again without `--query` to see the failure.
+
+**Watch it** every five minutes or so; a dry run lists and stops, so it should finish in minutes,
+not hours.
+
+**Operator command** (expected runtime ~1 min each time)
+Where: `$WT`, in the same shell
+```bash
+aws ecs describe-tasks --profile debate-dev-caselist-run-deployer --region us-east-1 --cluster debate-dev-caselist-run --tasks "$TASK" --query 'tasks[0].[lastStatus,stopCode,containers[0].exitCode]' --output text
+```
+Success looks like `STOPPED	EssentialContainerExited	0`. `RUNNING` (or `PENDING`) means it is not
+done yet. A non-zero exit code is a failed rehearsal: read its result below.
+
+**Its result: it listed, and downloaded, wrote and published nothing.** The pull's `--json` result is
+one line in the run's log.
+
+**Operator command** (expected runtime ~1 min)
+Where: `$WT`, in the same shell
+```bash
+aws logs tail debate-dev-caselist-run --profile debate-dev-caselist-run-deployer --region us-east-1 --since 1h | grep '"command": "caselist pull"' | grep -oE '"status": "(ok|error)"|"dry_run": true|"archives_wanted": [0-9]+|"archives_downloaded": [0-9]+|"objects_published": [0-9]+|"code": "[A-Z_]+"'
+```
+Success looks like `"status": "ok"`, `"dry_run": true`, `"archives_wanted": <any count>`,
+`"archives_downloaded": 0` and `"objects_published": 0`. A `"code"` line is a failure.
+`CASELIST_AUTH_EXPIRED` means the secret's token does not work: go back to step 3. Any other code,
+or nothing printed, goes to the PM with the log's last lines (`aws logs tail` without the `grep`s).
+
+**It recorded nothing.** The bucket's run records end where they did: no run at the rehearsal's
+start time.
+
+**Operator command** (expected runtime ~1 min)
+Where: your Mac, the installed build
+```bash
+aws sso login --profile debate-dev-evidence
+debate-research caselist runs --remote --last 3
+```
+Success looks like the newest runs being the Mac's, none started at the rehearsal's time.
+
+## Step 8 — The seed, bucket mode, and one run by hand (at the cutover, after `v1-e40-t04`)
+
+**At the cutover, run this step through [caselist-cutover.md](caselist-cutover.md)**, steps 2 to 5.
+It orders these parts with the Mac's agent, installs the build with the lock first, and checks the
+image apply's plan with `IMAGEPLAN`. Since `v1-e40-t05`'s alerts apply carried bucket mode into the
+run's task definition early (the PM's ruling (a)), the apply below is an image change only, with the
+same counts, and since `v1-e40-t06` the dev profile sets bucket mode itself. What follows is kept as
+the record of what each part does.
+
+**Not before `v1-e40-t04` has merged and been released, and not before `v1-e40-t06`'s cutover has
+unloaded the Mac's agent** (ADR-0020 (4), cutover steps 3 to 5; the PM's ruling 3(b) on t04's plan).
+Without bucket mode a cloud run starts from an empty data directory: it would select every week as
+new, spend the day's five downloads, and publish to the dev bucket while the Mac's agent may too,
+with no lock between them. In bucket mode a run restores the working copy and takes the bucket's run
+lock first, and it refuses a bucket that holds no lock object (`RUN_STATE_NOT_SEEDED`). The seed
+creates that object from the Mac's state. From then on the bucket keeps the run's state, and a
+local-mode command on the Mac refuses the bucket (`BUCKET_KEEPS_RUN_STATE`). That is why the agent
+goes first: left loaded, it would be refused every Wednesday.
+
+The parts, in order: the agent is unloaded; the seed's plan; the seed; the run task in bucket mode,
+planned (the PM reads it) and applied; one run by hand.
+
+**The agent is unloaded, and no pull is running.** Read-only.
+
+**Operator command** (expected runtime ~1 min)
+Where: your Mac, anywhere
+```bash
+if launchctl print "gui/$(id -u)/com.debate-intelligence.caselist-sync" >/dev/null 2>&1; then echo "STOP: the agent is still loaded; v1-e40-t06 unloads it first"; elif pgrep -f "caselist pull" >/dev/null; then echo "STOP: a caselist pull is running"; else echo "agent unloaded, no pull running"; fi
+```
+Success looks like `agent unloaded, no pull running`.
+
+**The seed's plan.** With the installed build, a release that has `v1-e40-t04`, in bucket mode for
+this command alone. It writes nothing anywhere: it lists the lock's key and heads each of the Mac's
+manifests in the bucket.
+
+**Operator command** (expected runtime ~1 min)
+Where: your Mac, the installed build
+```bash
+aws sso login --profile debate-dev-evidence
+if env | grep -q '^DEBATE_'; then echo "STOP: DEBATE_ overrides are set in this shell"; else DEBATE_ENV=dev DEBATE_CASELIST__RUN_STATE=bucket debate-research --json caselist seed-run-state | grep -oE '"(applied|seeded_already)": (true|false)|"manifests": [0-9]+|"code": "[A-Z_]+"'; fi
+```
+
+**What to read, and what stops you.**
+
+* Go on only with `"applied": false`, `"seeded_already": false` and `"manifests":` **above zero**
+  (50 on 2026-10-24). Zero manifests is an empty data directory, not a Mac ready to seed: stop.
+* `"code": "SEED_REFUSED"` stops you. Run the block again without the `grep` to read the reason.
+  "already holds a run lock" means the bucket is seeded: stop and tell the PM. "not in the bucket
+  with the same SHA-256" means the Mac imported something it has not published: run `caselist pull
+  --publish-pending` in local mode (the bucket is not seeded yet, so local mode still publishes),
+  then this block again. A manifest the publisher withholds names the removal to run again.
+
+**The seed.** It creates the lock object with `If-None-Match: *`, so of two seeds only one gets past
+its first write, uploads the run-state bundle and the five state files, checks each back against
+its SHA-256, and releases the lock.
+
+**Operator command** (expected runtime ~1 min)
+Where: your Mac, the installed build
+```bash
+if env | grep -q '^DEBATE_'; then echo "STOP: DEBATE_ overrides are set in this shell"; elif pgrep -f "caselist pull" >/dev/null; then echo "STOP: a caselist pull is running"; else DEBATE_ENV=dev DEBATE_CASELIST__RUN_STATE=bucket debate-research --json caselist seed-run-state --execute | grep -oE '"applied": (true|false)|"manifests": [0-9]+|"checked_back": \[[^]]*\]|"code": "[A-Z_]+"'; fi
+```
+Success looks like `"applied": true`, the same `"manifests":` count as the plan, above zero, and
+`"checked_back":` naming six keys: `manifests/_run-state/run-state.tar.gz` and the five under
+`reports/sync/state/`. Anything else: stop and send the PM the output. The seed releases the lock
+whatever happened after it created it.
+
+From here on, every command on the Mac that writes to the dev bucket runs in bucket mode
+(`DEBATE_CASELIST__RUN_STATE=bucket`, which `v1-e40-t06` puts in the profile), and restores the
+working copy first.
+
+**The run task in bucket mode.** Two changes reach the run's task definition in one apply: an image
+built from a release that has `v1-e40-t04`, and `DEBATE_CASELIST__RUN_STATE=bucket` in its
+environment, from this module (the PM's ruling 1 on t04's plan). Build and push the image as
+[A new image, later](#a-new-image-later) says, and put the digest line it prints in place of the
+old one in `owner.auto.tfvars`. Then the plan.
+
+**Operator command** (expected runtime ~2 min)
+Where: `$WT`, a worktree of `dev` with `v1-e40-t04` merged
+```bash
+cd "$WT"
+if env | grep -qE '^(TF_VAR_|TF_WORKSPACE=|TF_DATA_DIR=|TF_CLI_ARGS)'; then echo "STOP: a Terraform override is set in this shell"; else AWS_PROFILE=debate-admin terraform -chdir=infrastructure/envs/dev plan -input=false -no-color -out=caselist-bucket-mode.tfplan | tee /tmp/caselist-bucket-mode-plan.txt | tail -5; fi
+grep -E '^Plan:|must be replaced|will be destroyed' /tmp/caselist-bucket-mode-plan.txt
+grep -c 'DEBATE_CASELIST__RUN_STATE' /tmp/caselist-bucket-mode-plan.txt
+grep -E '^  # ' /tmp/caselist-bucket-mode-plan.txt | grep -v 'module.caselist_run' | head
+grep -E '^ +[~+] state ' /tmp/caselist-bucket-mode-plan.txt
+```
+
+**What to read, and what stops you.** Send the plan to the PM; apply only after the PM's word.
+
+* `Plan: 2 to add, 4 to change, 2 to destroy.`, as for any new image: the login and run task
+  definitions each replaced (the two `must be replaced` lines), and the two schedules and their
+  scheduler roles' policies repointed at the new revisions. The run schedule's revision is the one
+  ruling 1 expects to see repointed.
+* The second `grep` prints `1` or more: the run's new revision carries bucket mode. `0`: stop,
+  unless the alerts' apply ([caselist-run-alerts.md](caselist-run-alerts.md), step 2) already
+  carried bucket mode into the run's task definition, which its plan check reported as a `NOTE for
+  the PM` and the PM let go on. Then the revision here changes its image alone and `0` is expected.
+* Nothing printed by the third, and no schedule's `state` turning `ENABLED` in the fourth: the run's
+  schedule stays `DISABLED` until `v1-e40-t06` enables it.
+
+**Operator command** (expected runtime ~1 min)
+Where: `$WT`
+```bash
+cd "$WT"
+AWS_PROFILE=debate-admin terraform -chdir=infrastructure/envs/dev apply -input=false caselist-bucket-mode.tfplan
+AWS_PROFILE=debate-admin terraform -chdir=infrastructure/envs/dev output caselist_run_schedule_state
+```
+Success looks like `Apply complete! Resources: 2 added, 4 changed, 2 destroyed.`, then `"DISABLED"`.
+
+**One run by hand.**
+
+The network a run by hand starts in is the schedule's: read it from the root's outputs.
+
+**Operator command** (expected runtime ~1 min)
+Where: `$WT`
+```bash
+cd "$WT"
+SUBNETS=$(AWS_PROFILE=debate-admin terraform -chdir=infrastructure/envs/dev output -json caselist_run_subnet_ids | tr -d '[]" \n')
+SECURITY_GROUP=$(AWS_PROFILE=debate-admin terraform -chdir=infrastructure/envs/dev output -raw caselist_run_security_group_id)
+echo "subnets ${SUBNETS}; security group ${SECURITY_GROUP}"
+```
+Success looks like two `subnet-` ids joined by a comma, and one `sg-` id.
+
+**Start it.** As the deployer, on the run's cluster, the newest revision of the run's family.
+
+**Operator command** (expected runtime ~1 min to start; the run takes up to about 2.5 hours)
+Where: `$WT`
+```bash
+cd "$WT"
+TASK=$(aws ecs run-task --profile debate-dev-caselist-run-deployer --region us-east-1 --cluster debate-dev-caselist-run --task-definition debate-dev-caselist-run --launch-type FARGATE --platform-version LATEST --count 1 --network-configuration "awsvpcConfiguration={subnets=[${SUBNETS}],securityGroups=[${SECURITY_GROUP}],assignPublicIp=ENABLED}" --query 'tasks[0].taskArn' --output text)
+echo "started ${TASK}"
+```
+Success looks like `started arn:aws:ecs:us-east-1:<account>:task/debate-dev-caselist-run/<id>`.
+`None` means it did not start: run it again without `--query` to see the failure.
+
+**Watch it**, every half hour or so. `RUNNING` while it runs; at the end, `STOPPED` with exit code
+`0`. A non-zero exit, or `EssentialContainerExited` with no exit code, is a failed run: read its log.
+
+```bash
+aws ecs describe-tasks --profile debate-dev-caselist-run-deployer --region us-east-1 --cluster debate-dev-caselist-run --tasks "$TASK" --query 'tasks[0].[lastStatus,stopCode,containers[0].exitCode]' --output text
+aws logs tail debate-dev-caselist-run --profile debate-dev-caselist-run-deployer --region us-east-1 --since 3h | tail -3
+```
+
+**Its record reads as a Mac run's does** (ac2). The run published its record to the bucket like any
+run; `caselist runs --remote` on the Mac, with the everyday profile, lists it beside the Mac's runs,
+and the record's keys are the Mac record's keys.
+
+**Operator command** (expected runtime ~1 min)
+Where: your Mac, the installed build
+```bash
+aws sso login --profile debate-dev-evidence
+debate-research caselist runs --remote --last 3
+```
+Success looks like the cloud run's id (the UTC time it started) at the top, with its outcome and
+counts in the same columns as the Mac's runs, and no warning that a record was skipped or unreadable.
+
+**It ran in bucket mode, and left the lock free.** Its details in the bucket say what it restored
+and whether it saved the run-state bundle. Put the cloud run's id in `RUN_ID`.
+
+**Operator command** (expected runtime ~1 min)
+Where: `$WT`
+```bash
+cd "$WT"
+RUN_ID='the-cloud-runs-id-caselist-runs-printed'
+BUCKET=$(AWS_PROFILE=debate-admin terraform -chdir=infrastructure/envs/dev output -raw evidence_bucket_name)
+aws s3 cp "s3://${BUCKET}/reports/sync-run-details/2026/${RUN_ID}.json" - --profile debate-dev-evidence | grep -oE '"bundle": "saved[^"]*"|"took_over": (null|"[^"]*")|"parsed_objects": [0-9]+|"lock_lost": (true|false)'
+aws s3 cp "s3://${BUCKET}/reports/sync/run-lock.json" - --profile debate-dev-evidence | grep -oE '"state": "[a-z]+"|"home_environment": "[a-z]+"'
+```
+Success looks like `"bundle": "saved, ...`, `"took_over": null`, `"parsed_objects":` above zero (the
+parsed store's current version directory, about 15,000 objects at today's size), `"lock_lost":
+false`, then `"state": "free"` and `"home_environment": "dev"`. The restore's start and end are in
+the same file, under `bucket_run.restore`: they are the cloud figure the PM asked for in place of an
+estimate (t04's plan, question 7).
+
+## A new image, later
+
+Each new release reaches the run in two steps: the deploy script builds, checks, pushes and registers
+a run task definition with the new image (so a run by hand runs it), and prints the
+`caselist_image_digest` line. The schedule and the login move only when that line replaces the old
+one in `owner.auto.tfvars` and an apply that the PM has read puts it in both task definitions. A
+task definition is replaced, never changed, so expect `Plan: 2 to add, 4 to change, 2 to destroy.`:
+the login and run task definitions each replaced (a new revision, the old one deregistered, the two
+`must be replaced` lines here and nowhere else), and the two schedules and the two scheduler roles'
+policies pointed at the new revisions. Nothing else, and never an account assignment or a
+permission set.
+
+Keep at most four pushes between applies: the repository keeps the five newest images, and a task
+definition pins one by digest.
+
+**Applied so far in dev:** `v1.1.0-dev.164` (run task definition revision 8), then `v1.1.0-dev.251` on
+2026-10-31: the push registered revision 9, and the apply, its plan read by the PM with
+`check_image_plan.py` printing `PLAN OK`, put the schedule and the login on revision 10. On
+2026-11-01 v1-e40-t30's memory apply (`check_image_plan.py --memory`, `PLAN OK`) put the schedule on
+revision 11, the same image at 32 GB. The same day `v1.1.0-dev.289` was pushed for a hand-run import
+only, registering revision 12 (32 GB); the schedule stayed on 11 for Wednesday 2026-11-04.
+
+**The search index's format: dev's function first** (`v1-e39-t16`). The run's index stage builds
+dev's search index in the format its image writes, and dev's pilot function refuses an index of a
+format it does not read ([Moving the index to format 3](evidence-search.md#moving-the-index-to-format-3)).
+So before the digest line is replaced, check that dev's function reads the format the image you
+pushed writes. The block reads the function's image, finds the commit its tag names, and compares
+the format each commit writes, from its `search_index.py`: a build reads the format it writes and
+every earlier one, as each has so far. It reads AWS and changes nothing. `TAG` is the release the
+push used ([Step 5](#step-5--build-the-first-image-and-push-it) sets it).
+
+**Operator command** (expected runtime seconds)
+Where: `$WT`, in the shell that ran the push
+```bash
+cd "$WT"
+if [ -z "$TAG" ]; then echo "STOP: TAG is not set; set it to the release the push used"; else git fetch --quiet origin && git fetch --quiet origin tag "$TAG" && URI="$(AWS_PROFILE=debate-admin aws lambda get-function --region us-east-1 --function-name debate-dev-tub --query Code.ImageUri --output text)" && FUNCTION_TAG="$(AWS_PROFILE=debate-admin aws ecr describe-images --region us-east-1 --repository-name debate-dev-tub --image-ids "imageDigest=${URI##*@}" --query 'imageDetails[0].imageTags[0]' --output text)" && python3 -I - "$TAG" "${FUNCTION_TAG%%-uncommitted-*}" <<'FORMAT'
+import re, subprocess, sys
+def writes(commit):
+    shown = subprocess.run(["git", "show", commit + ":packages/debate_core/src/debate_core/domain/search_index.py"], capture_output=True, text=True)
+    found = re.search(r"^SEARCH_INDEX_FORMAT_VERSION: Final = ([0-9]+)$", shown.stdout, re.MULTILINE)
+    return int(found.group(1)) if found else None
+image, function = writes(sys.argv[1]), writes(sys.argv[2])
+if image is None or function is None:
+    print("STOP: cannot read the format of " + (sys.argv[1] if image is None else "dev's function at " + sys.argv[2]) + "; take this to the PM")
+elif function < image:
+    print("STOP: the image writes index format " + str(image) + " and dev's function, at " + sys.argv[2] + ", reads " + str(function) + " at most: deploy dev's function first (evidence-search.md, Moving the index to format " + str(image) + ")")
+else:
+    print("OK: the image writes index format " + str(image) + " and dev's function, at " + sys.argv[2] + ", reads it")
+FORMAT
+fi
+```
+Success looks like `OK: the image writes index format 3 and dev's function, at <commit>, reads it`.
+A `STOP` line stops this section: do not replace the digest line. Deploy dev's function as the line
+says, run this block again, and go on only after `OK`. A failed `aws` call prints its own error and
+no `OK`. For prod at the promotion the same check reads `debate-prod-tub`.
+
+**Replacing the digest line.** Step 6's append block stops on a line that is already there, so a new
+image's line replaces the old one with this block, after the push has written
+`/tmp/caselist-run-deploy.txt`. It changes that one line and nothing else, and stops when the file
+holds no digest line or more than one. Then the plan below, read by the PM before the apply.
+
+**Operator command** (expected runtime under a second)
+Where: `$WT`, in the shell that ran the push
+```bash
+cd "$WT"
+NEW="$(grep -oE 'caselist_image_digest = "sha256:[0-9a-f]{64}"' /tmp/caselist-run-deploy.txt | tail -1)"
+if [ -z "$NEW" ]; then echo "STOP: no digest line in /tmp/caselist-run-deploy.txt; run the push first"; else python3 -I - infrastructure/envs/dev/owner.auto.tfvars "$NEW" <<'DIGEST'
+import re, sys
+path, new = sys.argv[1], sys.argv[2]
+text = open(path).read()
+found = [line for line in text.splitlines() if re.match(r"^caselist_image_digest\s*=", line)]
+if len(found) != 1:
+    sys.exit("STOP: expected one caselist_image_digest line, found " + str(len(found)))
+open(path, "w").write(re.sub(r"(?m)^caselist_image_digest\s*=.*$", new, text))
+print("replaced: " + found[0] + "  ->  " + new)
+DIGEST
+fi
+grep -cE '^caselist_image_digest += "sha256:[0-9a-f]{64}"$' infrastructure/envs/dev/owner.auto.tfvars
+```
+Success looks like `replaced: caselist_image_digest = "sha256:<old>"  ->  caselist_image_digest =
+"sha256:<new>"`, then `1`. (Added by the PM, 2026-10-26, from `v1-e40-t13`'s review.)
+
+**The plan, after the cutover.** Step 6's plan and the cutover runbook's image-plan check were
+written for the first image apply, while the run's schedule was still `DISABLED`; since the cutover
+(2026-10-26) the schedule is `ENABLED` and stays so (`v1-e31-t31`'s review). This block saves the
+plan, writes it as JSON with `terraform show -json`, and checks that JSON with
+`ops/caselist_run/check_image_plan.py` (`v1-e40-t15`). The check reads the plan's resource changes,
+never its text: `terraform plan` prints a "Refreshing state..." line for every resource in state, so
+on 2026-10-29 a count of Identity Center lines read 40 on a plan that changed none of them. The block
+first removes the last plan and its JSON, so a plan that fails leaves nothing behind for the check
+or the apply to read. The plan's text stays in `/tmp/caselist-new-image-plan.txt` for the PM.
+
+**Operator command** (expected runtime ~2 min)
+Where: `$WT`, in the shell that replaced the digest line
+```bash
+cd "$WT"
+rm -f infrastructure/envs/dev/caselist-new-image.tfplan /tmp/caselist-new-image-plan.json
+if env | grep -qE '^(TF_VAR_|TF_WORKSPACE=|TF_DATA_DIR=|TF_CLI_ARGS)'; then echo "STOP: a Terraform override is set in this shell"; else AWS_PROFILE=debate-admin terraform -chdir=infrastructure/envs/dev init -input=false >/dev/null && AWS_PROFILE=debate-admin terraform -chdir=infrastructure/envs/dev plan -input=false -no-color -out=caselist-new-image.tfplan | tee /tmp/caselist-new-image-plan.txt | tail -3; fi
+AWS_PROFILE=debate-admin terraform -chdir=infrastructure/envs/dev show -json caselist-new-image.tfplan > /tmp/caselist-new-image-plan.json
+python3 -I ops/caselist_run/check_image_plan.py /tmp/caselist-new-image-plan.json infrastructure/envs/dev/owner.auto.tfvars
+```
+
+**What to read, and what stops you.** The last line is the check's. Send the PM it and the plan's
+`Plan:` line above it; apply only after the PM's word.
+
+* `PLAN OK: 2 to add, 4 to change, 2 to destroy; the login and run task definitions replaced with
+  the image sha256:<new>... and nothing else in them changed; the two schedules and their roles'
+  policies repointed at the new revisions; both schedules ENABLED throughout; nothing else changes`,
+  with the image the digest line's: the only shape that passes. Each task definition's image
+  changed to `owner.auto.tfvars`'s digest and nothing else in it; each schedule's target and each
+  scheduler role's policy pointed at the new revision and nothing else in them; neither schedule's
+  `state` changing.
+* `PLAN STOP: ...` names each change that is not that shape, with its address and actions: an
+  Identity Center change (`aws_ssoadmin_*`, `aws_identitystore_*`) anywhere, a change outside
+  `module.caselist_run`, a schedule's `state`, a task definition updated rather than replaced, an
+  expected change missing, or any other change in the module, such as 2026-10-29's update to
+  `module.caselist_run.aws_cloudwatch_event_target.task_stopped["run"]`. A `PLAN STOP` goes to the PM
+  before any apply, with the plan's text for each address it names. An Identity Center change is
+  never applied.
+* `PLAN STOP: the plan file is not JSON ...` or `... has no resource_changes ...` means the plan or
+  its `show` failed: read the lines above it, fix that and run the block again.
+
+If the PM allows a plan the check stopped, the apply's counts are that plan's, not the ones below.
+
+**Operator command** (expected runtime ~1 min)
+Where: `$WT`, after the PM's word, on any day but Wednesday
+```bash
+cd "$WT"
+if [ "$(date +%A)" = "Wednesday" ]; then echo "STOP: it is Wednesday, the run's day; apply on another day"; else AWS_PROFILE=debate-admin terraform -chdir=infrastructure/envs/dev apply -input=false caselist-new-image.tfplan; fi
+AWS_PROFILE=debate-admin terraform -chdir=infrastructure/envs/dev output caselist_run_schedule_state
+```
+Success looks like `Apply complete! Resources: 2 added, 4 changed, 2 destroyed.`, then `"ENABLED"`.
+One `-login-task-changed` email is expected. (Added by the PM, 2026-10-27, from `v1-e31-t31`'s
+review; the PM reads every plan before its apply.)
+
+**A parse stage refused a newer occurrence table.** When the bucket's occurrence table of a caselist
+is stamped by a build with a newer fingerprint version than the run's image, the parse stage leaves
+it as it is and fails on `NEWER_FINGERPRINT_TABLE` (`v1-e34-t29`). Since `v1-e40-t22` its hint names
+both versions and says the next cloud run on an image whose fingerprint version is the table's or
+later rebuilds and publishes it, whatever it imports (`v1-e40-t08`): a new image, as this section
+says, after the PM's word. An image built before `v1-e40-t25` adds that the run must import into the
+caselist; since `v1-e40-t08` it need not. An image built before `v1-e40-t22` says instead "install that build for
+the weekly agent", which meant the Mac's agent; the cure is still a new image here. Never rebuild or
+publish the parsed store on the operator's Mac ([A failed parse stage](#a-failed-parse-stage)).
+
+## The run task's memory
+
+The run task gets 32 GB, 32768 MiB, in place of 16 GB (`v1-e40-t30`). The first cloud backfile import
+(`hspolicy25`, revision 10, 2026-10-31) was killed at 71 minutes with ECS's `OutOfMemoryError`, exit
+137, and Wednesday 2026-11-04's run is the first full re-parse in the cloud, on the same 8 workers
+([ADR-0020's amendment](../adr/0020-weekly-caselist-run-in-the-cloud.md)). The change is in Terraform
+once `v1-e40-t30` merges, and it reaches the schedule only by this apply. The CPU (8 vCPU), the 8 parse
+workers, the ephemeral volume, the image and the login task stay as they are.
+
+**When.** Never on a Wednesday, and **before 2026-11-04 06:00 Chicago**, so that Wednesday's run starts
+on 32 GB. Not while a task is running on the run's cluster, a backfile import included: the apply
+deregisters the revision such a task started from. The apply block refuses a Wednesday and a running
+task itself.
+
+**No image.** This apply keeps `owner.auto.tfvars`'s digest (`v1.1.0-dev.251`). The PM's hold of
+2026-10-31 on run images carrying `v1-e39-t16` (lifted when `v1-e39-t28` merged) was about images, so
+it never applied to this change. Do not replace the digest line for this apply: the check refuses a
+plan that changes the image as well, and a new image is [A new image, later](#a-new-image-later)'s
+apply, on its own.
+
+**What the plan should be: `Plan: 1 to add, 2 to change, 1 to destroy.`** The run task definition is
+replaced (a new revision with `memory` `"16384" -> "32768"`, the old one deregistered; the one `must be
+replaced` line in the plan's text), the run schedule's target moves to the new revision, and the run
+scheduler role's policy, which names that revision, follows it. The login task definition, its
+schedule and its policy do not change, nor anything outside `module.caselist_run`, and never an account
+assignment or a permission set. The image apply's check would stop this plan, so the check runs with
+`--memory`, which passes this shape and nothing else.
+
+**Revisions a push registered.** `scripts/caselist_run_deploy.sh` registers its revision as a copy of
+the family's newest ACTIVE revision with only the image changed, so it takes that revision's size and
+sets none of its own. After this apply the newest is Terraform's 32 GB revision, so a later push
+carries 32 GB with no change to the script. A push between now and the apply would copy revision 10's
+16 GB: push no image until this is applied. Revision 9, which the push of `v1.1.0-dev.251` registered,
+stays as it is, at 16 GB; nothing starts it unless it is named. A backfile import starts the revision
+`--task-definition` names, read from Terraform's output in [Before each start](#before-each-start-both-profiles-the-network-and-the-revision):
+a `REVISION` read before this apply names the deregistered 16 GB revision, so read it again after.
+
+**The worktree, at a `dev` with `v1-e40-t30` in it.**
+
+**Operator command** (expected runtime seconds)
+Where: `$WT`
+```bash
+cd "$WT"
+git fetch origin
+git switch --detach origin/dev
+grep -q '^  run_memory             = "32768"$' infrastructure/modules/caselist_run/run_task.tf && grep -q -- '"--memory"' ops/caselist_run/check_image_plan.py && echo "ok: $(git rev-parse --short HEAD), the run task at 32768 and the check's --memory mode merged" || echo "NOT MERGED: wait for v1-e40-t30 to merge into dev"
+git status --porcelain | grep -v 'owner.auto.tfvars' | head -3
+```
+Success looks like `ok: <commit>, the run task at 32768 and the check's --memory mode merged`, and
+nothing after it. Sign in as break-glass as [Before you start](#before-you-start) does.
+
+**The plan, saved, and the check.** This block removes the last plan and its JSON first, so a plan that
+fails leaves nothing for the check or the apply to read. The plan's text stays in
+`/tmp/caselist-run-memory-plan.txt` for the PM.
+
+**Operator command** (expected runtime ~2 min)
+Where: `$WT`, signed in as break-glass
+```bash
+cd "$WT"
+rm -f infrastructure/envs/dev/caselist-run-memory.tfplan /tmp/caselist-run-memory-plan.json
+if env | grep -qE '^(TF_VAR_|TF_WORKSPACE=|TF_DATA_DIR=|TF_CLI_ARGS)'; then echo "STOP: a Terraform override is set in this shell"; else AWS_PROFILE=debate-admin terraform -chdir=infrastructure/envs/dev init -input=false >/dev/null && AWS_PROFILE=debate-admin terraform -chdir=infrastructure/envs/dev plan -input=false -no-color -out=caselist-run-memory.tfplan | tee /tmp/caselist-run-memory-plan.txt | tail -3; fi
+AWS_PROFILE=debate-admin terraform -chdir=infrastructure/envs/dev show -json caselist-run-memory.tfplan > /tmp/caselist-run-memory-plan.json
+python3 -I ops/caselist_run/check_image_plan.py /tmp/caselist-run-memory-plan.json infrastructure/envs/dev/owner.auto.tfvars --memory
+```
+
+**What to read, and what stops you.** Send the PM the `Plan:` line and the check's line, the last two
+lines; the PM reads both, with the plan's text, before the apply.
+
+* `Plan: 1 to add, 2 to change, 1 to destroy.`, then `PLAN OK: 1 to add, 2 to change, 1 to destroy;
+  the run task definition replaced with its memory 16384 -> 32768 and nothing else in it changed, 8192
+  CPU units and the image sha256:<digest>... as before; the run schedule and its role's policy
+  repointed at the new revision; the run schedule ENABLED throughout; the login task definition, its
+  schedule and its policy unchanged; nothing else changes`, with the digest line's image: the only
+  shape that passes.
+* `PLAN STOP: ...` names each change that is not that shape, with its address and actions: an
+  Identity Center change anywhere, a change outside the module, a login change, an image change, a
+  memory other than 32768, any other change in the run task definition (its CPU, environment,
+  command, roles or storage), the run schedule left on the old revision, its state, or any other
+  change in the module. It goes to the PM before any apply. An Identity Center change is never
+  applied.
+* `PLAN STOP: the plan file is not JSON ...` or `... has no resource_changes ...` means the plan or
+  its `show` failed: read the lines above it, fix that and run the block again.
+
+**The apply, after the PM's word.** The block refuses a Wednesday in Chicago, a Terraform override in
+the shell, and a task running on the run's cluster, or a count of them it could not read.
+
+**Operator command** (expected runtime ~1 min)
+Where: `$WT`, after the PM's word, on any day but Wednesday, before 2026-11-04 06:00 Chicago
+```bash
+cd "$WT"
+RUNNING="$(AWS_PROFILE=debate-admin aws ecs list-tasks --region us-east-1 --cluster debate-dev-caselist-run --desired-status RUNNING --query 'length(taskArns)' --output text)" || RUNNING="unknown"
+if [ "$(TZ=America/Chicago date +%A)" = "Wednesday" ]; then echo "STOP: it is Wednesday in Chicago, the run's day; apply on another day"; elif env | grep -qE '^(TF_VAR_|TF_WORKSPACE=|TF_DATA_DIR=|TF_CLI_ARGS)'; then echo "STOP: a Terraform override is set in this shell"; elif [ "$RUNNING" = "0" ]; then AWS_PROFILE=debate-admin terraform -chdir=infrastructure/envs/dev apply -input=false caselist-run-memory.tfplan; else echo "STOP: ${RUNNING} tasks running on debate-dev-caselist-run, or the count could not be read; apply when it is 0"; fi
+```
+Success looks like `Apply complete! Resources: 1 added, 2 changed, 1 destroyed.` No
+`-login-task-changed` email is expected: one means the login's task definition changed, and goes to
+the PM. If the PM allowed a plan the check stopped, the counts are that plan's.
+
+**The read-back: the revision the schedule starts has 32768.** The schedule's own target, read from
+Scheduler, beside Terraform's output; then that revision's CPU and memory, and nothing else of it.
+
+**Operator command** (expected runtime seconds)
+Where: `$WT`, after the apply
+```bash
+cd "$WT"
+SCHEDULED="$(AWS_PROFILE=debate-admin aws scheduler get-schedule --region us-east-1 --group-name debate-dev-caselist-run --name debate-dev-caselist-run --query Target.EcsParameters.TaskDefinitionArn --output text)"
+echo "scheduled: ${SCHEDULED}"
+echo "terraform: $(AWS_PROFILE=debate-admin terraform -chdir=infrastructure/envs/dev output -raw caselist_run_task_definition_arn)"
+AWS_PROFILE=debate-admin aws ecs describe-task-definition --region us-east-1 --task-definition "$SCHEDULED" --query 'taskDefinition.[cpu,memory]' --output text
+AWS_PROFILE=debate-admin terraform -chdir=infrastructure/envs/dev output caselist_run_schedule_state
+```
+Success looks like two equal `…:task-definition/debate-dev-caselist-run:<n>` ARNs, `<n>` above 10,
+then `8192	32768`, then `"ENABLED"`. `8192	16384` means the schedule is still on a 16 GB revision:
+stop and send the PM the four lines. The PM records the plan line, the check's line and this
+read-back for `v1-e40-t30`'s ac3.
+
+**Prod** gets 32 GB with its own first apply B, at the pilot's promotion: its task definition is created
+from the same module, so no separate step.
+
+### The run's memory figures
+
+From an image with `v1-e40-t31` on, each stage of a run records, as it ends, the memory high-water
+marks since the task started, in bytes. They are in the summary the run prints and in its details,
+on each entry of `stage_times`, as `"memory"`:
+
+* `"container_peak_bytes"` is the whole container's, every parse worker included, from its cgroup
+  (`"cgroup"` says `v1` or `v2`), as in [the backfile import's lines](#the-four-imports-v1-e40-t09-ac3).
+  Divided by 34359738368, the task's 32768 MiB in bytes, it is the share of the task the run had
+  reached by the end of that stage. On cgroup `v1` it counts the page cache as well, which the kernel
+  reclaims before it kills anything.
+* `"main_process_peak_bytes"` is the run's own process. The parse stage's is the one to watch: the
+  stage's aggregate rebuild holds every card of a caselist in this process, after the workers have
+  stopped ([caselist-parse-memory.md](../data/caselist-parse-memory.md)).
+* A figure that could not be read is left out, never zero. A run on the Mac has no container figure.
+  A stage with no `"memory"` at all was recorded by an image from before `v1-e40-t31`: Wednesday
+  2026-11-04's run, on `v1.1.0-dev.251`, records none.
+
+**Reading them.** A read, with the everyday profile. The Mac's build must have `v1-e40-t31` too: an
+earlier build reads these details and passes over the figures, so it prints `no figures` for every
+stage, the same as for a run that recorded none.
+
+**Operator command** (expected runtime ~1 min)
+Where: your Mac, a build with `v1-e40-t31`
+```bash
+debate-research --json caselist runs --remote --last 1 > /tmp/caselist-run-memory.json
+python3 -I - /tmp/caselist-run-memory.json <<'FIGURES'
+import json, sys
+TASK = 34359738368
+for run in json.load(open(sys.argv[1]))["data"]["runs"]:
+    print(run["run_id"], run["outcome"])
+    for one in (run["details"] or {}).get("stage_times", []):
+        memory = one.get("memory")
+        if not memory:
+            print(" ", one["stage"], "no figures")
+            continue
+        container = memory.get("container_peak_bytes")
+        share = "%.2f of the task" % (container / TASK) if container is not None else "container not read"
+        print(" ", one["stage"], "container", container, memory.get("cgroup"), share, "main", memory.get("main_process_peak_bytes"))
+FIGURES
+```
+Success looks like the newest run's id and outcome, then one line for each stage, in the run's order,
+each with its figures. Send the PM the lines. A share above about 0.8 after any stage, or a parse
+stage whose main figure is most of its container figure, goes to the PM before the next run.
+
+## A failed parse stage
+
+When the cloud run's parse stage does not publish a caselist's parsed store, the run names no
+command (`v1-e40-t18`). The stage's hint, in the run's details and in the alert email, reads:
+
+> The cloud run publishes the parsed store of `<slug>`, never the operator's Mac, whose working copy is not the one the cloud run owns: the next weekly run rebuilds it and publishes it, whether or not it imports into the caselist, and so does a run started by hand (caselist-cloud-run.md, "A failed parse stage").
+
+The email's fix line reads:
+
+> Fix: the next cloud run publishes the parsed store of `<slug>`: the weekly run, or one started by hand (caselist-cloud-run.md, "A failed parse stage"); never a publish from the operator's Mac
+
+Two caselists are named together (`hspolicy26 and openev`). A parse stage that waited for a login
+says the same in its reason, and the login email ends `The parsed store waits too:` and the fix
+line's words. An image built before `v1-e40-t08` adds that the run must import something into the
+caselist; on such an image that was the condition, and since it is not.
+
+**What to do: usually nothing.** The raw evidence of the week is published; only its parsed store is
+late, and the search index stays at the week before (the index stage is skipped after a failed
+parse). The week's parse stays owed, in the run's state files, until its parsed store is published
+complete (`v1-e40-t08`). The next run, the Wednesday one or one started by hand, restores the
+bucket's parsed store, parses every source it lacks, the failed week's among them, rebuilds the
+aggregates and publishes it, **whether or not it imports anything into the caselist**. If the
+caselist cannot wait for Wednesday, ask the PM; a run by hand is
+[Step 8's "One run by hand"](#step-8--the-seed-bucket-mode-and-one-run-by-hand-at-the-cutover-after-v1-e40-t04)
+(the network, then the start, then the watch). `caselist runs --remote` on the Mac ends its caption
+with what the cloud run owes (`Parse owed: <slug> <snapshot>.`), read from the bucket's
+`reports/sync/state/caselist-sync-parse-owed.json`.
+
+**A stage over its failure rate that published its parsed store owes nothing.** Its email's fix line
+is `none owed: the parsed store was published` and the section below; the failures are the PM's to
+look into ([A parse stage over its failure rate](#a-parse-stage-over-its-failure-rate)).
+
+**Never run `caselist parse --caselist <slug> --publish` on the operator's Mac**, nor `--publish-only`.
+There it rebuilds the Mac's own, older working copy and publishes that over the parsed store the
+cloud run owns. A run on an image built before `v1-e40-t18` (the run's image was `v1.1.0-dev.164` until 2026-10-31, and `v1.1.0-dev.251`, which carries it, since) still names
+`caselist parse --caselist <slug> --publish` in its email; the rule holds for that email too, and the
+cure is the one above. (The rule is the PM's, 2026-10-30, from `v1-e34-t31`'s review; `v1-e40-t18`
+made the run say it.)
+
+
+## A new image with a new parser version
+
+The first cloud run on an image whose parser version the bucket's parsed store has no directory of
+parses **every caselist it follows in full, `openev` included**, before its search index stage, and
+builds the index from the new version (`v1-e40-t08`). Before it, that run's index stage failed for
+want of a directory of the new version, and the operator re-parsed by hand from a restored copy.
+That is no longer needed. The run's parse stage reason says `parsed in full, as the parsed store
+held no directory of parser version <version>`, and its counts give `full_parses`.
+
+**How long it takes.** No cloud run has parsed in full yet, so this is from the Mac's figures. The
+2026-10-11 full parse under `2026.10.10-docx-2` took 1,465 s for 11,126 sources, parse, rebuild and
+publish; on 2026-10-30 hspolicy26 alone took 981 s for 4,342 sources, 1.6 times its 2,657 sources
+and 611 s of 2026-10-11. With every caselist grown alike, a full parse is about 2,400 s, 40 minutes,
+on the Mac. The task's 8 vCPU are not measured against the Mac; at one to three times as slow it is
+40 minutes to 2 hours, beside the restore (about 8 minutes for 15,000 parsed objects), the raw
+sources the parse fetches from `raw/`, and the index build. That is inside the run's 6-hour deadline
+([The deadline, and stopping a run](#the-deadline-and-stopping-a-run)), and the run records itself,
+so the late-run alarm, which counts recorded runs over seven days, is not near.
+
+**When one run does not finish it.** Each caselist owed is written down in
+`reports/sync/state/caselist-sync-parse-owed.json` before its parse starts, published as soon as
+its parse ends, and only then cleared. A run stopped at the deadline, or by hand, leaves the
+caselists it did not publish owed, and the next run, the Wednesday one or one started by hand,
+parses them first. A caselist whose parse was cut short starts again: its working copy went with the
+task. The index stays at the old version until a run parses and publishes every caselist owed; the
+index stage is skipped after a failed parse, and the old index stays current meanwhile.
+`caselist runs --remote` on the Mac ends with `Full parse owed under parser version <version>:` and
+the caselists still owed.
+
+## A run that found no AWS session
+
+When a cloud run finds no AWS session, its publish or its parse stage waits for a login, and the
+login email (`caselist publish waiting for an AWS login`) has this fix line since `v1-e40-t22`:
+
+> Fix: the PM looks into the cloud run's task role, which gave the run no AWS session (caselist-cloud-run.md, "A run that found no AWS session"); never a login and a publish from the operator's Mac
+
+Its message says what waits, with no command: the snapshots and the run record, the parsed store
+(with the cure of [A failed parse stage](#a-failed-parse-stage)), the report stage's check that was
+cut short, and the search index. Since `v1-e40-t25` it starts `Run <id> (dev) was left without an
+AWS session, and its working copy ends with its task;`, where a Mac's run says it "kept everything it
+fetched", and a manifest owed again is said without "the publish after the login uploads this
+machine's copy" ([A manifest published again](#a-manifest-published-again)).
+
+Since `v1-e40-t28` the run's record and details say the same. Every stage reason and hint that says
+the session was not usable ends with the fix line's words, `the PM looks into the cloud run's task
+role, which gave the run no AWS session (…)`, where a run on the Mac, or a bucket-mode command run by
+hand on the Mac, names `aws sso login --profile <profile>`. The run tells the two apart by bucket mode
+inside an ECS task, which only the run task is.
+
+**What it means.** A cloud run's AWS session is its task role's (`debate-dev-caselist-run`), which
+ECS renews for as long as the task runs. The Mac's SSO session ran out after hours; the role's
+should not. A run that found none points at the role, its policies or the run's task definition, and
+that goes to the PM. Send the PM the run's id from the email and the last lines of its log, read as
+the deployer. Read-only:
+
+**Operator command** (expected runtime ~1 min)
+Where: your Mac, anywhere
+```bash
+aws logs tail debate-dev-caselist-run --profile debate-dev-caselist-run-deployer --region us-east-1 --since 1d | tail -20
+```
+
+**Never run `aws sso login && debate-research caselist pull --publish-pending` on the operator's
+Mac** for a cloud run. It publishes from the working copy of the machine it runs on, and the cloud
+run's working copy ended with its task. A run on an image built before `v1-e40-t22` (the run's image was
+`v1.1.0-dev.164` until 2026-10-31, and `v1.1.0-dev.251`, which carries it, since) still names that command as its fix; the rule holds for that email too.
+
+## A parse stage over its failure rate
+
+When more of the sources a cloud run's parse stage tried failed than `parse.failure_rate_threshold`
+allows, the stage fails on `PARSE_FAILURE_RATE_EXCEEDED`, and since `v1-e40-t22` its hint reads:
+
+> The cloud run's failed sources are listed in failures.jsonl of the caselist's parsed store in the bucket, once the run has published it, never in the operator's Mac's own store; why they failed is the PM's to look into (caselist-cloud-run.md, "A parse stage over its failure rate").
+
+The stage still publishes the caselist's parsed store. Its `failures.jsonl` holds an entry for each
+source of the current version directory that did not parse: its SHA-256 and the reason, and no
+path, school or team code ([parsed-card-store.md](../data/parsed-card-store.md)). The PM decides
+what is done about them, usually a parser task; the raw evidence is published either way.
+
+**Not `caselist parse --caselist <slug> --failures` on the operator's Mac.** It is read-only, but it
+lists the Mac's own parsed store, which the cloud run never wrote. A run on an image built before
+`v1-e40-t22` still names it.
+
+To send the PM the reasons by count, read the file from the bucket. Read-only. Put the caselist the
+email names in `SLUG`; the first block lists its version directories.
+
+**Operator command** (expected runtime ~1 min)
+Where: `$WT`, a worktree of `dev`
+```bash
+cd "$WT"
+aws sso login --profile debate-dev-evidence
+SLUG='the-caselist-the-email-names'
+BUCKET=$(AWS_PROFILE=debate-admin terraform -chdir=infrastructure/envs/dev output -raw evidence_bucket_name)
+aws s3 ls "s3://${BUCKET}/parsed/${SLUG}/" --profile debate-dev-evidence
+```
+
+The current directory is the newest generation of the newest parser version: the highest date, and
+its highest `_reparse-N` if it has one. Put it in `VERSION`.
+
+**Operator command** (expected runtime ~1 min)
+Where: `$WT`, in the same shell
+```bash
+VERSION='the-current-directory-the-listing-printed'
+aws s3 cp "s3://${BUCKET}/parsed/${SLUG}/${VERSION}/failures.jsonl" - --profile debate-dev-evidence | grep -oE '"reason": ?"[^"]*"' | sort | uniq -c
+```
+Success looks like one line per reason with its count, the counts adding up to about the number
+the stage's reason gives as failed. Nothing printed means the file is not there: the publish did not
+finish either, and the email's parse stage says so.
+
+## A failed publish stage
+
+When a cloud run's publish stage fails and no other stage does, the alert email (`caselist pull
+failed: …`) ends `What the bucket confirmed is kept; the cloud run's working copy ends with its
+task.`, and since `v1-e40-t25` its fix line reads:
+
+> Fix: the next cloud run takes up what this run did not publish, from the run state saved in the bucket: the weekly run, or one started by hand (caselist-cloud-run.md, "A failed publish stage"); never a publish from the operator's Mac
+
+The run's own output, in its log, ends with the same words after `In bucket mode`.
+
+**What happens next.** A run saves its run-state bundle only when every snapshot the bundle records
+is confirmed in the bucket (ADR-0020 (3)), so a run whose publish failed usually leaves the bundle it
+restored, and its details say so: `bucket_run.bundle` is `not saved: …`. The next run, the Wednesday
+one or one started by hand, restores that bundle and the state files. A snapshot the pending-work
+file owes and the bundle holds, it publishes. A week after the bundle it fetches, imports and
+publishes again, within the day's downloads; the download ledger is a state file, so a run started
+by hand on the same day may leave that week for the next. A week redone is late, never lost.
+
+**What to do: usually nothing.** An email titled `will be retried` failed on something the next run
+may not meet, the bucket not answering for one, and the next run retries it. One titled `needs a
+person` or `retried once fixed` goes to the PM with the run's id. To send the PM whether the run saved
+its bundle, read its details from the bucket. Read-only. Put the run's id from the email in `RUN_ID`.
+
+**Operator command** (expected runtime ~1 min)
+Where: `$WT`, a worktree of `dev`
+```bash
+cd "$WT"
+aws sso login --profile debate-dev-evidence
+RUN_ID='the-run-id-the-email-names'
+BUCKET=$(AWS_PROFILE=debate-admin terraform -chdir=infrastructure/envs/dev output -raw evidence_bucket_name)
+aws s3 cp "s3://${BUCKET}/reports/sync-run-details/${RUN_ID:0:4}/${RUN_ID}.json" - --profile debate-dev-evidence | grep -oE '"bundle": "[^"]*"'
+```
+Success looks like one `"bundle":` line, `saved, …` or `not saved: …`. An error that the key does not
+exist means the run's details did not reach the bucket either: tell the PM.
+
+**Never run `caselist pull --publish-pending` on the operator's Mac** for a cloud run. It publishes
+from the working copy of the machine it runs on, and the cloud run's working copy ended with its task.
+A run on an image built before `v1-e40-t25` (the run's image was `v1.1.0-dev.164` until 2026-10-31, and `v1.1.0-dev.251`, which carries it, since) still names that command as
+its fix; the rule holds for that email too.
+
+## A manifest published again
+
+When a cloud run's report stage finds that the bucket's copy of a manifest differs from the run's and
+nothing else does, the run owes the snapshot again (`v1-e34-t26`), and since `v1-e40-t25` the email
+`caselist pull: publish a manifest again` reads:
+
+> Run `<id>` (dev): the report stage found the bucket's manifest of `<slug>` `<date>` differs from this machine's. The next cloud run takes it up from the run state saved in the bucket. Nothing here needs a person.
+
+"This machine" is the cloud run's task. Its fix line:
+
+> Fix: the next cloud run takes up what is owed again, from the run state saved in the bucket: the weekly run, or one started by hand (caselist-cloud-run.md, "A manifest published again"); never a publish from the operator's Mac
+
+**What happens next.** While a manifest differs from the bucket's, the run does not save its bundle,
+so the next run restores the one before it, with the pending-work file that owes the snapshot. A
+snapshot that bundle holds is published again from it; one it does not hold is a week redone, as in
+[A failed publish stage](#a-failed-publish-stage). If the manifest differs again after a run published
+it again and the bucket confirmed it, the email `caselist pull: a manifest drifted again` asks for a
+person: send the PM its run's id.
+
+**Never run `caselist pull --publish-pending` on the operator's Mac** for it. It would upload the
+Mac's own copy of the manifest, which is not the cloud run's. A run on an image built before
+`v1-e40-t25` still names that command as its fix; the rule holds for that email too.
+
+## A failed or stopped run
+
+When a cloud run stops on an error before its stages, or a stage fails beyond the publish alone or
+the parse alone (a failed import beside a failed publish, a failed download, a failed report stage),
+the alert email (`caselist pull failed: …` or `caselist pull finished with a failed stage`) has this
+fix line since `v1-e40-t28`:
+
+> Fix: the next cloud run takes up what this run did not finish, from the run state saved in the bucket: the weekly run, or one started by hand (caselist-cloud-run.md, "A failed or stopped run"); never a publish from the operator's Mac
+
+A failed-stage email ends `What the bucket confirmed is kept; the cloud run's working copy ends with
+its task.`, where a run on the Mac says `What was captured is kept.`: an archive the cloud run
+downloaded and did not import, and a snapshot it captured and did not publish, ended with its task
+(ADR-0020 (3), "What is not saved"). The run's own output, in its log, ends with the fix line's words
+after `In bucket mode`, or after a stage's own fix, after `Then in bucket mode`.
+
+**What happens next.** The next run, the Wednesday one or one started by hand, restores the bucket's
+run state and does what this one did not. An archive this run lost it downloads again, within the
+day's downloads; a week whose bundle was not saved it redoes, as in
+[A failed publish stage](#a-failed-publish-stage).
+
+**What to do: usually nothing.** An email titled `will be retried` failed on something the next run
+may not meet. One titled `needs a person` or `retried once fixed`, or one that carries a hint, goes
+to the PM with the run's id: the hint is what has to be fixed before the next run helps. A run by
+hand is
+[Step 8's "One run by hand"](#step-8--the-seed-bucket-mode-and-one-run-by-hand-at-the-cutover-after-v1-e40-t04).
+
+**Not `caselist pull` on the operator's Mac** for a cloud run's failure. Which machine runs the week
+is [caselist-cutover.md](caselist-cutover.md)'s, and falling back to the Mac is the PM's decision. A
+run on an image built before `v1-e40-t28` still names `debate-research caselist pull` as its fix;
+the rule holds for that email too.
+
+## A run refused for an expired login
+
+When OpenCaselist refuses a cloud run with 401 or 403, the run stops on `CASELIST_AUTH_EXPIRED` and
+the alert email `caselist pull stopped: OpenCaselist login expired` has this fix line since
+`v1-e40-t33`:
+
+> Fix: the next Wednesday 03:00 login renews the caselist_token, and the run after it takes up what this run did not finish, from the run state saved in the bucket; a backfile import refused for it starts again after Thursday 00:00 (caselist-cloud-run.md, "A run refused for an expired login"); never a login by hand, which would be a second login
+
+Its title and message, `Run <id> (dev) was refused by OpenCaselist and fetched nothing more.`, are
+the ones a run on the Mac sends, and a run on the Mac still names `debate-research caselist auth
+login` as its fix.
+
+**What it means.** The cloud run's caselist_token is the one the login task writes to Secrets Manager
+every Wednesday at 03:00, three hours before the run. A token that stopped working between two of
+those logins is renewed by the next one, and that Wednesday's run restores the bucket's run state and
+does what this one did not, as in [A failed or stopped run](#a-failed-or-stopped-run). A backfile
+import refused for it says so in its log (the `"code"` line in [Backfile imports](#backfile-imports))
+and starts again after Thursday 00:00, once the no-import window has closed.
+
+**What to do: usually nothing.** Two cases go to the PM with the run's id:
+
+* the Wednesday login failed as well: its own email, `Weekly caselist login failed`, came that morning.
+  Follow that email's fix, which [caselist-run-alerts.md](caselist-run-alerts.md#when-an-alert-arrives)
+  explains; it replaces the login that failed rather than adding a second one;
+* the refused run is a Wednesday run whose login that morning sent no failure email. The token was
+  hours old, and a refusal straight after a login may mean access was suspended
+  ([caselist-data-use.md](../policies/caselist-data-use.md), clause 10). Do not log in again.
+
+**Never run `debate-research caselist auth login` on the operator's Mac** for a cloud run's refusal.
+It is a second login that week for the same account, which may end the token the other login holds
+([Step 3](#step-3--does-a-new-login-end-the-macs-token-before-apply-b)); and without
+`--token-backend secretsmanager` it writes only the Mac's own token, which the cloud run never reads.
+The policy's clause 10 says a `401` or `403` is escalated, never worked around: this email is the
+escalation. A run on an image built before `v1-e40-t33` still names that command as its fix. Since
+`v1-e40-t35` the run's own log and its record (`caselist runs --json`'s `error_message`) say only what
+was refused, with the fix above as the command's hint; on an image built before it both still say to
+run it (the error's message is the Mac's). The rule holds for all of them.
+
+## A backlog growing
+
+When the archives a cloud run's daily download cap deferred have grown for two runs in a row, the
+email `caselist backlog growing` has this fix line since `v1-e40-t28`:
+
+> Fix: the next cloud run fetches more of what the daily download cap deferred, once the day's downloads reset: the weekly run, or one started by hand (caselist-cloud-run.md, "A backlog growing"); never a publish from the operator's Mac
+
+A run on the Mac names `debate-research caselist pull (again tomorrow, when the day's downloads
+reset)` instead.
+
+**What it means.** OpenCaselist allows five bulk downloads a day, and a run defers what they do not
+cover. The day's downloads are counted in the download ledger, a state file the bucket keeps, so a
+run started by hand on the same day fetches nothing more.
+
+**What to do: usually nothing.** Each Wednesday's run fetches more, and nothing deferred is lost
+while it waits. If a caselist cannot wait, ask the PM for a run by hand on a later day
+([Step 8's "One run by hand"](#step-8--the-seed-bucket-mode-and-one-run-by-hand-at-the-cutover-after-v1-e40-t04)).
+A run on an image built before `v1-e40-t28` still names the pull again tomorrow as its fix.
+
+## The deadline, and stopping a run
+
+The run's command is `timeout --signal=TERM --kill-after=120s 6h debate-research --json caselist
+pull`: at six hours the CLI gets SIGTERM, as `docker stop` would send, and SIGKILL two minutes later,
+and the task stops with a non-zero exit (ADR-0020 (1) 6). To stop a run sooner, as the deployer:
+
+```bash
+aws ecs stop-task --profile debate-dev-caselist-run-deployer --region us-east-1 --cluster debate-dev-caselist-run --task "$TASK" --reason "stopped by the operator" --query 'task.desiredStatus' --output text
+```
+Success looks like `STOPPED`. ECS sends SIGTERM and gives the same two minutes.
+
+## Backfile imports
+
+The four backfile complete archives (`hspolicy25`, `hsld25`, `hspolicy24`, `hsld24`) are imported
+once each by a one-off task of **the run's own task definition**, started by hand with its command
+overridden to `v1-e34-t34`'s `caselist backfile-import --caselist <slug>`, and never on a schedule
+(the PM's rulings of 2026-10-27 on
+[`v1-e40-t09`](../../plan_specs/v1/e40-cloud-caselist-run/t09-cloud-backfile-import.yaml)). The import's
+rules, its refusals and its rebuild after a removal are [caselist-backfiles.md](caselist-backfiles.md)'s;
+this section is how the cloud runs it.
+
+* **The task.** The run's task definition, the revision Terraform made and the schedule starts: 8
+  vCPU, 32 GB since [The run task's memory](#the-run-tasks-memory) (`v1-e40-t30`), the run role, and the run's 6-hour deadline (an import is estimated at 1.5 to 2.5
+  hours). Its 100 GiB of ephemeral storage holds the largest import, `hsld25`, which needs
+  32,750,091,060 bytes free by t34's estimate with 25% headroom, beside the image and the restore.
+  The module's tests hold that figure.
+* **What Terraform changes.** One thing: the run-stopped alert's email now says the task may be a
+  backfile import started by hand. No task definition, schedule, role, policy or permission set
+  changes, and no grant is added: every call the import makes is one the run role already holds.
+* **Who it runs as.** `ops/caselist_run/start_backfile_import.py` reads the bucket's run lock as the
+  everyday evidence profile (`debate-dev-evidence`, one `GetObject`) and starts the task as the run
+  deployer (`debate-dev-caselist-run-deployer`). **Both must be signed in.** The plan, the apply and
+  the root's outputs are `debate-admin`'s, as everywhere in this runbook.
+* **What refuses.** The script refuses inside the no-import window, Tuesday 06:00 to Thursday 00:00
+  America/Chicago, and while a run holds the bucket's lock; nothing is started. In the task, the
+  import refuses again before any download: the window, the backfile budget (one complete archive in
+  any 24 hours, in the bucket's ledger), free space, and a token that is expired or missing.
+* **A failed or refused import emails the coach**, as a failed weekly run does: the task stops with a
+  non-zero exit and the run-stopped rule matches every task of the run's family. The email says it
+  may be a backfile import. A refused dry run sends one too.
+* **An import never counts as a weekly run.** The late-run alarm counts only `caselist pull` results
+  that carry a run record, and an import's result is `caselist backfile-import` with none, so a
+  finished import cannot hide a Wednesday with no run.
+
+**When.** This task's pull request merges into `dev` only after Thursday 2026-10-29's image apply, so
+that its plan is not part of that one. The dry run waits until Wednesday 2026-10-28's first scheduled
+cloud run has succeeded. The four imports wait until the operator is back, after 2026-11-01.
+
+### The plan, which the PM reads before the apply
+
+**The worktree**, `$WT` from "Before you start", moved to `origin/dev` with this task merged.
+
+**Operator command** (expected runtime ~1 min)
+Where: `$WT`
+```bash
+cd "$WT"
+git fetch origin
+git switch --detach origin/dev
+test -f ops/caselist_run/start_backfile_import.py && echo "ok: origin/dev $(git rev-parse --short HEAD), the backfile import merged" || echo "NOT MERGED: wait for v1-e40-t09 to merge"
+grep -cE '^caselist_image_digest += "sha256:[0-9a-f]{64}"$' infrastructure/envs/dev/owner.auto.tfvars
+```
+Success looks like `ok: origin/dev <commit>, the backfile import merged`, then `1`: the digest line
+Thursday's image apply left.
+
+**The plan**, saved to a file, so that what the apply applies is what was read.
+
+**Operator command** (expected runtime ~2 min)
+Where: `$WT`
+```bash
+cd "$WT"
+if env | grep -qE '^(TF_VAR_|TF_WORKSPACE=|TF_DATA_DIR=|TF_CLI_ARGS)'; then echo "STOP: a Terraform override is set in this shell"; else AWS_PROFILE=debate-admin terraform -chdir=infrastructure/envs/dev init -input=false >/dev/null && AWS_PROFILE=debate-admin terraform -chdir=infrastructure/envs/dev plan -input=false -no-color -out=caselist-backfile-alert.tfplan | tee /tmp/caselist-backfile-alert-plan.txt | tail -5; fi
+grep -E '^Plan:|must be replaced|will be destroyed|will be created' /tmp/caselist-backfile-alert-plan.txt
+grep -c 'aws_ssoadmin' /tmp/caselist-backfile-alert-plan.txt
+grep -E '^ +~ +input_template' /tmp/caselist-backfile-alert-plan.txt
+```
+Expect `Plan: 0 to add, 1 to change, 0 to destroy.`, no line saying a resource is replaced, destroyed
+or created, then `0`, then the one `input_template` line: the run-stopped email's text, before and
+after. **The PM reads that line.** The new text is the old with one sentence added after `Task
+<task>.`: `It is the weekly run, or a backfile import someone started by hand
+(docs/runbooks/caselist-cloud-run.md, Backfile imports): the command on the last line of its log says
+which.` **An account assignment, a permission set, a schedule or a task definition anywhere in the
+plan stops everything**: never apply it.
+
+**The plan checked against exactly that shape.** It prints `PLAN OK` only for one in-place update of
+`module.caselist_run.aws_cloudwatch_event_target.task_stopped["run"]` whose text gains that sentence and
+changes in nothing else, with nothing else in the plan. Anything else prints `PLAN STOP` with the
+reason.
+
+**Operator command** (expected runtime ~1 min)
+Where: `$WT`
+```bash
+cd "$WT"
+AWS_PROFILE=debate-admin terraform -chdir=infrastructure/envs/dev show -json caselist-backfile-alert.tfplan > /tmp/caselist-backfile-alert-plan.json
+python3 -I - /tmp/caselist-backfile-alert-plan.json <<'BACKFILEPLAN'
+import json, sys
+plan = json.load(open(sys.argv[1]))
+m = "module.caselist_run."
+target = m + 'aws_cloudwatch_event_target.task_stopped["run"]'
+added = " It is the weekly run, or a backfile import someone started by hand (docs/runbooks/caselist-cloud-run.md, Backfile imports): the command on the last line of its log says which."
+changes = [c for c in plan.get("resource_changes", []) if c["change"]["actions"] not in (["no-op"], ["read"])]
+problems = []
+def unknown(value):
+    if value is True:
+        return True
+    if isinstance(value, dict):
+        return any(unknown(v) for v in value.values())
+    if isinstance(value, list):
+        return any(unknown(v) for v in value)
+    return False
+sso = sorted(c["address"] for c in changes if "aws_ssoadmin" in c["address"])
+if sso:
+    problems.append("an account assignment or permission set changes: " + str(sso))
+schedules = sorted(c["address"] + " " + "/".join(c["change"]["actions"]) for c in changes if "aws_scheduler_schedule" in c["address"])
+if schedules:
+    problems.append("a schedule is added or changed: " + str(schedules))
+outside = sorted(c["address"] for c in changes if not c["address"].startswith(m))
+if outside:
+    problems.append("changes outside module.caselist_run " + str(outside))
+others = sorted(c["address"] + " " + "/".join(c["change"]["actions"]) for c in changes if c["address"] != target)
+if others:
+    problems.append("changes other than the run-stopped alert's text: " + str(others))
+found = [c["change"] for c in changes if c["address"] == target]
+if not found:
+    problems.append("the run-stopped alert's text does not change: is v1-e40-t09 merged in this checkout?")
+for change in found:
+    if change["actions"] != ["update"]:
+        problems.append(target + " is " + "/".join(change["actions"]) + ", expected an update in place")
+    before, after = change["before"] or {}, change["after"] or {}
+    unknowns = {k for k, v in (change.get("after_unknown") or {}).items() if unknown(v)}
+    changed = sorted(k for k in set(before) | set(after) if before.get(k) != after.get(k) or k in unknowns)
+    if changed != ["input_transformer"]:
+        problems.append(target + " changes " + str(changed) + ", expected only input_transformer")
+        continue
+    old, new = (before.get("input_transformer") or [{}])[0], (after.get("input_transformer") or [{}])[0]
+    if old.get("input_paths") != new.get("input_paths"):
+        problems.append(target + " changes its input paths")
+    text_before, text_after = str(old.get("input_template", "")), str(new.get("input_template", ""))
+    if added not in text_after:
+        problems.append("the new text does not name a hand-started backfile import as v1-e40-t09 wrote it")
+    elif text_after.replace(added, "", 1) != text_before:
+        problems.append("the text changes beyond the sentence naming a backfile import")
+if problems:
+    print("PLAN STOP: " + "; ".join(problems))
+else:
+    print("PLAN OK: 0 to add, 1 to change, 0 to destroy; the run-stopped alert's text names a hand-started backfile import and nothing else in it changed; no schedule, task definition, role, policy or permission set changes; nothing else")
+BACKFILEPLAN
+```
+Success looks like `PLAN OK: 0 to add, 1 to change, 0 to destroy; the run-stopped alert's text names a
+hand-started backfile import …; nothing else`. **`PLAN STOP` stops everything**: send its line and the
+plan to the PM. Either way the PM reads the plan before the apply.
+
+### The apply, after the PM's word
+
+**Operator command** (expected runtime ~1 min)
+Where: `$WT`, after the PM's word, on any day but Wednesday
+```bash
+cd "$WT"
+if env | grep -qE '^(TF_VAR_|TF_WORKSPACE=|TF_DATA_DIR=|TF_CLI_ARGS)'; then echo "STOP: a Terraform override is set in this shell"; elif [ "$(date +%A)" = "Wednesday" ]; then echo "STOP: it is Wednesday, the run's day; apply on another day"; else AWS_PROFILE=debate-admin terraform -chdir=infrastructure/envs/dev apply -input=false caselist-backfile-alert.tfplan; fi
+```
+Success looks like `Apply complete! Resources: 0 added, 1 changed, 0 destroyed.` A stale plan: plan
+again. Never `-target`.
+
+### Before each start: both profiles, the network and the revision
+
+**Sign in.** One SSO session covers the deployer and the everyday profile; each is checked by name.
+
+**Operator command** (expected runtime ~1 min)
+Where: your Mac, anywhere
+```bash
+aws sso login --sso-session debate
+aws sts get-caller-identity --profile debate-dev-caselist-run-deployer --query Arn --output text
+aws sts get-caller-identity --profile debate-dev-evidence --query Arn --output text
+```
+Success looks like one ARN containing `AWSReservedSSO_DebateDevCaselistRunDeployer` and one containing
+`AWSReservedSSO_DebateDevEvidenceOperator`. An error on either: that profile is not configured or not
+signed in, and the script would refuse.
+
+**The network and the revision the schedule starts**, from the root's outputs. The deployer cannot
+read the schedule, so the runbook passes the script Terraform's own revision; without
+`--task-definition`, the script starts the family's newest ACTIVE revision, which the deploy script
+may have replaced with a later image.
+
+**Operator command** (expected runtime ~1 min)
+Where: `$WT`
+```bash
+cd "$WT"
+SUBNETS=$(AWS_PROFILE=debate-admin terraform -chdir=infrastructure/envs/dev output -json caselist_run_subnet_ids | tr -d '[]" \n')
+SECURITY_GROUP=$(AWS_PROFILE=debate-admin terraform -chdir=infrastructure/envs/dev output -raw caselist_run_security_group_id)
+REVISION=$(AWS_PROFILE=debate-admin terraform -chdir=infrastructure/envs/dev output -raw caselist_run_task_definition_arn)
+DIGEST=$(grep -oE 'sha256:[0-9a-f]{64}' infrastructure/envs/dev/owner.auto.tfvars)
+echo "subnets ${SUBNETS}; security group ${SECURITY_GROUP}; revision ${REVISION}; image ${DIGEST}"
+```
+Success looks like two `subnet-` ids joined by a comma, one `sg-` id, a
+`…:task-definition/debate-dev-caselist-run:<n>` ARN, and one `sha256:` digest.
+
+### The dry run (`v1-e40-t09` ac2)
+
+Listings and a `HEAD` in the task, as the run role, with the run's token: nothing is downloaded,
+written or locked, and no budget is spent. It also measures the free space on the task's volume.
+Not inside the window, and not before Wednesday 2026-10-28's scheduled run has succeeded.
+
+**Start it.** The caselist is the first to import.
+
+**Operator command** (expected runtime ~1 min to start)
+Where: `$WT`, in the shell that set `REVISION`
+```bash
+cd "$WT"
+CASELIST=hspolicy25
+rm -f "/tmp/backfile-${CASELIST}-dry-run.txt"
+if env | grep -q '^DEBATE_'; then echo "STOP: DEBATE_ overrides are set in this shell"; elif [ -z "$REVISION" ] || [ -z "$SUBNETS" ]; then echo "STOP: REVISION or SUBNETS is not set; run the block above first"; else python3 -I ops/caselist_run/start_backfile_import.py --env dev --caselist "$CASELIST" --subnets "$SUBNETS" --security-group "$SECURITY_GROUP" --task-definition "$REVISION" --dry-run | tee "/tmp/backfile-${CASELIST}-dry-run.txt"; fi
+TASK_ID=$(sed -n 's/^task id: //p' "/tmp/backfile-${CASELIST}-dry-run.txt" 2>/dev/null)
+echo "task ${TASK_ID}"
+```
+Success looks like `outside the no-import window`, `run lock: free`, `task definition: <REVISION>
+(revision <n>)`, `image digest: <DIGEST>`, `ephemeral storage: 100 GiB`, `started arn:aws:ecs:…`, and
+`task <32 hex digits>`. **Before the first import, the revision and the digest printed must be
+`REVISION` and `DIGEST` above**: if either differs, stop and tell the PM. A `REFUSED:` line started
+nothing; it says why. Inside the window: start it after Thursday 00:00. The lock held: a run is
+working, so start it once that run's task has stopped.
+
+**Watch it** until it stops; a dry run takes a few minutes.
+
+**Operator command** (expected runtime ~1 min each time)
+Where: `$WT`, in the same shell
+```bash
+aws ecs describe-tasks --profile debate-dev-caselist-run-deployer --region us-east-1 --cluster debate-dev-caselist-run --tasks "$TASK_ID" --query 'tasks[0].[lastStatus,stopCode,containers[0].exitCode]' --output text
+```
+Success looks like `STOPPED	EssentialContainerExited	0`. `RUNNING` or `PENDING`: not done yet. Exit
+`1` is a refusal: read its result below.
+
+**Its result**, the import's `--json` line in the task's log.
+
+**Operator command** (expected runtime ~1 min)
+Where: `$WT`, in the same shell
+```bash
+aws logs tail debate-dev-caselist-run --profile debate-dev-caselist-run-deployer --region us-east-1 --log-stream-names "run/run/${TASK_ID}" --since 6h | grep '"command": "caselist backfile-import"' | grep -oE '"status": "(ok|error)"|"applied": (true|false)|"archive_bytes": [0-9]+|"already_imported": (true|false)|"backfile_downloads_left": [0-9]+|"inside_no_import_window": (true|false)|"required_bytes": [0-9]+|"free_bytes": [0-9]+|"enough": (true|false)|"code": "[A-Z_]+"'
+```
+Success (ac2) looks like `"status": "ok"`, `"applied": false`, `"archive_bytes": 3958272657` for
+`hspolicy25`, `"already_imported": false`, `"backfile_downloads_left": 1`,
+`"inside_no_import_window": false`, `"required_bytes": 29687044928`, a `"free_bytes"` above it,
+`"enough": true`, and **no `"code"` line**. Record the free bytes in the report: they are the task
+volume's measured room. Nothing printed at all: the task did not reach the import; send the log's
+last lines (`aws logs tail` without the `grep`s) to the PM.
+
+**A `"code"` line names why it stopped**:
+
+* `CASELIST_AUTH_EXPIRED`, `CASELIST_TOKEN_MISSING` or `CASELIST_TOKEN_UNREADABLE`: the token the run's
+  login stored has expired, or there is none. **The Wednesday 03:00 login renews it. Nobody logs in by
+  hand for an import**, which would be a second login: start the import again after Thursday 00:00.
+  Since `v1-e40-t35` an image's `CASELIST_AUTH_EXPIRED` message says only what OpenCaselist refused,
+  and its hint is the Wednesday login of
+  [A run refused for an expired login](#a-run-refused-for-an-expired-login). An image built before it
+  still says to run `caselist auth login`, and the messages of the other two codes still do: that
+  wording is the Mac's, and the rule holds for all of them.
+* `INSIDE_NO_IMPORT_WINDOW`, `BACKFILE_BUDGET_SPENT`, `NOT_ENOUGH_FREE_SPACE`,
+  `RUN_STATE_NOT_SEEDED`, `NOT_A_BACKFILE`, `NO_COMPLETE_ARCHIVE`: as
+  [caselist-backfiles.md, "What each refusal means"](caselist-backfiles.md#what-each-refusal-means) says.
+* `RUN_LOCK_HELD` or another lock code: a run took the lock after the script read it. Start again once
+  that run's task has stopped.
+* Anything else goes to the PM with the log's last lines.
+
+### The four imports (`v1-e40-t09` ac3)
+
+In the order of [caselist-backfiles.md](caselist-backfiles.md#the-order), **at most one a day**,
+outside the window and **never on a Wednesday**, each its dry run first:
+
+| Order | Caselist | Earliest | Its dry run's `archive_bytes` | `required_bytes` |
+|---|---|---|---|---|
+| 1 | `hspolicy25` | the operator's return, after 2026-11-01 | 3958272657 | 29687044928 |
+| 2 | `hsld25` | the Thursday after the first import's weekly run is checked (below) | 4366678808 | 32750091060 |
+| 3 | `hspolicy24` | a day after the second | 2563267685 | 19224507638 |
+| 4 | `hsld24` | a day after the third | 3967721058 | 29757907935 |
+
+**For each:** "Before each start" above (the sign-in, and the block that sets `REVISION`), then the
+dry run with `CASELIST` set to this caselist, read as above. Its `archive_bytes` and `required_bytes`
+are the table's, `"backfile_downloads_left": 1`, and no `"code"` line. **Only then the import**, in a
+block of its own.
+
+**Operator command** (expected runtime ~1 min to start; the import takes 1.5 to 2.5 hours)
+Where: `$WT`, in the shell that ran this caselist's dry run
+```bash
+cd "$WT"
+rm -f "/tmp/backfile-${CASELIST}-import.txt"
+if env | grep -q '^DEBATE_'; then echo "STOP: DEBATE_ overrides are set in this shell"; elif [ -z "$REVISION" ] || [ -z "$CASELIST" ]; then echo "STOP: REVISION or CASELIST is not set; run the dry run first"; else python3 -I ops/caselist_run/start_backfile_import.py --env dev --caselist "$CASELIST" --subnets "$SUBNETS" --security-group "$SECURITY_GROUP" --task-definition "$REVISION" | tee "/tmp/backfile-${CASELIST}-import.txt"; fi
+TASK_ID=$(sed -n 's/^task id: //p' "/tmp/backfile-${CASELIST}-import.txt" 2>/dev/null)
+echo "task ${TASK_ID}"
+```
+Success looks like the dry run's lines and `task <32 hex digits>`.
+
+**Watch it** every half hour with the dry run's `describe-tasks` block, until `STOPPED
+EssentialContainerExited 0`.
+
+**How far it got**, after a `STOPPED` that is not exit `0`, or at any time while it runs. The import
+writes a line to its log as each step starts and ends (restore, download, import, parse, publish,
+publish parsed), and during the parse one every five minutes (`v1-e40-t32`). Each is a JSON object
+with the result's `"command"` and an `"event"` in place of its `"status"`. This reads the last one,
+filtered to its step, seconds, counts and memory figures.
+
+**Operator command** (expected runtime ~1 min)
+Where: `$WT`, in the same shell
+```bash
+aws logs tail debate-dev-caselist-run --profile debate-dev-caselist-run-deployer --region us-east-1 --log-stream-names "run/run/${TASK_ID}" --since 6h | grep '"command": "caselist backfile-import"' | grep '"event": ' | tail -1 | grep -oE '"event": "[a-z_]+"|"step": "[a-z_]+"|"seconds": [0-9.]+|"counts": [{][^}]*[}]|"memory": [{][^}]*[}]'
+```
+
+What it says:
+
+* `"event": "step_ended"`: that step finished, after its `"seconds"`, with its `"counts"`; the next
+  had not started.
+* `"event": "step_started"`: it stopped inside that step. The step's line has no counts yet.
+* `"event": "parse_progress"`: it stopped in the parse, with `"sources_done"` and `"sources_left"`
+  as they were then, at most five minutes before. `"sources_left": 0` means every source was parsed
+  and it stopped while rebuilding the parsed store's aggregates.
+* `"event": "step_failed"`: that step raised. The result's `"code"`, in the counts block below, says
+  why.
+* Nothing printed: the task stopped before the import's first step, or the image predates
+  `v1-e40-t32`. Send the log's last lines (`aws logs tail` without the `grep`s) to the PM.
+
+**The memory figures** are on every end, failure and progress line, in bytes, as high-water marks
+since the task started. `"container_peak_bytes"` is the whole container's, every parse worker
+included, read from its cgroup (`"cgroup"` says `v1` or `v2`). Divided by 34359738368, the task's
+32768 MiB in bytes, it is the share of the task's memory the import reached; near 1 is where ECS
+stops it with `OutOfMemoryError`. On cgroup `v1` the figure counts the page cache as well, which the kernel
+reclaims before it kills anything, so a figure near 1 is not a kill by itself.
+`"main_process_peak_bytes"` is the import's own process; the container's less it is, at most, what
+the workers took. Either is left out when it could not be read. Send the PM the lines, with the
+exit code and stop reason from `describe-tasks`; for the first import, say which `"cgroup"` they
+name.
+
+**Its counts.**
+
+**Operator command** (expected runtime ~1 min)
+Where: `$WT`, in the same shell
+```bash
+aws logs tail debate-dev-caselist-run --profile debate-dev-caselist-run-deployer --region us-east-1 --log-stream-names "run/run/${TASK_ID}" --since 6h | grep '"command": "caselist backfile-import"' | grep -v '"event": ' | grep -oE '"status": "(ok|error)"|"applied": (true|false)|"downloaded_bytes": [0-9]+|"members": [0-9]+|"stored": [0-9]+|"suppressed": [0-9]+|"held_by_request": [{][^}]*[}]|"sources_uploaded": [0-9]+|"sources_skipped": [0-9]+|"parsed": [0-9]+|"unsupported": [0-9]+|"failed": [0-9]+|"cards": [0-9]+|"parsed_uploaded": [0-9]+|"archive_left_inbox": (true|false)|"(restore|download|import|parse|publish|publish_parsed)": [0-9.]+|"code": "[A-Z_]+"'
+```
+Success looks like `"status": "ok"`, `"applied": true`, `"downloaded_bytes"` equal to the dry run's
+`archive_bytes`, and `"members"`, `"sources_uploaded"`, `"parsed"`, `"cards"` and `"parsed_uploaded"`
+each **above zero**, `"archive_left_inbox": true`, the six step times in seconds, any `"held_by_request"` counts, and no `"code"` line.
+The `grep -v` drops the step lines, which carry the same `"command"` and counts of the same names.
+A zero there is not a success, even with `"status": "ok"`: send the lines to the PM.
+`BACKFILE_IMPORT_INCOMPLETE` or `BUNDLE_CHANGED_SINCE_RESTORE`: start it again the next day; it
+resumes from what was published and does not download again. A window that opened part-way
+(`INSIDE_NO_IMPORT_WINDOW`): start it again after Thursday 00:00.
+
+**Record the counts** in
+[docs/data/caselist-backfile-seasons.md, "Cloud imports"](../data/caselist-backfile-seasons.md#cloud-imports-v1-e40-t09):
+paste the lines above, with the date and the revision, into a session, which commits the row. Counts
+only: no school, team or file name is in them.
+
+**The next weekly run after the first import.** The first import's manifest goes into the run-state
+bundle that every weekly run restores. On the Thursday after that import's Wednesday, check that run
+restored, finished, and took about as long as the weeks before it. The second import waits for this.
+
+**Operator command** (expected runtime ~1 min)
+Where: your Mac, the installed build
+```bash
+debate-research --json caselist runs --remote --last 4 > /tmp/caselist-runs.json
+python3 -I - /tmp/caselist-runs.json <<'RUNS'
+import json, sys
+from datetime import datetime
+for run in json.load(open(sys.argv[1]))["data"]["runs"]:
+    started = datetime.fromisoformat(run["started_at"].replace("Z", "+00:00"))
+    finished = datetime.fromisoformat(run["finished_at"].replace("Z", "+00:00"))
+    print(run["run_id"], run["outcome"], "%.0f min" % ((finished - started).total_seconds() / 60))
+RUNS
+```
+Success looks like four lines, newest first, the newest Wednesday's run with the outcome the weeks
+before had and a time within about a quarter of theirs. A failed run, or one much slower, goes to the
+PM before the second import, with its log's last lines.
+
+**A rebuild after a whole-file removal** is this same import, dry run first, for each backfile the
+removal's plan listed ([caselist-removal.md](caselist-removal.md), step 5): imported already, it
+downloads nothing and spends no budget, so `"already_imported": true` and `"downloaded_bytes": 0` are
+its success. The window still applies.
+
+## A camp table change: the OpenEv metadata re-import
+
+When `camp_aliases.yaml` changes, camp files already imported keep the camp they were filed under
+until their release's metadata is re-derived (`v1-e30-t32` split Michigan into three camps this way).
+`caselist reimport-openev-metadata` re-derives camp, lab, title and warnings from the paths the release
+manifest recorded. It downloads nothing and reads no file's bytes. Since the cutover dev's records are
+the cloud run's run-state bundle, so in dev it runs in bucket mode (`v1-e40-t34`), on the bucket's
+copy, as `caselist remove` does:
+
+* **The dry run is the default.** It restores the bucket's run state into the working copy, re-derives
+  with nothing written, and prints each camp's file count before and after, with the titles and
+  warnings that change. It takes no lock and writes nothing to the bucket.
+* **`--execute`** holds the bucket's run lock from the restore to the end. It restores, re-derives,
+  corrects the camp-file records, publishes the release manifest (no source: they are all in the
+  bucket already) and saves the run-state bundle. A release whose metadata is already right is left
+  alone: nothing is published or saved.
+* **What refuses, before anything is restored:** the no-import window, Tuesday 06:00 to Thursday
+  00:00 America/Chicago, every Wednesday included (`INSIDE_NO_IMPORT_WINDOW`); a run holding the lock
+  (`RUN_LOCK_HELD`); the run's home moved to prod (`RUN_HOME_MOVED`); in prod, `--execute` without
+  `--confirm-prod` (`CONFIRMATION_REQUIRED`). A bundle that changed between the restore and the
+  publish, which only a removal could do, stops it with `BUNDLE_CHANGED_SINCE_RESTORE` and nothing
+  published: run it again.
+* **After it, nothing more by hand.** The next cloud run's parse stage carries the new camps to the
+  occurrence rows, and its search index stage carries them to the cards (`v1-e30-t32`'s route table).
+  Never `caselist publish` or `caselist parse --publish` from the Mac for it.
+
+**The working copy** is `$HOME/.debate-research/reimport-working-copy`, a directory of its own, so the
+Mac's own dev data directory is left as it is. Each command replaces its contents with the bucket's.
+
+### Michigan's refile (`v1-e30-t32`), after `v1-e40-t34` merges
+
+**The worktree**, `$WT` from "Before you start", moved to `origin/dev` with this task merged.
+
+**Operator command** (expected runtime ~1 min)
+Where: your Mac
+```bash
+WT="$HOME/Documents/debate/debate-intelligence-tool/debate-intelligence-worktrees/caselist-credentials-dev"
+cd "$WT" || echo "WT does not exist: $WT"
+git fetch origin
+git switch --detach origin/dev
+test -f packages/debate_core/src/debate_core/application/caselist/openev_metadata_reimport_in_bucket.py && echo "ok: origin/dev $(git rev-parse --short HEAD), the bucket-mode re-import merged" || echo "NOT MERGED: wait for v1-e40-t34 to merge into dev"
+aws sso login --profile debate-dev-evidence
+aws sts get-caller-identity --profile debate-dev-evidence --query Arn --output text
+```
+Success looks like `ok: origin/dev <commit>, the bucket-mode re-import merged`, then an ARN containing
+`AWSReservedSSO_DebateDevEvidenceOperator`.
+
+**The dry run**, of both camp releases dev holds. Not inside the window: Thursday to Monday, or a
+Tuesday before 06:00 Chicago.
+
+**Operator command** (expected runtime ~1 min)
+Where: `$WT`, a new terminal window
+```bash
+cd "$WT"
+COPY="$HOME/.debate-research/reimport-working-copy"
+PULL=$(pgrep -fl 'debate-research( --json)? caselist pull')
+echo "running pull: ${PULL:-none}"
+if [[ -n "$PULL" ]] || env | grep -q '^DEBATE_'; then
+  echo "STOP: a caselist pull is running, or DEBATE_ overrides are set in this shell; nothing ran"
+else
+  for EVENT in policy ld; do
+    env DEBATE_ENV=dev DEBATE_STORAGE__DATA_DIR="$COPY" uv run debate-research caselist reimport-openev-metadata --year 2026 --event "$EVENT"
+  done
+fi
+```
+Success looks like two tables, each titled `openev 2026-<event> metadata, dev's run state (dry run)`,
+each caption ending `DRY RUN: the bucket's run state was restored into this machine's working copy;
+nothing was written to the bucket and the run lock was not taken.` and the command that carries it
+out. **Send both tables to the PM, who reads the counts before the run.** They hold camps and counts
+only. What to expect, from a read-only re-derive of the Mac's copy of both releases on 2026-11-01
+with this table (dev's bundle was seeded from that copy):
+
+* **`2026-policy`**: the three Michigan rows below, and every other camp the same before and after.
+  The caption says `105 file(s), 6 changed: 0 title(s) and 0 warning(s) changed, 6 camp-file
+  record(s) to correct`, and `102 not held in this working copy, which fetches no file`, which is
+  right: the working copy fetches no source. A camp file a cloud run has pulled since adds one to the
+  files, and to its own camp before and after alike. Its count of rows given their upstream identity can be
+  up to 106 (the Mac's copy gives every member row one; dev's may already carry them), and that
+  number does not move a camp.
+
+  | Camp | Files before | Files after |
+  |---|---|---|
+  | Michigan | 40 | 34 |
+  | Michigan Classic | 0 | 5 |
+  | MNDI | 0 | 1 |
+
+* **`2026-ld`**: every camp the same before and after, and `2 file(s), 2 changed: 0 title(s) and 2
+  warning(s) changed, 2 camp-file record(s) to correct`. **That is expected under any table**: a
+  warning has been reworded since those 2 files were imported (`v1-e30-t32`'s report). It moves no
+  camp, and the run below leaves `2026-ld` alone; re-deriving it is the PM's call.
+
+**What stops the run:** a `2026-policy` count that is not the table's (another camp moving, a title
+changing, Michigan not 40 to 34), any error code, or a `STOP` line. Send it to the PM. A refusal
+changed nothing: `INSIDE_NO_IMPORT_WINDOW` runs again after the window closes; `RUN_LOCK_HELD` runs
+again once the cloud run's task has stopped (`caselist runs --remote --last 1`).
+
+**The run**, after the PM's word, `2026-policy` alone.
+
+**Operator command** (expected runtime ~1 min)
+Where: `$WT`, a new terminal window
+```bash
+cd "$WT"
+COPY="$HOME/.debate-research/reimport-working-copy"
+PULL=$(pgrep -fl 'debate-research( --json)? caselist pull')
+echo "running pull: ${PULL:-none}"
+if [[ -n "$PULL" ]] || env | grep -q '^DEBATE_'; then
+  echo "STOP: a caselist pull is running, or DEBATE_ overrides are set in this shell; nothing ran"
+else
+  env DEBATE_ENV=dev DEBATE_STORAGE__DATA_DIR="$COPY" uv run debate-research --json caselist reimport-openev-metadata --year 2026 --event policy --execute | grep -oE '"status": "(ok|error)"|"applied": (true|false)|"rows": [0-9]+|"rows_changed": [0-9]+|"camp_files_updated": [0-9]+|"manifest_published": ("[a-z]+"|null)|"bundle_saved": (true|false)|"code": "[A-Z_]+"'
+fi
+```
+Success looks like `"status": "ok"`, `"applied": true`, `"rows"` the dry run's file count (105 on
+the Mac's copy), `"rows_changed": 6`,
+`"camp_files_updated": 6`, `"manifest_published": "uploaded"`, `"bundle_saved": true`, and no
+`"code"` line. `"rows": 0`, or nothing printed, is no success: send the output to the PM.
+`"manifest_published": null` with `"rows_changed": 0` means the bundle already held the refile.
+`OPENEV_REIMPORT_INCOMPLETE` says what did not finish; run the same block again.
+
+**The check**, read-only: the dry run again, which restores the bundle the run saved.
+
+**Operator command** (expected runtime ~1 min)
+Where: `$WT`, in the same window
+```bash
+cd "$WT"
+env DEBATE_ENV=dev DEBATE_STORAGE__DATA_DIR="$COPY" uv run debate-research --json caselist reimport-openev-metadata --year 2026 --event policy | grep -oE '"rows": [0-9]+|"rows_changed": [0-9]+|"camp_files_updated": [0-9]+|"manifest_changed": (true|false)|"code": "[A-Z_]+"'
+```
+Success looks like `"rows"` as in the run, `"rows_changed": 0`, `"camp_files_updated": 0` and
+`"manifest_changed": false`: dev's bundle holds Michigan's 6 files refiled. Record the run's lines
+and these in the task's report. The next weekly cloud run carries the camps to the cards.
+
+## Prod, at the pilot's promotion (follow-up)
+
+The same steps against `infrastructure/envs/prod`, from a checkout of `main`, with `prod` for `dev`
+in every name (`debate-prod-caselist-run`, `DebateProdCaselistRunDeployer`, the profile
+`debate-prod-caselist-run-deployer`), and a stable release: the deploy script refuses a dev
+pre-release for prod. ADR-0020 (7) moves the run's home at the same time; `v1-e40-t06`'s runbook
+orders the two.

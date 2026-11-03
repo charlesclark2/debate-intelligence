@@ -58,6 +58,7 @@ from debate_core.evidence.style_classifier import (
 from debate_core.integrations.docx_parser.package import (
     MC_NAMESPACE,
     DocxPackage,
+    InheritedRunProperties,
     XmlElement,
     qualified_name,
 )
@@ -65,7 +66,9 @@ from debate_core.integrations.docx_parser.package import (
 __all__ = [
     "ReadParagraph",
     "SpannedText",
+    "as_word_shows_it",
     "concatenate_spanned_text",
+    "defaults_make_text_bold",
     "font_size_spans_for",
     "formatting_spans_for",
     "iter_text_box_paragraphs",
@@ -323,6 +326,58 @@ def read_paragraph(
         insertions_kept=tracked.insertions_kept,
         deletions_dropped=tracked.deletions_dropped,
     )
+
+
+def _inherited(style_id: str | None, package: DocxPackage) -> list[InheritedRunProperties]:
+    """A style's own run properties and its ancestors', nearest first; none for no style."""
+    if style_id is None:
+        return []
+    chain = (style_id, *package.based_on_chain(style_id))
+    return [package.styles[name].run_properties for name in chain if name in package.styles]
+
+
+def _default_paragraph_style(package: DocxPackage) -> str | None:
+    for definition in package.styles.values():
+        if definition.is_default and definition.style_type == "paragraph":
+            return definition.style_id
+    return None
+
+
+def defaults_make_text_bold(package: DocxPackage) -> bool:
+    """Whether a run that says nothing of bold, in a paragraph that names no style, is bold.
+
+    The document's default paragraph style decides, through its `w:basedOn` chain, and the
+    document's defaults when no style in it says (`v1-e31-t24`).
+    """
+    for properties in _inherited(_default_paragraph_style(package), package):
+        if properties.bold is not None:
+            return properties.bold
+    return bool(package.run_defaults.bold)
+
+
+def as_word_shows_it(description: ParagraphDescription, package: DocxPackage) -> ParagraphDescription:
+    """The paragraph with each run's bold and size, where the run says nothing, as Word shows them.
+
+    The nearest that says something wins: the run's character style, the paragraph's style (the
+    document's default paragraph style when it names none), each through its `w:basedOn` chain,
+    then the document's defaults. Word treats bold in a style as a toggle against the styles
+    beneath it; this takes the nearest instead, which differs only where two styles both set
+    bold, and says so here rather than in a count.
+
+    The parser does not call this: it reads what a run says (`v1-e31-t24` counts the difference).
+    """
+    paragraph_style = description.style_id or _default_paragraph_style(package)
+    below_the_run = [*_inherited(paragraph_style, package), package.run_defaults]
+    runs: list[RunDescription] = []
+    for run in description.runs:
+        sources = [*_inherited(run.character_style_id, package), *below_the_run]
+        bold = run.bold
+        half_points = run.half_points
+        for source in sources:
+            bold = source.bold if bold is None else bold
+            half_points = source.half_points if half_points is None else half_points
+        runs.append(run.model_copy(update={"bold": bold, "half_points": half_points}))
+    return description.model_copy(update={"runs": tuple(runs)})
 
 
 def _outline_level(properties: XmlElement | None) -> int | None:

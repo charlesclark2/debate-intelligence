@@ -1,0 +1,73 @@
+# TASK v1-e06-t11-export-docx-refuses-a-mismatched-profile - Exporting a .docx refuses a card whose format profile is not the one it renders in
+# Epic: E06 Card Cutting, Citation & Export | Release: v1.3 (URL → verified card) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e06-t11-export-docx-refuses-a-mismatched-profile
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.3
+    debate/epic: v1-e06-card-cutting
+  annotations:
+    debate/title: "Exporting a .docx refuses a card whose format profile is not the one it renders in"
+spec:
+  # Filed by the PM, 2026-11-02, from v1-e06-t07's question 5 (the PM's ruling, 2026-11-02).
+  description: >-
+    `verify` reads a .docx body in the format profile its cards name (`Card.format_profile`).
+    `ExportService.export_docx` does not check that each card names the profile it renders the
+    document in. `cut` always passes the same one, but nothing guarantees it. Refuse, before
+    anything is written, an export whose cards name a profile other than the rendering profile,
+    naming the card by id and both profiles. The manifest's version is unchanged.
+  priority: 3
+  constraints:
+    packages: [debate_core.application, packages/debate_core/tests]
+    forbidden:
+      - A manifest version change
+      - A partly written .docx on a refusal
+  context:
+    - kind: TaskRef
+      name: v1-e06-t07-verify-docx
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        export_docx refuses a card whose format_profile is not the rendering profile, naming
+        the card and both profiles, and writes nothing, while a matching export is
+        unchanged, by tests shown failing first.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e06-t11-export-docx-refuses-a-mismatched-profile-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.3
+    debate/epic: v1-e06-card-cutting
+spec:
+  description: >-
+    Exporting a .docx refuses a card whose format profile is not the one it renders in.
+  goalRef:
+    name: v1-e06-t11-export-docx-refuses-a-mismatched-profile
+  graph:
+    nodes:
+      - id: export-docx-refuses-a-mismatched-profile
+        kind: Task
+        name: Profile match
+        description: >-
+          Exporting a .docx refuses a card whose format profile is not the one it renders
+          in.
+        estimatedEffort: 30m
+        acceptanceCriteria:
+          - type: test_passes
+            name: Profile match tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests, -k, export_docx or export_service]
+status:
+  phase: Pending

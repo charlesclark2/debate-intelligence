@@ -229,7 +229,7 @@ async def test_a_version_1_document_reads_back_with_its_empty_tag_as_no_tag() ->
     assert record.schema_version == 1
     document = record.to_parsed_document(PATH)
     assert document.parser_version == FIRST_VERSION
-    assert [(card.tag, card.has_tag) for card in document.cards] == [(TAG, True), ("", False)]
+    assert [(card.tag, card.has_tag) for card in document.cards] == [(TAG, True), (None, False)]
     assert [card.short_cite for card in document.cards] == ["Okonkwo 26", "Ferreira 25"]
 
 

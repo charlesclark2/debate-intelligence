@@ -47,8 +47,9 @@ from debate_core.evidence.selection import (
     SelectionProblem,
 )
 from debate_core.evidence.snapshot_text import SnapshotText
-from debate_core.testing import FixedClock, InMemorySnapshotStore, SequentialIdGenerator
 from debate_core.testing.builders import build_source_snapshot
+from debate_core.testing.fakes.clock_and_ids import FixedClock, SequentialIdGenerator
+from debate_core.testing.fakes.persistence import InMemorySnapshotStore
 
 #: Raw extracted text: CRLF breaks, a doubled space, a trailing newline.
 EXTRACTED = (

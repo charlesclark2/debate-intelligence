@@ -27,10 +27,11 @@ from tests.fixtures.caselist.build_synthetic_archives import (
     build_snapshot_directories,
     build_snapshot_zips,
 )
+from tests.fixtures.model_routing import EXAMPLE_ROUTING_FILE
 from typer.testing import CliRunner, Result
 
 from debate_cli.app import create_app
-from debate_cli.commands.caselist import EVENTS_BY_SLUG_PREFIX, event_for_caselist
+from debate_cli.caselist_events import EVENTS_BY_SLUG_PREFIX, event_for_caselist
 from debate_cli.exit_codes import ExitCode
 from debate_core.application.caselist.manifest import MANIFEST_SCHEMA_VERSION, manifest_key
 from debate_core.domain.caselist import Event
@@ -52,7 +53,7 @@ def isolated_environment(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Ite
     profiles.mkdir()
     (profiles / "dev.toml").write_text(
         f'[storage]\ndata_dir = "{tmp_path / "data"}"\n'
-        f'[models]\nrouting_file = "{tmp_path / "routing.yaml"}"\nbudget_usd_daily = 1.0\n',
+        f'[models]\nrouting_file = "{EXAMPLE_ROUTING_FILE}"\nbudget_usd_daily = 1.0\n',
         encoding="utf-8",
     )
     monkeypatch.setenv("DEBATE_PROFILE_DIR", str(profiles))
@@ -180,7 +181,7 @@ def test_a_directory_imports_exactly_as_the_zip_does(
     # A second data directory, so the two runs do not see each other.
     (tmp_path / "profiles" / "dev.toml").write_text(
         f'[storage]\ndata_dir = "{tmp_path / "second"}"\n'
-        f'[models]\nrouting_file = "{tmp_path / "routing.yaml"}"\nbudget_usd_daily = 1.0\n',
+        f'[models]\nrouting_file = "{EXAMPLE_ROUTING_FILE}"\nbudget_usd_daily = 1.0\n',
         encoding="utf-8",
     )
     from_directory = envelope(import_week(directories[FIRST_WEEK], FIRST_WEEK, json_output=True))["data"]
@@ -442,6 +443,10 @@ def test_a_slug_this_build_does_not_know_is_refused_rather_than_guessed(
 
     assert result.exit_code == ExitCode.DOMAIN_FAILURE
     assert "--event" in result.stdout + result.stderr
+    # The table moved out of the command module in v1-e01-t32; the hint names where it is now (t39).
+    shown = " ".join((result.stdout + result.stderr).split())
+    assert "add the slug prefix to the table in debate_cli.caselist_events" in shown
+    assert "debate_cli.commands.caselist" not in shown
 
 
 def test_an_explicit_event_overrides_the_inference(zips: dict[date, Path]) -> None:

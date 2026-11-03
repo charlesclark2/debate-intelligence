@@ -169,3 +169,117 @@ variable "evidence_removal_user_names" {
   type        = list(string)
   default     = []
 }
+
+# --- The student evidence search pilot (v1-e39-t04-pilot-infrastructure, ADR-0019) ---------------
+#
+# Identical in both roots; the host is in each root's terraform.tfvars and the people in the
+# gitignored owner.auto.tfvars.
+
+variable "evidence_search_host" {
+  description = "The host students open: tub.dev.wfbdebate.com in dev, tub.wfbdebate.com in prod (ADR-0019 (a) 6). The login host is auth. in front of it."
+  type        = string
+}
+
+variable "evidence_search_dns_zone_name" {
+  description = "Name of the existing Route 53 hosted zone holding evidence_search_host. Read, never created."
+  type        = string
+  default     = "wfbdebate.com"
+}
+
+variable "evidence_search_budget_emails" {
+  description = <<-EOT
+    Where the pilot's $10 budget alarm writes. Supplied through the gitignored owner.auto.tfvars
+    and never committed; empty sends it to the Owner address.
+  EOT
+  type        = list(string)
+  default     = []
+}
+
+variable "evidence_search_deployer_user_names" {
+  description = <<-EOT
+    Identity Center user names assigned this environment's TubDeployer permission set, which
+    scripts/tub_deploy.sh runs as. Adult maintainers only. Supplied through the gitignored
+    owner.auto.tfvars, because these are people's names and the repository is public.
+  EOT
+  type        = list(string)
+  default     = []
+}
+
+variable "evidence_search_accounts_user_names" {
+  description = <<-EOT
+    Identity Center user names assigned this environment's TubAccounts permission set, which the
+    coach's `tub users` commands run as (v1-e39-t05). Adult maintainers only, never a student.
+    Supplied through the gitignored owner.auto.tfvars.
+  EOT
+  type        = list(string)
+  default     = []
+}
+
+# --- The weekly caselist run in the cloud (v1-e40-t02-secrets-token-store-and-login, ADR-0020) ---
+#
+# Identical in both roots; the people are in the gitignored owner.auto.tfvars. The image digest is
+# what scripts/caselist_run_deploy.sh prints after a push (v1-e40-t03).
+
+variable "caselist_credential_writer_user_names" {
+  description = <<-EOT
+    The Identity Center user assigned this environment's CaselistSecretWriter permission set: the
+    coach, who writes the Tabroom password with `caselist auth set-password` and never reads it
+    back. One person at most. Supplied through the gitignored owner.auto.tfvars.
+  EOT
+  type        = list(string)
+  default     = []
+}
+
+variable "caselist_run_deployer_user_names" {
+  description = <<-EOT
+    The Identity Center users assigned this environment's CaselistRunDeployer permission set,
+    which scripts/caselist_run_deploy.sh runs as: push the run's image, register its task
+    definition, start a run by hand. Adult maintainers only. Supplied through the gitignored
+    owner.auto.tfvars.
+  EOT
+  type        = list(string)
+  default     = []
+}
+
+variable "caselist_image_digest" {
+  description = <<-EOT
+    The digest of the run image scripts/caselist_run_deploy.sh pushed, sha256:<64 hex digits>. Null,
+    the default, applies the credentials, the network, the cluster, the repository and the deployer;
+    set, it adds the login and run task definitions, pinned by this digest, and their Wednesday
+    schedules (apply B).
+  EOT
+  type        = string
+  default     = null
+}
+
+variable "caselist_login_schedule_enabled" {
+  description = "Whether the Wednesday login schedule is enabled once it exists. False pauses the weekly login without destroying it."
+  type        = bool
+  default     = true
+}
+
+variable "caselist_run_schedule_enabled" {
+  description = "Whether the Wednesday 06:00 run schedule is enabled once it exists. False, the default, until v1-e40-t04's bucket mode and the cutover (v1-e40-t06)."
+  type        = bool
+  default     = false
+}
+
+variable "caselist_run_late_alarm_actions_enabled" {
+  description = "Whether the late-run alarm (no run recorded in seven days) emails the coach. False, the default, until the cutover's first recorded cloud run (v1-e40-t06): the alarm is in ALARM until a run records itself."
+  type        = bool
+  default     = false
+}
+
+# --- Calling the routed Bedrock models (v1-e05-t08-bedrock-invoke-access) ------------------------
+#
+# Identical in both roots; the people are in the gitignored owner.auto.tfvars.
+
+variable "bedrock_invoker_user_names" {
+  description = <<-EOT
+    Identity Center user names assigned this environment's BedrockInvoker permission set, which a
+    model call is made with through the profile models.aws_profile names. Adult maintainers only,
+    never students. Supplied through the gitignored owner.auto.tfvars.
+  EOT
+  type        = list(string)
+  default     = []
+}

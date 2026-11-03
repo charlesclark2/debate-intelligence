@@ -9,10 +9,11 @@ simply truncated. None of those may take a parse run down, and none may be half-
 
 So this module does two jobs and hands the rest of the parser a package it can trust:
 
-**It bounds what it will open.** Entry count, total uncompressed size, the size of each XML part
-and each entry's compression ratio are all checked *before* anything is decompressed to memory,
-from the zip's own directory — and then the actual bytes read are counted too, because a zip
-directory can lie. See :class:`PackageLimits` for the numbers and where they come from.
+**It bounds what it will open.** Entry count and total uncompressed size are checked over every
+entry, from the zip's own directory, before anything is decompressed to memory. The compression
+ratio is judged on each part the reader opens, from the same directory, before that part is
+inflated; and the bytes actually read are bounded too, because a zip directory can lie. See
+:class:`PackageLimits` for the numbers and where they come from.
 
 **It refuses rather than guesses.** Every refusal is a
 :class:`~debate_core.domain.debate_files.ParseFailureReason`, raised as
@@ -50,13 +51,35 @@ corpus refused 23 ordinary files for card text such as *the system "works"* (`v1
 one of them holds a declaration.
 
 `remove_blank_text` stays off: a `<w:t>` holding nothing but spaces is part of a card's text, and
-evidence is copied exactly.
+evidence is copied exactly, but for the one decided exception below.
+
+## Characters XML 1.0 forbids
+
+XML 1.0 allows tab, line feed and carriage return, and no other C0 control, anywhere in a document,
+nor the noncharacters U+FFFE and U+FFFF. CardMirror's exporter has written U+0001, U+0002 and
+U+FFFE raw into card text, and no conforming parser reads such a part: the first parse of the
+corpus refused five files for it (`v1-e31-t09`). The PM decided with Charlie (2026-10-18, recorded
+in `v1-e31-t15`'s spec):
+
+    Each character XML 1.0 forbids that appears raw in a part the parser reads is replaced
+    one-for-one by U+FFFD before the part is parsed. Nothing is deleted, no author's word changes,
+    every other character keeps its position, and each source records how many it replaced. A
+    forbidden character written as a character reference (`&#1;` and the like) is still refused.
+
+So between step 1 and step 2 above, :func:`_replace_forbidden_characters` rewrites the part's raw
+bytes, and :attr:`DocxPackage.forbidden_characters_replaced` carries the count to the parser, which
+records it among the document's warnings. The rewrite cannot build markup: it only ever writes
+U+FFFD, which is not markup, in place of a character that can never be legitimate where it stands.
+A character reference is not a raw character, is left as it is, and the parser refuses it. The
+rewrite reads the part in its own encoding, UTF-8 or UTF-16, the two Office Open XML allows; a
+part in any other is handed to the parser unchanged.
 """
 
 from __future__ import annotations
 
 import re
 import zipfile
+import zlib
 from collections.abc import Iterator, Mapping
 from dataclasses import dataclass, field
 from io import BytesIO
@@ -64,6 +87,7 @@ from typing import Final
 
 from lxml import etree
 
+from debate_core.domain.caselist import SourceFormat
 from debate_core.domain.debate_files import ParseFailureReason
 from debate_core.evidence.style_profile_loader import resolve_based_on_chain
 
@@ -74,15 +98,21 @@ type XmlElement = etree._Element  # pyright: ignore[reportPrivateUsage]
 
 __all__ = [
     "DEFAULT_PACKAGE_LIMITS",
+    "declared_document_bytes",
     "W_NAMESPACE",
     "DocxPackage",
     "DocxPackageError",
+    "InheritedRunProperties",
+    "REPLACEMENT_CHARACTER",
     "PackageLimits",
     "StyleDefinition",
     "XmlElement",
     "hardened_xml_parser",
+    "PartRelationship",
+    "check_replacement_character",
     "open_debate_docx",
     "qualified_name",
+    "read_part_relationships",
 ]
 
 #: The WordprocessingML main namespace. Every element this parser reads lives in it.
@@ -137,6 +167,30 @@ ENCRYPTED_PACKAGE_STREAM: Final = "EncryptedPackage".encode("utf-16-le")
 #: First bytes of a PDF.
 PDF_MAGIC: Final = b"%PDF"
 
+#: First bytes of a gzip stream, which is what CardMirror's native `.cmir` file is.
+GZIP_MAGIC: Final = b"\x1f\x8b"
+
+#: How much of a gzip stream is read to tell a `.cmir` from any other: one inflated byte, from no
+#: more than the first 4 KiB. A gzip stream is a compression ratio of its own, so it is never
+#: inflated further than the one question needs.
+_CMIR_HEAD_INPUT_BYTES: Final = 4096
+
+#: Every character XML 1.0 forbids that can appear raw in a part: the C0 controls but tab, line
+#: feed and carriage return, and the noncharacters U+FFFE and U+FFFF (XML 1.0 section 2.2, `Char`).
+_FORBIDDEN_XML_CHARACTERS: Final = re.compile("[\x00-\x08\x0b\x0c\x0e-\x1f￾￿]")
+
+#: The same characters as UTF-8 writes them. A C0 control is one byte that never occurs inside
+#: another character's encoding, and `EF` only ever begins a character, so a match is always one
+#: whole character.
+_FORBIDDEN_XML_CHARACTERS_IN_UTF8: Final = re.compile(rb"[\x00-\x08\x0b\x0c\x0e-\x1f]|\xef\xbf[\xbe\xbf]")
+
+#: What a forbidden character is replaced by: U+FFFD, the character Unicode keeps for one that
+#: cannot be represented.
+REPLACEMENT_CHARACTER: Final = "�"
+
+#: The encoding an XML declaration names, read from a part that begins in an ASCII-compatible one.
+_DECLARED_ENCODING: Final = re.compile(rb"""(?:\xef\xbb\xbf)?<\?xml\s[^>]*?encoding\s*=\s*["']([^"']*)["']""")
+
 #: A document type or entity declaration anywhere in a part. Refused before a parser is built,
 #: because the cheapest defence against entity expansion is never to hand the document to a parser
 #: at all. An external `SYSTEM` or `PUBLIC` identifier can only be written inside one of these two
@@ -170,6 +224,10 @@ class PackageLimits:
       an order of magnitude more than that, which still leaves a zip bomb — a thousandfold and up
       — outside. The ratio is only checked on entries big enough for it to mean anything:
       a 40-byte `.rels` file that compresses to 20 bytes is not evidence of anything.
+    * The ratio is judged on the parts the reader opens, and the entry count and the total on every
+      entry. One file in the first corpus parse had a page thumbnail 278 times its stored size, in
+      a part nothing opens, and no other entry in 9,738 files above 100 (`v1-e31-t09`). A part that
+      is never inflated cannot exhaust anything, and the total still bounds the package.
     """
 
     maximum_entries: int = 1024
@@ -192,15 +250,35 @@ class DocxPackageError(Exception):
     part names only — never document text, a team code or a path from outside the package.
     """
 
-    def __init__(self, reason: ParseFailureReason, detail: str) -> None:
+    def __init__(
+        self, reason: ParseFailureReason, detail: str, *, source_format: SourceFormat | None = None
+    ) -> None:
         super().__init__(f"{reason}: {detail}")
         self.reason = reason
         self.detail = detail
+        #: The format the bytes turned out to be, when the reader identified one; None otherwise.
+        self.source_format = source_format
 
 
 # --------------------------------------------------------------------------------------------
 # What a package gives the rest of the parser
 # --------------------------------------------------------------------------------------------
+
+
+@dataclass(frozen=True, slots=True)
+class InheritedRunProperties:
+    """The bold and size a style, or the document's defaults, give a run that says nothing of either.
+
+    Word shows a run's bold and size from the nearest of: the run itself, its character style, its
+    paragraph style (the document's default paragraph style when it names none), and the document's
+    defaults, each style through its `w:basedOn` chain. The parser reads a run's own properties
+    only, so a file whose defaults are bold at 13 pt shows a line typed with nothing set as a bold
+    tag and gives the reader an unbolded line of no size (`v1-e31-t24`). What is here is read so
+    that it can be counted; nothing in the parser reads it.
+    """
+
+    bold: bool | None = None
+    half_points: int | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -211,6 +289,10 @@ class StyleDefinition:
     style_name: str | None
     style_type: str | None
     based_on: str | None
+    run_properties: InheritedRunProperties = field(default=InheritedRunProperties())
+    """The style's own `w:rPr` bold and size, not its ancestors'."""
+    is_default: bool = False
+    """`w:default="1"`: the style a paragraph (or run) of its type has when it names none."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -228,6 +310,12 @@ class DocxPackage:
     entry_count: int
     uncompressed_bytes: int
     warnings: tuple[str, ...] = field(default=())
+    forbidden_characters_replaced: int = 0
+    """How many characters XML 1.0 forbids were replaced by U+FFFD, over every part parsed."""
+    document_part: str = "word/document.xml"
+    """The main document part's name, as the package relationships give it."""
+    run_defaults: InheritedRunProperties = field(default=InheritedRunProperties())
+    """`w:docDefaults/w:rPrDefault`'s bold and size: what a run has when nothing else says."""
 
     def style_name(self, style_id: str | None) -> str | None:
         """The `w:name` of a style as this document defines it, or None."""
@@ -252,8 +340,31 @@ class DocxPackage:
 # --------------------------------------------------------------------------------------------
 
 
+def _is_cardmirror_native(content: bytes) -> bool:
+    """True for a gzip stream whose first inflated byte opens a JSON object: CardMirror's `.cmir`.
+
+    `docs/architecture/cardmirror-evaluation.md` describes the format as a gzip-compressed JSON
+    envelope, and the one the corpus holds is exactly that (`v1-e31-t09`). One inflated byte is
+    read, from at most the first :data:`_CMIR_HEAD_INPUT_BYTES` of the stream.
+    """
+    if not content.startswith(GZIP_MAGIC):
+        return False
+    try:
+        head = zlib.decompressobj(16 + zlib.MAX_WBITS).decompress(content[:_CMIR_HEAD_INPUT_BYTES], 1)
+    except zlib.error:
+        return False
+    return head == b"{"
+
+
 def _refuse_non_zip_formats(content: bytes) -> None:
     """Name the common not-a-`.docx` formats before trying to open the bytes as a zip."""
+    if _is_cardmirror_native(content):
+        raise DocxPackageError(
+            ParseFailureReason.UNSUPPORTED_FORMAT,
+            "a gzip stream holding a JSON document, CardMirror's native .cmir format; "
+            "V1 stores these without parsing them",
+            source_format=SourceFormat.CMIR,
+        )
     if content.startswith(PDF_MAGIC):
         raise DocxPackageError(
             ParseFailureReason.UNSUPPORTED_FORMAT, "a PDF; V1 stores PDFs without parsing them"
@@ -275,10 +386,14 @@ def _refuse_non_zip_formats(content: bytes) -> None:
 
 
 def _check_directory(archive: zipfile.ZipFile, limits: PackageLimits) -> tuple[int, int]:
-    """Check the zip's own directory against the limits, before decompressing anything.
+    """Check the entry count and the total uncompressed size over every entry, before decompressing
+    anything.
 
-    Returns `(entry count, declared uncompressed total)`. The declared total is checked again
-    against what is actually read, because a zip directory is written by whoever built the file.
+    Every entry counts toward the total, read or not: a zip bomb in a part nobody opens still has to
+    be written to a disk by whoever unpacks the file. The compression ratio is judged on the parts
+    the reader opens, as each is opened (:func:`_judge_compression_ratio`).
+
+    Returns `(entry count, declared uncompressed total)`.
     """
     infos = archive.infolist()
     if len(infos) > limits.maximum_entries:
@@ -295,15 +410,26 @@ def _check_directory(archive: zipfile.ZipFile, limits: PackageLimits) -> tuple[i
                 f"the package declares more than {limits.maximum_total_uncompressed_bytes} "
                 f"uncompressed bytes",
             )
-        if info.compress_size >= limits.ratio_check_minimum_compressed_bytes:
-            ratio = info.file_size / info.compress_size
-            if ratio > limits.maximum_compression_ratio:
-                raise DocxPackageError(
-                    ParseFailureReason.COMPRESSION_RATIO_EXCEEDED,
-                    f"one entry expands {ratio:.0f}-fold, above the limit of "
-                    f"{limits.maximum_compression_ratio:.0f}",
-                )
     return len(infos), total
+
+
+def _judge_compression_ratio(info: zipfile.ZipInfo, limits: PackageLimits) -> None:
+    """Refuse a part the reader is about to open whose directory entry expands past the limit.
+
+    Judged from the directory, before a byte of the part is inflated, and only on the parts the
+    reader opens: which those are is decided from their names and the package relationships, and
+    every part is opened through :func:`_read_part`, which calls this first. A page thumbnail Word
+    saves can expand hundreds of times over, and it is never opened (`v1-e31-t15`).
+    """
+    if info.compress_size < limits.ratio_check_minimum_compressed_bytes:
+        return
+    ratio = info.file_size / info.compress_size
+    if ratio > limits.maximum_compression_ratio:
+        raise DocxPackageError(
+            ParseFailureReason.COMPRESSION_RATIO_EXCEEDED,
+            f"{info.filename} expands {ratio:.0f}-fold, above the limit of "
+            f"{limits.maximum_compression_ratio:.0f}",
+        )
 
 
 def _refuse_macro_enabled(archive: zipfile.ZipFile, content_types: bytes) -> None:
@@ -320,13 +446,21 @@ def _refuse_macro_enabled(archive: zipfile.ZipFile, content_types: bytes) -> Non
 def _read_part(archive: zipfile.ZipFile, name: str, limits: PackageLimits) -> bytes:
     """Read one part, refusing to hold more of it in memory than the limits allow.
 
-    The read is bounded by one byte more than the limit, so a part that lies about its size in the
-    directory is caught here rather than after it has been decompressed in full.
+    Its compression ratio is judged first, from the directory. The read is bounded by one byte more
+    than the limit, so a part that lies about its size in the directory is caught here rather than
+    after it has been decompressed in full.
     """
     if name in NEVER_READ_PARTS:
         raise AssertionError(f"{name} is on the never-read list; this is a programming error")
     try:
-        with archive.open(name) as part:
+        info = archive.getinfo(name)
+    except KeyError as error:
+        raise DocxPackageError(
+            ParseFailureReason.MALFORMED_PACKAGE, f"{name} could not be read from the package"
+        ) from error
+    _judge_compression_ratio(info, limits)
+    try:
+        with archive.open(info) as part:
             data = part.read(limits.maximum_part_bytes + 1)
     except (KeyError, zipfile.BadZipFile, OSError, EOFError) as error:
         raise DocxPackageError(
@@ -361,14 +495,84 @@ def hardened_xml_parser() -> etree.XMLParser:
     )
 
 
-def _parse_xml(data: bytes, name: str) -> XmlElement:
-    """Parse one part, refusing it if it declares a document type in any encoding."""
+def _part_encoding(data: bytes) -> str | None:
+    """The encoding a part's bytes are in, read as XML 1.0 Appendix F reads it.
+
+    None for an encoding the forbidden-character rewrite does not read: UTF-32, anything else with a
+    zero byte in its first four, and any encoding a declaration names other than UTF-8.
+    """
+    head = data[:4]
+    if head.startswith(b"\xef\xbb\xbf"):
+        return "utf-8"
+    if head == b"\xff\xfe\x00\x00":
+        return None
+    if head.startswith(b"\xff\xfe") or head == b"<\x00?\x00":
+        return "utf-16-le"
+    if head.startswith(b"\xfe\xff") or head == b"\x00<\x00?":
+        return "utf-16-be"
+    if b"\x00" in head:
+        return None
+    declared = _DECLARED_ENCODING.match(data)
+    if declared is None or declared.group(1).lower() in (b"utf-8", b"utf8"):
+        return "utf-8"
+    return None
+
+
+def _replace_forbidden_characters(data: bytes, replacement: str = REPLACEMENT_CHARACTER) -> tuple[bytes, int]:
+    """Replace each raw character XML 1.0 forbids by U+FFFD, and count them.
+
+    The decision recorded in `v1-e31-t15`'s spec. One character in, one character out, so every
+    other character keeps its position. A character reference is markup, not a raw character, and is
+    left for the parser to refuse. A part this cannot read in its own encoding is returned unchanged.
+
+    `replacement` is U+FFFD for every reader but one: the lossless writer (`v1-e33-t02`) opens a
+    source a second time with a character the source does not hold, to count the replacements
+    in each card it copies, and then writes U+FFFD in its place (:func:`check_replacement_character`).
+    """
+    encoding = _part_encoding(data)
+    if encoding == "utf-8":
+        return _FORBIDDEN_XML_CHARACTERS_IN_UTF8.subn(replacement.encode("utf-8"), data)
+    if encoding is None:
+        return data, 0
+    try:
+        text = data.decode(encoding)
+    except UnicodeDecodeError:
+        return data, 0
+    replaced, count = _FORBIDDEN_XML_CHARACTERS.subn(replacement, text)
+    return (replaced.encode(encoding), count) if count else (data, 0)
+
+
+#: A character a forbidden one may be replaced by: one XML 1.0 allows that is neither markup nor
+#: whitespace, so the replacement can never build a tag, an entity or a word break.
+_ALLOWED_REPLACEMENT: Final = re.compile("[^\x00-\x20<>&\"'\ufffe\uffff\ud800-\udfff]")
+
+
+def check_replacement_character(replacement: str) -> str:
+    """Return `replacement` if a forbidden character may be replaced by it, or raise ValueError."""
+    if len(replacement) != 1 or _ALLOWED_REPLACEMENT.fullmatch(replacement) is None:
+        raise ValueError(f"not a character a forbidden one may be replaced by: {replacement!r}")
+    return replacement
+
+
+@dataclass(frozen=True, slots=True)
+class _ParsedPart:
+    root: XmlElement
+    forbidden_characters_replaced: int
+
+
+def _parse_xml(data: bytes, name: str, replacement: str = REPLACEMENT_CHARACTER) -> _ParsedPart:
+    """Parse one part, refusing it if it declares a document type in any encoding.
+
+    A raw character XML forbids is replaced by U+FFFD after the declaration scan and before the
+    parser sees the part, and the count comes back with the root.
+    """
     match = _FORBIDDEN_XML_CONSTRUCT.search(data)
     if match is not None:
         raise DocxPackageError(
             ParseFailureReason.FORBIDDEN_XML_CONSTRUCT,
             f"{name} declares {match.group(0).decode('ascii', 'replace')}, which is never resolved",
         )
+    data, replaced = _replace_forbidden_characters(data, replacement)
     try:
         root = etree.fromstring(data, parser=hardened_xml_parser())
     except etree.XMLSyntaxError as error:
@@ -385,27 +589,35 @@ def _parse_xml(data: bytes, name: str) -> XmlElement:
             ParseFailureReason.FORBIDDEN_XML_CONSTRUCT,
             f"{name} declares <!DOCTYPE in an encoding the byte scan does not read, which is never resolved",
         )
-    return root
+    return _ParsedPart(root, replaced)
 
 
-def _main_document_part(archive: zipfile.ZipFile, limits: PackageLimits) -> str:
+def _main_document_part(
+    archive: zipfile.ZipFile, limits: PackageLimits, replacement: str = REPLACEMENT_CHARACTER
+) -> tuple[str, int]:
     """Find the main document part through the package relationships, falling back to convention.
 
     Nearly every file names it `word/document.xml`, but Word itself writes `/word/document2.xml`
     after certain repairs, and the wiki converter has been seen to write `word/document.xml` with
     a leading slash in the relationship. Following the relationship is what makes those readable.
+
+    Returns the part's name, and how many forbidden characters the relationships part held.
     """
     names = set(archive.namelist())
+    replaced = 0
     if "_rels/.rels" in names:
-        root = _parse_xml(_read_part(archive, "_rels/.rels", limits), "_rels/.rels")
-        for relationship in root.iterfind(qualified_name("Relationship", RELATIONSHIPS_NAMESPACE)):
+        relationships = _parse_xml(_read_part(archive, "_rels/.rels", limits), "_rels/.rels", replacement)
+        replaced = relationships.forbidden_characters_replaced
+        for relationship in relationships.root.iterfind(
+            qualified_name("Relationship", RELATIONSHIPS_NAMESPACE)
+        ):
             if relationship.get("Type") != OFFICE_DOCUMENT_RELATIONSHIP:
                 continue
             target = (relationship.get("Target") or "").lstrip("/")
             if target in names:
-                return target
+                return target, replaced
     if "word/document.xml" in names:
-        return "word/document.xml"
+        return "word/document.xml", replaced
     raise DocxPackageError(
         ParseFailureReason.MISSING_DOCUMENT_PART,
         "the package declares no main document part and holds no word/document.xml",
@@ -420,6 +632,25 @@ def _styles_part(archive: zipfile.ZipFile, document_part: str) -> str | None:
     return candidate if candidate in names else None
 
 
+#: `w:val` spellings of "off", read as :mod:`debate_core.integrations.docx_parser.runs` reads a run's.
+_OFF_VALUES: Final = frozenset({"0", "false", "off"})
+
+
+def _read_inherited_run_properties(properties: XmlElement | None) -> InheritedRunProperties:
+    """The bold and size in one `w:rPr`, each None when it says nothing of it."""
+    if properties is None:
+        return InheritedRunProperties()
+    bold_element = properties.find(qualified_name("b"))
+    bold = None
+    if bold_element is not None:
+        value = bold_element.get(qualified_name("val"))
+        bold = value is None or value.strip().lower() not in _OFF_VALUES
+    size_element = properties.find(qualified_name("sz"))
+    size = None if size_element is None else size_element.get(qualified_name("val"))
+    half_points = int(size) if size is not None and size.strip().isdigit() and int(size) > 0 else None
+    return InheritedRunProperties(bold=bold, half_points=half_points)
+
+
 def _read_styles(root: XmlElement) -> dict[str, StyleDefinition]:
     """Build the document's own style table: id, name, type and `basedOn` for every `w:style`."""
     styles: dict[str, StyleDefinition] = {}
@@ -429,24 +660,67 @@ def _read_styles(root: XmlElement) -> dict[str, StyleDefinition]:
             continue
         name_element = element.find(qualified_name("name"))
         based_on_element = element.find(qualified_name("basedOn"))
+        default = element.get(qualified_name("default"))
         styles[style_id] = StyleDefinition(
             style_id=style_id,
             style_name=None if name_element is None else name_element.get(qualified_name("val")),
             style_type=element.get(qualified_name("type")),
             based_on=None if based_on_element is None else based_on_element.get(qualified_name("val")),
+            run_properties=_read_inherited_run_properties(element.find(qualified_name("rPr"))),
+            is_default=default is not None and default.strip().lower() in ("1", "true", "on"),
         )
     return styles
 
 
-def open_debate_docx(content: bytes, *, limits: PackageLimits = DEFAULT_PACKAGE_LIMITS) -> DocxPackage:
+def _read_run_defaults(root: XmlElement) -> InheritedRunProperties:
+    """`w:docDefaults/w:rPrDefault/w:rPr`'s bold and size."""
+    defaults = root.find(qualified_name("docDefaults"))
+    run_default = None if defaults is None else defaults.find(qualified_name("rPrDefault"))
+    return _read_inherited_run_properties(
+        None if run_default is None else run_default.find(qualified_name("rPr"))
+    )
+
+
+def declared_document_bytes(content: bytes, *, limits: PackageLimits = DEFAULT_PACKAGE_LIMITS) -> int | None:
+    """The uncompressed size the zip directory declares for the main document part, or `None` when
+    the bytes are not a package this reader would open that far (`v1-e39-t08`).
+
+    Read from the directory and the package relationships alone, under the same guards as
+    :func:`open_debate_docx`: nothing of the document part is inflated. The size is the package's
+    claim, not a measurement. A part that holds more than it declares is never read past the
+    declared size: `zipfile` stops inflating there, and the part is refused as `MALFORMED_PACKAGE`
+    when its CRC does not match, or as `MALFORMED_XML` when a CRC forged to match leaves its XML
+    cut short. Above that, :func:`_read_part` never reads more than `maximum_part_bytes` of a part.
+    """
+    try:
+        _refuse_non_zip_formats(content)
+        with zipfile.ZipFile(BytesIO(content)) as archive:
+            _check_directory(archive, limits)
+            document_part, _ = _main_document_part(archive, limits)
+            return archive.getinfo(document_part).file_size
+    except (DocxPackageError, zipfile.BadZipFile, KeyError):
+        return None
+
+
+def open_debate_docx(
+    content: bytes,
+    *,
+    limits: PackageLimits = DEFAULT_PACKAGE_LIMITS,
+    forbidden_character_replacement: str = REPLACEMENT_CHARACTER,
+) -> DocxPackage:
     """Open `content` as a debate `.docx`, or raise :class:`DocxPackageError` saying why not.
 
     The order is deliberate: the formats we do not parse are named from their magic bytes before
     a zip is opened, the zip directory is checked before anything is decompressed, macros are
-    refused before a document part is looked for, and the XML is scanned for a document type
-    declaration before a parser is built. Nothing about the document's contents is examined until
+    refused before a document part is looked for, each part's compression ratio is judged before
+    it is inflated, and the XML is scanned for a document type declaration before a parser is
+    built. Nothing about the document's contents is examined until
     all of that has passed.
+
+    `forbidden_character_replacement` is U+FFFD unless the caller is the lossless writer counting
+    replacements (:func:`_replace_forbidden_characters`); every other reader leaves it alone.
     """
+    replacement = check_replacement_character(forbidden_character_replacement)
     _refuse_non_zip_formats(content)
     try:
         archive = zipfile.ZipFile(BytesIO(content))
@@ -465,10 +739,10 @@ def open_debate_docx(content: bytes, *, limits: PackageLimits = DEFAULT_PACKAGE_
         content_types = _read_part(archive, "[Content_Types].xml", limits)
         _refuse_macro_enabled(archive, content_types)
 
-        document_part = _main_document_part(archive, limits)
-        document_bytes = _read_part(archive, document_part, limits)
-        document_root = _parse_xml(document_bytes, document_part)
-        body = document_root.find(qualified_name("body"))
+        document_part, replaced = _main_document_part(archive, limits, replacement)
+        document = _parse_xml(_read_part(archive, document_part, limits), document_part, replacement)
+        replaced += document.forbidden_characters_replaced
+        body = document.root.find(qualified_name("body"))
         if body is None:
             raise DocxPackageError(
                 ParseFailureReason.MISSING_DOCUMENT_PART,
@@ -480,11 +754,15 @@ def open_debate_docx(content: bytes, *, limits: PackageLimits = DEFAULT_PACKAGE_
             parts_read.insert(0, "_rels/.rels")
         warnings: list[str] = []
         styles: dict[str, StyleDefinition] = {}
+        run_defaults = InheritedRunProperties()
         styles_part = _styles_part(archive, document_part)
         if styles_part is None:
             warnings.append("the package defines no styles part; every unit comes from a heuristic")
         else:
-            styles = _read_styles(_parse_xml(_read_part(archive, styles_part, limits), styles_part))
+            styles_xml = _parse_xml(_read_part(archive, styles_part, limits), styles_part, replacement)
+            replaced += styles_xml.forbidden_characters_replaced
+            styles = _read_styles(styles_xml.root)
+            run_defaults = _read_run_defaults(styles_xml.root)
             parts_read.append(styles_part)
 
         return DocxPackage(
@@ -494,7 +772,57 @@ def open_debate_docx(content: bytes, *, limits: PackageLimits = DEFAULT_PACKAGE_
             entry_count=entry_count,
             uncompressed_bytes=declared_uncompressed,
             warnings=tuple(warnings),
+            forbidden_characters_replaced=replaced,
+            document_part=document_part,
+            run_defaults=run_defaults,
         )
+
+
+@dataclass(frozen=True, slots=True)
+class PartRelationship:
+    """One `Relationship` of a part: what an `r:id` in the part points at."""
+
+    relationship_id: str
+    relationship_type: str
+    target: str
+    external: bool
+
+
+def read_part_relationships(
+    content: bytes, part: str, *, limits: PackageLimits = DEFAULT_PACKAGE_LIMITS
+) -> dict[str, PartRelationship]:
+    """The relationships of one part, by id, read under the same guards as the part itself.
+
+    Not read by the parser, which follows no relationship but the main document's; the lossless
+    writer (`v1-e33-t02`) reads the document part's to re-create a copied hyperlink's target. A part
+    with no relationships part has none, which is ordinary.
+    """
+    directory, _, name = part.rpartition("/")
+    rels_name = f"{directory}/_rels/{name}.rels" if directory else f"_rels/{name}.rels"
+    _refuse_non_zip_formats(content)
+    try:
+        archive = zipfile.ZipFile(BytesIO(content))
+    except zipfile.BadZipFile as error:
+        raise DocxPackageError(
+            ParseFailureReason.NOT_A_ZIP, "the bytes are not a readable zip container"
+        ) from error
+    with archive:
+        _check_directory(archive, limits)
+        if rels_name not in archive.namelist():
+            return {}
+        root = _parse_xml(_read_part(archive, rels_name, limits), rels_name).root
+    relationships: dict[str, PartRelationship] = {}
+    for element in root.iterfind(qualified_name("Relationship", RELATIONSHIPS_NAMESPACE)):
+        relationship_id = element.get("Id")
+        if not relationship_id:
+            continue
+        relationships[relationship_id] = PartRelationship(
+            relationship_id=relationship_id,
+            relationship_type=element.get("Type") or "",
+            target=element.get("Target") or "",
+            external=(element.get("TargetMode") or "") == "External",
+        )
+    return relationships
 
 
 def iter_body_children(body: XmlElement) -> Iterator[XmlElement]:

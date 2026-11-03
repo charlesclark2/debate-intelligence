@@ -1,0 +1,9 @@
+# Synthetic robots.txt for the fetcher's tests: a group naming this crawler, and one for the rest.
+User-agent: SomeOtherBot
+Disallow: /
+
+User-agent: debate-research
+Disallow: /drafts/
+
+User-agent: *
+Disallow: /

@@ -1,0 +1,32 @@
+{
+  "output": {
+    "queries": [
+      {
+        "evidence": "An invented sentence standing in for quoted evidence text.",
+        "query": "rural hospital staffing shortages",
+        "rationale": "Finds reporting on staffing gaps."
+      }
+    ]
+  },
+  "output_schema": "debate_core.application.query_expansion.QueryExpansion",
+  "prompt_id": "model.repair",
+  "prompt_version": "1.0.0",
+  "variables": {
+    "failed_prompt": "search.expand@1.0.0",
+    "failed_system": "You help a high school debater find new evidence with a search engine. Debaters research one part of one argument at a time:\n- uniqueness: where things stand now, before the plan or action;\n- link: how the plan or action sets the argument off;\n- internal link: the step that connects the link to the impact;\n- impact: what happens in the end, and why it matters;\n- answers: evidence answering the other side's version of the argument.\n\nYou will be told the argument, the part of it the debater needs, their own query, the topic, and the queries already chosen for them. Suggest at most 3 more search queries that would find evidence for that need and that the chosen queries would miss.\n\nEach query is what a person would type into a search engine: one line of at most twelve words, with no quotation marks, no search operators and no links. Do not repeat or reword a chosen query. Do not invent facts, statistics, names of bills or quotations; if a query needs a name, use one the debater gave you.\n\nFor each query, give a rationale: one short sentence, in your own words, on what the query should find. Never write evidence, a quotation or a claim about what a source says.\n\nAnswer by calling the tool once. An empty list is a valid answer when there is nothing useful to add.",
+    "failed_user": "Argument: Test DA (da)\nNeed: Uniqueness (Where things stand now.)\nTopic: rural hospital staffing\nThe debater's query: rural hospital staffing\n\nThe queries already chosen:\n- rural hospital staffing now\n- rural hospital staffing polling",
+    "json_schema": "{\n  \"$defs\": {\n    \"SuggestedQuery\": {\n      \"additionalProperties\": false,\n      \"description\": \"One extra query a model suggests, and why, in its own words.\",\n      \"properties\": {\n        \"query\": {\n          \"description\": \"A search engine query of a few words.\",\n          \"maxLength\": 120,\n          \"minLength\": 1,\n          \"title\": \"Query\",\n          \"type\": \"string\"\n        },\n        \"rationale\": {\n          \"description\": \"One short sentence on what it should find.\",\n          \"maxLength\": 300,\n          \"minLength\": 1,\n          \"title\": \"Rationale\",\n          \"type\": \"string\"\n        }\n      },\n      \"required\": [\n        \"query\",\n        \"rationale\"\n      ],\n      \"title\": \"SuggestedQuery\",\n      \"type\": \"object\"\n    }\n  },\n  \"additionalProperties\": false,\n  \"description\": \"`search.expand`'s output schema: extra queries for one argument and need, with reasons.\",\n  \"properties\": {\n    \"queries\": {\n      \"description\": \"Queries the template queries do not already ask.\",\n      \"items\": {\n        \"$ref\": \"#/$defs/SuggestedQuery\"\n      },\n      \"maxItems\": 5,\n      \"title\": \"Queries\",\n      \"type\": \"array\"\n    }\n  },\n  \"required\": [\n    \"queries\"\n  ],\n  \"title\": \"QueryExpansion\",\n  \"type\": \"object\"\n}",
+    "problems": [
+      {
+        "loc": [
+          "queries",
+          0,
+          "evidence"
+        ],
+        "msg": "Extra inputs are not permitted",
+        "type": "extra_forbidden"
+      }
+    ],
+    "schema_name": "QueryExpansion"
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "query": {"query": "single payer health insurance", "filters": {"since": "2025-01-01T00:00:00Z", "until": "2026-06-30T00:00:00Z", "max_results": 6}},
+  "exchanges": [
+    {
+      "request": {"method": "POST", "url": "https://api.govinfo.gov/search"},
+      "response": {"status": 429, "headers": {"content-type": "application/json"}, "body": "{\"error\": {\"code\": \"OVER_RATE_LIMIT\", \"message\": \"You have exceeded your rate limit.\"}}"}
+    }
+  ],
+  "expected_results_file": "search_errors.expected.json"
+}

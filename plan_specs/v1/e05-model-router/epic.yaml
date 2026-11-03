@@ -224,5 +224,252 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e05-t07-usage-telemetry
+    - id: t08
+      kind: Task
+      name: 'A profile that may call Bedrock, and the model access its first call needs'
+      description: >-
+        A profile per environment that may call the routed Bedrock models, and the setting
+        the client is built from.
+      inputs:
+        specRef: plan_specs/v1/e05-model-router/t08-bedrock-invoke-access.yaml
+        goalRef: v1-e05-t08-bedrock-invoke-access
+      dependsOn:
+      - t02
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e05-t08-bedrock-invoke-access reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e05-t08-bedrock-invoke-access
+    - id: t09
+      kind: Task
+      name: 'Replay tolerates a new optional parameter, a refused model call is not retryable, and doctor can check the routing file'
+      description: >-
+        Replay tolerates a new optional parameter, refused model calls exit 1, and doctor
+        can check the routing file.
+      inputs:
+        specRef: plan_specs/v1/e05-model-router/t09-replay-and-model-exit-codes.yaml
+        goalRef: v1-e05-t09-replay-and-model-exit-codes
+      dependsOn:
+      - t02
+      - t03
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e05-t09-replay-and-model-exit-codes reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e05-t09-replay-and-model-exit-codes
+    - id: t10
+      kind: Task
+      name: 'Record mode keeps an invalid answer, so a repaired call can be recorded live'
+      description: >-
+        Record mode keeps an invalid answer, so a repaired call can be recorded live.
+      inputs:
+        specRef: plan_specs/v1/e05-model-router/t10-record-mode-keeps-invalid-answers.yaml
+        goalRef: v1-e05-t10-record-mode-keeps-invalid-answers
+      dependsOn:
+      - t03
+      - t05
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e05-t10-record-mode-keeps-invalid-answers reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e05-t10-record-mode-keeps-invalid-answers
+    - id: ext-v1-e32-t07-model-classification-stage
+      kind: External
+      name: 'Prerequisite from E32: Model classification of what headings cannot place'
+      description: >-
+        Cross-epic prerequisite owned by v1-e32-argument-landscape (release v1.2).
+      inputs:
+        goalRef: v1-e32-t07-model-classification-stage
+        specRef: plan_specs/v1/e32-argument-landscape/t07-model-classification-stage.yaml
+    - id: t11
+      kind: Task
+      name: 'A prompt may set its own effort, so a classifier need not think at the route''s default'
+      description: >-
+        A prompt may set its own effort, so a classifier need not think at the route's
+        default.
+      inputs:
+        specRef: plan_specs/v1/e05-model-router/t11-per-prompt-effort.yaml
+        goalRef: v1-e05-t11-per-prompt-effort
+      dependsOn:
+      - ext-v1-e32-t07-model-classification-stage
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e05-t11-per-prompt-effort reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e05-t11-per-prompt-effort
+    - id: t12
+      kind: Task
+      name: 'An installed build carries config/model_pricing.yaml beside the routing files'
+      description: >-
+        An installed build carries config/model_pricing.yaml beside the routing files.
+      inputs:
+        specRef: plan_specs/v1/e05-model-router/t12-installed-build-carries-model-pricing.yaml
+        goalRef: v1-e05-t12-installed-build-carries-model-pricing
+      dependsOn:
+      - t07
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e05-t12-installed-build-carries-model-pricing reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e05-t12-installed-build-carries-model-pricing
+    - id: t13
+      kind: Task
+      name: 'Dev routes to Claude models this account can call while the 5.5 quotas are held at zero'
+      description: >-
+        Dev routes to Claude models this account can call while the 5.5 quotas are held at
+        zero.
+      inputs:
+        specRef: plan_specs/v1/e05-model-router/t13-dev-routes-to-callable-claude-models.yaml
+        goalRef: v1-e05-t13-dev-routes-to-callable-claude-models
+      dependsOn:
+      - t07
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e05-t13-dev-routes-to-callable-claude-models reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e05-t13-dev-routes-to-callable-claude-models
+    - id: t14
+      kind: Task
+      name: 'A cheaper model for the high-volume route, chosen by the coach-labelled evaluation'
+      description: >-
+        A cheaper model for the high-volume route, chosen by the coach-labelled evaluation.
+      inputs:
+        specRef: plan_specs/v1/e05-model-router/t14-cheaper-model-for-high-volume-evaluated-first.yaml
+        goalRef: v1-e05-t14-cheaper-model-for-high-volume-evaluated-first
+      dependsOn:
+      - t13
+      - ext-v1-e32-t07-model-classification-stage
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e05-t14-cheaper-model-for-high-volume-evaluated-first reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e05-t14-cheaper-model-for-high-volume-evaluated-first
+    - id: t15
+      kind: Task
+      name: 'A monthly model budget beside the daily one, at the coach''s $50 ceiling'
+      description: >-
+        A monthly model budget beside the daily one, at the coach's $50 ceiling.
+      inputs:
+        specRef: plan_specs/v1/e05-model-router/t15-monthly-model-budget.yaml
+        goalRef: v1-e05-t15-monthly-model-budget
+      dependsOn:
+      - t07
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e05-t15-monthly-model-budget reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e05-t15-monthly-model-budget
+    - id: t16
+      kind: Task
+      name: 'An AWS budget alarm on the account''s model spend, $100 a month with a first notice at $50'
+      description: >-
+        An AWS budget alarm on the account's model spend, $100 a month with a first notice at $50.
+      inputs:
+        specRef: plan_specs/v1/e05-model-router/t16-bedrock-budget-alarm.yaml
+        goalRef: v1-e05-t16-bedrock-budget-alarm
+      dependsOn:
+      - t08
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e05-t16-bedrock-budget-alarm reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e05-t16-bedrock-budget-alarm
+    - id: t17
+      kind: Task
+      name: 'Dev back on the 5.5 models, and prod''s Bedrock grant applied, once the quotas are restored'
+      description: >-
+        Dev back on the 5.5 models, and prod's Bedrock grant applied, once the quotas are
+        restored.
+      inputs:
+        specRef: plan_specs/v1/e05-model-router/t17-switch-back-to-the-5-5-models.yaml
+        goalRef: v1-e05-t17-switch-back-to-the-5-5-models
+      dependsOn:
+      - t13
+      - t08
+      - ext-v1-e32-t07-model-classification-stage
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e05-t17-switch-back-to-the-5-5-models reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e05-t17-switch-back-to-the-5-5-models
+    - id: t18
+      kind: Task
+      name: 'The cost allocation tags are active by Terraform, so the budgets that filter on them never read zero again'
+      description: >-
+        The cost allocation tags are active by Terraform, so the budgets that filter on them
+        never read zero again.
+      inputs:
+        specRef: plan_specs/v1/e05-model-router/t18-cost-allocation-tags-in-terraform.yaml
+        goalRef: v1-e05-t18-cost-allocation-tags-in-terraform
+      dependsOn:
+      - t16
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e05-t18-cost-allocation-tags-in-terraform reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e05-t18-cost-allocation-tags-in-terraform
+    - id: t19
+      kind: Task
+      name: 'The cost allocation tags'' import blocks are removed once both tags are in state'
+      description: >-
+        The cost allocation tags' import blocks are removed once both tags are in state.
+      inputs:
+        specRef: plan_specs/v1/e05-model-router/t19-cost-allocation-tag-imports-removed.yaml
+        goalRef: v1-e05-t19-cost-allocation-tag-imports-removed
+      dependsOn:
+      - t18
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e05-t19-cost-allocation-tag-imports-removed reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e05-t19-cost-allocation-tag-imports-removed
 status:
   phase: Pending

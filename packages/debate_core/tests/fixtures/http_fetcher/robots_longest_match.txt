@@ -1,0 +1,7 @@
+# Synthetic robots.txt for the fetcher's tests. The stdlib applies the first matching rule, so it
+# allows /archive/2026/x under "Allow: /"; RFC 9309 applies the longest, which disallows it. And
+# only RFC 9309 knows the wildcard in the last rule.
+User-agent: *
+Allow: /
+Disallow: /archive/2026/
+Disallow: /*.pdf$

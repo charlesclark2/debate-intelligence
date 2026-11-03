@@ -1,0 +1,32 @@
+{
+  "status": "ok",
+  "message-type": "work",
+  "message-version": "1.0.0",
+  "message": {
+    "DOI": "10.5555/JSCS.2026.0012",
+    "type": "journal-article",
+    "title": ["Moral Hazard and the Return of Lost Species"],
+    "container-title": ["Journal of Synthetic Conservation Studies"],
+    "publisher": "Synthetic Conservation Press",
+    "volume": "12",
+    "author": [
+      {
+        "given": "Rhea",
+        "family": "Okonkwo-Hale",
+        "sequence": "first",
+        "affiliation": [{"name": "Department of Ecology, University of Synthetic Studies"}]
+      },
+      {
+        "given": "Tomas",
+        "family": "Lindqvist",
+        "sequence": "additional",
+        "affiliation": []
+      }
+    ],
+    "published": {"date-parts": [[2026, 4, 20]]},
+    "published-online": {"date-parts": [[2026, 4, 20]]},
+    "published-print": {"date-parts": [[2026, 6]]},
+    "issued": {"date-parts": [[2026, 4, 20]]},
+    "URL": "https://doi.org/10.5555/jscs.2026.0012"
+  }
+}

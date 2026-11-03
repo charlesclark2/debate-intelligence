@@ -12,8 +12,9 @@ against exactly the text it was cut from (architecture proposal §8).
 from __future__ import annotations
 
 import re
+from typing import Self
 
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 
 from debate_core.domain.base import (
     ORGANIZATION_ID_FIELD,
@@ -26,6 +27,12 @@ from debate_core.domain.base import (
     Ulid,
     UtcDatetime,
     new_id,
+)
+from debate_core.domain.citation import (
+    CITATION_FIELD_NAMES,
+    STATED_CITATION_FIELDS,
+    Citation,
+    CitationField,
 )
 from debate_core.domain.enums import AccessStatus, ProvenanceMode, SourceType
 
@@ -174,3 +181,31 @@ class SourceSnapshot(DomainEntity):
         default=None, description="Content type reported by the source, if any."
     )
     byte_size: int | None = Field(default=None, ge=0, description="Size of the raw blob in bytes.")
+    stated_citation: Citation | None = Field(
+        default=None,
+        exclude_if=lambda value: value is None,
+        description=(
+            "Cite fields the user stated when they supplied this text (`v1-e06-t12`): the title, authors, "
+            "publication and date, never verified. Only a USER_SUPPLIED snapshot has them. Left out of the "
+            "stored record when there are none, so a snapshot stated nothing for is stored as before."
+        ),
+    )
+
+    @model_validator(mode="after")
+    def _check_stated_citation(self) -> Self:
+        stated = self.stated_citation
+        if stated is None:
+            return self
+        if self.provenance_mode is not ProvenanceMode.USER_SUPPLIED:
+            raise ValueError("only a USER_SUPPLIED snapshot carries cite fields its user stated")
+        fields: dict[str, CitationField[object]] = {
+            name: getattr(stated, name) for name in CITATION_FIELD_NAMES
+        }
+        if claimed := [name for name, field in fields.items() if field.verified]:
+            raise ValueError(f"a stated cite field is never verified: {', '.join(claimed)}")
+        if others := [n for n, f in fields.items() if f.is_present and n not in STATED_CITATION_FIELDS]:
+            stateable = ", ".join(STATED_CITATION_FIELDS)
+            raise ValueError(f"a user states only {stateable}, not {', '.join(others)}")
+        if not any(field.is_present for field in fields.values()):
+            raise ValueError("a stated cite that states nothing is no stated cite; leave it out")
+        return self

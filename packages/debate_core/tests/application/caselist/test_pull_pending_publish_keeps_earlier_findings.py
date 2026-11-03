@@ -92,7 +92,7 @@ async def test_a_publish_left_pending_records_the_code_a_snapshot_ended_incomple
     assert summary.failure_codes == (), "an earlier finding decides nothing about the exit"
     assert summary.succeeded
     assert owed(installation) == [OWED_1, OWED_2]
-    assert [one["earlier_findings"] for one in stages_of(summary) if one["stage"] != "publish"] == [[]] * 7
+    assert [one["earlier_findings"] for one in stages_of(summary) if one["stage"] != "publish"] == [[]] * 8
 
 
 async def test_a_publish_pending_from_its_first_call_has_no_earlier_finding(

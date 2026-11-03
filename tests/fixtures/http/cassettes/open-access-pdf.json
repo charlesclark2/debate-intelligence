@@ -1,0 +1,34 @@
+{
+  "cassette_version": 1,
+  "kind": "open-access PDF",
+  "url": "https://journal.synthetic-conservation.example/doi/pdf/10.5555/jscs.2026.0012",
+  "made_from": "v1-e04-t04's three-page journal article, written by build_pdf_fixtures.py with no PDF library, served as a 200 at a URL carrying a test-prefix DOI (10.5555)",
+  "interactions": [
+    {
+      "request": {
+        "method": "GET",
+        "url": "https://journal.synthetic-conservation.example/robots.txt"
+      },
+      "response": {
+        "status_code": 200,
+        "headers": {
+          "content-type": "text/plain; charset=utf-8"
+        },
+        "body_text": "User-agent: *\nAllow: /\n"
+      }
+    },
+    {
+      "request": {
+        "method": "GET",
+        "url": "https://journal.synthetic-conservation.example/doi/pdf/10.5555/jscs.2026.0012"
+      },
+      "response": {
+        "status_code": 200,
+        "headers": {
+          "content-type": "application/pdf"
+        },
+        "body_file": "extraction/journal-article.pdf"
+      }
+    }
+  ]
+}

@@ -16,6 +16,7 @@ import os
 import stat
 import subprocess
 import sys
+from collections.abc import Sequence
 from pathlib import Path
 
 import pytest
@@ -23,6 +24,7 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
 
+import check_promotion_source as guard  # noqa: E402
 import validate_dev as driver  # noqa: E402
 
 SHA = "1111111111111111111111111111111111111111"
@@ -35,6 +37,7 @@ class FakeGitHub:
         self.tags = tags or {}
         self.releases = releases or {}
         self.posted: list[tuple[str, str, str, str]] = []
+        self.issues: dict[int, dict[str, object]] = {}
 
     def dev_tags_at(self, sha: str) -> list[str]:
         return [tag for tag, commit in self.tags.items() if commit == sha and driver.DEV_TAG.fullmatch(tag)]
@@ -47,6 +50,29 @@ class FakeGitHub:
 
     def post_status(self, sha: str, state: str, target_url: str, description: str) -> None:
         self.posted.append((sha, state, target_url, description))
+
+    def open_issue(self, label: str) -> int | None:
+        found = [n for n, issue in self.issues.items() if issue["open"] and issue["label"] == label]
+        return min(found) if found else None
+
+    def create_issue(self, title: str, body: str, label: str) -> None:
+        number = max(self.issues, default=0) + 1
+        self.issues[number] = {"title": title, "body": body, "label": label, "open": True, "comments": []}
+
+    def comment_on_issue(self, number: int, body: str) -> None:
+        self.issues[number]["comments"].append(body)  # type: ignore[union-attr]
+
+    def close_issue(self, number: int, comment: str) -> None:
+        self.issues[number]["comments"].append(comment)  # type: ignore[union-attr]
+        self.issues[number]["open"] = False
+
+    def texts(self) -> str:
+        """Every title, body and comment this fake was given, for a test that reads them all."""
+        return "\n".join(
+            str(part)
+            for issue in self.issues.values()
+            for part in (issue["title"], issue["body"], *issue["comments"])  # type: ignore[misc]
+        )
 
 
 def prerelease(tag: str) -> driver.Release:
@@ -255,7 +281,7 @@ def test_a_tier_passes_when_every_selected_test_ran_and_passed() -> None:
     [
         (driver.RECORDED, "not live and not in_process"),
         (driver.LIVE_CANARY, "live and canary"),
-        (driver.SLOW, "slow and not live and not eval"),
+        (driver.SLOW, "slow and not live and not eval and not operator_data"),
     ],
 )
 def test_the_tiers_select_what_the_readme_says(tier: driver.Tier, expression: str) -> None:
@@ -506,6 +532,90 @@ def test_a_skip_in_the_slow_tier_fails_it_too(tmp_path: Path) -> None:
 
 
 # --------------------------------------------------------------------------------------------
+# cloud: dev's pilot checks, which need no account (v1-e39-t10)
+# --------------------------------------------------------------------------------------------
+
+
+def test_the_cloud_tier_is_tests_smoke_cloud_marked_live_and_dev() -> None:
+    assert driver.Tier("dev cloud", "live and dev", ("tests/smoke/cloud",)) == driver.CLOUD
+
+
+def test_the_cloud_tier_refuses_a_checkout_of_another_commit(tmp_path: Path) -> None:
+    repo, commit = tree(tmp_path, PASSING)
+
+    report = driver.cloud(OTHER_SHA, tmp_path / "work", pytest_command=pytest_in(repo), cwd=repo)
+
+    assert report.problems == [
+        f"the dev cloud tier would run {commit}, not {OTHER_SHA}; check out the validated commit"
+    ]
+    assert report.tier == {}
+
+
+CLOUD_SUITE = """
+import os
+import pytest
+@pytest.mark.live
+def test_dev_answers():
+    assert not any(name.startswith("DEBATE_") for name in os.environ)
+    assert "GH_TOKEN" not in os.environ and "GITHUB_TOKEN" not in os.environ
+def test_offline_is_not_in_this_tier():
+    raise AssertionError("the cloud tier ran a check not marked live")
+"""
+
+
+def test_the_cloud_tier_runs_only_its_marked_checks_with_no_token_and_no_setting(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo, commit = tree(tmp_path, CLOUD_SUITE)
+    (repo / "pytest.ini").write_text("[pytest]\nmarkers =\n    live: needs the network\n", encoding="utf-8")
+    git(repo, "commit", "-q", "-am", "markers")
+    commit = git(repo, "rev-parse", "HEAD")
+    monkeypatch.setenv("GH_TOKEN", "a-token-the-tests-must-not-see")
+    monkeypatch.setenv("DEBATE_ENV", "prod")
+    tier = driver.Tier("dev cloud", "live", ("checks",))
+
+    report = driver.cloud(commit, tmp_path / "work", pytest_command=pytest_in(repo), tier=tier, cwd=repo)
+
+    assert report.passed, report.problems
+    assert report.tier["counts"] == {
+        "tests": 1,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "skipped_names": (),
+    }
+    assert (tmp_path / "work" / "junit-dev-cloud.xml").is_file()
+
+
+def test_a_skip_in_the_cloud_tier_fails_it_too(tmp_path: Path) -> None:
+    repo, commit = tree(tmp_path, SKIPPING)
+
+    report = driver.cloud(commit, tmp_path / "work", pytest_command=pytest_in(repo), tier=TIER, cwd=repo)
+
+    assert any("1 skipped" in problem for problem in report.problems), report.problems
+
+
+def test_cli_cloud_writes_the_commit_its_checks_came_from(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo, commit = tree(tmp_path, PASSING)
+    output = tmp_path / "github-output"
+    monkeypatch.setattr(
+        driver,
+        "cloud",
+        lambda sha, work: driver.tier_from_source(sha, work, TIER, pytest_command=pytest_in(repo), cwd=repo),
+    )
+
+    exit_code = driver.main(
+        ["cloud", "--sha", OTHER_SHA, "--work-dir", str(tmp_path / "work"), "--github-output", str(output)],
+        github=FakeGitHub(),
+    )
+
+    assert exit_code == driver.PROBLEM
+    assert output.read_text(encoding="utf-8") == f"tests_commit={commit}\n"
+
+
+# --------------------------------------------------------------------------------------------
 # conclude: what is posted, and on which commit
 # --------------------------------------------------------------------------------------------
 
@@ -550,6 +660,79 @@ def test_anything_less_is_a_failure_on_the_requested_commit(
     changes: dict[str, object], description: str
 ) -> None:
     assert concluded(**changes) == driver.Conclusion(SHA, "failure", description)
+
+
+def test_the_run_image_job_once_reported_must_succeed_too() -> None:
+    """v1-e40-t03: the workflow reports its image job, and a red image is no validated build."""
+    assert concluded(jobs=ALL_GREEN | {"image": "failure"}) == driver.Conclusion(
+        SHA, "failure", "validation failed: image failure"
+    )
+    assert concluded(jobs=ALL_GREEN | {"image": "success"}) == driver.Conclusion(
+        SHA,
+        "success",
+        "v0.1.0-dev.5 installed from its pre-release and validated: recorded and slow tiers green, "
+        "the run image built and checked",
+    )
+
+
+def test_the_cloud_job_once_reported_must_succeed_too() -> None:
+    """v1-e39-t10: dev's pilot is checked by the cloud job, and a red one is no validated dev."""
+    every = ALL_GREEN | {"image": "success"}
+    assert concluded(jobs=every | {"cloud": "failure"}) == driver.Conclusion(
+        SHA, "failure", "validation failed: cloud failure"
+    )
+    success = concluded(jobs=every | {"cloud": "success"})
+    assert success == driver.Conclusion(
+        SHA,
+        "success",
+        "v0.1.0-dev.5 installed from its pre-release and validated: recorded and slow tiers green, "
+        "the run image built and checked, dev pilot up",
+    )
+    longest = success.description.replace("v0.1.0-dev.5", "v1.10.0-dev.999")
+    assert len(longest) <= driver.DESCRIPTION_LIMIT, len(longest)
+
+
+def junit_report(directory: Path, *, tests: int, skipped: int) -> Path:
+    path = directory / "image-smoke.xml"
+    cases = "".join(f'<testcase classname="c" name="t{index}"/>' for index in range(tests - skipped))
+    cases += "".join(
+        f'<testcase classname="c" name="s{index}"><skipped message="no fixture"/></testcase>'
+        for index in range(skipped)
+    )
+    path.write_text(
+        f'<testsuites><testsuite name="pytest" tests="{tests}" failures="0" errors="0" skipped="{skipped}">'
+        f"{cases}</testsuite></testsuites>",
+        encoding="utf-8",
+    )
+    return path
+
+
+def test_tier_report_passes_a_report_with_tests_and_no_skip(tmp_path: Path) -> None:
+    report = junit_report(tmp_path, tests=7, skipped=0)
+
+    assert (
+        driver.main(["tier-report", "--name", "image smoke", str(report)], github=FakeGitHub())
+        == driver.PASSED
+    )
+
+
+@pytest.mark.parametrize(("tests", "skipped"), [(7, 1), (0, 0)])
+def test_tier_report_fails_a_skip_or_an_empty_report(tmp_path: Path, tests: int, skipped: int) -> None:
+    report = junit_report(tmp_path, tests=tests, skipped=skipped)
+
+    assert (
+        driver.main(["tier-report", "--name", "image smoke", str(report)], github=FakeGitHub())
+        == driver.PROBLEM
+    )
+
+
+def test_tier_report_fails_when_there_is_no_report(tmp_path: Path) -> None:
+    assert (
+        driver.main(
+            ["tier-report", "--name", "image smoke", str(tmp_path / "missing.xml")], github=FakeGitHub()
+        )
+        == driver.PROBLEM
+    )
 
 
 def test_a_cancelled_run_is_an_error_not_a_pending_left_behind() -> None:
@@ -754,4 +937,322 @@ def test_conclude_tells_a_calling_workflow_the_state_and_the_commit_it_is_for(tm
 
     driver.main(command, github=FakeGitHub())
 
-    assert outputs.read_text(encoding="utf-8") == f"state=failure\nstatus_sha={SHA}\n"
+    assert outputs.read_text(encoding="utf-8") == (
+        f"state=failure\nstatus_sha={SHA}\n"
+        f"description=the installed build reports {OTHER_SHA}, not this commit\n"
+    )
+
+
+# --------------------------------------------------------------------------------------------
+# issue: a red validate-dev opens or updates an issue, a green one closes it (v1-e01-t34)
+# --------------------------------------------------------------------------------------------
+
+TAG = "v1.1.0-dev.102"
+
+
+def issue_command(state: str, description: str = "validation failed: slow failure") -> list[str]:
+    return [
+        "issue",
+        "--sha",
+        SHA,
+        "--tag",
+        TAG,
+        "--state",
+        state,
+        "--description",
+        description,
+        "--target-url",
+        RUN_URL,
+    ]
+
+
+def test_a_failure_opens_an_issue_labelled_validate_dev_when_none_is_open() -> None:
+    github = FakeGitHub()
+
+    assert driver.main(issue_command("failure"), github=github) == driver.PASSED
+
+    assert list(github.issues) == [1]
+    issue = github.issues[1]
+    assert issue["title"] == "validate-dev is failing on dev"
+    assert issue["label"] == "validate-dev"
+    assert issue["open"] is True
+    assert str(issue["body"]).startswith(
+        f"validate-dev failed on `{SHA}` (v1.1.0-dev.102): validation failed: slow failure\n\n"
+        f"Run: {RUN_URL}\n\n"
+    )
+    assert "no promotion to main can merge until dev's head validates" in str(issue["body"])
+
+
+def test_a_failure_with_an_issue_open_comments_on_it_instead_of_opening_another() -> None:
+    github = FakeGitHub()
+    driver.main(issue_command("failure"), github=github)
+
+    assert driver.main(issue_command("failure", "validation failed: smoke failure"), github=github) == 0
+
+    assert list(github.issues) == [1]
+    [comment] = github.issues[1]["comments"]  # type: ignore[misc]
+    assert comment.startswith(
+        f"validate-dev failed on `{SHA}` (v1.1.0-dev.102): validation failed: smoke failure"
+    )
+
+
+def test_a_success_closes_the_open_issue_and_says_which_run_was_green() -> None:
+    github = FakeGitHub()
+    driver.main(issue_command("failure"), github=github)
+
+    assert driver.main(issue_command("success", "v1.1.0-dev.102 validated"), github=github) == 0
+
+    assert github.issues[1]["open"] is False
+    assert github.issues[1]["comments"] == [
+        f"validate-dev is green again on `{SHA}` (v1.1.0-dev.102): {RUN_URL}"
+    ]
+
+
+def test_a_success_with_no_issue_open_touches_nothing() -> None:
+    github = FakeGitHub()
+
+    assert driver.main(issue_command("success"), github=github) == driver.PASSED
+
+    assert github.issues == {}
+
+
+def test_a_cancelled_run_leaves_the_issue_as_it_is() -> None:
+    github = FakeGitHub()
+    driver.main(issue_command("failure"), github=github)
+
+    assert driver.main(issue_command("error"), github=github) == driver.PASSED
+
+    assert github.issues[1]["open"] is True
+    assert github.issues[1]["comments"] == []
+
+
+def test_no_token_or_secret_reaches_the_issue_text(monkeypatch: pytest.MonkeyPatch) -> None:
+    sentinel = "ghs_SENTINELSECRET0123456789"
+    for name in (*driver.WITHHELD, "AWS_SECRET_ACCESS_KEY", "DEBATE_OPENCASELIST_PASSWORD"):
+        monkeypatch.setenv(name, sentinel)
+    monkeypatch.setenv("GITHUB_SERVER_URL", "https://github.com")
+    monkeypatch.setenv("GITHUB_REPOSITORY", "charlesclark2/debate-intelligence")
+    monkeypatch.setenv("GITHUB_RUN_ID", "42")
+    github = FakeGitHub()
+    without_url = [part for part in issue_command("failure") if part not in ("--target-url", RUN_URL)]
+
+    driver.main(without_url, github=github)
+    driver.main(without_url, github=github)
+    driver.main([*without_url[:-4], "--state", "success", "--description", "validated"], github=github)
+
+    assert len(github.texts()) > 200
+    assert sentinel not in github.texts()
+    assert RUN_URL in github.texts()
+
+
+@pytest.mark.parametrize(
+    "arguments",
+    [
+        ["--sha", "abc123", "--state", "failure", "--description", "d"],
+        ["--sha", SHA, "--tag", "main", "--state", "failure", "--description", "d"],
+    ],
+    ids=["a short sha", "a tag that is not a dev pre-release"],
+)
+def test_the_issue_names_only_a_full_commit_and_a_dev_tag(arguments: list[str]) -> None:
+    github = FakeGitHub()
+
+    assert driver.main(["issue", *arguments, "--target-url", RUN_URL], github=github) == driver.PROBLEM
+
+    assert github.issues == {}
+
+
+def test_gh_lists_open_issues_by_label_and_takes_the_oldest() -> None:
+    runner = RecordingRunner({"gh issue list": done(json.dumps([{"number": 31}, {"number": 12}]))})
+
+    assert driver.GhCli(REPO, runner).open_issue("validate-dev") == 12
+    assert runner.calls == [
+        [
+            "gh",
+            "issue",
+            "list",
+            "--label",
+            "validate-dev",
+            "--state",
+            "open",
+            "--json",
+            "number",
+            "--limit",
+            "100",
+            "--repo",
+            REPO,
+        ]
+    ]
+    assert (
+        driver.GhCli(REPO, RecordingRunner({"gh issue list": done("[]")})).open_issue("validate-dev") is None
+    )
+
+
+def test_gh_creates_the_label_then_the_issue_and_comments_and_closes_by_number() -> None:
+    runner = RecordingRunner({})
+    gh = driver.GhCli(REPO, runner)
+
+    gh.create_issue("validate-dev is failing on dev", "the body", "validate-dev")
+    gh.comment_on_issue(12, "a comment")
+    gh.close_issue(12, "green again")
+
+    assert runner.calls == [
+        ["gh", "label", "create", "validate-dev", "--color", "B60205", "--force", "--repo", REPO],
+        [
+            "gh",
+            "issue",
+            "create",
+            "--title",
+            "validate-dev is failing on dev",
+            "--body",
+            "the body",
+            "--label",
+            "validate-dev",
+            "--repo",
+            REPO,
+        ],
+        ["gh", "issue", "comment", "12", "--body", "a comment", "--repo", REPO],
+        ["gh", "issue", "close", "12", "--comment", "green again", "--repo", REPO],
+    ]
+
+
+def test_a_failing_issue_call_is_a_problem_not_a_silent_pass() -> None:
+    runner = RecordingRunner(
+        {"gh issue create": done(returncode=1, stderr="HTTP 403: Resource not accessible")}
+    )
+
+    with pytest.raises(driver.ValidationProblem, match="HTTP 403"):
+        driver.GhCli(REPO, runner).create_issue("t", "b", "validate-dev")
+
+
+# --------------------------------------------------------------------------------------------
+# the site lane (v1-e37-t09): a site/<slug> commit is validated by the site's prod build, and
+# only a commit whose own changes since main are site content, pages or assets can be
+# --------------------------------------------------------------------------------------------
+
+
+class FakeDiff:
+    """The git calls check_promotion_source.site_changes makes, answered with one diff."""
+
+    def __init__(self, diff: str) -> None:
+        self.diff = diff
+
+    def __call__(self, args: Sequence[str]) -> str:
+        if args[:2] == ["rev-parse", "--is-shallow-repository"]:
+            return "false\n"
+        if args[:2] == ["rev-parse", "--verify"]:
+            return SHA + "\n"
+        if args[0] == "diff":
+            assert args[-1] == f"origin/main...{SHA}"
+            return self.diff
+        raise AssertionError(f"unexpected git call: {args}")
+
+
+def test_site_resolve_posts_pending_only_after_the_change_is_found_to_be_site_only() -> None:
+    github = FakeGitHub()
+
+    driver.site_resolve(
+        github, SHA, "origin/main", RUN_URL, post_status=True, git=FakeDiff("site/content/results.yaml\0")
+    )
+
+    assert github.posted == [
+        (SHA, "pending", RUN_URL, "site only: building this commit's site for prod and checking it")
+    ]
+
+
+@pytest.mark.parametrize(
+    "diff",
+    [
+        "",
+        "site/content/results.yaml\0scripts/site_deploy.sh\0",
+        "site/package.json\0",
+        "site/pnpm-lock.yaml\0",
+    ],
+    ids=["empty", "outside-site", "package-json", "lockfile"],
+)
+def test_site_resolve_refuses_anything_else_and_posts_nothing(diff: str) -> None:
+    """A mistyped SHA, dev's head say, must not turn that commit's validate-dev red: the site path
+    posts nothing at all on a commit it may not validate."""
+    github = FakeGitHub()
+
+    with pytest.raises(driver.ValidationProblem, match="not a site-only change; no status was posted"):
+        driver.site_resolve(github, SHA, "origin/main", RUN_URL, post_status=True, git=FakeDiff(diff))
+
+    assert github.posted == []
+
+
+def test_conclude_site_posts_success_on_the_commit_whose_site_was_checked() -> None:
+    conclusion = driver.conclude_site(SHA, site_commit=SHA, jobs={"site": "success"})
+
+    assert conclusion == driver.Conclusion(
+        SHA,
+        "success",
+        "site only: nothing outside site/ changed since main; prod build, policy and consent guards "
+        "and export checks green",
+    )
+    assert len(conclusion.description) <= driver.DESCRIPTION_LIMIT
+
+
+@pytest.mark.parametrize(
+    ("site_result", "site_commit", "state", "description"),
+    [
+        ("failure", SHA, "failure", "site-only validation failed: site failure"),
+        ("skipped", None, "failure", "site-only validation failed: site skipped"),
+        ("", None, "failure", "site-only validation failed: site did not run"),
+        ("cancelled", None, "error", "validation was cancelled before it finished"),
+        ("success", OTHER_SHA, "failure", f"the site checks ran on {OTHER_SHA}, not this commit"),
+        ("success", None, "failure", "the site checks ran on nothing, not this commit"),
+    ],
+)
+def test_conclude_site_posts_failure_on_the_requested_commit_for_anything_less(
+    site_result: str, site_commit: str | None, state: str, description: str
+) -> None:
+    conclusion = driver.conclude_site(SHA, site_commit=site_commit, jobs={"site": site_result})
+
+    assert conclusion == driver.Conclusion(SHA, state, description)
+
+
+def test_cli_site_conclude_posts_and_writes_the_state(tmp_path: Path) -> None:
+    github = FakeGitHub()
+    outputs = tmp_path / "outputs"
+
+    code = driver.main(
+        [
+            "site-conclude",
+            "--sha",
+            SHA,
+            "--site-commit",
+            SHA,
+            "--job",
+            "site=success",
+            "--post-status",
+            "--target-url",
+            RUN_URL,
+            "--github-output",
+            str(outputs),
+        ],
+        github=github,
+    )
+
+    assert code == 0
+    assert [(sha, state) for sha, state, _, _ in github.posted] == [(SHA, "success")]
+    assert "state=success\n" in outputs.read_text(encoding="utf-8")
+    assert driver.main(["site-conclude", "--sha", SHA, "--job", "site=failure"], github=github) == 1
+
+
+def test_cli_site_resolve_exit_codes(monkeypatch: pytest.MonkeyPatch) -> None:
+    github = FakeGitHub()
+    monkeypatch.setattr(guard, "run_git", FakeDiff("site/content/results.yaml\0"))
+    args = [
+        "site-resolve",
+        "--sha",
+        SHA,
+        "--main-ref",
+        "origin/main",
+        "--post-status",
+        "--target-url",
+        RUN_URL,
+    ]
+    assert driver.main(args, github=github) == 0
+    monkeypatch.setattr(guard, "run_git", FakeDiff("scripts/site_deploy.sh\0"))
+    assert driver.main(args, github=github) == 1
+    assert [state for _, state, _, _ in github.posted] == ["pending"]

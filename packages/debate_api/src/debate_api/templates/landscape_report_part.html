@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block title %}{{ part.heading }} · {{ bundle.caselist }} landscape · Team evidence search{% endblock %}
+{% block main %}
+<nav class="back-link" aria-label="Back"><a href="/landscape/{{ bundle.caselist }}">{{ report.title or "Argument landscape" }}</a></nav>
+<nav class="landscape-parts" aria-label="Parts of the report">
+<ul>
+{% for one in report.parts %}<li>{% if one.path == part.path %}<a href="/landscape/{{ bundle.caselist }}/report/{{ one.path | urlencode }}" aria-current="page">{{ one.heading }}</a>{% else %}<a href="/landscape/{{ bundle.caselist }}/report/{{ one.path | urlencode }}">{{ one.heading }}</a>{% endif %}</li>
+{% endfor %}</ul>
+</nav>
+<h1>{{ part.heading }}</h1>
+<div class="landscape-body">
+{{ part.body_html | safe }}
+</div>
+{% endblock %}

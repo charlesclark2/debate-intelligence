@@ -1,0 +1,122 @@
+# TASK v1-e40-t04-run-state-on-s3 - A cloud run keeps its state in the evidence bucket
+# Epic: E40 — Weekly Caselist Run in the Cloud | Release: v1.8 (Weekly caselist run in the cloud) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e40-t04-run-state-on-s3
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.8
+    debate/epic: v1-e40-cloud-caselist-run
+  annotations:
+    debate/title: "A cloud run keeps its state in the evidence bucket"
+spec:
+  # Filed by the PM, 2026-10-22, from ADR-0020.
+  description: >-
+    Everything a run reads from a data directory today comes from the evidence bucket at the
+    start of a cloud run, and everything it must keep goes back at the end: the run log and
+    details, the suppression list's local copy, the parsed store's current version (by the
+    restore route ADR-0020 chooses, since store sync skips `parsed/`), and whatever the SQLite
+    database holds that a later run needs. A run that dies halfway leaves the bucket as a Mac
+    run would. ADR-0020 may amend this task.
+    (PM amendment 2026-10-23 (ADR-0020).) Bucket mode, `caselist.run_state = "bucket"`: a run
+    restores a working copy (the run-state bundle, the state files, the published index's
+    manifest, and each configured caselist's and `openev`'s current parsed version directory
+    by a one-way restore route checked against the publisher's recorded SHA-256), fetches raw
+    sources only as its parse needs them, and saves state as ADR-0020 (3) sets out: the state
+    files under `reports/sync/state/`, the download ledger before each download, and the
+    run-state bundle (manifests and database) under `manifests/_run-state/` only when every
+    snapshot it records is confirmed, never while a local manifest is one the publisher
+    withholds. Every command that writes to an evidence bucket takes the bucket lock
+    (`reports/sync/run-lock.json`, S3 conditional writes, a 30-minute lease renewed every 5
+    minutes) in bucket mode, renewing it before every named-object write, and a run never
+    starts on a bucket with no lock object. A seed command creates the lock object and uploads
+    the Mac's state. The store layout document gains `reports/sync/run-lock.json`,
+    `reports/sync/state/` and `manifests/_run-state/`, and `store sync` skips
+    `manifests/_run-state/` as it skips `manifests/_suppression/`.
+    (PM ruling 2026-10-23.) Deleting anything in a bucket, except that `caselist remove`,
+    under the removal credential, purges the noncurrent versions of the objects under
+    `manifests/_run-state/` after its rewrite of the bundle is confirmed in the bucket. The
+    run, its role and every other command never delete. The run's role has no
+    `s3:DeleteObject` or `s3:DeleteObjectVersion` permission, and a test over its Terraform
+    policy document shows it.
+  priority: 1
+  constraints:
+    # PM ruling 2026-10-23: the run role's policy test lives with the run's Terraform module.
+    # PM ruling 2026-10-24 (plan question 1): infrastructure/modules/caselist_run is added for the
+    # run task's one environment line, DEBATE_CASELIST__RUN_STATE=bucket, and its assertion.
+    packages: [debate_core.application, debate_core.integrations, debate_cli, packages/debate_core/tests, packages/debate_cli/tests, docs/runbooks, docs/architecture, infrastructure/modules/caselist_run]
+    forbidden:
+      - A second copy of the publisher's suppression or withholding rules
+      # PM ruling 2026-10-23 (ADR-0020): replaces "Deleting anything in the bucket".
+      - >-
+        Deleting anything in a bucket, except that `caselist remove`, under the removal
+        credential, purges the noncurrent versions of the objects under
+        `manifests/_run-state/` after its rewrite of the bundle is confirmed in the bucket.
+        The run, its role and every other command never delete.
+      - Network or AWS access in any test
+      # PM amendment 2026-10-23 (ADR-0020)
+      - A command that writes to an evidence bucket without the bucket lock in bucket mode
+  context:
+    - kind: TaskRef
+      name: v1-e40-t01-cloud-run-adr
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        A run started on an empty data directory restores what it needs from a stubbed
+        bucket and produces the same parse and index as a run on a full directory, by test.
+    - id: ac2
+      description: >-
+        A run killed at each stage leaves the bucket readable by the next run, by test.
+    # PM amendment 2026-10-23 (ADR-0020)
+    - id: ac3
+      description: >-
+        Against a stubbed bucket, a second runner is refused while the lease is live, takes
+        over an expired one and says so, and a runner whose lease was taken writes nothing
+        more and ends `RUN_LOCK_LOST`; every bucket-writing command takes the lock in bucket
+        mode, by test.
+    # PM ruling 2026-10-23 (ADR-0020)
+    - id: ac4
+      description: >-
+        A removal against a stubbed bucket leaves no noncurrent version of the run-state
+        bundle that holds the removed rows, and purges only after its rewrite is confirmed;
+        a test over the run role's Terraform policy document shows it has no
+        `s3:DeleteObject` or `s3:DeleteObjectVersion`. Both tests are shown failing first,
+        against code and a policy that do not meet them, and the red run is in the report.
+status:
+  phase: Succeeded
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e40-t04-run-state-on-s3-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.8
+    debate/epic: v1-e40-cloud-caselist-run
+spec:
+  description: >-
+    Restore a run's state from the bucket at its start and save it at its end.
+  goalRef:
+    name: v1-e40-t04-run-state-on-s3
+  graph:
+    nodes:
+      - id: state
+        kind: Task
+        name: Run state on S3
+        description: >-
+          Restore a run's state from the bucket at its start and save it at its end.
+        estimatedEffort: 5h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Sync tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application, -k, caselist_sync]
+status:
+  phase: Pending

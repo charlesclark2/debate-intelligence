@@ -1,0 +1,75 @@
+# TASK v1-e37-t14-season-end-warning-and-one-definition - A check dated after the season says so, and the schedule and results use one season end
+# Epic: E37 — Calendar & Announcements (Coach-Editable) | Release: v1.6 (Public team website) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e37-t14-season-end-warning-and-one-definition
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.6
+    debate/epic: v1-e37-calendar-and-announcements
+  annotations:
+    debate/title: "A check dated after the season says so, and the schedule and results use one season end"
+spec:
+  # Filed by the PM, 2026-11-01, from v1-e37-t13's Follow-up work 2 and 3 (the PM's review, 2026-11-01).
+  description: >-
+    Since v1-e37-t13 `isStale` treats a `dateChecked` after the season's end as stale, but the
+    warning for an entry nothing publishes still says only that the start-of-season check "has
+    not been recorded". When `dateChecked` is after `seasonEnd`, add that it is dated after the
+    season ends, which is usually a mistyped year. And `loadSchedule` (`tournaments.ts`) and
+    `loadResults` (`results.ts`) build their own `${year + 1}-07-31` strings: use
+    `seasonEnd(season)` instead, with the shipped schedule and results unchanged.
+  priority: 3
+  constraints:
+    packages: [site, docs/guides]
+    forbidden:
+      - A guard weakened
+      - A real student's name in a test fixture
+      - A dependency manifest or lockfile under site/ changed
+  context:
+    - kind: TaskRef
+      name: v1-e37-t13-consent-checked-after-the-season-is-stale
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        An entry dated after its season is warned as such, the schedule and results range
+        checks use `seasonEnd`, and the shipped schedule and results load byte for byte as
+        before, by tests shown failing first.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e37-t14-season-end-warning-and-one-definition-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.6
+    debate/epic: v1-e37-calendar-and-announcements
+spec:
+  description: >-
+    A check dated after the season says so, and the schedule and results use one season end.
+  goalRef:
+    name: v1-e37-t14-season-end-warning-and-one-definition
+  graph:
+    nodes:
+      - id: season-end-warning-and-one-definition
+        kind: Task
+        name: Season end
+        description: >-
+          A check dated after the season says so, and the schedule and results use one
+          season end.
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Season end tests pass
+            command: pnpm
+            args: [--dir, site, test]
+status:
+  phase: Pending

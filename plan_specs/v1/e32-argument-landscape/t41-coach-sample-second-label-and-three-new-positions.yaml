@@ -1,0 +1,129 @@
+# TASK v1-e32-t41-coach-sample-second-label-and-three-new-positions - The coach's review applied: three new NHI positions, corrected descriptions, and a second accepted label in the coach sample
+# Epic: E32 Argument Landscape Reports | Release: v1.2 (Argument landscape & file building) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e32-t41-coach-sample-second-label-and-three-new-positions
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e32-argument-landscape
+  annotations:
+    debate/title: "The coach's review applied: three new NHI positions, corrected descriptions, and a second accepted label in the coach sample"
+spec:
+  # Filed by the PM, 2026-11-02, from the coach's review of v1-e32-t40's descriptions and its 13 rows (2026-11-02; claude/e32-t40-coach-review.md in the project).
+  description: >-
+    v1-e32-t40 (merged) gave every Policy position a one-line description and asked the coach
+    about 13 sample rows. He approved the descriptions with nine corrections and answered the
+    rows. Apply his review before v1-e32-t40's re-record of the 47 cards, so the re-record
+    measures against it. (1) Three new NHI positions, in the taxonomy's own form (id, kind,
+    side, aliases seeding the deterministic matcher's headings, a description), with the version
+    raised as the taxonomy guide says for new positions: `health-profiteering-advantage` (aff
+    advantage: the plan ends profiteering in health care, read against teams that run the
+    capitalism kritik); `free-market-cp` (neg CP: free-market reforms to health care, such as
+    deregulation and competition, instead of the affirmative's plan); and `federalism-cp` (neg
+    CP: the fifty states and sub-national actors suspend cooperation with federal initiatives
+    until the federal government adopts the plan; a different mechanism from states-cp, the
+    coach's ruling). Count first, in counts only, how many stored headings each new alias would
+    place, and how many of those today sit under another position or none. (2) The nine
+    description corrections, in the coach's words as the PM recorded them: pharma-da, taxes-da,
+    ai-da (a politics-style DA on AI regulation), democracy-da, advantage-cp, trump-k,
+    antiblackness-k, psychoanalysis-k and aspec. The wording is in the PM's context for this
+    task. (3) The coach sample accepts an optional second label column (for example `also`)
+    naming a second position the coach accepts. An answer naming either label is correct, and
+    the breakdown reports how many cards were scored correct on the second label. Both labels
+    are validated against the taxonomy, a row's two labels may not be equal, and `none` may not
+    be a second label. A sample without the column scores as today. (4) Operator follow-ups, as
+    blocks: the coach relabels rows 11 (free-market-cp), 30 and 59
+    (health-profiteering-advantage) and 31 (federalism-cp); rows 32, 38 and 47 take the model's
+    answers; rows 34 and 58 gain the model's answer as their second label. A JSON-only check
+    then confirms the sample reads, giving counts by label kind. v1-e32-t40 is InProgress for
+    its re-record, which follows this task, and is deliberately not a prerequisite.
+    The nine corrected descriptions, as the coach approved them on 2026-11-02 (the PM's wording):
+    - pharma-da: the plan cuts drug makers' profits, which undermines the US's global lead in biotech
+      and drug research.
+    - taxes-da: the taxes that pay for the plan cause economic damage (lost jobs, slower growth) or a
+      political backlash such as a rise in populism.
+    - ai-da: a politics-style DA: passing the plan costs the political capital or floor time Congress
+      needs for AI regulation.
+    - democracy-da: the plan's taxes or spending fuel populism and conservative backlash, which deepens
+      polarization and weakens democracy.
+    - advantage-cp: solves the affirmative's advantages without the plan, often with a separate plank
+      for each advantage.
+    - trump-k: the affirmative's faith in a return to normal after Trump is the link: the US is
+      consolidating into competitive authoritarianism, so clinging to the old system's rules is a
+      catastrophic failure to plan.
+    - antiblackness-k: the affirmative's reform perpetuates white supremacy and antiblackness; the
+      alternative is an epistemological reframing of how we approach health care.
+    - psychoanalysis-k: the affirmative is driven by desire, read through Lacan or Zizek; the
+      alternative is psychoanalysis.
+    - aspec: the affirmative must specify its agent, a particular branch or agency, rather than the
+      whole federal government.
+  priority: 1
+  constraints:
+    packages: [config/landscape, debate_core.arguments, debate_core.application, debate_cli, packages/debate_core/tests, packages/debate_cli/tests, tests/fixtures/landscape, docs/guides, docs/data]
+    forbidden:
+      - Card text, a tag, heading or label text in the report, docs, logs or a test
+      - A school, team code or debater name in a fixture or an alias
+      - A change to the 85% bar, the review threshold or the model stage's prompt
+      - A live model call
+  context:
+    - kind: TaskRef
+      name: v1-e32-t39-model-evaluation-diagnosis
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e32-t21-local-classifier-comparison
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        The three positions exist with descriptions and aliases, the nine descriptions read
+        as the coach corrected them, and the taxonomy validates at its new version, with the
+        alias counts recorded first.
+    - id: ac2
+      description: >-
+        A coach sample with a second label column scores an answer naming either label
+        correct, refuses an invalid or repeated second label, reports the second-label count
+        in the breakdown, and scores a sample without the column exactly as before, by tests
+        shown failing first.
+    - id: ac3
+      description: >-
+        The coach's relabelled sample reads without refusal (operator, recorded by the PM).
+status:
+  phase: Succeeded
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e32-t41-coach-sample-second-label-and-three-new-positions-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e32-argument-landscape
+spec:
+  description: >-
+    The coach's review applied: three new NHI positions, corrected descriptions, and a second
+    accepted label in the coach sample.
+  goalRef:
+    name: v1-e32-t41-coach-sample-second-label-and-three-new-positions
+  graph:
+    nodes:
+      - id: coach-sample-second-label-and-three-new
+        kind: Task
+        name: Coach review applied
+        description: >-
+          The coach's review applied: three new NHI positions, corrected descriptions, and
+          a second accepted label in the coach sample.
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Coach review applied tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests, -k, taxonomy or coach_sample or evaluat]
+status:
+  phase: Pending

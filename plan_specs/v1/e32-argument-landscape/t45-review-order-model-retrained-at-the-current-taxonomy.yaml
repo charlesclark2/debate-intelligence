@@ -1,0 +1,75 @@
+# TASK v1-e32-t45-review-order-model-retrained-at-the-current-taxonomy - The review queue's order model is trained again at taxonomy 1.5.0
+# Epic: E32 Argument Landscape Reports | Release: v1.2 (Argument landscape & file building) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e32-t45-review-order-model-retrained-at-the-current-taxonomy
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e32-argument-landscape
+  annotations:
+    debate/title: "The review queue's order model is trained again at taxonomy 1.5.0"
+spec:
+  # Filed by the PM, 2026-11-02, from v1-e32-t41's follow-up 2 (the PM's review, 2026-11-02).
+  description: >-
+    The local classifier that orders the review queue was trained under taxonomy 1.4.0. It has
+    not ordered the queue since 1.4.1, and still won't at 1.5.0, which added three positions.
+    Train it again with `scripts/compare_local_classifier.py` at 1.5.0, record its comparison
+    figures beside the last training's in docs/data, and let the queue use it again. Counts and
+    ids only.
+  priority: 3
+  constraints:
+    packages: [scripts, debate_core.application, packages/debate_core/tests, docs/data]
+    forbidden:
+      - Card text in the report, docs or logs
+      - A live model call
+      - A school, team code or debater name anywhere
+  context:
+    - kind: TaskRef
+      name: v1-e32-t41-coach-sample-second-label-and-three-new-positions
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e32-t21-local-classifier-comparison
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        The order model is trained at 1.5.0 and the review queue uses it again, with the
+        comparison figures recorded in docs/data beside the 1.4.0 training's.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e32-t45-review-order-model-retrained-at-the-current-taxonomy-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e32-argument-landscape
+spec:
+  description: >-
+    The review queue's order model is trained again at taxonomy 1.5.0.
+  goalRef:
+    name: v1-e32-t45-review-order-model-retrained-at-the-current-taxonomy
+  graph:
+    nodes:
+      - id: review-order-model-retrained-at-the-curr
+        kind: Task
+        name: Order model retrained
+        description: >-
+          The review queue's order model is trained again at taxonomy 1.5.0.
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Order model retrained tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests, -k, local_classifier or review_queue]
+status:
+  phase: Pending

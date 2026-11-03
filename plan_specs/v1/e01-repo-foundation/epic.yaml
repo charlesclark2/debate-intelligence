@@ -676,5 +676,299 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e01-t27-ci-test-job-within-budget
+    - id: t28
+      kind: Task
+      name: 'scripts/affected_tests.py prints the tests a branch''s changes can break'
+      description: >-
+        scripts/affected_tests.py prints the tests a branch's changes can break.
+      inputs:
+        specRef: plan_specs/v1/e01-repo-foundation/t28-affected-test-selection.yaml
+        goalRef: v1-e01-t28-affected-test-selection
+      dependsOn:
+      - t27
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e01-t28-affected-test-selection reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e01-t28-affected-test-selection
+    - id: t29
+      kind: Task
+      name: 'debate_core.testing and debate_core.evidence stop importing more than a caller asks for'
+      description: >-
+        debate_core.testing and debate_core.evidence stop importing more than a caller asks
+        for.
+      inputs:
+        specRef: plan_specs/v1/e01-repo-foundation/t29-slim-package-reexports.yaml
+        goalRef: v1-e01-t29-slim-package-reexports
+      dependsOn:
+      - t28
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e01-t29-slim-package-reexports reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e01-t29-slim-package-reexports
+    - id: t30
+      kind: Task
+      name: 'Tests stop reaching code they do not use: fakes by port, no port re-exports, and a graph option'
+      description: >-
+        Tests stop reaching code they do not use: fakes by port, no port re-exports, and a
+        graph option.
+      inputs:
+        specRef: plan_specs/v1/e01-repo-foundation/t30-test-selection-reach.yaml
+        goalRef: v1-e01-t30-test-selection-reach
+      dependsOn:
+      - t29
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e01-t30-test-selection-reach reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e01-t30-test-selection-reach
+    - id: t31
+      kind: Task
+      name: 'Repository checks stop flagging true values, and the smoke tests type-check'
+      description: >-
+        Repository checks stop flagging true values, and the smoke tests type-check.
+      inputs:
+        specRef: plan_specs/v1/e01-repo-foundation/t31-repo-check-false-positives.yaml
+        goalRef: v1-e01-t31-repo-check-false-positives
+      dependsOn:
+      - t29
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e01-t31-repo-check-false-positives reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e01-t31-repo-check-false-positives
+    - id: t32
+      kind: Task
+      name: 'Test selection, round three: command registration, quoted words, the root pyproject and the contract suites'
+      description: >-
+        Test selection, round three: command registration, quoted words, the root pyproject
+        and the contract suites.
+      inputs:
+        specRef: plan_specs/v1/e01-repo-foundation/t32-test-selection-reach-round-three.yaml
+        goalRef: v1-e01-t32-test-selection-reach-round-three
+      dependsOn:
+      - t30
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e01-t32-test-selection-reach-round-three reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e01-t32-test-selection-reach-round-three
+    - id: t34
+      kind: Task
+      name: 'validate-dev is green again, and a red one is seen'
+      description: >-
+        validate-dev is green again, and a red one is seen.
+      inputs:
+        specRef: plan_specs/v1/e01-repo-foundation/t34-validate-dev-green-again.yaml
+        goalRef: v1-e01-t34-validate-dev-green-again
+      dependsOn:
+      - t30
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e01-t34-validate-dev-green-again reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e01-t34-validate-dev-green-again
+    - id: t35
+      kind: Task
+      name: 'CI''s pyright covers tests/architecture and tests/smoke'
+      description: >-
+        CI's pyright covers tests/architecture and tests/smoke.
+      inputs:
+        specRef: plan_specs/v1/e01-repo-foundation/t35-pyright-scope-tests.yaml
+        goalRef: v1-e01-t35-pyright-scope-tests
+      dependsOn:
+      - t31
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e01-t35-pyright-scope-tests reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e01-t35-pyright-scope-tests
+    - id: t36
+      kind: Task
+      name: 'A dev pre-release for a commit dev has moved past with a workflow change is reported superseded, not failed'
+      description: >-
+        A dev pre-release for a commit dev has moved past with a workflow change is reported
+        superseded, not failed.
+      inputs:
+        specRef: plan_specs/v1/e01-repo-foundation/t36-prerelease-superseded-commit.yaml
+        goalRef: v1-e01-t36-prerelease-superseded-commit
+      dependsOn:
+      - t09
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e01-t36-prerelease-superseded-commit reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e01-t36-prerelease-superseded-commit
+    - id: t38
+      kind: Task
+      name: 'A pull request into dev runs the tests its changes reach; a push to dev and a pull request into main run them all'
+      description: >-
+        A pull request into dev runs the tests its changes reach; a push to dev and a pull
+        request into main run them all.
+      inputs:
+        specRef: plan_specs/v1/e01-repo-foundation/t38-ci-affected-tests-on-dev-pull-requests.yaml
+        goalRef: v1-e01-t38-ci-affected-tests-on-dev-pull-requests
+      dependsOn:
+      - t28
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e01-t38-ci-affected-tests-on-dev-pull-requests reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e01-t38-ci-affected-tests-on-dev-pull-requests
+    - id: t39
+      kind: Task
+      name: 'The container imports each integration in its own factory, and selection follows a command to its factories'
+      description: >-
+        The container imports each integration in its own factory, and selection follows a
+        command to its factories.
+      inputs:
+        specRef: plan_specs/v1/e01-repo-foundation/t39-container-builds-integrations-lazily.yaml
+        goalRef: v1-e01-t39-container-builds-integrations-lazily
+      dependsOn:
+      - t32
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e01-t39-container-builds-integrations-lazily reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e01-t39-container-builds-integrations-lazily
+    - id: t40
+      kind: Task
+      name: 'The planted-break check runs the tests nearest a break by what reads it, not by path'
+      description: >-
+        The planted-break check runs the tests nearest a break by what reads it, not by
+        path.
+      inputs:
+        specRef: plan_specs/v1/e01-repo-foundation/t40-planted-break-nearest-ordering.yaml
+        goalRef: v1-e01-t40-planted-break-nearest-ordering
+      dependsOn:
+      - t32
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e01-t40-planted-break-nearest-ordering reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e01-t40-planted-break-nearest-ordering
+    - id: t41
+      kind: Task
+      name: 'The pull request''s smoke tier reads the bundled profiles, as the installed build does'
+      description: >-
+        The pull request's smoke tier reads the bundled profiles, as the installed build
+        does.
+      inputs:
+        specRef: plan_specs/v1/e01-repo-foundation/t41-pr-smoke-reads-the-bundled-profiles.yaml
+        goalRef: v1-e01-t41-pr-smoke-reads-the-bundled-profiles
+      dependsOn:
+      - t21
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e01-t41-pr-smoke-reads-the-bundled-profiles reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e01-t41-pr-smoke-reads-the-bundled-profiles
+    - id: t42
+      kind: Task
+      name: 'Coverage measured in the test parts and combined, so the push run is never held by one unsplit job'
+      description: >-
+        Coverage measured in the test parts and combined, so the push run is never held by
+        one unsplit job.
+      inputs:
+        specRef: plan_specs/v1/e01-repo-foundation/t42-coverage-measured-in-the-parts.yaml
+        goalRef: v1-e01-t42-coverage-measured-in-the-parts
+      dependsOn:
+      - t38
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e01-t42-coverage-measured-in-the-parts reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e01-t42-coverage-measured-in-the-parts
+    - id: t43
+      kind: Task
+      name: 'A change to container.py reaches only the tests of the parts it changes'
+      description: >-
+        A change to container.py reaches only the tests of the parts it changes.
+      inputs:
+        specRef: plan_specs/v1/e01-repo-foundation/t43-container-diff-read-part-by-part.yaml
+        goalRef: v1-e01-t43-container-diff-read-part-by-part
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e01-t43-container-diff-read-part-by-part reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e01-t43-container-diff-read-part-by-part
+    - id: t44
+      kind: Task
+      name: 'A test that mentions debate-research inside a longer message is not read as running the app'
+      description: >-
+        A test that mentions debate-research inside a longer message is not read as running
+        the app.
+      inputs:
+        specRef: plan_specs/v1/e01-repo-foundation/t44-cli-mention-in-a-message-is-prose.yaml
+        goalRef: v1-e01-t44-cli-mention-in-a-message-is-prose
+      dependsOn:
+      - t39
+      - t43
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e01-t44-cli-mention-in-a-message-is-prose reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e01-t44-cli-mention-in-a-message-is-prose
 status:
   phase: Pending

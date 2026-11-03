@@ -102,6 +102,8 @@ spec:
       inputs:
         specRef: plan_specs/v1/e38-donations/t01-district-donation-process.yaml
         goalRef: v1-e38-t01-district-donation-process
+      dependsOn:
+      - ext-v1-e36-t01-publishing-policy
       acceptanceCriteria:
       - type: command_succeeds
         name: Task spec v1-e38-t01-district-donation-process reports phase Succeeded

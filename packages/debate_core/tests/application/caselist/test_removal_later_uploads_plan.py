@@ -49,7 +49,7 @@ from debate_core.integrations.local import FsEvidenceObjectStore, FsSnapshotStor
 from debate_core.integrations.local.archive_reader import archive_digest, read_archive
 from debate_core.integrations.local.suppression_list import local_removal_log_file
 from debate_core.integrations.s3 import S3EvidenceVersionStore
-from debate_core.testing.fakes import empty_suppression_list
+from debate_core.testing.fakes.suppression import empty_suppression_list
 
 from .conftest import REQUEST, TEAM, RemovalWorld
 from .test_removal_covers_later_uploads import (

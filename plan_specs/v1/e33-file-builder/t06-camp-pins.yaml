@@ -1,0 +1,89 @@
+# TASK v1-e33-t06-camp-pins - A recipe can name a camp (OpenEv) card
+# Epic: E33 Evidence File Builder | Release: v1.2 (Argument landscape & file building) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e33-t06-camp-pins
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e33-file-builder
+  annotations:
+    debate/title: "A recipe can name a camp (OpenEv) card"
+spec:
+  # Filed by the PM, 2026-10-19, from v1-e33-t01's PM question 3.
+  description: >-
+    Recipe schema version 1 refuses a pin to the `openev` store, and AUTO reads only the
+    recipe's caselist, though the data-use policy's attribution rules cover camp cards in built
+    files. Let a pin name `openev` with a release snapshot, additively within schema version 1,
+    resolved against the openev occurrence rows, with the same suppression rule as every other
+    occurrence (v1-e33-t01's ac6).
+    (PM amendment 2026-10-19, from v1-e33-t02's Follow-up 4.) Two things the writer needs for a
+    camp occurrence, which it refuses today as `SOURCE_UNREADABLE`: the OpenEv form of the
+    provenance line, `[OpenEv: <camp> <year> — <event>, <file title>]` as the data-use policy's
+    Attribution 2 gives it, and the source document for a camp occurrence, read from
+    `raw/openev/` by its sha256.
+    (PM amendment 2026-10-20, recording the PM's ruling on v1-e33-t06's question 1.) A recipe's
+    own `caselist` may also be `openev`, so AUTO chooses among camp releases by the documented
+    rule; a caselist recipe reaches a camp card only by a pin.
+  priority: 3
+  constraints:
+    # debate_core.integrations (the writer, debate_core.integrations.docx_file_writer, never
+    # docx_parser, which is v1-e31-t24's) and docs/data's file-provenance.schema.json: PM amendment
+    # 2026-10-19, from the PM's notes for this task, as v1-e33-t02 marked its additions.
+    packages: [debate_core.domain, debate_core.application, debate_core.integrations, packages/debate_core/tests, docs/guides, docs/data]
+    forbidden:
+      - A change that makes a valid schema-version-1 recipe invalid
+      - Real camp file names, schools or team codes in fixtures
+      - Network or AWS access in any test
+  context:
+    - kind: TaskRef
+      name: v1-e33-t01-file-recipe-format
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        A pin naming `openev` and a release resolves, AUTO never picks a suppressed camp
+        occurrence, and the schema and guide say so, by tests shown failing first; every
+        existing example still loads.
+    - id: ac2
+      description: >-
+        (PM amendment 2026-10-19) A recipe pinning a camp card builds, with the OpenEv
+        provenance line below its cite and the occurrence in the sidecar, and reads back as
+        its source, by test shown failing first.
+status:
+  phase: Succeeded
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e33-t06-camp-pins-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e33-file-builder
+spec:
+  description: >-
+    Camp pins in recipe schema version 1.
+  goalRef:
+    name: v1-e33-t06-camp-pins
+  graph:
+    nodes:
+      - id: camp-pins
+        kind: Task
+        name: Camp pins
+        description: >-
+          Camp pins in recipe schema version 1.
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Recipe tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application/test_file_recipes.py]
+status:
+  phase: Pending

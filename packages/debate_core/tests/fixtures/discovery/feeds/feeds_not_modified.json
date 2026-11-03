@@ -1,0 +1,14 @@
+{
+  "query": {"query": "health insurance", "filters": {"since": "2026-10-01T00:00:00Z", "until": "2026-10-21T00:00:00Z", "max_results": 10}},
+  "exchanges": [
+    {
+      "request": {"method": "GET", "url": "https://news.example.org/rss/politics.xml"},
+      "response": {"status": 304, "headers": {"etag": "\"courier-v1\""}, "body": ""}
+    },
+    {
+      "request": {"method": "GET", "url": "https://www.example.com/atom/health.xml"},
+      "response": {"status": 304, "headers": {"last-modified": "Tue, 20 Oct 2026 13:00:00 GMT"}, "body": ""}
+    }
+  ],
+  "expected_results_file": "feeds_search.expected.json"
+}

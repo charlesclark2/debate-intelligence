@@ -1,0 +1,78 @@
+# TASK v1-e07-t10-time-waiting-on-a-pace-is-not-a-failure - The resilience wrapper does not count time a provider spends waiting on its own pace as a failure
+# Epic: E07 Discovery Provider Adapters | Release: v1.4 (Federated research from the CLI) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e07-t10-time-waiting-on-a-pace-is-not-a-failure
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.4
+    debate/epic: v1-e07-discovery-adapters
+  annotations:
+    debate/title: "The resilience wrapper does not count time a provider spends waiting on its own pace as a failure"
+spec:
+  # Filed by the PM, 2026-11-02, from v1-e07-t03's follow-up 1 and ruling 6 (the PM's review, 2026-11-02).
+  description: >-
+    Crossref paces itself inside its adapter (v1-e07-t03), and to keep the wrapper's timeout
+    from benching it, it answers 'not asked' before its deadline. That arithmetic lives in one
+    adapter, and its 'not asked' answers count as wrapper successes whose waits inflate the
+    latency median in provider_health. Give ResilientProvider a way for an adapter to say it is
+    queued on its own pace, so that time is neither a timeout failure nor latency, and move
+    Crossref onto it with its behaviour unchanged. A shared pacer the adapters configure is the
+    likely shape; propose it first. Semantic Scholar (v1-e07-t04) should use it if its limits
+    need pacing.
+  priority: 3
+  constraints:
+    packages: [debate_core.integrations.discovery, debate_core.application, packages/debate_core/tests]
+    forbidden:
+      - A provider's limits exceeded
+      - A query that was sent and ran slow no longer timing out
+      - Live provider calls in tests
+  context:
+    - kind: TaskRef
+      name: v1-e07-t03-crossref-adapter
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        Time an adapter spends queued on its own pace counts neither as a timeout failure
+        nor as latency, and Crossref's eleven-query public-pool case behaves as today on
+        virtual time, by tests shown failing first.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e07-t10-time-waiting-on-a-pace-is-not-a-failure-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.4
+    debate/epic: v1-e07-discovery-adapters
+spec:
+  description: >-
+    The resilience wrapper does not count time a provider spends waiting on its own pace as a
+    failure.
+  goalRef:
+    name: v1-e07-t10-time-waiting-on-a-pace-is-not-a-failure
+  graph:
+    nodes:
+      - id: time-waiting-on-a-pace-is-not-a-failure
+        kind: Task
+        name: Pace not failure
+        description: >-
+          The resilience wrapper does not count time a provider spends waiting on its own
+          pace as a failure.
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Pace not failure tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/integrations/discovery, -k, resilien or crossref or pace]
+status:
+  phase: Pending

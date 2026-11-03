@@ -25,6 +25,7 @@ from __future__ import annotations
 import configparser
 import hashlib
 import json
+import stat
 import zipfile
 from collections.abc import Iterator
 from datetime import UTC, date, datetime, timedelta
@@ -41,6 +42,7 @@ from tests.fixtures.caselist.build_synthetic_archives import (
     build_snapshot_zips,
 )
 from tests.fixtures.identity_center_roles import EVERYDAY_ROLE, TAKEDOWN_ROLE, sign_in
+from tests.fixtures.model_routing import EXAMPLE_ROUTING_FILE
 from tests.fixtures.openev.build_synthetic_openev import CAMP_ALIASES_PATH, build_download_zips
 from tests.fixtures.openev.build_synthetic_openev import DOCUMENT_BODIES as CAMP_BODIES
 from tests.fixtures.openev.build_synthetic_openev import DOWNLOADS as OPENEV_DOWNLOADS
@@ -105,7 +107,7 @@ def installation(installed_cli: InstalledCli, s3_stand_in: S3StandIn, tmp_path: 
         (profiles / f"{environment_name}.toml").write_text(
             f'[storage]\ndata_dir = "{tmp_path / environment_name}"\n'
             f'[storage.s3]\nbucket = "{BUCKET}"\nregion = "us-east-1"\naws_profile = "{OPERATOR_PROFILE}"\n'
-            f'[models]\nrouting_file = "{tmp_path / "routing.yaml"}"\nbudget_usd_daily = 1.0\n',
+            f'[models]\nrouting_file = "{EXAMPLE_ROUTING_FILE}"\nbudget_usd_daily = 1.0\n',
             encoding="utf-8",
         )
     # Each environment's own data directory, as its profile names it, rather than the harness's one.
@@ -424,7 +426,7 @@ def test_the_download_inbox_is_listed_by_the_dry_run_and_purged_by_the_execution
         (f"{SYNTHETIC_CASELIST}-weekly-2026-09-15.zip", "delete"),
         (waiting.name, "rewrite"),
     ]
-    assert f"DOWNLOAD INBOX ({inbox}): 4 file(s) hold removed files." in shown.stdout
+    assert "DOWNLOAD INBOX (inbox in the data directory): 4 file(s) hold removed files." in shown.stdout
     assert tree(inbox) == before, "the dry run changed the inbox"
 
     environment(DEBATE_REMOVAL_PROFILE=REMOVAL_PROFILE)
@@ -652,6 +654,9 @@ NOTHING_LEFT = {
     "files": [],
     "older_versions": [],
     "older_than": COMPLETED_BY_THE_REMOVAL,
+    # The landscape school views a removal left (v1-e32-t13): none, so no cutoff is named.
+    "school_views": [],
+    "school_views_older_than": None,
 }
 
 
@@ -753,6 +758,8 @@ def test_versions_of_a_later_upload_left_under_a_delete_marker_fail_status_by_pr
             ],
             "older_versions": [],
             "older_than": COMPLETED_BY_THE_REMOVAL,
+            "school_views": [],
+            "school_views_older_than": None,
         }
     ]
     assert error["message"] == (
@@ -796,6 +803,8 @@ def test_a_refused_version_listing_says_not_checked_and_never_that_nothing_is_le
             "files": None,
             "older_versions": None,
             "older_than": None,
+            "school_views": None,
+            "school_views_older_than": None,
         }
     ]
     assert f"Removal residue NOT CHECKED for {SYNTHETIC_CASELIST}" in shown
@@ -1035,12 +1044,23 @@ def test_versions_older_than_a_removal_are_cleared_by_running_it_again_under_the
     assert clean["data"]["removal_residue"] == [NOTHING_LEFT]
 
 
-def test_an_old_manifest_version_alone_is_cleared_by_executing_a_plan_that_says_nothing_is_left(
+def test_an_old_manifest_version_alone_is_counted_by_the_dry_run_and_cleared_by_its_execution(
     installation: Path, bucket: S3Client, an_old_manifest_version: str
 ) -> None:
-    """The plan reads current manifests only, so it finds nothing to do; the sweep runs at execution."""
+    """The sweep the execution will make is planned too (`v1-e30-t19`): the dry run counts the one
+    version, prints the command to carry it out, and never says nothing is left. Until then it read
+    current manifests only and said *Nothing is left to remove*, and the runbook said to execute
+    anyway."""
     assert run("caselist", "status")["error"]["code"] == "REMOVAL_RESIDUE"
-    assert "Nothing is left to remove" in invoke(*REMOVE_FIRST_VERSION).stdout
+    planned = invoke(*REMOVE_FIRST_VERSION, width=200).stdout
+    assert "Nothing is left to remove" not in planned
+    lines = planned.splitlines()
+    assert (
+        "MANIFEST VERSIONS SWEPT from the bucket by --execute: 1 noncurrent version(s) of 1 manifest(s)."
+        in lines
+    )
+    assert f"  bucket {an_old_manifest_version}  (1 version(s))" in lines
+    assert "TO CARRY IT OUT" in lines
 
     environment(DEBATE_REMOVAL_PROFILE=REMOVAL_PROFILE)
     done = run(*REMOVE_FIRST_VERSION, "--execute")
@@ -1154,6 +1174,27 @@ def test_a_removed_path_holds_next_weeks_upload_and_the_same_removal_run_again_f
     assert run("caselist", "publish", "--caselist", SYNTHETIC_CASELIST)["exit_code"] == ExitCode.OK
     assert not bucket_holds(bucket, UPLOADED_AFTER)
 
+    # Status says the removal is owed again: the upload waits in the inbox archive (v1-e30-t21). It
+    # names it by prefix and request, never by path or archive, and still exits 0: nothing differs.
+    owed = raw_json("caselist", "status")
+    data = json.loads(owed)["data"]
+    assert (data["in_sync"], data["removals_owed"]) == (True, ["RM-2026-03"])
+    assert data["held_in_inbox"] == [
+        {
+            "caselist": SYNTHETIC_CASELIST,
+            "uploads": 1,
+            "sha256_prefixes": [UPLOADED_AFTER[:12]],
+            "requests": ["RM-2026-03"],
+        }
+    ]
+    told = invoke("caselist", "status", width=200).stdout
+    assert (
+        f"for {SYNTHETIC_CASELIST}: 1 upload(s) at a path a removal holds (sha256 {UPLOADED_AFTER[:12]}"
+        in told
+    )
+    assert "RM-2026-03 is owed again" in told
+    assert not [name for name in (*IDENTIFYING, NEXT_WEEK, HELD_PATH) if name in owed + told]
+
     # The same removal, run again, finds it in the inbox archive, and takes the archive out.
     again = run(*REMOVE_REVISION)
     assert [
@@ -1171,7 +1212,9 @@ def test_a_removed_path_holds_next_weeks_upload_and_the_same_removal_run_again_f
     listed = (data_dir / "suppression" / "suppression-list.jsonl").read_text(encoding="utf-8")
     assert UPLOADED_AFTER in [json.loads(line)["sha256"] for line in listed.splitlines()]
     assert {json.loads(line)["request_id"] for line in listed.splitlines()} == {"RM-2026-03"}
-    assert run("caselist", "status")["exit_code"] == ExitCode.OK
+    finished = run("caselist", "status")
+    assert finished["exit_code"] == ExitCode.OK
+    assert finished["data"]["removals_owed"] == [], "the re-run finished what status said was owed"
 
     # Letting the removed file back in would release the path.
     lifted = run("caselist", "unsuppress", "--sha256", REVISION, "--reason", "REMOVED_IN_ERROR")
@@ -1199,6 +1242,93 @@ def test_after_only_named_no_path_is_held_and_next_weeks_upload_is_imported(
     assert (
         data_dir / "blobs" / "sha256" / UPLOADED_AFTER[0:2] / UPLOADED_AFTER[2:4] / UPLOADED_AFTER
     ).exists()
+
+
+def test_a_link_at_a_held_path_imports_with_no_row_and_nothing_is_owed_for_it(
+    installation: Path, bucket: S3Client, published: Any
+) -> None:
+    """`v1-e30-t22`. After the `--source` removal, next week's archive holds a symbolic link at the
+    held path, whose body is the removed file's name, beside another team's file. The import still
+    counts it as skipped, and gives it no row; the publish completes, and status owes nothing."""
+    data_dir = installation / "dev"
+    environment(DEBATE_REMOVAL_PROFILE=REMOVAL_PROFILE)
+    assert run(*REMOVE_REVISION, "--execute")["exit_code"] == ExitCode.OK
+    environment(DEBATE_REMOVAL_PROFILE=None)
+    archive = installation / "next-week" / NEXT_WEEK
+    archive.parent.mkdir(parents=True)
+    with zipfile.ZipFile(archive, "w") as written:
+        link = zipfile.ZipInfo(HELD_PATH, date_time=(1980, 1, 1, 0, 0, 0))
+        link.external_attr = (stat.S_IFLNK | 0o777) << 16
+        written.writestr(link, HELD_PATH.rsplit("/", 1)[1].encode())
+        written.writestr(
+            "Cedar Hollow/ZaLu/Cedar Hollow-ZaLu-AFF-Harbor Classic.docx", DOCUMENT_BODIES["harbor-aff"]
+        )
+
+    imported = import_next_week(archive)
+
+    assert imported["exit_code"] == ExitCode.OK, imported
+    assert imported["data"]["skipped"] == {"SYMLINK": 1}
+    manifest = (data_dir / "objects" / "manifests" / SYNTHETIC_CASELIST / "2026-09-22.jsonl").read_text()
+    assert HELD_PATH not in manifest
+    assert run("caselist", "publish", "--caselist", SYNTHETIC_CASELIST)["exit_code"] == ExitCode.OK
+    status = run("caselist", "status")
+    assert status["exit_code"] == ExitCode.OK, status
+    assert status["data"]["removals_owed"] == []
+    assert {
+        (one["held_skipped_rows"], tuple(one["held_skipped_row_requests"]))
+        for one in status["data"]["snapshots"]
+    } == {(0, ())}
+
+
+def test_junk_beside_a_held_link_has_no_row_and_a_push_sends_no_manifest_the_publisher_withholds(
+    installation: Path, bucket: S3Client, published: Any
+) -> None:
+    """`v1-e30-t25`. As above, with the AppleDouble junk macOS writes beside the link: it is skipped
+    and given no row either. Then a manifest an older build wrote for 2026-09-29, with the link's row
+    at the held path, which `caselist publish` withholds: `store sync --apply` leaves it on this
+    machine, pushes the week beside it, and prints no path."""
+    data_dir = installation / "dev"
+    environment(DEBATE_REMOVAL_PROFILE=REMOVAL_PROFILE)
+    assert run(*REMOVE_REVISION, "--execute")["exit_code"] == ExitCode.OK
+    environment(DEBATE_REMOVAL_PROFILE=None)
+    directory, name = HELD_PATH.rsplit("/", 1)
+    junk = f"__MACOSX/{directory}/._{name}"
+    archive = installation / "next-week" / NEXT_WEEK
+    archive.parent.mkdir(parents=True)
+    with zipfile.ZipFile(archive, "w") as written:
+        link = zipfile.ZipInfo(HELD_PATH, date_time=(1980, 1, 1, 0, 0, 0))
+        link.external_attr = (stat.S_IFLNK | 0o777) << 16
+        written.writestr(link, name.encode())
+        written.writestr(junk, b"\x00\x05\x16\x07\x00\x02\x00\x00Mac OS X        ")
+        written.writestr(
+            "Cedar Hollow/ZaLu/Cedar Hollow-ZaLu-AFF-Harbor Classic.docx", DOCUMENT_BODIES["harbor-aff"]
+        )
+
+    imported = import_next_week(archive)
+
+    assert imported["exit_code"] == ExitCode.OK, imported
+    assert imported["data"]["skipped"] == {"SYMLINK": 1, "MACOS_METADATA": 1}
+    manifests = data_dir / "objects" / "manifests" / SYNTHETIC_CASELIST
+    assert name not in (manifests / "2026-09-22.jsonl").read_text(), "a row names the held path"
+
+    withheld = f"manifests/{SYNTHETIC_CASELIST}/2026-09-29.jsonl"
+    (manifests / "2026-09-29.jsonl").write_text(
+        json.dumps({"kind": "member", "path": HELD_PATH, "skip_reason": "SYMLINK"}) + "\n"
+    )
+    pushed = f"manifests/{SYNTHETIC_CASELIST}/2026-09-22.jsonl"
+    synced = run("store", "sync", "--prefix", f"manifests/{SYNTHETIC_CASELIST}/", "--apply")
+
+    assert synced["exit_code"] == ExitCode.OK, synced
+    assert synced["data"]["counts"]["new"] == 1
+    listed = bucket.list_objects_v2(Bucket=BUCKET, Prefix=f"manifests/{SYNTHETIC_CASELIST}/")
+    keys = {str(item.get("Key")) for item in listed.get("Contents", [])}
+    assert pushed in keys
+    assert withheld not in keys, "the push sent a manifest the publisher withholds"
+    assert name not in json.dumps(synced)
+    left_behind = synced["data"]["skipped_reasons"]["withheld_manifest"]
+    assert (left_behind["count"], left_behind["request_ids"]) == (1, ["RM-2026-03"]), (
+        "v1-e29-t11: the push says which removal to run again"
+    )
 
 
 # ------------------------------------------------------------------------------------------------
@@ -1367,3 +1497,374 @@ def test_a_camp_file_two_releases_hold_names_one_other_camp_file(
         0,
         1,
     )
+
+
+# ------------------------------------------------------------------------------------------------
+# Loose ends in what a removal plan prints (v1-e30-t20)
+# ------------------------------------------------------------------------------------------------
+
+#: Cedar Hollow/ZaLu's path of the Round 1 affirmative, which Maple Grove/QX discloses too, from 09-08.
+ANOTHER_TEAMS_PATH = "Cedar Hollow/ZaLu/Cedar Hollow-ZaLu-Aff-Grove City Invitational-Round 3.docx"
+#: The other team's second path, where it uploaded the revision again.
+ANOTHER_TEAMS_SECOND_PATH = "Cedar Hollow/ZaLu/Cedar Hollow-ZaLu-Aff-Grove City Invitational-Round 3 (1).docx"
+ROUND_1_REVISED = _docx(("Grove City Invitational, round 3, affirmative.", "Revised by the other team."))
+ROUND_1_REVISION = hashlib.sha256(ROUND_1_REVISED).hexdigest()
+REMOVE_SHARED_TOO = (*REMOVE, "--include-shared")
+NOTHING_REMOVED = "  - Removed from this environment: nothing; this run found nothing left to remove."
+
+
+def disclosure_of(path: str) -> str:
+    """The digest the suppression list and the withdrawal record hold for a path: of `<caselist>/<path>`."""
+    return hashlib.sha256(f"{SYNTHETIC_CASELIST}/{path}".encode()).hexdigest()
+
+
+def suppression_count_line(text: str) -> str:
+    """The line under *SUPPRESSION ENTRIES* that counts them by kind."""
+    lines = text.splitlines()
+    heading = next(index for index, line in enumerate(lines) if line.startswith("SUPPRESSION ENTRIES"))
+    return lines[heading + 1]
+
+
+def confirmation_lines(text: str) -> list[str]:
+    lines = text.splitlines()
+    start = lines.index("FOR THE CONFIRMATION TO THE REQUESTER")
+    end = next((index for index in range(start, len(lines)) if not lines[index]), len(lines))
+    return lines[start:end]
+
+
+@pytest.fixture
+def revised_at_another_teams_paths(installation: Path, published: Any) -> None:
+    """The weekly window of 2026-09-22: the other team's copy of the shared affirmative revised, at
+    its path and at its second.
+
+    `caselist remove --team <Maple Grove/QX> --include-shared` removes the shared file whole, from
+    the other team's path as well, so the revision is a later upload there. The other team's second
+    path still holds it, so it is withdrawn from the other team's path only.
+    """
+    archive = installation / "downloads" / f"{SYNTHETIC_CASELIST}-weekly-2026-09-22.zip"
+    with zipfile.ZipFile(archive, "w", compression=zipfile.ZIP_DEFLATED) as written:
+        written.writestr(ANOTHER_TEAMS_PATH, ROUND_1_REVISED)
+        written.writestr(ANOTHER_TEAMS_SECOND_PATH, ROUND_1_REVISED)
+    imported = run(
+        "caselist", "import", str(archive), "--caselist", SYNTHETIC_CASELIST, "--snapshot", "2026-09-22"
+    )  # fmt: skip
+    assert imported["exit_code"] == ExitCode.OK, imported
+    assert run("caselist", "publish", "--caselist", SYNTHETIC_CASELIST)["exit_code"] == ExitCode.OK
+
+
+def test_a_team_removal_including_shared_files_calls_another_teams_path_none_of_this_teams(
+    installation: Path, bucket: S3Client, revised_at_another_teams_paths: None
+) -> None:
+    """The suppression count and the line on what the list stops, in the dry run and the execution."""
+    dry_run = shown(*REMOVE_SHARED_TOO)
+    planned = run(*REMOVE_SHARED_TOO)
+    environment(DEBATE_REMOVAL_PROFILE=REMOVAL_PROFILE)
+    executed = shown(*REMOVE_SHARED_TOO, "--execute")
+
+    revision = {source["sha256"]: source for source in planned["data"]["sources"]}[ROUND_1_REVISION]
+    assert (revision["inclusion"], revision["disposition"]) == ("later_upload", "withdraw")
+    assert revision["withdrawn_disclosures"] == [
+        {"caselist": SYNTHETIC_CASELIST, "disclosure": disclosure_of(ANOTHER_TEAMS_PATH)}
+    ]
+    whole = sum(
+        1 for line in planned["data"]["suppression_entries"] if json.loads(line)["disclosure"] is None
+    )
+    for text in (dry_run, executed):
+        lines = text.splitlines()
+        assert suppression_count_line(text) == (
+            f"  {whole} whole file(s), and 1 path(s) of another holder a later upload is withdrawn from. Each"
+        )
+        assert (
+            "  - Suppressed, so no later archive, weekly or complete, can bring back a removed file, or "
+            "another holder's copy of a later upload at the path it was withdrawn from."
+        ) in lines
+        assert [line for line in lines if "this team's path" in line or "this team's copy" in line] == []
+
+
+def test_a_rerun_that_removes_nothing_says_so_in_its_dry_run_and_its_execution(
+    installation: Path, bucket: S3Client, published: Any
+) -> None:
+    """A team removal with a shared file withdrawn, executed, then the same command again, both ways.
+
+    The re-run plans the team's files again, finds each gone and suppressed, and removes nothing.
+    """
+    environment(DEBATE_REMOVAL_PROFILE=REMOVAL_PROFILE)
+    first = shown(*REMOVE, "--execute")
+    rerun = shown(*REMOVE)
+    rerun_executed = shown(*REMOVE, "--execute")
+
+    told = confirmation_lines(first)
+    assert told[1].startswith("  - Removed from this environment: ") and told[1] != NOTHING_REMOVED
+    for text in (rerun, rerun_executed):
+        assert "Nothing is left to remove" in text
+        told = confirmation_lines(text)
+        assert told[1] == NOTHING_REMOVED, told
+        assert [line for line in told if "removed" in line.casefold() and "file(s)" in line] == [], told
+
+
+def test_the_jsons_withdrawals_are_the_plans_lines_and_what_the_execution_records(
+    installation: Path, bucket: S3Client, published: Any
+) -> None:
+    """The team's two paths of the shared affirmative: in the text, in the JSON, and in the record."""
+    text = shown(*REMOVE)
+    planned = run(*REMOVE)
+    environment(DEBATE_REMOVAL_PROFILE=REMOVAL_PROFILE)
+    done = run(*REMOVE, "--execute")
+    rerun = run(*REMOVE)
+
+    expected = [
+        {"sha256": HELD_BY_TWO_TEAMS, "disclosure": disclosure_of(path), "caselist": SYNTHETIC_CASELIST}
+        for path in sorted(
+            (
+                "Maple Grove/QX/Maple Grove-QX-Aff-Grove City Invitational-Round 1.docx",
+                "Maple Grove/QX/Maple Grove-QX-Aff-Grove City Invitational-Round 1 (1).docx",
+            )
+        )
+    ]
+    assert sorted(planned["data"].get("withdrawals", []), key=lambda one: one["disclosure"]) == sorted(
+        expected, key=lambda one: one["disclosure"]
+    )
+    lines = text.splitlines()
+    heading = next(index for index, line in enumerate(lines) if line.startswith("WITHDRAWALS"))
+    printed = [json.loads(line) for line in lines[heading + 4 : heading + 4 + len(expected)]]
+    assert [{key: one[key] for key in ("sha256", "disclosure", "caselist")} for one in printed] == (
+        planned["data"]["withdrawals"]
+    )
+    assert done["exit_code"] == ExitCode.OK, done
+    assert done["data"]["withdrawals"] == planned["data"]["withdrawals"]
+    record = installation / "dev" / "suppression" / "withdrawals.jsonl"
+    recorded = [json.loads(line) for line in record.read_text(encoding="utf-8").splitlines()]
+    assert sorted((one["sha256"], one["disclosure"], one["caselist"]) for one in recorded) == sorted(
+        (one["sha256"], one["disclosure"], one["caselist"]) for one in expected
+    )
+    assert rerun["data"]["withdrawals"] == [], "the re-run appends nothing"
+
+
+def manifest_versions(client: S3Client, key: str) -> set[str]:
+    listed = client.list_object_versions(Bucket=BUCKET, Prefix=key)
+    return {str(one.get("VersionId")) for one in listed.get("Versions", []) if one.get("Key") == key}
+
+
+def test_the_jsons_sweep_count_is_the_plan_lines_and_what_the_execution_deletes(
+    installation: Path, bucket: S3Client, an_old_manifest_version: str
+) -> None:
+    text = invoke(*REMOVE_FIRST_VERSION, width=200).stdout
+    planned = run(*REMOVE_FIRST_VERSION)
+    before = manifest_versions(bucket, an_old_manifest_version)
+    environment(DEBATE_REMOVAL_PROFILE=REMOVAL_PROFILE)
+    done = run(*REMOVE_FIRST_VERSION, "--execute")
+    after = manifest_versions(bucket, an_old_manifest_version)
+
+    assert planned["data"].get("manifest_versions_swept") == {
+        "total": 1,
+        "by_manifest": {an_old_manifest_version: 1},
+    }
+    assert (
+        "MANIFEST VERSIONS SWEPT from the bucket by --execute: 1 noncurrent version(s) of 1 manifest(s)."
+        in text.splitlines()
+    )
+    assert f"  bucket {an_old_manifest_version}  (1 version(s))" in text.splitlines()
+    assert done["exit_code"] == ExitCode.OK, done
+    assert len(before - after) == planned["data"]["manifest_versions_swept"]["total"]
+    assert after <= before, "the sweep put nothing new at the key"
+
+
+def test_a_plan_that_may_not_list_versions_says_the_sweep_was_not_counted(
+    installation: Path, bucket: S3Client, removed_with_its_later_upload: None, s3_stand_in: S3StandIn
+) -> None:
+    """The bucket refuses the listing as S3 refuses a call the permission set does not grant."""
+    s3_stand_in.refuse("ListObjectVersions", status=403, code="AccessDenied", message="Access Denied")
+
+    text = invoke(*REMOVE_FIRST_VERSION, width=200).stdout
+    planned = run(*REMOVE_FIRST_VERSION)
+
+    assert planned["data"].get("manifest_versions_swept") == "not counted"
+    assert "MANIFEST VERSIONS SWEPT from the bucket by --execute: not counted." in text.splitlines()
+
+
+# ------------------------------------------------------------------------------------------------
+# v1-e30-t24: a withdrawn copy left fails status; an upload refused at import is owed after it goes
+# ------------------------------------------------------------------------------------------------
+
+WITHDRAWN_COPY = hashlib.sha256(b"a copy a withdrawal took from testcl26, put back").hexdigest()
+WITHDRAWN_FROM = disclosure_of("Seaside/ZZ/Seaside-ZZ-Neg-Fictional Invitational-Round 9.docx")
+WITHDRAWAL_REQUEST = "RM-2026-07"
+
+
+def a_withdrawal_left_its_copy(installation: Path, bucket: S3Client, *, recorded: bool = True) -> None:
+    """What a withdrawal from `testcl26` leaves when its takedown stopped before the caselist's copy:
+    the list's entry for the path it was withdrawn from, the withdrawal record's line naming
+    `testcl26`, no manifest row of the file, and its copy still under `raw/caselist/testcl26/`.
+    Written as a build since `v1-e30-t16` writes them. Without `recorded`, as an earlier build leaves
+    it: the entry and no record."""
+    suppression = installation / "dev" / "suppression"
+    suppression.mkdir(parents=True, exist_ok=True)
+    when = {
+        "recorded_at": "2026-10-01T12:00:00Z",
+        "reason": "REQUESTED_BY_TEAM",
+        "request_id": WITHDRAWAL_REQUEST,
+    }
+    entry = {
+        "schema_version": 1,
+        "action": "SUPPRESS",
+        "sha256": WITHDRAWN_COPY,
+        "disclosure": WITHDRAWN_FROM,
+    }
+    (suppression / "suppression-list.jsonl").write_text(json.dumps(entry | when) + "\n", encoding="utf-8")
+    if recorded:
+        line = {"schema_version": 1, "sha256": WITHDRAWN_COPY, "disclosure": WITHDRAWN_FROM}
+        (suppression / "withdrawals.jsonl").write_text(
+            json.dumps(line | {"caselist": SYNTHETIC_CASELIST} | when) + "\n", encoding="utf-8"
+        )
+    digest = WITHDRAWN_COPY
+    key = f"raw/caselist/{SYNTHETIC_CASELIST}/sha256/{digest[:2]}/{digest[2:4]}/{digest}"
+    bucket.put_object(Bucket=BUCKET, Key=key, Body=b"left")
+
+
+def test_a_withdrawn_copy_left_in_a_caselist_that_keeps_no_holder_fails_status_as_removal_residue(
+    installation: Path, bucket: S3Client, published: Any
+) -> None:
+    """The PM's ruling on `v1-e30-t19`'s question 1: an unfinished removal, like a removed file's residue."""
+    a_withdrawal_left_its_copy(installation, bucket)
+
+    status = run("caselist", "status")
+    told = invoke("caselist", "status", width=400)
+
+    assert status["exit_code"] == ExitCode.DOMAIN_FAILURE, status
+    error = status["error"]
+    assert error["code"] == "REMOVAL_RESIDUE"
+    assert error["details"]["withdrawn_copies_left"] == [
+        {
+            "caselist": SYNTHETIC_CASELIST,
+            "sha256_prefix": WITHDRAWN_COPY[:12],
+            "request_id": WITHDRAWAL_REQUEST,
+            "current_objects": 1,
+            "noncurrent_versions": 0,
+            "delete_markers": 0,
+        }
+    ]
+    assert f"withdrawn from {SYNTHETIC_CASELIST} (sha256 {WITHDRAWN_COPY[:12]}, {WITHDRAWAL_REQUEST})" in (
+        " ".join(error["message"].split())
+    )
+    assert told.exit_code == ExitCode.DOMAIN_FAILURE
+    assert "REMOVAL_RESIDUE" in told.output and WITHDRAWN_COPY not in told.output
+
+
+def test_a_withdrawal_no_record_attributes_is_reported_and_status_still_exits_zero(
+    installation: Path, bucket: S3Client, published: Any
+) -> None:
+    """*NOT ATTRIBUTED* says what was not looked at, not that something was found."""
+    a_withdrawal_left_its_copy(installation, bucket, recorded=False)
+
+    status = run("caselist", "status")
+
+    assert status["exit_code"] == ExitCode.OK, status
+    assert status["data"]["withdrawals_not_attributed"] == [WITHDRAWAL_REQUEST]
+    assert status["data"]["withdrawn_copies_left"] == []
+
+
+def test_an_upload_refused_at_a_held_path_is_owed_after_its_archive_has_gone_until_the_rerun_lists_it(
+    installation: Path, bucket: S3Client, published: Any
+) -> None:
+    """`v1-e30-t24`, item 3. Next week's archive is imported from outside the inbox, the state its
+    take-out or retention leaves, so only the held-digest record still knows the upload."""
+    data_dir = installation / "dev"
+    environment(DEBATE_REMOVAL_PROFILE=REMOVAL_PROFILE)
+    assert run(*REMOVE_REVISION, "--execute")["exit_code"] == ExitCode.OK
+    environment(DEBATE_REMOVAL_PROFILE=None)
+    imported = import_next_week(next_weeks_archive(installation / "next-week"))
+    assert imported["data"]["held_at_removed_paths"] == {"RM-2026-03": 1}, imported
+    assert not list((data_dir / "inbox").glob("*.zip")), "nothing waits in the inbox"
+    assert run("caselist", "publish", "--caselist", SYNTHETIC_CASELIST)["exit_code"] == ExitCode.OK
+
+    owed = raw_json("caselist", "status")
+    told = invoke("caselist", "status", width=400).stdout
+
+    data = json.loads(owed)["data"]
+    assert (data["in_sync"], data["removals_owed"], data["held_in_inbox"][0]["uploads"]) == (
+        True,
+        ["RM-2026-03"],
+        0,
+    )
+    assert data["refused_at_import"] == [
+        {
+            "caselist": SYNTHETIC_CASELIST,
+            "uploads": 1,
+            "sha256_prefixes": [UPLOADED_AFTER[:12]],
+            "requests": ["RM-2026-03"],
+        }
+    ]
+    assert (
+        f"REFUSED AT IMPORT AT A HELD PATH in {SYNTHETIC_CASELIST}: 1 upload(s) the same removal has not yet "
+        f"listed (sha256 {UPLOADED_AFTER[:12]}, RM-2026-03)."
+    ) in " ".join(told.split())
+    assert not [name for name in (*IDENTIFYING, NEXT_WEEK, HELD_PATH) if name in owed + told]
+
+    again = run(*REMOVE_REVISION)
+    assert [
+        (one["sha256"], one["inclusion"])
+        for one in again["data"]["sources"]
+        if one["sha256"] == UPLOADED_AFTER
+    ] == [(UPLOADED_AFTER, "held_at_import")]
+    environment(DEBATE_REMOVAL_PROFILE=REMOVAL_PROFILE)
+    assert run(*REMOVE_REVISION, "--execute")["exit_code"] == ExitCode.OK
+    finished = run("caselist", "status")
+    assert finished["exit_code"] == ExitCode.OK, finished
+    assert finished["data"]["removals_owed"] == [], "the re-run listed what status said was owed"
+
+
+# ------------------------------------------------------------------------------------------------
+# The landscape bundles' school views (v1-e32-t13)
+# ------------------------------------------------------------------------------------------------
+
+SCHOOL_VIEWS = ("schools.csv", "schools.md")
+CIRCUIT_WIDE = ("report.md", "positions.csv", "top_cards.csv", "impact_cards.csv", "trends.csv")
+
+
+def test_a_removal_takes_its_caselists_school_views_and_leaves_every_other_landscape_file(
+    installation: Path, bucket: S3Client, published: Any
+) -> None:
+    """Two snapshots' bundles of the team's caselist, and one of another's, on this machine and in the
+    bucket, each with the seven files v1-e32-t04 names (written out here by hand). The plan lists the
+    team's caselist's four school-view files on each side and the newest bundle to republish; the
+    execution deletes those and nothing else; and `caselist status` then has nothing to report."""
+    data_dir = installation / "dev"
+    bundles = [
+        (SYNTHETIC_CASELIST, "2026-09-08"),
+        (SYNTHETIC_CASELIST, "2026-09-15"),
+        ("othercl26", "2026-09-15"),
+    ]
+    keys = [
+        f"reports/landscape/{c}/{s}/{name}" for c, s in bundles for name in (*SCHOOL_VIEWS, *CIRCUIT_WIDE)
+    ]
+    for key in keys:
+        (data_dir / key).parent.mkdir(parents=True, exist_ok=True)
+        (data_dir / key).write_bytes(f"synthetic {key}\n".encode())
+        bucket.put_object(Bucket=BUCKET, Key=key, Body=f"synthetic {key}\n".encode())
+    taken = [
+        f"reports/landscape/{SYNTHETIC_CASELIST}/{snapshot}/{name}"
+        for snapshot in ("2026-09-08", "2026-09-15")
+        for name in SCHOOL_VIEWS
+    ]
+
+    planned = run(*REMOVE)
+
+    assert planned["exit_code"] == ExitCode.OK, planned
+    views = planned["data"]["school_views"]
+    assert [(one["side"], one["key"]) for one in views["files"]] == [
+        *(("local", key) for key in taken),
+        *(("bucket", key) for key in taken),
+    ]
+    assert views["republish"] == [{"caselist": SYNTHETIC_CASELIST, "snapshot": "2026-09-15"}]
+
+    environment(DEBATE_REMOVAL_PROFILE=REMOVAL_PROFILE)
+    done = run(*REMOVE, "--execute")
+
+    assert done["exit_code"] == ExitCode.OK, done
+    assert done["data"]["school_views_deleted"] == {"local_files": 4, "bucket_versions": 4}
+    left_here = {key for key in keys if (data_dir / key).exists()}
+    left_there = {key for key, _ in versions(bucket) if key.startswith("reports/landscape/")}
+    assert left_here == left_there == set(keys) - set(taken)
+    for key in sorted(left_here):
+        assert (data_dir / key).read_bytes() == f"synthetic {key}\n".encode()
+    assert run("caselist", "status")["exit_code"] == ExitCode.OK

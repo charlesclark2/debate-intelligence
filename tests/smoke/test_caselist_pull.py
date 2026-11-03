@@ -39,6 +39,7 @@ from tests.fixtures.caselist.build_synthetic_archives import (
 )
 from tests.fixtures.caselist.publish_expectations import expected_publish
 from tests.fixtures.identity_center_roles import EVERYDAY_ROLE, TAKEDOWN_ROLE, sign_in
+from tests.fixtures.model_routing import EXAMPLE_ROUTING_FILE
 from tests.fixtures.openev.build_synthetic_openev import DOCUMENT_BODIES
 from tests.fixtures.permissions import needs_permissions, refused
 from tests.smoke.installed_build import InstalledCli
@@ -122,7 +123,7 @@ def installation(
         # The parse stage is on, as it is for the agent (`v1-e34-t17`). One worker, so that each
         # pull here starts one process and not the machine's cores less one.
         "[parse]\nworkers = 1\n"
-        f'[models]\nrouting_file = "{tmp_path / "routing.yaml"}"\nbudget_usd_daily = 1.0\n',
+        f'[models]\nrouting_file = "{EXAMPLE_ROUTING_FILE}"\nbudget_usd_daily = 1.0\n',
         encoding="utf-8",
     )
     installed_cli.configure(
@@ -266,7 +267,9 @@ def test_a_weekly_pull_downloads_imports_publishes_and_then_finds_nothing_new(
     three synthetic weeks come to 14 distinct source objects — plus one for the camp file, whose
     bytes no archive holds. The complete archive the rotation fetches after the weeklies
     (`v1-e34-t04`, on by default) holds the 09-15 week's bytes, every one of which the weeklies
-    already uploaded, so it adds a manifest and no source.
+    already uploaded, so it adds a manifest and no source. The count includes the manifests since
+    `v1-e34-t28`: one for each of the five snapshots imported, the three weeks, the camp release and
+    the complete archive.
     """
     expected = expected_publish()
 
@@ -281,12 +284,29 @@ def test_a_weekly_pull_downloads_imports_publishes_and_then_finds_nothing_new(
     data = pulled["data"]
     assert data["archives_downloaded"] == 3 + 1
     assert data["openev_downloaded"] == 1
-    assert data["objects_published"] == expected["totals"]["source_objects"] + 1
+    assert data["objects_published"] == expected["totals"]["source_objects"] + 1 + 5
+    assert data["manifests_published"] == 5
     assert data["snapshots_imported"] == [
         *(f"{SYNTHETIC_CASELIST} {week.snapshot.isoformat()}" for week in SNAPSHOTS),
         "openev 2026-policy",
         f"{SYNTHETIC_CASELIST} full/2026-09-15",
     ]
+    # Each stage's start and end, in the summary and in the run's details (v1-e40-t03); no volume
+    # is read without storage.volume_warning_percent, which only the cloud task sets.
+    every_stage = [
+        "select",
+        "download",
+        "import",
+        "publish",
+        "parse",
+        "search_index",
+        "landscape",
+        "report",
+        "retention",
+    ]
+    assert [one["stage"] for one in data["stage_times"]] == every_stage
+    assert [one["stage"] for one in data["run_details"]["stage_times"]] == every_stage
+    assert data["data_volume"] is None
 
     # The report confirmed every week in the bucket, so retention took them out of the inbox
     # (v1-e34-t11), and the summary names each by caselist and date.
@@ -524,7 +544,10 @@ def test_a_bucket_listing_that_does_not_answer_fails_publish_with_three_and_the_
     assert data["pending_publish"] == []
     assert data["archives_downloaded"] == 0 and data["openev_downloaded"] == 0
     assert not any(one.server == "files" for one in site.requests()[downloads:])
-    published = {one["Key"] for one in bucket.list_objects_v2(Bucket=BUCKET, Prefix="manifests/")["Contents"]}
+    published = {
+        str(one.get("Key"))
+        for one in bucket.list_objects_v2(Bucket=BUCKET, Prefix="manifests/").get("Contents", [])
+    }
     assert f"manifests/{SYNTHETIC_CASELIST}/{SNAPSHOTS[-1].snapshot.isoformat()}.jsonl" in published
 
 
@@ -579,7 +602,10 @@ def test_a_pending_work_file_that_cannot_be_read_fails_publish_with_one_and_is_l
     assert pulled["error"]["hint"].startswith(stages["publish"]["hint"])
     assert (installation / "data" / PENDING_WORK_FILE).read_bytes() == cut_short
     assert stages["report"]["outcome"] == "completed"
-    published = {one["Key"] for one in bucket.list_objects_v2(Bucket=BUCKET, Prefix="manifests/")["Contents"]}
+    published = {
+        str(one.get("Key"))
+        for one in bucket.list_objects_v2(Bucket=BUCKET, Prefix="manifests/").get("Contents", [])
+    }
     assert f"manifests/{SYNTHETIC_CASELIST}/2026-09-15.jsonl" in published
     assert "aws sso login" not in stage_text(pulled)
     assert str(installation) not in stage_text(pulled)

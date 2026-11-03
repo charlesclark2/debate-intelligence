@@ -25,11 +25,13 @@ import json
 import os
 import secrets
 from collections.abc import Iterator
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 import pytest
 from pydantic import SecretStr
+from tests.fixtures.model_routing import EXAMPLE_ROUTING_FILE
 from tests.smoke.installed_build import CliRun, InstalledCli
 from typer.testing import CliRunner, Result
 
@@ -48,6 +50,13 @@ runner = CliRunner()
 LIVE_SLUG = os.environ.get("CASELIST_LIVE_SLUG", "").strip()
 
 
+class WallClock:
+    """The real time, for the live check: what a live `Retry-After` date is measured from."""
+
+    def now(self) -> datetime:
+        return datetime.now(UTC)
+
+
 @pytest.fixture
 def installation(installed_cli: InstalledCli, tmp_path: Path) -> Iterator[Path]:
     """A dev profile of this check's own that keeps the token in a file, for the build under test."""
@@ -55,8 +64,9 @@ def installation(installed_cli: InstalledCli, tmp_path: Path) -> Iterator[Path]:
     profiles.mkdir()
     (profiles / "dev.toml").write_text(
         f'[storage]\ndata_dir = "{tmp_path / "data"}"\n'
-        f'[models]\nrouting_file = "{tmp_path / "routing.yaml"}"\nbudget_usd_daily = 1.0\n'
-        '[caselist]\ntoken_backend = "file"\n',
+        f'[models]\nrouting_file = "{EXAMPLE_ROUTING_FILE}"\nbudget_usd_daily = 1.0\n'
+        # No notifier: a refused `renew` below must not put a banner on the Mac running the suite.
+        '[caselist]\ntoken_backend = "file"\nnotifier = "none"\n',
         encoding="utf-8",
     )
     installed_cli.configure(DEBATE_PROFILE_DIR=str(profiles), DEBATE_ENV="dev", DEBATE_STORAGE__DATA_DIR=None)
@@ -118,6 +128,25 @@ def test_login_is_refused_while_the_api_is_disabled(installed_cli: InstalledCli,
     assert json.loads(result.stdout.strip().splitlines()[-1])["error"]["code"] == "CASELIST_API_DISABLED"
 
 
+def test_set_password_is_refused_without_a_terminal_before_any_prompt(
+    installed_cli: InstalledCli, installation: Path
+) -> None:
+    """The password is only ever typed into a terminal: a pipe is refused before anything is asked."""
+    result = installed_cli.run("--json", "caselist", "auth", "set-password", stdin="nobody\nx\nx\n")
+
+    assert result.exit_code == ExitCode.DOMAIN_FAILURE, result.stdout + result.stderr
+    assert json.loads(result.stdout.strip().splitlines()[-1])["error"]["code"] == "NO_TERMINAL"
+    assert "Tabroom password" not in result.stderr
+
+
+def test_renew_is_refused_while_the_api_is_disabled(installed_cli: InstalledCli, installation: Path) -> None:
+    """The cloud login's command, in a build whose profile keeps the API off, reads no secret."""
+    result = installed_cli.run("--json", "caselist", "auth", "renew")
+
+    assert result.exit_code == ExitCode.DOMAIN_FAILURE, result.stdout + result.stderr
+    assert json.loads(result.stdout.strip().splitlines()[-1])["error"]["code"] == "CASELIST_API_DISABLED"
+
+
 # ------------------------------------------------------------------------------------------------
 # Live, opt-in: the operator's real token against the real API. Lists only; never downloads.
 # ------------------------------------------------------------------------------------------------
@@ -146,6 +175,7 @@ def test_live_the_stored_token_works_and_the_archives_list() -> None:
                 secret_file=settings.caselist.secret_file or default_secret_file(settings.storage.data_dir),
             ),
             user_agent_version=package_version(),
+            wall_clock=WallClock(),
         ) as client:
             return [archive.name for archive in await client.list_archives(LIVE_SLUG)]
 

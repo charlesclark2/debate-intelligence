@@ -1,0 +1,81 @@
+# TASK v1-e41-t08-run-shaped-strings-read-wherever-they-stand - Test selection reads a run-shaped string in an f-string or a comparison, and a shell script's quoted command words
+# Epic: E41 — Delivery Tooling Upkeep | Release: v1.8 (Weekly caselist run in the cloud) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e41-t08-run-shaped-strings-read-wherever-they-stand
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.8
+    debate/epic: v1-e41-delivery-tooling-upkeep
+  annotations:
+    debate/title: "Test selection reads a run-shaped string in an f-string or a comparison, and a shell script's quoted command words"
+spec:
+  # Filed by the PM, 2026-11-01, from v1-e01-t44's Follow-up work 1, 2 and 3 (the PM's review, 2026-11-01).
+  description: >-
+    After v1-e01-t44, 27 of the 62 files that reach every command do so through a mention.
+    Thirteen are messages that start with the program, which are runs as ruled, but t39's
+    argument reading does not read them where they stand: an f-string's literal head
+    (`f"debate-research caselist parse --caselist {x} ..."`) or a string in a comparison
+    (`assert "debate-research caselist pull" in output`), so they reach every command instead of
+    their own. Read those words. Three more use the program's name alone as a name (a user
+    agent, an author): make the name alone a run only where a program is started from (an
+    argument list's first element, a call's positional argument, an operand of `/`), with its
+    own mutants. And strip quotes from a shell script's command words before matching
+    (`debate-research caselist 'remove'` names `caselist remove`), which is latent today but in
+    the forbidden direction.
+  priority: 3
+  constraints:
+    packages: [scripts, tests/scripts]
+    forbidden:
+      - A test that runs the app left unselected
+  context:
+    - kind: TaskRef
+      name: v1-e01-t44-cli-mention-in-a-message-is-prose
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        Over t44's measured diffs, the 13 message files reach their own command rather than
+        every command, the 3 name-only files reach none, a quoted command word in a shell
+        script is read, every after-list is a subset of before, and a run check over the
+        dropped files shows none starts the app on a changed command; tests shown failing
+        first.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e41-t08-run-shaped-strings-read-wherever-they-stand-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.8
+    debate/epic: v1-e41-delivery-tooling-upkeep
+spec:
+  description: >-
+    Test selection reads a run-shaped string in an f-string or a comparison, and a shell
+    script's quoted command words.
+  goalRef:
+    name: v1-e41-t08-run-shaped-strings-read-wherever-they-stand
+  graph:
+    nodes:
+      - id: run-shaped-strings-read-wherever-they-st
+        kind: Task
+        name: Run-shaped strings
+        description: >-
+          Test selection reads a run-shaped string in an f-string or a comparison, and a
+          shell script's quoted command words.
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Run-shaped strings tests pass
+            command: uv
+            args: [run, pytest, tests/scripts, -k, affected]
+status:
+  phase: Pending

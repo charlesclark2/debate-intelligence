@@ -263,10 +263,22 @@ class CaselistAuthExpired(DomainError):
         self.operation = operation
         """What was being done, e.g. `list archives for hsld26`. Never a URL or a path."""
         super().__init__(
-            f"OpenCaselist refused {operation} with HTTP {status_code}; the caselist_token has "
-            "expired or been revoked. Run `debate-research caselist auth login` again. If it "
+            f"{self.refusal} Run `debate-research caselist auth login` again. If it "
             "happens straight after a login, stop and tell the operator: access may have been "
             "suspended (policy clause 10)."
+        )
+
+    @property
+    def refusal(self) -> str:
+        """What was refused and why, without the Mac's login: the message's first sentence (`v1-e40-t35`).
+
+        A property, so that it is not one of the details the CLI reports from the error's attributes.
+        A bucket-mode run says this alone (:func:`~debate_core.application.caselist_sync.message_for`):
+        the cloud run's token is the one the Wednesday login renews, and a login by hand is a second one.
+        """
+        return (
+            f"OpenCaselist refused {self.operation} with HTTP {self.status_code}; the caselist_token has "
+            "expired or been revoked."
         )
 
 

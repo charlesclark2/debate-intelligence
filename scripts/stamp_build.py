@@ -18,14 +18,27 @@ What `stamp` does, and why:
 * **Build info.** Writes `debate_cli/_build_info.py` (version, channel, commit, build time, workflow
   run, tag), which `debate_cli.build_info` and `debate-research --version` read, and the same
   values to `<dist>/build-info.json`, a release asset.
-* **Configuration.** Copies the committed `config/profiles/*.toml` and `config/model_routing.*.yaml`
-  into `debate_cli/_bundled_config/config/`, so an installed build reads the profiles it was built
-  and validated with (including the `[caselist] api_enabled` gate) from any working directory.
+* **Configuration.** Copies the committed `config/profiles/*.toml`, `config/model_routing.*.yaml`
+  and `config/model_pricing.yaml` into `debate_cli/_bundled_config/config/`, so an installed build
+  reads the profiles it was built and validated with (including the `[caselist] api_enabled` gate)
+  from any working directory, and prices its model calls from the pricing file beside its routing
+  files: without it, a call under a budget limit is refused as unpriced (v1-e05-t12). The card
+  format profiles, `config/format_profiles/*.yaml`, go beside them, and the reviewed prompts, every
+  `prompts/**/*.md` but a README with `prompts/prompts.lock.json`, into
+  `debate_cli/_bundled_config/prompts/`: `cut` loads its prompt registry and its `--format` profile
+  from those copies (v1-e06-t06). `search` reads `config/argument_taxonomy.yaml`,
+  `config/federated_ranking.yaml` and every `config/feeds/*.yaml` from the same place, so they are
+  bundled too, unchanged, and a checkout without them is refused (v1-e08-t09).
 
 `check-wheels` refuses a build that is not exactly the two expected wheels at the stamped version,
-whose debate_cli does not pin debate_core, that lacks the build info or bundled profiles, or that
-contains anything that looks like a secret or local data: `.env` files, a `secrets/` directory, a
-`caselist_token`, SQLite files, a `.debate-research` data directory.
+whose debate_cli does not pin debate_core, that lacks the build info, the bundled profiles, routing
+files, pricing file, `cut`'s two prompts or its default format profile, `search`'s taxonomy, ranking
+table, `--expand-llm` prompt or any feed list the checkout commits, or that contains anything that
+looks like a secret or local data: `.env` files, a `secrets/` directory, a `caselist_token`, SQLite
+files and their sidecars, a `.debate-research` data directory, a `tests/` or `fixtures/` directory, a
+test module (`conftest.py`, `test_*.py`), or a `.docx` other than the file writer's template, which
+would be a debate file (v1-e09-t06). It runs in the checkout the wheels were built from
+(`--repository`), and refuses when that checkout commits no feed list to compare with.
 
 Standard library only.
 """
@@ -53,6 +66,8 @@ CLI_PACKAGE = Path("packages/debate_cli/src/debate_cli")
 BUILD_INFO_MODULE = CLI_PACKAGE / "_build_info.py"
 BUNDLED_CONFIG = CLI_PACKAGE / "_bundled_config"
 BUILD_INFO_ASSET = "build-info.json"
+PROMPTS = Path("prompts")
+PROMPT_LOCK = "prompts.lock.json"
 
 CHANNELS = ("dev", "stable")
 PEP440_RELEASE_OR_DEV = re.compile(r"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(\.dev[1-9]\d*)?$")
@@ -68,10 +83,31 @@ REQUIRED_CLI_MEMBERS = (
     "debate_cli/_bundled_config/config/profiles/prod.toml",
     "debate_cli/_bundled_config/config/model_routing.dev.yaml",
     "debate_cli/_bundled_config/config/model_routing.prod.yaml",
+    "debate_cli/_bundled_config/config/model_pricing.yaml",
+    "debate_cli/_bundled_config/config/format_profiles/team-default.yaml",
+    "debate_cli/_bundled_config/prompts/card/select.md",
+    "debate_cli/_bundled_config/prompts/card/markup.md",
+    "debate_cli/_bundled_config/config/argument_taxonomy.yaml",
+    "debate_cli/_bundled_config/config/federated_ranking.yaml",
+    "debate_cli/_bundled_config/prompts/search/expand.md",
 )
+"""Every wheel's fixed members; :func:`required_cli_members` adds the feed lists the checkout commits."""
+
+SEARCH_CONFIGURATION = ("argument_taxonomy.yaml", "federated_ranking.yaml")
+"""What `search` reads from `config/` beside the feed lists: its taxonomy and its ranking table."""
+FEEDS = "feeds"
+"""`config/feeds/`, every topic's feed list, read whole by the `rss` and `google_news` providers."""
 
 FORBIDDEN_DIRECTORY_NAMES = frozenset({"secrets", ".debate-research", ".data", ".venv"})
 FORBIDDEN_SUFFIXES = (".sqlite", ".sqlite3", ".db")
+DATABASE_SIDECARS = ("-wal", "-shm", "-journal")
+"""What SQLite writes beside a database file, which holds its rows as much as the file does."""
+FIXTURE_DIRECTORY_NAMES = frozenset({"tests", "fixtures"})
+"""Directories of test code and recorded fixtures (v1-e09-t06): `debate_core.testing`, the shared
+fakes and contract suites other packages' tests import, is code and ships."""
+DOCX_TEMPLATE_DIRECTORY = "templates"
+"""The one place a wheel carries a .docx: the file writer's starting document. Any other .docx is a
+debate file, and team evidence never ships."""
 
 
 class StampError(Exception):
@@ -132,20 +168,54 @@ def render_build_info_module(info: Mapping[str, str]) -> str:
 
 
 def bundle_configuration(repository: Path) -> list[Path]:
-    """Copy the committed profiles and routing files into the CLI package; return what was copied."""
+    """Copy the committed profiles, routing, pricing and format profile files, what `search` reads and
+    the prompts into the CLI package; return them."""
     source = repository / "config"
     destination = repository / BUNDLED_CONFIG / "config"
     if destination.parent.exists():
         shutil.rmtree(destination.parent)
-    (destination / "profiles").mkdir(parents=True)
+    for subdirectory in ("profiles", "format_profiles", FEEDS):
+        (destination / subdirectory).mkdir(parents=True)
     copied: list[Path] = []
-    for pattern, subdirectory in (("profiles/*.toml", "profiles"), ("model_routing.*.yaml", "")):
+    for pattern, subdirectory in (
+        ("profiles/*.toml", "profiles"),
+        ("model_routing.*.yaml", ""),
+        ("model_pricing.yaml", ""),
+        ("format_profiles/*.yaml", "format_profiles"),
+        *((name, "") for name in SEARCH_CONFIGURATION),
+        (f"{FEEDS}/*.yaml", FEEDS),
+    ):
         for file in sorted(source.glob(pattern)):
             target = destination / subdirectory / file.name
             shutil.copyfile(file, target)
             copied.append(target.relative_to(repository))
     if not any(path.name == "dev.toml" for path in copied):
         raise StampError(f"no config/profiles/dev.toml under {repository}; nothing to bundle")
+    names = {path.name for path in copied}
+    for name in SEARCH_CONFIGURATION:
+        if name not in names:
+            raise StampError(f"no config/{name} under {repository}; an installed build could not search")
+    if not any(path.parent.name == FEEDS for path in copied):
+        raise StampError(
+            f"no feed lists (config/{FEEDS}/*.yaml) under {repository}; an installed build could not search"
+        )
+    copied.extend(_bundle_prompts(repository))
+    return copied
+
+
+def _bundle_prompts(repository: Path) -> list[Path]:
+    """Copy every prompt file, at its place under `prompts/`, and the lock; READMEs are not prompts."""
+    source = repository / PROMPTS
+    destination = repository / BUNDLED_CONFIG / PROMPTS
+    files = sorted(path for path in source.rglob("*.md") if path.name != "README.md" and path.is_file())
+    if not files:
+        raise StampError(f"no prompts under {source}; an installed build could not cut a card")
+    copied: list[Path] = []
+    for file in [*files, source / PROMPT_LOCK]:
+        target = destination / file.relative_to(source)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(file, target)
+        copied.append(target.relative_to(repository))
     return copied
 
 
@@ -179,14 +249,22 @@ def forbidden_member(name: str) -> str | None:
     """Why a wheel member must not be published, or `None` if it is fine."""
     path = PurePosixPath(name)
     for part in path.parts[:-1]:
-        if part in FORBIDDEN_DIRECTORY_NAMES:
+        if part in FORBIDDEN_DIRECTORY_NAMES or part in FIXTURE_DIRECTORY_NAMES:
             return f"inside a {part}/ directory"
     if path.name == ".env" or path.name.startswith(".env."):
         return "a .env file"
     if "caselist_token" in path.name:
         return "a caselist_token file"
-    if path.name.endswith(FORBIDDEN_SUFFIXES):
+    if path.name.endswith(FORBIDDEN_SUFFIXES) or any(
+        path.name.endswith(suffix + sidecar) for suffix in FORBIDDEN_SUFFIXES for sidecar in DATABASE_SIDECARS
+    ):
         return "a database file"
+    if path.name == "conftest.py" or (
+        path.suffix == ".py" and (path.name.startswith("test_") or path.stem.endswith("_test"))
+    ):
+        return "a test module"
+    if path.suffix.lower() == ".docx" and path.parent.name != DOCX_TEMPLATE_DIRECTORY:
+        return "a debate file"
     return None
 
 
@@ -197,9 +275,30 @@ def _metadata(archive: zipfile.ZipFile) -> email.message.Message:
     return email.parser.Parser().parsestr(archive.read(names[0]).decode("utf-8"))
 
 
-def check_wheels(dist: Path, version: str) -> list[str]:
-    """Every reason the wheels in `dist` are not publishable as `version`; empty when they are."""
+def committed_feed_lists(repository: Path) -> list[str]:
+    """The names of the feed lists `repository` commits, `config/feeds/*.yaml`, sorted."""
+    return sorted(path.name for path in (repository / "config" / FEEDS).glob("*.yaml"))
+
+
+def required_cli_members(repository: Path) -> tuple[str, ...]:
+    """What the debate_cli wheel must carry: the fixed members and every feed list `repository` commits."""
+    return (
+        *REQUIRED_CLI_MEMBERS,
+        *(f"debate_cli/_bundled_config/config/{FEEDS}/{name}" for name in committed_feed_lists(repository)),
+    )
+
+
+def check_wheels(dist: Path, version: str, *, repository: Path = REPOSITORY_ROOT) -> list[str]:
+    """Every reason the wheels in `dist` are not publishable as `version`; empty when they are.
+
+    The feed lists required are those `repository` commits: the checkout the wheels were built from.
+    """
     problems: list[str] = []
+    if not committed_feed_lists(repository):
+        problems.append(
+            f"no committed feed lists under {repository / 'config' / FEEDS}; cannot tell whether the "
+            "wheel carries every one `search` reads"
+        )
     wheels = sorted(dist.glob("*.whl"))
     by_distribution = {wheel.name.split("-", 1)[0]: wheel for wheel in wheels}
     if sorted(by_distribution) != sorted(WHEEL_DISTRIBUTIONS) or len(wheels) != len(WHEEL_DISTRIBUTIONS):
@@ -229,7 +328,9 @@ def check_wheels(dist: Path, version: str) -> list[str]:
                 )
             members = set(archive.namelist())
             problems.extend(
-                f"{wheel.name}: missing {member}" for member in REQUIRED_CLI_MEMBERS if member not in members
+                f"{wheel.name}: missing {member}"
+                for member in required_cli_members(repository)
+                if member not in members
             )
             if "debate_cli/_build_info.py" in members:
                 stamped = _stamped_build_info(archive.read("debate_cli/_build_info.py").decode("utf-8"))
@@ -270,6 +371,9 @@ def _parser() -> argparse.ArgumentParser:
     check = commands.add_parser("check-wheels", help="refuse wheels that are not publishable")
     check.add_argument("--version", required=True)
     check.add_argument("--dist", type=Path, required=True)
+    check.add_argument(
+        "--repository", type=Path, default=REPOSITORY_ROOT, help="the checkout the wheels were built from"
+    )
     return parser
 
 
@@ -289,7 +393,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             for path in stamp(arguments.repository, info, arguments.dist):
                 print(f"stamped {path}")
             return 0
-        problems = check_wheels(arguments.dist, arguments.version)
+        problems = check_wheels(arguments.dist, arguments.version, repository=arguments.repository)
         for problem in problems:
             print(f"stamp_build: {problem}", file=sys.stderr)
         if problems:

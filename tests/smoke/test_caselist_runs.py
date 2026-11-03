@@ -29,11 +29,13 @@ from tests.fixtures.caselist.build_synthetic_archives import (
     SYNTHETIC_CASELIST,
     build_snapshot_zips,
 )
+from tests.fixtures.model_routing import EXAMPLE_ROUTING_FILE
 from tests.smoke.installed_build import InstalledCli
 from tests.smoke.stand_ins.opencaselist import OpenCaselistStandIn
 from tests.smoke.stand_ins.s3 import MOTO_TEST_CREDENTIALS, S3StandIn
 
 from debate_cli.exit_codes import ExitCode
+from debate_core.application.caselist_sync import LOCK_FILENAME, RunLock
 
 if TYPE_CHECKING:  # pragma: no cover - import for the type checker only
     from mypy_boto3_s3.client import S3Client
@@ -80,7 +82,7 @@ def installation(
         'notifier = "none"\n'
         f'sync_caselists = ["{SYNTHETIC_CASELIST}"]\n'
         "min_request_interval_seconds = 0.5\n"
-        f'[models]\nrouting_file = "{tmp_path / "routing.yaml"}"\nbudget_usd_daily = 1.0\n',
+        f'[models]\nrouting_file = "{EXAMPLE_ROUTING_FILE}"\nbudget_usd_daily = 1.0\n',
         encoding="utf-8",
     )
     installed_cli.configure(
@@ -128,9 +130,17 @@ def run(installed_cli: InstalledCli) -> Any:
 def test_a_pull_is_listed_by_caselist_runs_locally_and_from_the_bucket(
     installation: Path, bucket: S3Client, site: OpenCaselistStandIn, run: Any, installed_cli: InstalledCli
 ) -> None:
+    # This world parses no camp store, so the search index stage would fail on `openev` every run;
+    # it is about the run log, not the index (PM ruling 2026-10-20, v1-e39-t09 Q6).
+    installed_cli.configure(DEBATE_CASELIST__REFRESH_SEARCH_INDEX="false")
     pulled = run("caselist", "pull")
     assert pulled["exit_code"] == ExitCode.OK
     run_id = pulled["data"]["run_id"]
+    [index_stage] = [one for one in pulled["data"]["stages"] if one["stage"] == "search_index"]
+    assert (index_stage["outcome"], index_stage["reason"].split(" (")[0]) == (
+        "skipped",
+        "turned off by setting",
+    )
 
     local = run("caselist", "runs", "--last", "5")
     remote = run("caselist", "runs", "--last", "5", "--remote")
@@ -175,11 +185,39 @@ def test_a_pull_is_listed_by_caselist_runs_locally_and_from_the_bucket(
     assert json.loads(bucket.get_object(Bucket=BUCKET, Key=beside)["Body"].read())["parse"] == counted
     stored = json.loads(bucket.get_object(Bucket=BUCKET, Key=key)["Body"].read())
     jsonschema.Draft202012Validator(json.loads(INSTALLED_BUILDS_RECORD.read_text("utf-8"))).validate(stored)  # pyright: ignore[reportUnknownMemberType]
-    under_the_records = bucket.list_objects_v2(Bucket=BUCKET, Prefix="reports/sync-runs/")["Contents"]
-    assert [one["Key"] for one in under_the_records] == [key], "an older build lists this prefix"
+    under_the_records = bucket.list_objects_v2(Bucket=BUCKET, Prefix="reports/sync-runs/").get("Contents", [])
+    assert [one.get("Key") for one in under_the_records] == [key], "an older build lists this prefix"
 
     rendered = installed_cli.run("caselist", "runs", env={"COLUMNS": "200"})
     table = " ".join(rendered.stdout.split())
     assert "Parse stage" in table
+    # `v1-e34-t23`: the codes the run failed on and its verdict, from the same details: none here.
+    assert "Failed on" in table and "Verdict" in table
+    assert f"{run_id} │" in table and "│ completed │ none │ none │" in table
     assert f"{counted['caselists']} caselist(s), {counted['full_parses']} in full" in table
     assert f"{counted['cards']} card(s)" in table
+    for listed in (local, remote):
+        [record] = listed["data"]["runs"]
+        assert record["banner"] is None, (
+            "`v1-e34-t26`: no words of a banner's own for a run that did not fail"
+        )
+
+
+def test_a_pull_the_lock_refused_is_listed_with_its_banners_word(
+    installation: Path, bucket: S3Client, site: OpenCaselistStandIn, run: Any, installed_cli: InstalledCli
+) -> None:
+    """`v1-e34-t26`, item 3: the run another held the lock against says `skipped` beside its verdict,
+    in the table and in `--json`, as its banner did. The lock is held here, from the test, on the file
+    the installed build's run takes it on."""
+    with RunLock(installation / "data" / LOCK_FILENAME):
+        refused = run("caselist", "pull")
+    assert refused["exit_code"] == ExitCode.DOMAIN_FAILURE, "the exit is untouched: 1"
+
+    [record] = run("caselist", "runs", "--last", "5")["data"]["runs"]
+    assert (record["error_class"], record["verdict"], record["banner"]) == (
+        "SyncRunInProgress",
+        "person",
+        "skipped",
+    )
+    table = " ".join(installed_cli.run("caselist", "runs", env={"COLUMNS": "200"}).stdout.split())
+    assert "│ SYNC_RUN_IN_PROGRESS │ person (skipped) │" in table

@@ -1,0 +1,19 @@
+# The plan-mechanism words (v1-e33-t14, the PM's ruling B of 2026-10-31 on v1-e33-t11): words that name
+# how a plan works on this topic. `files suggest` marks a counterplan draft's block whose heading holds
+# one, with "# Check this block against the affirmative's plan: its heading names a plank or mechanism
+# of a plan." above it, since its cards may make sense only against a plan with that mechanism.
+#
+# The list is yours to edit: add a word as you meet a block that depends on the plan. Lowercase letters,
+# with single hyphens between them (pre-empt), 3 to 32 characters, each listed once. A word is matched
+# whole in a block heading as the normalizer writes it, and so is its plural (the word with s or es):
+# waiver marks a block headed "Waivers", but waive does not mark "Waiver", and preempt does not mark
+# "Preemption", which is why both are listed. docs/guides/file-recipes.md says how the draft reads it.
+# Nothing else reads this file, so an edit needs no refill and no taxonomy bump. No team, school or
+# text is written here.
+schema_version: 1
+topic_id: policy-2026-27-nhi
+words:
+  - preempt
+  - preemption
+  - waiver
+  - waive

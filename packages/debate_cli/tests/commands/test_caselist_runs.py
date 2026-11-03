@@ -33,11 +33,12 @@ from debate_cli.exit_codes import ExitCode
 from debate_core.application.caselist_sync import DOWNLOAD_LEDGER_FILENAME, DownloadLedger
 from debate_core.application.sync_runs import (
     SYNC_RUN_LOG_FILENAME,
+    StageEntry,
     SyncRunLog,
     SyncRunOutcome,
     SyncRunRecord,
 )
-from debate_core.testing.fakes import FixedClock
+from debate_core.testing.fakes.clock_and_ids import FixedClock
 
 API = "https://api.opencaselist.example.invalid/v1"
 FILE_HOST = "https://files.opencaselist.example.invalid"
@@ -206,7 +207,11 @@ def test_runs_still_reads_the_run_log_a_schema_3_build_wrote(installation: Path)
     table = " ".join(invoke("caselist", "runs", "--last", "5").stdout.split())
     # Nothing was deferred by the cap, so the table shows the downloads as a plain count. The parse
     # stage's column says the run has no counts on record, which is not the same as none parsed.
-    assert "20260916T060000Z │ 2026-09-16 06:00 │ failed │ 2 │ 0 │ 0 │ not recorded" in table
+    # Since `v1-e34-t23` the codes and the verdict follow the outcome; an older build kept neither.
+    assert (
+        "20260916T060000Z │ 2026-09-16 06:00 │ failed │ not recorded │ not recorded │ 2 │ 0 │ 0 │ "
+        "not recorded" in table
+    )
 
 
 def test_runs_with_nothing_recorded_says_so_and_is_overdue(installation: Path) -> None:
@@ -444,3 +449,175 @@ def test_redact_an_expired_token_run_record_carries_neither_the_token_nor_a_path
     log_text = (installation / SYNC_RUN_LOG_FILENAME).read_text(encoding="utf-8")
     assert token not in log_text
     assert token not in json.dumps(as_json("caselist", "runs"))
+
+
+# ------------------------------------------------------------------------------------------------
+# `v1-e34-t23`, item 3: each run's codes and verdict, from its details
+# ------------------------------------------------------------------------------------------------
+
+
+def a_failed_record(started: datetime) -> SyncRunRecord:
+    return a_record(started).model_copy(update={"outcome": SyncRunOutcome.FAILED})
+
+
+def details_line(run_id: str, *failure_codes: str) -> str:
+    """A run's details as this build writes them, by hand: the codes its exit was decided from."""
+    return json.dumps(
+        {
+            "schema_version": 1,
+            "run_id": run_id,
+            "stages": [],
+            "failure_codes": list(failure_codes),
+            "hint": None,
+            "parse": None,
+        }
+    )
+
+
+def test_runs_shows_each_runs_codes_and_verdict_from_its_details(installation: Path) -> None:
+    """Four runs, newest first: one that failed only on what a retry may cure, one that met a verdict
+    among such failures, one that did not fail, and one an older build recorded with no details.
+    The verdict is the command's own rule for exit `3` (retry) against every other failure (person),
+    the rule the notification asks too."""
+    day = datetime.now(UTC).replace(microsecond=0) - timedelta(days=4)
+    retried, looked_at, fine, older = (
+        a_failed_record(day + timedelta(days=3)),
+        a_failed_record(day + timedelta(days=2)),
+        a_record(day + timedelta(days=1)),
+        a_failed_record(day),
+    )
+    log = SyncRunLog(installation / SYNC_RUN_LOG_FILENAME)
+    for record in (older, fine, looked_at, retried):
+        log.append(record)
+    (installation / DETAILS_FILE).write_text(
+        "\n".join(
+            (
+                details_line(fine.run_id),
+                details_line(looked_at.run_id, "UNREADABLE_ARCHIVE", "STORE_UNAVAILABLE"),
+                details_line(retried.run_id, "STORE_UNAVAILABLE"),
+            )
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    table = " ".join(invoke("caselist", "runs").stdout.split())
+
+    for heading in ("Failed on", "Verdict"):
+        assert heading in table
+    assert (
+        f"{retried.run_id} │ {retried.started_at:%Y-%m-%d %H:%M} │ failed │ STORE_UNAVAILABLE │ retry │"
+        in table
+    )
+    assert (
+        f"{looked_at.run_id} │ {looked_at.started_at:%Y-%m-%d %H:%M} │ failed │ UNREADABLE_ARCHIVE, "
+        "STORE_UNAVAILABLE │ person │"
+    ) in table
+    assert f"{fine.run_id} │ {fine.started_at:%Y-%m-%d %H:%M} │ completed │ none │ none │" in table
+    assert (
+        f"{older.run_id} │ {older.started_at:%Y-%m-%d %H:%M} │ failed │ not recorded │ not recorded │"
+        in table
+    )
+
+    runs = as_json("caselist", "runs")["data"]["runs"]
+    assert [(one["run_id"], one["verdict"]) for one in runs] == [
+        (retried.run_id, "retry"),
+        (looked_at.run_id, "person"),
+        (fine.run_id, None),
+        (older.run_id, None),
+    ]
+    assert [one["details"]["failure_codes"] if one["details"] else None for one in runs] == [
+        ["STORE_UNAVAILABLE"],
+        ["UNREADABLE_ARCHIVE", "STORE_UNAVAILABLE"],
+        [],
+        None,
+    ]
+
+
+def test_runs_shows_the_banners_own_words_beside_the_verdict(installation: Path) -> None:
+    """`v1-e34-t26`, item 3. Five runs, newest first: one the lock refused, a publish refused with a
+    fix, a run stopped by a refusal with a fix, a retry with no fix, and an older build's lock refusal
+    with no details. The first three banners had words of their own beside the verdict, and the table
+    and `--json` now say them: `skipped` and `retry once fixed`. A retry with no fix has none, and a
+    run with no details has none known."""
+    day = datetime.now(UTC).replace(microsecond=0) - timedelta(days=5)
+    locked = a_failed_record(day + timedelta(days=4)).model_copy(update={"error_class": "SyncRunInProgress"})
+    refused = a_failed_record(day + timedelta(days=3)).model_copy(
+        update={"stages": (StageEntry(stage="publish", outcome="failed"),)}
+    )
+    stopped = a_failed_record(day + timedelta(days=2)).model_copy(update={"error_class": "StoreAccessDenied"})
+    retried = a_failed_record(day + timedelta(days=1)).model_copy(
+        update={"stages": (StageEntry(stage="publish", outcome="failed"),)}
+    )
+    older = a_failed_record(day).model_copy(update={"error_class": "SyncRunInProgress"})
+    log = SyncRunLog(installation / SYNC_RUN_LOG_FILENAME)
+    for record in (older, retried, stopped, refused, locked):
+        log.append(record)
+    grant = "the AWS profile lacks a grant for this; docs/runbooks/evidence-store.md lists what each has"
+    (installation / DETAILS_FILE).write_text(
+        "\n".join(
+            (
+                details_line(locked.run_id, "SYNC_RUN_IN_PROGRESS"),
+                json.dumps(
+                    {
+                        "schema_version": 1,
+                        "run_id": refused.run_id,
+                        "stages": [
+                            {"stage": "publish", "error_codes": ["STORE_ACCESS_DENIED"], "hint": grant}
+                        ],
+                        "failure_codes": ["STORE_ACCESS_DENIED"],
+                    }
+                ),
+                json.dumps(
+                    {
+                        "schema_version": 1,
+                        "run_id": stopped.run_id,
+                        "failure_codes": ["STORE_ACCESS_DENIED"],
+                        "hint": grant,
+                    }
+                ),
+                json.dumps(
+                    {
+                        "schema_version": 1,
+                        "run_id": retried.run_id,
+                        "stages": [{"stage": "publish", "error_codes": ["STORE_UNAVAILABLE"]}],
+                        "failure_codes": ["STORE_UNAVAILABLE"],
+                    }
+                ),
+            )
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    table = " ".join(invoke("caselist", "runs").stdout.split())
+
+    assert (
+        f"{locked.run_id} │ {locked.started_at:%Y-%m-%d %H:%M} │ failed (SyncRunInProgress) │ "
+        "SYNC_RUN_IN_PROGRESS │ person (skipped) │"
+    ) in table
+    assert (
+        f"{refused.run_id} │ {refused.started_at:%Y-%m-%d %H:%M} │ failed │ STORE_ACCESS_DENIED │ "
+        "retry (retry once fixed) │"
+    ) in table
+    assert (
+        f"{stopped.run_id} │ {stopped.started_at:%Y-%m-%d %H:%M} │ failed (StoreAccessDenied) │ "
+        "STORE_ACCESS_DENIED │ retry (retry once fixed) │"
+    ) in table
+    assert (
+        f"{retried.run_id} │ {retried.started_at:%Y-%m-%d %H:%M} │ failed │ STORE_UNAVAILABLE │ retry │"
+        in table
+    )
+    assert (
+        f"{older.run_id} │ {older.started_at:%Y-%m-%d %H:%M} │ failed (SyncRunInProgress) │ not recorded │ "
+        "not recorded │"
+    ) in table
+
+    runs = as_json("caselist", "runs")["data"]["runs"]
+    assert [(one["run_id"], one["verdict"], one["banner"]) for one in runs] == [
+        (locked.run_id, "person", "skipped"),
+        (refused.run_id, "retry", "retry once fixed"),
+        (stopped.run_id, "retry", "retry once fixed"),
+        (retried.run_id, "retry", None),
+        (older.run_id, None, None),
+    ]

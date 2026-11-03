@@ -61,5 +61,5 @@ check "cloudtrail_trusted_access_enabled" {
 }
 
 # The budgets and the anomaly monitor filter on the Project and Environment cost allocation
-# tags. Those tags must be activated by hand in Billing before they report real numbers, and no
-# AWS provider resource can activate them, so the runbook carries that step and its verification.
+# tags, which report real numbers only once they are activated. modules/cost_allocation_tags keeps
+# them Active (budgets.tf); the runbook's step 5 says when a new account's keys can be activated.

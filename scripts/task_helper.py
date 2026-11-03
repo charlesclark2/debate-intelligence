@@ -8,8 +8,10 @@ Kept in Python so the shell script stays small and portable (macOS ships bash 3.
 Every subcommand reads the specs of the checkout it is run from.
 
   info    <task>                 print tab-separated: spec_path, title, epic, release, phase
-  prereqs <task>                 list prerequisites and their phase; exit 1 if any is not Succeeded
-  ready                          list Pending tasks whose prerequisites are all Succeeded
+  prereqs <task>                 list prerequisites and their phase; exit 1 if any is not Succeeded,
+                                 2 if any is not a task spec
+  ready                          list Pending tasks whose prerequisites are all Succeeded; a task with a
+                                 prerequisite that is not a task spec is left out, and stderr says so
   set-phase <task> <phase>       set the task Goal's status.phase in place
   prompt  <task> <worktree>      render the kickoff prompt for the task's Claude session
   prompt-resumed <task> <worktree>
@@ -20,13 +22,17 @@ Every subcommand reads the specs of the checkout it is run from.
   open-items <task>              print the open-item markers in the current session's part of the
                                  session report; exit 1 if there are none
   pr-body <task>                 render the pull request body
+  validate-dev-status            print dev's head and its latest validate-dev status, from GitHub's
+                                 combined status for dev on stdin (`gh api .../commits/dev/status`)
 """
 
 from __future__ import annotations
 
+import json
 import re
 import sys
 from pathlib import Path
+from typing import NoReturn
 
 import yaml
 
@@ -41,7 +47,7 @@ SECTION_HEADING = re.compile(r"^## ", re.M)
 OPEN_ITEM_MARKERS = re.compile(r"NOT RUN|NOT APPLICABLE|PARTIAL|FAIL")
 
 
-def die(msg: str, code: int = 2) -> None:
+def die(msg: str, code: int = 2) -> NoReturn:
     print(msg, file=sys.stderr)
     sys.exit(code)
 
@@ -99,17 +105,28 @@ def cmd_info(task: str) -> None:
     )
 
 
+def unknown_prerequisite(task: str, name: str) -> str:
+    return f"{task}'s spec.context names {name}, which no task spec declares"
+
+
 def cmd_prereqs(task: str) -> None:
     _, g = find(task)
     files = task_files()
     blocked = False
+    unknown = [name for name in prereq_names(g) if name not in files]
     for name in prereq_names(g):
-        ph = phase_of(goal(files[name])) if name in files else "MISSING"
+        if name in unknown:
+            print(f"  UNKNOWN {name} (no task spec declares it)")
+            continue
+        ph = phase_of(goal(files[name]))
         mark = "ok     " if ph == "Succeeded" else "BLOCKED"
         blocked |= ph != "Succeeded"
         print(f"  {mark} {name} ({ph})")
     if not prereq_names(g):
         print("  (no prerequisites)")
+    if unknown:
+        # A prerequisite nobody declares is a spec error, never a met prerequisite (v1-e41-t07).
+        die("\n".join(unknown_prerequisite(task, name) for name in unknown))
     sys.exit(1 if blocked else 0)
 
 
@@ -120,7 +137,16 @@ def cmd_ready() -> None:
     for n, g in goals.items():
         if phase_of(g) not in ("Pending", "Ready"):
             continue
-        if all(phase_of(goals[p]) == "Succeeded" for p in prereq_names(g) if p in goals):
+        unknown = [p for p in prereq_names(g) if p not in goals]
+        if unknown:
+            # Until v1-e41-t07 an unknown prerequisite was skipped, so it counted as met.
+            for p in unknown:
+                print(
+                    f"{n} is not listed: its spec.context names {p}, which no task spec declares",
+                    file=sys.stderr,
+                )
+            continue
+        if all(phase_of(goals[p]) == "Succeeded" for p in prereq_names(g)):
             rows.append(
                 (g["metadata"]["labels"]["debate/release"], n, g["metadata"]["annotations"]["debate/title"])
             )
@@ -286,6 +312,15 @@ How to work:
    explanation in the prose around the block (working agreement 9,
    docs/process/working-agreements.md#9-command-blocks-are-safe-to-paste-into-zsh). This holds in
    runbooks, guides, READMEs and your session report; scripts/check_command_blocks.py fails CI on one.
+9. Never run the whole test suite, in one command or in parts: CI runs what the pull request's
+   changes reach, and everything on dev's push run (working agreement 10). While working, run the
+   tests for what you change. Bound every test run you start at 115 seconds with
+   `.venv/bin/python scripts/hard_stop.py 115 .venv/bin/python -m pytest ...`, which stops the run
+   and every process it started, xdist workers included. Before the report, run the affected set
+   once with `uv run scripts/affected_tests.py --run`, plus ruff, pyright on the changed packages,
+   lint-imports and scripts/validate_specs.py, and record the commands and results. If it says the
+   whole selection is affected, run nothing more; agreement 10 says when to hand the operator one
+   whole-selection run.
 
 When the work is complete:
 - Set the task Goal status.phase to Succeeded ONLY if every acceptance criterion actually passed
@@ -371,6 +406,41 @@ def cmd_prompt_resumed(task: str, worktree: str) -> None:
     print(render_prompt(task, worktree, RESUMED))
 
 
+# protect-main requires validate-dev green on a promotion's head commit. From 2026-10-20 it was red
+# on every dev pre-release for days and nobody saw it, so `scripts/task ready` and `list`, the two
+# views the operator and the PM read most, print it for dev's head (v1-e01-t34).
+VALIDATE_DEV = "validate-dev"
+UNREADABLE_STATUS = "validate-dev: unknown (gh could not read dev's commit status)"
+
+
+def validate_dev_status(document: str) -> str:
+    """What scripts/task prints for dev's head, from GitHub's combined status for `dev`."""
+    try:
+        combined = json.loads(document)
+        sha, statuses = combined["sha"], combined["statuses"]
+    except (ValueError, KeyError, TypeError):
+        return UNREADABLE_STATUS
+    if not isinstance(sha, str) or not isinstance(statuses, list):
+        return UNREADABLE_STATUS
+    head = f"dev {sha[:7]}"
+    found = next((s for s in statuses if isinstance(s, dict) and s.get("context") == VALIDATE_DEV), None)
+    if found is None:
+        return f"validate-dev: none yet on {head} (its pre-release may still be building)"
+    state = found.get("state")
+    if not isinstance(state, str):
+        return UNREADABLE_STATUS
+    line = f"validate-dev: {state} on {head}"
+    if found.get("target_url"):
+        line += f"  {found['target_url']}"
+    if state in ("failure", "error"):
+        line += "\n  No promotion to main can merge until dev's head validates; the run says what failed."
+    return line
+
+
+def cmd_validate_dev_status() -> None:
+    print(validate_dev_status(sys.stdin.read()))
+
+
 def main() -> None:
     a = sys.argv[1:]
     cmds = {
@@ -385,9 +455,10 @@ def main() -> None:
         "verdict-of": (cmd_verdict_of, 1),
         "open-items": (cmd_open_items, 1),
         "pr-body": (cmd_pr_body, 1),
+        "validate-dev-status": (cmd_validate_dev_status, 0),
     }
     if not a or a[0] not in cmds or len(a) - 1 != cmds[a[0]][1]:
-        die(__doc__)
+        die(__doc__ or "usage: task_helper.py <command> ...")
     cmds[a[0]][0](*a[1:])
 
 

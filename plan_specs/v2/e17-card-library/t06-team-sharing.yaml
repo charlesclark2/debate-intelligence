@@ -39,6 +39,9 @@ spec:
     - kind: TaskRef
       name: v2-e17-t02-library-api
       relation: dependsOn
+    - kind: TaskRef
+      name: v2-e35-t01-tub-data-model
+      relation: dependsOn
   acceptanceCriteria:
     - id: ac1
       description: >-

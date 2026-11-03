@@ -26,6 +26,7 @@ from debate_core.application.settings import (
     Environment,
     HttpSettings,
     ModelSettings,
+    ProviderSettings,
     SearchProviderName,
     Settings,
     StorageSettings,
@@ -480,6 +481,21 @@ def test_a_relative_routing_file_is_anchored_to_the_repository(profiles: Path) -
     assert settings.models.routing_file.name == "routing-dev.yaml"
 
 
+def test_run_from_outside_any_checkout_the_routing_file_is_this_checkouts(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The smoke tier and the launchd installer run a checkout's code from a scratch directory, on
+    the built-in profile. Its relative routing file still names this checkout's committed file, which
+    the CLI now loads at startup (v1-e05-t03-fake-replay-models ac6)."""
+    monkeypatch.chdir(tmp_path)
+
+    settings = load_settings(environment="dev", env_file=tmp_path / "no.env")
+
+    assert REPOSITORY_ROOT is not None
+    assert settings.models.routing_file == REPOSITORY_ROOT / "config" / "model_routing.dev.yaml"
+    assert settings.field_sources["models.routing_file"] == "built-in:dev"
+
+
 def test_settings_built_by_hand_report_every_source_as_default(tmp_path: Path) -> None:
     settings = Settings(
         storage=StorageSettings(data_dir=tmp_path),
@@ -509,7 +525,7 @@ def test_every_environment_has_a_committed_profile() -> None:
 
 
 @pytest.mark.skipif(REPOSITORY_ROOT is None, reason="not running from a source checkout")
-def test_the_committed_profiles_give_dev_and_prod_different_everything() -> None:
+def test_the_committed_profiles_give_dev_and_prod_their_own_data_dir_routing_file_and_budgets() -> None:
     assert REPOSITORY_ROOT is not None
     profiles = REPOSITORY_ROOT / "config" / "profiles"
     development = load_settings(environment="dev", profile_dir=profiles)
@@ -517,7 +533,10 @@ def test_the_committed_profiles_give_dev_and_prod_different_everything() -> None
 
     assert development.storage.data_dir != production.storage.data_dir
     assert development.models.routing_file != production.models.routing_file
-    assert development.models.budget_usd_daily < production.models.budget_usd_daily
+    # Dev: $2 a day, the capped sample's allowance (PM ruling, 2026-10-27). Prod: $1.50 a day, the
+    # coach's $50 a month over thirty days. Both: the $50 month itself (v1-e05-t15).
+    assert (development.models.budget_usd_daily, production.models.budget_usd_daily) == (2.0, 1.5)
+    assert (development.models.budget_usd_monthly, production.models.budget_usd_monthly) == (50.0, 50.0)
 
 
 @pytest.mark.skipif(REPOSITORY_ROOT is None, reason="not running from a source checkout")
@@ -535,7 +554,13 @@ def test_the_committed_test_profile_is_offline() -> None:
 def test_no_committed_profile_contains_anything_that_looks_like_a_secret() -> None:
     """A profile file is committed, so a secret in one is a secret published."""
     assert REPOSITORY_ROOT is not None
-    secret_fields = ("contact_email", "semantic_scholar_api_key", "caselist_token")
+    secret_fields = (
+        "contact_email",
+        "openalex_api_key",
+        "semantic_scholar_api_key",
+        "api_data_gov_key",
+        "caselist_token",
+    )
     for path in sorted((REPOSITORY_ROOT / "config" / "profiles").glob("*.toml")):
         body = "\n".join(
             line for line in path.read_text(encoding="utf-8").splitlines() if not line.startswith("#")
@@ -552,6 +577,8 @@ def test_the_example_env_file_documents_every_secret_without_setting_one() -> No
     for variable in (
         "DEBATE_PROVIDERS__CASELIST_TOKEN",
         "DEBATE_PROVIDERS__SEMANTIC_SCHOLAR_API_KEY",
+        "DEBATE_PROVIDERS__OPENALEX_API_KEY",
+        "DEBATE_PROVIDERS__API_DATA_GOV_KEY",
         "DEBATE_PROVIDERS__CONTACT_EMAIL",
     ):
         assert variable in body
@@ -565,8 +592,27 @@ def test_the_provider_names_configuration_accepts_are_the_ones_e07_builds() -> N
         "crossref",
         "semantic_scholar",
         "rss",
+        "google_news",
         "gdelt",
+        "federal_register",
+        "govinfo",
     }
+
+
+def test_the_api_data_gov_key_is_unset_by_default_and_never_the_demo_key(
+    profiles: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """GovInfo goes unconfigured without a key; it never falls back to api.data.gov's DEMO_KEY."""
+    assert ProviderSettings().api_data_gov_key is None
+    assert load_settings(environment="dev", profile_dir=profiles).providers.api_data_gov_key is None
+
+    monkeypatch.setenv("DEBATE_PROVIDERS__API_DATA_GOV_KEY", "datagov-not-a-real-key")
+    settings = load_settings(environment="dev", profile_dir=profiles)
+
+    key = settings.providers.api_data_gov_key
+    assert key is not None and key.get_secret_value() == "datagov-not-a-real-key"
+    assert "datagov-not-a-real-key" not in repr(settings)
+    assert settings.redacted_dict()["providers.api_data_gov_key"] == SECRET_PLACEHOLDER
 
 
 # ---------------------------------------------------------------------------------------------

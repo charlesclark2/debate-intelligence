@@ -53,7 +53,18 @@ the aggregates of the caselists they belong to, and publishes the parsed store w
 at all (`v1-e34-t17`). The summary's `parse` holds the stage's counts and nothing else, and the
 stage's row says the same in a sentence. A failed parse stage records the code of each failure
 (`PARSE_FAILURE_RATE_EXCEEDED`, `STORE_UNAVAILABLE`, …) and, by the rule above, leaves the exit code
-alone; `caselist parse --caselist <slug> --publish` is what finishes it.
+alone.
+
+The stage names what finishes each caselist it did not publish, in its hint (or, when pending, its
+reason), in the notification and in the summary's `parsed_stores_owed` (`v1-e34-t31`):
+`caselist parse --caselist <slug> --publish-only` (`v1-e31-t30`) where the rebuild is done from
+every copy of the suppression list and only the publish is owed, and `--publish`, which rebuilds
+first, where the aggregates may come from the run's own copy of the list alone, which is never
+published, or the rebuild did not finish. `--publish-pending` is neither: it completes the snapshot
+publishes an earlier run deferred, never a parsed store's. A bucket-mode run, the cloud run's, names
+no command (`v1-e40-t18`): the next cloud run publishes it, whatever it imports (`v1-e40-t08`), and
+nothing is published from the operator's Mac (`docs/runbooks/caselist-cloud-run.md`, "A failed
+parse stage").
 
 When a download, an import or a publish failed, the exit code comes from **what they failed on**
 (`v1-e34-t13`). Each failed stage records the error code of every failure behind it, and
@@ -112,23 +123,35 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Coroutine
-from typing import Annotated, Any, cast
+from pathlib import Path
+from typing import Annotated, Any, Final, cast
 
 import typer
 
-from debate_cli.commands.caselist import event_for_caselist
+from debate_cli.bucket_lock import cancelled_on_sigterm
+from debate_cli.caselist_auth_expired import CLOUD_AUTH_EXPIRED_HINT, cloud_cure_for_an_expired_login
+from debate_cli.caselist_events import event_for_caselist
 from debate_cli.context import cli_context, command_name
 from debate_cli.exit_codes import ExitCode, exit_code_for_failure_codes
 from debate_cli.output import CommandFailure, JsonValue, TableSpec
+from debate_cli.panel_summaries import every_value_in_full, shorten_digests
 from debate_core.application.caselist_sync import (
+    RUN_SUMMARY_DIRECTORY,
     RunSummary,
     StageOutcome,
     StageRecord,
     SyncStage,
     run_pull,
 )
+from debate_core.application.errors import error_code_of_class
+from debate_core.application.ports.caselist_source import CaselistAuthExpired
 from debate_core.application.settings import Settings
-from debate_core.application.sync_runs import SyncRunDetails, SyncRunRecord
+from debate_core.application.sync_runs import (
+    CLOUD_PUBLISH_CURE,
+    CLOUD_UNFINISHED_RUN_CURE,
+    SyncRunDetails,
+    SyncRunRecord,
+)
 
 __all__ = ["pull", "pull_summary"]
 
@@ -150,7 +173,10 @@ def pull(
         bool,
         typer.Option(
             "--publish-pending",
-            help="Only complete the publishes an earlier run deferred, and exit.",
+            help=(
+                "Only complete the snapshot publishes an earlier run deferred, and exit. The parsed "
+                "store is `caselist parse`'s to publish."
+            ),
         ),
     ] = False,
     full_archive: Annotated[
@@ -178,17 +204,23 @@ def pull(
         )
     slugs = [] if publish_pending else list(caselist) if caselist else list(settings.caselist.sync_caselists)
 
-    pulled = _run(
-        run_pull(
-            lambda: cli.services.caselist_sync(event_for_caselist=event_for_caselist),
-            slugs,
-            dry_run=dry_run,
-            publish_pending=publish_pending,
-            monitor=cli.services.caselist_sync_monitor,
-            progress=cli.output.detail,
-            full_archive=full_archive,
+    bracket = cli.services.bucket_run()
+    with cloud_cure_for_an_expired_login(cli, ctx, bucket_mode=bracket.bucket_mode):
+        pulled = _run(
+            cancelled_on_sigterm(
+                bracket.terminate if bracket.bucket_mode else None,
+                run_pull(
+                    lambda: cli.services.caselist_sync(event_for_caselist=event_for_caselist),
+                    slugs,
+                    dry_run=dry_run,
+                    publish_pending=publish_pending,
+                    monitor=cli.services.caselist_sync_monitor,
+                    progress=cli.output.detail,
+                    full_archive=full_archive,
+                    bracket=bracket,
+                ),
+            )
         )
-    )
     summary = pulled.summary
     payload = pull_summary(summary, settings, pulled.summary_path, pulled.record, pulled.details)
     display = _pull_table(summary, settings, pulled.record)
@@ -197,7 +229,7 @@ def pull(
         return
     if not cli.output.is_json:
         cli.output.success(command_name(ctx), payload, display=display)
-    failure = _pull_failure(summary, payload)
+    failure = _pull_failure(summary, payload, bucket_mode=bracket.bucket_mode)
     cli.output.failure(failure, command=command_name(ctx))
     raise typer.Exit(code=failure.exit_code)
 
@@ -220,7 +252,7 @@ class ConflictingPullMode(typer.BadParameter):
 def pull_summary(
     summary: RunSummary,
     settings: Settings,
-    written_to: Any = None,
+    written_to: Path | None = None,
     record: SyncRunRecord | None = None,
     details: SyncRunDetails | None = None,
 ) -> dict[str, JsonValue]:
@@ -230,13 +262,20 @@ def pull_summary(
     :meth:`~debate_core.application.caselist_sync.RunSummary.as_json` unchanged, so the object a
     monitoring check reads out of `<data_dir>/caselist-sync-runs/` and the object this command
     prints are the same shape. `v1-e34-t03`'s run log reads one or the other and never both.
+
+    `summary_written_to` is the summary file's path inside the data directory,
+    `caselist-sync-runs/<run id>.json`, and never its absolute path, which is under the home
+    directory: the agent's stdout log keeps this object, and the runbook says it may be pasted as
+    it is (`v1-e34-t16`).
     """
     # `as_json` is declared `dict[str, object]` because `debate_core` may not name the CLI's
     # JSON alias; every value in it is a number, a string, a bool, `None` or a list of those.
     body = cast("dict[str, JsonValue]", dict(summary.as_json()))
     body["environment"] = settings.environment.value
     body["bucket"] = settings.storage.s3.bucket
-    body["summary_written_to"] = str(written_to) if written_to is not None else None
+    body["summary_written_to"] = (
+        f"{RUN_SUMMARY_DIRECTORY}/{written_to.name}" if written_to is not None else None
+    )
     # The run log's record of this run (v1-e34-t03), or `None` for a dry run, which records nothing.
     body["run_record"] = cast("JsonValue", record.model_dump(mode="json")) if record is not None else None
     # What is kept beside the record, because the record's shape is frozen (v1-e34-t19): each
@@ -268,7 +307,7 @@ def _caption(summary: RunSummary, record: SyncRunRecord | None = None) -> str:
     """
     deferred = summary.archives_deferred
     backlog = _backlog_sentence(record)
-    inbox = _full_archive_sentence(summary) + _inbox_sentence(summary)
+    inbox = _full_archive_sentence(summary) + _inbox_sentence(summary) + _data_volume_sentence(summary)
     if summary.dry_run:
         wanted = sum(1 for one in summary.archives if one.wanted)
         camp = sum(1 for one in summary.openev if one.wanted)
@@ -358,6 +397,16 @@ def _inbox_sentence(summary: RunSummary) -> str:
     )
 
 
+def _data_volume_sentence(summary: RunSummary) -> str:
+    """The data volume's warning, as a leading-space sentence, when the run passed it (`v1-e40-t03`).
+
+    Only a run that reads its volume can pass it: the cloud run, under `storage.volume_warning_percent`.
+    """
+    volume = summary.data_volume
+    warning = volume.warning if volume is not None else None
+    return f" Warning: {warning}." if warning else ""
+
+
 def _backlog_sentence(record: SyncRunRecord | None) -> str:
     """What the previous run left to the cap, when it left anything, as a leading-space sentence."""
     if record is None or not record.backlog_carried:
@@ -370,33 +419,64 @@ def _backlog_sentence(record: SyncRunRecord | None) -> str:
     return f" Carried from the previous run: {record.backlog_carried} deferred.{growing}"
 
 
-def _pull_failure(summary: RunSummary, payload: dict[str, JsonValue]) -> CommandFailure:
+def _pull_failure(
+    summary: RunSummary, payload: dict[str, JsonValue], *, bucket_mode: bool = False
+) -> CommandFailure:
     """What an incomplete run reports: the stages that failed, and the whole summary.
 
     Its exit code is `3` when every failure behind a stage that had to finish is one a retry may
     cure, and `1` as soon as one is not (:attr:`RunSummary.failure_codes`,
     :func:`~debate_cli.exit_codes.exit_code_for_failure_codes`, `v1-e34-t13`).
+
+    The details are the whole summary and the message every failed stage's reason, which names a
+    publish's failed digests whole, for `--json`. The panel prints the failed stages by name, and
+    one line per stage with its reason and its digests as a few prefixes (`v1-e30-t27`). The hint,
+    with each parsed store's own command (`v1-e34-t31`), is the same in both.
     """
     failed = [record for record in summary.stages if record.outcome is StageOutcome.FAILED]
     named = "; ".join(f"{record.stage}: {record.reason}" for record in failed)
     exit_code = exit_code_for_failure_codes(summary.failure_codes)
+    did_not_complete = f"{len(failed)} stage(s) of the caselist pull did not complete"
+    # No environment or bucket line: the table above the panel names the run and its environment.
+    panel: dict[str, JsonValue] = {"stages": f"{len(summary.stages)} recorded, {len(failed)} failed"}
+    for record in failed:
+        panel[str(record.stage)] = shorten_digests(record.reason or "no reason recorded")
     return CommandFailure(
         code="CASELIST_PULL_INCOMPLETE",
-        message=f"{len(failed)} stage(s) of the caselist pull did not complete — {named}",
+        message=f"{did_not_complete} — {named}",
         exit_code=exit_code,
         details=payload,
-        hint=_hint_for(failed, retryable=exit_code is ExitCode.RETRIEVAL_FAILURE),
+        hint=_hint_for(failed, retryable=exit_code is ExitCode.RETRIEVAL_FAILURE, bucket_mode=bucket_mode),
+        panel_message=f"{did_not_complete}: {', '.join(str(record.stage) for record in failed)}",
+        panel_details=every_value_in_full(panel),
     )
 
 
-def _hint_for(failed: list[StageRecord], *, retryable: bool) -> str:
+_AUTH_EXPIRED: Final = error_code_of_class(CaselistAuthExpired)
+
+
+def _hint_for(failed: list[StageRecord], *, retryable: bool, bucket_mode: bool = False) -> str:
     """What to do about the failed stages: the fix a stage names, or else how to run it again.
 
     A stage a store refused carries its own fix, a permission on this machine or a grant the AWS
     profile lacks, and that comes first: running the command again before it is made changes
     nothing.
+
+    In bucket mode a failed publish names the next cloud run (`v1-e40-t25`), never
+    `--publish-pending`, which publishes the working copy of the machine it is run on: the cloud
+    run's ends with its task. So does every "run the same command again" (`v1-e40-t28`): the
+    command is the cloud task's, which has ended, and what it captured and did not publish, the
+    inbox included, ended with it.
+
+    A download OpenCaselist refused for an expired login names the Wednesday login instead in bucket
+    mode (`v1-e40-t35`, :data:`~debate_cli.caselist_auth_expired.CLOUD_AUTH_EXPIRED_HINT`): a run
+    started by hand before it is refused again, and a login by hand would be a second login.
     """
+    if bucket_mode and any(_AUTH_EXPIRED in record.error_codes for record in failed):
+        return CLOUD_AUTH_EXPIRED_HINT
     fixes = list(dict.fromkeys(record.hint for record in failed if record.hint))
+    if fixes and bucket_mode:
+        return " ".join(fixes) + f" Then in bucket mode {CLOUD_UNFINISHED_RUN_CURE}."
     if fixes:
         return " ".join(fixes) + " Then run the same command again: what was captured is kept."
     stages = {record.stage for record in failed}
@@ -406,13 +486,19 @@ def _hint_for(failed: list[StageRecord], *, retryable: bool) -> str:
         if retryable
         else ""
     )
+    if SyncStage.DOWNLOAD in stages and bucket_mode:
+        return f"{again}In bucket mode {CLOUD_UNFINISHED_RUN_CURE}."
     if SyncStage.DOWNLOAD in stages:
         return (
             f"{again}Nothing that did download was lost: it is in the inbox and imported. Run the same "
             "command again — an archive already held is not fetched twice."
         )
+    if SyncStage.PUBLISH in stages and bucket_mode:
+        return f"{again}In bucket mode {CLOUD_PUBLISH_CURE}."
     if SyncStage.PUBLISH in stages:
         return f"{again}Re-run `caselist pull --publish-pending`: every confirmed source is skipped."
+    if bucket_mode:
+        return f"{again}In bucket mode {CLOUD_UNFINISHED_RUN_CURE}."
     return f"{again}Run the same command again; every stage is idempotent."
 
 

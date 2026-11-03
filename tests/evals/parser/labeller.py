@@ -14,7 +14,9 @@ worksheet with a row nobody checked or a text that is not the document's.
 * **Enter** or **Space**: accept the row as shown, check it and move on.
 * **p h b t c e a u o**: POCKET, HAT, BLOCK, TAG, CITE, EVIDENCE, ANALYTIC, UNDERTAG, OTHER. Set
   it, check the row and move on.
-* **n**: start a card on this row, or stop one starting here. Checks nothing and stays.
+* **n**: start a card on this row, or stop one starting here. Checks nothing and stays. A row with
+  no unit yet can start a card (blind mode, `n` before the unit's key), and `k` works on it at once.
+  Stopping a card that started here says so, and how to put it back.
 * **k**: the card's completeness, FULL, ABBREVIATED, CITE_ONLY, and for the first and last card of
   a block, cut off by the block's edge. Checks nothing and stays.
 * **Backspace** or **Left**: back one row. Checks nothing.
@@ -36,6 +38,15 @@ Card numbers follow from the card starts, by the labeling guide's rules
   block all end it;
 * **a card cut off by the end of a block is left unnumbered.** Whether the card goes on past the
   block is in the paragraphs after it, which the page shows; the person marks it with `k`.
+
+## Warnings
+
+What the page says under a row's label, or after a key, is advice, named in :data:`WARNINGS` and in
+the page's own help. None of it refuses anything; `check` does that. Three came from the first
+labeling sittings (v1-e31-t25): a CITE marked as a start directly under a TAG, which leaves the tag
+outside its card; `n` taking away a card that started on its row; and a TAG or CITE in no card that
+is not cut off at a block edge, which `check` warns about too, because a card written body first
+is labeled that way on purpose.
 
 The page shows a card by its place in the file. The number written to the worksheet keeps the
 pre-label's number for a card that starts where a pre-label card started, so `import`'s count of
@@ -64,13 +75,14 @@ from __future__ import annotations
 import csv
 import hashlib
 import hmac
+import html
 import io
 import json
 import os
 import secrets
 import time
 import webbrowser
-from collections.abc import Callable, Iterable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence, Set
 from dataclasses import dataclass, field, replace
 from enum import StrEnum
 from http.server import BaseHTTPRequestHandler, HTTPServer
@@ -89,6 +101,7 @@ __all__ = [
     "COMPLETENESS_KEY",
     "NEW_CARD_KEY",
     "UNIT_KEYS",
+    "WARNINGS",
     "Card",
     "CardReading",
     "CardState",
@@ -98,6 +111,7 @@ __all__ = [
     "RowLabel",
     "Session",
     "csv_bytes",
+    "cards_missing",
     "labelled_worksheet",
     "load_or_begin",
     "prelabel_card_starts",
@@ -124,11 +138,51 @@ BACK_KEYS: Final = frozenset({"Backspace", "ArrowLeft"})
 NEW_CARD_KEY: Final = "n"
 COMPLETENESS_KEY: Final = "k"
 
+#: Every warning the page gives, by the name the help and the labeling guide give it. A warning is
+#: advice: it says what happened and how to undo it, and refuses nothing (`check` does that).
+WARNINGS: Final[Mapping[str, str]] = {
+    "A CITE start under a TAG": "n on a CITE directly under a TAG or UNDERTAG starts a card of its own "
+    "at the CITE and leaves the tag outside it. If they are one card, press n on the CITE again.",
+    "A card start removed": "n on a row that starts a card takes the card away: its rows go into no card "
+    "or the card above, and its completeness goes. Press n again to put it back, then k.",
+    "A TAG or CITE in no card": "A TAG or CITE no card holds, and not cut off at a block edge. If a card "
+    "starts there, press n. A card written body first (its EVIDENCE, then its CITE) stays in no card: "
+    "leave it. check gives the same warning; neither refuses it.",
+    "A card with no CITE": "A card is a tag, its cite and its body. check refuses it.",
+    "A card with no completeness": "Press k on any of the card's rows. check refuses it.",
+    "A completeness that does not fit": "CITE_ONLY with an EVIDENCE row, or FULL or ABBREVIATED with "
+    "none. check refuses it.",
+    "A start that counts for nothing": "n on a row that is not a TAG or a CITE: a card starts at its "
+    "TAG, or at its CITE when it has no tag.",
+    "A row after its card's last EVIDENCE": "A card ends at its last EVIDENCE (or its last CITE), so the "
+    "rows after it are in no card.",
+    "Formatting that differs": "On a span row, the document's underline or highlight and the "
+    "pre-label's marks differ. What is written is the document's: look at the paragraph in Word.",
+    "Formatting that could not be read": "On a span row, the labeller marks nothing and leaves the "
+    "underline and highlight cells empty; check names them.",
+}
+
 #: The units a card starts on: its TAG, or its CITE when it has no tag.
 _CARD_STARTS: Final = frozenset({StructuralUnit.TAG, StructuralUnit.CITE})
 #: Rows that end any card open above them.
 _CARD_ENDERS: Final = frozenset(
     {StructuralUnit.POCKET, StructuralUnit.HAT, StructuralUnit.BLOCK, StructuralUnit.ANALYTIC}
+)
+#: Rows that, directly above a CITE marked as a start, are left outside its card.
+_TAG_LINES: Final = frozenset({StructuralUnit.TAG, StructuralUnit.UNDERTAG})
+#: Rows a card runs on through towards the end of its block, and, above its CITE, towards the start
+#: of its block. A TAG starts a card, so a card never runs on through one.
+_RUNS_DOWN: Final = frozenset(
+    {StructuralUnit.UNDERTAG, StructuralUnit.CITE, StructuralUnit.EVIDENCE, StructuralUnit.OTHER}
+)
+_RUNS_UP: Final = frozenset({StructuralUnit.UNDERTAG, StructuralUnit.CITE, StructuralUnit.OTHER})
+_BODY_FIRST: Final = "A card written body first, its EVIDENCE then its CITE, stays in no card: leave it"
+_TAG_IN_NO_CARD: Final = (
+    "a TAG in no card (not marked as the start of a card): if a card starts here, press n here. "
+    + _BODY_FIRST
+)
+_CITE_IN_NO_CARD: Final = (
+    "a CITE in no card: if its card has no tag, press n here to start it here. " + _BODY_FIRST
 )
 _PROGRESS_VERSION: Final = 1
 #: The largest request body the server reads: a key and a row number.
@@ -222,29 +276,36 @@ def read_cards(
     for block in blocks:
         start: RowLabel | None = None
         candidates: list[RowLabel] = []
+        #: The row above this one, passing over blank rows.
+        above: RowLabel | None = None
         for row in (row for row in rows if block[0] <= row.index <= block[1]):
             if row.starts_card:
                 _close_card(start, candidates, block, found, notes)
-                start, candidates = (row, []) if row.unit in _CARD_STARTS else (None, [])
-                if start is None:
+                # A start whose row has no unit yet (blind mode, `n` before the unit's key) is a
+                # card all the same: its unit decides later whether the start counts.
+                opens = row.unit is None or row.unit in _CARD_STARTS
+                start, candidates = (row, []) if opens else (None, [])
+                if not opens:
                     note(
                         row.index,
                         "a card starts at its TAG, or at its CITE when it has no tag: this start counts "
                         "for nothing",
                     )
-                continue
-            if row.unit is StructuralUnit.TAG:
-                _close_card(start, candidates, block, found, notes)
-                start = None
-                note(
-                    row.index,
-                    "a TAG not marked as the start of a card, so in no card: press n here to start one",
-                )
-            elif row.unit in _CARD_ENDERS:
+                elif row.unit is StructuralUnit.CITE and above is not None and above.unit in _TAG_LINES:
+                    assert above.unit is not None
+                    note(
+                        row.index,
+                        f"this CITE starts a card of its own, so the {above.unit.value} above it "
+                        f"(paragraph {above.index}) is left outside the card. If they are one card, press "
+                        "n here to undo the start",
+                    )
+            elif row.unit is StructuralUnit.TAG or row.unit in _CARD_ENDERS:
                 _close_card(start, candidates, block, found, notes)
                 start = None
             elif row.unit in CARD_UNITS and start is not None:
                 candidates.append(row)
+            if row.unit is not StructuralUnit.OTHER:
+                above = row
         _close_card(start, candidates, block, found, notes)
 
     cards: list[Card] = []
@@ -279,11 +340,45 @@ def read_cards(
             note(card.start, f"{name} is CITE_ONLY but has an EVIDENCE row")
         elif card.state is not CardState.CITE_ONLY and StructuralUnit.EVIDENCE not in member_units:
             note(card.start, f"{name} is {card.state.value} but has no EVIDENCE row")
+    in_card = {index for card in cards for index in card.members}
+    for index in cards_missing([(row.index, row.unit) for row in rows], in_card, blocks):
+        if index not in notes:
+            note(index, _TAG_IN_NO_CARD if units[index] is StructuralUnit.TAG else _CITE_IN_NO_CARD)
     return CardReading(
         cards=tuple(cards),
         card_of={index: card for card in cards for index in card.members},
         notes={index: tuple(messages) for index, messages in notes.items()},
     )
+
+
+def cards_missing(
+    units: Sequence[tuple[int, StructuralUnit | None]], in_card: Set[int], blocks: Sequence[Block]
+) -> tuple[int, ...]:
+    """The TAG and CITE rows in no card that are not cut off at a block edge: worth a warning only.
+
+    `units` is each sampled row's index and unit, and `in_card` the rows some card holds. A card is
+    cut off at the end of its block when every row from its TAG or CITE to the block's last row can
+    still be part of it, and at the start of its block when every row above its CITE can be: its tag
+    is above the block. A row with no unit yet can be anything, so it never ends either stretch. A
+    card written body first, its EVIDENCE then its CITE, is the legitimate case, so nothing refuses
+    these rows: `check` and the page warn (v1-e31-t25).
+    """
+
+    def runs_on(stretch: Sequence[tuple[int, StructuralUnit | None]], through: Set[StructuralUnit]) -> bool:
+        return all(index not in in_card and (unit is None or unit in through) for index, unit in stretch)
+
+    missing: list[int] = []
+    for first, last in blocks:
+        inside = [(index, unit) for index, unit in units if first <= index <= last]
+        for position, (index, unit) in enumerate(inside):
+            if index in in_card or unit not in _CARD_STARTS:
+                continue
+            cut = runs_on(inside[position + 1 :], _RUNS_DOWN) or (
+                unit is StructuralUnit.CITE and runs_on(inside[:position], _RUNS_UP)
+            )
+            if not cut:
+                missing.append(index)
+    return tuple(missing)
 
 
 def prelabel_card_starts(prelabels: LabelFile) -> tuple[tuple[int, int], ...]:
@@ -403,9 +498,18 @@ class Session:
             self._check(current, UNIT_KEYS[name], now)
         elif name == NEW_CARD_KEY:
             starts = not current.starts_card
+            lost = None if starts else self.cards().card_of.get(current.index)
             self.rows[self.position] = replace(current, starts_card=starts)
             if not starts:
                 self.card_states.pop(current.index, None)
+            if lost is not None and lost.start == current.index:
+                undo = "press n again" + (
+                    "" if lost.state is None else f", then k until it reads {lost.state.value}"
+                )
+                return (
+                    "this row no longer starts a card: the card that started here is gone, its rows are in "
+                    f"no card or the card above, and its completeness went with it. To undo, {undo}"
+                )
         elif name == COMPLETENESS_KEY:
             card = self.cards().card_of.get(current.index)
             if card is None:
@@ -669,7 +773,16 @@ class LabellerApp:
 
     def _page(self, _: bytes) -> Response:
         nonce = secrets.token_urlsafe(16)
-        page = _PAGE.read_text(encoding="utf-8").replace("__TOKEN__", self.token).replace("__NONCE__", nonce)
+        warnings = "".join(
+            f"<li><strong>{html.escape(name, quote=False)}</strong>: {html.escape(text, quote=False)}</li>"
+            for name, text in WARNINGS.items()
+        )
+        page = (
+            _PAGE.read_text(encoding="utf-8")
+            .replace("__TOKEN__", self.token)
+            .replace("__NONCE__", nonce)
+            .replace("__WARNINGS__", warnings)
+        )
         return Response(
             200,
             {

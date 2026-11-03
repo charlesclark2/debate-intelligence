@@ -34,6 +34,9 @@ spec:
     AWS baseline: the dev and prod accounts, Identity Center and state buckets come from v1-e29-t01 and
     v1-e29-t02, and the V1 evidence buckets (v1-e29-t03) join the CI-managed Terraform roots unchanged;
     V1's operator SSO access stays for operator steps. Environments are dev and prod only (ADR-0013).
+    (PM amendment 2026-11-01, Charlie's ruling in the dependency audit.) Blocked until Charlie says V2
+    starts. Every other V2 and V3 task depends on this one or on another held with it, so the ready list
+    stays V1's until then.
   priority: 1
   constraints:
     packages: [infrastructure/modules/github_oidc, infrastructure/envs, .github/workflows]
@@ -69,7 +72,7 @@ spec:
         terraform plan output for dev using the plan role before any dev apply; no plan runs on PRs into
         dev, and no AWS secret keys exist in the repository or organization secrets.
 status:
-  phase: Pending
+  phase: Blocked
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

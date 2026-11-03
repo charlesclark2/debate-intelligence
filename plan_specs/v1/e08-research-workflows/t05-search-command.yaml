@@ -25,9 +25,61 @@ spec:
     configured) so partial results are never silent. Exit codes: 0 results returned, 6 partial results, 7
     no results or all providers failed, 2 usage error. Boundaries: no cutting (t06), no digests (t07); the
     CLI contains no ranking or dedupe logic.
+    (PM amendment 2026-10-21, from v1-e08-t01's PM review.) The container builds
+    `FederatedSearchService` from `ProviderRegistry.from_settings` through the
+    `DiscoveryProviders` port. The overall deadline is a new setting,
+    `providers.search_deadline_seconds`, default 15, beside `timeout_seconds`; the status footer
+    reads the outcome's `provider_health`.
+    (PM amendment 2026-10-22, from the PM reviews of v1-e07-t02, v1-e07-t05, v1-e08-t02 and
+    v1-e08-t03.) The container registers `openalex_factory`, `feed_factory` and
+    `google_news_factory` (the feed providers over `load_feed_directory(config/feeds)`, with a
+    `FileFeedCache` on `<storage.data_dir>/feeds/`), and closes every provider when the search
+    ends (`aclose` through the registry or `ResilientProvider`). debate-cli requires
+    `debate-core[http,feeds]`, so `debate_cli.installation` reports a missing extra. The service
+    is built with `normalize=DedupeStage()` and
+    `rank=FederatedRankStage(load_federated_ranking_config( FEDERATED_RANKING_CONFIG_PATH),
+    clock=...)`. Ranked candidates become stored results here: each is matched to an Article by
+    `find_by_canonical_url`, or saved as a discovery-only Article with access `UNKNOWN`, never
+    fetched; the session decides whether a canonical URL is unique per owner and records it.
+    `state.results` then holds `search_result_for(...)` for each, and `SearchOutcome` exposes
+    `ranked_candidates` for the table and the JSON output (identifiers, provider sources, the
+    seven features and the explanation). Once the command runs on real providers, the coach
+    labels the results of one query per format on the topics current then, and the report
+    records nDCG@10 ranked against provider order; a lower ranked figure opens a weight-tuning
+    ticket and does not block this task (v1-e08-t03's PM review).
+    (PM amendment 2026-11-01, from v1-e08-t04's PM review.) Wire v1-e08-t04's expansion: map
+    `--argument`, `--need`, `--topic` (a topic preset id), `--var NAME=VALUE` (for example `bill=`) and
+    `--expand-llm` onto `ExpansionRequest`; build `QueryExpansionStage` from
+    `load_argument_taxonomy(ARGUMENT_TAXONOMY_PATH)`, with a guard only when `--expand-llm` is given;
+    and print the expansion's warning when it has one. `UnknownExpansionChoice` exits 2, a usage error,
+    because it is a choice the person typed, and its message lists the valid choices. `Search` is a
+    `DomainEntity` and now carries the optional `expansion` field, so a stored search that has one is
+    refused by a build from before v1-e08-t04. Say whether any installed build reads stored searches
+    across builds. If one does, make that read tolerate the field and prove it with an earlier build's
+    offline wheel, as the caselist tasks do; if none does, say so in the report.
+    (PM amendment 2026-11-02, the PM's rulings for this task, written in by the session.) Exit codes:
+    `debate_cli/exit_codes.py` stays the only place a failure becomes a code, and the numbers above
+    predate it, so the mapping is 0 for complete results; 6, a new `ExitCode.SEARCH_PARTIAL`, for
+    results returned while some provider failed, timed out, was rate-limited, had its breaker open,
+    was not configured or answered only partly, with or without rows; 7, a new `ExitCode.NO_RESULTS`,
+    for every provider answering in full with nothing; 3, `RETRIEVAL_FAILURE`, for every provider
+    failing, as `fetch` has it, not 7; 2 for usage, `UnknownExpansionChoice` and since > until
+    included; and (the session's addition) 1 when no provider was asked because none selected is
+    enabled, which no retry cures. Expansion flags are `--argument`, `--need`, `--topic`, a repeatable
+    `--var NAME=VALUE` and `--expand-llm`, off by default and the only thing that builds a guard; the
+    model call goes through the `high_volume` route under DEBATE_MODEL_MODE, replay by default, as
+    `cut`'s do. The JSON output is the CLI's envelope: the array of results is `data.results` (or
+    `error.details.results` on 6, 7 and 3), and no item carries a snippet or abstract. `--save PATH`
+    writes the same search object to a file. The session also changed, outside the packages first
+    listed, `config/profiles/dev.toml` and `prod.toml` to enable only the providers this build has
+    adapters for (`openalex`, `rss`), because the registry refuses every search while `crossref` or
+    `semantic_scholar` is enabled with no adapter, and added `tests/smoke/test_search_smoke.py`
+    (working agreement 5); both are in the report's Deviations for the PM to keep or undo.
   priority: 1
   constraints:
-    packages: [debate_cli]
+    # PM amendment 2026-10-22: registration, Article matching and the outcome live in debate_core.
+    # Session addition 2026-11-02 (Deviations, for the PM to keep or undo): the two profiles and the smoke check.
+    packages: [debate_cli, debate_core.application, debate_core.integrations.discovery, packages/debate_cli/tests, packages/debate_core/tests, packages/debate_cli/pyproject.toml, uv.lock, config/argument_taxonomy.yaml, config/profiles/dev.toml, config/profiles/prod.toml, tests/smoke/test_search_smoke.py]
     forbidden:
       - Business logic (ranking, dedupe, expansion) in debate_cli
       - Hiding provider failures when results are partial
@@ -62,8 +114,20 @@ spec:
       description: >-
         Invalid --argument/--need values or since > until exit 2 with the list of valid choices, and
         `search --help` documents every flag.
+    # PM amendment 2026-10-22
+    - id: ac5
+      description: >-
+        The container registers the OpenAlex, feed and Google News providers and closes
+        them, ranked candidates become stored results through Article matching without a
+        fetch, and the JSON output carries each result's features and explanation, by tests
+        on recorded fixtures.
+    # PM amendment 2026-10-22
+    - id: ac6
+      description: >-
+        The coach's labels on one real query per format are recorded with nDCG@10 ranked
+        against provider order (operator); a lower ranked figure is ticketed, not a failure.
 status:
-  phase: Pending
+  phase: InProgress
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

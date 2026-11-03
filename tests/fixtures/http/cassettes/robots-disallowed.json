@@ -1,0 +1,21 @@
+{
+  "cassette_version": 1,
+  "kind": "robots-disallowed",
+  "url": "https://www.closed-stacks.example/archive/2026/water-rights-ruling",
+  "made_from": "an invented site whose robots.txt disallows /archive/ to every agent; the page is never requested, so the cassette has no page response",
+  "interactions": [
+    {
+      "request": {
+        "method": "GET",
+        "url": "https://www.closed-stacks.example/robots.txt"
+      },
+      "response": {
+        "status_code": 200,
+        "headers": {
+          "content-type": "text/plain; charset=utf-8"
+        },
+        "body_text": "User-agent: *\nDisallow: /archive/\n"
+      }
+    }
+  ]
+}

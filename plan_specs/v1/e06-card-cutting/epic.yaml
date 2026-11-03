@@ -265,5 +265,141 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e06-t07-verify-docx
+    - id: t08
+      kind: Task
+      name: '`cut` can cut a card from the user''s own stored copy of an article, with that provenance'
+      description: >-
+        `cut` can cut a card from the user's own stored copy of an article, with that
+        provenance.
+      inputs:
+        specRef: plan_specs/v1/e06-card-cutting/t08-cut-from-a-stored-pasted-copy.yaml
+        goalRef: v1-e06-t08-cut-from-a-stored-pasted-copy
+      dependsOn:
+      - t06
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e06-t08-cut-from-a-stored-pasted-copy reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e06-t08-cut-from-a-stored-pasted-copy
+    - id: t09
+      kind: Task
+      name: '`cut` refused for an unrecorded model call says to set DEBATE_MODEL_MODE=live for a real cut'
+      description: >-
+        `cut` refused for an unrecorded model call says to set DEBATE_MODEL_MODE=live for a
+        real cut.
+      inputs:
+        specRef: plan_specs/v1/e06-card-cutting/t09-cut-replay-hint-names-live-mode.yaml
+        goalRef: v1-e06-t09-cut-replay-hint-names-live-mode
+      dependsOn:
+      - t06
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e06-t09-cut-replay-hint-names-live-mode reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e06-t09-cut-replay-hint-names-live-mode
+    - id: t10
+      kind: Task
+      name: '`verify` warns when a deletion in a .docx body removes a negation'
+      description: >-
+        `verify` warns when a deletion in a .docx body removes a negation.
+      inputs:
+        specRef: plan_specs/v1/e06-card-cutting/t10-verify-docx-flags-a-removed-negation.yaml
+        goalRef: v1-e06-t10-verify-docx-flags-a-removed-negation
+      dependsOn:
+      - t07
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e06-t10-verify-docx-flags-a-removed-negation reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e06-t10-verify-docx-flags-a-removed-negation
+    - id: t11
+      kind: Task
+      name: 'Exporting a .docx refuses a card whose format profile is not the one it renders in'
+      description: >-
+        Exporting a .docx refuses a card whose format profile is not the one it renders in.
+      inputs:
+        specRef: plan_specs/v1/e06-card-cutting/t11-export-docx-refuses-a-mismatched-profile.yaml
+        goalRef: v1-e06-t11-export-docx-refuses-a-mismatched-profile
+      dependsOn:
+      - t07
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e06-t11-export-docx-refuses-a-mismatched-profile reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e06-t11-export-docx-refuses-a-mismatched-profile
+    - id: t12
+      kind: Task
+      name: 'A pasted copy''s cite fields can be stated when it is stored, so a card cut from it has a usable cite'
+      description: >-
+        A pasted copy's cite fields can be stated when it is stored, so a card cut from it
+        has a usable cite.
+      inputs:
+        specRef: plan_specs/v1/e06-card-cutting/t12-pasted-copy-cite-stated-by-the-user.yaml
+        goalRef: v1-e06-t12-pasted-copy-cite-stated-by-the-user
+      dependsOn:
+      - t08
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e06-t12-pasted-copy-cite-stated-by-the-user reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e06-t12-pasted-copy-cite-stated-by-the-user
+    - id: t13
+      kind: Task
+      name: 'A cite can carry a year-only or year-and-month date without inventing a day'
+      description: >-
+        A cite can carry a year-only or year-and-month date without inventing a day.
+      inputs:
+        specRef: plan_specs/v1/e06-card-cutting/t13-year-and-month-dates-in-a-cite.yaml
+        goalRef: v1-e06-t13-year-and-month-dates-in-a-cite
+      dependsOn:
+      - t12
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e06-t13-year-and-month-dates-in-a-cite reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e06-t13-year-and-month-dates-in-a-cite
+    - id: t14
+      kind: Task
+      name: 'A stated cite the domain refuses is reported as a refusal, not an internal error'
+      description: >-
+        A stated cite the domain refuses is reported as a refusal, not an internal error.
+      inputs:
+        specRef: plan_specs/v1/e06-card-cutting/t14-refused-stated-cite-is-a-refusal.yaml
+        goalRef: v1-e06-t14-refused-stated-cite-is-a-refusal
+      dependsOn:
+      - t12
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e06-t14-refused-stated-cite-is-a-refusal reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e06-t14-refused-stated-cite-is-a-refusal
 status:
   phase: Pending

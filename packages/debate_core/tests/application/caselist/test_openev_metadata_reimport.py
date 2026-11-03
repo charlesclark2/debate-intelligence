@@ -40,7 +40,7 @@ from debate_core.domain.caselist import CampFile, Event
 from debate_core.integrations.local.fs_blob_store import BLOB_DIRECTORY, FsSnapshotStore
 from debate_core.integrations.local.sqlite_caselist_repository import SqliteCaselistRepository
 from debate_core.integrations.local.sqlite_db import SqliteDatabase
-from debate_core.testing.fakes import InMemoryAppendOnlyRecord
+from debate_core.testing.fakes.suppression import InMemoryAppendOnlyRecord
 
 YEAR = 2026
 EVENT = Event.POLICY

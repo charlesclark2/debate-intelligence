@@ -45,7 +45,7 @@ from datetime import date
 from typing import cast
 
 from debate_core.application.errors import Conflict, InvalidCursor, NotFound
-from debate_core.application.ports import DEFAULT_PAGE_SIZE, Page
+from debate_core.application.ports.persistence import DEFAULT_PAGE_SIZE, Page
 from debate_core.domain.caselist import (
     ArchiveSnapshot,
     CampFile,

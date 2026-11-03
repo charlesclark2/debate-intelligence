@@ -19,7 +19,7 @@ access rules.
 
 | Adapter | Where |
 |---|---|
-| :class:`~debate_core.testing.fakes.InMemoryCardEditLog` | tests |
+| :class:`~debate_core.testing.fakes.card_edit_log.InMemoryCardEditLog` | tests |
 
 None yet in production. No V1 command edits a card; the V2 editor brings the first real one, and
 with it the need to write the entry in the same transaction as the card (see the service's module

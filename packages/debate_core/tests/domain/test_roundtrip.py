@@ -146,7 +146,7 @@ search_results = st.builds(
     rerank_score=scores,
     source_quality_features=st.dictionaries(
         non_empty_text,
-        st.floats(min_value=-1e6, max_value=1e6, allow_nan=False, allow_infinity=False),
+        st.none() | st.floats(min_value=-1e6, max_value=1e6, allow_nan=False, allow_infinity=False),
         max_size=5,
     ),
     explanation=optional_text,

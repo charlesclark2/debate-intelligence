@@ -30,7 +30,7 @@ from collections.abc import Callable
 import pytest
 
 from debate_core.application.errors import BlobIntegrityError, NotFound
-from debate_core.application.ports import SnapshotStore
+from debate_core.application.ports.persistence import SnapshotStore
 from debate_core.testing.contracts.harness import (
     AdapterContract,
     BlobCopyCounter,

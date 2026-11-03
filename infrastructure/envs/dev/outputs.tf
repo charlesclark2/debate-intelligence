@@ -117,3 +117,190 @@ output "evidence_removal_profile_name" {
   description = "The name to give the takedown SSO profile for this environment."
   value       = module.evidence_store.removal_profile_name
 }
+
+# --- The student evidence search pilot (v1-e39-t04-pilot-infrastructure) ----------------------
+#
+# docs/runbooks/evidence-search.md reads these. scripts/tub_deploy.sh does not: it derives the
+# repository and function names from the environment, so a deploy never reads Terraform state.
+
+output "evidence_search_url" {
+  description = "Where students open the pilot in this environment."
+  value       = module.evidence_search.pilot_url
+}
+
+output "evidence_search_login_host" {
+  description = "The managed login's host, which school IT allows alongside the pilot host."
+  value       = module.evidence_search.login_host
+}
+
+output "evidence_search_repository_url" {
+  description = "The image repository scripts/tub_deploy.sh pushes to."
+  value       = module.evidence_search.repository_url
+}
+
+output "evidence_search_function_name" {
+  description = "The pilot's function."
+  value       = module.evidence_search.function_name
+}
+
+output "evidence_search_function_url" {
+  description = "The function URL, which refuses a direct request with 403; the runbook checks that it does."
+  value       = module.evidence_search.function_url
+}
+
+output "evidence_search_distribution_id" {
+  description = "The pilot's CloudFront distribution."
+  value       = module.evidence_search.distribution_id
+}
+
+output "evidence_search_user_pool_id" {
+  description = "The pilot's user pool."
+  value       = module.evidence_search.user_pool_id
+}
+
+output "evidence_search_client_id" {
+  description = "The confidential app client's id. Not a secret."
+  value       = module.evidence_search.client_id
+}
+
+output "evidence_search_cookie_keys_parameter_name" {
+  description = "The SecureString parameter the operator writes the session cookie keys to."
+  value       = module.evidence_search.cookie_keys_parameter_name
+}
+
+output "evidence_search_audit_log_group_name" {
+  description = "The append-only access audit log, kept 400 days."
+  value       = module.evidence_search.audit_log_group_name
+}
+
+output "evidence_search_account_changes_log_stream_name" {
+  description = "The audit stream the coach's `tub users` commands write to."
+  value       = module.evidence_search.account_changes_log_stream_name
+}
+
+output "evidence_search_app_log_group_name" {
+  description = "The function's application log, kept 30 days."
+  value       = module.evidence_search.app_log_group_name
+}
+
+output "evidence_search_deployer_profile_name" {
+  description = "The name to give the deployer's SSO profile (debate-dev-tub-deployer / debate-prod-tub-deployer)."
+  value       = module.evidence_search.deployer_profile_name
+}
+
+output "evidence_search_accounts_profile_name" {
+  description = "The name to give the accounts SSO profile (debate-dev-tub-accounts / debate-prod-tub-accounts)."
+  value       = module.evidence_search.accounts_profile_name
+}
+
+output "caselist_password_secret_name" {
+  description = "The Tabroom password secret (debate-<env>-caselist-tabroom-password), which `caselist auth set-password` writes."
+  value       = module.caselist_run.password_secret_name
+}
+
+output "caselist_token_secret_name" {
+  description = "The caselist token secret (debate-<env>-caselist-token), which the login task writes and the run reads."
+  value       = module.caselist_run.token_secret_name
+}
+
+output "caselist_credentials_key_alias" {
+  description = "The key that encrypts the two caselist secrets and nothing else."
+  value       = module.caselist_run.credentials_key_alias
+}
+
+output "caselist_login_role_arn" {
+  description = "The login task's role, the only reader of the Tabroom password."
+  value       = module.caselist_run.login_role_arn
+}
+
+output "caselist_run_role_arn" {
+  description = "The run's role, the only reader of the token."
+  value       = module.caselist_run.run_role_arn
+}
+
+output "caselist_secret_writer_permission_set_name" {
+  description = "The coach's writer permission set (DebateDevCaselistSecretWriter / DebateProdCaselistSecretWriter)."
+  value       = module.caselist_run.credential_writer_permission_set_name
+}
+
+output "caselist_secret_writer_profile_name" {
+  description = "The name to give the writer's SSO profile (debate-dev-caselist-writer / debate-prod-caselist-writer), passed as --aws-profile."
+  value       = module.caselist_run.credential_writer_profile_name
+}
+
+output "caselist_login_schedule_name" {
+  description = "The Wednesday login schedule. Null until caselist_image_digest is set (apply B)."
+  value       = module.caselist_run.login_schedule_name
+}
+
+output "caselist_run_repository_url" {
+  description = "Where scripts/caselist_run_deploy.sh pushes the run image (debate-<env>-caselist-run)."
+  value       = module.caselist_run.repository_url
+}
+
+output "caselist_run_cluster_name" {
+  description = "The cluster the login and run tasks run on (debate-<env>-caselist-run)."
+  value       = module.caselist_run.cluster_name
+}
+
+output "caselist_run_subnet_ids" {
+  description = "The run's two public subnets, where a run started by hand runs."
+  value       = module.caselist_run.run_subnet_ids
+}
+
+output "caselist_run_security_group_id" {
+  description = "The tasks' security group: no inbound rule, outbound HTTPS only."
+  value       = module.caselist_run.run_security_group_id
+}
+
+output "caselist_run_task_definition_arn" {
+  description = "The run task definition the schedule runs, pinned by digest. Null until caselist_image_digest is set (apply B)."
+  value       = module.caselist_run.run_task_definition_arn
+}
+
+output "caselist_run_schedule_name" {
+  description = "The Wednesday 06:00 America/Chicago run schedule. Null until caselist_image_digest is set (apply B)."
+  value       = module.caselist_run.run_schedule_name
+}
+
+output "caselist_run_schedule_state" {
+  description = "ENABLED or DISABLED; disabled until the cutover. Null until apply B."
+  value       = module.caselist_run.run_schedule_state
+}
+
+output "caselist_run_deployer_permission_set_name" {
+  description = "The run's deployer permission set (DebateDevCaselistRunDeployer / DebateProdCaselistRunDeployer)."
+  value       = module.caselist_run.deployer_permission_set_name
+}
+
+output "caselist_run_deployer_profile_name" {
+  description = "The name to give the deployer's SSO profile (debate-dev-caselist-run-deployer / debate-prod-caselist-run-deployer), which scripts/caselist_run_deploy.sh uses."
+  value       = module.caselist_run.deployer_profile_name
+}
+
+output "caselist_alert_topic_arn" {
+  description = "The alert topic (debate-<env>-caselist-run-alerts), which emails the coach when a run or login fails, a run is late, a schedule cannot start, or someone changes who may read the password."
+  value       = module.caselist_run.alert_topic_arn
+}
+
+output "caselist_alert_subscription_arn" {
+  description = "The coach's email subscription to the alert topic: `pending confirmation` until the link AWS emails is followed."
+  value       = module.caselist_run.alert_subscription_arn
+}
+
+output "caselist_run_late_alarm_actions_enabled" {
+  description = "Whether the late-run alarm emails the coach: false until the cutover's first recorded run."
+  value       = module.caselist_run.late_run_alarm_actions_enabled
+}
+
+# --- Calling the routed Bedrock models (v1-e05-t08-bedrock-invoke-access) ------------------------
+
+output "bedrock_invoker_permission_set_name" {
+  description = "The permission set a model call is made with (DebateDevBedrockInvoker / DebateProdBedrockInvoker)."
+  value       = module.bedrock_access.permission_set_name
+}
+
+output "bedrock_profile_name" {
+  description = "The name to give the BedrockInvoker SSO profile (debate-dev-bedrock / debate-prod-bedrock): what models.aws_profile names in config/profiles/<env>.toml."
+  value       = module.bedrock_access.profile_name
+}

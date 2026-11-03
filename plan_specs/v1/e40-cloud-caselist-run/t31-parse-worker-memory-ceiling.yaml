@@ -1,0 +1,112 @@
+# TASK v1-e40-t31-parse-worker-memory-ceiling - A parse worker over its share of memory fails its file, not the whole run
+# Epic: E40 — Weekly Caselist Run in the Cloud | Release: v1.8 (Weekly caselist run in the cloud) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e40-t31-parse-worker-memory-ceiling
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.8
+    debate/epic: v1-e40-cloud-caselist-run
+  annotations:
+    debate/title: "A parse worker over its share of memory fails its file, not the whole run"
+spec:
+  # Filed by the PM, 2026-10-31, from the hspolicy25 import of 2026-10-31, killed for memory.
+  description: >-
+    `ProcessPoolParseRunner` replaces a worker that dies, but when the task as a whole runs out
+    of memory the kernel kills the container, and the run or import is lost with nothing
+    recorded (2026-10-31: the `hspolicy25` import, exit 137). Measure first, read-only and
+    counts only: on the Mac's raw sources, each source's size against the parse's peak resident
+    memory for the largest few hundred sources, and the main process's growth over a parse of a
+    few thousand, as an operator block if it runs past two minutes; record the distribution in
+    `docs/data`. Then give each worker a ceiling (on Linux, a resource limit set in the worker
+    before it parses; say what macOS does with it), from a setting such as
+    `parse.worker_memory_mb`, unset meaning none, so that a source over it fails as a
+    `WorkerFailure` with its own reason, is recorded like the time limit's, and the run goes on.
+    The cloud task sets the ceiling from its memory and worker count, leaving room for the main
+    process. If the main process is what grows, say so and stop: that is a different fix.
+    (PM amendment 2026-11-01, from v1-e40-t30's follow-up.) The weekly run records the container's memory
+    high-water mark at the end of each stage and in its details, read as v1-e40-t32 reads it for an
+    import (the cgroup's peak, and the main process's own), so the run task's size comes from a
+    measurement. Record Wednesday 2026-11-04's figures if the run has them.
+    (PM amendment 2026-11-01, from the measurement.) The measurement
+    (`docs/data/caselist-parse-memory.md`) found the main process is what grows: a worker peaks at
+    most 632 MiB on the Mac's corpus and is stopped before the aggregate rebuild, which holds every
+    card of the caselist in the main process. The per-worker ceiling is dropped: on this corpus it
+    refuses nothing, it would not have stopped the kill, and doing it properly needs a parser change
+    and a failure reason older builds cannot read. A streaming rebuild is its own task,
+    v1-e40-t36. The scope is now the measurement (done) and the weekly run's memory figures: the
+    container's high-water mark (the cgroup's peak) and the main process's own, at the end of each
+    stage and in the run's details, read with v1-e40-t32's reader, left out rather than zero when
+    unreadable, and read by offline builds of `v1.1.0-dev.251` and `v1.1.0-dev.200`.
+  priority: 2
+  constraints:
+    packages: [debate_core.application, packages/debate_core/tests, debate_cli, packages/debate_cli/tests, infrastructure, docs/data, docs/runbooks]
+    forbidden:
+      - A real source's text, name or path in the report or a test
+      - Network or AWS access in a test
+      - A ceiling that refuses a source the measurement shows fits
+  context:
+    - kind: TaskRef
+      name: v1-e40-t30-run-task-memory-fits-a-full-parse
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        The measurement is recorded in `docs/data`, counts and sizes only, before any rule.
+    - id: ac2
+      description: >-
+        (PM amendment 2026-11-01, from the measurement.) Each stage the weekly run times, and
+        the run's details, carry the container's memory high-water mark and the main process's
+        own where they can be read and leave them out where they cannot, and offline builds of
+        `v1.1.0-dev.251` and `v1.1.0-dev.200` read those details; by tests shown failing first.
+status:
+  phase: Succeeded
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e40-t31-parse-worker-memory-ceiling-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.8
+    debate/epic: v1-e40-cloud-caselist-run
+spec:
+  description: >-
+    The parse's memory measured, and the weekly run's memory figures recorded (PM amendment
+    2026-11-01, from the measurement: the per-worker ceiling is dropped).
+  goalRef:
+    name: v1-e40-t31-parse-worker-memory-ceiling
+  graph:
+    nodes:
+      - id: parse-memory-measurement
+        kind: Task
+        name: Parse memory measured
+        description: >-
+          Each worker's peak against its source's size, and the main process's growth over a
+          parse, recorded in docs/data, counts and sizes only.
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: The measurement is recorded
+            path: docs/data/caselist-parse-memory.md
+      - id: run-memory-figures
+        kind: Task
+        name: Weekly run memory figures
+        description: >-
+          The weekly run records the container's memory high-water mark and the main process's
+          own at the end of each stage and in its details, which earlier builds still read.
+        dependsOn: [parse-memory-measurement]
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Run memory figure tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests, packages/debate_cli/tests, -k, memory_figures]
+status:
+  phase: Pending

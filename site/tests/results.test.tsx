@@ -29,7 +29,7 @@ import type { Results } from '@/lib/results'
 import { loadSchedule } from '@/lib/tournaments'
 
 import { describeViolations, findAccessibilityViolations } from './axe'
-import { STUDENTS, contentWith, replaceOnce } from './content-fixture'
+import { FIXTURE_SEASON, STUDENTS, contentWith, replaceOnce } from './content-fixture'
 import { SEASON_FIXTURE, oneResult, resultsContent, resultsSiteRoot } from './results-fixture'
 
 /**
@@ -177,6 +177,25 @@ describe('who a result names', () => {
     const [group] = loadResults(resultsContent(yaml, [lapsed])).groups
     expect(group!.results[0]!.named).toBe(false)
     expect(resultLine(group!.results[0]!)).not.toContain(STUDENTS.jordan.publishedName)
+  })
+
+  /**
+   * isStale decides who a result may name, so a check dated after the season's last day lapses
+   * the entry here too (v1-e37-t13). The result is printed in team-level form, not refused.
+   */
+  it('takes a name off a result when its consent entry was checked after the season ended', () => {
+    const yaml = oneResult({ students: '[Jordan Rivera]' })
+    const checkedLate = { ...STUDENTS.jordan, season: FIXTURE_SEASON, dateChecked: '2027-08-02' }
+    const [group] = loadResults(resultsContent(yaml, [checkedLate])).groups
+    expect(group!.results[0]!.named).toBe(false)
+    expect(resultLine(group!.results[0]!)).toBe('First place, Varsity Lincoln-Douglas: a Whitefish Bay debater')
+  })
+
+  it("still names a student whose entry was checked on 31 July, the season's last day", () => {
+    const yaml = oneResult({ students: '[Jordan Rivera]' })
+    const checkedLastDay = { ...STUDENTS.jordan, season: FIXTURE_SEASON, dateChecked: '2027-07-31' }
+    const [group] = loadResults(resultsContent(yaml, [checkedLastDay])).groups
+    expect(resultLine(group!.results[0]!)).toBe('First place, Varsity Lincoln-Douglas: Jordan Rivera (2028)')
   })
 
   it('always publishes a team-level result, with no consent entry needed for anyone', () => {

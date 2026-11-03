@@ -1,0 +1,45 @@
+{
+  "format": 1,
+  "prompts": {
+    "card.markup": {
+      "1.0.0": {
+        "body_sha256": "9f87420f74a69659fdbf2fad2d391252edcf0762f4aa1286fa333a7692c4b62a",
+        "output_schema": "debate_core.evidence.selection_contract.MarkupSuggestion",
+        "task_class": "complex_reasoning"
+      }
+    },
+    "card.select": {
+      "1.0.0": {
+        "body_sha256": "f17a32587e8c54b3a3a5c662574ee4245f5ace12ae858cc4f4538e204887c730",
+        "output_schema": "debate_core.evidence.selection_contract.CardSelection",
+        "task_class": "complex_reasoning"
+      }
+    },
+    "landscape.classify_position": {
+      "1.0.0": {
+        "body_sha256": "abab5e2d3dd883bfc279c95f85c72920a729e4057607ccc5fe87a1ba578d126d",
+        "output_schema": "debate_core.domain.landscape_classification.ModelPositionAnswers",
+        "task_class": "high_volume"
+      },
+      "1.1.0": {
+        "body_sha256": "c82e5aa735b4118a03b30dee7f29e0c504146d5058638189789a7721dcb105a4",
+        "output_schema": "debate_core.domain.landscape_classification.ModelPositionAnswers",
+        "task_class": "high_volume"
+      }
+    },
+    "model.repair": {
+      "1.0.0": {
+        "body_sha256": "62f84d9990009db70021ed0f1b6d6edebd9d6e64157afbea382e63e684654f10",
+        "output_schema": "debate_core.application.structured_output.RepairedSchema",
+        "task_class": "complex_reasoning"
+      }
+    },
+    "search.expand": {
+      "1.0.0": {
+        "body_sha256": "1251763a6ee96488c89dc21a1c5ead797467dfe6a2cfaa2cdc4c298f5c66ae4f",
+        "output_schema": "debate_core.application.query_expansion.QueryExpansion",
+        "task_class": "high_volume"
+      }
+    }
+  }
+}

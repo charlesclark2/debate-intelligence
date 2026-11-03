@@ -27,7 +27,8 @@ initials in its cite tail — is never printed, with or without the flag.
 
 Accepted here as well as before the command group (`debate-research --json caselist cards …`), so
 the invocation in the spec works as written. Either way the output is the one JSON envelope every
-command writes.
+command writes. A cluster labelled by a card with no tag says `"tag": null`, and `-` in the table
+(`v1-e31-t14`).
 """
 
 from __future__ import annotations
@@ -38,8 +39,8 @@ from typing import Annotated
 
 import typer
 
-from debate_cli.commands.caselist import _snapshot_date  # pyright: ignore[reportPrivateUsage]
 from debate_cli.context import cli_context, command_name
+from debate_cli.options.snapshot_date import parse_snapshot_date
 from debate_cli.output import CliOutput, JsonValue, OutputMode, TableSpec
 from debate_core.application.caselist_card_stats import CaselistCardReport, ClusterSummary, read_parsed_cards
 
@@ -75,7 +76,7 @@ def cards(
     cli = cli_context(ctx)
     if json_output and not cli.output.is_json:
         cli.output = CliOutput(OutputMode.JSON, verbose=cli.output.verbose)
-    as_of = _snapshot_date(snapshot) if snapshot is not None else None
+    as_of = parse_snapshot_date(snapshot) if snapshot is not None else None
     service = cli.services.caselist_card_stats()
     report = asyncio.run(
         service.report(
@@ -138,7 +139,7 @@ def _table(report: CaselistCardReport, *, by_team: bool) -> TableSpec:
             str(cluster.occurrences),
             str(cluster.files),
             cluster.short_cite or "-",
-            _shorten(cluster.tag),
+            _shorten(cluster.tag) if cluster.tag is not None else "-",
         ]
         if by_team:
             row.append(", ".join(f"{school} {code}" for school, code in cluster.teams or ()))

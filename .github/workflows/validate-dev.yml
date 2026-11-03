@@ -14,16 +14,70 @@
 #             tests/smoke's recorded tier against that installed binary, offline; with `live`, also
 #             the canary tier;
 #   slow      checks out the same commit and runs the offline slow tier from source,
-#             pytest -m "slow and not live and not eval": the suites tasks mark `slow` to keep them
-#             out of the PR `ci` check (working agreement 1). The parser evaluation (`eval`) is left
-#             out because it needs the evaluation corpus, which by policy never reaches a runner, so
-#             here it could only skip, and a skip fails a tier. It runs on the operator's Mac before
-#             any promotion containing a parser change (v1-e31-t05);
+#             pytest -m "slow and not live and not eval and not operator_data": the suites tasks
+#             mark `slow` to keep them out of the PR `ci` check (working agreement 1). The parser
+#             evaluation (`eval`) is left out because it needs the evaluation corpus, which by policy
+#             never reaches a runner, so here it could only skip, and a skip fails a tier. It runs on
+#             the operator's Mac before any promotion containing a parser change (v1-e31-t05).
+#             `operator_data` is left out for the same reason: data only the operator's machine
+#             holds, such as the tub's own search index (v1-e01-t34);
+#             The tier includes the search pages' browser suite (packages/debate_api/tests/browser,
+#             v1-e39-t06), so the job installs Playwright's Chromium first: without it every browser
+#             test errors, and the tier fails (PM ruling 2026-10-21, v1-e39-t06 Q1). For the same
+#             reason it pulls the pilot function's arm64 base image, the one scripts/tub_deploy.sh
+#             --print-base-image names, for the SQLite checks that run inside it (v1-e01-t34);
+#   cloud     checks out the same commit and runs tests/smoke/cloud -m "live and dev" from source:
+#             the student search pilot in dev, https://tub.dev.wfbdebate.com/, through CloudFront,
+#             with no account (v1-e39-t10): /healthz, the 302 to managed login for a page asked for
+#             without a session, the content-hashed app.js and app.css with their immutable cache
+#             header, and CloudFront's Content-Security-Policy on every answer. It holds no secret,
+#             no AWS credential and no TOTP seed, and signs nothing in; the signed-in journey is the
+#             operator's (scripts/tub_dev_journey.py, docs/runbooks/evidence-search.md). It checks
+#             what dev serves, whichever commit was last deployed there, so a pilot down in dev
+#             turns the status red;
+#   image     builds the weekly cloud run's image from the same pre-release, as the operator's
+#             scripts/caselist_run_deploy.sh --dry-run builds it (v1-e40-t03, ADR-0020 (1)): for
+#             linux/arm64, natively on GitHub's arm64 runner, checked offline by
+#             ops/caselist_run/check_image.sh. Then, inside that image, it runs
+#             tests/smoke/test_caselist_pull.py against the installed build there: `caselist pull`
+#             against the S3 and OpenCaselist stand-ins, on loopback inside the container. No AWS
+#             account, no OpenCaselist and no credential are involved; the build reaches PyPI and
+#             Docker's registries, as any image build does. An arm64 runner rather than buildx
+#             under QEMU, because the build runs Python (the install's rehearsal, `doctor`) and the
+#             smoke check runs the CLI and its parse workers, and emulated Python is several times
+#             slower;
 #   conclude  posts `success` on the commit the installed build reported, only when every job
 #             passed and that commit, and both test trees, are the one requested. Anything else posts
-#             `failure` (`error` if the run was cancelled) on the requested commit.
+#             `failure` (`error` if the run was cancelled) on the requested commit. Then, for a run
+#             from dev that posted the status, a failure opens an issue labelled `validate-dev` or
+#             comments on the open one, and a success closes it: a red validate-dev went unseen for
+#             days from 2026-10-20, because nothing but the status said so (v1-e01-t34).
 #
 # In any tier a skipped test fails the tier: a check skipped for a missing fixture did not run.
+#
+# THE SITE LANE (v1-e37-t09). A site/<slug> branch carries a change to the public website's content,
+# pages or assets straight from main to main, and has no pre-release. Dispatched with
+# `site_only: true` (from dev, by the person publishing), the jobs above are skipped and three others
+# run instead:
+#
+#   site-resolve   this workflow's own copy of scripts/validate_dev.py refuses the commit, posting
+#                  nothing, unless its own changes since it left main are something, all under
+#                  site/, and no dependency manifest or lockfile (check_promotion_source.py's rule,
+#                  the one promotion-source applies to the pull request). Then it posts `pending`.
+#                  Posting nothing on a refusal keeps a mistyped SHA from turning dev's head red;
+#   site           checks out the commit and runs the site's lint, type check and source tests, then
+#                  its PROD build (SITE_ENV=prod), in which the publishing-policy and consent guards
+#                  are fatal, and the export checks against that build. ci.yml's `site` job builds
+#                  for dev, where those guards only print, so before this the first prod build of a
+#                  site change was the deploy after it merged. Since v1-e36-t12 that job also runs
+#                  this prod build on every pull request into main, a hotfix/* one among them;
+#   site-conclude  posts `success` only when the site job passed on exactly that commit.
+#
+# This does not weaken the status for anything else: with the input off (every trigger but that
+# dispatch) nothing here changes, and with it on the status goes only on a commit whose every byte
+# outside site/ is main's, which was validated when it got there. A dev head always differs from
+# main outside site/, so it cannot pass. One workflow still posts `validate-dev`, with the same
+# split: the jobs that run the validated commit's code hold no write permission.
 #
 # Triggers:
 #   * workflow_dispatch (sha, tag, live): dev-prerelease.yml dispatches this after publishing each
@@ -41,10 +95,14 @@
 # The live canary tier runs only with the dispatch input `live: true` or the repository variable
 # VALIDATE_DEV_LIVE set to `true`; it never calls OpenCaselist (tests/smoke/test_live_canary.py).
 #
-# SECURITY. Permissions are contents: read and statuses: write, and nothing else. statuses: write
-# is held only by `resolve` and `conclude`, which run this workflow's own copy of the driver; the
-# jobs that run the validated commit's tests hold contents: read alone, and the driver withholds
-# GH_TOKEN from pytest, so the code under test can neither post its own status nor read the token.
+# SECURITY. Permissions are contents: read, statuses: write and issues: write, and nothing else.
+# No job reads a secret (`secrets.` appears nowhere here) or requests an OIDC token, so no job can
+# reach AWS or sign in to the pilot.
+# statuses: write is held only by `resolve` and `conclude`, and issues: write only by `conclude`,
+# which run this workflow's own copy of the driver; the jobs that run the validated commit's tests
+# hold contents: read alone, and the driver withholds GH_TOKEN from pytest, so the code under test
+# can neither post its own status nor read the token. The issue's text is the commit, the tag,
+# conclude's own description and the run's link, and nothing from the environment.
 # No job is named `validate-dev`: a check run of that name would land on the workflow's own commit,
 # which for a dispatch from dev is dev's head and not necessarily the commit validated.
 
@@ -64,6 +122,11 @@ on:
         default: ""
       live:
         description: Also run the live canary tier
+        required: false
+        type: boolean
+        default: false
+      site_only:
+        description: Validate a site/<slug> commit by the site's prod build instead of a pre-release
         required: false
         type: boolean
         default: false
@@ -122,6 +185,9 @@ env:
 jobs:
   resolve:
     name: find the pre-release and mark the commit pending
+    # Every trigger but a site-only dispatch. smoke, slow, cloud and image need this job, so they skip
+    # with it.
+    if: inputs.site_only != true
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions:
@@ -202,19 +268,116 @@ jobs:
         run: uv python install
       - name: Install the locked workspace
         run: uv sync --locked --all-packages
-      - name: Run pytest -m "slow and not live and not eval", offline
+      # The search pages' browser tests (v1-e39-t06) drive Chromium through Playwright. This installs
+      # the build the locked Playwright names, and the system libraries it needs on the runner; the
+      # tests then run offline, every page served in-process (PM ruling 2026-10-21, v1-e39-t06 Q1).
+      - name: Install Playwright's Chromium for the browser tests
+        run: uv run --locked playwright install --with-deps chromium
+      # The DOCX renderer's open check (v1-e06-t04) converts a rendered file with LibreOffice headless.
+      # Without soffice on the runner it skips, and a skip fails the tier (v1-e01-t10).
+      - name: Install LibreOffice for the rendered-DOCX open check
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends libreoffice-writer
+          soffice --version
+      # Two SQLite checks run inside the pilot function's base image, for linux/arm64 as the function
+      # runs (v1-e39-t02, v1-e39-t03). Without the image on the runner they skip, and a skip fails
+      # the tier, which it did from 2026-10-20 (v1-e01-t34). scripts/tub_deploy.sh names the image
+      # it builds on, from requires-python, so this pulls exactly that; the pull logs the digest it
+      # got, and the inspect the platform. QEMU lets this x86-64 runner run the image's python3.
+      - name: Set up QEMU, so the runner can run the arm64 Lambda image
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
+      - name: Pull the Lambda base image scripts/tub_deploy.sh builds on
+        run: |
+          base="$(scripts/tub_deploy.sh --print-base-image)"
+          image="${base% *}"
+          platform="${base#* }"
+          docker pull --platform "$platform" "$image"
+          docker image inspect --format "pulled {{.Os}}/{{.Architecture}} {{.RepoDigests}}" "$image"
+      - name: Run pytest -m "slow and not live and not eval and not operator_data", offline
         id: slow
         run: python3 scripts/validate_dev.py slow --sha "$REQUESTED_SHA" --work-dir "$RUNNER_TEMP/validate-dev-slow"
 
+  cloud:
+    name: check the student search pilot in dev through CloudFront, with no account
+    needs: resolve
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.REQUESTED_SHA }}
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@v10.2.0 # setup-uv publishes no major-version tag
+        with:
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+      - name: Install Python from .python-version
+        run: uv python install
+      - name: Install the locked workspace
+        run: uv sync --locked --all-packages
+      - name: Run pytest tests/smoke/cloud -m "live and dev" against dev's pilot
+        run: python3 scripts/validate_dev.py cloud --sha "$REQUESTED_SHA" --work-dir "$RUNNER_TEMP/validate-dev-cloud"
+
+  image:
+    name: build the run image from the pre-release and pull against stand-ins inside it
+    needs: resolve
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.REQUESTED_SHA }}
+          persist-credentials: false
+      # uv, for the smoke check's own environment inside the image. The image itself carries no uv.
+      - uses: astral-sh/setup-uv@v10.2.0 # setup-uv publishes no major-version tag
+        with:
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+      - name: Build and check the run image from the pre-release, for linux/arm64
+        env:
+          # gh downloads the release's wheels on the runner; the token never enters the build.
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.resolve.outputs.tag }}
+        run: scripts/caselist_run_deploy.sh dev "$TAG" --dry-run
+      - name: Run caselist pull in the image against the S3 and OpenCaselist stand-ins
+        # tests/smoke/test_caselist_pull.py against the image's own debate-research, with the
+        # checkout mounted for the tests and an environment of their own under /tmp. A skipped
+        # test fails this step, as it fails a validate-dev tier.
+        env:
+          TAG: ${{ needs.resolve.outputs.tag }}
+        run: |
+          docker run --rm \
+            --user "$(id -u):$(id -g)" \
+            --volume "$PWD:/checkout" --workdir /checkout \
+            --volume "$(command -v uv):/usr/local/bin/uv:ro" \
+            --env HOME=/tmp/home --env USER=runner \
+            --env UV_PROJECT_ENVIRONMENT=/tmp/check-venv \
+            --env UV_PYTHON_INSTALL_DIR=/tmp/uv-python \
+            --env UV_CACHE_DIR=/tmp/uv-cache \
+            --env DEBATE_SMOKE_BIN=/opt/debate-research/bin/debate-research \
+            --env DEBATE_SMOKE_EXPECT_SHA="$REQUESTED_SHA" \
+            --env DEBATE_SMOKE_EXPECT_TAG="$TAG" \
+            --entrypoint sh "debate-dev-caselist-run:$TAG" -c \
+            'uv sync --locked --all-packages --quiet && uv run --locked --no-sync pytest tests/smoke/test_caselist_pull.py -m "not live and not in_process" --no-cov --junitxml=image-smoke.xml -p no:cacheprovider -rfEs'
+          python3 scripts/validate_dev.py tier-report --name "image smoke" image-smoke.xml
+
   conclude:
     name: post the final validate-dev status
-    needs: [resolve, smoke, slow]
-    if: always()
+    needs: [resolve, smoke, slow, cloud, image]
+    if: always() && inputs.site_only != true
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions:
       contents: read
       statuses: write
+      issues: write
     outputs:
       state: ${{ steps.conclude.outputs.state }}
     steps:
@@ -232,15 +395,32 @@ jobs:
           RESOLVE_RESULT: ${{ needs.resolve.result }}
           SMOKE_RESULT: ${{ needs.smoke.result }}
           SLOW_RESULT: ${{ needs.slow.result }}
+          CLOUD_RESULT: ${{ needs.cloud.result }}
+          IMAGE_RESULT: ${{ needs.image.result }}
         run: |
           set -- --sha "$REQUESTED_SHA"
           set -- "$@" --job "resolve=$RESOLVE_RESULT" --job "smoke=$SMOKE_RESULT" --job "slow=$SLOW_RESULT"
+          set -- "$@" --job "cloud=$CLOUD_RESULT" --job "image=$IMAGE_RESULT"
           if [ -n "$TAG" ]; then set -- "$@" --tag "$TAG"; fi
           if [ -n "$INSTALLED_SHA" ]; then set -- "$@" --installed-sha "$INSTALLED_SHA"; fi
           if [ -n "$SMOKE_COMMIT" ]; then set -- "$@" --smoke-commit "$SMOKE_COMMIT"; fi
           if [ -n "$SLOW_COMMIT" ]; then set -- "$@" --slow-commit "$SLOW_COMMIT"; fi
           if [ "$POST_STATUS" = true ]; then set -- "$@" --post-status; fi
           python3 scripts/validate_dev.py conclude "$@"
+      # Only for dev, and only when this run posted the status: a hotfix head, a tag's release
+      # event or a caller that posts its own status is not dev's verdict. always(), because the
+      # step above exits 1 on a failure, which is exactly when this has to run.
+      - name: Open or update the validate-dev issue on a failure, close it on a success
+        if: always() && steps.conclude.outputs.state != '' && env.POST_STATUS == 'true' && github.ref == 'refs/heads/dev'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.resolve.outputs.tag }}
+          STATE: ${{ steps.conclude.outputs.state }}
+          DESCRIPTION: ${{ steps.conclude.outputs.description }}
+        run: |
+          set -- --sha "$REQUESTED_SHA" --state "$STATE" --description "$DESCRIPTION"
+          if [ -n "$TAG" ]; then set -- "$@" --tag "$TAG"; fi
+          python3 scripts/validate_dev.py issue "$@"
       - name: Summary
         if: always()
         env:
@@ -250,6 +430,8 @@ jobs:
           RESOLVE_RESULT: ${{ needs.resolve.result }}
           SMOKE_RESULT: ${{ needs.smoke.result }}
           SLOW_RESULT: ${{ needs.slow.result }}
+          CLOUD_RESULT: ${{ needs.cloud.result }}
+          IMAGE_RESULT: ${{ needs.image.result }}
         run: |
           {
             echo "### validate-dev: ${STATE:-not posted}"
@@ -259,7 +441,100 @@ jobs:
             echo "| Requested commit | \`${REQUESTED_SHA}\` |"
             echo "| Pre-release | ${TAG:-none found} |"
             echo "| Installed build reported | \`${INSTALLED_SHA:-nothing}\` |"
-            echo "| Jobs | resolve ${RESOLVE_RESULT}, smoke ${SMOKE_RESULT}, slow ${SLOW_RESULT} |"
+            echo "| Jobs | resolve ${RESOLVE_RESULT}, smoke ${SMOKE_RESULT}, slow ${SLOW_RESULT}, cloud ${CLOUD_RESULT}, image ${IMAGE_RESULT} |"
             echo "| Live canary tier | ${LIVE} |"
             echo "| Status posted by this run | ${POST_STATUS} |"
           } >> "$GITHUB_STEP_SUMMARY"
+
+  # --- The site lane (v1-e37-t09): see the header -------------------------------------------------
+
+  site-resolve:
+    name: check the commit changes only site content, and mark it pending
+    if: inputs.site_only == true
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      statuses: write
+    steps:
+      # This workflow's own commit, whose driver decides; full depth, to find where the commit left main.
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Fetch main and the requested commit
+        run: git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main "$REQUESTED_SHA"
+      - name: Refuse a commit that is not a site-only change, then post pending on it
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -- --sha "$REQUESTED_SHA" --main-ref refs/remotes/origin/main
+          if [ "$POST_STATUS" = true ]; then set -- "$@" --post-status; fi
+          python3 scripts/validate_dev.py site-resolve "$@"
+
+  site:
+    name: run the site's checks and its prod build from the commit
+    needs: site-resolve
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    outputs:
+      tests_commit: ${{ steps.commit.outputs.tests_commit }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.REQUESTED_SHA }}
+          persist-credentials: false
+      - name: Record the commit the checks run on
+        id: commit
+        run: echo "tests_commit=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      # The same setup as ci.yml's site job.
+      - uses: pnpm/action-setup@v6
+        with:
+          package_json_file: site/package.json # pnpm version from its packageManager field
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: site/pnpm-lock.yaml
+      - name: pnpm install
+        run: pnpm --dir site install --frozen-lockfile
+      - name: Lint, type-check and the source tests
+        run: |
+          pnpm --dir site lint
+          pnpm --dir site typecheck
+          pnpm --dir site test
+      # What site_deploy.sh prod builds, and the runbook's promotion preconditions 2 and 3: a policy
+      # error ([[TBD]], an unreviewed name, an address outside the allowlist, an unfilled consent
+      # reference) stops this build, then the export checks read what it built.
+      - name: The prod build, in which the policy and consent guards are fatal, and the export checks against it
+        env:
+          SITE_ENV: prod
+          SITE_URL: https://wfbdebate.com
+        run: site/scripts/export-checks.sh
+
+  site-conclude:
+    name: post the validate-dev status for a site-only commit
+    needs: [site-resolve, site]
+    # Only after site-resolve accepted the commit: a refused commit gets no status at all.
+    if: always() && inputs.site_only == true && needs.site-resolve.result == 'success'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      statuses: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Post success on the site-only commit, or failure
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SITE_RESULT: ${{ needs.site.result }}
+          SITE_COMMIT: ${{ needs.site.outputs.tests_commit }}
+        run: |
+          set -- --sha "$REQUESTED_SHA" --job "site=$SITE_RESULT"
+          if [ -n "$SITE_COMMIT" ]; then set -- "$@" --site-commit "$SITE_COMMIT"; fi
+          if [ "$POST_STATUS" = true ]; then set -- "$@" --post-status; fi
+          python3 scripts/validate_dev.py site-conclude "$@"

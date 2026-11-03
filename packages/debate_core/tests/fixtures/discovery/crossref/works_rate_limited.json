@@ -1,0 +1,13 @@
+{
+  "query": {"query": "carbon capture subsidies", "filters": {"since": "2020-01-01T00:00:00Z", "until": "2024-12-31T00:00:00Z", "max_results": 6}},
+  "exchanges": [
+    {
+      "request": {
+        "method": "GET",
+        "url": "https://api.crossref.org/works?query.bibliographic=carbon+capture+subsidies&filter=from-pub-date%3A2020-01-01%2Cuntil-pub-date%3A2024-12-31&rows=6&select=DOI%2Ctitle%2Ccontainer-title%2Cauthor%2Cissued%2Cpublished-online%2Cpublished-print%2Ctype%2Cis-referenced-by-count%2Clicense%2Clink%2Cabstract&mailto=crossref-coach%40example.org"
+      },
+      "response": {"status": 429, "headers": {"content-type": "text/plain", "retry-after": "30", "x-rate-limit-limit": "1", "x-rate-limit-interval": "2s", "x-concurrency-limit": "1"}, "body": "Too many requests"}
+    }
+  ],
+  "expected_results_file": "works_errors.expected.json"
+}

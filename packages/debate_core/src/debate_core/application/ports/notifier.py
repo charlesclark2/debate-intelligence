@@ -19,8 +19,8 @@ somebody finds out, and a log file nobody opens is not finding out. So the run p
 
 ## What a notification may say
 
-A title, a sentence or two, a command, and sometimes a hint. **Never** a token, a credential, a
-file's contents, card text, a school, a team code, a student's name or a path on the operator's
+A title, a short subtitle, a sentence or two, a command, and sometimes a hint. **Never** a token, a
+credential, a file's contents, card text, a school, a team code, a student's name or a path on the operator's
 machine (`docs/policies/caselist-data-use.md` rule 4, and the task specs' forbidden lists). The
 text is built from counts, caselist slugs, stage names, error *class* names and error codes — never
 from an exception's message, which is the one place a disclosure path could hide — and a hint is
@@ -60,11 +60,27 @@ class Notification:
     repair (`v1-e34-t19`). This project's own sentence, naming a directory by its role and never by
     its path; `None` when the command says it all."""
 
+    subtitle: str | None = None
+    """A few words under the title, short enough to be shown whole: the run and its environment,
+    `Run 20261014T060000Z (prod)` (`v1-e34-t23`). Never the command, which a banner cuts there."""
+
     @property
     def text(self) -> str:
         """The message, its hint and its fix as one line, for adapters with a single text field."""
         hint = f" {self.hint}" if self.hint else ""
         return f"{self.message}{hint} Fix: {self.fix_command}"
+
+    @property
+    def body(self) -> str:
+        """The fix first, then the message and its hint: for a banner that shows its first lines.
+
+        On the operator's Mac a banner shows about ten lines of about forty-five characters of its
+        body, and the rest only when it is opened (seen 2026-10-15). A fix at the end was cut off,
+        so it comes first (`v1-e34-t23`), set apart from the sentence by a dash that no command
+        ends with.
+        """
+        hint = f" {self.hint}" if self.hint else ""
+        return f"Fix: {self.fix_command} — {self.message}{hint}"
 
 
 class Notifier(Protocol):

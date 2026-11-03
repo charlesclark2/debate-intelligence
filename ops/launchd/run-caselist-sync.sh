@@ -12,36 +12,45 @@
 # changes with whatever branch is checked out (v1-e34-t10). Editing this file changes the agent
 # only when the installer is run again.
 #
-# Every argument is passed straight through, which is how the agent names its caselists:
+# Every argument is passed straight through. The agent passes none: the caselists its pull follows
+# are the build's caselist.sync_caselists, in the environment's profile (ADR-0020 (5), v1-e40-t06).
+# An agent installed before v1-e40-t06 passes `--caselist <slug>` pairs, which the pull still takes:
 #
 #     run-caselist-sync.sh --caselist hsld26 --caselist hspolicy26
 #
 # The one exception is `--check`, alone: it shows which console script DEBATE_RESEARCH_BIN
-# resolves to, runs its `--version`, and then runs `doctor --evidence-profiles`, and nothing else.
-# `install.sh --check-launchd` runs it under launchd to prove the agent can be executed, and that
-# the AWS profile the weekly run will use is one this machine's AWS config defines, without a sync
-# and without a download (v1-e34-t22). It ends with doctor's exit code: 1 when a configured
-# evidence profile is not defined, which is the setting that would make the scheduled run refuse
-# to start. What that check asks, and what does not fail it, is the command's to say, not this
-# file's.
+# resolves to, runs its `--version`, and then runs `doctor --evidence-profiles --search-index`, and
+# nothing else. `install.sh --check-launchd` runs it under launchd to prove the agent can be
+# executed, that the AWS profile the weekly run will use is one this machine's AWS config defines
+# (v1-e34-t22), and that every store the run's search index stage will index has been parsed by
+# this build (v1-e34-t30), without a sync and without a download. The stores are those of the
+# build's caselist.sync_caselists; for an agent installed before v1-e40-t06 the installer hands that
+# check the plist's caselists as the same setting, in the check's environment, so `--check` still
+# takes no argument. It ends with doctor's exit code: 1 when a configured evidence profile is
+# not defined, which is the setting that would make the scheduled run refuse to start, or when a
+# store has never been parsed, which would leave the run without a current search index. What
+# those checks ask, and what does not fail them, is the command's to say, not this file's.
 #
-# Environment, all optional, all templated into the plist by install.sh:
+# Environment, all optional when this file is run by hand. install.sh writes these two into the
+# plist, beside HOME and PATH:
 #
 #   DEBATE_ENV            dev or prod. Defaults to prod, because the schedule is the prod job;
 #                         the dev validation run is one an operator types.
-#   AWS_PROFILE           The SSO profile for that environment's evidence bucket. If its session
-#                         has expired the run still captures and imports, and records the publish
-#                         as pending for the next run or `caselist pull --publish-pending`.
 #   DEBATE_RESEARCH_BIN   The console script, by its full path. The installer always writes it, so
 #                         nothing earlier on PATH can stand in for the installed build.
+#
+# AWS_PROFILE is not in the plist (v1-e34-t24), and this file does not set it (v1-e34-t27). The AWS
+# profile the run uses is the build's setting storage.s3.aws_profile, which the bundled dev and
+# prod profiles both set, and a profile named by the setting is the one used whatever AWS_PROFILE
+# says. One set in a shell that runs this file by hand reaches the command as the shell's other
+# variables do, and changes nothing. If the profile's session has expired the run still captures
+# and imports, and records the publish as pending for the next run or `caselist pull
+# --publish-pending`.
 set -eu
 
 : "${DEBATE_ENV:=prod}"
 : "${DEBATE_RESEARCH_BIN:=debate-research}"
 export DEBATE_ENV
-if [ -n "${AWS_PROFILE:-}" ]; then
-    export AWS_PROFILE
-fi
 
 if ! command -v "${DEBATE_RESEARCH_BIN}" >/dev/null 2>&1; then
     echo "run-caselist-sync: ${DEBATE_RESEARCH_BIN} is not on PATH." >&2
@@ -57,10 +66,11 @@ if [ "${1:-}" = "--check" ]; then
     fi
     echo "run-caselist-sync: check: DEBATE_RESEARCH_BIN is $(command -v "${DEBATE_RESEARCH_BIN}")"
     "${DEBATE_RESEARCH_BIN}" --version
-    # The build's own checks, and each configured evidence profile: defined or not, and which
-    # permission set it is signed in as. Run here because this is the environment the scheduled
-    # run has: launchd's, with the plist's HOME, PATH and DEBATE_ENV, and nothing of a shell's.
-    exec "${DEBATE_RESEARCH_BIN}" doctor --evidence-profiles
+    # The build's own checks, each configured evidence profile (defined or not, and which
+    # permission set it is signed in as), and each store the run's search index stage will index
+    # (parsed by this build or not). Run here because this is the environment the scheduled run
+    # has: launchd's, with the plist's HOME, PATH and DEBATE_ENV, and nothing of a shell's.
+    exec "${DEBATE_RESEARCH_BIN}" doctor --evidence-profiles --search-index
 fi
 
 # --json so that stdout is one object per run, which is what the plist's StandardOutPath collects

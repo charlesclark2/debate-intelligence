@@ -35,10 +35,11 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from collections.abc import Mapping
 from datetime import datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any, Final, cast
 
 import jsonschema
 import pytest
@@ -98,10 +99,23 @@ THE_FIX_FOR_A_PROFILE_NOT_DEFINED = (
 """The fix the adapter writes for a profile the AWS config lacks (`v1-e29-t07`), as a run that the
 want of a bucket stopped gives it (`v1-e34-t22`)."""
 
-NO_DETAILS_TO_SPEAK_OF: dict[str, Any] = {"stages": [], "failure_codes": [], "hint": None, "parse": None}
+NO_DETAILS_TO_SPEAK_OF: dict[str, Any] = {
+    "stages": [],
+    "failure_codes": [],
+    "hint": None,
+    "parse": None,
+    "search_index": None,
+    "held_by_request": {},
+    "manifests_published": 0,
+    # Added by `v1-e34-t31`: no scenario here owes a parsed store.
+    "parsed_stores_owed": [],
+}
+
+WEEK_ONE_PUBLISHED: dict[str, Any] = {**NO_DETAILS_TO_SPEAK_OF, "manifests_published": 1}
+"""A run that published week one: one manifest, beside its sources (`v1-e34-t28`)."""
 
 EXPECTED_DETAILS: dict[str, list[dict[str, Any]]] = {
-    "a_week_imported_and_published": [{"run_id": FIRST_RUN_ID, **NO_DETAILS_TO_SPEAK_OF}],
+    "a_week_imported_and_published": [{"run_id": FIRST_RUN_ID, **WEEK_ONE_PUBLISHED}],
     "a_publish_the_bucket_did_not_take": [
         {
             "run_id": FIRST_RUN_ID,
@@ -111,11 +125,17 @@ EXPECTED_DETAILS: dict[str, list[dict[str, Any]]] = {
                     "error_codes": ["STORE_UNAVAILABLE"],
                     "hint": None,
                     "earlier_findings": [],
+                    "drift": [],
+                    "not_compared": [],
                 }
             ],
             "failure_codes": ["STORE_UNAVAILABLE"],
             "hint": None,
             "parse": None,
+            "search_index": None,
+            "held_by_request": {},
+            "manifests_published": 0,
+            "parsed_stores_owed": [],
         }
     ],
     "a_publish_the_bucket_refused": [
@@ -127,11 +147,17 @@ EXPECTED_DETAILS: dict[str, list[dict[str, Any]]] = {
                     "error_codes": ["STORE_ACCESS_DENIED"],
                     "hint": None,
                     "earlier_findings": [],
+                    "drift": [],
+                    "not_compared": [],
                 }
             ],
             "failure_codes": ["STORE_ACCESS_DENIED"],
             "hint": None,
             "parse": None,
+            "search_index": None,
+            "held_by_request": {},
+            "manifests_published": 0,
+            "parsed_stores_owed": [],
         }
     ],
     "a_week_that_cannot_be_read": [
@@ -143,16 +169,22 @@ EXPECTED_DETAILS: dict[str, list[dict[str, Any]]] = {
                     "error_codes": ["UNREADABLE_ARCHIVE"],
                     "hint": None,
                     "earlier_findings": [],
+                    "drift": [],
+                    "not_compared": [],
                 }
             ],
             "failure_codes": ["UNREADABLE_ARCHIVE"],
             "hint": None,
             "parse": None,
+            "search_index": None,
+            "held_by_request": {},
+            "manifests_published": 0,
+            "parsed_stores_owed": [],
         }
     ],
     "a_publish_left_for_a_login_and_then_drained": [
         {"run_id": FIRST_RUN_ID, **NO_DETAILS_TO_SPEAK_OF},
-        {"run_id": SECOND_RUN_ID, **NO_DETAILS_TO_SPEAK_OF},
+        {"run_id": SECOND_RUN_ID, **WEEK_ONE_PUBLISHED},
     ],
     "a_mismatch_and_then_an_expiry": [
         {
@@ -163,11 +195,17 @@ EXPECTED_DETAILS: dict[str, list[dict[str, Any]]] = {
                     "error_codes": [],
                     "hint": None,
                     "earlier_findings": ["CHECKSUM_MISMATCH"],
+                    "drift": [],
+                    "not_compared": [],
                 }
             ],
             "failure_codes": [],
             "hint": None,
             "parse": None,
+            "search_index": None,
+            "held_by_request": {},
+            "manifests_published": 0,
+            "parsed_stores_owed": [],
         }
     ],
     "a_run_stopped_by_an_expired_token": [
@@ -177,6 +215,10 @@ EXPECTED_DETAILS: dict[str, list[dict[str, Any]]] = {
             "failure_codes": ["CASELIST_AUTH_EXPIRED"],
             "hint": None,
             "parse": None,
+            "search_index": None,
+            "held_by_request": {},
+            "manifests_published": 0,
+            "parsed_stores_owed": [],
         }
     ],
     "a_run_stopped_by_an_error_nobody_modelled": [
@@ -186,6 +228,10 @@ EXPECTED_DETAILS: dict[str, list[dict[str, Any]]] = {
             "failure_codes": ["INTERNAL_ERROR"],
             "hint": None,
             "parse": None,
+            "search_index": None,
+            "held_by_request": {},
+            "manifests_published": 0,
+            "parsed_stores_owed": [],
         }
     ],
     "two_weeks_imported_and_parsed": [
@@ -206,6 +252,11 @@ EXPECTED_DETAILS: dict[str, list[dict[str, Any]]] = {
                 "uploaded": 9,
                 "not_published": 0,
             },
+            "search_index": None,
+            "held_by_request": {},
+            # Both weeks' manifests (`v1-e34-t28`).
+            "manifests_published": 2,
+            "parsed_stores_owed": [],
         }
     ],
     # `v1-e34-t22`: the run the want of a bucket refused, then the run that published its record.
@@ -216,8 +267,12 @@ EXPECTED_DETAILS: dict[str, list[dict[str, Any]]] = {
             "failure_codes": ["STORE_PROFILE_NOT_CONFIGURED"],
             "hint": THE_FIX_FOR_A_PROFILE_NOT_DEFINED,
             "parse": None,
+            "search_index": None,
+            "held_by_request": {},
+            "manifests_published": 0,
+            "parsed_stores_owed": [],
         },
-        {"run_id": SECOND_RUN_ID, **NO_DETAILS_TO_SPEAK_OF},
+        {"run_id": SECOND_RUN_ID, **WEEK_ONE_PUBLISHED},
     ],
 }
 """What each scenario's runs leave beside their records, written by hand from what the scenario
@@ -273,6 +328,78 @@ def stored_bucket_objects(name: str) -> dict[str, str]:
     return stored
 
 
+WORDS_THIS_BUILD_KEEPS: Final = {
+    "[redacted] lists the evidence profiles": "docs/runbooks/evidence-store.md lists the evidence profiles"
+}
+"""What the start commit's redaction took and this build's keeps (`v1-e34-t23`): the runbook the
+refusal's message points at. The stored files stay as that build wrote them; the comparison reads
+them with these words in place of those, and with nothing else changed."""
+
+
+def as_this_build_words_it(text: str) -> str:
+    for theirs, ours in WORDS_THIS_BUILD_KEEPS.items():
+        text = text.replace(theirs, ours)
+    return text
+
+
+SEARCH_INDEX_STAGE_THIS_BUILD_ADDS: Final = {
+    "run": "no search index stage is wired in: an environment that names no evidence bucket has none",
+    "publish_pending": "publish-pending runs no derived stages",
+}
+"""The stage entry this build records after parse and the start commit did not (`v1-e39-t09`): the
+search index stage, skipped, by the reason each mode gives. These scenarios build their run with no
+search index stage. A stage entry is a name, an outcome and a reason, all strings, so an older build
+reads it: :func:`read_as_an_older_build_reads` holds every written record to that."""
+
+
+A_COMPLETED_PUBLISH_AS_THE_START_COMMIT_COUNTED_IT: Final = re.compile(
+    r"(?P<sources>\d+) object\(s\) uploaded across (?P<snapshots>\d+) snapshot\(s\)"
+)
+"""A completed publish stage's reason as the start commit wrote it: its sources alone (`v1-e34-t28`).
+
+This build counts each snapshot's manifest too, in `objects_published` and in the reason, which
+says how many of each. In every stored scenario a completed publish uploaded every snapshot's
+manifest, into a bucket that held none, so this build's numbers are the start commit's plus one
+manifest a snapshot. The reason is a string and `objects_published` an integer, so the record's
+shape is unchanged: :func:`read_as_an_older_build_reads` holds every written record to that."""
+
+
+def as_this_build_counts_it(record: dict[str, Any]) -> None:
+    """A completed publish's count, and the record's `objects_published`, with the manifests in them."""
+    for one in record.get("stages", []):
+        found = A_COMPLETED_PUBLISH_AS_THE_START_COMMIT_COUNTED_IT.fullmatch(one.get("reason") or "")
+        if one["stage"] != "publish" or one["outcome"] != "completed" or found is None:
+            continue
+        sources, manifests = int(found["sources"]), int(found["snapshots"])
+        assert record["objects_published"] == sources, "the stored record counts its sources alone"
+        one["reason"] = (
+            f"{sources + manifests} object(s) uploaded across {manifests} snapshot(s): {sources} source(s) "
+            f"and {manifests} manifest(s)"
+        )
+        record["objects_published"] = sources + manifests
+
+
+def as_this_build_records_it(text: str) -> str:
+    """A stored record as this build writes it: :func:`as_this_build_words_it`, a completed publish
+    counted with its manifests (:func:`as_this_build_counts_it`), and the search index stage's entry
+    after the parse stage's, where the start commit's has a parse stage and no search index stage.
+    Nothing else changes."""
+    record = json.loads(as_this_build_words_it(text))
+    as_this_build_counts_it(record)
+    stages = record.get("stages", [])
+    names = [one["stage"] for one in stages]
+    if "parse" in names and "search_index" not in names:
+        stages.insert(
+            names.index("parse") + 1,
+            {
+                "stage": "search_index",
+                "outcome": "skipped",
+                "reason": SEARCH_INDEX_STAGE_THIS_BUILD_ADDS[record["mode"]],
+            },
+        )
+    return json.dumps(record)
+
+
 def details_file(world: World) -> Path:
     return world.installation.data_dir / DETAILS_FILE
 
@@ -292,8 +419,38 @@ def objects_under(world: World, prefix: str) -> dict[str, Any]:
     }
 
 
+#: Keys `v1-e40-t03` added to the details: each stage's start and end, and the data volume's
+#: reading. Their values are pinned by hand in `test_caselist_sync_stage_times_and_volume.py`; here
+#: they are checked for their shape apart from the rest (`times_and_volume_in_run_order`).
+TIMES_AND_VOLUME: Final = ("stage_times", "data_volume")
+
+#: The key `v1-e40-t04` added to the details: what a bucket-mode run did with the bucket's run lock and
+#: its state. `None` in local mode, which every scenario here runs in; its values are pinned by
+#: `debate_cli/tests/bucket_mode/`. A build from before it passes over it (`extra="ignore"`).
+BUCKET_RUN: Final = "bucket_run"
+
+#: The stages a run times, in the order it carries them out.
+RUN_ORDER: Final = [str(stage) for stage in SyncStage]
+
+
 def without_the_version(details: Mapping[str, Any]) -> dict[str, Any]:
-    return {key: value for key, value in details.items() if key != "schema_version"}
+    return {
+        key: value
+        for key, value in details.items()
+        if key not in ("schema_version", *TIMES_AND_VOLUME, BUCKET_RUN)
+    }
+
+
+def times_and_volume_in_run_order(details: Mapping[str, Any]) -> bool:
+    """Stage times in the run's order, each ending no earlier than it started, and no volume read:
+    nothing in these scenarios sets `storage.volume_warning_percent`."""
+    named = [one["stage"] for one in details["stage_times"]]
+    return (
+        named == [stage for stage in RUN_ORDER if stage in named]
+        and all(one["started_at"] <= one["finished_at"] for one in details["stage_times"])
+        and details["data_volume"] is None
+        and details.get(BUCKET_RUN) is None
+    )
 
 
 # ------------------------------------------------------------------------------------------------
@@ -338,7 +495,7 @@ async def test_the_run_log_this_build_writes_is_read_by_the_older_builds(name: s
     await SCENARIOS[name](world)
 
     written = world.run_log().decode("utf-8").splitlines()
-    stored = stored_lines(name)
+    stored = [as_this_build_records_it(line) for line in stored_lines(name)]
     assert len(written) == len(stored) == len(EXPECTED_DETAILS[name])
     for ours, theirs in zip(written, stored, strict=True):
         read_as_an_older_build_reads(json.loads(ours))
@@ -356,7 +513,7 @@ async def test_the_bucket_prefix_an_older_build_lists_holds_only_records_it_read
     await SCENARIOS[name](world)
 
     ours = world.records_in_the_bucket()
-    theirs = stored_bucket_objects(name)
+    theirs = {key: as_this_build_records_it(body) for key, body in stored_bucket_objects(name).items()}
     assert sorted(ours) == sorted(theirs)
     for key, body in ours.items():
         assert key.startswith(RECORDS_PREFIX)
@@ -375,7 +532,7 @@ async def test_a_refusal_that_carries_the_adapters_fix_is_still_a_record_the_old
     await a_publish_the_bucket_refused_with_the_adapters_fix(world)
 
     [written] = world.run_log().decode("utf-8").splitlines()
-    [stored] = stored_lines("a_publish_the_bucket_refused")
+    [stored] = [as_this_build_records_it(line) for line in stored_lines("a_publish_the_bucket_refused")]
     [(key, in_the_bucket)] = world.records_in_the_bucket().items()
     assert [key] == list(stored_bucket_objects("a_publish_the_bucket_refused"))
     for ours in (json.loads(written), json.loads(in_the_bucket)):
@@ -476,6 +633,7 @@ async def test_the_codes_and_the_parse_counts_travel_beside_the_record_keyed_by_
     written = details_written(world)
     assert [without_the_version(one) for one in written] == EXPECTED_DETAILS[name]
     assert [one["schema_version"] for one in written] == [1] * len(written)
+    assert all(times_and_volume_in_run_order(one) for one in written)
     in_the_bucket = objects_under(world, DETAILS_PREFIX)
     assert in_the_bucket == {f"{DETAILS_PREFIX}2026/{one['run_id']}.json": one for one in written}
     assert sorted(key.removeprefix(DETAILS_PREFIX) for key in in_the_bucket) == sorted(

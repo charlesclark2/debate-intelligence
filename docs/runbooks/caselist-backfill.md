@@ -191,9 +191,8 @@ files stay under the data directory. They name no school or team, but they are r
 something to commit.
 
 If an import refuses with `SnapshotOutOfOrder`, **stop**. Do not pass `--allow-out-of-order`. It
-means something newer is already held. The archive itself would be classified against the right
-week, but the newer weeks were measured without it, and their manifests would keep the counts and
-first-seen numbers measured against the wrong week until each was imported again.
+means something newer is already held. Importing it would rewrite the newer weeks' manifests
+(`v1-e30-t18`), which this backfill has no reason to do.
 
 ### 4. Publish them to dev
 
@@ -441,6 +440,11 @@ check has passed.
 
 ## After the backfill: correct the camp files' camp and title (`v1-e30-t08`)
 
+This was run on 2026-10-09, before the cutover. Since then dev is in bucket mode and its records are
+the cloud run's run-state bundle: a camp table change reaches them by
+[caselist-cloud-run.md, "A camp table change"](caselist-cloud-run.md#a-camp-table-change-the-openev-metadata-re-import)
+(`v1-e40-t34`), not by the blocks below.
+
 The 105 camp files imported on day 1 all carry camp `UNKNOWN`, and their titles still hold the
 camp, the year and the lab's initials. The importer looked for the camp only in a folder or at the
 start of a filename; these files name it after the title. `v1-e30-t08` fixed the detection, and
@@ -528,6 +532,26 @@ exits `0` with all 41 snapshots in sync. Prod holds no `testcl26`, so its status
 changed and both status results in a dated section of
 `docs/data/caselist-backfill-2026-09.md`.
 
+### After `v1-e30-t32`: Michigan's three camps
+
+`v1-e30-t32` files `Michigan7`, `Michigan Classic` and `MNDI` apart, as OpenEv files them, and keeps a
+bare `Michigan` as `Michigan`, with no OpenEv word. A re-derive of `2026-policy` with that table, measured
+read-only over the Mac's manifest on 2026-11-01 (counts only), changes 6 rows' camp and no title:
+
+| Camp | Files before | Files after |
+|---|---|---|
+| Michigan | 40 | 34 |
+| Michigan Classic | 0 | 5 |
+| MNDI | 0 | 1 |
+
+Every other camp is unchanged. The re-import is the same command as above, and a
+`caselist parse --caselist openev` after it rewrites the occurrence rows' camp from the manifest
+without parsing a file again; the next index build carries it to the card pages
+([the search index](../data/search-index.md#the-camp-cards-link-to-openev)). **Not in dev yet.** Since
+the cutover dev's records are the cloud run's run-state bundle, and the re-import writes only this
+Mac's copy, which a pull, a backfile import or a removal replaces from the bundle. Wait for the route
+the PM rules on (`v1-e30-t32`'s session report) before running it against dev.
+
 ## Resuming and recovering
 
 | What happened | What to do |
@@ -539,7 +563,7 @@ changed and both status results in a dated section of
 | `pending_publish` is not empty | With `publish: pending`, the session expired: `aws sso login --profile debate-dev-evidence`, then `caselist pull --publish-pending`. With `publish: failed`, logging in is not the fix: do what the stage's `hint` or reason names first, then `caselist pull --publish-pending`. See the scheduled-sync runbook, "When something goes wrong" |
 | `another caselist sync is already running` | Another `pull` holds the lock; wait for it. See the scheduled-sync runbook if none is running |
 | `SnapshotOutOfOrder` on a manual import | Stop. Something newer is already held. Never pass `--allow-out-of-order` in this backfill |
-| `caselist status` shows drift | Do what its hint says for each kind it names. Something missing: re-run the `caselist publish` for that caselist. A manifest mismatch is this machine's copy rewritten since its last publish, by a camp metadata re-import or a removal: run the `caselist publish --caselist <slug>` the hint names. A source mismatch needs a person. A suppressed row or object is a removal left unfinished: see `caselist-removal.md`, "When caselist status reports removal residue" |
+| `caselist status` shows drift | Do what its hint says for each kind it names. Something missing: re-run the `caselist publish` for that caselist. A manifest mismatch is this machine's copy rewritten since its last publish, by a camp metadata re-import or a removal: run the `caselist publish --caselist <slug>` the hint names. Where the publisher withholds that manifest, for a row a removal stops or holds, the hint names no publish and says to finish the removal first (`v1-e30-t19`): the publish would leave the mismatch. A source mismatch needs a person. A suppressed row or object is a removal left unfinished: see `caselist-removal.md`, "When caselist status reports removal residue" |
 | `caselist status --caselist openev` shows one manifest mismatch, on `manifests/openev/2026-policy.jsonl`, after `reimport-openev-metadata` | Expected: publish the release (`caselist publish --caselist openev --snapshot 2026-policy`), then check `--caselist openev` again. In dev, check one caselist at a time: an unscoped dev status exits `1` because of `testcl26`, kept by PM decision. See the camp-metadata section above |
 | A day was missed | Carry on the next day. Nothing is lost; the plan just ends a day later |
 

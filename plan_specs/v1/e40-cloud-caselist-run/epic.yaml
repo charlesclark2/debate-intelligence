@@ -1,0 +1,932 @@
+# EPIC E40 — Weekly Caselist Run in the Cloud
+# Major version: V1 | Release: v1.8 (Weekly caselist run in the cloud)
+# Architecture refs: ADR-0020 (written by t01), ADR-0019, ADR-0017, docs/policies/caselist-data-use.md
+# Source of truth for task ordering inside this epic. Task details live in the tNN-*.yaml files beside this one.
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e40-cloud-caselist-run
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: epic
+    debate/major-version: v1
+    debate/release: v1.8
+    debate/epic: v1-e40-cloud-caselist-run
+  annotations:
+    debate/title: E40 — Weekly Caselist Run in the Cloud
+    debate/architecture-refs: ADR-0020, ADR-0019, ADR-0017, caselist data-use policy
+spec:
+  # Filed by the PM, 2026-10-22, from Charlie's decision of 2026-10-22: the weekly run moves off the
+  # coach's Mac so that an unplugged laptop on a Wednesday night never stops the debaters seeing
+  # updated evidence.
+  description: >-
+    Run the weekly caselist run (E34's pull, import and publish, E31's parse and E39's search
+    index stage) in the team's AWS account on a schedule, so the coach's Mac is no longer the
+    server the student pilot's freshness depends on. A scheduled job logs in to OpenCaselist with
+    the coach's own Tabroom account (Charlie's decision, 2026-10-22): the password and the
+    caselist token are held in Secrets Manager under their own KMS key, only the login job's role
+    can read the password, and CloudTrail records every read. The run keeps its state in the
+    evidence bucket rather than a laptop's data directory, follows the same rate limit and weekly
+    cadence (data-use policy, E34 gate), and tells the coach when a run fails or is late. One
+    runner at a time: the Mac's schedule is switched off at the cutover and never publishes
+    alongside the cloud run. t01 decides the shape in ADR-0020 and amends the data-use policy;
+    the tasks after it may be amended by that ADR.
+  priority: 1
+  constraints:
+    majorVersion: v1
+    release: v1.8
+    rule: Every task in this epic ships in this release; no task crosses major versions.
+  acceptanceCriteria:
+  - id: ac1
+    description: >-
+      A scheduled run in the cloud logs itself in, pulls, imports, publishes, parses and refreshes
+      the search index in dev and then prod, with no laptop involved, and its record reads as a
+      Mac run's does.
+  - id: ac2
+    description: >-
+      The Tabroom password and token are in Secrets Manager under their own KMS key, only the login
+      role reads the password, every read is in CloudTrail, and the data-use policy says so.
+  - id: ac3
+    description: >-
+      A failed or late run reaches the coach by email without anyone looking, and the Mac's
+      schedule is off, with exactly one runner able to publish.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e40-cloud-caselist-run-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: epic
+    debate/major-version: v1
+    debate/release: v1.8
+    debate/epic: v1-e40-cloud-caselist-run
+spec:
+  description: >-
+    Task graph for epic E40 (Weekly Caselist Run in the Cloud). Each Task node points at its own
+    task-level PlanSpec.
+  goalRef:
+    name: v1-e40-cloud-caselist-run
+  version: '1'
+  graph:
+    nodes:
+    - id: ext-v1-e39-t09-weekly-index-refresh
+      kind: External
+      name: 'Prerequisite from E39: The weekly agent run rebuilds and publishes the search index when the parsed store changed'
+      description: >-
+        Cross-epic prerequisite owned by v1-e39-evidence-search-pilot (release v1.7).
+      inputs:
+        goalRef: v1-e39-t09-weekly-index-refresh
+        specRef: plan_specs/v1/e39-evidence-search-pilot/t09-weekly-index-refresh.yaml
+    - id: ext-v1-e34-t30-doctor-unparsed-store
+      kind: External
+      name: 'Prerequisite from E34: doctor says when a store the weekly run will index has never been parsed'
+      description: >-
+        Cross-epic prerequisite owned by v1-e34-caselist-sync (release v1.1).
+      inputs:
+        goalRef: v1-e34-t30-doctor-unparsed-store
+        specRef: plan_specs/v1/e34-caselist-sync/t30-doctor-unparsed-store.yaml
+    - id: t01
+      kind: Task
+      name: 'ADR-0020: the weekly caselist run in the cloud, its credentials and its state'
+      description: >-
+        ADR-0020: the weekly caselist run in the cloud, its credentials and its state.
+      inputs:
+        specRef: plan_specs/v1/e40-cloud-caselist-run/t01-cloud-run-adr.yaml
+        goalRef: v1-e40-t01-cloud-run-adr
+      dependsOn:
+      - ext-v1-e39-t09-weekly-index-refresh
+      - ext-v1-e34-t30-doctor-unparsed-store
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e40-t01-cloud-run-adr reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e40-t01-cloud-run-adr
+    - id: t02
+      kind: Task
+      name: 'The caselist token in Secrets Manager, and a scheduled login that renews it'
+      description: >-
+        The caselist token in Secrets Manager, and a scheduled login that renews it.
+      inputs:
+        specRef: plan_specs/v1/e40-cloud-caselist-run/t02-secrets-token-store-and-login.yaml
+        goalRef: v1-e40-t02-secrets-token-store-and-login
+      dependsOn:
+      - t01
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e40-t02-secrets-token-store-and-login reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e40-t02-secrets-token-store-and-login
+    - id: t03
+      kind: Task
+      name: 'The weekly run as a container on a schedule'
+      description: >-
+        The weekly run as a container on a schedule.
+      inputs:
+        specRef: plan_specs/v1/e40-cloud-caselist-run/t03-run-image-and-schedule.yaml
+        goalRef: v1-e40-t03-run-image-and-schedule
+      dependsOn:
+      - t01
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e40-t03-run-image-and-schedule reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e40-t03-run-image-and-schedule
+    - id: t04
+      kind: Task
+      name: 'A cloud run keeps its state in the evidence bucket'
+      description: >-
+        A cloud run keeps its state in the evidence bucket.
+      inputs:
+        specRef: plan_specs/v1/e40-cloud-caselist-run/t04-run-state-on-s3.yaml
+        goalRef: v1-e40-t04-run-state-on-s3
+      dependsOn:
+      - t01
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e40-t04-run-state-on-s3 reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e40-t04-run-state-on-s3
+    - id: t05
+      kind: Task
+      name: 'A failed or late cloud run emails the coach'
+      description: >-
+        A failed or late cloud run emails the coach.
+      inputs:
+        specRef: plan_specs/v1/e40-cloud-caselist-run/t05-run-alerts.yaml
+        goalRef: v1-e40-t05-run-alerts
+      dependsOn:
+      - t03
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e40-t05-run-alerts reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e40-t05-run-alerts
+    - id: t06
+      kind: Task
+      name: 'Cut over: the cloud run takes the schedule and the Mac stops'
+      description: >-
+        Cut over: the cloud run takes the schedule and the Mac stops.
+      inputs:
+        specRef: plan_specs/v1/e40-cloud-caselist-run/t06-cutover.yaml
+        goalRef: v1-e40-t06-cutover
+      dependsOn:
+      - t02
+      - t03
+      - t04
+      - t05
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e40-t06-cutover reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e40-t06-cutover
+    - id: t07
+      kind: Task
+      name: 'The evidence bucket itself refuses an unconditional write of the run lock'
+      description: >-
+        The evidence bucket itself refuses an unconditional write of the run lock.
+      inputs:
+        specRef: plan_specs/v1/e40-cloud-caselist-run/t07-lock-writes-conditional-at-the-bucket.yaml
+        goalRef: v1-e40-t07-lock-writes-conditional-at-the-bucket
+      dependsOn:
+      - t04
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e40-t07-lock-writes-conditional-at-the-bucket reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e40-t07-lock-writes-conditional-at-the-bucket
+    - id: t08
+      kind: Task
+      name: 'A week a killed run published is parsed by the next run, not left for the next import'
+      description: >-
+        A week a killed run published is parsed by the next run, not left for the next
+        import.
+      inputs:
+        specRef: plan_specs/v1/e40-cloud-caselist-run/t08-parse-owed.yaml
+        goalRef: v1-e40-t08-parse-owed
+      dependsOn:
+      - t04
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e40-t08-parse-owed reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e40-t08-parse-owed
+    - id: ext-v1-e34-t34-backfile-seasons-import
+      kind: External
+      name: 'Prerequisite from E34: Earlier seasons'' complete archives, from 2021-22 on, imported and parsed as backfiles'
+      description: >-
+        Cross-epic prerequisite owned by v1-e34-caselist-sync (release v1.1).
+      inputs:
+        goalRef: v1-e34-t34-backfile-seasons-import
+        specRef: plan_specs/v1/e34-caselist-sync/t34-backfile-seasons-import.yaml
+    - id: t09
+      kind: Task
+      name: 'The backfile imports run once each in the cloud, not on the operator''s machine'
+      description: >-
+        The backfile imports run once each in the cloud, not on the operator's machine.
+      inputs:
+        specRef: plan_specs/v1/e40-cloud-caselist-run/t09-cloud-backfile-import.yaml
+        goalRef: v1-e40-t09-cloud-backfile-import
+      dependsOn:
+      - t06
+      - ext-v1-e34-t34-backfile-seasons-import
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e40-t09-cloud-backfile-import reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e40-t09-cloud-backfile-import
+    - id: t10
+      kind: Task
+      name: 'A restored working copy that brings the raw sources a hand prod publish needs'
+      description: >-
+        A restored working copy that brings the raw sources a hand prod publish needs.
+      inputs:
+        specRef: plan_specs/v1/e40-cloud-caselist-run/t10-restore-with-sources.yaml
+        goalRef: v1-e40-t10-restore-with-sources
+      dependsOn:
+      - t06
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e40-t10-restore-with-sources reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e40-t10-restore-with-sources
+    - id: t11
+      kind: Task
+      name: 'The dev lock held for good when the weekly run''s home moves to prod'
+      description: >-
+        The dev lock held for good when the weekly run's home moves to prod.
+      inputs:
+        specRef: plan_specs/v1/e40-cloud-caselist-run/t11-run-home-moved-holder.yaml
+        goalRef: v1-e40-t11-run-home-moved-holder
+      dependsOn:
+      - t06
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e40-t11-run-home-moved-holder reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e40-t11-run-home-moved-holder
+    - id: t12
+      kind: Task
+      name: 'A held upload a cloud task records reaches the bucket, not only its working copy'
+      description: >-
+        A held upload a cloud task records reaches the bucket, not only its working copy.
+      inputs:
+        specRef: plan_specs/v1/e40-cloud-caselist-run/t12-held-upload-records-reach-the-bucket.yaml
+        goalRef: v1-e40-t12-held-upload-records-reach-the-bucket
+      dependsOn:
+      - t06
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e40-t12-held-upload-records-reach-the-bucket reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e40-t12-held-upload-records-reach-the-bucket
+    - id: t13
+      kind: Task
+      name: 'In bucket mode, the report stage counts a source the bucket holds at its manifest digest as present'
+      description: >-
+        In bucket mode, the report stage counts a source the bucket holds at its manifest
+        digest as present.
+      inputs:
+        specRef: plan_specs/v1/e40-cloud-caselist-run/t13-bucket-mode-report-counts-held-sources.yaml
+        goalRef: v1-e40-t13-bucket-mode-report-counts-held-sources
+      dependsOn:
+      - t06
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e40-t13-bucket-mode-report-counts-held-sources reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e40-t13-bucket-mode-report-counts-held-sources
+    - id: t14
+      kind: Task
+      name: 'The deploy script''s region test, which failed once under load, made deterministic'
+      description: >-
+        The deploy script's region test, which failed once under load, made deterministic.
+      inputs:
+        specRef: plan_specs/v1/e40-cloud-caselist-run/t14-deploy-script-region-test-under-load.yaml
+        goalRef: v1-e40-t14-deploy-script-region-test-under-load
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e40-t14-deploy-script-region-test-under-load reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e40-t14-deploy-script-region-test-under-load
+    - id: t15
+      kind: Task
+      name: 'A plan check for a new run image after the cutover, with the schedule left enabled'
+      description: >-
+        A plan check for a new run image after the cutover, with the schedule left enabled.
+      inputs:
+        specRef: plan_specs/v1/e40-cloud-caselist-run/t15-image-plan-check-after-the-cutover.yaml
+        goalRef: v1-e40-t15-image-plan-check-after-the-cutover
+      dependsOn:
+      - t06
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e40-t15-image-plan-check-after-the-cutover reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e40-t15-image-plan-check-after-the-cutover
+    - id: ext-v1-e31-t31-labelled-evaluation-gaps
+      kind: External
+      name: 'Prerequisite from E31: Where the labelled evaluation''s missed cites, tags and highlights go, counted before any rule'
+      description: >-
+        Cross-epic prerequisite owned by v1-e31-debate-file-parsing (release v1.1).
+      inputs:
+        goalRef: v1-e31-t31-labelled-evaluation-gaps
+        specRef: plan_specs/v1/e31-debate-file-parsing/t31-labelled-evaluation-gaps.yaml
+    - id: t16
+      kind: Task
+      name: 'Prod''s parsed store re-parsed after a parser bump, from a copy restored with its sources'
+      description: >-
+        Prod's parsed store re-parsed after a parser bump, from a copy restored with its
+        sources.
+      inputs:
+        specRef: plan_specs/v1/e40-cloud-caselist-run/t16-prod-reparse-after-a-parser-bump.yaml
+        goalRef: v1-e40-t16-prod-reparse-after-a-parser-bump
+      dependsOn:
+      - t10
+      - ext-v1-e31-t31-labelled-evaluation-gaps
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e40-t16-prod-reparse-after-a-parser-bump reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e40-t16-prod-reparse-after-a-parser-bump
+    - id: t17
+      kind: Task
+      name: 'A landscape report counts the weeks the cloud run pulled, from a copy restored from the bucket'
+      description: >-
+        A landscape report counts the weeks the cloud run pulled, from a copy restored from the
+        bucket.
+      inputs:
+        specRef: plan_specs/v1/e40-cloud-caselist-run/t17-landscape-report-from-the-cloud-runs-state.yaml
+        goalRef: v1-e40-t17-landscape-report-from-the-cloud-runs-state
+      dependsOn:
+      - t10
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e40-t17-landscape-report-from-the-cloud-runs-state reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e40-t17-landscape-report-from-the-cloud-runs-state
+    - id: t18
+      kind: Task
+      name: 'In bucket mode a failed parse stage names the cloud cure, never a publish from the operator''s Mac'
+      description: >-
+        In bucket mode a failed parse stage names the cloud cure, never a publish from the
+        operator's Mac.
+      inputs:
+        specRef: plan_specs/v1/e40-cloud-caselist-run/t18-cloud-parse-stage-cure.yaml
+        goalRef: v1-e40-t18-cloud-parse-stage-cure
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e40-t18-cloud-parse-stage-cure reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e40-t18-cloud-parse-stage-cure
+    - id: ext-v1-e32-t07-model-classification-stage
+      kind: External
+      name: 'Prerequisite from E32: Model classification of what headings cannot place'
+      description: >-
+        Cross-epic prerequisite owned by v1-e32-argument-landscape (release v1.2).
+      inputs:
+        goalRef: v1-e32-t07-model-classification-stage
+        specRef: plan_specs/v1/e32-argument-landscape/t07-model-classification-stage.yaml
+    - id: t19
+      kind: Task
+      name: 'The weekly cloud run builds the landscape reports, counted for cost first'
+      description: >-
+        The weekly cloud run builds the landscape reports, counted for cost first.
+      inputs:
+        specRef: plan_specs/v1/e40-cloud-caselist-run/t19-landscape-stage-in-the-weekly-run.yaml
+        goalRef: v1-e40-t19-landscape-stage-in-the-weekly-run
+      dependsOn:
+      - t17
+      - ext-v1-e32-t07-model-classification-stage
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e40-t19-landscape-stage-in-the-weekly-run reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e40-t19-landscape-stage-in-the-weekly-run
+    - id: ext-v1-e30-t27-command-panels-print-summaries
+      kind: External
+      name: 'Prerequisite from E30: caselist publish, verify, parse and pull panels print a summary, not the whole record'
+      description: >-
+        Cross-epic prerequisite owned by v1-e30-caselist-ingestion (release v1.1).
+      inputs:
+        goalRef: v1-e30-t27-command-panels-print-summaries
+        specRef: plan_specs/v1/e30-caselist-ingestion/t27-command-panels-print-summaries.yaml
+    - id: t20
+      kind: Task
+      name: 'The caselist pull table''s Detail column shortens digests as its panel does'
+      description: >-
+        The caselist pull table's Detail column shortens digests as its panel does.
+      inputs:
+        specRef: plan_specs/v1/e40-cloud-caselist-run/t20-pull-table-shortens-digests.yaml
+        goalRef: v1-e40-t20-pull-table-shortens-digests
+      dependsOn:
+      - ext-v1-e30-t27-command-panels-print-summaries
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e40-t20-pull-table-shortens-digests reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e40-t20-pull-table-shortens-digests
+    - id: t21
+      kind: Task
+      name: 'A restored working copy carries a marker, so leftover copies are found exactly'
+      description: >-
+        A restored working copy carries a marker, so leftover copies are found exactly.
+      inputs:
+        specRef: plan_specs/v1/e40-cloud-caselist-run/t21-restored-copy-marker.yaml
+        goalRef: v1-e40-t21-restored-copy-marker
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e40-t21-restored-copy-marker reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e40-t21-restored-copy-marker
+    - id: t22
+      kind: Task
+      name: 'In bucket mode the login banner and the parse stage''s other hints point at the cloud run, not the operator''s Mac'
+      description: >-
+        In bucket mode the login banner and the parse stage's other hints point at the cloud
+        run, not the operator's Mac.
+      inputs:
+        specRef: plan_specs/v1/e40-cloud-caselist-run/t22-bucket-mode-hints-point-at-the-cloud.yaml
+        goalRef: v1-e40-t22-bucket-mode-hints-point-at-the-cloud
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e40-t22-bucket-mode-hints-point-at-the-cloud reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e40-t22-bucket-mode-hints-point-at-the-cloud
+    - id: t23
+      kind: Task
+      name: 'The leftover search drops its pre-marker list, and a report over a restored copy requires the marker'
+      description: >-
+        The leftover search drops its pre-marker list, and a report over a restored copy
+        requires the marker.
+      inputs:
+        specRef: plan_specs/v1/e40-cloud-caselist-run/t23-restored-copy-marker-required.yaml
+        goalRef: v1-e40-t23-restored-copy-marker-required
+      dependsOn:
+      - t21
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e40-t23-restored-copy-marker-required reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e40-t23-restored-copy-marker-required
+    - id: t24
+      kind: Task
+      name: 'A restore refuses both environments'' data directories, not only its own'
+      description: >-
+        A restore refuses both environments' data directories, not only its own.
+      inputs:
+        specRef: plan_specs/v1/e40-cloud-caselist-run/t24-restore-refuses-either-data-directory.yaml
+        goalRef: v1-e40-t24-restore-refuses-either-data-directory
+      dependsOn:
+      - t21
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e40-t24-restore-refuses-either-data-directory reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e40-t24-restore-refuses-either-data-directory
+    - id: t25
+      kind: Task
+      name: 'In bucket mode the failed-publish banners and the CLI''s next step point at the cloud run, not a publish from the Mac'
+      description: >-
+        In bucket mode the failed-publish banners and the CLI's next step point at the cloud
+        run, not a publish from the Mac.
+      inputs:
+        specRef: plan_specs/v1/e40-cloud-caselist-run/t25-remaining-bucket-mode-publish-pending-hints.yaml
+        goalRef: v1-e40-t25-remaining-bucket-mode-publish-pending-hints
+      dependsOn:
+      - t22
+      - t08
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e40-t25-remaining-bucket-mode-publish-pending-hints reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e40-t25-remaining-bucket-mode-publish-pending-hints
+    - id: t26
+      kind: Task
+      name: 'A smoke check reads parses_owed from caselist runs and caselist status'
+      description: >-
+        A smoke check reads parses_owed from caselist runs and caselist status.
+      inputs:
+        specRef: plan_specs/v1/e40-cloud-caselist-run/t26-parses-owed-smoke-check.yaml
+        goalRef: v1-e40-t26-parses-owed-smoke-check
+      dependsOn:
+      - t08
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e40-t26-parses-owed-smoke-check reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e40-t26-parses-owed-smoke-check
+    - id: t27
+      kind: Task
+      name: 'store sync never moves reports/sync/, so a push of pulled copies cannot overwrite the run''s lock or state files'
+      description: >-
+        store sync never moves reports/sync/, so a push of pulled copies cannot overwrite
+        the run's lock or state files.
+      inputs:
+        specRef: plan_specs/v1/e40-cloud-caselist-run/t27-store-sync-leaves-the-run-state-alone.yaml
+        goalRef: v1-e40-t27-store-sync-leaves-the-run-state-alone
+      dependsOn:
+      - t07
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e40-t27-store-sync-leaves-the-run-state-alone reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e40-t27-store-sync-leaves-the-run-state-alone
+    - id: t28
+      kind: Task
+      name: 'The last bucket-mode wording pass: banners and the CLI name the next cloud run, and a cloud run''s login hint names the task role'
+      description: >-
+        The last bucket-mode wording pass: banners and the CLI name the next cloud run, and
+        a cloud run's login hint names the task role.
+      inputs:
+        specRef: plan_specs/v1/e40-cloud-caselist-run/t28-last-bucket-mode-wording-pass.yaml
+        goalRef: v1-e40-t28-last-bucket-mode-wording-pass
+      dependsOn:
+      - t25
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e40-t28-last-bucket-mode-wording-pass reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e40-t28-last-bucket-mode-wording-pass
+    - id: t29
+      kind: Task
+      name: 'A Mac pull refused because the weekly run moved to prod is recorded as skipped, with its own notice'
+      description: >-
+        A Mac pull refused because the weekly run moved to prod is recorded as skipped, with
+        its own notice.
+      inputs:
+        specRef: plan_specs/v1/e40-cloud-caselist-run/t29-pull-refused-by-the-move-is-skipped.yaml
+        goalRef: v1-e40-t29-pull-refused-by-the-move-is-skipped
+      dependsOn:
+      - t11
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e40-t29-pull-refused-by-the-move-is-skipped reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e40-t29-pull-refused-by-the-move-is-skipped
+    - id: t30
+      kind: Task
+      name: 'The run task gets 32 GB, so a full re-parse or a backfile import is not killed for memory'
+      description: >-
+        The run task gets 32 GB, so a full re-parse or a backfile import is not killed for
+        memory.
+      inputs:
+        specRef: plan_specs/v1/e40-cloud-caselist-run/t30-run-task-memory-fits-a-full-parse.yaml
+        goalRef: v1-e40-t30-run-task-memory-fits-a-full-parse
+      dependsOn:
+      - t03
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e40-t30-run-task-memory-fits-a-full-parse reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e40-t30-run-task-memory-fits-a-full-parse
+    - id: t31
+      kind: Task
+      name: 'A parse worker over its share of memory fails its file, not the whole run'
+      description: >-
+        A parse worker over its share of memory fails its file, not the whole run.
+      inputs:
+        specRef: plan_specs/v1/e40-cloud-caselist-run/t31-parse-worker-memory-ceiling.yaml
+        goalRef: v1-e40-t31-parse-worker-memory-ceiling
+      dependsOn:
+      - t30
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e40-t31-parse-worker-memory-ceiling reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e40-t31-parse-worker-memory-ceiling
+    - id: t32
+      kind: Task
+      name: 'A backfile import logs each step as it ends, so a task killed part-way shows how far it got'
+      description: >-
+        A backfile import logs each step as it ends, so a task killed part-way shows how far
+        it got.
+      inputs:
+        specRef: plan_specs/v1/e40-cloud-caselist-run/t32-backfile-import-logs-each-step.yaml
+        goalRef: v1-e40-t32-backfile-import-logs-each-step
+      dependsOn:
+      - ext-v1-e34-t34-backfile-seasons-import
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e40-t32-backfile-import-logs-each-step reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e40-t32-backfile-import-logs-each-step
+    - id: ext-v1-e34-t33-keychain-errors-named
+      kind: External
+      name: 'Prerequisite from E34: A keychain failure under launchd names its cause, and clearing a token already gone is no error'
+      description: >-
+        Cross-epic prerequisite owned by v1-e34-caselist-sync (release v1.1).
+      inputs:
+        goalRef: v1-e34-t33-keychain-errors-named
+        specRef: plan_specs/v1/e34-caselist-sync/t33-keychain-errors-named.yaml
+    - id: t33
+      kind: Task
+      name: 'A cloud run refused for an expired login says the Wednesday login renews it, not to log in by hand'
+      description: >-
+        A cloud run refused for an expired login says the Wednesday login renews it, not to
+        log in by hand.
+      inputs:
+        specRef: plan_specs/v1/e40-cloud-caselist-run/t33-expired-login-cloud-notice-names-the-wednesday-login.yaml
+        goalRef: v1-e40-t33-expired-login-cloud-notice-names-the-wednesday-login
+      dependsOn:
+      - ext-v1-e34-t33-keychain-errors-named
+      - t22
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e40-t33-expired-login-cloud-notice-names-the-wednesday-login reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e40-t33-expired-login-cloud-notice-names-the-wednesday-login
+    - id: ext-v1-e30-t08-import-metadata-defects
+      kind: External
+      name: 'Prerequisite from E30: Importer metadata defects found by the backfill'
+      description: >-
+        Cross-epic prerequisite owned by v1-e30-caselist-ingestion (release v1.1).
+      inputs:
+        goalRef: v1-e30-t08-import-metadata-defects
+        specRef: plan_specs/v1/e30-caselist-ingestion/t08-import-metadata-defects.yaml
+    - id: t34
+      kind: Task
+      name: 'The OpenEv metadata re-import runs in bucket mode, so a camp table change reaches dev''s records'
+      description: >-
+        The OpenEv metadata re-import runs in bucket mode, so a camp table change reaches
+        dev's records.
+      inputs:
+        specRef: plan_specs/v1/e40-cloud-caselist-run/t34-openev-metadata-reimport-in-bucket-mode.yaml
+        goalRef: v1-e40-t34-openev-metadata-reimport-in-bucket-mode
+      dependsOn:
+      - ext-v1-e30-t08-import-metadata-defects
+      - t04
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e40-t34-openev-metadata-reimport-in-bucket-mode reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e40-t34-openev-metadata-reimport-in-bucket-mode
+    - id: t35
+      kind: Task
+      name: 'A cloud run refused for an expired login names the Wednesday login in its own output too'
+      description: >-
+        A cloud run refused for an expired login names the Wednesday login in its own output
+        too.
+      inputs:
+        specRef: plan_specs/v1/e40-cloud-caselist-run/t35-expired-login-cli-output-in-bucket-mode.yaml
+        goalRef: v1-e40-t35-expired-login-cli-output-in-bucket-mode
+      dependsOn:
+      - t33
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e40-t35-expired-login-cli-output-in-bucket-mode reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e40-t35-expired-login-cli-output-in-bucket-mode
+    - id: ext-v1-e33-t07-camp-path-on-occurrence-rows
+      kind: External
+      name: 'Prerequisite from E33: A camp occurrence row carries its camp path''s digest, so a camp-path withdrawal stops it before a rebuild'
+      description: >-
+        Cross-epic prerequisite owned by v1-e33-file-builder (release v1.2).
+      inputs:
+        goalRef: v1-e33-t07-camp-path-on-occurrence-rows
+        specRef: plan_specs/v1/e33-file-builder/t07-camp-path-on-occurrence-rows.yaml
+    - id: t36
+      kind: Task
+      name: 'The aggregate rebuild reads cards source by source, so it no longer holds a whole caselist''s cards in memory'
+      description: >-
+        The aggregate rebuild reads cards source by source, so it no longer holds a whole
+        caselist's cards in memory.
+      inputs:
+        specRef: plan_specs/v1/e40-cloud-caselist-run/t36-parse-rebuild-streams-occurrence-rows.yaml
+        goalRef: v1-e40-t36-parse-rebuild-streams-occurrence-rows
+      dependsOn:
+      - t30
+      - ext-v1-e33-t07-camp-path-on-occurrence-rows
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e40-t36-parse-rebuild-streams-occurrence-rows reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e40-t36-parse-rebuild-streams-occurrence-rows
+    - id: t37
+      kind: Task
+      name: 'Redaction no longer takes two apostrophes for a quoted path and removes the words between them'
+      description: >-
+        Redaction no longer takes two apostrophes for a quoted path and removes the words
+        between them.
+      inputs:
+        specRef: plan_specs/v1/e40-cloud-caselist-run/t37-redact-keeps-text-between-apostrophes.yaml
+        goalRef: v1-e40-t37-redact-keeps-text-between-apostrophes
+      dependsOn:
+      - t11
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e40-t37-redact-keeps-text-between-apostrophes reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e40-t37-redact-keeps-text-between-apostrophes
+    - id: t38
+      kind: Task
+      name: 'A lock refusal is not reported as a run that stopped before its stages'
+      description: >-
+        A lock refusal is not reported as a run that stopped before its stages.
+      inputs:
+        specRef: plan_specs/v1/e40-cloud-caselist-run/t38-landscape-staleness-ignores-lock-refusals.yaml
+        goalRef: v1-e40-t38-landscape-staleness-ignores-lock-refusals
+      dependsOn:
+      - t29
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e40-t38-landscape-staleness-ignores-lock-refusals reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e40-t38-landscape-staleness-ignores-lock-refusals
+    - id: t39
+      kind: Task
+      name: 'The near-duplicate index and the linker''s word lists are held compactly, so a season''s rebuild fits with room'
+      description: >-
+        The near-duplicate index and the linker's word lists are held compactly, so a
+        season's rebuild fits with room.
+      inputs:
+        specRef: plan_specs/v1/e40-cloud-caselist-run/t39-cut-index-and-linker-words-held-compactly.yaml
+        goalRef: v1-e40-t39-cut-index-and-linker-words-held-compactly
+      dependsOn:
+      - t36
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e40-t39-cut-index-and-linker-words-held-compactly reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e40-t39-cut-index-and-linker-words-held-compactly
+    - id: t40
+      kind: Task
+      name: 'In bucket mode a missing or unreadable token, and a download refused for an expired login, give the cloud''s cure, not a login by hand'
+      description: >-
+        In bucket mode a missing or unreadable token, and a download refused for an expired
+        login, give the cloud's cure, not a login by hand.
+      inputs:
+        specRef: plan_specs/v1/e40-cloud-caselist-run/t40-token-errors-name-the-cloud-cure.yaml
+        goalRef: v1-e40-t40-token-errors-name-the-cloud-cure
+      dependsOn:
+      - t35
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e40-t40-token-errors-name-the-cloud-cure reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e40-t40-token-errors-name-the-cloud-cure
+status:
+  phase: Pending

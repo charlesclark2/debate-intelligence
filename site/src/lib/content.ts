@@ -35,6 +35,12 @@ export const SCHEDULE_SLUG = 'schedule'
 export const RESULTS_SLUG = 'results'
 
 /**
+ * The announcements list, composed from content/announcements/ by src/app/news/page.tsx; each
+ * announcement has a page of its own under it (v1-e37-t03).
+ */
+export const NEWS_SLUG = 'news'
+
+/**
  * Pages that are composed by a route module of their own rather than rendered as one run of
  * Markdown by src/app/[slug]/page.tsx.
  *
@@ -52,6 +58,7 @@ export const COMPOSED_SLUGS: readonly string[] = [
   EVENTS_SLUG,
   SCHEDULE_SLUG,
   RESULTS_SLUG,
+  NEWS_SLUG,
 ]
 
 /**
@@ -167,6 +174,12 @@ export const siteSettingsSchema = z.object({
   primaryNavigation: z
     .array(z.string().min(1))
     .min(1, 'the site needs at least one page in its navigation'),
+  /**
+   * Slugs the footer carries even when the header carries them too. See the comment in
+   * content/site.yaml. Optional, so a site whose footer is only "everything not in the header"
+   * says nothing.
+   */
+  alwaysInFooter: z.array(z.string().min(1)).default([]),
   skipLinkLabel: z.string().min(1),
   contactEmails: z.array(contactEmailSchema).min(1),
   instagram: instagramLinkSchema,
@@ -283,6 +296,17 @@ export const homeContentSchema = z.object({
    * around them. The panel is left out of the page while the season has no result yet.
    */
   recentResults: z.object({
+    eyebrow: z.string().min(1),
+    title: z.string().min(1),
+    intro: z.string().min(1),
+    action: homeActionSchema,
+  }),
+  /**
+   * The pinned and newest announcements, linking to /news/ (v1-e37-t03). The announcements are
+   * files in content/announcements/; this is only the words around them. The band is left out of
+   * the page while no announcement is published.
+   */
+  announcements: z.object({
     eyebrow: z.string().min(1),
     title: z.string().min(1),
     intro: z.string().min(1),
@@ -724,7 +748,8 @@ export function loadNotFoundPage(
 
 /** Every string in the home content, in reading order, for the checks that scan copy. */
 function homeContentStrings(content: HomeContent): string[] {
-  const { hero, seasonSchedule, recentResults, entryPoints, prose, whatDebateBuilds } = content
+  const { hero, seasonSchedule, recentResults, announcements, entryPoints, prose, whatDebateBuilds } =
+    content
   return [
     hero.lead,
     hero.action.label,
@@ -736,6 +761,10 @@ function homeContentStrings(content: HomeContent): string[] {
     recentResults.title,
     recentResults.intro,
     recentResults.action.label,
+    announcements.eyebrow,
+    announcements.title,
+    announcements.intro,
+    announcements.action.label,
     entryPoints.eyebrow,
     entryPoints.title,
     entryPoints.intro,
@@ -882,9 +911,13 @@ export interface AnnouncementField {
 /**
  * Every fact the site's announcements promise. None today: the October 1 parent-session panel
  * in content/home.yaml, the one announcement with facts of this kind, was replaced by a pointer
- * to the tournament schedule in v1-e37-t02 once the session had happened. The guard and its
- * wiring in src/app/layout.tsx stay, because v1-e37-t03's announcements join it here rather than
- * growing a second guard of their own.
+ * to the tournament schedule in v1-e37-t02 once the session had happened.
+ *
+ * v1-e37-t03's announcements, the Markdown files in content/announcements/, add none either,
+ * because they have no field that can be left unset: a missing title or date is a schema error
+ * that fails the build, and a fact still owed inside a body is a [[TBD]] marker, which the guard
+ * reports as it does on any page (src/lib/announcements.ts). The guard and its wiring in
+ * src/app/layout.tsx stay for the next panel built from fields.
  */
 export function announcementFields(): AnnouncementField[] {
   return []
@@ -941,8 +974,11 @@ const anchorId = z
   .min(1)
   .regex(/^[a-z][a-z0-9-]*$/, 'must be a lower-case anchor id such as "cost-and-travel"')
 
-/** Markdown rendered to HTML at build time, with any placeholder marker made visible. */
-function renderMarkdown(filePath: string, markdown: string): string {
+/**
+ * Markdown rendered to HTML at build time, with any placeholder marker made visible. The one
+ * Markdown path every content file goes through; src/lib/announcements.ts renders a body with it.
+ */
+export function renderMarkdown(filePath: string, markdown: string): string {
   const rendered = marked.parse(renderPlaceholders(markdown), { async: false })
   if (typeof rendered !== 'string') {
     throw new ContentValidationError(filePath, 'Markdown could not be rendered synchronously')
@@ -1493,6 +1529,11 @@ export function loadGuardedContent(
  *
  * Nothing published can fall out of both lists, which is the property that makes an explicit nav
  * safe: a page left off primaryNavigation moves to the footer rather than becoming unreachable.
+ *
+ * A page can be in both (v1-e37-t15). content/site.yaml's alwaysInFooter names the pages the
+ * footer keeps when the header carries them as well: News, which the coach wants in the header
+ * and where a visitor looking along the footer already found it. The list only adds pages back to
+ * the footer, in the footer's own order, so it moves no other page.
  * ---------------------------------------------------------------------------------------------
  */
 
@@ -1504,7 +1545,10 @@ export interface NavigationLink {
 export interface SiteNavigation {
   /** The header navigation, in the order content/site.yaml lists it. */
   primary: NavigationLink[]
-  /** Everything else published, for the footer, in navOrder then title order. */
+  /**
+   * Everything else published, plus the header pages content/site.yaml's alwaysInFooter names,
+   * for the footer, in navOrder then title order.
+   */
   utility: NavigationLink[]
 }
 
@@ -1521,6 +1565,8 @@ function toLink(page: ContentPage): NavigationLink {
  *   - the same slug listed twice, which would render the same link twice;
  *   - a page whose front matter opts it out of the nav being listed anyway, because a page and
  *     the site config disagreeing is a question nobody should have to answer by reading code.
+ *
+ * alwaysInFooter fails the same way on a slug that is not a published page or is listed twice.
  */
 export function buildNavigation(
   contentDirectory: string = defaultContentDirectory(),
@@ -1558,8 +1604,29 @@ export function buildNavigation(
     return toLink(page)
   })
 
-  // Everything published that the nav does not carry. Nothing published is left off both lists.
-  const utility = pages.filter((page) => !seen.has(page.slug)).map(toLink)
+  const keptInFooter = new Set<string>()
+  for (const slug of settings.alwaysInFooter) {
+    if (keptInFooter.has(slug)) {
+      throw new ContentValidationError(
+        filePath,
+        `alwaysInFooter lists "${slug}" twice. Each page appears in the footer once.`,
+      )
+    }
+    keptInFooter.add(slug)
+    if (!bySlug.has(slug)) {
+      throw new ContentValidationError(
+        filePath,
+        `alwaysInFooter lists "${slug}", which is not a published page in content/pages/. ` +
+          'Add the page, publish it, or take the slug out of the list.',
+      )
+    }
+  }
+
+  // Everything published that the nav does not carry, and the nav pages the footer keeps.
+  // Nothing published is left off both lists.
+  const utility = pages
+    .filter((page) => !seen.has(page.slug) || keptInFooter.has(page.slug))
+    .map(toLink)
 
   return { primary, utility }
 }

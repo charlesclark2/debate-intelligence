@@ -29,11 +29,13 @@ model in architecture proposal §7, so V2 swaps storage rather than schemas.
 | `base.py` | `DomainModel`, `DomainEntity`, the `Ulid`/`UtcDatetime`/`Sha256Hex`/`HttpUrlStr`/`NonEmptyText` scalars, and the injectable id factory (`new_id`, `use_id_factory`) |
 | `enums.py` | `AccessStatus`, `VerificationStatus`, `ProvenanceMode`, `SearchStatus`, `SourceType`, `SpanStyle`, `SpanPurpose`, `CitationFieldSource` |
 | `article.py` | `Article`, `ArticleIdentifiers`, `SourceSnapshot` |
-| `search.py` | `Search`, `SearchFilters`, `SearchResult` |
+| `search.py` | `Search`, `SearchFilters`, `SearchResult`, and `SearchExpansion`, how a search's query was expanded (v1-e08-t04) |
+| `argument_taxonomy.py` | `ArgumentTaxonomy`: the arguments, their families' needs, query templates, recency windows and topic presets of `config/argument_taxonomy.yaml`, validated whole (v1-e08-t04-argument-need-expansion; needs per family, v1-e08-t08) |
 | `card.py` | `Card`, `CardSpan` |
 | `citation.py` | `Citation`, `CitationField[T]` |
 | `schema_export.py` | Renders the published JSON Schemas (no I/O; the script writes them) |
 | `caselist/` | Disclosed and camp evidence: see below (v1-e30-t02-caselist-domain-model) |
+| `model_contracts.py` | What a model call is made of: `TaskClass`, `ModelParams`, `ModelPrompt`, `ModelRequest`, `ResolvedRoute`, `ModelUsage`, `ModelResponse[T]`, `EmbeddingResponse`, `RerankResponse`. No model identifiers (v1-e05-t01-model-router-port) |
 | `debate_files.py` | What reading a debate `.docx` produces: `ParsedDocument`, `FileSection`, `ParsedCard`, `FormattingSpan`, `FontSizeSpan`, `CardCompleteness`, `FileImportProvenance`, `ParseFailure` (v1-e31-t03-debate-docx-parser) |
 
 Things worth knowing before you add a field:
@@ -78,13 +80,17 @@ cross them. Full write-up: [docs/architecture/ports-and-adapters.md](../../docs/
 
 | Module | Contents |
 |---|---|
-| `errors.py` | `DomainError` and the errors a port may raise: `NotFound`, `Conflict` (`AlreadyExists`, `RevisionMismatch`), `InvalidCursor`, `BlobIntegrityError`, `StoreError` (`StoreAccessDenied`, `StoreCredentialsExpired`, `StoreProfileNotConfigured`, `StoreUnavailable`), `InvalidModelOutput`, `ProviderError` (`ProviderUnavailable`, `ProviderRateLimited`) |
-| `ports/persistence.py` | `ArticleRepository`, `SnapshotStore`, `CardRepository`, `SearchRepository`, and the `Page` returned by every listing |
-| `ports/providers.py` | `SearchProvider`, `ArticleFetcher`, `ContentExtractor`, `ModelRouter`, `Clock`, `IdGenerator`, and the value objects they exchange |
+| `errors.py` | `DomainError` and the errors a port may raise: `NotFound`, `Conflict` (`AlreadyExists`, `RevisionMismatch`), `InvalidCursor`, `BlobIntegrityError`, `StoreError` (`StoreAccessDenied`, `StoreCredentialsExpired`, `StoreProfileNotConfigured`, `StoreUnavailable`), `InvalidModelOutput`, `ProviderError` (`ProviderUnavailable` and its `ModelUnavailableError`, `ProviderRateLimited`) |
+| `ports/persistence.py` | `ArticleRepository`, `SnapshotStore`, `CardRepository`, `SearchRepository` (which also keeps each search's per-provider record, v1-e08-t01), and the `Page` returned by every listing |
+| `ports/providers.py` | `SearchProvider`, `DiscoveryProviders` (the enabled providers and their health: what a federated search fans out over, v1-e08-t01), `ArticleFetcher`, `ContentExtractor`, `Clock`, `IdGenerator`, and the value objects they exchange |
+| `ports/model_router.py` | `ModelRouter` (`generate_structured`, `embed`, `rerank`) and `RoutingConfigError`; every model call goes through it (v1-e05-t01-model-router-port) |
+| `structured_output.py`, `model_errors.py` | `StructuredOutputGuard`, the way a service asks for structured output: it checks the call against the prompt's registry entry, validates strictly (`validate_model_output`, which every router uses too), repairs an invalid answer once with `model.repair`, and raises `ModelOutputError` after that. `ValidationPolicy(fail_closed=...)` is given on every call (v1-e05-t05-structured-output-validation) |
 | `ports/caselist.py` | `CaselistRepository`, the boundary the E30 importers, publisher and removal command store through (v1-e30-t02) |
 | `ports/debate_files.py` | `DebateFileParser`, the boundary a debate `.docx` is taken apart behind. Synchronous, because parsing waits on nothing, and a file it cannot read comes back as a `ParseFailure` rather than an exception (v1-e31-t03) |
 | `ports/evidence_store.py` | `EvidenceObjectStore` and `ObjectInfo`: evidence stored under a *name* rather than a digest — manifests, reports — plus the key validation both its adapters share (v1-e29-t04) |
 | `services/article_registration.py` | The worked example of the constructor-injection pattern every service follows |
+| `federated_search.py`, `federated_search_types.py` | `FederatedSearchService`: the expand, fan_out, normalize and rank stages of a federated search, the concurrent fan-out under one deadline, and the COMPLETE / PARTIAL / FAILED rule (v1-e08-t01) |
+| `query_expansion.py` | `QueryExpansionStage`, the expand stage: a query turned into the taxonomy's template queries for `--argument` and `--need`, each with its date window, plus a model's validated extra queries when asked for (`search.expand`, fail-open). Loads `config/argument_taxonomy.yaml` (v1-e08-t04) |
 
 Things worth knowing before you write a service:
 
@@ -95,17 +101,28 @@ Things worth knowing before you write a service:
   `httpx` failures at its own edge.
 * **`CardRepository.save` requires `expected_revision`** and raises `RevisionMismatch`, so model
   reprocessing cannot overwrite a student's edit. Creating is a separate method.
+* **Structured output goes through `StructuredOutputGuard`, not the router.** No call gets a
+  coerced, partial or default object, and an evidence action (`fail_closed=True`) that gets a
+  `ModelOutputError` marks its card UNVERIFIED. An error or a log line never quotes the model's
+  answer: `InvalidModelOutput.problems` hold each problem's location, type and message only.
 * **Async where the work is I/O.** Extraction, the clock and the id generator are synchronous.
 
 ### `testing/` — in-memory fakes (v1-e02-t02-ports)
 
-`debate_core.testing.fakes` has a working in-memory implementation of every port, plus `FixedClock`
-and `SequentialIdGenerator`. They enforce what their ports promise — dedupe, blob integrity,
-revision conflicts, listing order — so a test against a fake exercises the same rules as the real
-adapter. `build_fake_ports()` assembles one of each, and is where pyright checks that the fakes
-still conform to the Protocols. `InMemoryCaselistRepository` lives there too — built by
-`build_fake_caselist_repository()` rather than by `build_fake_ports()`, because a caselist
-repository is not one of the ten ports every service takes.
+`debate_core.testing.fakes` has a working in-memory implementation of every port, one module per
+port, plus `FixedClock` and `SequentialIdGenerator` in `fakes.clock_and_ids`. They enforce what
+their ports promise — dedupe, blob integrity, revision conflicts, listing order — so a test against
+a fake exercises the same rules as the real adapter. Import a fake from its own module
+(`from debate_core.testing.fakes.persistence import InMemoryCardRepository`): a fakes module imports
+only its own port, so a test reaches only the ports it uses (`v1-e01-t30`).
+`fakes.all_ports.build_fake_ports()` assembles one of each of the ten ports every service takes,
+and is where pyright checks that they still conform to the Protocols. `InMemoryCaselistRepository`
+is built by `fakes.caselist.build_fake_caselist_repository()` instead, because a caselist
+repository is not one of the ten.
+
+`debate_core.testing.virtual_time` has `VirtualTimeEventLoop`, an asyncio loop whose clock jumps to
+the next timer instead of waiting, and `EventLoopClock`, the `Clock` port read from it: a test of
+timeouts and deadlines measured in seconds runs in milliseconds (v1-e08-t01).
 
 ### `integrations/local/` — the filesystem and SQLite adapters (v1-e02-t03-local-repositories)
 
@@ -188,8 +205,41 @@ Things worth knowing before you use or extend these:
   compared with a blob key.
 * **Blocking calls run in a worker thread** (`asyncio.to_thread`), unlike the local adapters, because
   here the I/O really is a network round trip.
-* **Tests use `moto`, never an account.** The fixtures are in `packages/debate_core/tests/conftest.py`
+* **Tests use `moto`, never an account.** The fixtures are in `tests/fixtures/moto_evidence_bucket.py`
   and the suite runs with `--disable-socket`.
+### `integrations/models/` — model routing (v1-e05-t01-model-router-port)
+
+`RoutingPolicy` loads a `config/model_routing.*.yaml` file (the one `models.routing_file` names)
+and resolves each call's task class and overrides into the `ResolvedRoute` it takes. Model ids,
+regions and inference profiles live only in those files; code and tests name task classes, and
+tests assert model families, never identifiers. The file is validated in full when it loads, so a
+bad route fails before anything is sent, and the CLI loads it with its settings, so a bad file stops
+a command before it starts. Nothing in this package may import the AWS SDK.
+
+The offline routers (v1-e05-t03-fake-replay-models) are why no test or eval ever reaches a model:
+
+| Module | Contents |
+|---|---|
+| `fixture_key.py` | `fixture_key`: SHA-256 of the prompt id, version, canonical JSON of the variables and the schema's dotted path |
+| `fake_router.py` | `FakeModelRouter`, answering from `tests/fixtures/model_outputs/<prompt_id>/<key>.json`, with hashed embeddings and lexical-overlap rerank |
+| `record_replay.py` | `RecordReplayModelRouter`: record a real router's calls to `tests/fixtures/model_cassettes/`, replay them, or pass through |
+| `received_answer.py` | How a real router hands record mode the answer it refused, so an invalid answer is recorded and replays as the same error (v1-e05-t10) |
+| `model_mode.py` | `resolve_model_mode` (`--model-mode`, else `DEBATE_MODEL_MODE`, else replay) and `add_model_mode_option` for argparse |
+| `redaction.py` | What a cassette is scrubbed of before it is written |
+| `factory.py` | `build_model_router`: `models.provider = "fake"` is the fake; a real provider is wrapped in the mode's router |
+
+Things worth knowing:
+
+* **A missing answer is an error, never a default.** The fake and replay both raise
+  `MissingFixtureError` naming the prompt and the key. Replay does not hold the real router at all.
+* **The mode has one control.** No setting chooses record, replay or live, and record is refused
+  when `CI=true`.
+* **Every fixture and cassette is invented.** No credentials, student names or real card text;
+  `tests/fixtures/model_cassettes/README.md` says how to write one.
+* **The scripted router is a different thing.** `debate_core.testing.ScriptedModelRouter` (named
+  `FakeModelRouter` until this task) answers from a queue, for unit tests that need a model to
+  say one particular thing. The shared `model_router` pytest fixture is the fixture-keyed fake.
+
 ### The debate-file style profile (v1-e31-t02-verbatim-style-profile)
 
 What a pocket, hat, block, tag, cite, analytic and undertag look like in a Word `.docx`, in one
@@ -205,7 +255,7 @@ means.**
 | `evidence/style_classifier.py` | `classify_paragraph` / `classify_run` for files that carry no Verbatim styles |
 
 ```python
-from debate_core.evidence import load_style_profile, resolve_based_on_chain
+from debate_core.evidence.style_profile_loader import load_style_profile, resolve_based_on_chain
 
 profile = load_style_profile()
 match = profile.resolve_paragraph_style("Heading411", "Heading 411", ("Heading1", "Normal"))

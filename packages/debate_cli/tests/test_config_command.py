@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from tests.fixtures.model_routing import EXAMPLE_ROUTING_FILE
 from typer.testing import CliRunner, Result
 
 from debate_cli.app import create_app
@@ -44,17 +45,17 @@ def isolated_environment(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Ite
     profiles.mkdir()
     (profiles / "dev.toml").write_text(
         f'[storage]\ndata_dir = "{tmp_path / "dev-data"}"\n'
-        f'[models]\nrouting_file = "{tmp_path / "routing.yaml"}"\nbudget_usd_daily = 2.0\n',
+        f'[models]\nrouting_file = "{EXAMPLE_ROUTING_FILE}"\nbudget_usd_daily = 2.0\n',
         encoding="utf-8",
     )
     (profiles / "prod.toml").write_text(
         f'[storage]\ndata_dir = "{tmp_path / "prod-data"}"\n'
-        f'[models]\nrouting_file = "{tmp_path / "routing-prod.yaml"}"\nbudget_usd_daily = 20.0\n',
+        f'[models]\nrouting_file = "{EXAMPLE_ROUTING_FILE}"\nbudget_usd_daily = 1.5\n',
         encoding="utf-8",
     )
     (profiles / "test.toml").write_text(
         "allow_network = false\n[providers]\nenabled = []\n"
-        f'[models]\nrouting_file = "{tmp_path / "routing.yaml"}"\nbudget_usd_daily = 0.0\n',
+        f'[models]\nrouting_file = "{EXAMPLE_ROUTING_FILE}"\nbudget_usd_daily = 0.0\n',
         encoding="utf-8",
     )
     monkeypatch.setenv("DEBATE_PROFILE_DIR", str(profiles))
@@ -211,10 +212,11 @@ def test_dev_and_prod_report_different_data_dirs(monkeypatch: pytest.MonkeyPatch
     production = envelope_of(runner.invoke(create_app(), ["--json", "config", "show"]))["data"]
 
     assert development["settings"]["storage.data_dir"] != production["settings"]["storage.data_dir"]
+    # Each environment's own profile is read: this test's dev.toml says $2 a day, its prod.toml $1.50.
     assert (
-        development["settings"]["models.budget_usd_daily"]
-        < (production["settings"]["models.budget_usd_daily"])
-    )
+        development["settings"]["models.budget_usd_daily"],
+        production["settings"]["models.budget_usd_daily"],
+    ) == (2.0, 1.5)
 
 
 def test_an_unusable_debate_env_fails_the_command_without_a_traceback(
@@ -244,6 +246,66 @@ def test_an_invalid_setting_is_reported_with_the_field_that_is_wrong(
     error = envelope_of(result)["error"]
     assert "http.max_retries" in error["message"]
     assert error["details"]["field"] == "http.max_retries"
+
+
+# ---------------------------------------------------------------------------------------------
+# A setting a newer build may define, from a .env in the folder the command runs in (v1-e41-t01)
+# ---------------------------------------------------------------------------------------------
+
+NEWER_KEY = "provider-key-a-newer-build-reads-that-must-never-be-printed"
+
+
+@pytest.fixture
+def newer_dotenv(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Path:
+    """A folder outside any checkout whose `.env` sets a provider key this build has no field for."""
+    folder = tmp_path / "beside-a-newer-checkout"
+    folder.mkdir()
+    dotenv = folder / ".env"
+    dotenv.write_text(f"DEBATE_PROVIDERS__CORE_API_KEY={NEWER_KEY}\n", encoding="utf-8")
+    monkeypatch.chdir(folder)
+    return dotenv
+
+
+def test_a_reserved_name_from_dotenv_is_refused_with_the_newer_build_hint(newer_dotenv: Path) -> None:
+    result = runner.invoke(create_app(), ["--json", "config", "show"])
+
+    assert result.exit_code == ExitCode.DOMAIN_FAILURE
+    assert envelope_of(result)["error"] == {
+        "code": "CONFIGURATION_ERROR",
+        "message": (
+            f"invalid configuration: providers.core_api_key (from dotenv:{newer_dotenv}): "
+            "Extra inputs are not permitted"
+        ),
+        "exit_code": 1,
+        "details": {"field": "providers.core_api_key", "source": f"dotenv:{newer_dotenv}"},
+        "hint": (
+            "A newer build may define providers.core_api_key: this build keeps names matching "
+            "providers.*_api_key for settings added after it, and refuses each one it does not know. "
+            "The .env file is read from the checkout or folder a command runs in, so run the command "
+            "from another folder, or install the newer build."
+        ),
+    }
+
+
+@pytest.mark.parametrize(
+    "arguments",
+    [
+        ["config", "show"],
+        ["--json", "config", "show"],
+        ["--verbose", "config", "show"],
+        ["--json", "--verbose", "config", "show"],
+    ],
+)
+def test_a_reserved_names_value_reaches_neither_stream_in_any_mode(
+    newer_dotenv: Path, arguments: list[str]
+) -> None:
+    """Only its name is printed: the refusal quotes no value, and chains no report that does."""
+    result = runner.invoke(create_app(), arguments)
+
+    assert result.exit_code == ExitCode.DOMAIN_FAILURE
+    written = everything_written(result)
+    assert "providers.core_api_key" in written
+    assert NEWER_KEY not in written
 
 
 # ---------------------------------------------------------------------------------------------
@@ -292,7 +354,9 @@ def test_version_does_not_load_settings(monkeypatch: pytest.MonkeyPatch) -> None
 
 @pytest.mark.parametrize(
     ("environment", "budget"),
-    [("dev", 2.0), ("prod", 20.0)],
+    # Dev's $2 a day is the capped sample's allowance (PM ruling, 2026-10-27); prod's $1.50 is the
+    # coach's $50 a month over thirty days (v1-e05-t15).
+    [("dev", 2.0), ("prod", 1.5)],
 )
 def test_the_committed_dev_and_prod_profiles_differ_in_config_show(
     environment: str, budget: float, monkeypatch: pytest.MonkeyPatch
@@ -311,4 +375,4 @@ def test_the_committed_dev_and_prod_profiles_differ_in_config_show(
     assert settings["storage.data_dir"] == str(Path(f"~/.debate-research/{environment}").expanduser())
     assert settings["models.routing_file"] == str(root / "config" / f"model_routing.{environment}.yaml")
     assert settings["models.budget_usd_daily"] == budget
-    assert budget <= 2.0 or environment == "prod"
+    assert settings["models.budget_usd_monthly"] == 50.0

@@ -14,6 +14,9 @@ are ones an installed build reads, and the reverse.
 | `written_by_the_start_commit/<scenario>.run-log.jsonl` | The source at `0a9c1e6` | The run log that build left after the scenario: one record a line. Ten scenarios; the tenth is [the refusal to start](#the-refusal-to-start-v1-e34-t22) |
 | `written_by_the_start_commit/<scenario>.bucket.json` | The source at `0a9c1e6` | Every object that build put under `reports/sync-runs/`, key to body |
 | `run_log_written_by_a_schema_3_build.jsonl`, `run_summary_schema_3.json` | A build before `v1-e34-t13` | Kept by that task; see `test_pull_stage_failure_codes.py` |
+| `details_schema_before_parsed_stores_owed.json` | `v1.1.0-dev.155` (`76b53e7`), the Mac's installed build at the cutover, and `b0cf40f`, the commit on `dev` that `v1-e34-t31` started from | `SyncRunDetails.model_json_schema()`, byte for byte the same from both: what those builds read a run's details with. It allows a key it does not define and refuses one of its own keys with another type. `test_caselist_sync_names_publish_only_per_caselist.py` holds the details this build writes to it |
+| `record_schema_of_the_cloud_image.json` | `v1.1.0-dev.164` (`03b23e2`), the cloud run's image deployed on 2026-10-29 (`v1-e40-t18`) | `SyncRunRecord.model_json_schema()` by that build. It differs from `record_schema_of_the_start_commit.json` only in two descriptions, and is byte for byte what `v1.1.0-dev.155` and `650a655`, the commit `v1-e40-t18` started from, print. Its `SyncRunDetails.model_json_schema()` is byte for byte `details_schema_before_parsed_stores_owed.json`, so that file stands for it too. `test_caselist_sync_names_the_cloud_cure_in_bucket_mode.py` holds the bucket-mode records and details this build writes to both |
+| `details_schema_of_the_macs_installed_build.json` | `v1.1.0-dev.200` (`761b571`), the Mac's installed build on 2026-10-31, `v1-e40-t18`'s merge (`v1-e40-t22`) | `SyncRunDetails.model_json_schema()` by that build: the first stored details schema that defines `parsed_stores_owed`. Byte for byte what `7272af9`, the commit `v1-e40-t22` started from, prints. dev.200's record schema is byte for byte `record_schema_of_the_cloud_image.json`, so that file stands for it. `v1.1.0-dev.251` (`a21bb68`), the cloud image scheduled for 2026-11-04, prints this details schema byte for byte too, and the record schema of `record_schema_of_the_cloud_image.json`, so the two files stand for it (`v1-e40-t31`). `test_caselist_sync_memory_figures.py` holds the details with memory figures to them `test_caselist_sync_bucket_mode_hints_point_at_the_cloud.py` holds the bucket-mode records and details of its three hints to both builds' schemas |
 
 The scenarios are the functions of `run_record_scenarios.py`, which gives each build the same
 run to record, so the same file runs against either source. Two things keep that true after
@@ -59,6 +62,12 @@ the stored line byte for byte
 Run on 2026-10-12, the command below wrote this scenario's two files and rewrote the other 18,
 changing none of them.
 
+**Those words, since `v1-e34-t23`.** The start commit's redaction took the runbook the error's
+message points at, `docs/runbooks/evidence-store.md`, for a path, and its record says
+`[redacted] lists the evidence profiles`. This build's redaction keeps the runbook. The stored
+files are left as that build wrote them; the comparison reads them with that one phrase in place
+of the other (`WORDS_THIS_BUILD_KEEPS` in the test) and requires everything else to be equal.
+
 ## How they were written
 
 The two schemas, each by the build it describes. The second line reads the installed build and
@@ -79,6 +88,36 @@ WRITE_STORED_RUN_RECORDS=from-the-start-commit PYTHONPATH="${START}/packages/deb
 
 `write_stored_run_records.py` is not a test module and is never collected; it runs only when named.
 It refuses to run without the variable above, because it overwrites these files.
+
+The details schema (`v1-e34-t31`), by each of the two builds, each exported the same way. `DEV155`
+and `START31` are the two directories and `CHECKOUT` is the worktree. The last two lines ran from
+the scratch directory, with the worktree's interpreter and without `-I`, which would set
+`PYTHONPATH` aside and read the worktree's own source:
+
+```bash
+git archive v1.1.0-dev.155 packages/debate_core/src | tar -x -C "${DEV155}"
+git archive b0cf40f packages/debate_core/src | tar -x -C "${START31}"
+PYTHONPATH="${DEV155}/packages/debate_core/src" "${CHECKOUT}/.venv/bin/python" -c 'import json,sys; from debate_core.application.sync_runs import SyncRunDetails; sys.stdout.write(json.dumps(SyncRunDetails.model_json_schema(), indent=2, sort_keys=True) + "\n")'
+PYTHONPATH="${START31}/packages/debate_core/src" "${CHECKOUT}/.venv/bin/python" -c 'import json,sys; from debate_core.application.sync_runs import SyncRunDetails; sys.stdout.write(json.dumps(SyncRunDetails.model_json_schema(), indent=2, sort_keys=True) + "\n")'
+```
+
+The cloud image's schemas (`v1-e40-t18`), the same way. `DEV164` is its exported source; the second
+line printed the details schema that was compared with `details_schema_before_parsed_stores_owed.json`:
+
+```bash
+git archive v1.1.0-dev.164 packages/debate_core/src | tar -x -C "${DEV164}"
+PYTHONPATH="${DEV164}/packages/debate_core/src" "${CHECKOUT}/.venv/bin/python" -c 'import json,sys; from debate_core.application.sync_runs import SyncRunRecord; sys.stdout.write(json.dumps(SyncRunRecord.model_json_schema(), indent=2, sort_keys=True) + "\n")'
+PYTHONPATH="${DEV164}/packages/debate_core/src" "${CHECKOUT}/.venv/bin/python" -c 'import json,sys; from debate_core.application.sync_runs import SyncRunDetails; sys.stdout.write(json.dumps(SyncRunDetails.model_json_schema(), indent=2, sort_keys=True) + "\n")'
+```
+
+The Mac's installed build's details schema (`v1-e40-t22`), the same way. `DEV200` is its exported
+source; the record schema it printed by the first line's code with `SyncRunRecord` was compared with
+`record_schema_of_the_cloud_image.json`:
+
+```bash
+git archive v1.1.0-dev.200 packages/debate_core/src | tar -x -C "${DEV200}"
+PYTHONPATH="${DEV200}/packages/debate_core/src" "${CHECKOUT}/.venv/bin/python" -c 'import json,sys; from debate_core.application.sync_runs import SyncRunDetails; sys.stdout.write(json.dumps(SyncRunDetails.model_json_schema(), indent=2, sort_keys=True) + "\n")'
+```
 
 ## When these may change
 

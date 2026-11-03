@@ -27,6 +27,9 @@ spec:
     API or workers, nor dashboards/alarms (t06). It lands in the dev and prod accounts and Terraform
     roots created in V1 (v1-e29-t01/v1-e29-t02; no stage, ADR-0013); the S3 gateway endpoint and task
     roles reach the existing V1 evidence buckets (v1-e29-t03) by reference, never by recreating them.
+    (PM amendment 2026-11-01, Charlie's ruling in the dependency audit.) Blocked until Charlie says V2
+    starts. Every other V2 and V3 task depends on this one or on another held with it, so the ready list
+    stays V1's until then.
   priority: 1
   constraints:
     packages: [infrastructure/modules/network, infrastructure/modules/ecr, infrastructure/modules/ecs_cluster]
@@ -61,7 +64,7 @@ spec:
         A throwaway smoke task (public hello-world image) launched into a private subnet can reach an
         external HTTPS URL and write logs, proving egress and logging work.
 status:
-  phase: Pending
+  phase: Blocked
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

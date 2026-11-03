@@ -215,6 +215,14 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e31-t05-parser-eval
+    - id: ext-v1-e30-t07-source-removal
+      kind: External
+      name: 'Prerequisite from E30: Source removal and suppression list'
+      description: >-
+        Cross-epic prerequisite owned by v1-e30-caselist-ingestion (release v1.1).
+      inputs:
+        goalRef: v1-e30-t07-source-removal
+        specRef: plan_specs/v1/e30-caselist-ingestion/t07-source-removal.yaml
     - id: t06
       kind: Task
       name: Incremental parse pipeline
@@ -230,6 +238,7 @@ spec:
       - t04
       - ext-v1-e30-t05-caselist-publish
       - ext-v1-e30-t06-initial-backfill
+      - ext-v1-e30-t07-source-removal
       acceptanceCriteria:
       - type: command_succeeds
         name: Task spec v1-e31-t06-parse-pipeline reports phase Succeeded
@@ -510,6 +519,7 @@ spec:
         goalRef: v1-e31-t20-long-cuts-and-limits
       dependsOn:
       - t11
+      - t21
       acceptanceCriteria:
       - type: command_succeeds
         name: Task spec v1-e31-t20-long-cuts-and-limits reports phase Succeeded
@@ -519,5 +529,268 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e31-t20-long-cuts-and-limits
+    - id: t21
+      kind: Task
+      name: 'Measure cluster shapes, and ask a person only about the pairs a rule cannot decide'
+      description: >-
+        Measure cluster shapes automatically, and ask a person only about the pairs a rule
+        cannot decide.
+      inputs:
+        specRef: plan_specs/v1/e31-debate-file-parsing/t21-cluster-shapes-and-sampler.yaml
+        goalRef: v1-e31-t21-cluster-shapes-and-sampler
+      dependsOn:
+      - t11
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e31-t21-cluster-shapes-and-sampler reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e31-t21-cluster-shapes-and-sampler
+    - id: t22
+      kind: Task
+      name: 'Bodies too long to be one card, and two cards stored as one'
+      description: >-
+        Bodies too long to be one card, and two cards stored as one, counted and fixed where
+        they are parser defects.
+      inputs:
+        specRef: plan_specs/v1/e31-debate-file-parsing/t22-card-boundaries.yaml
+        goalRef: v1-e31-t22-card-boundaries
+      dependsOn:
+      - t12
+      - t21
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e31-t22-card-boundaries reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e31-t22-card-boundaries
+    - id: t23
+      kind: Task
+      name: 'In-round markers kept in a card''s evidence text'
+      description: >-
+        In-round markers such as 'Marked 10:42' kept in evidence text, counted, then handled
+        as the PM rules.
+      inputs:
+        specRef: plan_specs/v1/e31-debate-file-parsing/t23-in-round-markers.yaml
+        goalRef: v1-e31-t23-in-round-markers
+      dependsOn:
+      - t12
+      - t20
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e31-t23-in-round-markers reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e31-t23-in-round-markers
+    - id: t24
+      kind: Task
+      name: 'A bold tag above a bracketed cite is read as the card''s tag'
+      description: >-
+        A bold tag above a bracketed cite is read as the card's tag.
+      inputs:
+        specRef: plan_specs/v1/e31-debate-file-parsing/t24-bold-tag-above-bracketed-cite.yaml
+        goalRef: v1-e31-t24-bold-tag-above-bracketed-cite
+      dependsOn:
+      - t19
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e31-t24-bold-tag-above-bracketed-cite reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e31-t24-bold-tag-above-bracketed-cite
+    - id: t25
+      kind: Task
+      name: 'The labeller warns before a card is lost, and import refuses a file already corrected'
+      description: >-
+        The labeller warns before a card is lost, and import refuses a file already
+        corrected.
+      inputs:
+        specRef: plan_specs/v1/e31-debate-file-parsing/t25-labeller-safeguards.yaml
+        goalRef: v1-e31-t25-labeller-safeguards
+      dependsOn:
+      - t18
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e31-t25-labeller-safeguards reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e31-t25-labeller-safeguards
+    - id: ext-v1-e30-t23-held-digests-and-manifest-fsync
+      kind: External
+      name: 'Prerequisite from E30: Held digests are remembered once the copy is gone, and a manifest write survives a power cut'
+      description: >-
+        Cross-epic prerequisite owned by v1-e30-caselist-ingestion (release v1.1).
+      inputs:
+        goalRef: v1-e30-t23-held-digests-and-manifest-fsync
+        specRef: plan_specs/v1/e30-caselist-ingestion/t23-held-digests-and-manifest-fsync.yaml
+    - id: t26
+      kind: Task
+      name: 'parse --publish sends nothing of a held upload'
+      description: >-
+        parse --publish sends nothing of a held upload.
+      inputs:
+        specRef: plan_specs/v1/e31-debate-file-parsing/t26-held-upload-parsed-publish.yaml
+        goalRef: v1-e31-t26-held-upload-parsed-publish
+      dependsOn:
+      - ext-v1-e30-t23-held-digests-and-manifest-fsync
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e31-t26-held-upload-parsed-publish reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e31-t26-held-upload-parsed-publish
+    - id: t27
+      kind: Task
+      name: 'The parse time-limit test does not depend on the machine''s load'
+      description: >-
+        The parse time-limit test does not depend on the machine's load.
+      inputs:
+        specRef: plan_specs/v1/e31-debate-file-parsing/t27-parse-time-limit-test.yaml
+        goalRef: v1-e31-t27-parse-time-limit-test
+      dependsOn:
+      - t17
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e31-t27-parse-time-limit-test reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e31-t27-parse-time-limit-test
+    - id: t28
+      kind: Task
+      name: 'What the cautious cite rules leave, and a short cite behind a first name'
+      description: >-
+        What the cautious cite rules leave, and a short cite behind a first name.
+      inputs:
+        specRef: plan_specs/v1/e31-debate-file-parsing/t28-cite-rules-leftovers.yaml
+        goalRef: v1-e31-t28-cite-rules-leftovers
+      dependsOn:
+      - t19
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e31-t28-cite-rules-leftovers reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e31-t28-cite-rules-leftovers
+    - id: t29
+      kind: Task
+      name: 'Card matching recovers two kinds of pair it now keeps apart'
+      description: >-
+        Card matching recovers two kinds of pair it now keeps apart.
+      inputs:
+        specRef: plan_specs/v1/e31-debate-file-parsing/t29-card-matching-recall.yaml
+        goalRef: v1-e31-t29-card-matching-recall
+      dependsOn:
+      - t20
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e31-t29-card-matching-recall reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e31-t29-card-matching-recall
+    - id: t30
+      kind: Task
+      name: 'Publish the parsed store without rebuilding it'
+      description: >-
+        Publish the parsed store without rebuilding it.
+      inputs:
+        specRef: plan_specs/v1/e31-debate-file-parsing/t30-parsed-store-publish-only.yaml
+        goalRef: v1-e31-t30-parsed-store-publish-only
+      dependsOn:
+      - t20
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e31-t30-parsed-store-publish-only reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e31-t30-parsed-store-publish-only
+    - id: t31
+      kind: Task
+      name: 'Where the labelled evaluation''s missed cites, tags and highlights go, counted before any rule'
+      description: >-
+        Where the labelled evaluation's missed cites, tags and highlights go, counted before
+        any rule.
+      inputs:
+        specRef: plan_specs/v1/e31-debate-file-parsing/t31-labelled-evaluation-gaps.yaml
+        goalRef: v1-e31-t31-labelled-evaluation-gaps
+      dependsOn:
+      - t24
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e31-t31-labelled-evaluation-gaps reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e31-t31-labelled-evaluation-gaps
+    - id: t32
+      kind: Task
+      name: 'A tag with a word left unbolded, above a cite, counted before any rule'
+      description: >-
+        A tag with a word left unbolded, above a cite, counted before any rule.
+      inputs:
+        specRef: plan_specs/v1/e31-debate-file-parsing/t32-bold-in-part-tags.yaml
+        goalRef: v1-e31-t32-bold-in-part-tags
+      dependsOn:
+      - t24
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e31-t32-bold-in-part-tags reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e31-t32-bold-in-part-tags
+    - id: t33
+      kind: Task
+      name: 'A pointer to another card (`<<AUTHOR ''YY FOR REFERENCE>>`) is never promoted to a cite'
+      description: >-
+        A pointer to another card (`<<AUTHOR 'YY FOR REFERENCE>>`) is never promoted to a
+        cite.
+      inputs:
+        specRef: plan_specs/v1/e31-debate-file-parsing/t33-reference-pointers-are-not-cites.yaml
+        goalRef: v1-e31-t33-reference-pointers-are-not-cites
+      dependsOn:
+      - t31
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e31-t33-reference-pointers-are-not-cites reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e31-t33-reference-pointers-are-not-cites
 status:
   phase: Pending

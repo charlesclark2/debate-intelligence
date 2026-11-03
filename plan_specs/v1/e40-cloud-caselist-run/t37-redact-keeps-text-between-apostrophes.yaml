@@ -1,0 +1,78 @@
+# TASK v1-e40-t37-redact-keeps-text-between-apostrophes - Redaction no longer takes two apostrophes for a quoted path and removes the words between them
+# Epic: E40 — Weekly Caselist Run in the Cloud | Release: v1.8 (Weekly caselist run in the cloud) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e40-t37-redact-keeps-text-between-apostrophes
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.8
+    debate/epic: v1-e40-cloud-caselist-run
+  annotations:
+    debate/title: "Redaction no longer takes two apostrophes for a quoted path and removes the words between them"
+spec:
+  # Filed by the PM, 2026-10-31, from v1-e40-t29's follow-up 1 (the PM's review, 2026-11-01).
+  description: >-
+    v1-e40-t29 found that `redact`'s `_QUOTED_PATH` reads the apostrophes of "bucket's" and
+    "run's" in t11's `RunHomeMoved` message as quotes around a path, and removes the words
+    between them, so `caselist runs --json` shows "this bucket[redacted]s home to prod". Nothing
+    leaks, but any stored message with two apostrophes may be cut. Count first, read-only and
+    counts only: how many of the Mac's stored run records' and details' messages `redact`
+    changed in a way a real path does not explain. Then narrow the pattern so a possessive or
+    contraction is not a quote, while every quoted path the current tests redact is still
+    redacted.
+  priority: 3
+  constraints:
+    packages: [debate_core.application, packages/debate_core/tests]
+    forbidden:
+      - A real quoted path left in a message
+      - A school, team or path in the report
+      - Network or AWS access in a test
+  context:
+    - kind: TaskRef
+      name: v1-e40-t11-run-home-moved-holder
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        The count is recorded first; possessives and contractions survive redaction while
+        every quoted path the existing tests name is still redacted, by tests shown failing
+        first.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e40-t37-redact-keeps-text-between-apostrophes-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.8
+    debate/epic: v1-e40-cloud-caselist-run
+spec:
+  description: >-
+    Redaction no longer takes two apostrophes for a quoted path and removes the words between
+    them.
+  goalRef:
+    name: v1-e40-t37-redact-keeps-text-between-apostrophes
+  graph:
+    nodes:
+      - id: redact-keeps-text-between-apostrophes
+        kind: Task
+        name: Apostrophes kept
+        description: >-
+          Redaction no longer takes two apostrophes for a quoted path and removes the
+          words between them.
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Apostrophes kept tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests, -k, redact]
+status:
+  phase: Pending

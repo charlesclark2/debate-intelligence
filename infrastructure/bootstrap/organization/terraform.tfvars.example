@@ -21,4 +21,5 @@ monthly_budget_usd = {
   prod = 50
 }
 
-bedrock_monthly_budget_usd = 40
+# Where the model spend budget's notices go: the coach's address.
+model_budget_notification_emails = ["coach@example.com"]

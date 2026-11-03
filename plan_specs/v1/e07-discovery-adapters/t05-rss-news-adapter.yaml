@@ -27,16 +27,54 @@ spec:
     text is always retrieved later by ArticleService from the publisher, subject to robots and paywall rules.
     Uses conditional GET (ETag/Last-Modified) to be polite. Boundaries: no full-text scraping from feeds, no
     GDELT (t06).
+    (PM amendment 2026-10-21, from v1-e07-t01's and v1-e04-t02's PM reviews and v1-e07-t01's CI
+    notes.) The adapter lives in `debate_core.integrations.discovery` and its tests in
+    `packages/debate_core/tests/integrations/discovery/` (the PM's naming ruling of 2026-10-20:
+    "search" in module names means the student pilot's index); the paths below say so. It
+    imports the discovery values from `debate_core.domain.discovery`, is wrapped in
+    `ResilientProvider`, maps HTTP failures and `Retry-After` with
+    `debate_core.integrations.discovery.http_failures`, calls `protect_logs` in its constructor
+    and logs on the package's one protected logger. It passes the contract kit,
+    `debate_core.testing.contracts.search_provider`, on its own recorded fixtures, served
+    through a copy of the FakeProvider binding's `replay_with_respx`. httpx comes from
+    debate-core's `http` extra (v1-e04-t02); no new extra. Any test that asserts on httpx or
+    httpcore log records starts from bare loggers and restores them, and before the report the
+    adapter's tests run once in one process after the OpenCaselist client and discovery suites
+    (`-n 0 -p no:randomly`), since logger filters are shared by the whole process (working
+    agreement 10).
   priority: 1
   constraints:
-    packages: [debate_core.integrations, config/feeds]
+    # PM ruling 2026-10-22 (v1-e07-t05: feedparser falls back to a loose parser on a hostile feed): defusedxml joins debate-core
+    # as the `feeds` extra, so the two pyproject files and uv.lock are in this task's packages.
+    packages:
+      - debate_core.integrations
+      # PM ruling 2026-10-22 (v1-e07-t05: Google News gets its own provider name).
+      - debate_core.application.settings
+      - packages/debate_core/tests/application/test_settings.py
+      # PM ruling 2026-10-22 (v1-e07-t05: a new provider name needs its precedence place).
+      - debate_core.application.federated_dedupe
+      - packages/debate_core/tests/application/test_federated_dedupe.py
+      - config/feeds
+      - packages/debate_core/pyproject.toml
+      - pyproject.toml
+      - uv.lock
+      # PM ruling 2026-10-22: each new import contract needs its failing probe.
+      - tests/architecture/test_import_contracts.py
     forbidden:
       - Using feed-embedded full content (content:encoded) as evidence text
-      - Returning news.google.com redirect URLs as the candidate URL when the publisher URL is resolvable
+      # PM ruling 2026-10-22 (v1-e07-t05: a Google News link counts as resolvable only offline).
+      - >-
+        Returning news.google.com redirect URLs as the candidate URL when the publisher URL is
+        resolvable, where resolvable means without any request to Google beyond the RSS search feed
+        itself (no batchexecute call, no per-article page request); an item that cannot be resolved
+        that way is dropped and counted in the log, and a <source url> is never a candidate URL
       - Live feed fetches in CI (recorded feed fixtures only)
   context:
     - kind: TaskRef
       name: v1-e07-t01-search-provider-contract
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e04-t02-http-fetcher
       relation: dependsOn
   acceptanceCriteria:
     - id: ac1
@@ -55,8 +93,14 @@ spec:
       description: >-
         No CandidateResult carries feed body content beyond a summary snippet of at most 500 characters,
         and both providers pass the contract kit.
+    - id: ac5
+      description: >-
+        (PM amendment 2026-10-21) The adapter, in `debate_core.integrations.discovery`,
+        passes `debate_core.testing.contracts.search_provider` on its recorded fixtures, its
+        secrets never reach a log line, and its tests pass in one process after the
+        OpenCaselist and discovery suites.
 status:
-  phase: Pending
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan
@@ -91,29 +135,31 @@ spec:
       - id: feed-provider
         kind: Task
         name: FeedProvider with filtering and conditional GET
+        # PM ruling 2026-10-22 (v1-e07-t05: feedparser falls back to a loose parser on a hostile feed).
         description: >-
-          Parse feeds with feedparser, filter by terms and dates, cache ETag/Last-Modified in the data dir.
+          Parse feeds with defusedxml over the standard library's ElementTree (entities and external
+          references refused), filter by terms and dates, cache ETag/Last-Modified in the data dir.
         dependsOn: [feed-config]
-        outputs: [packages/debate_core/src/debate_core/integrations/search/feeds.py]
+        outputs: [packages/debate_core/src/debate_core/integrations/discovery/feeds.py]
         estimatedEffort: 3h
         acceptanceCriteria:
           - type: test_passes
             name: Feed provider tests pass
             command: uv
-            args: [run, pytest, packages/debate_core/tests/integrations/search/test_feeds.py, -k, feed]
+            args: [run, pytest, packages/debate_core/tests/integrations/discovery/test_feeds.py, -k, feed]
       - id: google-news-rss
         kind: Task
         name: Google News RSS provider
         description: >-
           Build search feed URLs, map entries to publisher URL/name, and respect per-topic enablement.
         dependsOn: [feed-provider]
-        outputs: [packages/debate_core/src/debate_core/integrations/search/google_news_rss.py]
+        outputs: [packages/debate_core/src/debate_core/integrations/discovery/google_news_rss.py]
         estimatedEffort: 2h
         acceptanceCriteria:
           - type: test_passes
             name: Google News RSS tests pass
             command: uv
-            args: [run, pytest, packages/debate_core/tests/integrations/search/test_feeds.py, -k, google]
+            args: [run, pytest, packages/debate_core/tests/integrations/discovery/test_feeds.py, -k, google]
       - id: contract-run
         kind: Task
         name: Contract kit and snippet-limit checks
@@ -125,6 +171,6 @@ spec:
           - type: test_passes
             name: Full feed adapter tests pass
             command: uv
-            args: [run, pytest, packages/debate_core/tests/integrations/search/test_feeds.py]
+            args: [run, pytest, packages/debate_core/tests/integrations/discovery/test_feeds.py]
 status:
   phase: Pending

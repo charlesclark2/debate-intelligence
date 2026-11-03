@@ -10,7 +10,7 @@ every test here and prove nothing.
 the SDK signs requests on. That is how "a dry run performs no PutObject or GetObject" and "a blob
 diff heads nothing" are asserted: on the wire, not on a counter this code keeps about itself.
 
-Nothing here reaches AWS. `packages/debate_core/tests/conftest.py` builds the bucket in moto with
+Nothing here reaches AWS. `tests/fixtures/moto_evidence_bucket.py` builds the bucket in moto with
 fake credentials, and the workspace's pytest options disable sockets.
 """
 
@@ -30,6 +30,7 @@ from debate_core.application.errors import (
     BlobIntegrityError,
     NotFound,
     StoreCredentialsExpired,
+    StoreProfileNotConfigured,
 )
 from debate_core.application.evidence_sync import (
     EVIDENCE_PREFIXES,
@@ -45,7 +46,8 @@ from debate_core.application.ports.evidence_store import ObjectInfo
 from debate_core.application.ports.suppression import ReasonCode, SuppressionAction, SuppressionEntry
 from debate_core.integrations.local import BLOB_DIRECTORY, FsEvidenceObjectStore, FsSnapshotStore
 from debate_core.integrations.s3 import SHA256_METADATA_NAME, S3EvidenceObjectStore
-from debate_core.testing.fakes import FixedClock, InMemoryAppendOnlyRecord, empty_suppression_list
+from debate_core.testing.fakes.clock_and_ids import FixedClock
+from debate_core.testing.fakes.suppression import InMemoryAppendOnlyRecord, empty_suppression_list
 
 if TYPE_CHECKING:  # pragma: no cover - import for the type checker only
     from mypy_boto3_s3.client import S3Client
@@ -1079,6 +1081,28 @@ class RemoteStoreWithNoCredentials:
         return await self._real.get_file(key, destination)
 
 
+class RemoteStoreThatRefusesEveryUpload:
+    """Lists and heads through the real store; every upload raises `error`."""
+
+    def __init__(self, real: S3EvidenceObjectStore, error: Exception) -> None:
+        self._real = real
+        self._error = error
+        self.attempts = 0
+
+    async def list_objects(self, prefix: str) -> tuple[ObjectInfo, ...]:
+        return await self._real.list_objects(prefix)
+
+    async def head(self, key: str) -> ObjectInfo:
+        return await self._real.head(key)
+
+    async def put_file(self, key: str, source: Path) -> ObjectInfo:
+        self.attempts += 1
+        raise self._error
+
+    async def get_file(self, key: str, destination: Path) -> ObjectInfo:
+        return await self._real.get_file(key, destination)
+
+
 class TestFailures:
     async def test_one_failed_object_does_not_abandon_the_rest(
         self, data_dir: Path, evidence_bucket: str, s3_client: S3Client
@@ -1123,6 +1147,32 @@ class TestFailures:
 
         assert expired.attempts == 1
         assert raised.value.hint == "aws sso login --profile debate-dev-evidence"
+
+    async def test_a_profile_the_aws_config_lacks_ends_the_run_at_the_first_object(
+        self, data_dir: Path, evidence_bucket: str, s3_client: S3Client
+    ) -> None:
+        """True of every object as an expired session is, and no login cures it (`v1-e29-t09` ac1)."""
+        for name in ("a", "b", "c"):
+            write_local_object(data_dir, f"manifests/hsld26/{name}.jsonl", name.encode())
+        local = FsEvidenceObjectStore(data_dir)
+        missing = StoreProfileNotConfigured(
+            "debate-dev-evidence-typo", setting="storage.s3.aws_profile", hint="set storage.s3.aws_profile"
+        )
+        remote = RemoteStoreThatRefusesEveryUpload(
+            S3EvidenceObjectStore(bucket=evidence_bucket, client=s3_client), missing
+        )
+        service = EvidenceSyncService(
+            suppression=empty_suppression_list(),
+            keyspaces=(
+                SyncKeyspace(name="objects", local=local, remote=remote, local_path_for=local.path_for),
+            ),
+        )
+
+        with pytest.raises(StoreProfileNotConfigured) as raised:
+            await service.execute(await service.plan())
+
+        assert remote.attempts == 1
+        assert raised.value is missing
 
     async def test_a_service_with_no_keyspaces_is_a_programming_error(self) -> None:
         with pytest.raises(ValueError, match="at least one keyspace"):

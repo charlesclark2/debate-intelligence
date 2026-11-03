@@ -1,6 +1,436 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$defs": {
+    "Effort": {
+      "description": "How much thinking and output a Claude model spends on a call: its quality lever.\n\nSent as Converse's `outputConfig.effort`. The current Claude models take no temperature but their\ndefault and always think, so effort is the one knob that trades quality against tokens on them\n(v1-e05-t01-model-router-port, Follow-up work). Unset sends none, and the model's own default\napplies; that default differs by model, so a route that cares names a level.",
+      "enum": [
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+        "max"
+      ],
+      "title": "Effort",
+      "type": "string"
+    },
+    "ExpandedQuery": {
+      "additionalProperties": false,
+      "description": "One query an expanded search asked every provider, and why it was asked.",
+      "properties": {
+        "query": {
+          "description": "The query text exactly as the providers were asked it.",
+          "minLength": 1,
+          "title": "Query",
+          "type": "string"
+        },
+        "origin": {
+          "$ref": "#/$defs/QueryOrigin",
+          "description": "A template's, or a model's suggestion."
+        },
+        "template_id": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "`<argument>/<need>/<n>`, the n-th template of the pair; template queries only.",
+          "title": "Template Id"
+        },
+        "template": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The template's text, its variables still in braces; template queries only.",
+          "title": "Template"
+        },
+        "rationale": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Why the model suggested the query, in its words; model queries only.",
+          "title": "Rationale"
+        },
+        "since": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The `since` the query was asked with.",
+          "title": "Since"
+        },
+        "recency_days": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The taxonomy's window in days; None when it accepts any age.",
+          "title": "Recency Days"
+        },
+        "window": {
+          "$ref": "#/$defs/WindowSource",
+          "description": "Which rule set `since`."
+        }
+      },
+      "required": [
+        "query",
+        "origin",
+        "window"
+      ],
+      "title": "ExpandedQuery",
+      "type": "object"
+    },
+    "GeneratedArtifactMetadata": {
+      "additionalProperties": false,
+      "description": "The provenance of one generated artifact: which call produced it, and from which inputs.",
+      "properties": {
+        "prompt_id": {
+          "description": "Identifier of the registered prompt that was run.",
+          "minLength": 1,
+          "title": "Prompt Id",
+          "type": "string"
+        },
+        "prompt_version": {
+          "description": "The exact version of that prompt.",
+          "minLength": 1,
+          "title": "Prompt Version",
+          "type": "string"
+        },
+        "route": {
+          "$ref": "#/$defs/ResolvedRoute",
+          "description": "The route the call took: model id, inference profile, region, and the temperature and other parameters actually sent."
+        },
+        "provider_request_id": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The provider's id for the request, when it gave one.",
+          "title": "Provider Request Id"
+        },
+        "snapshot_ids": {
+          "default": [],
+          "description": "The source snapshots whose text the prompt was given, in the order given.",
+          "items": {
+            "maxLength": 26,
+            "minLength": 26,
+            "pattern": "^[0-7][0-9ABCDEFGHJKMNPQRSTVWXYZ]{25}$",
+            "type": "string"
+          },
+          "title": "Snapshot Ids",
+          "type": "array"
+        },
+        "retrieval_ids": {
+          "default": [],
+          "description": "The retrieved items (search results, cards) the prompt was given, in order.",
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "title": "Retrieval Ids",
+          "type": "array"
+        },
+        "created_at": {
+          "description": "When the model call was made, in UTC.",
+          "format": "date-time",
+          "title": "Created At",
+          "type": "string"
+        },
+        "repair_attempted": {
+          "default": false,
+          "description": "Whether the first answer failed validation and this output came from the repair call.",
+          "title": "Repair Attempted",
+          "type": "boolean"
+        },
+        "repair_prompt_version": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The version of the `model.repair` prompt that produced it, when repaired.",
+          "title": "Repair Prompt Version"
+        }
+      },
+      "required": [
+        "prompt_id",
+        "prompt_version",
+        "route",
+        "created_at"
+      ],
+      "title": "GeneratedArtifactMetadata",
+      "type": "object"
+    },
+    "ModelProvider": {
+      "description": "Who answers a routed call.",
+      "enum": [
+        "bedrock",
+        "fake"
+      ],
+      "title": "ModelProvider",
+      "type": "string"
+    },
+    "QueryOrigin": {
+      "description": "Where an expanded query came from.",
+      "enum": [
+        "template",
+        "model"
+      ],
+      "title": "QueryOrigin",
+      "type": "string"
+    },
+    "ResolvedRoute": {
+      "additionalProperties": false,
+      "description": "Where one call actually went, with the parameters it actually ran with.\n\nReturned on every response (ac4), and the provenance a generated artifact keeps\n(v1-e05-t04-prompt-registry). `temperature` and `max_tokens` are `None` when nothing was sent\nand the model's own default applied; that is the normal case for the current Claude models,\nwhich reject a non-default temperature.",
+      "properties": {
+        "task_class": {
+          "$ref": "#/$defs/TaskClass",
+          "description": "The task class the call was routed as."
+        },
+        "provider": {
+          "$ref": "#/$defs/ModelProvider",
+          "description": "Who answered the call."
+        },
+        "model_id": {
+          "description": "The provider's identifier of the foundation model.",
+          "minLength": 1,
+          "title": "Model Id",
+          "type": "string"
+        },
+        "inference_profile": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Inference profile the call was sent through, when the model is reached through one.",
+          "title": "Inference Profile"
+        },
+        "region": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Region the call was sent to; None for an offline router.",
+          "title": "Region"
+        },
+        "temperature": {
+          "anyOf": [
+            {
+              "maximum": 1.0,
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Temperature sent with the call; None means none was sent.",
+          "title": "Temperature"
+        },
+        "max_tokens": {
+          "anyOf": [
+            {
+              "maximum": 1000000,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Output cap sent with the call.",
+          "title": "Max Tokens"
+        },
+        "timeout_seconds": {
+          "description": "Wall-clock limit the call ran under.",
+          "exclusiveMinimum": 0,
+          "maximum": 3600.0,
+          "title": "Timeout Seconds",
+          "type": "number"
+        },
+        "effort": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Effort"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Effort level sent with the call; None means none was sent."
+        }
+      },
+      "required": [
+        "task_class",
+        "provider",
+        "model_id",
+        "timeout_seconds"
+      ],
+      "title": "ResolvedRoute",
+      "type": "object"
+    },
+    "SearchExpansion": {
+      "additionalProperties": false,
+      "description": "How one search's query was expanded by argument and need, recorded with the search.",
+      "properties": {
+        "taxonomy_version": {
+          "description": "The `config/argument_taxonomy.yaml` version used.",
+          "minLength": 1,
+          "title": "Taxonomy Version",
+          "type": "string"
+        },
+        "argument": {
+          "description": "The argument's id, after any alias was resolved.",
+          "minLength": 1,
+          "title": "Argument",
+          "type": "string"
+        },
+        "need": {
+          "description": "The need's id, after any alias was resolved.",
+          "minLength": 1,
+          "title": "Need",
+          "type": "string"
+        },
+        "topic_id": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The topic preset used, if any.",
+          "title": "Topic Id"
+        },
+        "variables": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "The value every variable was filled with.",
+          "title": "Variables",
+          "type": "object"
+        },
+        "queries": {
+          "description": "Every query asked, templates' first and then a model's, in order.",
+          "items": {
+            "$ref": "#/$defs/ExpandedQuery"
+          },
+          "minItems": 1,
+          "title": "Queries",
+          "type": "array"
+        },
+        "skipped_templates": {
+          "default": [],
+          "description": "Ids of the pair's templates not used because the search lacked a variable.",
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "title": "Skipped Templates",
+          "type": "array"
+        },
+        "model_requested": {
+          "default": false,
+          "description": "Whether model expansion was asked for.",
+          "title": "Model Requested",
+          "type": "boolean"
+        },
+        "model": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/GeneratedArtifactMetadata"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The model call whose suggestions were added; None when none were."
+        },
+        "warning": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Why model expansion was asked for and the templates were used alone.",
+          "title": "Warning"
+        }
+      },
+      "required": [
+        "taxonomy_version",
+        "argument",
+        "need",
+        "variables",
+        "queries"
+      ],
+      "title": "SearchExpansion",
+      "type": "object"
+    },
     "SearchFilters": {
       "additionalProperties": false,
       "description": "The constraints a user put on a search, stored with the search so it can be replayed.",
@@ -89,6 +519,28 @@
       ],
       "title": "SourceType",
       "type": "string"
+    },
+    "TaskClass": {
+      "description": "What kind of work a model call is, which is what routing is decided on.\n\nApplication code names a task class, never a model id. Routing a class to a model, a region\nand an inference profile is configuration, so a Bedrock model upgrade is a change to the\nrouting files rather than to code across the platform (architecture proposal §10, ADR-0005).",
+      "enum": [
+        "complex_reasoning",
+        "high_volume",
+        "deep_audit",
+        "embeddings",
+        "rerank"
+      ],
+      "title": "TaskClass",
+      "type": "string"
+    },
+    "WindowSource": {
+      "description": "Which rule set an expanded query's `since`.",
+      "enum": [
+        "need",
+        "template",
+        "request"
+      ],
+      "title": "WindowSource",
+      "type": "string"
     }
   },
   "additionalProperties": false,
@@ -176,6 +628,18 @@
     "status": {
       "$ref": "#/$defs/SearchStatus",
       "description": "Whether every selected provider answered."
+    },
+    "expansion": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/SearchExpansion"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "How the query was expanded by argument and need; absent when it was not."
     }
   },
   "required": [

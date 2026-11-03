@@ -1,0 +1,708 @@
+# EPIC E39 — Team Evidence Search (Student Pilot)
+# Major version: V1 | Release: v1.7 (Team evidence search pilot)
+# Architecture refs: ADR-0019, ADR-0012, ADR-0006, docs/policies/caselist-data-use.md (E39 gate)
+# Source of truth for task ordering inside this epic. Task details live in the tNN-*.yaml files beside this one.
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e39-evidence-search-pilot
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: epic
+    debate/major-version: v1
+    debate/release: v1.7
+    debate/epic: v1-e39-evidence-search-pilot
+  annotations:
+    debate/title: E39 — Team Evidence Search (Student Pilot)
+    debate/architecture-refs: ADR-0019, ADR-0012, ADR-0006, caselist data-use policy E39 gate
+spec:
+  description: >-
+    Give the team's debaters a signed-in web page, usable on a school Chromebook, to search the
+    disclosed and camp cards in the evidence store and take a card out with its provenance:
+    copied with its formatting into Google Docs or Word, or downloaded as a Verbatim .docx
+    through the E33 writer. A pilot for the end of the 2026 fall semester, on the smallest stack
+    that meets the data-use policy's E39 gate (ADR-0019): one function behind CloudFront on the
+    team domain, a weekly SQLite full-text index built from the parsed store, and Cognito
+    accounts the coach creates (username, password, authenticator-app codes, an opt-in
+    emailed-code fallback; no Google or school account). The school's activities director and IT
+    approved the tool for students (policy open question 6, version 1.10). V2's E12, E15 and E35
+    replace its pieces later; this epic says which in ADR-0019.
+  priority: 1
+  constraints:
+    majorVersion: v1
+    release: v1.7
+    rule: Every task in this epic ships in this release; no task crosses major versions.
+  acceptanceCriteria:
+  # PM amendment 2026-10-22: data-use policy version 1.11 takes the provenance line out of copied and
+  # downloaded cards; the card page still shows it.
+  - id: ac1
+    description: >-
+      A signed-in debater on a school Chromebook finds a card by words in its tag, author or
+      text, filtered by event, caselist and side, and copies it into Google Docs with its
+      formatting, its provenance shown on the card page, in prod.
+  - id: ac2
+    description: >-
+      Every item of the data-use policy's E39 gate is met and each is proven by a named test
+      or operator record.
+  - id: ac3
+    description: >-
+      The coach's beta and a student pilot have run on prod, and their findings and the go or
+      no-go for the whole team are recorded.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e39-evidence-search-pilot-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: epic
+    debate/major-version: v1
+    debate/release: v1.7
+    debate/epic: v1-e39-evidence-search-pilot
+spec:
+  description: >-
+    Task graph for epic E39 (Team Evidence Search (Student Pilot)). Each Task node points at its own
+    task-level PlanSpec.
+  goalRef:
+    name: v1-e39-evidence-search-pilot
+  version: '1'
+  graph:
+    nodes:
+    - id: ext-v1-e30-t01-caselist-data-use-policy
+      kind: External
+      name: 'Prerequisite from E30: Caselist and OpenEv data-use policy'
+      description: >-
+        Cross-epic prerequisite owned by v1-e30-caselist-ingestion (release v1.1).
+      inputs:
+        goalRef: v1-e30-t01-caselist-data-use-policy
+        specRef: plan_specs/v1/e30-caselist-ingestion/t01-caselist-data-use-policy.yaml
+    - id: t01
+      kind: Task
+      name: 'ADR-0019: the student search pilot''s stack, sign-in and hosting'
+      description: >-
+        ADR-0019: the student search pilot's stack, sign-in and hosting.
+      inputs:
+        specRef: plan_specs/v1/e39-evidence-search-pilot/t01-pilot-architecture-adr.yaml
+        goalRef: v1-e39-t01-pilot-architecture-adr
+      dependsOn:
+      - ext-v1-e30-t01-caselist-data-use-policy
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e39-t01-pilot-architecture-adr reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e39-t01-pilot-architecture-adr
+    - id: ext-v1-e31-t20-long-cuts-and-limits
+      kind: External
+      name: 'Prerequisite from E31: Long cuts join the one cluster that holds them, and the matching limits are set from samples'
+      description: >-
+        Cross-epic prerequisite owned by v1-e31-debate-file-parsing (release v1.1).
+      inputs:
+        goalRef: v1-e31-t20-long-cuts-and-limits
+        specRef: plan_specs/v1/e31-debate-file-parsing/t20-long-cuts-and-limits.yaml
+    - id: ext-v1-e30-t07-source-removal
+      kind: External
+      name: 'Prerequisite from E30: Source removal and suppression list'
+      description: >-
+        Cross-epic prerequisite owned by v1-e30-caselist-ingestion (release v1.1).
+      inputs:
+        goalRef: v1-e30-t07-source-removal
+        specRef: plan_specs/v1/e30-caselist-ingestion/t07-source-removal.yaml
+    - id: t02
+      kind: Task
+      name: 'tub index build and publish: one searchable document per card cluster, from the parsed store'
+      description: >-
+        tub index build and publish: one searchable document per card cluster, from the
+        parsed store.
+      inputs:
+        specRef: plan_specs/v1/e39-evidence-search-pilot/t02-search-index-build.yaml
+        goalRef: v1-e39-t02-search-index-build
+      dependsOn:
+      - t01
+      - ext-v1-e31-t20-long-cuts-and-limits
+      - ext-v1-e30-t07-source-removal
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e39-t02-search-index-build reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e39-t02-search-index-build
+    - id: t03
+      kind: Task
+      name: 'Search core: safe queries, ranking, filters, pages and card rendering over the index'
+      description: >-
+        Search core: safe queries, ranking, filters, pages and card rendering over the
+        index.
+      inputs:
+        specRef: plan_specs/v1/e39-evidence-search-pilot/t03-search-core.yaml
+        goalRef: v1-e39-t03-search-core
+      dependsOn:
+      - t02
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e39-t03-search-core reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e39-t03-search-core
+    - id: t04
+      kind: Task
+      name: 'Pilot infrastructure: the function, CloudFront, the user pool and the audit log, in dev and prod'
+      description: >-
+        Pilot infrastructure: the function, CloudFront, the user pool and the audit log, in
+        dev and prod.
+      inputs:
+        specRef: plan_specs/v1/e39-evidence-search-pilot/t04-pilot-infrastructure.yaml
+        goalRef: v1-e39-t04-pilot-infrastructure
+      dependsOn:
+      - t01
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e39-t04-pilot-infrastructure reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e39-t04-pilot-infrastructure
+    - id: t05
+      kind: Task
+      name: 'Accounts and sign-in: the session flow, roles, and the coach''s tub users commands'
+      description: >-
+        Accounts and sign-in: the session flow, roles, and the coach's tub users commands.
+      inputs:
+        specRef: plan_specs/v1/e39-evidence-search-pilot/t05-accounts-and-sign-in.yaml
+        goalRef: v1-e39-t05-accounts-and-sign-in
+      dependsOn:
+      - t04
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e39-t05-accounts-and-sign-in reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e39-t05-accounts-and-sign-in
+    - id: t06
+      kind: Task
+      name: 'Search pages: search, results, the card page and Copy card, on a Chromebook'
+      description: >-
+        Search pages: search, results, the card page and Copy card, on a Chromebook.
+      inputs:
+        specRef: plan_specs/v1/e39-evidence-search-pilot/t06-search-pages.yaml
+        goalRef: v1-e39-t06-search-pages
+      dependsOn:
+      - t03
+      - t05
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e39-t06-search-pages reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e39-t06-search-pages
+    - id: t07
+      kind: Task
+      name: 'Removal, access audit and exposure: the pilot meets the policy''s E39 gate'
+      description: >-
+        Removal, access audit and exposure: the pilot meets the policy's E39 gate.
+      inputs:
+        specRef: plan_specs/v1/e39-evidence-search-pilot/t07-removal-audit-and-exposure.yaml
+        goalRef: v1-e39-t07-removal-audit-and-exposure
+      dependsOn:
+      - t06
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e39-t07-removal-audit-and-exposure reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e39-t07-removal-audit-and-exposure
+    - id: ext-v1-e33-t02-lossless-card-writer
+      kind: External
+      name: 'Prerequisite from E33: Lossless card writer'
+      description: >-
+        Cross-epic prerequisite owned by v1-e33-file-builder (release v1.2).
+      inputs:
+        goalRef: v1-e33-t02-lossless-card-writer
+        specRef: plan_specs/v1/e33-file-builder/t02-lossless-card-writer.yaml
+    - id: ext-v1-e33-t08-provenance-line-one-function
+      kind: External
+      name: 'Prerequisite from E33: Built files carry no provenance line; the sidecar keeps the provenance'
+      description: >-
+        Cross-epic prerequisite owned by v1-e33-file-builder (release v1.2).
+      inputs:
+        goalRef: v1-e33-t08-provenance-line-one-function
+        specRef: plan_specs/v1/e33-file-builder/t08-provenance-line-one-function.yaml
+    - id: t08
+      kind: Task
+      name: 'Download a card or a small file as Verbatim .docx through the E33 writer'
+      description: >-
+        Download a card or a small file as Verbatim .docx through the E33 writer.
+      inputs:
+        specRef: plan_specs/v1/e39-evidence-search-pilot/t08-card-download.yaml
+        goalRef: v1-e39-t08-card-download
+      dependsOn:
+      - t07
+      - ext-v1-e33-t02-lossless-card-writer
+      - ext-v1-e33-t08-provenance-line-one-function
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e39-t08-card-download reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e39-t08-card-download
+    - id: t09
+      kind: Task
+      name: 'The weekly agent run rebuilds and publishes the search index when the parsed store changed'
+      description: >-
+        The weekly agent run rebuilds and publishes the search index when the parsed store
+        changed.
+      inputs:
+        specRef: plan_specs/v1/e39-evidence-search-pilot/t09-weekly-index-refresh.yaml
+        goalRef: v1-e39-t09-weekly-index-refresh
+      dependsOn:
+      - t02
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e39-t09-weekly-index-refresh reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e39-t09-weekly-index-refresh
+    - id: t10
+      kind: Task
+      name: 'Dev smoke checks, the coach''s beta and the student pilot'
+      description: >-
+        Dev smoke checks, the coach's beta and the student pilot.
+      inputs:
+        specRef: plan_specs/v1/e39-evidence-search-pilot/t10-pilot-smoke-and-review.yaml
+        goalRef: v1-e39-t10-pilot-smoke-and-review
+      dependsOn:
+      - t07
+      - t08
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e39-t10-pilot-smoke-and-review reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e39-t10-pilot-smoke-and-review
+    - id: t11
+      kind: Task
+      name: 'Search pages: a result count, a way back to the results, a link to the disclosed file, and Copy card without the provenance line'
+      description: >-
+        Search pages: a result count, a way back to the results, a link to the disclosed
+        file, and Copy card without the provenance line.
+      inputs:
+        specRef: plan_specs/v1/e39-evidence-search-pilot/t11-search-pages-follow-ups.yaml
+        goalRef: v1-e39-t11-search-pages-follow-ups
+      dependsOn:
+      - t06
+      - t07
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e39-t11-search-pages-follow-ups reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e39-t11-search-pages-follow-ups
+    - id: t12
+      kind: Task
+      name: 'Only real cards come back: entries with no cite or a few words of text, counted before any rule'
+      description: >-
+        Only real cards come back: entries with no cite or a few words of text, counted
+        before any rule.
+      inputs:
+        specRef: plan_specs/v1/e39-evidence-search-pilot/t12-card-only-results.yaml
+        goalRef: v1-e39-t12-card-only-results
+      dependsOn:
+      - t09
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e39-t12-card-only-results reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e39-t12-card-only-results
+    - id: t13
+      kind: Task
+      name: 'Find a card that says something: passage search, word stems and prefixes'
+      description: >-
+        Find a card that says something: passage search, word stems and prefixes.
+      inputs:
+        specRef: plan_specs/v1/e39-evidence-search-pilot/t13-passage-search.yaml
+        goalRef: v1-e39-t13-passage-search
+      dependsOn:
+      - t11
+      - t12
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e39-t13-passage-search reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e39-t13-passage-search
+    - id: t14
+      kind: Task
+      name: 'An index that would drop most of the cards is never published'
+      description: >-
+        An index that would drop most of the cards is never published.
+      inputs:
+        specRef: plan_specs/v1/e39-evidence-search-pilot/t14-index-shrink-guard.yaml
+        goalRef: v1-e39-t14-index-shrink-guard
+      dependsOn:
+      - t09
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e39-t14-index-shrink-guard reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e39-t14-index-shrink-guard
+    - id: t15
+      kind: Task
+      name: 'tub index prune: the runbook''s prune of superseded index versions as one command'
+      description: >-
+        tub index prune: the runbook's prune of superseded index versions as one command.
+      inputs:
+        specRef: plan_specs/v1/e39-evidence-search-pilot/t15-tub-index-prune.yaml
+        goalRef: v1-e39-t15-tub-index-prune
+      dependsOn:
+      - t07
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e39-t15-tub-index-prune reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e39-t15-tub-index-prune
+    - id: t16
+      kind: Task
+      name: 'Open on OpenEv: a camp card links to its camp file'
+      description: >-
+        Open on OpenEv: a camp card links to its camp file.
+      inputs:
+        specRef: plan_specs/v1/e39-evidence-search-pilot/t16-open-on-openev.yaml
+        goalRef: v1-e39-t16-open-on-openev
+      dependsOn:
+      - t13
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e39-t16-open-on-openev reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e39-t16-open-on-openev
+    - id: t17
+      kind: Task
+      name: 'The landscape report and its school view on the pilot, for signed-in team members'
+      description: >-
+        The landscape report and its school view on the pilot, for signed-in team members.
+      inputs:
+        specRef: plan_specs/v1/e39-evidence-search-pilot/t17-landscape-pages.yaml
+        goalRef: v1-e39-t17-landscape-pages
+      dependsOn:
+      - t07
+      - t11
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e39-t17-landscape-pages reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e39-t17-landscape-pages
+    - id: ext-v1-e34-t34-backfile-seasons-import
+      kind: External
+      name: 'Prerequisite from E34: Earlier seasons'' complete archives, from 2021-22 on, imported and parsed as backfiles'
+      description: >-
+        Cross-epic prerequisite owned by v1-e34-caselist-sync (release v1.1).
+      inputs:
+        goalRef: v1-e34-t34-backfile-seasons-import
+        specRef: plan_specs/v1/e34-caselist-sync/t34-backfile-seasons-import.yaml
+    - id: t18
+      kind: Task
+      name: 'Backfile seasons searchable on the pilot, without slowing its cold start'
+      description: >-
+        Backfile seasons searchable on the pilot, without slowing its cold start.
+      inputs:
+        specRef: plan_specs/v1/e39-evidence-search-pilot/t18-backfiles-in-the-pilot-index.yaml
+        goalRef: v1-e39-t18-backfiles-in-the-pilot-index
+      dependsOn:
+      - t14
+      - ext-v1-e34-t34-backfile-seasons-import
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e39-t18-backfiles-in-the-pilot-index reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e39-t18-backfiles-in-the-pilot-index
+    - id: t19
+      kind: Task
+      name: 'A rebuilt index identical to the published one records the suppression list it was checked against'
+      description: >-
+        A rebuilt index identical to the published one records the suppression list it was
+        checked against.
+      inputs:
+        specRef: plan_specs/v1/e39-evidence-search-pilot/t19-identical-rebuild-records-its-suppression-list.yaml
+        goalRef: v1-e39-t19-identical-rebuild-records-its-suppression-list
+      dependsOn:
+      - t09
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e39-t19-identical-rebuild-records-its-suppression-list reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e39-t19-identical-rebuild-records-its-suppression-list
+    - id: ext-v1-e01-t32-test-selection-reach-round-three
+      kind: External
+      name: 'Prerequisite from E01: Test selection, round three: command registration, quoted words, the root pyproject and the contract suites'
+      description: >-
+        Cross-epic prerequisite owned by v1-e01-repo-foundation (release v1.0).
+      inputs:
+        goalRef: v1-e01-t32-test-selection-reach-round-three
+        specRef: plan_specs/v1/e01-repo-foundation/t32-test-selection-reach-round-three.yaml
+    - id: t20
+      kind: Task
+      name: 'The pilot API''s test world split by surface, so a change selects only the tests it reaches'
+      description: >-
+        The pilot API's test world split by surface, so a change selects only the tests it
+        reaches.
+      inputs:
+        specRef: plan_specs/v1/e39-evidence-search-pilot/t20-api-conftest-split-by-surface.yaml
+        goalRef: v1-e39-t20-api-conftest-split-by-surface
+      dependsOn:
+      - ext-v1-e01-t32-test-selection-reach-round-three
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e39-t20-api-conftest-split-by-surface reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e39-t20-api-conftest-split-by-surface
+    - id: t21
+      kind: Task
+      name: 'The tub deploy test records each stub call alone, as the caselist run''s does'
+      description: >-
+        The tub deploy test records each stub call alone, as the caselist run's does.
+      inputs:
+        specRef: plan_specs/v1/e39-evidence-search-pilot/t21-one-call-recorder-for-deploy-tests.yaml
+        goalRef: v1-e39-t21-one-call-recorder-for-deploy-tests
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e39-t21-one-call-recorder-for-deploy-tests reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e39-t21-one-call-recorder-for-deploy-tests
+    - id: t22
+      kind: Task
+      name: 'Smoke checks for tub index build, publish and prune, and a test of P4''s shape'
+      description: >-
+        Smoke checks for tub index build, publish and prune, and a test of P4's shape.
+      inputs:
+        specRef: plan_specs/v1/e39-evidence-search-pilot/t22-tub-index-commands-smoke-and-p4-shape.yaml
+        goalRef: v1-e39-t22-tub-index-commands-smoke-and-p4-shape
+      dependsOn:
+      - t15
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e39-t22-tub-index-commands-smoke-and-p4-shape reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e39-t22-tub-index-commands-smoke-and-p4-shape
+    - id: t23
+      kind: Task
+      name: 'uvicorn''s app factory lives in the composition root, so app.py stops reaching every adapter'
+      description: >-
+        uvicorn's app factory lives in the composition root, so app.py stops reaching every
+        adapter.
+      inputs:
+        specRef: plan_specs/v1/e39-evidence-search-pilot/t23-uvicorn-factory-in-the-composition-root.yaml
+        goalRef: v1-e39-t23-uvicorn-factory-in-the-composition-root
+      dependsOn:
+      - t20
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e39-t23-uvicorn-factory-in-the-composition-root reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e39-t23-uvicorn-factory-in-the-composition-root
+    - id: t24
+      kind: Task
+      name: 'A card or cart download skips the header page, and the student can name its pocket'
+      description: >-
+        A card or cart download skips the header page, and the student can name its pocket.
+      inputs:
+        specRef: plan_specs/v1/e39-evidence-search-pilot/t24-download-skips-the-header-page-and-names-its-pocket.yaml
+        goalRef: v1-e39-t24-download-skips-the-header-page-and-names-its-pocket
+      dependsOn:
+      - t08
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e39-t24-download-skips-the-header-page-and-names-its-pocket reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e39-t24-download-skips-the-header-page-and-names-its-pocket
+    - id: t25
+      kind: Task
+      name: 'The weekly index stage skips an identical rebuild its record already matches, and publish --newest on the current index records instead of republishing'
+      description: >-
+        The weekly index stage skips an identical rebuild its record already matches, and
+        publish --newest on the current index records instead of republishing.
+      inputs:
+        specRef: plan_specs/v1/e39-evidence-search-pilot/t25-identical-rebuild-skipped-and-newest-records.yaml
+        goalRef: v1-e39-t25-identical-rebuild-skipped-and-newest-records
+      dependsOn:
+      - t19
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e39-t25-identical-rebuild-skipped-and-newest-records reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e39-t25-identical-rebuild-skipped-and-newest-records
+    - id: t26
+      kind: Task
+      name: 'The cloud smoke checks reach dev: a check marked live is let through pytest-socket, and validate-dev''s cloud job proves it'
+      description: >-
+        The cloud smoke checks reach dev: a check marked live is let through pytest-socket,
+        and validate-dev's cloud job proves it.
+      inputs:
+        specRef: plan_specs/v1/e39-evidence-search-pilot/t26-cloud-smoke-checks-reach-dev.yaml
+        goalRef: v1-e39-t26-cloud-smoke-checks-reach-dev
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e39-t26-cloud-smoke-checks-reach-dev reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e39-t26-cloud-smoke-checks-reach-dev
+    - id: t27
+      kind: Task
+      name: 'A smoke check runs publish --newest on the current index against an installed build'
+      description: >-
+        A smoke check runs publish --newest on the current index against an installed build.
+      inputs:
+        specRef: plan_specs/v1/e39-evidence-search-pilot/t27-newest-on-the-current-index-smoke-check.yaml
+        goalRef: v1-e39-t27-newest-on-the-current-index-smoke-check
+      dependsOn:
+      - t25
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e39-t27-newest-on-the-current-index-smoke-check reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e39-t27-newest-on-the-current-index-smoke-check
+    - id: t28
+      kind: Task
+      name: 'A camp card links to its camp''s page on OpenEv, the address the operator confirmed'
+      description: >-
+        A camp card links to its camp's page on OpenEv, the address the operator confirmed.
+      inputs:
+        specRef: plan_specs/v1/e39-evidence-search-pilot/t28-openev-link-goes-to-the-camps-page.yaml
+        goalRef: v1-e39-t28-openev-link-goes-to-the-camps-page
+      dependsOn:
+      - t16
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e39-t28-openev-link-goes-to-the-camps-page reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e39-t28-openev-link-goes-to-the-camps-page
+    - id: ext-v1-e30-t31-openev-camp-word-on-the-manifest-row
+      kind: External
+      name: 'Prerequisite from E30: The pull keeps OpenEv''s own camp word on a camp file''s manifest row'
+      description: >-
+        Cross-epic prerequisite owned by v1-e30-caselist-ingestion (release v1.1).
+      inputs:
+        goalRef: v1-e30-t31-openev-camp-word-on-the-manifest-row
+        specRef: plan_specs/v1/e30-caselist-ingestion/t31-openev-camp-word-on-the-manifest-row.yaml
+    - id: t29
+      kind: Task
+      name: 'A camp card''s OpenEv link takes the camp word the pull recorded, before the table''s'
+      description: >-
+        A camp card's OpenEv link takes the camp word the pull recorded, before the table's.
+      inputs:
+        specRef: plan_specs/v1/e39-evidence-search-pilot/t29-openev-camp-word-from-the-row-into-the-index.yaml
+        goalRef: v1-e39-t29-openev-camp-word-from-the-row-into-the-index
+      dependsOn:
+      - ext-v1-e30-t31-openev-camp-word-on-the-manifest-row
+      - t28
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e39-t29-openev-camp-word-from-the-row-into-the-index reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e39-t29-openev-camp-word-from-the-row-into-the-index
+status:
+  phase: Pending

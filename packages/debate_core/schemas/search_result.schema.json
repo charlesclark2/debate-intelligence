@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
-  "description": "One article's position in one search, with the features that put it there.\n\nIdentified by the pair (`search_id`, `article_id`) rather than by an id of its own: a result\nonly exists as part of a search, and a search holds at most one result per article.\n\nThe scores are all optional because the V1 ranking pipeline is deterministic and lexical;\n`semantic_score` and `rerank_score` are filled in by the embedding and rerank stages that\narrive with the V2 search index.",
+  "description": "One article's position in one search, with the features that put it there.\n\nIdentified by the pair (`search_id`, `article_id`) rather than by an id of its own: a result\nonly exists as part of a search, and a search holds at most one result per article.\n\nThe scores are all optional because the V1 ranking pipeline is deterministic and lexical;\n`semantic_score` and `rerank_score` are filled in by the embedding and rerank stages that\narrive with the V2 search index.\n\nA feature can be unknown, and is then stored as None rather than left out or written as 0: no\ndiscovery provider says whether a paper was peer-reviewed yet, and 0 would say it was not\n(v1-e08-t03-feature-ranking).",
   "properties": {
     "search_id": {
       "description": "The search this result belongs to.",
@@ -79,9 +79,16 @@
     },
     "source_quality_features": {
       "additionalProperties": {
-        "type": "number"
+        "anyOf": [
+          {
+            "type": "number"
+          },
+          {
+            "type": "null"
+          }
+        ]
       },
-      "description": "Named ranking features and their values, for example recency, peer_reviewed, open_access, citations, provider_agreement. Never a hidden credibility score.",
+      "description": "Named ranking features and their values, for example recency, peer_reviewed, open_access, citations, provider_agreement; None where a feature is unknown, which is not the same as 0. Never a hidden credibility score.",
       "title": "Source Quality Features",
       "type": "object"
     },

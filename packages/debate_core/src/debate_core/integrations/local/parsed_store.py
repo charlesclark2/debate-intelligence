@@ -40,16 +40,23 @@ the caselist and version it was asked for, so another caselist's unreadable dire
 
 from __future__ import annotations
 
+import hashlib
 import json
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable, Iterator, Sequence
 from pathlib import Path
 from typing import Final
 
+from debate_core.application.caselist.occurrence_table_guard import (
+    fingerprint_stamps_of_file,
+    profile_stamps_of_file,
+)
 from debate_core.application.ports.parsed_store import (
+    CAMP_PATHS_NAME,
     FAILURES_NAME,
     INDEX_NAME,
     OCCURRENCES_NAME,
     PARSED_PREFIX,
+    CampPathRecord,
     DocumentRecord,
     OccurrenceRecord,
     ParsedStoreRefusal,
@@ -145,7 +152,48 @@ class LocalParsedStore:
         return self._read_lines(SourceEntry, self._root / caselist / version / FAILURES_NAME)
 
     async def read_occurrences(self, caselist: str, version: str) -> tuple[OccurrenceRecord, ...] | None:
-        return self._read_lines(OccurrenceRecord, self._root / caselist / version / OCCURRENCES_NAME)
+        """The table, each camp row with the camp paths `camp_paths.jsonl` gives it (`v1-e33-t07`).
+
+        The digests are given only when the file names the SHA-256 of the table's bytes as read: a
+        table rewritten since with other bytes, or a file this build cannot read, gives none, and those
+        camp rows read as an earlier build wrote them.
+        """
+        directory = self._root / caselist / version
+        table, beside = directory / OCCURRENCES_NAME, directory / CAMP_PATHS_NAME
+        with refused_as_access_denied("read", _ROLE):
+            if not is_regular_file(beside):
+                return self._read_lines(OccurrenceRecord, table)
+            if not is_regular_file(table):
+                return None
+            digest = hashlib.sha256()
+            rows: list[OccurrenceRecord] = []
+            with table.open("rb") as stream:
+                for number, raw in enumerate(stream, start=1):
+                    digest.update(raw)
+                    line = raw.decode("utf-8")
+                    if line.strip():
+                        rows.append(self._record(OccurrenceRecord, line, table, number))
+            camp_paths = _camp_paths_of(beside, digest.hexdigest())
+        return tuple(
+            row.evolve(camp_path_disclosures=camp_paths[row.snapshot, row.source_sha256])
+            if (row.snapshot, row.source_sha256) in camp_paths
+            else row
+            for row in rows
+        )
+
+    async def read_occurrence_stamps(self, caselist: str, version: str) -> frozenset[str] | None:
+        path = self._root / caselist / version / OCCURRENCES_NAME
+        with refused_as_access_denied("read", _ROLE):
+            if not is_regular_file(path):
+                return None
+            return fingerprint_stamps_of_file(path)
+
+    async def read_occurrence_profiles(self, caselist: str, version: str) -> frozenset[str] | None:
+        path = self._root / caselist / version / OCCURRENCES_NAME
+        with refused_as_access_denied("read", _ROLE):
+            if not is_regular_file(path):
+                return None
+            return profile_stamps_of_file(path)
 
     # -- writing ------------------------------------------------------------------------------
 
@@ -184,13 +232,27 @@ class LocalParsedStore:
         *,
         index: Sequence[SourceEntry],
         failures: Sequence[SourceEntry],
-        occurrences: Sequence[OccurrenceRecord],
+        occurrences: Iterable[OccurrenceRecord],
     ) -> None:
         await self._refuse_old_version(caselist, version, parse_version_directory(version)[0])
         directory = self._root / caselist / version
-        self._write_lines(directory / INDEX_NAME, index)
-        self._write_lines(directory / FAILURES_NAME, failures)
-        self._write_lines(directory / OCCURRENCES_NAME, occurrences)
+        carrying: dict[tuple[str, str, str], OccurrenceRecord] = {}
+        # The table is written first, row by row as `occurrences` makes them, and put in place after
+        # the index and the failures file: the order they always were, and a row that fails to build
+        # leaves all three as they were (`v1-e40-t36`).
+        with (
+            refused_as_access_denied("write", _ROLE),
+            atomic_replacement(directory / OCCURRENCES_NAME) as incoming,
+        ):
+            table = _stream_lines(incoming, _noting_camp_paths(occurrences, carrying))
+            self._write_lines(directory / INDEX_NAME, index)
+            self._write_lines(directory / FAILURES_NAME, failures)
+        camp_paths = _camp_path_records(carrying, table)
+        if camp_paths:
+            self._write_lines(directory / CAMP_PATHS_NAME, camp_paths)
+        else:
+            with refused_as_access_denied("write", _ROLE):
+                (directory / CAMP_PATHS_NAME).unlink(missing_ok=True)
 
     # -- helpers ------------------------------------------------------------------------------
 
@@ -213,10 +275,10 @@ class LocalParsedStore:
                 f"{caselist}/{version} is an earlier generation of {parser_version}; it is never rewritten"
             )
 
-    def _write_lines(self, path: Path, records: Iterable[StoreRecord]) -> None:
-        text = "".join(f"{_render(record)}\n" for record in records)
+    def _write_lines(self, path: Path, records: Iterable[StoreRecord]) -> str:
+        """Replace `path` with `records`, one per line; the SHA-256 of the bytes written."""
         with refused_as_access_denied("write", _ROLE), atomic_replacement(path) as incoming:
-            incoming.write_text(text, encoding="utf-8")
+            return _stream_lines(incoming, records)
 
     def _read_lines[RecordT: StoreRecord](
         self, model: type[RecordT], path: Path
@@ -240,6 +302,71 @@ class LocalParsedStore:
         except ValueError as error:
             kind = "not JSON" if not line.strip().startswith("{") else f"not a {model.__name__}"
             raise UnreadableParsedStore(relative, number, kind) from error
+
+
+def _stream_lines(path: Path, records: Iterable[StoreRecord]) -> str:
+    """Write `records` to `path` one per line as they come; the SHA-256 of the bytes written.
+
+    The same bytes as the whole file rendered at once, without holding it (`v1-e40-t36`).
+    """
+    digest = hashlib.sha256()
+    with path.open("wb") as stream:
+        for record in records:
+            line = f"{_render(record)}\n".encode()
+            digest.update(line)
+            stream.write(line)
+    return digest.hexdigest()
+
+
+def _noting_camp_paths(
+    occurrences: Iterable[OccurrenceRecord], carrying: dict[tuple[str, str, str], OccurrenceRecord]
+) -> Iterator[OccurrenceRecord]:
+    """`occurrences` as they are written, noting in `carrying` the first row to carry each camp path."""
+    for row in occurrences:
+        for path in row.camp_path_disclosures:
+            carrying.setdefault((row.snapshot, row.source_sha256, path), row)
+        yield row
+
+
+def _camp_path_records(
+    carrying: dict[tuple[str, str, str], OccurrenceRecord], table_sha256: str
+) -> list[CampPathRecord]:
+    """One line per camp path of each camp file in each release the table's rows carry."""
+    return [
+        CampPathRecord(
+            caselist=row.caselist,
+            snapshot=snapshot,
+            source_sha256=source_sha256,
+            parser_version=row.parser_version,
+            profile_version=row.profile_version,
+            fingerprint_version=row.fingerprint_version,
+            camp_path_disclosure=path,
+            occurrence_table_sha256=table_sha256,
+        )
+        for (snapshot, source_sha256, path), row in sorted(carrying.items(), key=lambda item: item[0])
+    ]
+
+
+def _camp_paths_of(path: Path, table_sha256: str) -> dict[tuple[str, str], tuple[str, ...]]:
+    """`(release, source) -> camp path digests` of the lines of `path` written beside `table_sha256`.
+
+    Empty when a line is not one this build reads: it may be a later build's, and the rows then read
+    as they would with no file beside them.
+    """
+    found: dict[tuple[str, str], set[str]] = {}
+    with path.open(encoding="utf-8") as stream:
+        for line in stream:
+            if not line.strip():
+                continue
+            try:
+                record = CampPathRecord.model_validate_json(line)
+            except ValueError:
+                return {}
+            if record.occurrence_table_sha256 == table_sha256:
+                found.setdefault((record.snapshot, record.source_sha256), set()).add(
+                    record.camp_path_disclosure
+                )
+    return {key: tuple(sorted(paths)) for key, paths in found.items()}
 
 
 def _render(record: StoreRecord) -> str:

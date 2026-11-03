@@ -37,6 +37,7 @@ from botocore.client import BaseClient
 from botocore.exceptions import UnauthorizedSSOTokenError
 from moto import mock_aws
 from tests.fixtures.identity_center_roles import EVERYDAY_ROLE, TAKEDOWN_ROLE, sign_in
+from tests.fixtures.model_routing import EXAMPLE_ROUTING_FILE
 from typer.testing import CliRunner, Result
 
 from debate_cli.app import create_app
@@ -103,7 +104,7 @@ def installation(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Iterator[Pa
         f'[storage]\ndata_dir = "{tmp_path / "data"}"\n'
         f'[storage.s3]\nbucket = "{BUCKET}"\nregion = "us-east-1"\naws_profile = "{EVERYDAY_PROFILE}"\n'
         f'[caselist]\nnotifier = "none"\n'
-        f'[models]\nrouting_file = "{tmp_path / "routing.yaml"}"\nbudget_usd_daily = 1.0\n',
+        f'[models]\nrouting_file = "{EXAMPLE_ROUTING_FILE}"\nbudget_usd_daily = 1.0\n',
         encoding="utf-8",
     )
     monkeypatch.setenv("DEBATE_PROFILE_DIR", str(profiles))
@@ -279,6 +280,25 @@ def test_a_removal_profile_signed_in_as_the_everyday_set_is_reported_and_does_no
         "defined, and signed in as DebateDevEvidenceOperator; a takedown runs only as "
         "DebateDevEvidenceRemoval, so `caselist remove --execute` will refuse this profile",
     ]
+
+
+def test_an_everyday_profile_signed_in_as_prods_set_is_reported_and_does_not_fail_the_check(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`v1-e29-t09` ac5: the dev installation's everyday profile signed in as prod's permission set."""
+    prod_operator = "AWSReservedSSO_DebateProdEvidenceOperator_00000000000000aa"
+    who_each_profile_is(monkeypatch, {EVERYDAY_PROFILE: SignedInAs(prod_operator)})
+
+    exit_code, envelope = doctor("--evidence-profiles")
+
+    assert exit_code == ExitCode.OK, envelope
+    [found] = profiles_in(envelope)
+    assert found["permission_set"] == "DebateProdEvidenceOperator"
+    assert found["summary"] == (
+        "defined, and signed in as DebateProdEvidenceOperator, which is prod's permission set and not "
+        "dev's: dev's bucket grants it nothing, so every command that reaches the bucket will be refused"
+    )
+    assert AN_ACCOUNT_OR_AN_ADDRESS.search(json.dumps(envelope)) is None
 
 
 def test_an_environment_with_no_bucket_has_no_everyday_profile_to_check(
@@ -471,6 +491,31 @@ def test_a_person_sees_one_row_for_each_profile(monkeypatch: pytest.MonkeyPatch)
     ) in shown
 
 
+def test_a_person_sees_whose_takedown_set_a_removal_profile_from_the_other_environment_is_signed_in_as(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`v1-e34-t25` ac3. A dev installation whose `DEBATE_REMOVAL_PROFILE` is signed in as prod's
+    takedown set: the row names prod's set as prod's, as the everyday profile's row does."""
+    monkeypatch.setenv("DEBATE_REMOVAL_PROFILE", TAKEDOWN_PROFILE)
+    prod_takedown = "AWSReservedSSO_DebateProdEvidenceRemoval_00000000000000bb"
+    who_each_profile_is(
+        monkeypatch,
+        {EVERYDAY_PROFILE: SignedInAs(EVERYDAY_ROLE), TAKEDOWN_PROFILE: SignedInAs(prod_takedown)},
+    )
+
+    exit_code, shown = as_a_person_sees_it("--evidence-profiles")
+    json_exit_code, envelope = doctor("--evidence-profiles")
+
+    assert exit_code == ExitCode.OK == json_exit_code, shown
+    assert (
+        "Evidence profile debate-dev-evidence-removal (DEBATE_REMOVAL_PROFILE): defined, and signed in "
+        "as DebateProdEvidenceRemoval, which is prod's takedown permission set and not dev's; a takedown "
+        "runs only as DebateDevEvidenceRemoval, so `caselist remove --execute` will refuse this profile"
+    ) in shown
+    assert profiles_in(envelope)[1]["permission_set"] == "DebateProdEvidenceRemoval"
+    assert not AN_ACCOUNT_OR_AN_ADDRESS.search(shown + json.dumps(envelope))
+
+
 def test_a_person_sees_the_report_and_then_the_profile_that_is_not_defined(
     installation: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -498,3 +543,104 @@ def test_with_nothing_configured_a_person_is_told_so(monkeypatch: pytest.MonkeyP
 
     assert exit_code == ExitCode.OK, shown
     assert "Evidence profiles none configured for this environment" in shown
+
+
+# ------------------------------------------------------------------------------------------------
+# The model profile, models.aws_profile (v1-e05-t08-bedrock-invoke-access, ac2)
+# ------------------------------------------------------------------------------------------------
+
+MODEL_PROFILE = "debate-dev-bedrock"
+MODEL_SETTING = "models.aws_profile"
+MODEL_ROLE = "AWSReservedSSO_DebateDevBedrockInvoker_00000000000000cc"
+
+
+def test_the_model_profile_is_reported_in_the_same_words_under_its_own_setting(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("DEBATE_MODELS__AWS_PROFILE", MODEL_PROFILE)
+    asked = who_each_profile_is(
+        monkeypatch, {EVERYDAY_PROFILE: SignedInAs(EVERYDAY_ROLE), MODEL_PROFILE: SignedInAs(MODEL_ROLE)}
+    )
+
+    exit_code, envelope = doctor("--evidence-profiles")
+    person_exit_code, shown = as_a_person_sees_it("--evidence-profiles")
+
+    assert exit_code == ExitCode.OK == person_exit_code, envelope
+    assert profiles_in(envelope)[1] == {
+        "setting": MODEL_SETTING,
+        "profile": MODEL_PROFILE,
+        "defined": True,
+        "session": "signed_in",
+        "permission_set": "DebateDevBedrockInvoker",
+        "summary": "defined, and signed in as DebateDevBedrockInvoker",
+        "hint": None,
+    }
+    assert asked[:2] == [EVERYDAY_PROFILE, MODEL_PROFILE]
+    assert (
+        "Model profile debate-dev-bedrock (models.aws_profile): defined, and signed in as "
+        "DebateDevBedrockInvoker"
+    ) in shown
+    assert not AN_ACCOUNT_OR_AN_ADDRESS.search(shown + json.dumps(envelope))
+
+
+def test_an_expired_model_session_is_reported_with_its_login(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("DEBATE_MODELS__AWS_PROFILE", MODEL_PROFILE)
+    expired = StoreCredentialsExpired("not usable", hint=f"aws sso login --profile {MODEL_PROFILE}")
+    who_each_profile_is(
+        monkeypatch, {EVERYDAY_PROFILE: SignedInAs(EVERYDAY_ROLE), MODEL_PROFILE: CannotBeAsked(expired)}
+    )
+
+    exit_code, shown = as_a_person_sees_it("--evidence-profiles")
+
+    assert exit_code == ExitCode.OK, shown
+    assert (
+        "Model profile debate-dev-bedrock (models.aws_profile): defined; its session has expired or was "
+        "never started, so AWS cannot be asked which permission set it is (aws sso login --profile "
+        "debate-dev-bedrock)"
+    ) in shown
+
+
+def test_a_model_profile_the_aws_config_lacks_is_reported_with_its_fix_and_fails_nothing(
+    installation: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """No command calls a model yet, and `doctor --evidence-profiles` is what the weekly run's
+    `--check` and `install.sh --check-launchd` run before the run starts: a model profile missing
+    from this machine's AWS config is said, with its fix, and stops nothing."""
+    monkeypatch.setenv("DEBATE_MODELS__AWS_PROFILE", MODEL_PROFILE)
+    who_each_profile_is(monkeypatch, {EVERYDAY_PROFILE: SignedInAs(EVERYDAY_ROLE)})
+
+    exit_code, envelope = doctor("--evidence-profiles")
+    person_exit_code, shown = as_a_person_sees_it("--evidence-profiles")
+
+    assert exit_code == ExitCode.OK == person_exit_code, envelope
+    model = profiles_in(envelope)[1]
+    assert (model["setting"], model["profile"], model["defined"], model["session"]) == (
+        MODEL_SETTING,
+        MODEL_PROFILE,
+        False,
+        "not_defined",
+    )
+    assert model["hint"].startswith("set models.aws_profile to a profile this machine's AWS config defines")
+    assert "docs/runbooks/bedrock-access.md" in model["hint"]
+    assert (
+        "Model profile debate-dev-bedrock (models.aws_profile): not defined in this machine's AWS config "
+        "(set models.aws_profile to a profile this machine's AWS config defines"
+    ) in shown
+    for forbidden in (str(installation), AWS_CONFIG_NAME, "/.aws"):
+        assert forbidden not in shown
+
+
+def test_an_evidence_profile_that_is_not_defined_still_fails_beside_a_missing_model_profile(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("DEBATE_STORAGE__S3__AWS_PROFILE", MISSPELT_PROFILE)
+    monkeypatch.setenv("DEBATE_MODELS__AWS_PROFILE", MODEL_PROFILE)
+
+    exit_code, envelope = doctor("--evidence-profiles")
+
+    assert exit_code == ExitCode.DOMAIN_FAILURE
+    assert envelope["error"]["message"] == (
+        "AWS profile 'debate-dev-evidence-typo', named by storage.s3.aws_profile, is not defined in this "
+        "machine's AWS config, so every command that uses it will refuse to start."
+    )
+    assert [one["defined"] for one in profiles_in(envelope)] == [False, False]

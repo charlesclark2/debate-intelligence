@@ -17,6 +17,7 @@ import boto3
 import pytest
 from moto import mock_aws
 from tests.fixtures.caselist.publish_expectations import FICTIONAL_IDENTIFIERS
+from tests.fixtures.model_routing import EXAMPLE_ROUTING_FILE
 from tests.fixtures.parse_pipeline.build_parse_world import (
     CASELIST,
     EXPECTED,
@@ -86,12 +87,12 @@ def installation(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Iterator[Pa
             f'[storage]\ndata_dir = "{data_dir}"\n'
             f'[storage.s3]\nbucket = "{bucket}"\nregion = "us-east-1"\n'
             f'aws_profile = "{PROFILES[environment]}"\n'
-            f'[models]\nrouting_file = "{tmp_path / "routing.yaml"}"\nbudget_usd_daily = 1.0\n',
+            f'[models]\nrouting_file = "{EXAMPLE_ROUTING_FILE}"\nbudget_usd_daily = 1.0\n',
             encoding="utf-8",
         )
     (profiles / "test.toml").write_text(
         f'allow_network = false\n[providers]\nenabled = []\n[storage]\ndata_dir = "{data_dir}"\n'
-        f'[models]\nrouting_file = "{tmp_path / "routing.yaml"}"\nbudget_usd_daily = 0.0\n',
+        f'[models]\nrouting_file = "{EXAMPLE_ROUTING_FILE}"\nbudget_usd_daily = 0.0\n',
         encoding="utf-8",
     )
     monkeypatch.setenv("DEBATE_PROFILE_DIR", str(profiles))
@@ -235,6 +236,30 @@ def test_a_dry_run_counts_and_writes_nothing(imported: Path) -> None:
     assert data["failure_rate_minimum_sources"] == 100
     assert (data["failure_rate_judged"], data["threshold_exceeded"]) == (False, False)
     assert not (imported / "parsed").exists()
+
+
+def test_a_dry_run_under_a_new_parser_version_says_it_starts_a_directory_and_names_the_one_it_supersedes(
+    imported: Path,
+) -> None:
+    """The operator's 2026-10-11 case (v1-e31-t16 ac3): the store holds an earlier parser's directory.
+
+    That earlier directory is this build's output renamed, which is all a dry run reads of it.
+    """
+    invoke("caselist", "parse", "--caselist", CASELIST)
+    store = imported / "parsed" / CASELIST
+    (store / DOCX_PARSER_VERSION).rename(store / "2026.01.01-docx-0")
+
+    dry = invoke("--json", "caselist", "parse", "--caselist", CASELIST, "--dry-run")
+    shown = invoke("caselist", "parse", "--caselist", CASELIST, "--dry-run")
+
+    data = envelope_of(dry)["data"]
+    assert (data["version"], data["new_version"], data["superseded"]) == (
+        DOCX_PARSER_VERSION,
+        True,
+        "2026.01.01-docx-0",
+    )
+    assert "it supersedes 2026.01.01-docx-0" in " ".join(shown.stdout.split())
+    assert not (store / DOCX_PARSER_VERSION).exists()
 
 
 def test_reparse_writes_a_new_version_directory(imported: Path) -> None:

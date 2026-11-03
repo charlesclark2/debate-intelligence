@@ -47,7 +47,8 @@ no result to present. And a result is a plain frozen value that anyone can const
 from __future__ import annotations
 
 from debate_core.application.errors import NotFound, SnapshotIntegrityCheck, SnapshotIntegrityError
-from debate_core.application.ports import ArticleRepository, Clock
+from debate_core.application.ports.persistence import ArticleRepository
+from debate_core.application.ports.providers import Clock
 from debate_core.application.snapshot_service import LoadedSnapshot, SnapshotService
 from debate_core.domain import Card, VerificationStatus
 from debate_core.evidence.verification_types import (

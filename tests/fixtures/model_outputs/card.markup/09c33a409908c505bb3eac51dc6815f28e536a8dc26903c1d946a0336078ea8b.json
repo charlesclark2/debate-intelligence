@@ -1,0 +1,51 @@
+{
+  "output": {
+    "rationale": "The underlines carry the delay and the lost funding; the highlights are what a judge must hear.",
+    "spans": [
+      {
+        "end_offset": 86,
+        "paragraph": 2,
+        "purpose": "warrant",
+        "start_offset": 31,
+        "style": "underline"
+      },
+      {
+        "end_offset": 46,
+        "paragraph": 2,
+        "purpose": "warrant",
+        "start_offset": 31,
+        "style": "highlight"
+      },
+      {
+        "end_offset": 93,
+        "paragraph": 3,
+        "purpose": "claim",
+        "start_offset": 61,
+        "style": "underline"
+      },
+      {
+        "end_offset": 199,
+        "paragraph": 3,
+        "purpose": "impact",
+        "start_offset": 119,
+        "style": "underline"
+      },
+      {
+        "end_offset": 199,
+        "paragraph": 3,
+        "purpose": "impact",
+        "start_offset": 146,
+        "style": "highlight"
+      }
+    ]
+  },
+  "output_schema": "debate_core.evidence.selection_contract.MarkupSuggestion",
+  "prompt_id": "card.markup",
+  "prompt_version": "1.0.0",
+  "variables": {
+    "numbered_passages": "[P2] The delay follows two years of failed attempts to grow edited elephant embryos to term in surrogate animals. The company said the setbacks were biological, not financial, and that its funding remained secure.\n\n[P3] Conservation biologists who have criticized the project said the timeline was never realistic. “Every year this slips, the money raised for it is money that did not go to elephants that are alive now,” said Priya Ramaswamy, who studies elephant populations and was not involved in the work.",
+    "passages": "[\n  {\n    \"first_paragraph\": 2,\n    \"last_paragraph\": 2,\n    \"start_offset\": 0,\n    \"end_offset\": 108\n  },\n  {\n    \"first_paragraph\": 3,\n    \"last_paragraph\": 3,\n    \"start_offset\": 0,\n    \"end_offset\": 290\n  }\n]",
+    "research_need": "De-extinction DA: money spent reviving the mammoth is money lost to living elephants",
+    "tag": "Each delay in reviving the mammoth costs living elephants funding"
+  }
+}

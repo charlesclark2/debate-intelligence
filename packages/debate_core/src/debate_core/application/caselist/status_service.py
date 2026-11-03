@@ -15,10 +15,26 @@ For each snapshot, all of:
 A snapshot the bucket holds a manifest for and this machine does not is drift too: it is a snapshot
 this machine cannot vouch for.
 
+In bucket mode, the first point reads differently: see "A working copy restored without raw sources".
+
 A caselist's snapshots include its complete archives, `full/<date>` (`v1-e34-t04`), compared the
 same way: the sync's retention stage asks this whether a complete archive's publish is confirmed
 before its zip leaves the inbox, and a complete archive's manifest the bucket holds unaccounted for
 would be drift like any other.
+
+## A working copy restored without raw sources (`v1-e40-t13`)
+
+A run in bucket mode (`v1-e40-t04`) restores its working copy from the bucket's manifests and parsed
+store, without raw sources, and holds only the ones it downloads or fetches to parse. The caller
+says so (`bucket_mode`), and then a source the local manifest names that this machine lacks, and
+that the bucket holds with the manifest's digest and size, is present: not
+:attr:`SnapshotStatus.missing_local`, so not drift, and the report stage of `caselist pull`, its
+retention stage and `caselist status` agree, because all three ask this service. It is counted in
+:attr:`SnapshotStatus.held_only_in_bucket`, not in :attr:`SnapshotStatus.local_files`, so the facts
+stay visible. Presence is read from the `HeadObject` already made for
+:attr:`SnapshotStatus.published_sources`: no request is added and nothing is downloaded. A source the
+bucket lacks, or holds with other bytes or no recorded digest, is drift as before, and so are a
+manifest missing on either side and a suppressed row. Local mode is unchanged.
 
 ## Suppressed sources
 
@@ -49,6 +65,70 @@ removal log, which it reads as it reads the suppression list: this machine's cop
 as one, with the scopes beside them. Only entries recorded in this environment are compared: in
 prod the command runs against the dev data directory, whose copy holds dev's removals.
 
+## What a removal's hold says is owed
+
+A removal by `--source` holds the removed file's path (`v1-e30-t13`), and the importer of this build
+refuses an upload there. Two things still say the same removal has to be run again, and the
+comparison reports both (`v1-e30-t21`):
+
+* a stored row at a held path, in a snapshot the hold covers (:attr:`SnapshotStatus.held_rows`):
+  an import by a build from before `v1-e30-t13`, which reads no hold, wrote it;
+* a skipped member's row at a held path, in a snapshot the hold covers
+  (:attr:`SnapshotStatus.held_skipped_rows`, `v1-e30-t22`): a symbolic link named as the removed
+  file, which every build before `v1-e30-t22` gave a row and this build's importer withholds;
+* an upload at a held path in an archive in the download inbox (:attr:`CaselistStatusReport.held_in_inbox`),
+  asked for with `held_in_inbox=True` from a service built with the inbox: refused at import, or
+  waiting to be;
+* an upload an import refused at a held path, which the same removal run again has not yet put on
+  the list (:attr:`CaselistStatusReport.refused_at_import`, `v1-e30-t24`), whether or not its
+  archive is still in the inbox: see below;
+* a parsed file in the bucket of bytes only a held path discloses
+  (:attr:`CaselistStatusReport.held_parsed_objects`, `v1-e31-t26`): see below.
+
+None is a difference between this machine and the bucket, so none changes
+:attr:`CaselistStatusReport.in_sync` or the command's exit status. Each is named by the request that
+holds its path, and a file by its digest too, never by the path. The inbox is read only when asked, because it
+means reading every archive in it: `caselist status` asks, and `caselist pull` does not. An archive
+there that cannot be read is passed over; a removal's dry run names it.
+
+### What an import refused (`v1-e30-t24`)
+
+The import records each upload it refuses at a held path (`held-digests.jsonl`, `v1-e30-t23`): its
+digest, the held path's digest and the request holding the path. The same removal run again lists
+each one: whole where no other path holds the bytes, and withdrawn from the held path where one does.
+Until it has, the removal is owed, and once the archive has left the inbox nothing but the record
+says so. So, asked with `held_in_inbox=True`, the comparison reads the record too, from every copy
+of the list as the removal reads it (the import writes this machine's copy alone; a removal, the
+pull's index stage and, in bucket mode, each save of the run-state bundle give the bucket's copy
+what it lacks, `v1-e40-t12`, so a cloud task's refusals are read from any machine), and names a
+line whose request holds that path in a caselist compared, and which the list
+does not stop there, whole or as the held path's disclosure. A hold an un-suppress lifted holds
+nothing, and the re-run lists nothing for it, so nothing is owed for it either. The record holds no
+date, so `--snapshot` does not narrow it.
+
+### A held upload's parsed file (`v1-e31-t26`)
+
+An earlier build's `caselist parse --publish` sent the parsed file of a stored row at a held path,
+and this build's does not: the parse pipeline leaves a source that only a held path discloses out of
+every aggregate and holds back its file
+(:func:`~debate_core.application.caselist.parse_sources.held_only_sources`, which asks the
+publisher's rule for a held row). The comparison asks the same function of each compared caselist's
+manifests, and names each such source the bucket holds a current file of under
+`parsed/<caselist>/`, in any version directory, by its caselist, its digest and the request holding
+the path. The same removal run again deletes it: the held row is a later upload held at no other
+path, so it is removed whole, with every `parsed/` object of it. Bytes another live path discloses
+are not named: their parsed file is published. Read only when the list holds a path, and then one
+listing of `parsed/<caselist>/` per caselist with such a source.
+
+## Bytes the publisher does not upload
+
+Bytes that only held rows of a manifest name are never uploaded (`v1-e30-t22`; `publish_plan`,
+"Bytes only held rows name are not uploaded"), so the comparison does not expect them in the bucket:
+they are not among a snapshot's :attr:`SnapshotStatus.sources`, and neither the bucket nor this
+machine lacking them is drift or owed. The build that imported the held row stored them on this
+machine; running the same removal again deletes them here, and a re-run is what the held row already
+says is owed.
+
 ## A manifest mismatch and a source mismatch
 
 A checksum mismatch is one of two kinds (:class:`MismatchKind`, `v1-e30-t12`), told apart by
@@ -60,23 +140,45 @@ rewrites one in place after a camp metadata re-import (`v1-e30-t08`) or a remova
 copy differs until the next `caselist publish`, which uploads a manifest whose recorded digest
 differs. Both kinds are drift, as they always were.
 
+Unless the publisher withholds that manifest (`v1-e30-t19`): a manifest with a row a removal stops
+or holds is never uploaded, so a publish does not clear its mismatch, and the removal run again
+does. Whether it does is the publisher's own rule, asked of the snapshot's publish plan
+(:attr:`~debate_core.application.caselist.publish_plan.SnapshotPlan.withholding_rows`) rather than
+restated here, so the two cannot part ways: :attr:`SnapshotStatus.manifest_withheld`.
+
+## A withdrawn copy's residue (`v1-e30-t19`)
+
+With the residue check, the withdrawal record beside the list (`withdrawals.jsonl`, `v1-e30-t16`)
+says which caselist each copy a removal withdrew was taken from. For a caselist that no longer
+holds the file (no manifest of it on this machine names the file at a path the list does not stop)
+what is left of that caselist's copy is counted, and named by the caselist and the request
+(:mod:`~debate_core.application.caselist.removal_residue`, "A copy withdrawn from a caselist"). That
+is residue, as a removed file's is: since `v1-e30-t24` it is not :attr:`CaselistStatusReport.in_sync`,
+and the command fails as `REMOVAL_RESIDUE` when every snapshot agrees. A withdrawal an earlier build
+made has no record, and its request is named as not attributed
+(:attr:`CaselistStatusReport.withdrawals_not_attributed`). That is not part of
+:attr:`CaselistStatusReport.in_sync`: it says what was not looked at, not that something was found,
+like a caselist whose versions are not checked.
+
 Checksums are the bucket's *recorded* digests, read with one `HeadObject` per listed source — the
 listing states none (`debate_core.application.ports.evidence_store`). Nothing is downloaded: a
 manifest's digest is compared, and its body is never read back from the bucket.
 
 ## What it reports
 
-Counts, digests and keys — which are digests, or a caselist and a date. The school, team code and
-filename in a manifest row never leave the manifest (`docs/policies/caselist-data-use.md`, rule 4).
+Counts, digests and keys — which are digests, or a caselist and a date — and the request ids of the
+removals a hold says are owed. The school, team code and filename in a manifest row never leave the
+manifest (`docs/policies/caselist-data-use.md`, rule 4), and neither does an inbox archive's name.
 """
 
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Awaitable, Callable
+import dataclasses
+from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import Final
+from typing import Final, Protocol
 
 from debate_core.application.caselist.evidence_listing import (
     LocalEvidence,
@@ -86,9 +188,16 @@ from debate_core.application.caselist.evidence_listing import (
     local_blob_sizes,
     read_local_snapshots,
 )
+from debate_core.application.caselist.parse_sources import enumerate_sources, held_only_sources
 from debate_core.application.caselist.publish_plan import (
+    OPENEV,
+    HeldRow,
     LocalSnapshot,
+    build_publish_plan,
     digest_of_local_blob_key,
+    held_only_digests,
+    held_rows,
+    held_skipped_rows,
     remote_source_prefix,
     snapshot_manifest_key,
     snapshot_of_manifest_key,
@@ -99,18 +208,31 @@ from debate_core.application.caselist.publish_plan import (
 from debate_core.application.caselist.removal_residue import (
     CaselistResidue,
     CompletedRemovals,
+    RemovalCompletion,
     completed_removals,
     removal_residue,
 )
-from debate_core.application.caselist.suppression import load_suppression_state
-from debate_core.application.errors import DomainError, NotFound
+from debate_core.application.caselist.removal_school_views import school_view_cutoffs, school_views_left
+from debate_core.application.caselist.suppression import (
+    caselist_withdrawn_from,
+    load_suppression_state,
+    read_held_digests,
+    read_withdrawals,
+)
+from debate_core.application.errors import DomainError, NotFound, StoreAccessDenied, error_code_of
 from debate_core.application.ports.evidence_store import EvidenceObjectStore, ObjectInfo, ObjectKey
 from debate_core.application.ports.evidence_versions import EvidenceVersionStore
+from debate_core.application.ports.parsed_store import PARSED_PREFIX, source_digest_of_key
 from debate_core.application.ports.suppression import (
     RemovalLog,
+    RemovalLogEntry,
+    RemovalScopeEntry,
     RemovalScopeLog,
+    SuppressionAction,
     SuppressionList,
     SuppressionState,
+    camp_path_scope,
+    disclosure_digest,
 )
 from debate_core.domain import Sha256Hex
 
@@ -119,8 +241,12 @@ __all__ = [
     "REMOVAL_RESIDUE",
     "CaselistStatusReport",
     "CaselistStatusService",
+    "HeldInboxUpload",
+    "HeldParsedObject",
+    "InboxHolds",
     "MismatchKind",
     "NoCaselistEvidence",
+    "RefusedAtImport",
     "SnapshotStatus",
 ]
 
@@ -144,6 +270,61 @@ class MismatchKind(StrEnum):
     """The snapshot's own manifest. `caselist publish` uploads this machine's copy."""
     SOURCE = "source"
     """A source, filed by the digest of its bytes. A person finds out why the bucket holds others."""
+
+
+@dataclass(frozen=True, slots=True, order=True)
+class HeldInboxUpload:
+    """An upload at a path a removal holds, in an archive in the download inbox (`v1-e30-t21`).
+
+    Its caselist, the snapshot its archive is (`2026-10-08`, or `full/2026-10-09`), its digest and
+    the request holding the path. Never the archive's file name or the path.
+    """
+
+    caselist: str
+    snapshot: str
+    sha256: Sha256Hex
+    request_id: str
+
+
+@dataclass(frozen=True, slots=True, order=True)
+class RefusedAtImport:
+    """An upload an import refused at a held path, which the same removal run again has not yet put
+    on the list (`v1-e30-t24`), from the held-digest record (`v1-e30-t23`).
+
+    The caselist of the hold that refused it, its digest, and the request holding the path. Never the
+    path: the record holds the path's digest alone.
+    """
+
+    caselist: str
+    sha256: Sha256Hex
+    request_id: str
+
+
+@dataclass(frozen=True, slots=True, order=True)
+class HeldParsedObject:
+    """A parsed file in the bucket of bytes that only a held path discloses (`v1-e31-t26`).
+
+    An earlier build parsed and published it; this build's `caselist parse --publish` does not. Its
+    caselist, its source's digest and the request holding the path. Never the path, and never its
+    key's version directory, which says nothing the request does not.
+    """
+
+    caselist: str
+    sha256: Sha256Hex
+    request_id: str
+
+
+class InboxHolds(Protocol):
+    """The download inbox, asked which of its uploads a removal's hold covers.
+
+    :class:`~debate_core.application.caselist.inbox_purge.CaselistInbox` is one. A protocol, because
+    the inbox module imports the pull, and the pull imports this comparison.
+    """
+
+    def held_uploads(self, suppression: SuppressionState) -> tuple[HeldInboxUpload, ...]:
+        """Every real member of a weekly or complete archive there at a held path, in a snapshot the
+        hold covers, that the list does not already stop. Reads only."""
+        ...
 
 
 class NoCaselistEvidence(DomainError):
@@ -170,7 +351,8 @@ class SnapshotStatus:
     manifest_present: bool
     """Whether the bucket holds a manifest at :attr:`manifest_key`."""
     sources: int
-    """Distinct sources the local manifest names, suppressed ones excluded. 0 with no local manifest."""
+    """Distinct sources the local manifest names, less suppressed ones and those only held rows name
+    (`v1-e30-t22`), which are never uploaded. 0 with no local manifest."""
     local_files: int
     """How many of :attr:`sources` this machine's blob store holds."""
     published_sources: int
@@ -184,6 +366,20 @@ class SnapshotStatus:
     suppressed: int = 0
     suppressed_rows: tuple[Sha256Hex, ...] = ()
     """Digests of stored rows in the local manifest the suppression list stops. A removal leftover."""
+    held_rows: tuple[HeldRow, ...] = ()
+    """Stored rows in the local manifest at a path a removal holds (`v1-e30-t21`): the same removal is
+    owed again. Not a difference from the bucket, so not part of :attr:`in_sync`."""
+    held_skipped_rows: tuple[str, ...] = ()
+    """The request holding the path of each skipped member's row at a held path (`v1-e30-t22`), which
+    an earlier build wrote: the same removal is owed again. Not part of :attr:`in_sync` either."""
+    manifest_withheld: bool = False
+    """Whether the publisher withholds this snapshot's manifest for its rows, by its own rule
+    (`v1-e30-t19`): a publish then does not clear a mismatch of it, and the removal must be
+    finished first. False for a snapshot this machine holds no manifest of."""
+    held_only_in_bucket: tuple[Sha256Hex, ...] = ()
+    """In bucket mode, sources this machine does not hold that the bucket holds with the manifest's
+    digest and size (`v1-e40-t13`): present, so not in :attr:`missing_local`, and not counted in
+    :attr:`local_files` either. Always empty in local mode."""
 
     @property
     def in_sync(self) -> bool:
@@ -234,13 +430,28 @@ class CaselistStatusReport:
     removals_not_checked: tuple[str, ...] = ()
     """Request ids of completed removals whose log entries do not say which caselists they touched,
     so that no manifest or aggregate version is checked against them (`v1-e30-t15`)."""
+    held_in_inbox: tuple[HeldInboxUpload, ...] = ()
+    """Uploads at a held path in the download inbox's archives, of the caselists compared
+    (`v1-e30-t21`). Empty when the caller did not ask. Not part of :attr:`in_sync`."""
+    withdrawals_not_attributed: tuple[str, ...] = ()
+    """Request ids of withdrawals the list still suppresses that no withdrawal record attributes to
+    a caselist: made by a build from before `v1-e30-t16`, so what is left of their copies is not
+    checked (`v1-e30-t19`). Empty when the caller did not ask for the residue check."""
+    refused_at_import: tuple[RefusedAtImport, ...] = ()
+    """Uploads an import refused at a held path in a caselist compared, from the held-digest record,
+    that the same removal run again has not yet listed (`v1-e30-t24`). Read when the inbox is, and
+    empty when the caller did not ask. Not part of :attr:`in_sync`."""
+    held_parsed_objects: tuple[HeldParsedObject, ...] = ()
+    """Parsed files in the bucket, under a caselist compared, of bytes only a held path discloses
+    (`v1-e31-t26`): an earlier build's `caselist parse --publish` sent them. Not part of :attr:`in_sync`."""
 
     @property
     def in_sync(self) -> bool:
         """True only when every snapshot agrees and nothing suppressed is left; what exits 0.
 
         A caselist whose residue could not be checked does not make this false: it is reported as
-        not checked (:attr:`residue_not_checked`).
+        not checked (:attr:`residue_not_checked`). Nor does a withdrawal no record attributes
+        (:attr:`withdrawals_not_attributed`). A withdrawn copy left does (`v1-e30-t24`).
         """
         return (
             all(snapshot.in_sync for snapshot in self.snapshots)
@@ -277,9 +488,45 @@ class CaselistStatusReport:
         return tuple(key for key in self.suppressed_objects if key.startswith(prefix))
 
     @property
+    def held_snapshots(self) -> tuple[SnapshotStatus, ...]:
+        """The snapshots with a row at a held path: a stored row, or a skipped member's."""
+        return tuple(
+            snapshot for snapshot in self.snapshots if snapshot.held_rows or snapshot.held_skipped_rows
+        )
+
+    @property
+    def removals_owed(self) -> tuple[str, ...]:
+        """The request ids whose removal a held row, a held inbox upload, an upload refused at import
+        or a held upload's parsed file in the bucket says to run again, sorted."""
+        rows = {row.request_id for snapshot in self.snapshots for row in snapshot.held_rows}
+        skipped = {request for snapshot in self.snapshots for request in snapshot.held_skipped_rows}
+        inbox = {upload.request_id for upload in self.held_in_inbox}
+        refused = {one.request_id for one in self.refused_at_import}
+        parsed = {one.request_id for one in self.held_parsed_objects}
+        return tuple(sorted(rows | skipped | inbox | refused | parsed))
+
+    def held_in_inbox_of(self, caselist: str) -> tuple[HeldInboxUpload, ...]:
+        """The :attr:`held_in_inbox` uploads of `caselist`."""
+        return tuple(upload for upload in self.held_in_inbox if upload.caselist == caselist)
+
+    def refused_at_import_of(self, caselist: str) -> tuple[RefusedAtImport, ...]:
+        """The :attr:`refused_at_import` uploads of `caselist`."""
+        return tuple(upload for upload in self.refused_at_import if upload.caselist == caselist)
+
+    def held_parsed_objects_of(self, caselist: str) -> tuple[HeldParsedObject, ...]:
+        """The :attr:`held_parsed_objects` of `caselist`."""
+        return tuple(one for one in self.held_parsed_objects if one.caselist == caselist)
+
+    @property
     def residue_found(self) -> bool:
         """Whether a version listing showed anything left of a removed file."""
         return any(one.found for one in self.residue)
+
+    @property
+    def withdrawn_copies_left(self) -> bool:
+        """Whether a version listing showed anything left of a copy withdrawn from a caselist
+        (`v1-e30-t19`). Part of :attr:`residue_found` since `v1-e30-t24`."""
+        return any(one.withdrawn_copies for one in self.residue)
 
     @property
     def residue_not_checked(self) -> tuple[str, ...]:
@@ -300,6 +547,15 @@ class CaselistStatusService:
             manifest and aggregate versions older than a removal (`v1-e30-t15`). Read only when
             :meth:`status` is asked for residue. Without one, no removal is known.
         environment: This environment, `dev` or `prod`. Only its own removals are compared.
+        inbox: The download inbox, for the uploads a removal's hold covers there (`v1-e30-t21`).
+            Read only when :meth:`status` is asked for them, and the held-digest record beside the
+            suppression list with it (`v1-e30-t24`).
+        local_reports: The data directory, keyed as the bucket is, for the landscape school views a
+            removal left on this machine (`v1-e32-t13`). Listed only with the residue check; without
+            one, only the bucket's are counted.
+        bucket_mode: Whether the caller runs in bucket mode (`v1-e40-t04`), whose working copy is
+            restored without raw sources: a source the bucket holds at the manifest's digest is then
+            present (`v1-e40-t13`). See "A working copy restored without raw sources".
         concurrency: `HeadObject` calls in flight at once.
     """
 
@@ -312,6 +568,9 @@ class CaselistStatusService:
         versions: EvidenceVersionStore | None = None,
         removal_log: RemovalLog | None = None,
         environment: str | None = None,
+        inbox: InboxHolds | None = None,
+        local_reports: EvidenceVersionStore | None = None,
+        bucket_mode: bool = False,
         concurrency: int = _DEFAULT_CONCURRENCY,
     ) -> None:
         if concurrency < 1:
@@ -324,21 +583,34 @@ class CaselistStatusService:
         self._versions = versions
         self._removal_log = removal_log
         self._environment = environment
+        self._inbox = inbox
+        self._local_reports = local_reports
+        self._bucket_mode = bucket_mode
         self._semaphore_size = concurrency
 
     async def status(
-        self, caselist: str | None = None, snapshot: str | None = None, *, residue: bool = False
+        self,
+        caselist: str | None = None,
+        snapshot: str | None = None,
+        *,
+        residue: bool = False,
+        held_in_inbox: bool = False,
     ) -> CaselistStatusReport:
         """Compare one caselist, or every caselist either side holds a manifest for.
 
         With `residue`, also list object versions and report what is left of each compared
         caselist's removed files, whichever snapshot was asked about: see "What a removal left
-        behind" in the module docstring.
+        behind" in the module docstring. With `held_in_inbox`, also read the download inbox for
+        uploads a removal's hold covers, of the caselists compared and the snapshot asked about,
+        and the held-digest record for uploads an import refused that the re-run has not listed:
+        see "What a removal's hold says is owed".
 
         Raises :class:`NoCaselistEvidence` when neither side holds anything that was asked about.
         """
         if residue and self._versions is None:
             raise ValueError("the residue check needs a version store; this service was built without one")
+        if held_in_inbox and self._inbox is None:
+            raise ValueError("the inbox check needs the inbox; this service was built without one")
         if caselist is None:
             if snapshot is not None:
                 raise ValueError("a snapshot is only meaningful with a caselist")
@@ -364,23 +636,159 @@ class CaselistStatusService:
             raise NoCaselistEvidence(caselist, snapshot)
         left: list[CaselistResidue] = []
         removals = CompletedRemovals()
+        not_attributed: tuple[str, ...] = ()
         if residue and self._versions is not None:
-            removals = await self._completed_removals()
-            left = [await removal_residue(self._versions, name, suppression, removals) for name in caselists]
+            entries, scopes = await self._removal_records()
+            removals = (
+                completed_removals(entries, scopes, self._environment)
+                if self._environment is not None
+                else CompletedRemovals()
+            )
+            cutoffs: Mapping[str, RemovalCompletion] = (
+                school_view_cutoffs(entries, scopes, self._environment) if self._environment else {}
+            )
+            withdrawn, not_attributed = await self._withdrawn_copies(suppression, caselists)
+            left = [
+                await self._school_views_left(
+                    await removal_residue(self._versions, name, suppression, removals, withdrawn.get(name)),
+                    cutoffs.get(name),
+                )
+                for name in caselists
+            ]
+        inbox: tuple[HeldInboxUpload, ...] = ()
+        refused: tuple[RefusedAtImport, ...] = ()
+        if held_in_inbox and self._inbox is not None:
+            inbox = tuple(
+                sorted(
+                    upload
+                    for upload in self._inbox.held_uploads(suppression)
+                    if upload.caselist in caselists and snapshot in (None, upload.snapshot)
+                )
+            )
+            refused = await self._refused_at_import(suppression, caselists)
         return CaselistStatusReport(
+            held_parsed_objects=await self._held_parsed_objects(suppression, caselists),
             snapshots=tuple(compared),
             suppressed_objects=tuple(sorted(set(leftovers))),
             residue=tuple(left),
             removals_not_checked=removals.not_checked,
+            held_in_inbox=inbox,
+            withdrawals_not_attributed=not_attributed,
+            refused_at_import=refused,
         )
 
-    async def _completed_removals(self) -> CompletedRemovals:
-        """This environment's completed removals, from both copies of the log and of its scopes."""
+    async def _held_parsed_objects(
+        self, suppression: SuppressionState, caselists: Sequence[str]
+    ) -> tuple[HeldParsedObject, ...]:
+        """The bucket's parsed files of sources only a held path discloses: see "A held upload's
+        parsed file" in the module docstring."""
+        if not suppression.held_paths:
+            return ()
+        found: set[HeldParsedObject] = set()
+        for caselist in caselists:
+            held = held_only_sources(await enumerate_sources(self._local, caselist), suppression)
+            if not held:
+                continue
+            prefix = f"{PARSED_PREFIX}/"
+            for info in await self._remote.list_objects(f"{prefix}{caselist}/"):
+                digest = source_digest_of_key(info.key.removeprefix(prefix))
+                if digest is not None and digest in held:
+                    found.add(HeldParsedObject(caselist=caselist, sha256=digest, request_id=held[digest]))
+        return tuple(sorted(found))
+
+    async def _refused_at_import(
+        self, suppression: SuppressionState, caselists: Sequence[str]
+    ) -> tuple[RefusedAtImport, ...]:
+        """The held-digest record's uploads the same removal run again would still list: see "What
+        an import refused" in the module docstring. Reads the record from every copy of the list."""
+        found: set[RefusedAtImport] = set()
+        for entry in await read_held_digests(self._suppression):
+            if suppression.suppresses(entry.sha256, disclosure=entry.disclosure):
+                continue  # on the list already, whole or at the held path: the re-run's work is done
+            found.update(
+                RefusedAtImport(caselist=hold.caselist, sha256=entry.sha256, request_id=entry.request_id)
+                for hold in suppression.held_paths.get(entry.disclosure, ())
+                if hold.request_id == entry.request_id and hold.caselist in caselists
+            )
+        return tuple(sorted(found))
+
+    async def _withdrawn_copies(
+        self, suppression: SuppressionState, caselists: Sequence[str]
+    ) -> tuple[dict[str, dict[Sha256Hex, str]], tuple[str, ...]]:
+        """Per caselist, the files withdrawn from it that it keeps no holder of, with the request that
+        withdrew each; and the requests of withdrawals no record attributes (`v1-e30-t19`).
+
+        Each withdrawal the list still suppresses, whole files apart (the residue check counts those
+        as removed), is attributed by the withdrawal record. A caselist still holds a file where a
+        manifest of it on this machine names the file at a path the list does not stop; its copy
+        is then that holder's, as the removal itself leaves it (`kept_in`).
+        """
+        attributed: dict[str, dict[Sha256Hex, str]] = {}
+        not_attributed: set[str] = set()
+        withdrawals = await read_withdrawals(self._suppression)
+        for entry in await self._suppression.entries():
+            # A whole file's entry is the residue check's own; one since lifted is no longer withdrawn.
+            if (
+                entry.action is not SuppressionAction.SUPPRESS
+                or suppression.suppresses_source(entry.sha256)
+                or not suppression.suppresses(entry.sha256, disclosure=entry.disclosure)
+            ):
+                continue
+            caselist = caselist_withdrawn_from(entry, withdrawals)
+            if caselist is None:
+                not_attributed.add(entry.request_id or "a removal with no request id")
+            elif caselist in caselists and entry.request_id is not None:
+                attributed.setdefault(caselist, {}).setdefault(entry.sha256, entry.request_id)
+        for caselist, digests in attributed.items():
+            held = await self._held_in(caselist, suppression)
+            attributed[caselist] = {
+                digest: request for digest, request in digests.items() if digest not in held
+            }
+        return attributed, tuple(sorted(not_attributed))
+
+    async def _held_in(self, caselist: str, suppression: SuppressionState) -> frozenset[Sha256Hex]:
+        """The files a manifest of `caselist` on this machine names at a path the list does not stop."""
+        held: set[Sha256Hex] = set()
+        for local in await read_local_snapshots(self._local, caselist, None, full_archives=True):
+            scope = camp_path_scope(local.snapshot) if caselist == OPENEV else caselist
+            held.update(
+                digest
+                for digest, path in local.stored_rows
+                if not suppression.suppresses(digest, disclosure=disclosure_digest(scope, path))
+            )
+        return frozenset(held)
+
+    async def _removal_records(self) -> tuple[tuple[RemovalLogEntry, ...], tuple[RemovalScopeEntry, ...]]:
+        """Both copies of the removal log and of its scopes, read as one; none without a log."""
         if self._removal_log is None or self._environment is None:
-            return CompletedRemovals()
+            return (), ()
         log = self._removal_log
         scopes = await log.scopes() if isinstance(log, RemovalScopeLog) else ()
-        return completed_removals(await log.entries(), scopes, self._environment)
+        return tuple(await log.entries()), tuple(scopes)
+
+    async def _school_views_left(
+        self, residue: CaselistResidue, cutoff: RemovalCompletion | None
+    ) -> CaselistResidue:
+        """`residue`, with the landscape school views of its caselist a removal should have deleted
+        (`v1-e32-t13`): see :func:`~debate_core.application.caselist.removal_school_views.school_views_left`.
+
+        Only for a caselist a completed run's own scope names, and only once the version listing was
+        allowed. A refused listing of `reports/` leaves the caselist not checked, as a refused version
+        listing does: a zero would say nothing is left.
+        """
+        if cutoff is None or not residue.checked:
+            return residue
+        try:
+            views = await school_views_left(
+                residue.caselist, cutoff, bucket=self._remote, local=self._local_reports
+            )
+        except StoreAccessDenied as refused:
+            return CaselistResidue(
+                caselist=residue.caselist, checked=False, not_checked_reason=error_code_of(refused)
+            )
+        if not views:
+            return residue
+        return dataclasses.replace(residue, school_views=views, school_views_older_than=cutoff)
 
     async def _caselist_status(
         self,
@@ -437,7 +845,11 @@ class CaselistStatusService:
         head: Callable[[ObjectKey], Awaitable[ObjectInfo | None]],
         suppression: SuppressionState,
     ) -> SnapshotStatus:
-        sources = [source for source in local.sources if not suppression.suppresses_source(source.sha256)]
+        suppressed = [source for source in local.sources if suppression.suppresses_source(source.sha256)]
+        held_back = held_only_digests(local, suppression)
+        sources = [
+            source for source in local.sources if source not in suppressed and source.sha256 not in held_back
+        ]
         missing_local = tuple(
             source.sha256 for source in sources if local_blobs.get(source.sha256) != source.size
         )
@@ -451,6 +863,7 @@ class CaselistStatusService:
 
         missing_remote: list[Sha256Hex] = []
         mismatched: list[ObjectKey] = []
+        held_in_bucket: set[Sha256Hex] = set()
         published = 0
         for source, key in keyed:
             if key not in pending:
@@ -461,8 +874,14 @@ class CaselistStatusService:
                 missing_remote.append(source.sha256)
             elif info.sha256 == source.sha256 and info.size == source.size:
                 published += 1
+                held_in_bucket.add(source.sha256)
             else:
                 mismatched.append(key)
+        # Bucket mode: a source only the bucket holds, at the manifest's digest, is present (`v1-e40-t13`).
+        held_only = (
+            tuple(digest for digest in missing_local if digest in held_in_bucket) if self._bucket_mode else ()
+        )
+        missing_local = tuple(digest for digest in missing_local if digest not in held_only)
 
         manifest_present = manifest_key in pending
         if manifest_present:
@@ -480,13 +899,17 @@ class CaselistStatusService:
             local_manifest=True,
             manifest_present=manifest_present,
             sources=len(sources),
-            local_files=len(sources) - len(missing_local),
+            local_files=len(sources) - len(missing_local) - len(held_only),
             published_sources=published,
             missing_sources=tuple(sorted(missing_remote)),
             missing_local=tuple(sorted(missing_local)),
             checksum_mismatches=tuple(sorted(mismatched)),
-            suppressed=len(local.sources) - len(sources),
+            suppressed=len(suppressed),
             suppressed_rows=suppressed_rows(local, suppression),
+            held_rows=held_rows(local, suppression),
+            held_skipped_rows=held_skipped_rows(local, suppression),
+            manifest_withheld=_publisher_withholds(local, local_blobs, remote, suppression),
+            held_only_in_bucket=tuple(sorted(held_only)),
         )
 
     async def _head(self, key: ObjectKey, semaphore: asyncio.Semaphore) -> ObjectInfo | None:
@@ -496,6 +919,20 @@ class CaselistStatusService:
             except NotFound:
                 # Listed a moment ago and gone now.
                 return None
+
+
+def _publisher_withholds(
+    local: LocalSnapshot,
+    local_blobs: dict[Sha256Hex, int],
+    remote: dict[ObjectKey, int],
+    suppression: SuppressionState,
+) -> bool:
+    """Whether the publisher withholds `local`'s manifest for its rows: asked of its own plan
+    (:attr:`~debate_core.application.caselist.publish_plan.SnapshotPlan.withholding_rows`)."""
+    (plan,) = build_publish_plan(
+        local.caselist, [local], local_blobs=local_blobs, remote=remote, suppression=suppression
+    ).snapshots
+    return bool(plan.withholding_rows)
 
 
 def _suppressed_source_key(caselist: str, key: ObjectKey, suppression: SuppressionState) -> bool:

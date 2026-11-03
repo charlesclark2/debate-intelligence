@@ -32,6 +32,7 @@ import boto3
 import pytest
 from moto import mock_aws
 from tests.fixtures.caselist.build_synthetic_archives import SYNTHETIC_CASELIST
+from tests.fixtures.model_routing import EXAMPLE_ROUTING_FILE
 from typer.testing import CliRunner, Result
 
 from debate_cli.app import create_app
@@ -72,8 +73,8 @@ THE_FIX = (
 THE_RECORDED_MESSAGE = (
     "AWS profile 'debate-dev-evidence-typo', named by storage.s3.aws_profile, is not defined in this "
     "machine's AWS config: set storage.s3.aws_profile to a profile this machine's AWS config defines, "
-    "or add the profile to it: [redacted] lists the evidence profiles and how they are added. It is "
-    "not an expired session, and logging in changes nothing"
+    "or add the profile to it: docs/runbooks/evidence-store.md lists the evidence profiles and how "
+    "they are added. It is not an expired session, and logging in changes nothing"
 )
 
 STORED_BY_THE_OLDER_BUILD = (
@@ -139,7 +140,7 @@ def installation(
         'notifier = "none"\n'
         'api_base_url = "https://api.opencaselist.example.invalid/v1"\n'
         f'sync_caselists = ["{SYNTHETIC_CASELIST}"]\n'
-        f'[models]\nrouting_file = "{tmp_path / "routing.yaml"}"\nbudget_usd_daily = 1.0\n',
+        f'[models]\nrouting_file = "{EXAMPLE_ROUTING_FILE}"\nbudget_usd_daily = 1.0\n',
         encoding="utf-8",
     )
     monkeypatch.setenv("DEBATE_PROFILE_DIR", str(profiles))
@@ -245,6 +246,16 @@ def test_its_details_name_the_code_and_the_setting(
             "failure_codes": ["STORE_PROFILE_NOT_CONFIGURED"],
             "hint": THE_FIX,
             "parse": None,
+            "search_index": None,
+            "held_by_request": {},
+            "manifests_published": 0,
+            # A run refused before any stage owes no parsed store (`v1-e34-t31`).
+            "parsed_stores_owed": [],
+            # A run refused before any stage has no stage to time and read no volume (`v1-e40-t03`).
+            "stage_times": [],
+            "data_volume": None,
+            # Local mode: no bucket-mode run, so nothing of the bucket's run lock or state (`v1-e40-t04`).
+            "bucket_run": None,
         }
     ]
     assert PROFILE_SETTING in THE_FIX
@@ -259,7 +270,8 @@ def test_it_sends_one_notification_that_a_person_should_look_with_the_adapters_h
     [notification] = notified.sent
     assert notification.title == PERSON_TITLE
     assert (
-        notification.message == f"Run {FIRST_RUN_ID} (dev) stopped with StoreProfileNotConfigured. {PERSON}"
+        notification.message == f"Run {FIRST_RUN_ID} (dev) stopped: the AWS profile it publishes with is not "
+        f"one this machine's AWS config defines. {PERSON}"
     )
     assert notification.hint == THE_FIX
     assert "aws sso login" not in notification.text
@@ -286,7 +298,13 @@ def test_the_record_is_the_line_the_older_builds_code_wrote_for_the_same_refusal
     pull_with_the_misspelt_profile(monkeypatch)
 
     [written] = (installation / "data" / RUN_LOG).read_text("utf-8").splitlines()
-    stored = STORED_BY_THE_OLDER_BUILD.read_text("utf-8").splitlines()[0]
+    as_stored = STORED_BY_THE_OLDER_BUILD.read_text("utf-8").splitlines()[0]
+    # Those words but one: since `v1-e34-t23` the redaction keeps the runbook the message points at.
+    stored = as_stored.replace(
+        "[redacted] lists the evidence profiles",
+        "docs/runbooks/evidence-store.md lists the evidence profiles",
+    )
+    assert stored != as_stored
     assert json.loads(written) == json.loads(stored)
     assert list(json.loads(written)) == list(json.loads(stored)), "the same keys in the same order"
     assert written == stored, "byte for byte"
@@ -304,6 +322,23 @@ def test_a_dry_run_still_records_nothing_and_announces_nothing(
     assert lines_of(installation, DETAILS_FILE) == []
     assert owed(installation) is None
     assert notified.sent == []
+
+
+def test_a_dry_run_refused_for_the_profile_creates_nothing_on_disk(
+    installation: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`v1-e34-t24` ac3. A dry run writes nothing, and one refused for its profile wrote the data
+    directory and an empty database first: the pull's services opened the database before they
+    built the bucket (`v1-e34-t22` Follow-up 7). Whatever stops the bucket being built now stops
+    the dry run before anything else is opened."""
+    before = sorted(path.relative_to(installation) for path in installation.rglob("*"))
+
+    exit_code, envelope = pull_with_the_misspelt_profile(monkeypatch, "--dry-run")
+
+    assert exit_code == ExitCode.DOMAIN_FAILURE
+    assert envelope["error"]["code"] == "STORE_PROFILE_NOT_CONFIGURED"
+    assert not (installation / "data").exists(), "the refused dry run created the data directory"
+    assert sorted(path.relative_to(installation) for path in installation.rglob("*")) == before
 
 
 def test_nothing_it_writes_says_or_logs_names_a_path_an_account_or_an_address(

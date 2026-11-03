@@ -51,15 +51,24 @@ spec:
     - kind: TaskRef
       name: v1-e31-t06-parse-pipeline
       relation: dependsOn
+  # Amended by the PM, 2026-10-18, from v1-e31-t20's ruling question: under the ruling of
+  # 2026-10-16 (a card is a passage; joins need directly shared text, never transitive ones) two
+  # labelled cards' trimmed-start and trimmed-end copies share no text and are two passages each:
+  # Brannock's ferry fares (brannock-ferry-fares, t06's rows) and Kessler's night buses
+  # (kessler-night-buses, t08's rows). The labels stay as the coach wrote them, so those pairs count
+  # as misses. The full-short-card targets are the figures t20 measured; a test pins the lost pairs
+  # to these two cards by row id and holds every other card's recall where t08 left it.
   acceptanceCriteria:
     - id: ac1
       description: >-
         On both hand-labelled sets, through `CaselistCardStatsService.place`, precision
-        stays 1.000. Recall reaches at least 0.90 for full short cards, at least 0.75 for an
-        abbreviated disclosure against a full copy, and at least 0.75 for abbreviated
-        against abbreviated. If a target cannot be met without a false positive, the report
-        shows the trade-off and the PM amends the target rather than the session relaxing
-        precision.
+        stays 1.000. Recall reaches at least 0.792 (19 of 24 pairs) for full short cards on
+        the short-card set and at least 0.622 (23 of 37) on the extended set, at least 0.75
+        for an abbreviated disclosure against a full copy, and at least 0.75 for abbreviated
+        against abbreviated. The full-short-card targets were 0.90 until v1-e31-t20; the
+        pairs below 0.90 are Brannock's and Kessler's alone. If a target cannot be met
+        without a false positive, the report shows the trade-off and the PM amends the
+        target rather than the session relaxing precision.
     - id: ac2
       description: >-
         Each of the three mechanisms has a fixture case shown failing first against today's

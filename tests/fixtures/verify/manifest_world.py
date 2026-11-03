@@ -52,7 +52,7 @@ from tests.fixtures.verification.verification_world import (
 )
 
 from debate_core.application.evidence_verifier import EvidenceVerifier
-from debate_core.application.ports import ArticleRepository, SnapshotStore
+from debate_core.application.ports.persistence import ArticleRepository, SnapshotStore
 from debate_core.application.snapshot_service import LoadedSnapshot, SnapshotService
 from debate_core.application.verify_manifest import ManifestVerificationReport, VerifyManifest
 from debate_core.domain import AccessStatus, Card, ProvenanceMode, SpanPurpose
@@ -62,13 +62,9 @@ from debate_core.evidence.manifest import CardManifest
 from debate_core.evidence.markup import CardMarkup, EvidenceMarkupSpan
 from debate_core.evidence.selection import EvidenceSelection
 from debate_core.integrations.local import FsSnapshotStore, SqliteArticleRepository, SqliteDatabase
-from debate_core.testing import (
-    FixedClock,
-    InMemoryArticleRepository,
-    InMemorySnapshotStore,
-    SequentialIdGenerator,
-)
 from debate_core.testing.builders import DEFAULT_OWNER_ID
+from debate_core.testing.fakes.clock_and_ids import FixedClock, SequentialIdGenerator
+from debate_core.testing.fakes.persistence import InMemoryArticleRepository, InMemorySnapshotStore
 
 FIXTURE_DIR = Path(__file__).resolve().parent
 ALL_VERIFIED = FIXTURE_DIR / "all_verified.json"
@@ -95,7 +91,7 @@ class ManifestWorld:
             blobs=blobs, clock=self.clock, id_generator=SequentialIdGenerator(f"{id_prefix}SNAP")
         )
         self.verifier = EvidenceVerifier(articles=articles, snapshots=self.snapshots, clock=self.clock)
-        self.use_case = VerifyManifest(verifier=self.verifier)
+        self.use_case = VerifyManifest(verifier=self.verifier, articles=articles)
         self._card_ids = SequentialIdGenerator(f"{id_prefix}CARD")
         self._span_ids = SequentialIdGenerator(f"{id_prefix}SPAN")
 

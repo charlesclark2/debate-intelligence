@@ -6,9 +6,13 @@ A V1 adapter built on SQLite and the local filesystem and a V2 adapter built on 
 are interchangeable only if both are held to the same rules, and the way to make that true is for
 both to run the same suite (architecture proposal §16, §17).
 
-Five contract classes, one per port::
+A sixth, :class:`~debate_core.testing.contracts.model_router.ModelRouterContract`, holds every
+`ModelRouter` to one set of rules the same way: the Bedrock adapter, the fake and replay routers
+(v1-e05-t01-model-router-port). Its module docstring explains how a router opts in.
 
-    from debate_core.testing.contracts import CardRepositoryContract
+Five persistence contract classes, one per port::
+
+    from debate_core.testing.contracts.repositories import CardRepositoryContract
 
     class TestSqliteCardRepository(CardRepositoryContract):
         @pytest.fixture
@@ -19,48 +23,14 @@ That is the whole opt-in: subclass, override one fixture. `README.md` in this di
 full walkthrough, including what the factory must guarantee and which behaviour the contracts
 deliberately leave to the adapter.
 
+**This file holds only this docstring** (v1-e01-t32). It re-exported every suite, so a test of one
+adapter imported all six, and a change to the model-router contract selected the repository tests.
+Import each name from the module that defines it: `repositories`, `snapshot_store`,
+`evidence_object_store`, `model_router` or `harness`
+(`tests/architecture/test_fakes_reach_only_their_port.py`).
+
 **This package imports pytest**, so it is importable in a test environment and not in a running
 CLI or API. That is why `debate_core.testing` does not re-export it: `from debate_core.testing
 import build_fake_ports` keeps working in production code paths, and only a test ever reaches
 `debate_core.testing.contracts`.
 """
-
-from debate_core.testing.contracts.evidence_object_store import (
-    EvidenceObjectStoreContract,
-    EvidenceObjectStoreFactory,
-)
-from debate_core.testing.contracts.harness import (
-    ASYNC_BACKEND,
-    AdapterContract,
-    ArticleRepositoryFactory,
-    BlobCopyCounter,
-    BlobCorruptor,
-    CardRepositoryFactory,
-    SearchRepositoryFactory,
-    SnapshotStoreFactory,
-    walk_all_pages,
-)
-from debate_core.testing.contracts.repositories import (
-    ArticleRepositoryContract,
-    CardRepositoryContract,
-    SearchRepositoryContract,
-)
-from debate_core.testing.contracts.snapshot_store import SnapshotStoreContract
-
-__all__ = [
-    "ASYNC_BACKEND",
-    "AdapterContract",
-    "ArticleRepositoryContract",
-    "ArticleRepositoryFactory",
-    "BlobCopyCounter",
-    "BlobCorruptor",
-    "CardRepositoryContract",
-    "CardRepositoryFactory",
-    "EvidenceObjectStoreContract",
-    "EvidenceObjectStoreFactory",
-    "SearchRepositoryContract",
-    "SearchRepositoryFactory",
-    "SnapshotStoreContract",
-    "SnapshotStoreFactory",
-    "walk_all_pages",
-]

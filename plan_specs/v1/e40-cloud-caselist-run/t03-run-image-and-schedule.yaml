@@ -1,0 +1,92 @@
+# TASK v1-e40-t03-run-image-and-schedule - The weekly run as a container on a schedule
+# Epic: E40 — Weekly Caselist Run in the Cloud | Release: v1.8 (Weekly caselist run in the cloud) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e40-t03-run-image-and-schedule
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.8
+    debate/epic: v1-e40-cloud-caselist-run
+  annotations:
+    debate/title: "The weekly run as a container on a schedule"
+spec:
+  # Filed by the PM, 2026-10-22, from ADR-0020.
+  description: >-
+    A container image of the installed CLI built from a tagged release, pushed to a repository
+    in the account, and run on the schedule ADR-0020 chooses with the run's role (the everyday
+    evidence permissions and the token, nothing else), the rate limit and weekly cadence
+    unchanged. The run takes its caselists from settings (ADR-0020), writes its record as a Mac
+    run does, and refuses to start while the lock is held. Terraform in dev then prod. ADR-0020
+    may amend this task.
+    (PM amendment 2026-10-23 (ADR-0020).) The task is on-demand Fargate, `arm64`, 8 vCPU, 16 GB
+    and 100 GiB of ephemeral storage, with `parse.workers` 8, in the run's own VPC (public
+    subnets, no inbound rule, outbound HTTPS, an S3 gateway endpoint), under a 6-hour deadline
+    in the container, with ECS Exec off. The run's details carry each stage's start and end
+    time, and the run warns when its ephemeral volume passes 70% used. The deploy script runs
+    under `Debate<Env>CaselistRunDeployer` and may register run task definitions passing the run
+    role, never the login role.
+  priority: 1
+  constraints:
+    # PM ruling 2026-10-24: the deploy script, the validate-dev image job and their tests, and the smoke check run inside the image.
+    packages: [infrastructure, ops, debate_cli, debate_core.application, packages/debate_cli/tests, packages/debate_core/tests, docs/runbooks, scripts, .github/workflows, tests/scripts, tests/smoke]
+    forbidden:
+      - Credentials in the image, its environment or its logs
+      - A run that ignores the lock
+      - Network or AWS access in any test
+  context:
+    - kind: TaskRef
+      name: v1-e40-t01-cloud-run-adr
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        The image builds from a tag and runs `debate-research caselist pull` against stubbed
+        services in CI, and Terraform's tests show the run role's grants and the schedule.
+    - id: ac2
+      description: >-
+        The operator applies dev and starts one run by hand; its record matches a Mac run's
+        shape (operator).
+    # PM amendment 2026-10-23 (ADR-0020)
+    - id: ac3
+      description: >-
+        The run's details record each stage's start and end time, and a run whose ephemeral
+        volume passes 70% used says so in its summary, by test with a stubbed volume; the
+        record's own fields are unchanged.
+status:
+  # PM record 2026-10-26: ac2's hand run, 20261026T040426Z.
+  phase: Succeeded
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e40-t03-run-image-and-schedule-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.8
+    debate/epic: v1-e40-cloud-caselist-run
+spec:
+  description: >-
+    Package the CLI as an image and run it on a schedule with its own role.
+  goalRef:
+    name: v1-e40-t03-run-image-and-schedule
+  graph:
+    nodes:
+      - id: image-schedule
+        kind: Task
+        name: Run image and schedule
+        description: >-
+          Package the CLI as an image and run it on a schedule with its own role.
+        estimatedEffort: 4h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Terraform checks pass
+            command: bash
+            args: [scripts/terraform_checks.sh]
+status:
+  phase: Pending

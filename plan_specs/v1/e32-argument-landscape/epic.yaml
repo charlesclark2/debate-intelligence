@@ -20,7 +20,17 @@ spec:
   description: >-
     Classify parsed blocks and cards into the positions being read on each topic and publish weekly landscape
     reports: what is read, by how many teams, on which side, what is new, and the most-read cards.
-  priority: 3
+    (PM amendment 2026-10-22, from the coach's priorities of 2026-10-22.) The first target is
+    Policy, whose 2026-27 national health insurance topic runs all season and whose team starts
+    competing on 2026-11-07: the plans affirmatives read and the DAs, CPs and Ks negatives read,
+    from the hspolicy26 store, before that date. LD comes second, on the November-December
+    de-extinction topic once teams have disclosed on it; the two remaining space colonization
+    tournaments are not worth a taxonomy. The team has no PF debaters, so PF is out of scope
+    until it does. Classification ships deterministic first (headings, tags and coach overrides,
+    v1-e32-t02); the model stage for what headings cannot place is v1-e32-t07, which waits on
+    E05 and the data-use policy's E32 gate. The first reports show the unclassified share
+    honestly rather than waiting for the model.
+  priority: 1
   constraints:
     majorVersion: v1
     release: v1.2
@@ -28,8 +38,8 @@ spec:
   acceptanceCriteria:
   - id: ac1
     description: >-
-      Per-topic position taxonomies exist for the current Policy, LD and PF topics and are editable by
-      coaches.
+      Per-topic position taxonomies exist for the Policy 2026-27 topic and the LD de-extinction topic and
+      are editable by coaches (PM amendment 2026-10-22: no PF taxonomy while the team has no PF debaters).
   - id: ac2
     description: >-
       Blocks and cards are classified into positions with confidence and rationale; unknowns are queued
@@ -108,14 +118,21 @@ spec:
       inputs:
         goalRef: v1-e31-t08-short-card-recall
         specRef: plan_specs/v1/e31-debate-file-parsing/t08-short-card-recall.yaml
+    - id: ext-v1-e31-t20-long-cuts-and-limits
+      kind: External
+      name: 'Prerequisite from E31: Long cuts join the one cluster that holds them, and the matching limits are set from samples'
+      description: >-
+        Cross-epic prerequisite owned by v1-e31-debate-file-parsing (release v1.1).
+      inputs:
+        goalRef: v1-e31-t20-long-cuts-and-limits
+        specRef: plan_specs/v1/e31-debate-file-parsing/t20-long-cuts-and-limits.yaml
     - id: t01
       kind: Task
       name: Topic position taxonomies
       description: >-
-        Per-topic taxonomies of positions (Policy national health insurance: affs, DAs, CPs, Ks, T, theory;
-        LD space colonization: values, criteria, contention types; PF data-center moratorium: contentions
-        and responses), seeded from pocket/hat/block headings in the parsed cards, stored as editable
-        YAML.
+        The Policy national health insurance taxonomy (plans, advantages, DAs, CPs, Ks, T, theory) and
+        generic.yaml, seeded from pocket/hat/block headings in the parsed cards, stored as editable YAML
+        (PM amendment 2026-10-22: Policy first; LD is t06, no PF).
       inputs:
         specRef: plan_specs/v1/e32-argument-landscape/t01-position-taxonomy.yaml
         goalRef: v1-e32-t01-position-taxonomy
@@ -142,7 +159,6 @@ spec:
         goalRef: v1-e32-t02-position-classification
       dependsOn:
       - t01
-      - ext-v1-e05-t05-structured-output-validation
       - ext-v1-e30-t01-caselist-data-use-policy
       acceptanceCriteria:
       - type: command_succeeds
@@ -166,6 +182,7 @@ spec:
       - t02
       - ext-v1-e31-t04-card-fingerprints
       - ext-v1-e31-t08-short-card-recall
+      - ext-v1-e31-t20-long-cuts-and-limits
       acceptanceCriteria:
       - type: command_succeeds
         name: Task spec v1-e32-t03-landscape-report reports phase Succeeded
@@ -207,7 +224,6 @@ spec:
       dependsOn:
       - t03
       - ext-v1-e29-t05-evidence-sync-cli
-      - t04
       acceptanceCriteria:
       - type: command_succeeds
         name: Task spec v1-e32-t05-landscape-cli reports phase Succeeded
@@ -217,5 +233,799 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e32-t05-landscape-cli
+    - id: t06
+      kind: Task
+      name: 'LD de-extinction position taxonomy'
+      description: >-
+        LD de-extinction position taxonomy.
+      inputs:
+        specRef: plan_specs/v1/e32-argument-landscape/t06-ld-de-extinction-taxonomy.yaml
+        goalRef: v1-e32-t06-ld-de-extinction-taxonomy
+      dependsOn:
+      - t01
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e32-t06-ld-de-extinction-taxonomy reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e32-t06-ld-de-extinction-taxonomy
+    - id: t07
+      kind: Task
+      name: 'Model classification of what headings cannot place'
+      description: >-
+        Model classification of what headings cannot place.
+      inputs:
+        specRef: plan_specs/v1/e32-argument-landscape/t07-model-classification-stage.yaml
+        goalRef: v1-e32-t07-model-classification-stage
+      dependsOn:
+      - t02
+      - ext-v1-e05-t05-structured-output-validation
+      - t05
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e32-t07-model-classification-stage reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e32-t07-model-classification-stage
+    - id: t08
+      kind: Task
+      name: 'A released position id is never deleted or reused'
+      description: >-
+        A released position id is never deleted or reused.
+      inputs:
+        specRef: plan_specs/v1/e32-argument-landscape/t08-released-position-ids.yaml
+        goalRef: v1-e32-t08-released-position-ids
+      dependsOn:
+      - t01
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e32-t08-released-position-ids reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e32-t08-released-position-ids
+    - id: t09
+      kind: Task
+      name: 'Each Policy team''s plan text, counted first, so single payer splits by mechanism'
+      description: >-
+        Each Policy team's plan text, counted first, so single payer splits by mechanism.
+      inputs:
+        specRef: plan_specs/v1/e32-argument-landscape/t09-policy-plan-texts.yaml
+        goalRef: v1-e32-t09-policy-plan-texts
+      dependsOn:
+      - t01
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e32-t09-policy-plan-texts reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e32-t09-policy-plan-texts
+    - id: t10
+      kind: Task
+      name: 'Impact cards per DA and advantage in the landscape report'
+      description: >-
+        Impact cards per DA and advantage in the landscape report.
+      inputs:
+        specRef: plan_specs/v1/e32-argument-landscape/t10-impact-cards-per-position.yaml
+        goalRef: v1-e32-t10-impact-cards-per-position
+      dependsOn:
+      - t03
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e32-t10-impact-cards-per-position reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e32-t10-impact-cards-per-position
+    - id: t11
+      kind: Task
+      name: 'Counterplan texts, kritik alternatives and overviews in the landscape report'
+      description: >-
+        Counterplan texts, kritik alternatives and overviews in the landscape report.
+      inputs:
+        specRef: plan_specs/v1/e32-argument-landscape/t11-negative-analytic-texts.yaml
+        goalRef: v1-e32-t11-negative-analytic-texts
+      dependsOn:
+      - t09
+      - t03
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e32-t11-negative-analytic-texts reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e32-t11-negative-analytic-texts
+    - id: ext-v1-e30-t07-source-removal
+      kind: External
+      name: 'Prerequisite from E30: Source removal and suppression list'
+      description: >-
+        Cross-epic prerequisite owned by v1-e30-caselist-ingestion (release v1.1).
+      inputs:
+        goalRef: v1-e30-t07-source-removal
+        specRef: plan_specs/v1/e30-caselist-ingestion/t07-source-removal.yaml
+    - id: t13
+      kind: Task
+      name: 'A removal and the annual purge reach the landscape bundles'' school views'
+      description: >-
+        A removal and the annual purge reach the landscape bundles' school views.
+      inputs:
+        specRef: plan_specs/v1/e32-argument-landscape/t13-removal-reaches-landscape-school-views.yaml
+        goalRef: v1-e32-t13-removal-reaches-landscape-school-views
+      dependsOn:
+      - t04
+      - ext-v1-e30-t07-source-removal
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e32-t13-removal-reaches-landscape-school-views reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e32-t13-removal-reaches-landscape-school-views
+    - id: t12
+      kind: Task
+      name: 'The landscape command names the seven-file bundle and counts its trends and schools'
+      description: >-
+        The landscape command names the seven-file bundle and counts its trends and schools.
+      inputs:
+        specRef: plan_specs/v1/e32-argument-landscape/t12-landscape-cli-seven-files.yaml
+        goalRef: v1-e32-t12-landscape-cli-seven-files
+      dependsOn:
+      - t04
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e32-t12-landscape-cli-seven-files reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e32-t12-landscape-cli-seven-files
+    - id: t14
+      kind: Task
+      name: 'Each DA''s and advantage''s scenarios and link chain, and what each impact card runs through'
+      description: >-
+        Each DA's and advantage's scenarios and link chain, and what each impact card runs
+        through.
+      inputs:
+        specRef: plan_specs/v1/e32-argument-landscape/t14-scenarios-and-link-chains.yaml
+        goalRef: v1-e32-t14-scenarios-and-link-chains
+      dependsOn:
+      - t10
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e32-t14-scenarios-and-link-chains reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e32-t14-scenarios-and-link-chains
+    - id: t15
+      kind: Task
+      name: 'The advantages each affirmative''s teams read'
+      description: >-
+        The advantages each affirmative's teams read.
+      inputs:
+        specRef: plan_specs/v1/e32-argument-landscape/t15-advantages-per-aff.yaml
+        goalRef: v1-e32-t15-advantages-per-aff
+      dependsOn:
+      - t09
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e32-t15-advantages-per-aff reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e32-t15-advantages-per-aff
+    - id: t16
+      kind: Task
+      name: 'An advantage counterplan''s planks, and the advantage each one solves'
+      description: >-
+        An advantage counterplan's planks, and the advantage each one solves.
+      inputs:
+        specRef: plan_specs/v1/e32-argument-landscape/t16-advantage-cp-planks.yaml
+        goalRef: v1-e32-t16-advantage-cp-planks
+      dependsOn:
+      - t11
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e32-t16-advantage-cp-planks reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e32-t16-advantage-cp-planks
+    - id: t17
+      kind: Task
+      name: 'Kritikal affirmatives identified, not left among the rounds with no identified aff'
+      description: >-
+        Kritikal affirmatives identified, not left among the rounds with no identified aff.
+      inputs:
+        specRef: plan_specs/v1/e32-argument-landscape/t17-kritikal-affirmatives.yaml
+        goalRef: v1-e32-t17-kritikal-affirmatives
+      dependsOn:
+      - t09
+      - t11
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e32-t17-kritikal-affirmatives reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e32-t17-kritikal-affirmatives
+    - id: t18
+      kind: Task
+      name: 'The school view by position: every team that reads each DA, CP and K, with its caselist page'
+      description: >-
+        The school view by position: every team that reads each DA, CP and K, with its
+        caselist page.
+      inputs:
+        specRef: plan_specs/v1/e32-argument-landscape/t18-school-view-by-position.yaml
+        goalRef: v1-e32-t18-school-view-by-position
+      dependsOn:
+      - t04
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e32-t18-school-view-by-position reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e32-t18-school-view-by-position
+    - id: t19
+      kind: Task
+      name: 'A dry run''s scan refusal says nothing was written and gives the publish command'
+      description: >-
+        A dry run's scan refusal says nothing was written and gives the publish command.
+      inputs:
+        specRef: plan_specs/v1/e32-argument-landscape/t19-dry-run-scan-refusal-wording.yaml
+        goalRef: v1-e32-t19-dry-run-scan-refusal-wording
+      dependsOn:
+      - t05
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e32-t19-dry-run-scan-refusal-wording reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e32-t19-dry-run-scan-refusal-wording
+    - id: t20
+      kind: Task
+      name: 'report.md in two halves: every affirmative section together, then every negative one'
+      description: >-
+        report.md in two halves: every affirmative section together, then every negative
+        one.
+      inputs:
+        specRef: plan_specs/v1/e32-argument-landscape/t20-report-sides-together.yaml
+        goalRef: v1-e32-t20-report-sides-together
+      dependsOn:
+      - t14
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e32-t20-report-sides-together reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e32-t20-report-sides-together
+    - id: t21
+      kind: Task
+      name: 'A local text classifier for the cards headings cannot place, compared before anything is wired'
+      description: >-
+        A local text classifier for the cards headings cannot place, compared before
+        anything is wired.
+      inputs:
+        specRef: plan_specs/v1/e32-argument-landscape/t21-local-classifier-comparison.yaml
+        goalRef: v1-e32-t21-local-classifier-comparison
+      dependsOn:
+      - t02
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e32-t21-local-classifier-comparison reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e32-t21-local-classifier-comparison
+    - id: t22
+      kind: Task
+      name: 'A coach-edited scenario vocabulary per DA and advantage'
+      description: >-
+        A coach-edited scenario vocabulary per DA and advantage.
+      inputs:
+        specRef: plan_specs/v1/e32-argument-landscape/t22-scenario-vocabulary.yaml
+        goalRef: v1-e32-t22-scenario-vocabulary
+      dependsOn:
+      - t14
+      - t17
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e32-t22-scenario-vocabulary reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e32-t22-scenario-vocabulary
+    - id: t23
+      kind: Task
+      name: 'Team links on a school''s page, as on a position''s'
+      description: >-
+        Team links on a school's page, as on a position's.
+      inputs:
+        specRef: plan_specs/v1/e32-argument-landscape/t23-school-page-team-links.yaml
+        goalRef: v1-e32-t23-school-page-team-links
+      dependsOn:
+      - t18
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e32-t23-school-page-team-links reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e32-t23-school-page-team-links
+    - id: t24
+      kind: Task
+      name: 'Policy affs whose plan text has no label, identified by the plan or the advantages'
+      description: >-
+        Policy affs whose plan text has no label, identified by the plan or the advantages.
+      inputs:
+        specRef: plan_specs/v1/e32-argument-landscape/t24-unlabelled-plan-affs.yaml
+        goalRef: v1-e32-t24-unlabelled-plan-affs
+      dependsOn:
+      - t17
+      - t15
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e32-t24-unlabelled-plan-affs reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e32-t24-unlabelled-plan-affs
+    - id: t25
+      kind: Task
+      name: 'What each impact runs through, named in words a debater uses'
+      description: >-
+        What each impact runs through, named in words a debater uses.
+      inputs:
+        specRef: plan_specs/v1/e32-argument-landscape/t25-readable-impact-chains.yaml
+        goalRef: v1-e32-t25-readable-impact-chains
+      dependsOn:
+      - t22
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e32-t25-readable-impact-chains reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e32-t25-readable-impact-chains
+    - id: t26
+      kind: Task
+      name: 'The review queue ordered by the local proxy model, which places nothing'
+      description: >-
+        The review queue ordered by the local proxy model, which places nothing.
+      inputs:
+        specRef: plan_specs/v1/e32-argument-landscape/t26-review-queue-proxy-ordering.yaml
+        goalRef: v1-e32-t26-review-queue-proxy-ordering
+      dependsOn:
+      - t21
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e32-t26-review-queue-proxy-ordering reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e32-t26-review-queue-proxy-ordering
+    - id: t27
+      kind: Task
+      name: 'Branches and mechanisms in the DA sections, counted first'
+      description: >-
+        Branches and mechanisms in the DA sections, counted first.
+      inputs:
+        specRef: plan_specs/v1/e32-argument-landscape/t27-branches-and-mechanisms-counted-first.yaml
+        goalRef: v1-e32-t27-branches-and-mechanisms-counted-first
+      dependsOn:
+      - t22
+      - t25
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e32-t27-branches-and-mechanisms-counted-first reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e32-t27-branches-and-mechanisms-counted-first
+    - id: t28
+      kind: Task
+      name: 'Tags quoted in the impact and link-chain tables, held to the report''s withholding, counted first'
+      description: >-
+        Tags quoted in the impact and link-chain tables, held to the report's withholding,
+        counted first.
+      inputs:
+        specRef: plan_specs/v1/e32-argument-landscape/t28-tags-in-the-tables-held-to-withholding.yaml
+        goalRef: v1-e32-t28-tags-in-the-tables-held-to-withholding
+      dependsOn:
+      - t25
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e32-t28-tags-in-the-tables-held-to-withholding reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e32-t28-tags-in-the-tables-held-to-withholding
+    - id: t29
+      kind: Task
+      name: 'Harms headings counted under Impact, the word the coach''s debaters use'
+      description: >-
+        Harms headings counted under Impact, the word the coach's debaters use.
+      inputs:
+        specRef: plan_specs/v1/e32-argument-landscape/t29-harms-headings-under-impact.yaml
+        goalRef: v1-e32-t29-harms-headings-under-impact
+      dependsOn:
+      - t25
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e32-t29-harms-headings-under-impact reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e32-t29-harms-headings-under-impact
+    - id: t30
+      kind: Task
+      name: 'A dry run fills the plan-text and analytic-text caches, so the first report after a parser bump reads sources once'
+      description: >-
+        A dry run fills the plan-text and analytic-text caches, so the first report after a
+        parser bump reads sources once.
+      inputs:
+        specRef: plan_specs/v1/e32-argument-landscape/t30-dry-run-fills-the-text-caches.yaml
+        goalRef: v1-e32-t30-dry-run-fills-the-text-caches
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e32-t30-dry-run-fills-the-text-caches reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e32-t30-dry-run-fills-the-text-caches
+    - id: t31
+      kind: Task
+      name: 'Model cassettes name their caselist, so one season''s recordings can be deleted alone'
+      description: >-
+        Model cassettes name their caselist, so one season's recordings can be deleted
+        alone.
+      inputs:
+        specRef: plan_specs/v1/e32-argument-landscape/t31-cassettes-filed-by-caselist.yaml
+        goalRef: v1-e32-t31-cassettes-filed-by-caselist
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e32-t31-cassettes-filed-by-caselist reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e32-t31-cassettes-filed-by-caselist
+    - id: t32
+      kind: Task
+      name: 'A landscape model stage stopped by throttling ends as retryable, not as a verdict'
+      description: >-
+        A landscape model stage stopped by throttling ends as retryable, not as a verdict.
+      inputs:
+        specRef: plan_specs/v1/e32-argument-landscape/t32-throttled-model-stage-is-retryable.yaml
+        goalRef: v1-e32-t32-throttled-model-stage-is-retryable
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e32-t32-throttled-model-stage-is-retryable reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e32-t32-throttled-model-stage-is-retryable
+    - id: t33
+      kind: Task
+      name: 'A throttled landscape evaluation exits as retryable, and a throttled stop says how long to wait'
+      description: >-
+        A throttled landscape evaluation exits as retryable, and a throttled stop says how
+        long to wait.
+      inputs:
+        specRef: plan_specs/v1/e32-argument-landscape/t33-landscape-evaluate-retry-exit.yaml
+        goalRef: v1-e32-t33-landscape-evaluate-retry-exit
+      dependsOn:
+      - t32
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e32-t33-landscape-evaluate-retry-exit reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e32-t33-landscape-evaluate-retry-exit
+    - id: t34
+      kind: Task
+      name: 'A command lists and deletes one caselist''s model cassettes, and the annual purge calls it'
+      description: >-
+        A command lists and deletes one caselist's model cassettes, and the annual purge
+        calls it.
+      inputs:
+        specRef: plan_specs/v1/e32-argument-landscape/t34-landscape-cassettes-command.yaml
+        goalRef: v1-e32-t34-landscape-cassettes-command
+      dependsOn:
+      - t31
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e32-t34-landscape-cassettes-command reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e32-t34-landscape-cassettes-command
+    - id: t35
+      kind: Task
+      name: 'A CP text the landscape shows is whole: a text ending in a colon shows its planks, and a text split across paragraphs is joined'
+      description: >-
+        A CP text the landscape shows is whole: a text ending in a colon shows its planks,
+        and a text split across paragraphs is joined.
+      inputs:
+        specRef: plan_specs/v1/e32-argument-landscape/t35-cp-texts-shown-whole.yaml
+        goalRef: v1-e32-t35-cp-texts-shown-whole
+      dependsOn:
+      - t16
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e32-t35-cp-texts-shown-whole reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e32-t35-cp-texts-shown-whole
+    - id: t36
+      kind: Task
+      name: 'landscape cassettes gains a smoke check and a removal form that reaches every copy'
+      description: >-
+        landscape cassettes gains a smoke check and a removal form that reaches every copy.
+      inputs:
+        specRef: plan_specs/v1/e32-argument-landscape/t36-landscape-cassettes-smoke-check-and-removal-form.yaml
+        goalRef: v1-e32-t36-landscape-cassettes-smoke-check-and-removal-form
+      dependsOn:
+      - t34
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e32-t36-landscape-cassettes-smoke-check-and-removal-form reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e32-t36-landscape-cassettes-smoke-check-and-removal-form
+    - id: t37
+      kind: Task
+      name: 'The model-use gate reads open question 4 from the policy''s open-questions table, not the first row numbered 4'
+      description: >-
+        The model-use gate reads open question 4 from the policy's open-questions table, not
+        the first row numbered 4.
+      inputs:
+        specRef: plan_specs/v1/e32-argument-landscape/t37-model-use-gate-reads-the-open-questions-table.yaml
+        goalRef: v1-e32-t37-model-use-gate-reads-the-open-questions-table
+      dependsOn:
+      - t05
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e32-t37-model-use-gate-reads-the-open-questions-table reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e32-t37-model-use-gate-reads-the-open-questions-table
+    - id: t38
+      kind: Task
+      name: 'The landscape smoke check reads the review queue''s order line and a dry run''s scan refusal'
+      description: >-
+        The landscape smoke check reads the review queue's order line and a dry run's scan
+        refusal.
+      inputs:
+        specRef: plan_specs/v1/e32-argument-landscape/t38-landscape-smoke-checks-order-line-and-dry-run-refusal.yaml
+        goalRef: v1-e32-t38-landscape-smoke-checks-order-line-and-dry-run-refusal
+      dependsOn:
+      - t26
+      - t19
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e32-t38-landscape-smoke-checks-order-line-and-dry-run-refusal reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e32-t38-landscape-smoke-checks-order-line-and-dry-run-refusal
+    - id: t39
+      kind: Task
+      name: 'Why the model stage scored 36.8%: the evaluation broken down, and the scan''s hits listed in the operator''s terminal'
+      description: >-
+        Why the model stage scored 36.8%: the evaluation broken down, and the scan's hits
+        listed in the operator's terminal.
+      inputs:
+        specRef: plan_specs/v1/e32-argument-landscape/t39-model-evaluation-diagnosis.yaml
+        goalRef: v1-e32-t39-model-evaluation-diagnosis
+      dependsOn:
+      - t21
+      - t26
+      - t37
+      - ext-v1-e05-t05-structured-output-validation
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e32-t39-model-evaluation-diagnosis reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e32-t39-model-evaluation-diagnosis
+    - id: t40
+      kind: Task
+      name: 'The model stage names the argument a card is read as, with each position''s side and description, and the scrub and scan fixed'
+      description: >-
+        The model stage names the argument a card is read as, with each position's side and
+        description, and the scrub and scan fixed.
+      inputs:
+        specRef: plan_specs/v1/e32-argument-landscape/t40-model-stage-reads-the-argument-not-the-subject.yaml
+        goalRef: v1-e32-t40-model-stage-reads-the-argument-not-the-subject
+      dependsOn:
+      - t39
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e32-t40-model-stage-reads-the-argument-not-the-subject reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e32-t40-model-stage-reads-the-argument-not-the-subject
+    - id: t41
+      kind: Task
+      name: 'The coach''s review applied: three new NHI positions, corrected descriptions, and a second accepted label in the coach sample'
+      description: >-
+        The coach's review applied: three new NHI positions, corrected descriptions, and a
+        second accepted label in the coach sample.
+      inputs:
+        specRef: plan_specs/v1/e32-argument-landscape/t41-coach-sample-second-label-and-three-new-positions.yaml
+        goalRef: v1-e32-t41-coach-sample-second-label-and-three-new-positions
+      dependsOn:
+      - t39
+      - t21
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e32-t41-coach-sample-second-label-and-three-new-positions reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e32-t41-coach-sample-second-label-and-three-new-positions
+    - id: t42
+      kind: Task
+      name: '`landscape cassettes --delete` can delete only one prompt version''s cassettes'
+      description: >-
+        `landscape cassettes --delete` can delete only one prompt version's cassettes.
+      inputs:
+        specRef: plan_specs/v1/e32-argument-landscape/t42-landscape-cassettes-delete-by-prompt-version.yaml
+        goalRef: v1-e32-t42-landscape-cassettes-delete-by-prompt-version
+      dependsOn:
+      - t36
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e32-t42-landscape-cassettes-delete-by-prompt-version reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e32-t42-landscape-cassettes-delete-by-prompt-version
+    - id: t43
+      kind: Task
+      name: 'The model stage is scored as students meet it, its refusals are explained, and a second model route is measured on the same cards'
+      description: >-
+        The model stage is scored as students meet it, its refusals are explained, and a
+        second model route is measured on the same cards.
+      inputs:
+        specRef: plan_specs/v1/e32-argument-landscape/t43-model-evaluation-system-score-refusals-and-a-second-route.yaml
+        goalRef: v1-e32-t43-model-evaluation-system-score-refusals-and-a-second-route
+      dependsOn:
+      - t40
+      - t41
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e32-t43-model-evaluation-system-score-refusals-and-a-second-route reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e32-t43-model-evaluation-system-score-refusals-and-a-second-route
+    - id: t44
+      kind: Task
+      name: 'A scan hit already marked as a JSON key''s name or a taxonomy word does not make a text unclean'
+      description: >-
+        A scan hit already marked as a JSON key's name or a taxonomy word does not make a
+        text unclean.
+      inputs:
+        specRef: plan_specs/v1/e32-argument-landscape/t44-scan-marked-hits-leave-a-text-clean.yaml
+        goalRef: v1-e32-t44-scan-marked-hits-leave-a-text-clean
+      dependsOn:
+      - t40
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e32-t44-scan-marked-hits-leave-a-text-clean reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e32-t44-scan-marked-hits-leave-a-text-clean
+    - id: t45
+      kind: Task
+      name: 'The review queue''s order model is trained again at taxonomy 1.5.0'
+      description: >-
+        The review queue's order model is trained again at taxonomy 1.5.0.
+      inputs:
+        specRef: plan_specs/v1/e32-argument-landscape/t45-review-order-model-retrained-at-the-current-taxonomy.yaml
+        goalRef: v1-e32-t45-review-order-model-retrained-at-the-current-taxonomy
+      dependsOn:
+      - t41
+      - t21
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e32-t45-review-order-model-retrained-at-the-current-taxonomy reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e32-t45-review-order-model-retrained-at-the-current-taxonomy
 status:
   phase: Pending

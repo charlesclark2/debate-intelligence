@@ -17,11 +17,11 @@ for `v1-e31-t09` (the parser's fixes) and `v1-e31-t08` (short-card matching). Th
 describe the first parse and are kept as its record. The current figures are in
 [The re-parse, 2026-10-11](#the-re-parse-2026-10-11).
 
-**Not yet re-parsed under `2026.10.12-docx-3`** (`v1-e31-t12`, cites the parser missed or misread).
+**Re-parsed on 2026-10-16 under `2026.10.12-docx-3` and `card-fingerprint-v3`**, in dev and prod,
+for `v1-e31-t12` (cites) and `v1-e31-t11` (card matching).
 [Cites the parser missed or misread](#cites-the-parser-missed-or-misread-v1-e31-t12) says what that
-parser reads differently and what a re-parse is expected to hold. Those are figures from a
-read-only run over the same sources, not from a store. The operator's re-parse is recorded there
-when it has run.
+parser reads differently, from a read-only run before the re-parse. The current figures are in
+[The re-parse, 2026-10-16](#the-re-parse-2026-10-16).
 
 ## Versions
 
@@ -204,7 +204,8 @@ document id. 2,703 sources share that shape and 2,691 of them parse. In these fi
 wrote a character into the text that XML does not allow, so no conforming XML parser reads the
 part. The three files with U+0001 are well-formed once those four characters are taken out, which
 shows the characters are the whole defect there. Taking them out would be editing evidence text,
-which the parser never does.
+which the parser never does. From 2026.10.18-docx-4 the parser replaces each such character with
+U+FFFD, one for one, by decision (v1-e31-t15); nothing is taken out.
 
 **The compression ratio.** Of the 9,738 distinct DOCX sources that open as a zip, 9,732 have no
 entry above 50-fold, five have one between 50 and 100, and this file is the only one above 100.
@@ -759,12 +760,9 @@ banding (5 to 33 s a caselist), and its one full preview, openev (66 s):
   text; 288 would be put in a cluster with at least one text they share nothing with. That feeds
   the same chains as the largest clusters, so it waits for the by-eye sample.
 
-**After the rebuild under `card-fingerprint-v3`:** not run. It will be taken on
-`2026.10.12-docx-3`, after `v1-e31-t12`'s re-parse, which builds that directory's aggregates under
-`v3` if `v1-e31-t11` has merged by then. Everything above is from `2026.10.10-docx-2`. The
-re-parse changes the text of 2,515 cards and replaces 1,109 card ranges with 1,274, so the figures
-there should be near these, not equal. The counts and both by-eye samples (`v1-e31-t11`, criteria
-ac2 and ac4) are the operator's, recorded here at close-out.
+**After the rebuild under `card-fingerprint-v3`:** measured on `2026.10.12-docx-3`, in
+[Card matching under `card-fingerprint-v3`, measured](#card-matching-under-card-fingerprint-v3-measured-v1-e31-t11).
+Everything above is from `2026.10.10-docx-2`.
 
 ## Cites the parser missed or misread (`v1-e31-t12`)
 
@@ -775,9 +773,10 @@ the stored cards for the "before" figures, and the old and the new parser run si
 process over the same bytes for everything else. Counts, lengths, formatting flags and rule ids
 only. The stored directory's own counts and the old parser's agree on every figure both give.
 
-**Status: the rules are in parser `2026.10.12-docx-3`. The store is unchanged until the operator
-re-parses.** Every "after" figure below is what that parser produced over the 9,741 DOCX sources
-in the read-only run, not what a store holds.
+**Status: the rules are in parser `2026.10.12-docx-3`, and the store was re-parsed with it on
+2026-10-16** ([The re-parse, 2026-10-16](#the-re-parse-2026-10-16)). Every "after" figure below is
+what that parser produced over the 9,741 DOCX sources in the read-only run before it. Over those
+sources the stored figures equal it exactly.
 
 ### The five shapes
 
@@ -1107,3 +1106,973 @@ The one cite line still missed is the second line of a cite in small print, unde
   year at the head is emphasis, by the measure under 2, and that is a change to the earlier rule
   and to one of its fixtures.
 
+## The re-parse, 2026-10-16
+
+Run by the operator from the dev data directory on 2026-10-16, after `v1-e31-t12` (cites) and
+`v1-e31-t11` (card matching) merged: one re-parse covers both, and the weekly agent was reinstalled
+on a build carrying them only after it. It wrote a new version directory, published it to dev, and,
+after the by-eye checks below, to prod. Counts only, as everywhere in this report.
+
+| | |
+|---|---|
+| Parser | `2026.10.12-docx-3` |
+| Fingerprints | `card-fingerprint-v3` |
+| Parsed-store schema | 2 |
+| Version directory | `2026.10.12-docx-3` (first generation) |
+| Superseded | `2026.10.10-docx-2`, locally and in both buckets, byte for byte unchanged by the run. `2026.09.20-docx-1` is still in both buckets; removing superseded directories is `v1-e31-t16` |
+
+**There are 1,575 more sources than on 2026-10-12.** The weekly run of 2026-10-14 imported them,
+and the build it ran (`v0.1.0-dev.122`) did not parse them into `2026.10.10-docx-2`: the count of
+cites in that directory before the run was exactly the 2026-10-12 table above.
+
+### Dev
+
+Every run exited 0. Wall-clock is the run's `elapsed_seconds`: parse, rebuild and publish.
+
+| Caselist | Sources | Parsed | Unsupported | Failed | Cards | Clusters | Uploaded | Wall-clock |
+|---|---|---|---|---|---|---|---|---|
+| hsld26 | 4,970 | 4,855 | 109 | 6 | 74,725 | 11,552 | 4,973 | 544 s |
+| hspf26 | 4,437 | 3,033 | 1,404 | 0 | 49,204 | 9,930 | 4,440 | 399 s |
+| hspolicy26 | 3,190 | 3,159 | 31 | 0 | 101,681 | 18,746 | 3,193 | 940 s |
+| openev | 104 | 101 | 2 | 1 | 8,033 | 5,841 | 107 | 87 s |
+| **Total** | 12,701 | 11,148 | 1,546 | 7 | 233,643 | 46,069 | 12,713 | 1,970 s |
+
+* **The same 7 failures as on 2026-10-11:** hsld26's 5 `MALFORMED_XML` and 1 `NOT_A_ZIP`, and
+  openev's 1 `COMPRESSION_RATIO_EXCEEDED`. None of the new sources failed.
+* **Unsupported** is by format as before: hsld26 66 PDF and 43 other, hspf26 1,387 PDF.
+* **Every occurrence row** is `card-fingerprint-v3`.
+
+**Over the same sources, every figure is the prediction.** Restricted to the sources the
+2026-10-12 read-only run covered, the stored cards' completeness, tag and cite counts equal the
+"after" columns of [Before and after, over the same sources](#before-and-after-over-the-same-sources)
+exactly, and so do the counts by cite rule. Over every source:
+
+| Caselist | Cards | `FULL` | `CITE_ONLY` | No tag | With a cite | Tagged, no cite |
+|---|---|---|---|---|---|---|
+| hsld26 | 74,725 | 74,018 | 707 | 1,495 | 68,921 | 5,804 |
+| hspf26 | 49,204 | 48,796 | 408 | 2,682 | 35,092 | 14,112 |
+| hspolicy26 | 101,681 | 100,430 | 1,251 | 1,072 | 94,309 | 7,372 |
+| openev | 8,033 | 7,955 | 78 | 73 | 7,267 | 766 |
+| **Total** | 233,643 | 231,199 | 2,444 | 5,322 | 205,589 | 28,054 |
+
+No card is `ABBREVIATED`.
+
+**The second run** parsed and uploaded nothing: `attempted` 0, `skipped` equal to the source
+count, `uploaded` 0 for each caselist. Its elapsed time is the rebuild alone, now under
+`card-fingerprint-v3` and with 14% more sources: 345 s, 219 s, 482 s and 68 s (1,114 s in all,
+against 1,051 s on 2026-10-11).
+
+**Five files by eye** (`v1-e31-t12`, step 6), five cards each, tag, cite and evidence text against
+the document: 73 of 75 answers right. In one file two cards have no tag where the document may
+hold one; the operator is to confirm in Word. In two other files four cards have the right tag,
+cite and evidence text and no short cite: an author and a two-digit year with a curly apostrophe
+on its own line above a long bracketed cite. No cite was read as a sentence, and no evidence text
+began with a cite, so the check passed. Both shapes are `v1-e31-t19`'s.
+
+### Prod
+
+Published on 2026-10-16 from the same dev data directory (`DEBATE_ENV=prod`,
+`DEBATE_STORAGE__DATA_DIR` set to the dev directory, `--confirm-prod`), after the checks above. The
+dry run showed `2026.10.12-docx-3`, `card-fingerprint-v3`, nothing to parse and every source
+skipped. Every publish exited 0, parsing and failing nothing, and uploaded 4,973, 4,440, 3,193 and
+107 objects, dev's figures. Each store's listing holds its one index.
+
+Prod went ahead though the join sample below holds one pair of different cards. Nothing reads
+prod's parsed store yet, and the fix (`v1-e31-t20`) rewrites only the occurrence table, which the
+next publish replaces.
+
+### Card matching under `card-fingerprint-v3`, measured (`v1-e31-t11`)
+
+`scripts/compare_card_clusters.py`, read-only on the dev data directory, over
+`2026.10.12-docx-3`'s stored cards.
+
+**Against the rules before `v1-e31-t11`** (`--before-rules` at the commit before it): the same
+stored cards placed by `v2` and by `v3`.
+
+| Caselist | Clusters before | After | Merged into another | New clusters made of several | Divided | Most absorbed by one | Largest before and after | Exact fingerprints changed |
+|---|---|---|---|---|---|---|---|---|
+| hsld26 | 11,570 | 11,552 | 18 | 17 | 0 | 3 | 710, 710 | 0 |
+| hspf26 | 9,944 | 9,930 | 14 | 14 | 0 | 2 | 682, 682 | 0 |
+| hspolicy26 | 18,765 | 18,746 | 19 | 16 | 0 | 3 | 1,602, 1,609 | 0 |
+| openev | 5,841 | 5,841 | 0 | 0 | 0 | 1 | 22, 22 | 0 |
+
+The session estimated 18, 10, 17 and 0 merges and no division. No card is in only one placement.
+Of the short cuts the diagnosis finds within the rule and still apart, 2 are left, both in
+hsld26, as the session predicted.
+
+**Against the rules before `v1-e31-t08`** (`card-fingerprint-v1` to `v3`):
+
+| Caselist | Clusters before | After | Merged into another | Divided | Largest before and after |
+|---|---|---|---|---|---|
+| hsld26 | 11,536 | 11,552 | 15 | 13 | 710, 710 |
+| hspf26 | 9,924 | 9,930 | 12 | 16 | 682, 682 |
+| hspolicy26 | 18,773 | 18,746 | 33 | 5 | 1,603, 1,609 |
+| openev | 5,841 | 5,841 | 1 | 1 | 22, 22 |
+
+Against 21, 18, 11 and 1 divided under `v2` on 2026-10-11. Each of the 56 pairs still divided is
+one the diagnosis explains by a short cut: one left out in this part, or a part joined only
+through a short cut elsewhere. None is a part no short cut links to the rest.
+
+**By-eye samples**, tallies only:
+
+| Sample | Pairs | Same card | Different card | Unsure |
+|---|---|---|---|---|
+| Newly in one cluster, of 51 | 20 | 17 | 1 | 2 |
+| Divided, of 0 | 0 | | | |
+| Three largest clusters, hsld26 (10 pairs each) | 30 | 23 | 7 | 0 |
+| Three largest clusters, hspf26 (10 pairs each) | 30 | 19 | 10 | 1 |
+
+* **The newly joined pair of different cards** is in hspolicy26: two bodies of 59 and 87 words that
+  share no text, joined because a third body of 150 words holds all of both. That body is two
+  cards stored as one, or a card and its neighbour, and `v3` lets a body that contains a cut stand
+  witness for it whatever else the body holds.
+* **The largest clusters lump different cards.** hsld26's second-largest and hspf26's largest each
+  gave 6 of 10 pairs as different cards. The operator stopped the largest-cluster sample after two
+  caselists: telling one long cut from another of the same article by eye is slow and often
+  uncertain, so the rest was measured.
+
+**Measured instead: the share of pairs of distinct texts in a cluster that share no text at all**
+(five-word runs, counts only, read-only):
+
+| Cluster | Cards | Distinct texts | Pairs | Sharing no text |
+|---|---|---|---|---|
+| hspf26, largest | 682 | 89 | 3,916 | 62% |
+| hspolicy26, largest | 1,609 | 194 | 18,721 | 51% |
+| hsld26, second | 441 | 49 | 1,176 | 25% |
+| hspf26, third | 377 | 87 | 3,741 | 19% |
+| hsld26, largest | 710 | 53 | 1,378 | 15% |
+| hspolicy26, second | 692 | 54 | 1,431 | 8% |
+| hsld26, third; hspf26, second; hspolicy26, third | 396; 592; 671 | 14; 75; 20 | 91; 2,775; 190 | 0% |
+
+It agrees with the by-eye samples: the two clusters the operator found worst are the two with a
+quarter or more of their pairs sharing nothing. Each large cluster holds few distinct short cites:
+one article's many passages, chained together through long bodies that hold several of them.
+hspf26's second-largest shares text throughout, but its texts run from 1,414 to 7,485 words, which
+no card is: they are bodies the parser did not divide.
+
+**What one card is (the PM's ruling, 2026-10-16, for `v1-e31-t20`).** A card is a passage. Two
+bodies are one card when one holds the other or they overlap; two passages of one article are two
+cards. Two bodies join only on text they share directly, never through a third body that holds
+both. `v1-e31-t20` is measured by the share of pairs sharing no text, as above, and by a join
+sample with no pair of different cards; a person looks only at pairs whose overlap a rule cannot
+decide.
+
+**The same measures, built into the tools (`v1-e31-t21`, 2026-10-17).**
+`compare_card_clusters.py shapes` gives every figure in the table above exactly. It reads the same
+texts as `diagnose`. openev's three largest clusters, not in the table, hold 0%, 41% and 0% of
+pairs sharing no text, in clusters of 22, 21 and 18 cards and 14 texts each.
+
+The sampler now decides by rule:
+* a pair of two full cards that is identical or contained is the same card;
+* a pair sharing no text is two different cards.
+
+It asks a person about the rest. Run again on the join sample above (the same seed, so the same
+20 pairs):
+
+| Join sample of 20 | Same card | Different card | Unsure | Judged by a person |
+|---|---|---|---|---|
+| By eye, 2026-10-16 | 17 | 1 | 2 | 20 |
+| With the rule, 2026-10-17 | 19 (18 by rule, 1 by eye) | 1 (by rule) | 0 | 1, in 29 seconds |
+
+The rule agrees with every verdict given by eye. The pair called different shares no text, and the
+two called unsure are each wholly inside the other body.
+
+## The remaining cite shapes (`v1-e31-t19`)
+
+`v1-e31-t12` left five cite shapes counted and unsettled, and the operator's check by eye on
+2026-10-16 added two. Each was counted on 2026-10-18 in the dev data directory, read-only, as t12
+counted: the 11,148 parsed DOCX sources of `2026.10.12-docx-3` (233,643 cards) re-parsed in place
+from their blobs by scratch scripts outside the repository and the data directory. Counts,
+lengths, formatting flags and rule ids only. Every total below over all cards equals the stored
+directory's figures of [The re-parse, 2026-10-16](#the-re-parse-2026-10-16).
+
+**Status: the rules are in parser `2026.10.18-docx-5`; the store has not been re-parsed with it.**
+`2026.10.18-docx-4` is `v1-e31-t15`'s, which merged first; `2026.10.18-docx-5` carries both. The
+"after" figures are what that parser produces over the same sources, measured side by side with
+the stored cards on the branch synced onto `dev` with t15. The start commit's parser reproduces the stored cards exactly (openev,
+8,033 of 8,033 identical in every field), so the stored directory is the "before".
+
+### The counts, and what was done
+
+| | Shape | In the corpus | Ruling and result |
+|---|---|---|---|
+| 1 | A cite behind a first name or a title | 8,250 tagged cards with no cite have a name and a year starting within the first 40 characters of the line under the tag, not at its front: 6,204 read as nothing, 2,046 as the body's first paragraph | Built: where a cite stands, behind one to three capitalised words or a title, the name and year (or the line's opening) in bold, or everything after the year in one bracket |
+| 2 | A paragraph style that maps to no unit | 1,355 paragraphs a cite rule would read but for their style (1,255 by an alias, 48 by Word's de-duplication, 46 by `basedOn`, 6 in `Normal` by name) | Built, broad (PM, 2026-10-18): the cite and body rules see through such a style; the heading rules never do |
+| 3 | A highlighted cite | 645 highlighted paragraphs over 400 characters with a cite's shape: 599 open in bold with a name and a year, 38 carry the cite style on a name and year at the head past 1,000 characters, 8 hold everything after the year in one bracket | Built: where a cite stands and a body follows |
+| 4 | `v1-e31-t09`'s cite-style hold | 33 guessed cites carry a cite-style run; 26 of them, all over 2,000 characters, have no styled name and year at the head | Built as ruled in t12's review: the style holds a guess only when it marks a name and a year at its head |
+| 5 | Short plain lines inside a body read as nothing | 91,345 short unformatted lines read as nothing; 43,488 stand between two body paragraphs of one card | Measured only (PM: left here, for the task merged with `v1-e31-t23`). Below |
+| 6 | A short cite written `Okonkwo ‘26` | 296 short author-and-year lines hold U+2018, the left quote Word types before a two-digit year; the profile's patterns accept `'` and `’` only | Built: a left quote before a digit is read as `’` for matching only. Text, offsets and the profile are unchanged |
+| 7 | Two cards with no tag in one checked file | Cards 2 and 3 of the file t12's step 6 opened for the bracketed cite line: above each cite, a short underlined line at reading size, read as body | Waiting on the operator's check in Word; not counted |
+
+### 1. A cite behind a first name or a title
+
+What sits directly under the tag of a tagged card with no cite (28,054 cards):
+
+| Under the tag | Read as nothing | Read as body |
+|---|---|---|
+| No name and year | 8,178 | 6,392 |
+| A name and year within 40 characters, not at the front | 6,204 | 2,046 |
+| A name and year past 40 characters | 2,221 | 1,872 |
+| A name and year at the front | 143 | 860 |
+| A line in a paragraph style that maps to no unit | 129 | |
+
+Of the 8,250 with a name and a year a few words in, 5,817 have one to three capitalised words or
+initials before it, 308 a title, and the rest a phrase. The rule takes 4,864 of them in the counts:
+3,949 read as nothing (64%) and 915 read as body (45%); 4,811 of the 4,864 name a credential or
+hold a link. The same shape fits 437 paragraphs that do not stand where a cite stands, and the rule
+leaves them. Over every place a cite stands, the shipped rule reads 5,189 paragraphs.
+
+### 2. A paragraph style that maps to no unit
+
+16,372 paragraphs carry a paragraph style the profile maps to `OTHER`. In 955 of the 1,355 that a
+cite rule would read, the tag above had lost its card and the body below, in the same style, was
+nothing too; 711 sit in files where half or more of the paragraphs carry such a style. Side by
+side over the 492 files that hold one:
+
+| Over the 492 files | Cards | With a cite | Tagged, with a cite and a body | `CITE_ONLY` | Tagged, no cite | No tag | Paragraphs to a cite / to body |
+|---|---|---|---|---|---|---|---|
+| Before | 8,113 | 6,929 | 6,527 | 196 | 1,184 | 246 | |
+| The cite rules alone | 9,171 | 8,061 | 6,666 | 1,185 | 1,110 | 291 | 1,274 / 81 |
+| The cite and body rules (built) | 9,598 | 8,149 | 7,687 | 111 | 1,449 | 398 | 1,268 / 12,744 |
+
+The cite rules alone would have left 989 more cards `CITE_ONLY` whose body is in the file. In the
+shipped parser, 1,339 cites and 12,852 body paragraphs are read through such a style.
+
+### 3. A highlighted cite
+
+| The 645 | Where a cite stands, a body below | Elsewhere |
+|---|---|---|
+| Bold opening | 466 | 133 |
+| Styled name and year at the head | 14 | 24 |
+| One bracket | 8 | 0 |
+
+In 388 of the 488 the rule takes, under a tenth of the characters are highlighted, most often the
+name at the head. The shipped rule reads 493.
+
+### 4. The cite-style hold
+
+Over the 15 files that hold such a guess, the change re-reads 25 paragraphs of over 2,000
+characters as body: 23 cards go from `CITE_ONLY` to `FULL` (22 of them tagged), one more card
+changes and one range becomes two. No paragraph of 2,000 characters or fewer moves. Seven guesses
+are still held, six with the style on a name and year at the head. `v1-e31-t09`'s 300-word
+fixture, whose style marks a name in its middle, is body now.
+
+### 5. Short plain lines read as nothing, measured for a later task
+
+The PM's ruling of 2026-10-18 leaves these as they are: the lines between two body paragraphs are
+the population the task merged with `v1-e31-t23` (in-round markers) rules on. This is the
+measurement it starts from. 91,345 lines that the classifier reads as nothing, not table cells or
+text boxes:
+
+| Where | Lines |
+|---|---|
+| Between two body paragraphs of one card | 43,488, in 15,796 cards |
+| Before a body (under a tag or a cite) | 30,429 |
+| After a body, before something else | 6,467 |
+| Elsewhere | 10,961 |
+
+The 43,488 between two body paragraphs:
+
+| Length | No sentence end | Ends a sentence | In capitals |
+|---|---|---|---|
+| 40 characters or fewer | 24,207 | 1,192 | 11,799 |
+| 41 to 100 | 4,909 | 3,421 | 154 |
+| 101 to 200 | 1,300 | 5,482 | 4 |
+| 201 to 400 | 1,162 | 0 | 0 |
+| 401 to 1,000 | 1,457 | 0 | 0 |
+| 1,001 to 4,000 | 353 | 0 | 0 |
+| Over 4,000 | 5 | 0 | 0 |
+| **All** | 33,393 | 10,095 | 11,957 |
+
+A line of 200 characters or more that ends a sentence is prose to the classifier, so none of those
+is here; the longer lines are ones that do not end a sentence.
+
+### 6. A short cite written with a left quote
+
+`Okonkwo ‘26`: Word turns an apostrophe typed after a space into U+2018, the left quote. The lines
+written with `’` were read already. From `2026.10.18-docx-5` a left quote directly before a digit
+is read as `’` wherever the profile's cite patterns are matched, and the short cite is taken from
+the cite as written. Over the same sources **9,602 cards hold a short cite written with a left
+quote, none before.** The estimate before the build, 415 more short cites, covered only the 131
+files with such a line alone on its line; most of the 9,602 are cites that open `Okonkwo ‘26 [...]`.
+It also reads 106 such lines that a bold-heading guess had taken for tags, and the tags above them
+come back from analytics.
+
+### The coach's sample
+
+`scripts/sample_cite_shapes.py`, run by the operator on 2026-10-18 with seed 20261018: 70 items
+from the 11,148 sources, drawn blind across the rules and sides, one key each, 710 seconds
+answering. The parser was this task's, with the three new rules behind a flag only the sampler
+switched on.
+
+| Rule | Side | In the corpus | Asked | Yes | No | Unsure | Question |
+|---|---|---|---|---|---|---|---|
+| Behind a first name or a title | Taken, read as nothing before | 4,176 | 8 | 8 | 0 | 0 | The card's cite? |
+| | Taken, read as body before | 1,013 | 2 | 2 | 0 | 0 | The card's cite? |
+| | Left, read as nothing | 2,186 | 7 | 4 | 0 | 3 | The card's cite? |
+| | Left, read as body | 1,110 | 3 | 3 | 0 | 0 | The card's cite? |
+| A style that maps to no unit | Taken as a cite | 1,339 | 6 | 6 | 0 | 0 | The card's cite? |
+| | Taken as body | 12,852 | 8 | 8 | 0 | 0 | The card's text? |
+| | Left as nothing | 2,162 | 6 | 2 | 3 | 1 | A cite or text? |
+| A highlighted cite | Taken | 493 | 10 | 10 | 0 | 0 | The card's cite? |
+| | Left | 221 | 10 | 10 | 0 | 0 | The card's cite? |
+| The cite-style hold | Re-read as body | 25 | 7 | 0 | 7 | 0 | The card's cite? |
+| | Still held as a cite | 7 | 3 | 3 | 0 | 0 | The card's cite? |
+
+**No rule took a paragraph wrongly:** 0 of 10, 0 of 14, 0 of 10 and 0 of 7. With ten a side, that
+tells "mostly right" from "often wrong" and no finer. The left sides of the first and third rules
+are cites too (7 of 10 and 10 of 10): those rules are cautious, and what they leave is a follow-up.
+
+**The left quote, sampled after the PM's review.** (6) had shipped on a count of a few hundred lines
+and reaches 9,602 cards, and it is the one change here that can take evidence text away from a
+card. On 2026-10-18, seed 20261019, 28 items, 148 seconds answering, `--plan left-quote`:
+
+| Side | In the corpus | Asked | Yes | No | Unsure | Question |
+|---|---|---|---|---|---|---|
+| A cite line that leaves its card no body | 18 | 18 | 18 | 0 | 0 | The card's cite? |
+| A card gaining a short cite written with a left quote | 9,584 | 10 | 10 | 0 | 0 | The right short cite? |
+
+Each of the 18 is a card stored `FULL` that is `CITE_ONLY` now with no other new rule to explain it,
+and every one holds a line read as a cite only through the left quote. All 18 of those lines are
+the card's cite, and all 10 short cites are right. (6) stands as built.
+
+### Before and after, over the same sources
+
+| Caselist | Cards before | After | `CITE_ONLY` before | After | No tag before | After | With a cite before | After | Tagged, no cite before | After | With a short cite before | After |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| hsld26 | 74,725 | 75,336 | 707 | 676 | 1,495 | 1,563 | 68,921 | 70,914 | 5,804 | 4,422 | 48,313 | 50,458 |
+| hspf26 | 49,204 | 50,246 | 408 | 390 | 2,682 | 3,038 | 35,092 | 41,696 | 14,112 | 8,550 | 31,193 | 35,638 |
+| hspolicy26 | 101,681 | 101,826 | 1,251 | 1,265 | 1,072 | 1,093 | 94,309 | 95,713 | 7,372 | 6,113 | 56,818 | 61,162 |
+| openev | 8,033 | 8,049 | 78 | 78 | 73 | 75 | 7,267 | 7,590 | 766 | 459 | 4,203 | 4,468 |
+| **Total** | 233,643 | 235,457 | 2,444 | 2,409 | 5,322 | 5,769 | 205,589 | 215,913 | 28,054 | 19,544 | 140,527 | 151,726 |
+
+The table covers the 11,148 sources parsed before. `v1-e31-t15`'s part of `2026.10.18-docx-5` reads
+six of the seven sources refused before (five in hsld26, one in openev), with 95 cards, and names
+the seventh an unsupported format; with them the totals are 235,552 cards, 2,411 `CITE_ONLY`, 5,772
+with no tag, 216,005 with a cite, 19,547 tagged with no cite and 151,802 with a short cite. Over the
+11,148 sources, t15 changes no card: every figure above is the same on the synced parser.
+
+* **No card is `ABBREVIATED`,** before or after.
+* **218,218 stored cards are identical in every field** but provenance's versions.
+* **Among cards that keep their range,** 8,594 gain a cite and one loses its cite (a held guess the
+  hold now reads as the card's text); 9,547 gain a short cite; 16 have a different tag (a short
+  cite with a left quote no longer taken for the tag); 27 differ only in their section path.
+* **Completeness, among cards that keep their range:** 25 go from `CITE_ONLY` to `FULL` (23 by the
+  hold) and 28 from `FULL` to `CITE_ONLY`. Of the 28, 10 are a cite behind a first name that had
+  been the card's only "body" paragraph. The other 18 carry no new rule id; by their rule ids they
+  are lines read by the existing cite-line rule, which fits a line opening with a short cite
+  written with a left quote that had been read as body. That is a reading of rule ids, not a check
+  of each card.
+* **548 stored ranges are gone and 2,362 are new:** mostly tags restored with their cards in files
+  that write their cites and bodies in an unmapped style, and cards behind cites that are read now.
+  500 of the new have no tag.
+
+### The labelled evaluation
+
+The six person-corrected files of the PR subset, `run_parser_eval.py --tier pr-subset`, every
+parser over the same files and the labels as they stand on `dev` after `labels/2026 10 19`. The
+full tier's labels are not corrected yet.
+
+| Parser | Cite precision | Cite recall | Tag precision | Tag recall | Evidence precision | Evidence recall | Card boundaries |
+|---|---|---|---|---|---|---|---|
+| `2026.10.12-docx-3` | 0.957 (22 right, 1 wrong) | 0.500 (22 of 44) | 0.949 | 0.860 | 0.943 | 0.968 | 36 of 38 |
+| `2026.10.18-docx-4` (`v1-e31-t15`) | 0.957 | 0.500 | 0.949 | 0.860 | 0.943 | 0.968 | 36 of 38 |
+| `2026.10.18-docx-5` | 0.969 (31 right, 1 wrong) | 0.705 (31 of 44) | 0.949 | 0.860 | 0.943 | 0.968 | 36 of 38 |
+
+Before the labels moved, on 2026-10-18, the same comparison gave the same cite figures, tag recall
+0.771 and 22 of 23 card boundaries for both parsers.
+
+### What this raised and did not change
+
+* **What the cautious rules leave.** 2,186 lines behind a first name read as nothing and 221
+  highlighted cite shapes elsewhere than under a tag with a body below are left; the sample found
+  cites among both. Widening either needs its own counts and its own sample.
+* **19,544 tagged cards still have no cite.**
+* **The short plain lines** are the later task's, with the figures above.
+
+## The re-cluster under `card-fingerprint-v4` (`v1-e31-t20`)
+
+**Status: the first preview is measured and ruled on; the re-preview under the PM's rulings is
+measured (2026-10-18); the rebuild after the merge is not run.** The first preview (the counts, shapes, samples and diagnosis below, all 2026-10-18) was of
+the rules before the PM's rulings on it the same day; the re-preview is of the rules as ruled. The
+steps are in
+[the task's session report](../session-reports/v1-e31-t20-long-cuts-and-limits.md#operator-follow-ups):
+a preview from the task worktree before the merge, which writes nothing to the store, and after it
+`v1-e31-t19`'s re-parse to `2026.10.18-docx-5` (the PM, 2026-10-19), which builds each caselist's
+`occurrences.jsonl` under this task's rules in the same run: this task has no rebuild of its own.
+Its figures on the store compare the `docx-5` cards under the rules before and after it.
+
+**What changed** (the PM's ruling of 2026-10-16, and the PM's rulings on the first preview of
+2026-10-18, in [`near_duplicates.py`](../../packages/debate_core/src/debate_core/evidence/near_duplicates.py)):
+
+* A long cut joins the one cluster that holds it by the step short cuts use, where `v3` joined it
+  only when the banding happened to pair the two. `MIN_CUT_SHARE` applies to both.
+* **Two bodies overlap when they share at least three-tenths of the smaller's five-word runs**
+  (`MIN_OVERLAP_SHARE`, `v1-e31-t21`'s line between overlapping and sharing a little; the PM,
+  2026-10-18). Every two bodies in a cluster overlap or one holds the other. This supersedes the
+  first preview's reading, one shared run, which the PM had accepted: the preview's sample found a
+  newly joined pair sharing a little that a person judged a different card.
+* A body that holds a cut and another passage the cut does not overlap is no witness for the cut.
+  `v1-e31-t11`'s false join is the case: two bodies sharing no text, joined because a third held
+  both.
+* A cut's own cluster counts among its witnesses, so a cut already with a body that holds it is not
+  taken into a second cluster.
+* No join puts two bodies that do not overlap in one cluster. So, by construction, every pair of
+  full texts in a cluster overlaps or is contained, ac5's measure, the share of pairs sharing
+  nothing, is 0 in every cluster, and so is the share sharing a little, but for texts of six runs
+  or fewer, where one or two runs is three-tenths.
+* **`MIN_CUT_SHARE` is a tenth** (a quarter before; the PM, 2026-10-18, from the first preview's
+  sample: 20 of 20 cuts the share kept out were the same card, 8 of them under a tenth). It is also
+  the size of a passage, so a body holding a passage a tenth to a quarter of it that a cut does not
+  overlap is now no witness for that cut; the diagnosis counts those refusals.
+* **A short body is found from either end**, as a long one is: one nine-tenths inside a body lacking
+  one of its ends is compared (item 4, decided by the first preview's sample: 20 of 20 the same
+  card). `MAX_CONTAINER_CLUSTERS` stays 8 and still counts clusters holding both ends.
+* `MAX_CONTAINER_CLUSTERS` is counted against the clusters as they stand when a cut is considered,
+  after long copies have joined one another.
+* A long body nine-tenths inside a body that lacks one of its ends joins it, as `v3`'s banding did
+  when it paired the two. The container rule applies to that join as to every other: a body that
+  also holds a passage sharing no text with the long body is no witness for it (the PM's
+  condition, 2026-10-18).
+
+**What it costs on the labelled sets, and what recovering it would need.** Precision stays 1.000.
+Two labelled cards have a trimmed-start and a trimmed-end copy that share no five-word run:
+Brannock's ferry fares and Kessler's night buses, both invented. The labels call each one card. Under
+the ruling they are two passages, and the bodies holding both are no witness for either, so their
+pairs are lost: 19 of 24 full-short-card pairs found on the short-card set (was 24) and 23 of 37 on
+the extended set (was 35). The PM held the ruling against the labels on 2026-10-18, kept the labels
+as the coach wrote them, and amended `v1-e31-t08`'s two full-short-card targets to these figures. A
+test pins the lost pairs to these two cards by row id and holds every other card's recall where
+`v1-e31-t08` left it. **Recovering these pairs needs evidence beyond the bodies**: on the bodies
+alone, two trims of one card that share no text have the same shape as `v1-e31-t11`'s false join of
+two cards. A cite, a tag or the files the copies came from might tell the two apart; that is outside
+this task, and the PM will consider it as a separate one.
+
+**Stock phrases.** Under the first preview's reading one shared five-word run was enough to pass the
+guard, and a stock phrase is one run. `shapes` counts the pairs in one cluster sharing only one or
+two runs, for each cluster it describes and, with `--every-cluster`, over every cluster of a
+caselist, and since the PM's rulings also how many of them do not overlap, which must be none. On
+the labelled sets, all invented text, there are none under either reading: 0 of 59 pairs of
+distinct full texts in one cluster on the variant set, 0 of 15 on the short-card set and 0 of 18 on
+the extended set. Under the overlap reading the labelled sets' figures are unchanged row for row,
+and the guardrail (t08's misses and the 18 pinned pairs, every other card's recall as t08 left it)
+holds exactly, by test.
+
+**To be recorded here**, from the operator's runs:
+
+| Measure | First preview (superseded rules) | Re-preview, before the merge | On the `docx-5` store, after the re-parse |
+|---|---|---|---|
+| Counts against `card-fingerprint-v3`: clusters, merged, divided, largest | below, 2026-10-18 | below, 2026-10-18 | not run |
+| ac5: share of pairs sharing nothing, three largest clusters per caselist | 0 in all twelve, below | 0 in all twelve, below | not run |
+| ac1: join sample of 20 newly joined pairs, contained shapes asked | all 20 decided by rule, below | 20 of 20 same card by eye, below | not run, a fresh draw |
+| Newly joined cuts a tenth to a quarter of their witness, at least 20 (the PM's check on the share) | | 20 of 20 same card, below | |
+| Witness refusals the lower share added | | 10,602 of 38,776, below | |
+| `MIN_CUT_SHARE`: contained pairs under a third, joined and kept apart, by share band | below | 514 kept out, all under a tenth, below | |
+| Lacking an end: short bodies nine-tenths inside a body lacking one of their ends | below | (joined) | |
+| Bodies nine-tenths inside one holding neither of their ends | 9 unexplained divided pairs | 62 cuts, 13 divided pairs, none unexplained, below | |
+| `MAX_CONTAINER_CLUSTERS`: cuts whose ends too many clusters hold, re-measured | below | 6, below | |
+| Divided pairs against `v3`, by reason | below | 2,134, below | |
+| Pairs in one cluster sharing only one or two five-word runs, every cluster, and of them not overlapping | below, 2026-10-18 | 4, none not overlapping, below | not run |
+
+### The first preview's counts against `card-fingerprint-v3` (operator-run, 2026-10-18)
+
+`compare_card_clusters.py counts --save-after`, from the task worktree at `ecf3e11` (rebased onto `dev` since as `8a22400`, the same rules), each
+caselist's cards in `2026.10.12-docx-3` placed in memory by `v4` and compared with the store's `v3`
+table. Nothing was written to the store. In every caselist, `exact_fingerprints_changed`,
+`cards_only_before` and `cards_only_after` are 0, and no cluster absorbed more than 5 others.
+
+| | hsld26 | hspf26 | hspolicy26 | openev |
+|---|---|---|---|---|
+| Clusters, `v3` → `v4` | 11,552 → 11,656 | 9,930 → 10,325 | 18,746 → 18,821 | 5,841 → 5,816 |
+| Clusters merged into another | 314 | 267 | 492 | 66 |
+| Clusters made of several | 296 | 257 | 460 | 61 |
+| Clusters divided | 230 | 336 | 320 | 28 |
+| Absorbing 2 / 3 to 5 / 6 or more | 278 / 18 / 0 | 247 / 10 / 0 | 428 / 32 / 0 | 58 / 3 / 0 |
+| Largest cluster, cards, `v3` → `v4` | 710 → 385 | 682 → 589 | 1,609 → 649 | 22 → 33 |
+| Distinct texts in the largest, `v4` | 22 | 74 | 36 | 21 |
+| Seconds to place | 330 | 229 | 414 | 51 |
+
+The divided clusters are the chains `v3` built through bodies holding several passages coming apart;
+the merges are mostly long copies joining one another, which `v3` left to the banding. hspf26's
+largest cluster falls least and holds the most distinct texts, and openev's grows: both are read by
+the shapes step, whose share of pairs sharing nothing is the check that no cluster joins texts with
+nothing in common.
+
+### The first preview's shapes (operator-run, 2026-10-18)
+
+`compare_card_clusters.py shapes --largest-clusters 3 --every-cluster --after`, reading the
+placement step 2 saved. **ac5 on the preview: no pair sharing nothing in any of the twelve
+clusters** (target under 5%; `v3`'s were 62, 51, 41 and 25% in the largest clusters).
+
+| Caselist | Rank | Cards | Distinct texts | Pairs | Sharing nothing | Sharing 1 / 2 runs | Words, smallest / median / largest |
+|---|---|---|---|---|---|---|---|
+| hsld26 | 1 | 385 | 22 | 231 | 0 | 0 / 0 | 676 / 1,120 / 1,125 |
+| hsld26 | 2 | 331 | 29 | 406 | 0 | 0 / 0 | 238 / 1,479 / 1,539 |
+| hsld26 | 3 | 312 | 8 | 28 | 0 | 0 / 0 | 81 / 88 / 102 |
+| hspf26 | 1 | 589 | 74 | 2,701 | 0 | 0 / 0 | 2,672 / 6,143 / 7,040 |
+| hspf26 | 2 | 225 | 47 | 1,081 | 0 | 0 / 0 | 400 / 1,193 / 1,512 |
+| hspf26 | 3 | 191 | 19 | 171 | 0 | 0 / 0 | 500 / 829 / 882 |
+| hspolicy26 | 1 | 649 | 36 | 630 | 0 | 0 / 0 | 404 / 694 / 1,161 |
+| hspolicy26 | 2 | 634 | 74 | 2,701 | 0 | 11 / 0 | 296 / 2,499 / 3,843 |
+| hspolicy26 | 3 | 622 | 14 | 91 | 0 | 0 / 0 | 443 / 796 / 880 |
+| openev | 1 | 33 | 21 | 210 | 0 | 24 / 1 | 163 / 2,075 / 4,016 |
+| openev | 2 | 12 | 4 | 6 | 0 | 0 / 0 | 113 / 174 / 218 |
+| openev | 3 | 11 | 6 | 15 | 0 | 0 / 0 | 769 / 1,044 / 1,211 |
+
+Every card in these clusters is full. hspf26's largest is the long-bodied cluster the PM said to
+leave alone; nothing special-cases it.
+
+**Stock phrases, over every cluster**: pairs of distinct full texts in one cluster that share only
+one or two five-word runs.
+
+| Caselist | Pairs in one cluster | Sharing 1 run | Sharing 2 runs | Share | Clusters with such a pair |
+|---|---|---|---|---|---|
+| hsld26 | 16,589 | 23 | 169 | 1.2% | 21 of 2,505 |
+| hspf26 | 15,361 | 21 | 22 | 0.3% | 17 of 2,054 |
+| hspolicy26 | 24,181 | 83 | 47 | 0.5% | 42 of 3,518 |
+| openev | 1,151 | 33 | 3 | 3.1% | 9 of 407 |
+
+They are concentrated: openev's largest cluster holds 25 of its caselist's 36. Such a pair is in one
+cluster because each text shares more with some third body, so the count cannot say whether it is
+two passages of one article overlapping by a few words or a stock phrase bridging two cards; a
+person can, with `sample --largest 1 --least-alike`. The PM decides any follow-up from these figures.
+
+### The first preview's samples (operator-run, 2026-10-18)
+
+`compare_card_clusters.py sample --after`, against the placement step 2 saved, over all four
+caselists, judged by eye on the operator's terminal. Tallies only.
+
+| Sample | Drawn | Decided by rule | Asked | Same card | Different card | Unsure |
+|---|---|---|---|---|---|---|
+| Step 4, ac1: newly joined pairs (seed 718710206) | 20 of 1,139 | 20 (contained: 13 under a third, 7 a third or more) | 0 | | | |
+| Step 5: newly joined pairs, contained under a third asked (seed 306444940) | 40 of 1,139 | 18 (contained, a third or more) | 22 | 21: 17 contained under a third, 4 overlapping | **1: sharing a little** | 0 |
+| Step 5: cuts kept apart by the minimum share (seed 563320648) | 20 of 2,226 | 0 | 20 | 20: long 11 a tenth to a quarter, 7 under a tenth; short 1 and 1 | 0 | 0 |
+| Step 6: short bodies lacking an end (seed 737351069) | 20 of 31 | 0 | 20 | 20: 2 half or more, 4 a quarter to a half, 4 a tenth to a quarter, 10 under a tenth | 0 | 0 |
+| Step 7: cuts whose ends too many clusters hold (seed 281425182) | 6 of 6 | 0 | 6 | 6: 4 half or more, 1 a quarter to a half, 1 a tenth to a quarter | 0 | 0 |
+
+* **A newly joined pair called different.** One of the 40 newly joined pairs in step 5 shares a
+  little text (some five-word run, under three tenths of the smaller's) and was judged a different
+  card. `v4` refuses a join only when two texts share nothing, so two texts sharing a run can end up
+  in one cluster through a third body that shares more with each, although under the ruling they
+  are neither one inside the other nor overlapping. This is with the PM before any merge.
+* **ac1's 20 pairs were all decided by rule**, so no person judged them; the sample is to be run
+  again on whatever placement the PM's answer leads to, with the contained shapes asked.
+* **The limits.** Every cut each limit keeps out that a person saw was judged the same card:
+  20 of 20 under the minimum share, including 8 under a tenth of the body; 20 of 20 short bodies
+  lacking an end (item 4: the sample says compare them); 6 of 6 whose ends too many clusters hold,
+  which is every such cut on the four caselists. The contained pairs under a third that `v4`
+  newly joins were the same card 17 times in 17, confirming the rule's "contained is the same card"
+  on this sample (ac6).
+
+### The first preview's diagnosis (operator-run, 2026-10-18)
+
+`compare_card_clusters.py diagnose --after`, and `shapes`' pair counts for the twelve largest
+clusters. Bodies with a container outside their cluster, by what keeps them out:
+
+| Outcome | Short cuts | Long cuts |
+|---|---|---|
+| Every body outside that holds it also holds a passage sharing nothing with it | 126 | 1,366 |
+| Under the minimum share of the smallest witness | 235 | 1,991 |
+| … of which a tenth to a quarter / under a tenth | 81 / 154 | 1,327 / 664 |
+| Its witnesses are in more than one cluster | 50 | 625 |
+| A body in its own cluster holds it, and so does one in another | 12 | 303 |
+| Joining it would put two texts that share nothing in one cluster | 2 | 53 |
+| One cluster is its witness, within the share, and it is still apart | 0 | 132 |
+| Nine-tenths inside a body lacking one of its ends | 31 | (joined) |
+| Its ends are held by too many clusters | 6 | (not counted for long cuts) |
+
+(Summed over hsld26, hspf26, hspolicy26 and openev; t11 counted the too-many-clusters limit at
+5 of 81.)
+
+**The 132 long cuts within the rule and still apart**: 82 because another body of their cluster
+points elsewhere (a witness of its own in a third cluster, or too common), so the cluster joins
+nothing, which is the rule; 22 with nested copies as containers in several clusters; 9 whose
+container first by fingerprint is over the share; 19 of none of these, refused beside another join
+(the symmetric refusal) or placed by other rules.
+
+**Divided pairs against `v3`**: 418, 662, 567 and 41, 1,688 in all, each explained by a cut left out
+or a part joined only through a cut, except **9** (1, 6, 1 and 1) that the diagnosis reports as "no
+cut or copy links this part to the rest". On invented text, one shape gives exactly that: a long
+body nine-tenths inside another but with a word changed at both ends. `v4` finds a long cut's
+containers from either end, so such a body has none; `v3` joined the pair whenever its banding
+happened to pair the two. This is likely, not shown on the store, and is a recall loss, not a
+false join.
+
+**Pairs sharing a little in the largest clusters** (some five-word run, under three tenths of the
+smaller's): hspf26 1 and 19 of 2,701 and 1,081 pairs in its first two; hspolicy26 19 of 2,701 in
+its second; openev 50 of 210 in its largest; none in the other eight. These are the pairs a
+reading of "shares text" as "overlaps" would keep out of one cluster.
+
+### The PM's rulings on the first preview (2026-10-18)
+
+* **"Shares text" means overlaps**, at three-tenths of the smaller text's five-word runs, in the
+  passage refusal and the join guard. This supersedes the one-run reading the PM accepted earlier
+  the same day; the count of pairs sharing one or two runs was asked for to test that reading, and
+  the sample answered it.
+* **`MIN_CUT_SHARE` is a tenth.** The re-preview samples at least 20 newly joined cuts from the
+  tenth-to-a-quarter band; any judged a different card stops the merge until the PM has seen it.
+  The diagnosis reports the witness refusals the lower share added.
+* **Short bodies lacking an end are compared**, as the sample supports. **`MAX_CONTAINER_CLUSTERS`
+  stays 8.**
+* **The 9 divided pairs the diagnosis could not explain** are named by a new outcome, a body
+  nine-tenths inside one holding neither of its ends; recovering them is a later rule change, which
+  the PM is filing at p3.
+* **The 132 long cuts within the rule and apart**: accepted, no defect.
+
+### The re-preview's counts and shapes (operator-run, 2026-10-18)
+
+The rules as ruled, from the task worktree at `8065605` (rebased onto `dev` since as `ff64075`, the same rules), placed in memory and saved (step R2), then
+described (step R3). Nothing was written to the store. In every caselist
+`exact_fingerprints_changed`, `cards_only_before` and `cards_only_after` are 0, and no cluster
+absorbed more than 4 others.
+
+| | hsld26 | hspf26 | hspolicy26 | openev |
+|---|---|---|---|---|
+| Clusters, `v3` → as ruled | 11,552 → 11,595 | 9,930 → 10,234 | 18,746 → 18,741 | 5,841 → 5,806 |
+| Clusters merged into another | 501 | 438 | 779 | 109 |
+| Clusters divided | 292 | 390 | 420 | 46 |
+| Absorbing 2 / 3 to 5 / 6 or more | 443 / 29 / 0 | 404 / 17 / 0 | 696 / 40 / 0 | 104 / 2 / 0 |
+| Largest cluster, cards (first preview) | 385 (385) | 586 (589) | 665 (649) | 13 (33) |
+| Distinct texts in the largest | 22 | 72 | 75 | 9 |
+| Seconds to place | 343 | 247 | 496 | 52 |
+
+**ac5 on the re-preview: no pair sharing nothing in any of the twelve largest clusters, and no pair
+sharing a little** (the first preview had 89 of those, 50 in openev's largest). Sizes of the three
+largest clusters, in cards: hsld26 385, 331, 312; hspf26 586, 217, 191; hspolicy26 665, 648, 602;
+openev 13, 12, 12.
+
+**Pairs sharing only one or two runs, over every cluster: 4** (hsld26 2 of 15,350 pairs in one
+cluster, hspf26 1 of 14,804, hspolicy26 1 of 22,864, openev 0 of 974), against 401 in the first
+preview, and **none of them fails to overlap**. How they got there: two texts sharing one run
+overlap only when the smaller has three runs or fewer, so each of the four is a text of a few words
+in its cluster directly, one of its runs being three-tenths of it or more; none is there through a
+third body.
+
+### The re-preview's join sample, ac1 (operator-run, 2026-10-18)
+
+`sample --count 20 --ask-shape contained-under-a-third --ask-shape contained-a-third-or-more
+--after`, over all four caselists: `Drew 20 of 1827 newly joined pairs, seed 963278315`. Every pair
+was shown and judged by eye; **20 of 20 the same card, none different, none unsure** (ac1). By
+shape: 16 contained under a third of the larger, 2 contained a third or more, 2 overlapping. The
+rule would have called the 18 contained ones the same card; the person agreed with it every time.
+
+### The re-preview's band sample, the PM's check on the share (operator-run, 2026-10-18)
+
+`sample --joined-in-band a-tenth-to-a-quarter --count 20` with the three decided shapes asked,
+over all four caselists: `Drew 20 of 933 cuts newly joined a tenth to a quarter of their smallest
+witness, seed 902519467`. Each was shown beside the smallest body holding it and judged by eye:
+**20 of 20 the same card** (17 long cuts, 3 short; every one contained, under a third of the
+larger), none different, none unsure. These are the joins lowering `MIN_CUT_SHARE` from a quarter
+to a tenth let in; the PM's condition, no different-card pair among at least 20, is met.
+
+### The re-preview's diagnosis (operator-run, 2026-10-18)
+
+`compare_card_clusters.py diagnose --after`, against the placement step R2 saved. Bodies with a
+container outside their cluster, by what keeps them out, summed over the four caselists (first
+preview in brackets):
+
+| Outcome | Short cuts | Long cuts |
+|---|---|---|
+| Every body outside that holds it also holds a passage it does not overlap | 203 (126) | 3,429 (1,366) |
+| Under the minimum share of the smallest witness, all under a tenth | 114 (235) | 400 (1,991) |
+| Its witnesses are in more than one cluster | 40 (50) | 347 (625) |
+| A body in its own cluster holds it, and so does one in another | 9 (12) | 213 (303) |
+| Joining it would put two texts that do not overlap in one cluster | 8 (2) | 21 (53) |
+| One cluster is its witness, within the share, and it is still apart | 2 (0) | 96 (132) |
+| Nine-tenths inside a body that holds neither of its ends | 0 | 62 |
+| Its ends are held by too many clusters (`MAX_CONTAINER_CLUSTERS`) | 6 (6) | |
+
+**Witness refusals** (`witness_refusals`, the PM's figure): 38,776 containers refused as witnesses
+for a body they hold (hsld26 8,637, hspf26 9,348, hspolicy26 20,159, openev 632), of which
+**10,602 (27%) only by a passage a tenth to a quarter of the container**: the refusals lowering
+`MIN_CUT_SHARE` added (2,391, 2,612, 5,370, 229). They fall on 7,706 bodies and come from 5,081
+containers. Each is a body holding two passages that do not overlap, which the ruling makes no
+witness for either; it is the other side of the 933 newly joined cuts in the band, which the band
+sample judged the same card 20 of 20.
+
+**Divided pairs against `v3`**: 544, 742, 774 and 74, 2,134 in all (1,688 in the first preview),
+**none unexplained** (9 in the first preview). By the outcome that explains them: a passage the cut
+does not overlap 1,422; witnesses in several clusters 435; own cluster and another 171; within the
+rule 54; nine-tenths inside a body holding neither end 13; under the share 23; joining texts that do
+not overlap 12; ends held by too many clusters 4.
+
+### The re-parse to `docx-5` and the re-cluster on the store (operator-run, 2026-10-19)
+
+The after-merge list (A1 to A13) in `v1-e31-t20`'s report. It is the combined re-parse that closes
+`v1-e31-t15`'s ac4 and `v1-e31-t19`'s ac4, and `v1-e31-t20`'s rebuild, closing its ac1, ac4 and ac5
+on the store. It ran from `dev` with both merges (`card-fingerprint-v4`, `MIN_CUT_SHARE` 0.1,
+`MIN_OVERLAP_SHARE` 0.3), over the dev data directory. Recorded by the PM from the operator's output.
+
+**The parse and publish (A3, dev).** Every source was parsed again at `2026.10.18-docx-5`, and the
+`v4` occurrence table was written in the same run.
+
+| | hsld26 | hspf26 | hspolicy26 | openev |
+|---|---|---|---|---|
+| Sources / parsed | 4,970 / 4,860 | 4,437 / 3,033 | 3,190 / 3,159 | 104 / 102 |
+| Cards | 75,399 | 50,246 | 101,826 | 8,081 |
+| Unsupported | PDF 66, other 43, CMIR 1 | PDF 1,387, other 17 | PDF 19, other 12 | other 2 |
+| Failed | 0 | 0 | 0 | 0 |
+| Seconds | 714 | 538 | 991 | 180 |
+| Published to dev | 4,973 | 4,440 | 3,193 | 107 |
+
+**`v1-e31-t15`'s ac4, the refusal counts.** No source failed. Every source not parsed is counted as
+an unsupported format, a `.cmir` file under its own format (`CMIR`, 1 in hsld26). Forbidden XML
+characters were replaced one for one in 5 sources, 66 characters in all.
+
+**`v1-e31-t19`'s ac4, the cites before and after,** over the same sources (`docx-3` against
+`docx-5`):
+
+| | Cards | `CITE_ONLY` | No tag | With a cite | Tagged, no cite | With a short cite |
+|---|---|---|---|---|---|---|
+| hsld26 | 74,725 → 75,399 | 707 → 676 | 1,495 → 1,563 | 68,921 → 70,977 | 5,804 → 4,422 | 48,313 → 50,512 |
+| hspf26 | 49,204 → 50,246 | 408 → 390 | 2,682 → 3,038 | 35,092 → 41,696 | 14,112 → 8,550 | 31,193 → 35,638 |
+| hspolicy26 | 101,681 → 101,826 | 1,251 → 1,265 | 1,072 → 1,093 | 94,309 → 95,713 | 7,372 → 6,113 | 56,818 → 61,162 |
+| openev | 8,033 → 8,081 | 78 → 80 | 73 → 78 | 7,267 → 7,619 | 766 → 462 | 4,203 → 4,490 |
+| **Total** | 233,643 → 235,552 | 2,444 → 2,411 | 5,322 → 5,772 | 205,589 → 216,005 | 28,054 → 19,547 | 140,527 → 151,802 |
+
+Every `docx-5` figure is exactly the one `v1-e31-t19`'s report predicted, and no card is
+`ABBREVIATED`. The new rules read these cards (hsld26, hspf26, hspolicy26, openev): a cite behind a
+name 1,042, 2,866, 1,025, 256; a highlighted cite 29, 426, 34, 4; a cite through an unmapped style
+3,414, 9,473, 963, 89; a short cite with a left quote 1,679, 3,412, 4,259, 252. Of the PF sources,
+1,387 (31%) are PDFs the parser does not read.
+
+**The second run (A5)** parsed and uploaded nothing: `attempted` 0, `skipped` equal to the sources and
+`uploaded` 0 in each caselist.
+
+**Five files by eye (A6).** In the five files `v1-e31-t19`'s step 2f names, every card printed had its
+own tag, its own cite and evidence starting where the quoted text starts.
+
+**`v1-e31-t20`'s ac4, the clusters before and after on the same `docx-5` cards (A7).** In every
+caselist `exact_fingerprints_changed`, `cards_only_before` and `cards_only_after` are 0, and no cluster
+absorbed more than 4 others.
+
+| | hsld26 | hspf26 | hspolicy26 | openev |
+|---|---|---|---|---|
+| Clusters, `v3` → `v4` | 11,636 → 11,675 | 10,085 → 10,365 | 18,780 → 18,772 | 5,882 → 5,846 |
+| Clusters merged into another | 506 | 451 | 778 | 109 |
+| Clusters divided | 292 | 386 | 417 | 45 |
+| Absorbing 2 / 3 to 5 / 6 or more | 448 / 29 / 0 | 415 / 18 / 0 | 695 / 40 / 0 | 104 / 2 / 0 |
+| Largest cluster, cards, before → after | 710 → 385 | 700 → 621 | 1,609 → 665 | 22 → 13 |
+| Distinct texts in the largest, before → after | 53 → 22 | 86 → 72 | 190 → 72 | 14 → 9 |
+| Seconds | 393 | 209 | 445 | 67 |
+
+**`v1-e31-t20`'s ac5 on the store (A8).** The store's table, `card-fingerprint-v4`: no pair sharing
+nothing and no pair sharing a little in any of the twelve largest clusters (hsld26 385, 339, 314;
+hspf26 621, 222, 205; hspolicy26 665, 648, 602; openev 13, 12, 12 cards). Over every cluster with two
+or more texts, 5 pairs share only one or two runs (hsld26 4 of 15,515, hspolicy26 1 of 22,378), and
+none fails to overlap.
+
+**`v1-e31-t20`'s ac1 on the store (A9).** 20 of the 1,844 newly joined pairs, seed 988006232: 20 the
+same card (15 contained under a third of the larger, 5 a third or more), none different.
+
+**The prod publish (A11)** published all four caselists' `docx-5` directories: 4,973, 4,440, 3,193 and
+107 objects, none failed. hspf26 and openev ended `RETRIEVAL_FAILURE` on the first attempt, when the
+sign-in's credentials expired after about an hour of uploads, and were run again after a new sign-in.
+
+**The agent (A12)** runs `1.1.0.dev64`: `--check-launchd` exit 0, and its dry run shows
+`2026.10.18-docx-5`, `card-fingerprint-v4` and `to_parse` 0.
+
+**Status (A13).** Dev: in sync but for `testcl26`, as before; no removal residue, withdrawn copy,
+held upload or held parsed file. Prod: in sync but for the 2026-10-13 weeks of the three caselists
+and openev's `2026-ld` release, which prod has not yet been sent (`caselist publish`); no removal
+residue.
+
+## Card boundaries: bodies too long to be one card, and two cards stored as one (`v1-e31-t22`)
+
+Operator-run, read-only, over the dev data directory's `2026.10.18-docx-5` store on 2026-10-19:
+`scripts/count_card_boundaries.py` (all 11,154 parsed sources; every long card parsed again and
+reproduced exactly), then `scripts/sample_card_boundaries.py`, seed 20261019, 60 items, 1,259
+seconds answering. Counts only. Before any parser rule changed; whether one changes is the PM's
+ruling, recorded below when made.
+
+### Bodies over 3,000 words
+
+| | hsld26 | hspf26 | hspolicy26 | openev | Total |
+|---|---|---|---|---|---|
+| Cards in the store | 75,399 | 50,246 | 101,826 | 8,081 | 235,552 |
+| Cards over 3,000 words | 4,130 | 2,705 | 4,946 | 267 | 12,048 |
+| Distinct texts | 969 | 635 | 1,199 | 191 | 2,994 |
+| Ended by a tag in a debate style | 2,801 | 1,356 | 3,326 | 177 | 7,660 |
+| Ended by a pocket, hat or block | 686 | 703 | 1,117 | 82 | 2,588 |
+| Ended by a tag with nothing under it | 274 | 177 | 260 | 5 | 716 |
+| Ended by the end of the file | 230 | 159 | 140 | 2 | 531 |
+| Ended by a tag guessed from its formatting | 81 | 223 | 47 | 0 | 351 |
+| Ended by a cite, starting a card with no tag | 35 | 85 | 21 | 1 | 142 |
+| Ended by an analytic | 23 | 2 | 35 | 0 | 60 |
+| In a file that writes no tags | 5 | 35 | 4 | 0 | 44 |
+| In a file that uses no debate style | 52 | 55 | 10 | 0 | 117 |
+| Inside: a short line above a cite-shaped paragraph | 256 | 449 | 439 | 30 | 1,174 |
+| Inside: a cite-shaped paragraph, no short line above | 163 | 192 | 647 | 27 | 1,029 |
+| Inside: no cite, marked up (5% or more) | 3,351 | 1,397 | 3,307 | 190 | 8,245 |
+| Inside: no cite, plain prose (under 5%) | 360 | 667 | 553 | 20 | 1,600 |
+
+A cite-shaped paragraph names a source within its first 40 characters and is 2,000 characters or
+fewer, once the body has begun; a short line is 300 characters or fewer. Of the 4,844 cite-shaped
+paragraphs, 2,914 were read as small-print body and 329 as a cite the body kept.
+
+### Bodies holding two shorter bodies whole that share no text
+
+| | hsld26 | hspf26 | hspolicy26 | openev | Total |
+|---|---|---|---|---|---|
+| Distinct full texts | 16,774 | 14,561 | 25,701 | 6,400 | 63,436 |
+| Holding two that share no text | 1,212 | 1,207 | 2,023 | 118 | 4,560 |
+| Stored cards carrying them | 11,013 | 6,280 | 19,666 | 169 | 37,128 |
+| Holding two that do not overlap | 1,430 | 1,346 | 2,255 | 142 | 5,173 |
+
+"Holds" is the clusterer's (`CutIndex.containers`); 3,297 of the 4,560 hold exactly two, and in
+4,142 the smaller of the two is 64 words or more.
+
+### The sample
+
+| Stratum | Distinct texts | Asked | Answers |
+|---|---|---|---|
+| Long body: a short line above a cite-shaped paragraph | 271 | 10 | one card 8, several cards stored as one 2 |
+| Long body: a cite-shaped paragraph, no short line above | 241 | 10 | one card 10 |
+| Long body: no cite inside, marked up | 2,157 | 10 | one card 10 |
+| Long body: no cite inside, plain prose | 379 | 10 | one card 10 |
+| Two cards in one: body under 1,000 words | 1,954 | 10 | one card cut twice 10 |
+| Two cards in one: body of 1,000 words or more | 2,606 | 10 | one card cut twice 10 |
+
+No long body was answered "no cards". With ten a stratum, 2 of 10 is 6% to 51% at 95% (Wilson),
+and 0 of 10 is at most 28%; 0 of 20 at most 16%.
+
+## A bold tag above a cite that opens a card with no tag (`v1-e31-t24`)
+
+`v1-e31-t19`'s item (7): in one hspf26 file, two cards read by the bracketed cite-line rule had no
+tag, and the line above each cite was read as body; in Word each line is the card's tag in bold.
+The two lines say nothing of bold or size themselves. Their file, a Google Docs export, sets its
+document defaults to bold at 13 pt, so Word shows a tag, and the parser, which reads what a run
+says, saw an unbolded line of no size that the bold-heading rule could not take. The counts read
+bold and size both ways: as the reader gives them, and as Word shows them, with what a run
+inherits from its styles and the document's defaults.
+
+All counts are read-only over the dev data directory's `2026.10.18-docx-5` store (11,154 parsed
+sources), counts and rule names only. Every source parsed again gave back its stored cards' ranges:
+0 not reproduced, 0 without a blob.
+
+### The counts, before any rule changed
+
+`scripts/count_tag_above_bracketed_cite.py --expect-version 2026.10.18-docx-5`, in the session,
+2026-10-19, 15 seconds; `--every-source` by the operator, 2026-10-19, 353 seconds.
+
+| | hsld26 | hspf26 | hspolicy26 | openev | Total |
+|---|---|---|---|---|---|
+| Cites read by a bracketed rule | 153 | 255 | 51 | 39 | 498 |
+| **The shape: the line above one, read as body or nothing, bold as Word shows it or in a tag style** | 0 | **17** | 0 | 0 | **17** |
+| Files holding the shape | 0 | 10 | 0 | 0 | 10 |
+| Files whose defaults make text bold | 3 | 30 | 9 | 0 | 42 |
+| Lines the rule proposed to the PM would take, above any cite, in every file | 115 | 784 | 22 | 0 | 921 |
+| Files holding them | 61 | 239 | 10 | 0 | 310 |
+| Of the 921, bold only by inheritance | 6 | 60 | 5 | 0 | 71 |
+
+All 17 lines of the shape stand above a cite that opens a card with no tag, are 300 characters or
+fewer and name no source at their head; 15 are bold only by their file's defaults, and all 17 state
+no size of their own. 12 were read as body (the last paragraph of the card above) and 5 as nothing.
+Lines Word shows as bold headings, read as body or nothing and above no cite, in the 42 files with
+bold defaults: 417.
+
+### The sample
+
+`scripts/sample_cite_shapes.py --plan bold-tag --seed 20261020`, by the operator, 2026-10-19: 36
+items, 845 seconds answering. Each marked line was shown with the bold and size Word gives it.
+
+| Stratum | In the store | Asked | Answers |
+|---|---|---|---|
+| The proposed rule takes it, above a bracketed cite | 17 | 10 | the card's tag 10 |
+| The proposed rule takes it, above another cite | 904 | 10 | the card's tag 10 |
+| The proposed rule leaves it, read as body or nothing | 3,573 | 6 | the card's tag 1, not 5 |
+| A bold line above no cite, in a file whose defaults make text bold | 417 | 10 | a heading 3, not 7 |
+
+0 wrong takes of 20 is at most 16% at 95% (Wilson). Reading Word's formatting in the classifier
+everywhere would be wrong 7 times in 10 on the last stratum.
+
+### The PM's ruling (2026-10-20)
+
+The rule above any cite, with guards: only where the cite opens a card with no tag; inherited
+formatting is read inside this rule only, never by the classifier; a line with a highlighted run or
+a run in the underline or emphasis style stays body; one paragraph only (blank lines and page
+furniture stepped over, never a second text paragraph). The rule is
+`assembly-bold-tag-above-a-cite`; the parser is `2026.10.20-docx-6`, which also steps over an
+Undertag line when it looks for the body below a highlighted cite (ac4).
+
+### Before and after, over the files the rule can reach
+
+`scripts/diff_tag_above_a_cite.py`, in the session, 2026-10-20, 175 seconds: every source whose
+stored cards hold a card with no tag and a cite (2,373), parsed twice by `docx-6`, with the rule off
+and on. With the rule off every one gives back its stored cards' ranges, so the Undertag step-over
+changes none of them.
+
+| | hsld26 | hspf26 | hspolicy26 | openev | Total |
+|---|---|---|---|---|---|
+| Lines the sampled rule takes | 115 | 784 | 22 | 0 | 921 |
+| Lines the parser takes | 101 | 760 | 14 | 0 | **875** |
+| Left by the guard on a highlighted run | 9 | 21 | 8 | 0 | 38 |
+| Left by the guard on the underline or emphasis style | 5 | 2 | 0 | 0 | 7 |
+| Left because the cite is a guess a body may yet take | 0 | 1 | 0 | 0 | 1 |
+| Files with a line taken | 48 | 225 | 6 | 0 | 279 |
+| **Cards that gain a tag** | 101 | 760 | 14 | 0 | **875** |
+| **Cards above that lose their last body paragraph** | 28 | 112 | 10 | 0 | **150** |
+| Cards above that vanish: a tag whose only body was the taken line, now an analytic | 0 | 5 | 0 | 0 | 5 |
+| Cards with no tag further down whose heading path now names the taken line | 2 | 103 | 2 | 0 | 107 |
+| of which changed in nothing else | 2 | 97 | 1 | 0 | 100 |
+| **Any other card that changed** | 0 | 0 | 0 | 0 | **0** |
+| Cards unchanged | 13,541 | 14,975 | 26,267 | 5,114 | 59,897 |
+
+A card can show more than one effect: one that gains a tag can also lose its last paragraph to the
+tag of the card below. (7)'s cards 2 and 3 of 16 both read with their tags, the line that was the
+last paragraph of the card above each.
+
+### The labelled evaluation
+
+`scripts/run_parser_eval.py --tier pr-subset`, before (`docx-5`) and after (`docx-6`): every score
+the same, the gate passed both times. TAG precision 0.949 and recall 0.861; CITE precision 0.969 and
+recall 0.705. The six labelled files hold none of the shape.
+
+### The re-parse to `docx-6` (operator-run, after the merge)
+
+Run on 2026-10-21 by the steps in
+`docs/session-reports/v1-e31-t24-bold-tag-above-bracketed-cite.md`, Operator follow-ups, and read by
+the PM before the prod publish. Recorded by the PM, 2026-10-22.
+
+**The dev parse and publish (step 3) and its counts (step 4)** matched the session's expected figures
+exactly, so nothing had been imported since 2026-10-19:
+
+| Caselist | Cards | Tagged by the new rule (`bold-tag`) | No tag |
+|---|---|---|---|
+| hsld26 | 75,399 | 101 | 1,462 |
+| hspf26 | 50,241 | 760 | 2,278 |
+| hspolicy26 | 101,826 | 14 | 1,079 |
+| openev | 8,081 | 0 | 78 |
+
+Each caselist uploaded its sources plus its 3 aggregates, with 0 failed, and the parsed store held
+14 GB on this machine with both version directories present.
+
+**The second run (step 5)** attempted 0 sources and uploaded 0 objects for every caselist.
+
+**The clusters against `docx-5` (step 6):**
+
+| Caselist | Clusters before | Clusters after | Exact fingerprints changed |
+|---|---|---|---|
+| hsld26 | 11,650 | 11,650 | 18 |
+| hspf26 | 10,144 | 10,142 (2 merged into another) | 55 |
+| hspolicy26 | 18,767 | 18,767 | 4 |
+| openev | 5,846 | 5,846 | 0 |
+
+The largest cluster of each caselist was unchanged. The changed fingerprints are the cards above a
+newly tagged card that lost a stray last paragraph, and hspf26's 5 entries that became analytics.
+
+**The prod publish (step 7)**, from the dev data directory: 0 parsed, and 4,973 (hsld26), 3,193
+(hspolicy26), 4,440 (hspf26) and 107 (openev) objects uploaded, 0 failed.
+
+**The agent (step 8)** was reinstalled at `1.1.0.dev85` (`31782a8ad1b5`). `doctor` exited 0, the
+installer kept the settings, and `--check-launchd` exited 0. Its keychain dry run listed 17 archives
+(hsld26, 1 to fetch) and exited 0. An agent run on the morning of 2026-10-22 had failed with
+`KeyringError` reading the caselist token after the earlier reinstall; after the `dev85` reinstall
+the keychain read under the agent's environment succeeded (the dry run above), and the
+kickstarted run of 2026-10-22 (`20261022T052044Z`) completed: 4 archives downloaded, 2,628 sources
+parsed and 12,597 skipped, 0 failed, 51,998 cards, 2,637 parsed-store objects uploaded, and the
+search index `767b9c7c056b80cb` (52,059 documents) published
+([caselist-sync-runs.md](caselist-sync-runs.md)).
+
+`2026.10.18-docx-5` was retired in the dev bucket and on this machine on 2026-10-22
+([parsed-card-store.md](parsed-card-store.md#retired-so-far)).

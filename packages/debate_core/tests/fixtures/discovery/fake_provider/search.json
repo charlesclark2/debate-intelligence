@@ -1,0 +1,17 @@
+{
+  "query": {"query": "methane leakage", "filters": {"max_results": 2}},
+  "exchanges": [
+    {
+      "request": {
+        "method": "GET",
+        "url": "https://fake-discovery.example.org/v1/search?q=methane+leakage&limit=2&mailto=coach%40example.org"
+      },
+      "response": {
+        "status": 200,
+        "headers": {"content-type": "application/json"},
+        "body_file": "search.body.json"
+      }
+    }
+  ],
+  "expected_results_file": "search.expected.json"
+}

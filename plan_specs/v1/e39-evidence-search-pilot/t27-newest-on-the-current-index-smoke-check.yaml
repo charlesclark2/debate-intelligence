@@ -1,0 +1,77 @@
+# TASK v1-e39-t27-newest-on-the-current-index-smoke-check - A smoke check runs publish --newest on the current index against an installed build
+# Epic: E39 — Team Evidence Search (Student Pilot) | Release: v1.7 (Team evidence search pilot) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e39-t27-newest-on-the-current-index-smoke-check
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.7
+    debate/epic: v1-e39-evidence-search-pilot
+  annotations:
+    debate/title: "A smoke check runs publish --newest on the current index against an installed build"
+spec:
+  # Filed by the PM, 2026-10-31, from v1-e39-t25's Follow-up work (the PM's review, 2026-10-31).
+  description: >-
+    v1-e39-t25 made `tub index publish --newest` on the index `current.json` already names write
+    only `checked-against.json` (when what it read differs from the record) or refuse with
+    `SEARCH_INDEX_ALREADY_CURRENT`, never the object, manifest or pointer. Its tests are
+    in-process; no smoke check runs it on an installed build (agreement 5). Add one to
+    tests/smoke/test_tub_index_smoke.py, in its style and on the S3 stand-in: build, publish,
+    add a suppression entry that stops nothing, rebuild, `--newest` writes only the record
+    (object versions counted on the stand-in), and `--newest` again is refused. The existing
+    checks' pinned key sets stay as they are.
+  priority: 3
+  constraints:
+    packages: [tests/smoke]
+    forbidden:
+      - Network or AWS access in a test
+      - A pinned smoke key set changed
+  context:
+    - kind: TaskRef
+      name: v1-e39-t25-identical-rebuild-skipped-and-newest-records
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        On the checkout's script and an installed build, `--newest` on the current index
+        writes only `checked-against.json` under a longer list and is refused under the same
+        list, with no new version of the object, manifest or pointer, shown failing first
+        against a break.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e39-t27-newest-on-the-current-index-smoke-check-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.7
+    debate/epic: v1-e39-evidence-search-pilot
+spec:
+  description: >-
+    A smoke check runs publish --newest on the current index against an installed build.
+  goalRef:
+    name: v1-e39-t27-newest-on-the-current-index-smoke-check
+  graph:
+    nodes:
+      - id: newest-on-the-current-index-smoke-check
+        kind: Task
+        name: Newest smoke check
+        description: >-
+          A smoke check runs publish --newest on the current index against an installed
+          build.
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Newest smoke check tests pass
+            command: uv
+            args: [run, pytest, tests/smoke, -k, tub_index]
+status:
+  phase: Pending

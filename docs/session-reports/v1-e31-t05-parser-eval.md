@@ -960,3 +960,39 @@ section: the blind file's share of rows changed from its pre-label beside the re
 files went round (Numbers, `check --repair`, import), in the guide's last working-reference
 section. The page refuses a file whose worksheet was changed in a spreadsheet or whose `.numbers`
 file is in the folder, so the two routes never write over each other.
+
+## PM record, 2026-10-21
+
+Added by the PM. Nothing above is changed, and this section is not a review.
+
+* **ac4, the baseline:** written on 2026-10-20 on `2026.10.18-docx-5` and merged (#364), with its
+  report at `docs/data/parser-eval-2026-10.md`. The pr-subset gate holds every unit's F1 within
+  0.01 of it from then on.
+* **ac3, targets met or ticketed:** the baseline missed several targets (Verbatim TAG 0.950,
+  CITE 0.751 with recall 0.623, EVIDENCE 0.934, span F1 0.971; non-Verbatim CITE 0.796;
+  wiki-converted files; Public Forum highlight F1 0.759). They are ticketed by
+  [`v1-e31-t31-labelled-evaluation-gaps`](../../plan_specs/v1/e31-debate-file-parsing/t31-labelled-evaluation-gaps.yaml),
+  filed by the PM on 2026-10-21. With that ticket, ac3's "met or ticketed" is met.
+* **Still open:** ac5 (the corpus health report under docs/data) and ac6 (deleting the
+  hand-unpacked archives once the evaluation no longer needs them) are the operator's, as before.
+  The Goal stays `InProgress` until they are recorded.
+
+## Operator records (recorded by the PM, 2026-11-01)
+
+Added by the PM. Nothing above is changed, and this section is not a review.
+
+| Criterion | Was | Now | Record |
+|---|---|---|---|
+| ac5, the corpus health report | NOT RUN | PASS | 2026-10-31, `scripts/parser_corpus_health.py` on the Mac over the hsld26 weekly snapshots and the 2026-27 Policy camp files, parser `2026.10.27-docx-7`: 2,162 of 2,163 distinct `.docx` parsed, **0.9995** (target 0.98, met); the one failure counted by reason (`UNSUPPORTED_FORMAT`); 46 non-`.docx` counted apart. Counts only, read by the PM, committed as `docs/data/parser-corpus-health.md` |
+
+ac5 passes. The Goal stays `InProgress` for ac3, the corrected labels.
+
+## Operator records (recorded by the PM, 2026-11-01)
+
+Added by the PM. Nothing above is changed, and this section is not a review.
+
+| Criterion | Was | Now | Record |
+|---|---|---|---|
+| ac3: targets recorded and met or ticketed | Recorded: PASS. Met or ticketed: open | PASS | The targets the baseline missed are ticketed by `v1-e31-t31-labelled-evaluation-gaps`, filed 2026-10-21, as the PM's close-out of that date recorded; a target met or ticketed is what ac3 asks. The PM's 2026-11-01 record named ac3 as still open in error |
+
+ac6, deleting the hand-unpacked archives once the evaluation no longer needs them, is the one criterion left: `v1-e31-t31` still reads them. The Goal stays `InProgress` for it.

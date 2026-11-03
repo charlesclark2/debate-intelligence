@@ -71,6 +71,39 @@ and team code all over again. A manifest written after the removal has no such r
 give a suppressed member none, and `caselist remove` rewrites the manifests it touches), so this
 only fires for a manifest the removal never reached, and the fix is to run the removal on this
 machine.
+
+A stored row at a path a removal holds (`v1-e30-t13`), in a snapshot the hold covers, withholds the
+manifest the same way (:attr:`SnapshotPlan.held_rows`, `v1-e30-t21`), with the same outcome and the
+same code. Its bytes are not on the list, so the row is the requester's later upload at the removed
+path, and uploading the manifest would publish that path. This build's importer never writes such a
+row; a build from before `v1-e30-t13` imported one, because it reads no hold. Running the same
+removal again takes the row out.
+
+So does a skipped member's row at a held path, such as a symbolic link, in a snapshot the hold
+covers (:attr:`SnapshotPlan.held_skipped_rows`; the PM's amendment of 2026-10-18 to `v1-e30-t23`).
+Its path names the school and the team, and the link's body is often the removed file's name. A
+build from before `v1-e30-t22` writes one, and before this task the publisher published it. It has
+no bytes, so nothing else of it changes: the same outcome, the same code, and the fix the message
+names is the same removal run again.
+
+## Bytes only held rows name are not uploaded
+
+A held row's bytes are the requester's later upload at the removed path, and a removal is a privacy
+request: they do not go to the bucket on a held row's account (`v1-e30-t22`, the PM's ruling of
+2026-10-16). So a digest that held rows name and no other row of the same manifest does is left out
+of that snapshot's plan (:func:`held_only_digests`, :attr:`SnapshotPlan.held_back`), whatever the
+bucket holds: it is neither uploaded nor verified, and no count includes it. A digest an unheld row
+also names, another team's copy at its own path or a copy whose disclosure alone was withdrawn, is
+planned by the table above as before, so another team's copy is never held back; and a later
+snapshot whose own row names it uploads it as its own. The manifest is withheld for the held row as
+before, with the same outcome, code and held count.
+
+Such bytes are still in this machine's blob store, put there by the build that imported the row,
+so every comparison of this machine with the bucket leaves them out too: `caselist status` does not
+expect them in the bucket, and `store sync` does not push them. Nor does it push a manifest this
+module's plan withholds (`v1-e30-t25`): a push asks :attr:`SnapshotPlan.withholding_rows` of each
+manifest it would send, through
+:func:`~debate_core.application.caselist.publish_service.withheld_manifest_reason`.
 """
 
 from __future__ import annotations
@@ -85,9 +118,15 @@ from typing import Final
 
 from debate_core.application.caselist.import_service import STORED_CLASSIFICATIONS
 from debate_core.application.caselist.manifest import FULL_ARCHIVE_DIRECTORY, MANIFEST_DIRECTORY
+from debate_core.application.caselist.pipeline import hold_on_skipped_member
 from debate_core.application.errors import DomainError
 from debate_core.application.ports.evidence_store import ObjectKey, validate_object_key
-from debate_core.application.ports.suppression import SuppressionState, camp_path_scope, disclosure_digest
+from debate_core.application.ports.suppression import (
+    PathHoldEntry,
+    SuppressionState,
+    camp_path_scope,
+    disclosure_digest,
+)
 from debate_core.domain import SHA256_HEX_PATTERN, Sha256Hex
 from debate_core.domain.caselist import CASELIST_SLUG_PATTERN
 
@@ -109,14 +148,21 @@ __all__ = [
     "digest_of_local_blob_key",
     "full_archive_date",
     "full_archive_snapshot",
+    "HeldRow",
+    "held_only_digests",
+    "held_rows",
+    "held_skipped_rows",
     "local_blob_key",
     "manifest_prefix",
     "remote_source_prefix",
+    "skipped_paths_in_manifest",
+    "snapshot_date",
     "snapshot_manifest_key",
     "snapshot_of_manifest_key",
     "source_key",
     "source_prefix",
     "sources_in_manifest",
+    "stored_row_hold",
     "stored_rows_in_manifest",
     "suppressed_rows",
     "validate_publish_target",
@@ -384,6 +430,28 @@ def stored_rows_in_manifest(lines: Iterable[str]) -> tuple[tuple[Sha256Hex, str]
     return tuple(rows)
 
 
+def skipped_paths_in_manifest(lines: Iterable[str]) -> tuple[str, ...]:
+    """The path of every skipped member row, in file order (`v1-e30-t22`).
+
+    What the held-path check of a member that was never read looks at: a symbolic link at a removed
+    file's path still names it. Like :func:`stored_rows_in_manifest`, a row this cannot read is not
+    one.
+    """
+    paths: list[str] = []
+    for line in lines:
+        try:
+            row = json.loads(line) if line.strip() else None
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(row, dict):
+            continue
+        fields: dict[str, object] = row  # pyright: ignore[reportUnknownVariableType]
+        path = fields.get("path")
+        if fields.get("kind") == "member" and fields.get("skip_reason") is not None and isinstance(path, str):
+            paths.append(path)
+    return tuple(paths)
+
+
 @dataclass(frozen=True, slots=True)
 class LocalSnapshot:
     """One snapshot as this machine holds it: its manifest and the sources that manifest names."""
@@ -394,6 +462,8 @@ class LocalSnapshot:
     manifest_size: int
     stored_rows: tuple[tuple[Sha256Hex, str], ...] = ()
     """`(sha256, path)` of every stored member row, for the suppression check. Never logged."""
+    skipped_paths: tuple[str, ...] = ()
+    """The path of every skipped member row, for the held-path check (`v1-e30-t22`). Never logged."""
 
     @property
     def manifest_key(self) -> ObjectKey:
@@ -415,6 +485,103 @@ def suppressed_rows(local: LocalSnapshot, suppression: SuppressionState) -> tupl
         if suppression.suppresses(digest, disclosure=disclosure_digest(scope, path))
     }
     return tuple(sorted(stopped))
+
+
+@dataclass(frozen=True, slots=True, order=True)
+class HeldRow:
+    """A stored manifest row at a path a removal holds: its digest, and the request holding the path."""
+
+    sha256: Sha256Hex
+    request_id: str
+
+
+def held_rows(local: LocalSnapshot, suppression: SuppressionState) -> tuple[HeldRow, ...]:
+    """The local manifest's stored rows at a path a removal holds, sorted by digest, once each.
+
+    A row is held when a removal holds its caselist path and the snapshot is dated after the removed
+    file first appeared there: the rule the importer refuses an upload by
+    (:meth:`~debate_core.application.ports.suppression.SuppressionState.path_hold`, `v1-e30-t13`).
+    A row the list already stops is :func:`suppressed_rows`', not this. A camp release's rows are at
+    no caselist path, so none is held. Where one digest is held at two paths, the first hold found
+    names it.
+    """
+    held: dict[Sha256Hex, str] = {}
+    for digest, hold in _holds_of_stored_rows(local, suppression):
+        if hold is not None:
+            held.setdefault(digest, hold.request_id)
+    return tuple(HeldRow(sha256=digest, request_id=held[digest]) for digest in sorted(held))
+
+
+def held_only_digests(local: LocalSnapshot, suppression: SuppressionState) -> frozenset[Sha256Hex]:
+    """The digests held rows of the local manifest name and none of its other rows does (`v1-e30-t22`).
+
+    Not uploaded: see "Bytes only held rows name are not uploaded" in the module docstring. A row the
+    list stops by its disclosure is another row here, as it is not held: the bytes of a withdrawn
+    copy are uploaded as they always were.
+    """
+    held: set[Sha256Hex] = set()
+    unheld: set[Sha256Hex] = set()
+    for digest, hold in _holds_of_stored_rows(local, suppression):
+        (held if hold is not None else unheld).add(digest)
+    return frozenset(held - unheld)
+
+
+def held_skipped_rows(local: LocalSnapshot, suppression: SuppressionState) -> tuple[str, ...]:
+    """The request holding the path of each skipped member row at a held path, sorted (`v1-e30-t22`).
+
+    One per row: the rows this build's importer withholds
+    (:func:`~debate_core.application.caselist.pipeline.hold_on_skipped_member`), which an earlier
+    build wrote. A camp release's rows are at no caselist path, so none is held.
+    """
+    snapshot = snapshot_date(local.snapshot)
+    caselist = None if local.caselist == OPENEV else local.caselist
+    holds = (
+        hold_on_skipped_member(suppression, caselist=caselist, path=path, snapshot=snapshot)
+        for path in local.skipped_paths
+    )
+    return tuple(sorted(hold.request_id for hold in holds if hold is not None))
+
+
+def stored_row_hold(
+    caselist: str, snapshot: str, digest: Sha256Hex, path: str, suppression: SuppressionState
+) -> PathHoldEntry | None:
+    """The hold on one stored manifest row's path, `None` where none covers it.
+
+    The one rule every question about a held stored row asks: :func:`held_rows`,
+    :func:`held_only_digests` and, through them, the publisher, `caselist status` and `store sync`;
+    and the parsed card store, for each disclosure of a source (`v1-e31-t26`). The list's own rows
+    come first: a row the list stops is :func:`suppressed_rows`', never held. A camp release's rows
+    are at no caselist path, and a snapshot of no date is covered by no hold.
+    """
+    day = snapshot_date(snapshot)
+    if caselist == OPENEV or day is None:
+        return None
+    if suppression.suppresses(digest, disclosure=disclosure_digest(caselist, path)):
+        return None
+    return suppression.path_hold(caselist=caselist, path=path, snapshot=day)
+
+
+def _holds_of_stored_rows(
+    local: LocalSnapshot, suppression: SuppressionState
+) -> list[tuple[Sha256Hex, PathHoldEntry | None]]:
+    """Each stored row's digest and the hold on its path (:func:`stored_row_hold`)."""
+    return [
+        (digest, stored_row_hold(local.caselist, local.snapshot, digest, path, suppression))
+        for digest, path in local.stored_rows
+    ]
+
+
+def snapshot_date(snapshot: str) -> date | None:
+    """The date a caselist snapshot's name states: a weekly's `2026-09-15`, a complete archive's
+    `full/2026-10-06`. `None` for any other name, such as a camp release's."""
+    full = full_archive_date(snapshot)
+    if full is not None:
+        return full
+    try:
+        parsed = date.fromisoformat(snapshot)
+    except ValueError:
+        return None
+    return parsed if parsed.isoformat() == snapshot else None
 
 
 # ------------------------------------------------------------------------------------------------
@@ -472,6 +639,27 @@ class SnapshotPlan:
     manifest_action: ManifestAction
     suppressed_rows: tuple[Sha256Hex, ...] = ()
     """Digests of stored rows in the local manifest the suppression list stops; any withholds it."""
+    held_rows: tuple[HeldRow, ...] = ()
+    """Stored rows at a path a removal holds (`v1-e30-t21`); any withholds it, as a suppressed row does."""
+    held_back: tuple[Sha256Hex, ...] = ()
+    """Digests only held rows name, sorted: left out of :attr:`sources`, so never uploaded (`v1-e30-t22`)."""
+    held_skipped_rows: tuple[str, ...] = ()
+    """The request holding the path of each skipped member row at a held path, sorted (`v1-e30-t23`);
+    any withholds the manifest, as a held stored row does."""
+
+    @property
+    def withholding_rows(self) -> tuple[str, ...]:
+        """Every row that withholds the manifest, sorted, once each.
+
+        A stored row by its digest, suppressed or held; a skipped member's row at a held path, which
+        has no digest, by the request holding the path (`v1-e30-t23`). The publisher's rule: any
+        withholds the manifest. `caselist status` asks this same property for the hint it gives a
+        manifest mismatch (`v1-e30-t19`), so a change to what withholds a manifest is made here, and
+        the hint follows it.
+        """
+        return tuple(
+            sorted({*self.suppressed_rows, *(row.sha256 for row in self.held_rows), *self.held_skipped_rows})
+        )
 
     def of(self, *actions: SourceAction) -> tuple[PlannedSource, ...]:
         wanted = set(actions)
@@ -537,7 +725,10 @@ def build_publish_plan(
         if local.caselist != caselist:
             raise ValueError(f"snapshot {local.snapshot} belongs to {local.caselist}, not {caselist}")
         sources: list[PlannedSource] = []
+        held_back = held_only_digests(local, suppression)
         for source in local.sources:
+            if source.sha256 in held_back:
+                continue
             key = source_key(caselist, local.snapshot, source.sha256)
             action = _source_action(source, key, local_blobs, remote, suppression, planned_uploads)
             if action is SourceAction.UPLOAD:
@@ -561,6 +752,9 @@ def build_publish_plan(
                 manifest_size=local.manifest_size,
                 manifest_action=ManifestAction.VERIFY if manifest_key in remote else ManifestAction.UPLOAD,
                 suppressed_rows=suppressed_rows(local, suppression),
+                held_rows=held_rows(local, suppression),
+                held_back=tuple(sorted(held_back)),
+                held_skipped_rows=held_skipped_rows(local, suppression),
             )
         )
     return PublishPlan(caselist=caselist, snapshots=tuple(plans))

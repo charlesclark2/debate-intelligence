@@ -30,6 +30,7 @@ from debate_core.application.errors import (
     reported_error_code,
 )
 from debate_core.application.ports.caselist_source import ArchiveUnavailable, CaselistAuthExpired
+from debate_core.integrations.local.sqlite_db import DatabaseFromNewerBuild
 
 #: Failures a stage of `caselist pull` records instead of raising, and the code each is recorded
 #: under, written by hand from the class name.
@@ -101,3 +102,24 @@ def test_a_removal_this_machine_refused_part_way_is_a_retrieval_failure() -> Non
             raise TakedownPreflightFailed("debate-dev-evidence-removal", "delete a blob", cause) from cause
     except TakedownPreflightFailed as stopped:
         assert exit_code_for(stopped) is ExitCode.RETRIEVAL_FAILURE
+
+
+def test_a_database_a_newer_build_migrated_is_the_operators_to_fix_and_never_a_retrieval_failure() -> None:
+    """`v1-e41-t01`: its own code, and exit `1` whether it ends the command or a run records it.
+
+    Running the command again meets the same database, so it is not a `3`: syncing the checkout or
+    installing the newer build fixes it. Before this task it was an unmodelled exception, a `70`.
+    """
+    newer = DatabaseFromNewerBuild(database_version=31, build_version=30)
+    failure = CommandFailure.from_exception(newer)
+
+    assert reported_error_code(newer) == error_code_for(newer) == "DATABASE_FROM_NEWER_BUILD"
+    assert exit_code_for(newer) is ExitCode.DOMAIN_FAILURE
+    assert exit_code_for_failure_codes(["DATABASE_FROM_NEWER_BUILD"]) is ExitCode.DOMAIN_FAILURE
+    assert (
+        exit_code_for_failure_codes(["STORE_UNAVAILABLE", "DATABASE_FROM_NEWER_BUILD"])
+        is ExitCode.DOMAIN_FAILURE
+    )
+    assert (failure.code, failure.exit_code) == ("DATABASE_FROM_NEWER_BUILD", ExitCode.DOMAIN_FAILURE)
+    assert failure.details == {"database_version": 31, "build_version": 30}
+    assert failure.hint == newer.hint

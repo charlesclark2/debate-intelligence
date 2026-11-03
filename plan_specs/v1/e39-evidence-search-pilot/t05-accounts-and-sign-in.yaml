@@ -1,0 +1,135 @@
+# TASK v1-e39-t05-accounts-and-sign-in - Accounts and sign-in: the session flow, roles, and the coach's tub users commands
+# Epic: E39 — Team Evidence Search (Student Pilot) | Release: v1.7 (Team evidence search pilot) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e39-t05-accounts-and-sign-in
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.7
+    debate/epic: v1-e39-evidence-search-pilot
+  annotations:
+    debate/title: "Accounts and sign-in: the session flow, roles, and the coach's tub users commands"
+spec:
+  # Filed by the PM, 2026-10-19, from Charlie's direction of 2026-10-19 (a student search pilot before the
+  # semester ends, on Chromebooks, signing in with a username, password and 2FA, outside the school's systems).
+  # PM ruling 2026-10-20 (ac5 re-run): the account page no longer replaces the authenticator; for a new
+  # phone it sends the student to the coach for a reset (no self-service replacement in the pilot).
+  description: >-
+    The application side of ADR-0019's sign-in. In debate_api: the authorization-code flow with
+    PKCE against the v1-e39-t04 pool's managed login, the token exchange on the server, an
+    encrypted HttpOnly, Secure, SameSite=Lax session cookie, sign-out (local and the pool's),
+    the session lifetimes ADR-0019 sets, CSRF protection on every state-changing request, and a
+    session required on every route except the health check and the sign-in callback. Roles come
+    from the pool's groups: `student` and `coach`. In debate_cli, a coach-only `tub users`
+    group: `add` (username and role; shows a temporary password once and never logs it), `list`
+    (usernames and roles only), `reset` (a new temporary password, and the second factor cleared
+    so the student enrols again), `disable` and `remove`. A username is 3 to 32 lowercase
+    letters, digits and dots, and never an email address. A guide for the coach and the
+    students: first sign-in, choosing an authenticator app, adding the optional backup email,
+    and what to do when a phone is lost or replaced.
+    (PM amendment 2026-10-19, from ADR-0019 and v1-e39-t01's PM questions.) Routes without a
+    session are `/healthz`, `/auth/callback`, `/signed-out` and `/static/` (content-hashed
+    assets with no data) and no others. No session starts until the account has an authenticator
+    registered: a student who chose email at managed login's first setup is sent to the app's
+    own authenticator enrolment page. An account page lets a student add, verify and remove the
+    backup email and, for a new phone, sends the student to the coach for a reset. The fallback for a debater with no phone (PM
+    ruling, 2026-10-19): the coach adds the account to an `email-second-factor` group (`tub
+    users add --group` or a `tub users` subcommand), and for that account alone a verified email
+    is accepted as the only second factor. `debate_api` moves from the boto3 contract's
+    even-indirectly list to the direct form the CLI uses. The session follows ADR-0019 (d): an
+    AES-GCM encrypted `__Host-` cookie, revalidated at most every five minutes, with its
+    lifetimes and CSRF rules.
+  priority: 1
+  constraints:
+    # (PM amendment 2026-10-19, in the session's PM notes) infrastructure/modules/evidence_search: the
+    # email-second-factor group, and TubAccounts' AdminRemoveUserFromGroup, with the mocked test
+    # listing its Cognito actions exactly. docs/runbooks: step 10's account becomes `tub users add`.
+    # (Session deviation for the PM to rule on, 2026-10-19) debate_core.integrations,
+    # packages/debate_core/tests, tests/architecture and tests/scripts: ADR-0019 (Where the code goes)
+    # puts the Cognito and audit adapters in debate_core.integrations and moves debate_api to the
+    # direct boto3 contract, which its contract test names; debate-core's new `tub` extra changes the
+    # CLI's pinned extras, which tests/scripts/test_stamp_build.py checks.
+    packages: [debate_api, debate_cli, debate_core.application, debate_core.integrations, packages/debate_api/tests, packages/debate_cli/tests, packages/debate_core/tests, docs/guides, docs/runbooks, infrastructure/modules/evidence_search, tests/architecture, tests/scripts, pyproject.toml]
+    forbidden:
+      - A password, temporary password, token or TOTP secret in a log, error message, report or commit
+      - Self sign-up, or any Google or school identity provider
+      - Card text, a school, team code, file name, student name, username or email in any fixture, log, report or commit (synthetic values only)
+      - Network or AWS access in any test
+  context:
+    - kind: TaskRef
+      name: v1-e39-t04-pilot-infrastructure
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        An authorization matrix over every route (student and coach, each with a valid,
+        expired, tampered or absent session) shows that only the health check and the
+        callback answer without a session and that coach routes refuse a student, by test.
+    - id: ac2
+      description: >-
+        The callback refuses a mismatched state or PKCE verifier and an ID token from
+        another pool or client, by tests with locally signed tokens.
+    - id: ac3
+      description: >-
+        `tub users` calls the pool's administrator API with the expected parameters
+        (stubbed), never shows a password except `add`'s and `reset`'s one display, and
+        refuses an email-shaped username, by test.
+    - id: ac4
+      description: >-
+        docs/guides/evidence-search-accounts.md walks the coach and a student through first
+        sign-in, TOTP, the backup email and a reset; `scripts/check_command_blocks.py` and
+        `scripts/check_links.py` pass.
+    - id: ac5
+      description: >-
+        On dev, the operator signs in as a synthetic user, enrols TOTP, signs out, and a
+        reset forces enrolment again (operator follow-up, recorded in the report).
+    # PM ruling 2026-10-20 (ac5 re-run): "replaces the authenticator" became "for a new phone, sends
+    # the student to the coach for a reset (no self-service replacement in the pilot)".
+    - id: ac6
+      description: >-
+        (PM amendment 2026-10-19) The authorization matrix covers exactly the four
+        session-free routes; an account with no authenticator gets no session and is sent to
+        enrolment unless it is in `email-second-factor` with a verified email; the account
+        page adds, verifies and removes the backup email and, for a new phone, sends the student
+        to the coach for a reset (no self-service replacement in the pilot); a
+        disabled account's session ends within five minutes; each by test shown failing
+        first.
+status:
+  phase: Succeeded
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e39-t05-accounts-and-sign-in-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.7
+    debate/epic: v1-e39-evidence-search-pilot
+spec:
+  description: >-
+    Build the sign-in flow, session, roles and CSRF in debate_api, and the coach's account
+    commands in debate_cli.
+  goalRef:
+    name: v1-e39-t05-accounts-and-sign-in
+  graph:
+    nodes:
+      - id: sign-in
+        kind: Task
+        name: Accounts and sign-in
+        description: >-
+          Build the sign-in flow, session, roles and CSRF in debate_api, and the coach's
+          account commands in debate_cli.
+        estimatedEffort: 5h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Sign-in and account tests pass
+            command: uv
+            args: [run, pytest, packages/debate_api/tests, packages/debate_cli/tests, -k, auth or session or tub_users]
+status:
+  phase: Pending

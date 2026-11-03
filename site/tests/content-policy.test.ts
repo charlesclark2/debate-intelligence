@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { AnnouncementField, ContentPage, SiteSettings } from '@/lib/content'
 import {
@@ -6,15 +6,18 @@ import {
   loadGuardedContent,
   loadPages,
   loadSiteSettings,
+  PLACEHOLDER_PATTERN,
   parsePage,
 } from '@/lib/content'
 import type { MediaConsent } from '@/lib/media-consent'
 import {
   consentGuardedContent,
   consentPlaceholders,
+  REVIEWED_SINGLE_WORDS,
   consentedStudentSchema,
   isStale,
   loadMediaConsent,
+  seasonEnd,
   seasonStart,
 } from '@/lib/media-consent'
 import {
@@ -25,10 +28,11 @@ import {
   resetPolicyReporting,
   unreviewedNames,
 } from '@/lib/publishing-policy'
+import { announcementsGuardedContent } from '@/lib/announcements'
 import { resultsGuardedContent } from '@/lib/results'
 import { loadSchedule, scheduleGuardedContent } from '@/lib/tournaments'
 
-import { STUDENTS, contentWith, withConsent } from './content-fixture'
+import { STUDENTS, contentWith, replaceOnce, shippedContentWith, withConsent } from './content-fixture'
 
 /**
  * The content guard (v1-e36-t04 acceptance criterion 3).
@@ -43,6 +47,13 @@ import { STUDENTS, contentWith, withConsent } from './content-fixture'
 
 const PROD: NodeJS.ProcessEnv = { ...process.env, SITE_ENV: 'prod' }
 const DEV: NodeJS.ProcessEnv = { ...process.env, SITE_ENV: 'dev' }
+
+/**
+ * The season the guard's own cases are written for, set on the manifest they check, so they hold
+ * whatever season the shipped manifest is in: at a season change only the content files change
+ * (v1-e37-t11).
+ */
+const CASE_SEASON = '2026-27'
 
 const settings = loadSiteSettings()
 const consent = loadMediaConsent()
@@ -68,6 +79,73 @@ function messages(markdown: string, overrides: Partial<MediaConsent> = {}): stri
   return check(markdown, overrides)
     .errors.map((finding) => finding.message)
     .join('\n')
+}
+
+/**
+ * What must hold of every image entry in a content directory's consent manifest, whichever
+ * photographs it lists: a consent reference that has been filled in, and consent for the
+ * manifest's season, confirmed inside it. The manifest's loader already refuses an entry with no
+ * reference or no season (src/lib/media-consent.ts); this adds that they are this season's, as
+ * the student entries' check below does. A problem names the image by its path, never by who it
+ * shows (v1-e37-t11).
+ */
+function imageEntryProblems(directory?: string): string[] {
+  const manifest = loadMediaConsent(directory)
+  const lastDay = `${Number(manifest.season.slice(0, 4)) + 1}-07-31`
+  return manifest.images.flatMap((image) => [
+    ...(new RegExp(PLACEHOLDER_PATTERN.source).test(image.consentReference)
+      ? [`image ${image.path}: its consent reference is still to come`]
+      : []),
+    ...(image.season !== manifest.season
+      ? [`image ${image.path}: its consent is for season ${image.season}, not ${manifest.season}`]
+      : isStale(image, manifest.season) || image.dateChecked > lastDay
+        ? [`image ${image.path}: its consent was last checked ${image.dateChecked}, outside season ${manifest.season}`]
+        : []),
+  ])
+}
+
+/** An image entry for the current season, consented, with invented values. */
+function consentedImage(seasonYear: number): Record<string, string | undefined> {
+  return {
+    path: '/photos/planted-orientation.jpg',
+    consentReference: 'MC-PLANT-001',
+    depicts: '2 team members, both covered',
+    season: `'${seasonYear}-${String(seasonYear + 1).slice(2)}'`,
+    dateChecked: `${seasonYear}-09-18`,
+  }
+}
+
+/**
+ * Adds an image entry at the head of the manifest's `images:` list, whether it holds entries or
+ * is `[]`. A field set to undefined is left out.
+ */
+function withImage(fields: Record<string, string | undefined>): (source: string) => string {
+  return (source) => {
+    const entry = Object.entries(fields)
+      .filter(([, value]) => value !== undefined)
+      .map(([key, value], index) => `${index === 0 ? '  - ' : '    '}${key}: ${value}`)
+      .join('\n')
+    const opened = source.replace(/^images: \[\]$/m, 'images:')
+    if (!/^images:$/m.test(opened)) {
+      throw new Error('withImage: no `images:` list in content/media-consent.yaml')
+    }
+    return opened.replace(/^images:$/m, `images:\n${entry}`)
+  }
+}
+
+/** Every publishing-policy error in a content directory, as the build's guard reports them. */
+function guardErrors(directory: string): string[] {
+  return checkPublishingPolicy({
+    pages: [
+      ...loadGuardedContent(directory),
+      ...scheduleGuardedContent(directory),
+      ...resultsGuardedContent(directory),
+      ...announcementsGuardedContent(directory),
+      ...consentGuardedContent(directory),
+    ],
+    settings: loadSiteSettings(directory),
+    consent: loadMediaConsent(directory),
+  }).errors.map((error) => `${error.location}: ${error.message}`)
 }
 
 beforeEach(() => {
@@ -128,16 +206,83 @@ describe('images and media consent', () => {
         path: '/photos/orientation.jpg',
         consentReference: 'MC-2026-014',
         depicts: '2 team members, both covered',
-        season: consent.season,
+        season: CASE_SEASON,
         dateChecked: '2026-09-18',
       },
     ]
-    expect(check('![Two debaters](/photos/orientation.jpg)', { images }).errors).toEqual([])
+    expect(check('![Two debaters](/photos/orientation.jpg)', { season: CASE_SEASON, images }).errors).toEqual([])
   })
 
   it('finds an image referenced from HTML as well as from Markdown', () => {
     expect(referencedImages('<img src="/photos/a.jpg" alt="">')).toEqual(['/photos/a.jpg'])
     expect(referencedImages('![alt](/photos/b.jpg?v=2)')).toEqual(['/photos/b.jpg'])
+  })
+})
+
+/**
+ * A photograph publishes only against a current-season consent form (docs/policies/
+ * website-publishing.md, Photos and media consent 4), so an image a page shows whose entry has
+ * lapsed is an error, as a named student's lapsed entry is: it fails a prod build, and a dev build
+ * prints it with the guard's other problems. Until v1-e37-t12 it was only a warning in both. The
+ * image path and reference are invented.
+ */
+describe('an image whose consent has lapsed', () => {
+  const PATH = '/photos/planted-orientation.jpg'
+  const consented = {
+    path: PATH,
+    consentReference: 'MC-PLANT-001',
+    depicts: '2 team members, both covered',
+    season: CASE_SEASON,
+    dateChecked: '2026-09-18',
+  }
+  const lapses = [
+    [
+      'consent for another season',
+      { season: '2025-26', dateChecked: '2025-09-18' },
+      /references the image \/photos\/planted-orientation\.jpg, whose consent entry is for season 2025-26, checked 2025-09-18/,
+    ],
+    [
+      'consent not checked this season',
+      { dateChecked: '2026-07-04' },
+      /references the image \/photos\/planted-orientation\.jpg, whose consent entry is for season 2026-27, checked 2026-07-04/,
+    ],
+    [
+      'a consent reference still to come',
+      { consentReference: '[[TBD: form reference from the office]]' },
+      /references the image \/photos\/planted-orientation\.jpg, whose consent reference is still to come/,
+    ],
+  ] as const
+
+  function input(entry: typeof consented | Record<string, string>) {
+    return {
+      pages: [pageFrom(`![Two team members at orientation](${PATH})`)],
+      settings,
+      consent: { ...consent, season: CASE_SEASON, images: [{ ...consented, ...entry }] },
+    }
+  }
+
+  it.each(lapses)('fails a prod build on %s', (_case, entry, reason) => {
+    expect(() => enforcePublishingPolicy(input(entry), PROD)).toThrow(PublishingPolicyError)
+    expect(() => enforcePublishingPolicy(input(entry), PROD)).toThrow(reason)
+  })
+
+  it.each(lapses)('lets a dev build come up, printing %s with the problems', (_case, entry, reason) => {
+    const printed = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    try {
+      const report = enforcePublishingPolicy(input(entry), DEV)
+      expect(report.errors.map((error) => error.message).join('\n')).toMatch(reason)
+      const problems = printed.mock.calls
+        .map(([block]) => String(block))
+        .filter((block) => block.startsWith('Publishing policy problems, which will fail a prod build:'))
+      expect(problems.join('\n')).toMatch(reason)
+    } finally {
+      printed.mockRestore()
+    }
+  })
+
+  it('builds a consented, current-season image in prod and in dev', () => {
+    expect(enforcePublishingPolicy(input(consented), PROD).errors).toEqual([])
+    expect(enforcePublishingPolicy(input(consented), DEV).errors).toEqual([])
   })
 })
 
@@ -206,11 +351,11 @@ describe('named students', () => {
         publishedForm: 'full-name-and-class-year' as const,
         graduationYear: 2028,
         consentReference: 'MC-2026-014',
-        season: consent.season,
+        season: CASE_SEASON,
         dateChecked: '2026-09-18',
       },
     ]
-    expect(check('Jordan Rivera reached quarterfinals.', { students }).errors).toEqual([])
+    expect(check('Jordan Rivera reached quarterfinals.', { season: CASE_SEASON, students }).errors).toEqual([])
   })
 
   it('fails when the only consent entry is from a previous season', () => {
@@ -227,6 +372,81 @@ describe('named students', () => {
     expect(messages('Jordan Rivera reached quarterfinals.', { students })).toMatch(
       /whose consent entry is for season 2025-26/,
     )
+  })
+})
+
+/**
+ * A check dated after the season's last day, 31 July of its second year, is not a check made in
+ * that season, any more than one dated before 1 August is. Until v1-e37-t13 the build accepted
+ * one, and only v1-e37-t11's tests of the shipped manifest refused it, so a prod build alone
+ * would have published a name or an image on it. The name, the image and the reference are
+ * invented.
+ */
+describe('a consent entry checked after its season ends', () => {
+  const NAME = 'Jordan Rivera'
+  const PATH = '/photos/planted-orientation.jpg'
+  const student = {
+    publishedName: NAME,
+    publishedForm: 'full-name-and-class-year' as const,
+    graduationYear: 2028,
+    consentReference: 'MC-PLANT-001',
+    season: CASE_SEASON,
+  }
+  const image = {
+    path: PATH,
+    consentReference: 'MC-PLANT-002',
+    depicts: '2 team members, both covered',
+    season: CASE_SEASON,
+  }
+
+  function input(markdown: string, dateChecked: string) {
+    return {
+      pages: [pageFrom(markdown)],
+      settings,
+      consent: {
+        ...consent,
+        season: CASE_SEASON,
+        students: [{ ...student, dateChecked }],
+        images: [{ ...image, dateChecked }],
+      },
+    }
+  }
+
+  const published = [
+    [
+      'a name',
+      `${NAME} reached quarterfinals.`,
+      /names "Jordan Rivera", whose consent entry is for season 2026-27, checked 2027-08-02/,
+    ],
+    [
+      'an image',
+      `![Two team members at orientation](${PATH})`,
+      /references the image \/photos\/planted-orientation\.jpg, whose consent entry is for season 2026-27, checked 2027-08-02/,
+    ],
+  ] as const
+
+  it.each(published)('fails a prod build on %s', (_case, markdown, reason) => {
+    expect(() => enforcePublishingPolicy(input(markdown, '2027-08-02'), PROD)).toThrow(PublishingPolicyError)
+    expect(() => enforcePublishingPolicy(input(markdown, '2027-08-02'), PROD)).toThrow(reason)
+  })
+
+  it.each(published)('lets a dev build come up, printing %s with the problems', (_case, markdown, reason) => {
+    const printed = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    try {
+      const report = enforcePublishingPolicy(input(markdown, '2027-08-02'), DEV)
+      expect(report.errors.map((error) => error.message).join('\n')).toMatch(reason)
+      const problems = printed.mock.calls
+        .map(([block]) => String(block))
+        .filter((block) => block.startsWith('Publishing policy problems, which will fail a prod build:'))
+      expect(problems.join('\n')).toMatch(reason)
+    } finally {
+      printed.mockRestore()
+    }
+  })
+
+  it.each(published)('builds %s checked on 31 July, the season\'s last day, in prod and in dev', (_case, markdown) => {
+    expect(enforcePublishingPolicy(input(markdown, '2027-07-31'), PROD).errors).toEqual([])
+    expect(enforcePublishingPolicy(input(markdown, '2027-07-31'), DEV).errors).toEqual([])
   })
 })
 
@@ -299,23 +519,37 @@ describe('the start-of-season check', () => {
     expect(seasonStart('2026-27').toISOString()).toBe('2026-08-01T00:00:00.000Z')
   })
 
+  it('treats a season as ending on 31 July of its second year', () => {
+    expect(seasonEnd('2026-27').toISOString()).toBe('2027-07-31T00:00:00.000Z')
+  })
+
   it('calls an entry stale when it was last checked before the season began', () => {
     expect(isStale({ season: '2026-27', dateChecked: '2026-07-31' }, '2026-27')).toBe(true)
     expect(isStale({ season: '2026-27', dateChecked: '2026-08-01' }, '2026-27')).toBe(false)
     expect(isStale({ season: '2025-26', dateChecked: '2026-09-18' }, '2026-27')).toBe(true)
   })
 
-  it('warns, rather than failing, when an entry predates the current season', () => {
+  it('calls an entry stale when it was last checked after the season ended, on 31 July', () => {
+    expect(isStale({ season: '2026-27', dateChecked: '2027-07-31' }, '2026-27')).toBe(false)
+    expect(isStale({ season: '2026-27', dateChecked: '2027-08-01' }, '2026-27')).toBe(true)
+    expect(isStale({ season: '2026-27', dateChecked: '2027-08-02' }, '2026-27')).toBe(true)
+  })
+
+  /**
+   * An entry no page shows. One a page shows is refused instead, as a lapsed name is
+   * ("an image whose consent has lapsed", below, v1-e37-t12).
+   */
+  it('warns, rather than failing, when an entry nothing shows predates the current season', () => {
     const images = [
       {
         path: '/photos/orientation.jpg',
         consentReference: 'MC-2026-014',
         depicts: '2 team members, both covered',
-        season: consent.season,
+        season: CASE_SEASON,
         dateChecked: '2026-07-04',
       },
     ]
-    const report = check('![Two debaters](/photos/orientation.jpg)', { images })
+    const report = check('Nobody is pictured here.', { season: CASE_SEASON, images })
     expect(report.errors).toEqual([])
     expect(report.warnings.map((warning) => warning.message).join('\n')).toMatch(
       /the start-of-season check for 2026-27 has not been recorded/,
@@ -531,6 +765,7 @@ describe('the content this site actually ships', () => {
     ...loadGuardedContent(),
     ...scheduleGuardedContent(),
     ...resultsGuardedContent(),
+    ...announcementsGuardedContent(),
     ...consentGuardedContent(),
   ]
 
@@ -579,6 +814,7 @@ describe('the content this site actually ships', () => {
       'content/events.yaml',
       'content/schedule.yaml',
       'content/results.yaml, labels',
+      'content/news.yaml',
     ]) {
       expect(guarded, `${filePath} is not checked by the publishing-policy guard`).toContain(
         filePath,
@@ -593,9 +829,90 @@ describe('the content this site actually ships', () => {
     }
   })
 
-  it('has a media-consent manifest for the current season, with no photograph in it yet', () => {
+  it('has a media-consent manifest for the current season', () => {
     expect(consent.season).toMatch(/^\d{4}-\d{2}$/)
-    expect(consent.images).toEqual([])
+  })
+
+  /**
+   * Every image entry, checked for what must always hold of it rather than for how many there
+   * are: until v1-e37-t11 this test pinned `images: []`, which the first consented photograph
+   * would have failed, a content edit needing a test edit. Each case plants an entry in a copy
+   * of the shipped content, at the head of the list, so it runs the same whatever the manifest
+   * lists. Every image path and reference in it is invented.
+   */
+  describe('every image entry', () => {
+    const seasonYear = Number(consent.season.slice(0, 4))
+    const PLANTED_PATH = '/photos/planted-orientation.jpg'
+
+    it('in the shipped manifest has a filled-in consent reference for the current season', () => {
+      expect(imageEntryProblems()).toEqual([])
+    })
+
+    it('passes for a consented image, in the manifest and on a page', () => {
+      const copy = shippedContentWith({
+        'media-consent.yaml': withImage(consentedImage(seasonYear)),
+        'pages/about.md': (source) => `${source.trimEnd()}\n\n![Two team members at orientation](${PLANTED_PATH})\n`,
+      })
+      expect(imageEntryProblems(copy)).toEqual([])
+      expect(guardErrors(copy)).toEqual([])
+    })
+
+    it.each([
+      [
+        'consent from last season',
+        { season: `'${seasonYear - 1}-${String(seasonYear).slice(2)}'`, dateChecked: `${seasonYear - 1}-09-18` },
+        new RegExp(`image ${PLANTED_PATH}: its consent is for season ${seasonYear - 1}-`),
+      ],
+      [
+        'consent not yet checked this season',
+        { dateChecked: `${seasonYear}-07-04` },
+        new RegExp(`image ${PLANTED_PATH}: its consent was last checked ${seasonYear}-07-04, outside season`),
+      ],
+      [
+        'consent checked after the season ended',
+        { dateChecked: `${seasonYear + 1}-08-02` },
+        new RegExp(`image ${PLANTED_PATH}: its consent was last checked ${seasonYear + 1}-08-02, outside season`),
+      ],
+      [
+        'a consent reference still to come',
+        { consentReference: "'[[TBD: form reference from the office]]'" },
+        new RegExp(`image ${PLANTED_PATH}: its consent reference is still to come`),
+      ],
+    ])('refuses an image with %s', (_case, fields, reason) => {
+      const copy = shippedContentWith({ 'media-consent.yaml': withImage({ ...consentedImage(seasonYear), ...fields }) })
+      expect(imageEntryProblems(copy).join('\n')).toMatch(reason)
+    })
+
+    // The build agrees with the check above once a page shows the image (v1-e37-t12).
+    it.each([
+      ['consent from last season', { season: `'${seasonYear - 1}-${String(seasonYear).slice(2)}'`, dateChecked: `${seasonYear - 1}-09-18` }],
+      ['consent not yet checked this season', { dateChecked: `${seasonYear}-07-04` }],
+      ['a consent reference still to come', { consentReference: "'[[TBD: form reference from the office]]'" }],
+    ])('and the guard refuses a page showing an image with %s', (_case, fields) => {
+      const copy = shippedContentWith({
+        'media-consent.yaml': withImage({ ...consentedImage(seasonYear), ...fields }),
+        'pages/about.md': (source) => `${source.trimEnd()}\n\n![Two team members at orientation](${PLANTED_PATH})\n`,
+      })
+      expect(guardErrors(copy).join('\n')).toMatch(
+        new RegExp(`content/pages/about\\.md: references the image ${PLANTED_PATH}, whose consent`),
+      )
+    })
+
+    it('refuses an image entry with no consent reference at all', () => {
+      const copy = shippedContentWith({
+        'media-consent.yaml': withImage({ ...consentedImage(seasonYear), consentReference: undefined }),
+      })
+      expect(() => imageEntryProblems(copy)).toThrow(/images\.0\.consentReference/)
+    })
+
+    it('refuses an image on a page with no entry in the manifest', () => {
+      const copy = shippedContentWith({
+        'pages/about.md': (source) => `${source.trimEnd()}\n\n![Two team members at orientation](${PLANTED_PATH})\n`,
+      })
+      expect(guardErrors(copy).join('\n')).toMatch(
+        new RegExp(`references the image ${PLANTED_PATH}, which has no entry in content/media-consent\\.yaml`),
+      )
+    })
   })
 
   /**
@@ -653,6 +970,99 @@ describe('the content this site actually ships', () => {
         expect(entry, `${page.filePath} prints a name with no consent entry`).toBeDefined()
         expect(isStale(entry!, consent.season), `${page.filePath} prints a lapsed name`).toBe(false)
       }
+    }
+  })
+})
+
+/**
+ * The name rules read what a page publishes outside its body text too (v1-e37-t03 acceptance
+ * criterion 6, from the v1-e36-t08 review). An image's alt text is read aloud by a screen reader
+ * and shown when the image does not load, and a Markdown image's title is the caption a browser
+ * shows on it: both are published copy, so a name in either fails the build with the message it
+ * would get in a paragraph. Until v1-e37-t03 the rules read the text between tags only, so a name
+ * in an attribute passed. Rowan Ellery is invented.
+ */
+describe('names in alt text and captions', () => {
+  const IMAGE = '/brand/wfb-mark-navy-transparent.png'
+  const bodyMessage = () => messages('Rowan Ellery spoke second.')
+
+  it('names a student in body copy, which is the message the others must match', () => {
+    expect(bodyMessage()).toMatch(/names "Rowan Ellery", which has no entry in content\/media-consent\.yaml/)
+  })
+
+  it.each([
+    ['the alt text of a Markdown image', `![Rowan Ellery at the podium](${IMAGE})`],
+    ['the alt text of an HTML image', `<img src="${IMAGE}" alt="Rowan Ellery">`],
+    ['the alt text of an HTML image in single quotes', `<img src='${IMAGE}' alt='Rowan Ellery'>`],
+    ['the caption of a Markdown image', `![A debater at the podium](${IMAGE} "Rowan Ellery")`],
+    ['a figure caption', `<figure><img src="${IMAGE}" alt="A debater"><figcaption>Rowan Ellery</figcaption></figure>`],
+  ])('fails on a name in %s, with the message it gets in body copy', (_where, markdown) => {
+    expect(messages(markdown)).toBe(bodyMessage())
+  })
+
+  it('reads an alt attribute in a built page, as the export checks see it', () => {
+    const report = checkPublishingPolicy({
+      pages: [],
+      settings,
+      consent,
+      builtPages: [{ location: '/news/example/', html: `<main><img src="${IMAGE}" alt="Rowan Ellery"></main>` }],
+    })
+    expect(report.errors.map((error) => error.message).join('\n')).toBe(bodyMessage())
+  })
+
+  it("reads a name with an apostrophe, which the Markdown renderer writes as an entity", () => {
+    expect(messages(`![Rowan O'Neill at the podium](${IMAGE})`)).toMatch(/names "Rowan O'Neill"/)
+    expect(messages("Rowan O'Neill spoke second.")).toMatch(/names "Rowan O'Neill"/)
+  })
+
+  it('reads a name whose first word is in bold as one name', () => {
+    expect(messages('**Rowan** Ellery spoke second.')).toBe(bodyMessage())
+  })
+
+  it('stays quiet about alt text and captions that name nobody', () => {
+    expect(check(`![The team mark](${IMAGE} "Whitefish Bay Debate")`).errors).toEqual([])
+    expect(check(`<img src="${IMAGE}" alt="">`).errors).toEqual([])
+  })
+})
+
+/**
+ * permittedNamePhrases holds reviewed phrases, not bare words (the v1-e36-t07 ruling, and v1-e37-t03
+ * acceptance criterion 7). A one-word entry covers that word inside any run of capitals, so a list
+ * that grew a word at a time would cover a student's name a word at a time, which is the guard the
+ * ruling replaced. A one-word entry is allowed only from the short list of ordinary words reviewed
+ * in src/lib/media-consent.ts; any other fails the build naming the entry. Ellery is invented.
+ */
+describe('the reviewed-phrase allowlist', () => {
+  const withPhrase = (phrase: string) => ({
+    'media-consent.yaml': replaceOnce('permittedNamePhrases:\n', `permittedNamePhrases:\n  - ${phrase}\n`),
+  })
+
+  it('refuses a new bare word, naming the entry and the rule', () => {
+    expect(() => loadMediaConsent(contentWith(withPhrase('Ellery')))).toThrow(
+      /permittedNamePhrases: "Ellery" is a single word/,
+    )
+  })
+
+  it('accepts a new multi-word phrase', () => {
+    expect(loadMediaConsent(contentWith(withPhrase('Ellery Middle School'))).permittedNamePhrases).toContain(
+      'Ellery Middle School',
+    )
+  })
+
+  it('accepts a single word from the reviewed list, as the days of the week are', () => {
+    expect(REVIEWED_SINGLE_WORDS).toContain('Tuesday')
+    expect(() => loadMediaConsent(contentWith(withPhrase('Tuesday')))).not.toThrow()
+  })
+
+  it('keeps the reviewed list short, and free of any word of a consented name', () => {
+    expect(REVIEWED_SINGLE_WORDS.length).toBeLessThanOrEqual(40)
+    const nameWords = new Set(
+      consent.students.flatMap((student) => student.publishedName.toLowerCase().split(/\s+/)),
+    )
+    // Asserted as one boolean, so a failure prints no student's name.
+    expect(REVIEWED_SINGLE_WORDS.some((word) => nameWords.has(word.toLowerCase()))).toBe(false)
+    for (const word of REVIEWED_SINGLE_WORDS) {
+      expect(word.trim().split(/\s+/)).toHaveLength(1)
     }
   })
 })

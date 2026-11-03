@@ -69,6 +69,7 @@ def test_citation_field_source_values() -> None:
         "opengraph",
         "crossref",
         "byline",
+        "retrieval",
         "heuristic",
         "missing",
     ]

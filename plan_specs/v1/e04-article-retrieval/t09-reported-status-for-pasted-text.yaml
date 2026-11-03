@@ -1,0 +1,75 @@
+# TASK v1-e04-t09-reported-status-for-pasted-text - fetch --paste can report the access status of the user's own copy
+# Epic: E04 Article Retrieval & Extraction | Release: v1.3 (URL → verified card) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e04-t09-reported-status-for-pasted-text
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.3
+    debate/epic: v1-e04-article-retrieval
+  annotations:
+    debate/title: "fetch --paste can report the access status of the user's own copy"
+spec:
+  # Filed by the PM, 2026-10-26, from v1-e04-t06's follow-up 1, accepted by the PM (2026-10-26).
+  description: >-
+    ArticleService takes a `reported_access_status`, for example PAYWALLED for a subscriber's
+    copy, but `debate-research fetch --paste` always leaves it UNKNOWN, because v1-e04-t06's
+    spec asked for no option. Add `--reported-status` with the values a user may honestly report
+    about their own copy. The session proposes the list, which never includes a value that
+    implies the platform retrieved the text. The reported value is stored on the USER_SUPPLIED
+    snapshot as reported, and printed in the panel and in `--json` under its schema. Attestation
+    and the exit codes are unchanged: stored pasted text still exits 0.
+  priority: 3
+  constraints:
+    packages: [debate_cli, packages/debate_cli/tests, debate_core.application, packages/debate_core/schemas, tests/smoke]
+    forbidden:
+      - Pasted text reported or stored as PUBLISHER_RETRIEVED
+      - A value stored without attestation
+      - Network or AWS access in any test
+  context:
+    - kind: TaskRef
+      name: v1-e04-t06-fetch-command
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        A reported status reaches the snapshot, the panel and `--json`, which validates
+        against the schema; a value outside the list is a usage error; no option keeps
+        UNKNOWN; tests shown failing first.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e04-t09-reported-status-for-pasted-text-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.3
+    debate/epic: v1-e04-article-retrieval
+spec:
+  description: >-
+    Let a pasted copy carry the access status its user reports.
+  goalRef:
+    name: v1-e04-t09-reported-status-for-pasted-text
+  graph:
+    nodes:
+      - id: reported-status
+        kind: Task
+        name: Reported status for pasted text
+        description: >-
+          Let a pasted copy carry the access status its user reports.
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Fetch command tests pass
+            command: uv
+            args: [run, pytest, packages/debate_cli/tests/test_fetch_command.py, -k, paste]
+status:
+  phase: Pending

@@ -1,0 +1,10 @@
+{
+  "query": {"query": "veterinary telehealth licensure", "filters": {"max_results": 5}},
+  "exchanges": [
+    {
+      "request": {"method": "GET", "url": "https://www.federalregister.gov/api/v1/documents.json?conditions%5Bterm%5D=veterinary+telehealth+licensure&conditions%5Btype%5D%5B%5D=RULE&conditions%5Btype%5D%5B%5D=PRORULE&conditions%5Btype%5D%5B%5D=NOTICE&fields%5B%5D=document_number&fields%5B%5D=title&fields%5B%5D=publication_date&fields%5B%5D=agency_names&fields%5B%5D=abstract&fields%5B%5D=html_url&fields%5B%5D=pdf_url&order=relevance&per_page=5"},
+      "response": {"status": 200, "headers": {"content-type": "application/json"}, "body_file": "documents_empty.body.json"}
+    }
+  ],
+  "expected_results_file": "documents_empty.expected.json"
+}

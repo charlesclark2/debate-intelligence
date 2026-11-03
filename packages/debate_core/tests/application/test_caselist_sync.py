@@ -120,7 +120,7 @@ from debate_core.integrations.local.archive_reader import archive_digest, read_a
 from debate_core.integrations.local.macos_notifier import MacOsNotifier
 from debate_core.integrations.local.sqlite_caselist_repository import SqliteCaselistRepository
 from debate_core.integrations.s3 import S3EvidenceObjectStore
-from debate_core.testing.fakes import empty_suppression_list
+from debate_core.testing.fakes.suppression import empty_suppression_list
 
 from .caselist.retry_rule import the_commands_retry_rule
 
@@ -1431,6 +1431,9 @@ async def test_a_run_publishes_the_snapshots_it_imported(
 
     11 + 2 + 1 = 14. `2026-09-01` is not published by this run: it was imported before it, and a
     run publishes what it imported plus whatever an earlier run left owed.
+
+    And three manifests, which the count includes since `v1-e34-t28`: the two weeks' and the camp
+    release's. 14 + 3 = 17.
     """
     await import_first_week(data_dir, archives)
     local = local_evidence(data_dir)
@@ -1444,7 +1447,8 @@ async def test_a_run_publishes_the_snapshots_it_imported(
 
     summary = await service.run([SYNTHETIC_CASELIST])
 
-    assert summary.objects_published == 14
+    assert summary.objects_published == 17
+    assert summary.manifests_published == 3
     assert summary.stage(SyncStage.PUBLISH).outcome is StageOutcome.COMPLETED  # type: ignore[union-attr]
     assert (await bucket.head(manifest_key(SYNTHETIC_CASELIST, date(2026, 9, 15)))).size > 0
     assert summary.stage(SyncStage.REPORT).outcome is StageOutcome.COMPLETED  # type: ignore[union-attr]
@@ -1490,7 +1494,8 @@ async def test_publish_pending_completes_what_the_expired_run_left(
     archives: dict[date, Path],
     bucket: S3EvidenceObjectStore,
 ) -> None:
-    """ac3's second half: after `aws sso login`, the same fourteen objects go up and nothing else."""
+    """ac3's second half: after `aws sso login`, the same fourteen sources and three manifests go up
+    and nothing else (`v1-e34-t28` counts the manifests)."""
     await import_first_week(data_dir, archives)
     expired = build_service(
         source=source,
@@ -1512,7 +1517,8 @@ async def test_publish_pending_completes_what_the_expired_run_left(
     )
     drained = await logged_in.publish_pending()
 
-    assert drained.objects_published == 14
+    assert drained.objects_published == 17
+    assert drained.manifests_published == 3
     assert drained.stage(SyncStage.PUBLISH).outcome is StageOutcome.COMPLETED  # type: ignore[union-attr]
     assert drained.stage(SyncStage.DOWNLOAD).outcome is StageOutcome.SKIPPED  # type: ignore[union-attr]
     assert source.archive_fetches == [weekly_name(date(2026, 9, 8)), weekly_name(date(2026, 9, 15))]
@@ -1637,9 +1643,11 @@ async def test_each_run_writes_a_json_summary_with_no_school_team_code_or_token(
         "stage",
         "outcome",
         "reason",
+        "not_compared",
         "error_codes",
         "hint",
         "earlier_findings",
+        "drift",
     }
 
     text = written.read_text(encoding="utf-8")
@@ -1860,6 +1868,9 @@ async def test_a_caselist_whose_event_this_build_does_not_know_is_not_imported_u
     stage = summary.stage(SyncStage.IMPORT)
     assert stage is not None and stage.outcome is StageOutcome.FAILED
     assert "does not know which event" in (stage.reason or "")
+    # Where the table is: `debate_cli.caselist_events` since `v1-e01-t39` (the PM's ruling of
+    # 2026-10-28, carried out in `v1-e34-t31`).
+    assert "add the slug prefix to the table in debate_cli.caselist_events" in (stage.reason or "")
     assert not any(one.startswith(SYNTHETIC_CASELIST) for one in summary.snapshots_imported)
     assert not summary.succeeded
     assert summary.archives_downloaded == 2, "the bytes are in the inbox either way"
@@ -2192,8 +2203,8 @@ def test_notify_through_osascript_passes_the_text_as_arguments_not_script() -> N
     [command] = ran
     script = [command[index + 1] for index, part in enumerate(command) if part == "-e"]
     assert all(hostile not in line and "touch" not in line for line in script)
-    assert command[-3].startswith('done" & (do shell script')
-    assert command[-2:] == ["caselist pull failed", "debate-research caselist pull"]
+    assert command[-3] == f"Fix: debate-research caselist pull — {hostile}", "the fix first (`v1-e34-t23`)"
+    assert command[-2:] == ["caselist pull failed", ""], "no subtitle was given"
 
 
 def test_notify_failure_of_osascript_does_not_raise() -> None:

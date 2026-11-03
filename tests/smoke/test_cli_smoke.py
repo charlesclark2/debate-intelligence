@@ -15,11 +15,15 @@ second fixture manifest exists for this tier.
 
 from __future__ import annotations
 
+import json
 import re
 import secrets
+import tomllib
 from pathlib import Path
 from typing import Any
 
+import pytest
+import yaml
 from tests.fixtures.verify.manifest_world import ALL_VERIFIED, TAMPERED, build_fixture_data_dir
 from tests.smoke.installed_build import REPO_ROOT, CliRun, InstalledCli
 
@@ -112,7 +116,12 @@ def test_doctor_checks_the_evidence_profiles_only_when_asked_and_fails_on_one_th
     `doctor` passes there, as every install and `validate-dev` need it to. With
     `--evidence-profiles` the same build fails on that profile, under the code a pull refused for
     the same reason records, naming the setting and no path. boto3 refuses the session before any
-    request, so the network guard, which fails this check on any attempt, stays silent."""
+    request, so the network guard, which fails this check on any attempt, stays silent.
+
+    The `dev` profile also names `debate-dev-bedrock` as `models.aws_profile` (`v1-e05-t08`),
+    which this config does not define either. It is reported, with its own fix, and fails nothing:
+    the failure names the evidence profile alone. An installed build reads that profile from its
+    wheel and the checkout's script from the committed file (`v1-e01-t41`), so both report it."""
     plain = data_of(installed_cli.run("--json", "doctor"))
     assert "evidence_profiles" not in plain
 
@@ -127,7 +136,7 @@ def test_doctor_checks_the_evidence_profiles_only_when_asked_and_fails_on_one_th
         "machine's AWS config, so every command that uses it will refuse to start."
     )
     assert "storage.s3.aws_profile" in error["hint"] and "aws sso login" not in error["hint"]
-    assert error["details"]["evidence_profiles"] == [
+    everyday = [
         {
             "setting": "storage.s3.aws_profile",
             "profile": "debate-dev-evidence",
@@ -138,8 +147,64 @@ def test_doctor_checks_the_evidence_profiles_only_when_asked_and_fails_on_one_th
             "hint": error["hint"],
         }
     ]
+    model = [
+        {
+            "setting": "models.aws_profile",
+            "profile": "debate-dev-bedrock",
+            "defined": False,
+            "session": "not_defined",
+            "permission_set": None,
+            "summary": "not defined in this machine's AWS config",
+            "hint": (
+                "set models.aws_profile to a profile this machine's AWS config defines, or add the profile "
+                "to it: docs/runbooks/bedrock-access.md lists the Bedrock profiles and how they are added. "
+                "It is not an expired session, and logging in changes nothing"
+            ),
+        }
+    ]
+    assert error["details"]["evidence_profiles"] == everyday + model
     about_the_profile = f"{error['message']} {error['hint']}"
     assert str(installed_cli.home) not in about_the_profile and "/.aws" not in asked.stdout
+
+
+def test_doctor_checks_the_search_index_stores_only_when_asked_and_fails_on_one_never_parsed(
+    installed_cli: InstalledCli,
+) -> None:
+    """`v1-e34-t30`. `dev` names a bucket and keeps `caselist.refresh_search_index` on, so its weekly
+    run has the search index stage, and nothing is parsed in this harness's data directory. Plain
+    `doctor` passes and says nothing of it. With `--search-index` the build fails on every store the
+    stage indexes, the build's own `caselist.sync_caselists` and then `openev`, naming the command
+    that parses each and no path. With the setting off the check does not apply and passes.
+
+    The caselists are read from the build under test, not written here (PM fix 2026-10-25): an
+    installed pre-release carries `config/profiles/dev.toml`, which names the weekly run's caselists
+    since `v1-e40-t06`, and this checkout's console script reads the same file (`v1-e01-t41`)."""
+    plain = data_of(installed_cli.run("--json", "doctor"))
+    assert "search_index" not in plain
+    shown = data_of(installed_cli.run("--json", "config", "show"))
+    caselists = list(shown["settings"]["caselist.sync_caselists"])
+    stores = [*dict.fromkeys(caselists), "openev"]
+
+    asked = installed_cli.run("--json", "doctor", "--search-index")
+
+    assert asked.exit_code == 1, asked.output
+    error = asked.envelope()["error"]
+    assert isinstance(error, dict)
+    assert error["code"] == "SEARCH_INDEX_STORE_NOT_READY"
+    fixes = " and ".join(f"`debate-research caselist parse --caselist {store}`" for store in stores)
+    assert error["hint"] == f"Run {fixes} before the next weekly run."
+    found = error["details"]["search_index"]
+    assert (found["applies"], found["caselists"], found["unparsed"]) == (True, caselists, stores)
+    assert str(installed_cli.home) not in f"{error['message']} {error['hint']} {found}"
+
+    turned_off = installed_cli.run(
+        "--json", "doctor", "--search-index", env={"DEBATE_CASELIST__REFRESH_SEARCH_INDEX": "false"}
+    )
+
+    assert turned_off.exit_code == 0, turned_off.output
+    data = turned_off.envelope()["data"]
+    assert isinstance(data, dict)
+    assert data["search_index"]["applies"] is False
 
 
 # ------------------------------------------------------------------------------------------------
@@ -148,6 +213,7 @@ def test_doctor_checks_the_evidence_profiles_only_when_asked_and_fails_on_one_th
 
 SECRET_SETTINGS = {
     "providers.semantic_scholar_api_key": "DEBATE_PROVIDERS__SEMANTIC_SCHOLAR_API_KEY",
+    "providers.openalex_api_key": "DEBATE_PROVIDERS__OPENALEX_API_KEY",
     "providers.caselist_token": "DEBATE_PROVIDERS__CASELIST_TOKEN",
     "providers.contact_email": "DEBATE_PROVIDERS__CONTACT_EMAIL",
 }
@@ -178,6 +244,24 @@ def test_config_show_uses_the_scratch_data_directory_it_was_given(installed_cli:
     assert report["sources"]["storage.data_dir"] == "env:DEBATE_STORAGE__DATA_DIR"
 
 
+def test_config_show_reads_the_api_gate_from_the_dev_profile_not_the_built_in_values(
+    installed_cli: InstalledCli,
+) -> None:
+    """`v1-e01-t41`. An installed build reads the dev profile its wheel carries, and so must the
+    checkout's script, run from a scratch directory, or a check can pass in `ci` on a premise the
+    installed build breaks: validate-dev failed three runs on the gate the dev profile turns on. The
+    value is the committed file's, which the wheel's copy is made from."""
+    report = data_of(installed_cli.run("--json", "config", "show"))
+
+    committed = tomllib.loads((REPO_ROOT / "config" / "profiles" / "dev.toml").read_text(encoding="utf-8"))
+    source = report["sources"]["caselist.api_enabled"]
+    assert report["settings"]["caselist.api_enabled"] is committed["caselist"]["api_enabled"]
+    if installed_cli.build.installed:
+        assert source.startswith("profile:") and "_bundled_config" in source, source
+    else:
+        assert source == f"profile:{REPO_ROOT / 'config' / 'profiles' / 'dev.toml'}"
+
+
 def test_an_unset_debate_env_runs_the_build_as_dev(installed_cli: InstalledCli) -> None:
     report = data_of(installed_cli.run("--json", "config", "show", env={"DEBATE_ENV": None}))
 
@@ -203,11 +287,115 @@ def test_dev_and_prod_get_their_own_data_directory_routing_file_and_budget(
     assert prod["storage.data_dir"] == str(installed_cli.home / ".debate-research" / "prod")
     assert Path(dev["models.routing_file"]).name == "model_routing.dev.yaml"
     assert Path(prod["models.routing_file"]).name == "model_routing.prod.yaml"
-    assert (dev["models.budget_usd_daily"], prod["models.budget_usd_daily"]) == (2.0, 20.0)
-    if installed_cli.build.installed:
-        for routing in (dev["models.routing_file"], prod["models.routing_file"]):
+    # Dev's $2 a day is the capped sample's allowance; prod's $1.50 is the coach's $50 a month over
+    # thirty days; both hold the month to that $50 (v1-e05-t15). Bundled and built in alike.
+    assert (dev["models.budget_usd_daily"], prod["models.budget_usd_daily"]) == (2.0, 1.5)
+    assert (dev["models.budget_usd_monthly"], prod["models.budget_usd_monthly"]) == (50.0, 50.0)
+    # The profiles name each environment's Bedrock profile (v1-e05-t08), and both builds read them.
+    assert (dev["models.aws_profile"], prod["models.aws_profile"]) == (
+        "debate-dev-bedrock",
+        "debate-prod-bedrock",
+    )
+    for routing in (dev["models.routing_file"], prod["models.routing_file"]):
+        if installed_cli.build.installed:
             assert "_bundled_config" in routing, f"{routing} is not the configuration the build ships"
             assert not Path(routing).resolve().is_relative_to(REPO_ROOT)
+        else:
+            assert Path(routing).parent == REPO_ROOT / "config", f"{routing} is not this checkout's"
+
+
+# ------------------------------------------------------------------------------------------------
+# A model call is priced from the pricing file the build carries (v1-e05-t12)
+# ------------------------------------------------------------------------------------------------
+
+PRICED_CALL = """
+import asyncio
+import json
+import sys
+from datetime import UTC, datetime
+from pathlib import Path
+
+from pydantic import BaseModel
+
+from debate_cli.build_info import settings_loader
+from debate_core.domain.model_contracts import ModelPrompt, ModelResponse, ModelUsage, TaskClass
+from debate_core.integrations.models import build_model_router
+
+
+class Answer(BaseModel):
+    ok: bool
+
+
+class AnsweringRouter:
+    def __init__(self, policy):
+        self.policy = policy
+
+    async def generate_structured(self, task_class, prompt, schema, params=None):
+        return ModelResponse[schema](
+            output=schema(ok=True),
+            route=self.policy.resolve(task_class, params),
+            usage=ModelUsage(input_tokens=1000, output_tokens=2000, latency_ms=5.0),
+            prompt_id=prompt.prompt_id,
+            prompt_version=prompt.prompt_version,
+            invoked_at=datetime.now(UTC),
+        )
+
+
+settings = settings_loader()()
+router = build_model_router(
+    settings,
+    mode="live",
+    environ={},
+    real_router=lambda policy, *, aws_profile: AnsweringRouter(policy),
+    cassette_dir=Path(sys.argv[1]),
+)
+prompt = ModelPrompt(prompt_id="smoke.priced-call", prompt_version="1.0.0", variables={})
+asyncio.run(router.generate_structured(TaskClass.HIGH_VOLUME, prompt, Answer))
+records = [
+    json.loads(line)
+    for day in sorted((settings.storage.data_dir / "usage").glob("*.jsonl"))
+    for line in day.read_text(encoding="utf-8").splitlines()
+]
+print(json.dumps({"routing_file": str(settings.models.routing_file), "records": records}))
+"""
+"""One live-mode call through the router the build makes, with a stand-in where Bedrock would be."""
+
+
+def test_a_model_call_is_priced_from_the_pricing_file_the_build_carries(installed_cli: InstalledCli) -> None:
+    """`v1-e05-t12`. The build's own interpreter loads its settings as the CLI does and makes one
+    high_volume call in live mode, under the dev profile's daily and monthly limits, through the
+    router `build_model_router` wraps in the usage recorder and the budget guard. A stand-in answers
+    in Bedrock's place with 1000 input and 2000 output tokens, so nothing leaves the machine.
+
+    Without a pricing file beside the routing file the guard refuses the call as unpriced, which is
+    what every installed build did before the stamp bundled one. An installed build reads the copy in
+    its wheel, and the checkout's script the committed file; the copy is made from the committed
+    file, so the expected cost is worked out from that file's price for dev's high_volume model."""
+    build = installed_cli.build
+
+    run = installed_cli.run_program([str(build.interpreter), "-c", PRICED_CALL, str(installed_cli.workdir)])
+
+    assert run.exit_code == 0, run.output
+    report = json.loads(run.stdout)
+    routing = yaml.safe_load((REPO_ROOT / "config" / "model_routing.dev.yaml").read_text(encoding="utf-8"))
+    model_id = routing["routes"]["high_volume"]["model_id"]
+    pricing = yaml.safe_load((REPO_ROOT / "config" / "model_pricing.yaml").read_text(encoding="utf-8"))
+    price = pricing["models"][model_id]
+    [record] = report["records"]
+    assert record["model_id"] == model_id
+    assert (record["input_tokens"], record["output_tokens"]) == (1000, 2000)
+    assert record["estimated_cost_usd"] == pytest.approx(
+        (1000 * price["input_usd_per_1k_tokens"] + 2000 * price["output_usd_per_1k_tokens"]) / 1000
+    )
+    routing_file = Path(report["routing_file"])
+    assert (routing_file.parent / "model_pricing.yaml").is_file()
+    if build.installed:
+        assert "_bundled_config" in routing_file.parts, (
+            f"{routing_file} is not the configuration the build ships"
+        )
+        assert not routing_file.resolve().is_relative_to(REPO_ROOT)
+    else:
+        assert routing_file == REPO_ROOT / "config" / "model_routing.dev.yaml"
 
 
 # ------------------------------------------------------------------------------------------------
@@ -253,6 +441,7 @@ def test_prod_refuses_each_stand_in_endpoint_with_a_message_naming_the_setting(
 
             assert run.exit_code == 1, run.output
             error = run.envelope()["error"]
+            assert isinstance(error, dict)
             assert error["code"] == "CONFIGURATION_ERROR", error
             assert error["details"] == {"field": setting, "source": f"env:{variable}"}
             assert setting in error["message"] and variable in error["message"], error["message"]

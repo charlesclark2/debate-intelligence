@@ -1,0 +1,51 @@
+{
+  "output": {
+    "rationale": "The underlines carry the claim and the shutdown impact; the highlights are what a judge must hear.",
+    "spans": [
+      {
+        "end_offset": 126,
+        "paragraph": 2,
+        "purpose": "claim",
+        "start_offset": 62,
+        "style": "underline"
+      },
+      {
+        "end_offset": 94,
+        "paragraph": 2,
+        "purpose": "claim",
+        "start_offset": 69,
+        "style": "highlight"
+      },
+      {
+        "end_offset": 90,
+        "paragraph": 3,
+        "purpose": "impact",
+        "start_offset": 59,
+        "style": "underline"
+      },
+      {
+        "end_offset": 69,
+        "paragraph": 3,
+        "purpose": "impact",
+        "start_offset": 61,
+        "style": "highlight"
+      },
+      {
+        "end_offset": 120,
+        "paragraph": 3,
+        "purpose": "internal_link",
+        "start_offset": 93,
+        "style": "underline"
+      }
+    ]
+  },
+  "output_schema": "debate_core.evidence.selection_contract.MarkupSuggestion",
+  "prompt_id": "card.markup",
+  "prompt_version": "1.0.0",
+  "variables": {
+    "numbered_passages": "[P2] Analysts at the Café Économique institute warn that the fight leaves no room for a budget deal this spring 🌍 before the recess.\n\n[P3] If the budget deal fails—and “fails” is the word staff use—a shutdown follows within weeks 😬 and the grid program stalls.",
+    "passages": "[\n  {\n    \"first_paragraph\": 2,\n    \"last_paragraph\": 2,\n    \"start_offset\": 52,\n    \"end_offset\": 127\n  },\n  {\n    \"first_paragraph\": 3,\n    \"last_paragraph\": 3,\n    \"start_offset\": 59,\n    \"end_offset\": 120\n  }\n]",
+    "research_need": "Politics DA link: an energy fight costs the majority the budget",
+    "tag": "An energy fight leaves no time for a budget, so a shutdown follows"
+  }
+}

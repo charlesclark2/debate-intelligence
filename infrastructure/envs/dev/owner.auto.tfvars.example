@@ -19,3 +19,27 @@ evidence_operator_user_names = ["your-identity-center-user-name"]
 # one name: the module refuses a second, because a removal purges noncurrent versions and there is
 # nothing left to restore from. Leave it empty and no one can run a takedown.
 evidence_removal_user_names = ["your-identity-center-user-name"]
+
+# The student evidence search pilot (v1-e39-t04-pilot-infrastructure). Adult maintainers only.
+#
+# TubDeployer is what scripts/tub_deploy.sh runs as: push the image, update the function.
+evidence_search_deployer_user_names = ["your-identity-center-user-name"]
+
+# TubAccounts is what the coach's `tub users` commands run as (v1-e39-t05).
+evidence_search_accounts_user_names = ["your-identity-center-user-name"]
+
+# Where the pilot's $10 budget alarm writes. Leave it out and the alarm goes to `owner` above.
+evidence_search_budget_emails = ["you@example.com"]
+
+# The weekly caselist run in the cloud (v1-e40-t02, ADR-0020). CaselistSecretWriter is what
+# `debate-research caselist auth set-password` runs as: write the Tabroom password and the token,
+# read neither back. Exactly one name: the coach whose Tabroom account the run logs in with.
+caselist_credential_writer_user_names = ["your-identity-center-user-name"]
+
+# CaselistRunDeployer is what scripts/caselist_run_deploy.sh runs as (v1-e40-t03): push the run's
+# image, register its task definition, start a run by hand. Adult maintainers only.
+caselist_run_deployer_user_names = ["your-identity-center-user-name"]
+
+# BedrockInvoker is what a model call runs as (v1-e05-t08): bedrock:InvokeModel on the routed
+# models and nothing else, through the profile models.aws_profile names. Adult maintainers only.
+bedrock_invoker_user_names = ["your-identity-center-user-name"]

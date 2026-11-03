@@ -1,0 +1,75 @@
+# TASK v1-e41-t14-hard-stop-stops-a-named-container - A bounded run that starts a Docker container stops that container too
+# Epic: E41 — Delivery Tooling Upkeep | Release: v1.8 (Weekly caselist run in the cloud) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e41-t14-hard-stop-stops-a-named-container
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.8
+    debate/epic: v1-e41-delivery-tooling-upkeep
+  annotations:
+    debate/title: "A bounded run that starts a Docker container stops that container too"
+spec:
+  # Filed by the PM, 2026-11-01, from v1-e40-t31's follow-up 2 (the PM's review, 2026-11-01).
+  description: >-
+    v1-e40-t31's measurement ran a `docker run` under `scripts/hard_stop.py`. At the limit the
+    script stopped the `docker run` client, but the container runs under Docker's daemon,
+    outside the process group, and it finished its work about 30 seconds later. Give
+    `hard_stop.py` a repeatable option naming a container to `docker stop` (then `docker kill`
+    after the grace period) when the limit passes or the script is signalled, saying on stderr
+    what it stopped. A name that is not running is not an error. Add a sentence to working
+    agreement 10 in `docs/process/working-agreements.md` saying a session that starts a
+    container under the script names it. Tests use a stand-in `docker` on PATH, never a real
+    daemon.
+  priority: 3
+  constraints:
+    packages: [scripts, tests/scripts, docs/process]
+    forbidden:
+      - A real Docker daemon, network or AWS access in a test
+  context:
+    - kind: TaskRef
+      name: v1-e41-t05-test-runs-stopped-by-process-group
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        At the limit and on a signal, a named container is stopped (then killed after the
+        grace) through the stand-in `docker`, a name not running is not an error, and a run
+        without the option behaves as today; by tests shown failing first.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e41-t14-hard-stop-stops-a-named-container-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.8
+    debate/epic: v1-e41-delivery-tooling-upkeep
+spec:
+  description: >-
+    A bounded run that starts a Docker container stops that container too.
+  goalRef:
+    name: v1-e41-t14-hard-stop-stops-a-named-container
+  graph:
+    nodes:
+      - id: hard-stop-stops-a-named-container
+        kind: Task
+        name: Container stopped
+        description: >-
+          A bounded run that starts a Docker container stops that container too.
+        estimatedEffort: 45m
+        acceptanceCriteria:
+          - type: test_passes
+            name: Container stopped tests pass
+            command: uv
+            args: [run, pytest, tests/scripts, -k, hard_stop]
+status:
+  phase: Pending

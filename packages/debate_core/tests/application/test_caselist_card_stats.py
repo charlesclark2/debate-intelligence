@@ -19,6 +19,7 @@ from debate_core.application.caselist_card_stats import (
     CaselistCardReport,
     CaselistCardStatsService,
     UnreadableParsedCards,
+    fingerprint_thresholds,
     read_parsed_cards,
 )
 from debate_core.application.settings import CardFingerprintSettings
@@ -33,7 +34,7 @@ from debate_core.domain.debate_files import (
 from debate_core.domain.style_profile import StyleMatchSource
 from debate_core.evidence.fingerprints import FINGERPRINT_VERSION, card_fingerprint
 from debate_core.evidence.near_duplicates import NearDuplicateThresholds
-from debate_core.testing.fakes import InMemoryCaselistRepository
+from debate_core.testing.fakes.caselist import InMemoryCaselistRepository
 
 CASELIST = "testcl26"
 WEEK_ONE, WEEK_TWO, WEEK_THREE = date(2026, 9, 1), date(2026, 9, 8), date(2026, 9, 15)
@@ -66,7 +67,7 @@ def card(
     snapshot: date = WEEK_ONE,
     short_cite: str | None = "Pellam 26",
     full_cite: str = "Pellam 26 (Oriel Pellam, Fictional Review of Urban Climate, 2026)",
-    tag: str = "Canopy loss kills",
+    tag: str | None = "Canopy loss kills",
     completeness: CardCompleteness = CardCompleteness.FULL,
     caselist: str | None = CASELIST,
 ) -> ParsedCard:
@@ -433,11 +434,11 @@ def test_a_cut_that_matches_two_different_full_cards_is_not_grouped_with_a_third
 
 
 def test_a_short_cut_is_placed_with_the_smallest_of_the_nested_copies_that_hold_it() -> None:
-    """Through the step the parse pipeline builds its occurrence table with: a 330-word card, a
-    90-word copy from inside it that the banding never pairs with it, and a 30-word cut from inside
-    the copy. `card-fingerprint-v2` left the cut a cluster of its own, inside two clusters. It is
-    placed with the copy, and the two long cards are where they were."""
-    whole = [f"word{index}" for index in range(330)]
+    """Through the step the parse pipeline builds its occurrence table with: a 1,000-word card, a
+    90-word copy from inside it, under a tenth of it, and a 30-word cut from inside the copy.
+    `card-fingerprint-v2` left the cut a cluster of its own, inside two clusters. It is placed with
+    the copy, and the two long cards are where they were."""
+    whole = [f"word{index}" for index in range(1000)]
     copy, cut = whole[100:190], whole[110:140]
     cards = [
         card(source, 0, " ".join(body)) for source, body in ((FILE_A, whole), (FILE_B, copy), (FILE_C, cut))
@@ -449,6 +450,72 @@ def test_a_short_cut_is_placed_with_the_smallest_of_the_nested_copies_that_hold_
     assert copy_cluster == min(card_fingerprint(item).exact_fingerprint for item in cards[1:])
     (whole_alone, _), (copy_alone, _) = place(*cards[:2])
     assert whole_alone == whole_cluster != copy_alone
+
+
+def test_a_long_copy_over_a_tenth_of_its_card_is_placed_with_it_and_the_cut_with_both() -> None:
+    """The same through `place` with a 330-word card, of which the 90-word copy is over a tenth:
+    the copy is a long cut of the card and joins it (`card-fingerprint-v4`), and the cut with it."""
+    whole = [f"word{index}" for index in range(330)]
+    copy, cut = whole[100:190], whole[110:140]
+    cards = [
+        card(source, 0, " ".join(body)) for source, body in ((FILE_A, whole), (FILE_B, copy), (FILE_C, cut))
+    ]
+    clusters = {cluster for cluster, _ in place(*cards)}
+    assert clusters == {min(card_fingerprint(item).exact_fingerprint for item in cards)}
+
+
+# ------------------------------------------------------------------------------------------------
+# v1-e31-t14: a card with no tag has no tag on its occurrence or as its cluster's label
+# ------------------------------------------------------------------------------------------------
+
+
+def test_the_occurrence_of_a_card_with_no_tag_has_none() -> None:
+    report = build_report(
+        [card(FILE_A, 4), card(FILE_B, 2, WAREHOUSE, short_cite="Thorne 26", tag=None)],
+        [disclosure(FILE_A, WEEK_ONE), disclosure(FILE_B, WEEK_ONE, school="Cedar Hollow", team_code="ZaLu")],
+    )
+
+    by_source = {occurrence.source_sha256: occurrence for occurrence in report.occurrences}
+    assert by_source[FILE_A].tag == "Canopy loss kills"
+    assert by_source[FILE_B].tag is None
+    assert by_source[FILE_B].model_dump(mode="json")["tag"] is None
+
+
+def test_a_cluster_whose_cards_have_no_tag_has_none_as_its_label() -> None:
+    report = build_report(
+        [card(FILE_A, 4, WAREHOUSE, short_cite="Thorne 26", tag=None)], [disclosure(FILE_A, WEEK_ONE)]
+    )
+
+    assert [(cluster.short_cite, cluster.tag) for cluster in report.top_clusters] == [("Thorne 26", None)]
+
+
+def test_a_tie_between_no_tag_and_a_tag_is_still_won_by_no_tag() -> None:
+    """The rule of every build before `v1-e31-t14`: "no tag" sorted as `""`, before any tag's text.
+
+    Two copies of the heat card, one tagged and one not, label the cluster once each. The tie goes
+    to the smallest label, and `("Pellam 26", no tag)` is smaller than `("Pellam 26", "Canopy…")`.
+    """
+    report = build_report(
+        [card(FILE_A, 4), card(FILE_B, 2, tag=None)],
+        [disclosure(FILE_A, WEEK_ONE), disclosure(FILE_B, WEEK_ONE, school="Cedar Hollow", team_code="ZaLu")],
+    )
+
+    assert [(cluster.short_cite, cluster.tag) for cluster in report.top_clusters] == [("Pellam 26", None)]
+
+
+def test_a_tag_two_copies_share_outnumbers_a_copy_with_no_tag() -> None:
+    report = build_report(
+        [card(FILE_A, 4), card(FILE_B, 2, tag=None), card(FILE_C, 7)],
+        [
+            disclosure(FILE_A, WEEK_ONE),
+            disclosure(FILE_B, WEEK_ONE, school="Cedar Hollow", team_code="ZaLu"),
+            disclosure(FILE_C, WEEK_ONE, school="Northgate Prep", team_code="BeCo"),
+        ],
+    )
+
+    assert [(cluster.short_cite, cluster.tag) for cluster in report.top_clusters] == [
+        ("Pellam 26", "Canopy loss kills")
+    ]
 
 
 def test_cutter_mark_is_recorded_on_the_occurrence_and_nowhere_else() -> None:
@@ -520,6 +587,8 @@ def test_an_unreadable_line_names_the_file_and_line_but_not_its_content(tmp_path
 
 
 def test_thresholds_come_from_settings() -> None:
-    assert CardFingerprintSettings().thresholds() == NearDuplicateThresholds(jaccard=0.8, containment=0.9)
+    assert fingerprint_thresholds(CardFingerprintSettings()) == NearDuplicateThresholds(
+        jaccard=0.8, containment=0.9
+    )
     tuned = CardFingerprintSettings(near_duplicate_jaccard=0.7, near_duplicate_containment=0.95)
-    assert tuned.thresholds() == NearDuplicateThresholds(jaccard=0.7, containment=0.95)
+    assert fingerprint_thresholds(tuned) == NearDuplicateThresholds(jaccard=0.7, containment=0.95)

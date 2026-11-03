@@ -53,16 +53,23 @@ is missing.
 from __future__ import annotations
 
 import asyncio
+import shlex
+import traceback
 from collections.abc import Coroutine
 from pathlib import Path
 from typing import Annotated, Any
 
 import typer
 
+from debate_cli.bucket_lock import run_holding_the_bucket_lock
 from debate_cli.context import CliContext, cli_context, command_name
-from debate_cli.exit_codes import ExitCode, exit_code_for_failure_codes
+from debate_cli.exit_codes import ExitCode, error_code_for, exit_code_for_failure_codes
+from debate_cli.options.bucket_environment import CONFIRM_PROD_FLAG, SYNCABLE_ENVIRONMENTS
 from debate_cli.output import CommandFailure, JsonValue, TableSpec
+from debate_core.application.errors import DomainError
 from debate_core.application.evidence_sync import (
+    EvidenceSyncService,
+    SkipKind,
     SyncAction,
     SyncDirection,
     SyncPlan,
@@ -71,12 +78,6 @@ from debate_core.application.evidence_sync import (
 from debate_core.application.settings import Environment, Settings
 
 __all__ = ["get", "ls", "sync"]
-
-#: The environments that name a real bucket. `test` is deliberately not one of them.
-SYNCABLE_ENVIRONMENTS = (Environment.DEV, Environment.PROD)
-
-#: Confirmation a push to production needs, spelled the way the rest of the CLI spells one.
-CONFIRM_PROD_FLAG = "--confirm-prod"
 
 
 def sync(
@@ -126,6 +127,10 @@ def sync(
     )
 
     service = cli.services.evidence_sync(blob_prefix=blob_prefix or None)
+    if not apply_changes:
+        # Before the plan, which can refuse (no --blob-prefix for the blobs), so that a refused
+        # dry run still names the stale copy (v1-e29-t13).
+        _note_a_stale_parsed_copy(cli, service)
     cli.output.detail(f"listing {settings.storage.s3.bucket} and {settings.storage.data_dir}")
     plan = _run(service.plan(prefix=prefix, direction=direction))
 
@@ -133,7 +138,11 @@ def sync(
         report = SyncReport(plan=plan, applied=False)
     else:
         cli.output.detail(f"transferring {len(plan.transfers)} object(s)")
-        report = _run(service.execute(plan))
+        report = (
+            run_holding_the_bucket_lock(cli, "store sync --push", lambda: service.execute(plan))
+            if direction is SyncDirection.PUSH
+            else _run(service.execute(plan))
+        )
 
     payload = sync_report(report, settings)
     if report.succeeded:
@@ -298,9 +307,14 @@ def _unconfirmed_production_write(
 def sync_report(report: SyncReport, settings: Settings) -> dict[str, JsonValue]:
     """The `--json` envelope's `data` for `store sync`.
 
-    The shape the scheduled caselist sync (`v1-e34-t02`) reads, so it is written for a program
-    first: every action has a count and a byte total whether or not it happened, `applied` says
-    whether anything moved, and `failed` is a list of objects rather than a sentence to parse.
+    Written for a program first: every action has a count and a byte total whether or not it
+    happened, `applied` says whether anything moved, and `failed` is a list of objects rather than
+    a sentence to parse.
+
+    `skipped_reasons` (`v1-e29-t11`) breaks the `skipped` count down by kind of skip, each with its
+    count and up to three 12-character key prefixes, and a manifest the publisher withholds or cannot
+    read with the publisher's message and the requests it names. It is the one key added since; a
+    reader that does not know it reads every other key as before.
     """
     plan = report.plan
     return {
@@ -324,6 +338,7 @@ def sync_report(report: SyncReport, settings: Settings) -> dict[str, JsonValue]:
         ],
         "mismatched": [planned.remote_key for planned in plan.of(SyncAction.MISMATCHED)],
         "journal": str(report.journal_path) if report.journal_path is not None else None,
+        "skipped_reasons": {reason.kind.value: reason.as_json() for reason in plan.skipped_reasons},
     }
 
 
@@ -348,6 +363,10 @@ def _sync_table(report: SyncReport, settings: Settings) -> TableSpec:
 
 
 def _caption(report: SyncReport) -> str:
+    return "\n".join([_outcome(report), *_left_behind_lines(report.plan)])
+
+
+def _outcome(report: SyncReport) -> str:
     if not report.applied:
         return (
             f"Planned only; nothing was transferred. {report.plan.remote_head_requests} head "
@@ -357,6 +376,67 @@ def _caption(report: SyncReport) -> str:
     if report.failed:
         return f"{moved}; {len(report.failed)} failed."
     return f"{moved}, each verified at the destination."
+
+
+def _left_behind_lines(plan: SyncPlan) -> list[str]:
+    """Under the table: the manifests a push left on this machine because of the publisher (`v1-e29-t11`),
+    and the parsed store a sync never moves, either way (`v1-e29-t12`).
+
+    By kind, count and the requests the publisher's messages name, never the messages themselves,
+    which `--json` carries. Every other kind of skip stays a count in the table.
+    """
+    lines: list[str] = []
+    for reason in plan.skipped_reasons:
+        if reason.kind is SkipKind.PARSED_STORE:
+            lines.append(
+                f"PARSED STORE: {reason.count} object(s) under parsed/ left as they are on both sides. "
+                "store sync never moves the parsed store: caselist parse --publish is what publishes it."
+            )
+        elif reason.kind is SkipKind.WITHHELD_MANIFEST:
+            named = f" ({', '.join(reason.request_ids)})" if reason.request_ids else ""
+            removals = " and ".join(
+                f"caselist remove … --request {request}" for request in reason.request_ids or ("<id>",)
+            )
+            lines.append(
+                f"WITHHELD MANIFESTS: {reason.count} manifest(s) the publisher withholds, left on this "
+                f"machine{named}. Run the same removal again on this machine ({removals}) to rewrite "
+                "them, then push again; --json has the publisher's message for each."
+            )
+        elif reason.kind is SkipKind.UNREADABLE_MANIFEST:
+            lines.append(
+                f"UNREADABLE MANIFESTS: {reason.count} manifest(s) the publisher cannot read, left on "
+                "this machine; --json has the key and line number of each."
+            )
+    return lines
+
+
+def _note_a_stale_parsed_copy(cli: CliContext, service: EvidenceSyncService) -> None:
+    """On a dry run, the `objects/parsed/` copy an earlier pull left, and the command that removes it.
+
+    On the console only (`v1-e29-t12`): a note on stderr, so the path and the command are one
+    unbroken line whatever the terminal's width, and never in `--json`'s payload or the journal. The
+    directory and a count, never a file's name. Nothing here deletes it; the operator runs the command.
+
+    The note is advice, so a check that cannot be made never ends the run (`v1-e29-t13`): it says so
+    by its error code, or the exception's class, never its message, which can quote a path; and the
+    plan that follows reports its own outcome, a refusal included, exactly as it would without it.
+    """
+    try:
+        stale = _run(service.stale_parsed_copy())
+    except (DomainError, OSError) as exception:
+        cli.output.detail(traceback.format_exc())
+        code = error_code_for(exception) if isinstance(exception, DomainError) else type(exception).__name__
+        cli.output.note(
+            f"STALE PARSED COPY: could not look for one ({code}); the plan below does not depend on it."
+        )
+        return
+    if stale is None:
+        return
+    cli.output.note(
+        f"STALE PARSED COPY: {stale.directory} holds {stale.files} file(s) an earlier store sync --pull "
+        "copied from the bucket. Nothing reads them, and store sync no longer moves them. Remove them "
+        f"with: rm -r {shlex.quote(str(stale.directory))}"
+    )
 
 
 def _filtered(plan: SyncPlan) -> str:

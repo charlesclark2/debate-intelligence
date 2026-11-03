@@ -1,0 +1,11 @@
+# The edits v1-e32-t29's golden files make to the synthetic caselist (../synthetic_caselist/): five cards'
+# headings, nothing else. README.md works out the expected sections by hand.
+#
+# cards: a card by its file (the digest's first two characters, repeated) and first paragraph, and its new
+# normalized headings, outermost first. Every other field is the fixture's.
+cards:
+  - {file: a4, element_index: 0, headings: [innovation advantage, harms]}
+  - {file: a6, element_index: 3, headings: [innovation advantage, harm]}
+  - {file: a3, element_index: 3, headings: [costs advantage, harm]}
+  - {file: a5, element_index: 9, headings: [costs advantage, harms]}
+  - {file: b5, element_index: 3, headings: [spending da, harms]}

@@ -24,16 +24,44 @@ Subcommands, in the order .github/workflows/validate-dev.yml runs them:
     (``-m "live and canary"``).
 ``slow``
     From a checkout of the same commit, run the offline slow tier,
-    ``-m "slow and not live and not eval"``. The parser evaluation (``eval``) is excluded: it needs
-    the evaluation corpus, which by policy never reaches a runner, so there it could only skip. It
-    runs on the operator's Mac before any promotion that changes the parser (v1-e31-t05).
+    ``-m "slow and not live and not eval and not operator_data"``. The parser evaluation (``eval``)
+    is excluded: it needs the evaluation corpus, which by policy never reaches a runner, so there it
+    could only skip. It runs on the operator's Mac before any promotion that changes the parser
+    (v1-e31-t05). So is anything marked ``operator_data``, which needs data only the operator's
+    machine holds, such as the tub's own search index (v1-e01-t34).
+``cloud``
+    From a checkout of the same commit, run dev's cloud smoke checks,
+    ``tests/smoke/cloud -m "live and dev"``: the student search pilot through CloudFront, with no
+    account and no secret (v1-e39-t10). They check what dev serves, so a pilot that is down in dev
+    turns the status red; the workflow holds no AWS credential and nothing to sign in with.
 ``conclude``
     Post the final state. ``success`` only when every job succeeded, the installed build reported
     the requested commit, and both test trees were that commit; ``success`` is posted on the commit
     the installed build reported, which by then is the requested one. Anything else posts
     ``failure`` (``error`` if the run was cancelled) on the requested commit.
+``issue``
+    After ``conclude``, on dev: a ``failure`` opens an issue labelled ``validate-dev``, or comments
+    on the open one; a ``success`` closes it. A red validate-dev went unseen for days from
+    2026-10-20, because nothing but the status said so (v1-e01-t34). The text holds the commit,
+    the tag, the conclusion's own description and the run's link, and nothing from the environment.
 ``run``
-    All of the above in one process, for an operator's rehearsal or a caller with one job.
+    All of the above but ``issue`` in one process, for an operator's rehearsal or a caller with one
+    job.
+
+**The site lane** (v1-e37-t09). A ``site/<slug>`` commit has no pre-release and needs none: the
+workflow's ``site_only`` input replaces the jobs above with these two around a ``site`` job, which
+runs the site's checks and its prod build from the commit.
+
+``site-resolve``
+    Refuse, posting nothing, unless the commit's own changes since it left ``main`` are site content,
+    pages or assets (``check_promotion_source.py``'s site-only rule: something, all under ``site/``,
+    no dependency manifest or lockfile). Then post ``pending`` (with ``--post-status``). Posting
+    nothing on a refusal is deliberate: a mistyped SHA, dev's head say, must not turn that commit
+    red. Every byte the CLI is built from is then ``main``'s, which was itself validated, so the
+    pre-release tiers have nothing to add.
+``site-conclude``
+    ``success`` only when the ``site`` job succeeded on exactly the requested commit; ``failure``
+    (``error`` if cancelled) otherwise. It opens no issue: a site branch is not dev's verdict.
 
 **A skipped test fails its tier.** A tier passes only when pytest exits 0, wrote its JUnit report,
 ran at least one test, and that report shows no failure, no error and no skip (an expected failure
@@ -69,6 +97,9 @@ CHANNEL = "dev"
 FULL_SHA = re.compile(r"[0-9a-f]{40}")
 DEV_TAG = re.compile(r"v(?P<x>0|[1-9]\d*)\.(?P<y>0|[1-9]\d*)\.(?P<z>0|[1-9]\d*)-dev\.(?P<n>[1-9]\d*)")
 DESCRIPTION_LIMIT = 140  # the statuses API refuses a longer description
+ISSUE_LABEL = "validate-dev"
+ISSUE_LABEL_COLOR = "B60205"
+ISSUE_TITLE = "validate-dev is failing on dev"
 
 PASSED, PROBLEM = 0, 1
 
@@ -112,6 +143,18 @@ class GitHub(Protocol):
     def post_status(self, sha: str, state: str, target_url: str, description: str) -> None:
         """Create a `validate-dev` commit status on `sha`."""
         ...
+
+    def open_issue(self, label: str) -> int | None:
+        """The number of the oldest open issue labelled `label`, or None when there is none."""
+        ...
+
+    def create_issue(self, title: str, body: str, label: str) -> None:
+        """Open an issue labelled `label`, creating the label if the repository lacks it."""
+        ...
+
+    def comment_on_issue(self, number: int, body: str) -> None: ...
+
+    def close_issue(self, number: int, comment: str) -> None: ...
 
 
 class GhCli:
@@ -190,6 +233,30 @@ class GhCli:
             f"context={STATUS_CONTEXT}",
         )
 
+    def _issue_command(self, *arguments: str) -> str:
+        completed = self._gh(*arguments, "--repo", self.repository)
+        if completed.returncode != 0:
+            raise ValidationProblem(f"gh {' '.join(arguments[:2])} failed: {completed.stderr.strip()}")
+        return completed.stdout
+
+    def open_issue(self, label: str) -> int | None:
+        listing = self._issue_command(
+            "issue", "list", "--label", label, "--state", "open", "--json", "number", "--limit", "100"
+        )
+        numbers = [int(issue["number"]) for issue in json.loads(listing or "[]")]
+        return min(numbers) if numbers else None
+
+    def create_issue(self, title: str, body: str, label: str) -> None:
+        # --force makes this idempotent: it creates the label, or updates it if it exists.
+        self._issue_command("label", "create", label, "--color", ISSUE_LABEL_COLOR, "--force")
+        self._issue_command("issue", "create", "--title", title, "--body", body, "--label", label)
+
+    def comment_on_issue(self, number: int, body: str) -> None:
+        self._issue_command("issue", "comment", str(number), "--body", body)
+
+    def close_issue(self, number: int, comment: str) -> None:
+        self._issue_command("issue", "close", str(number), "--comment", comment)
+
 
 # --------------------------------------------------------------------------------------------
 # resolve: which pre-release is this commit's
@@ -259,7 +326,9 @@ class Tier:
 
 RECORDED = Tier("recorded", "not live and not in_process", ("tests/smoke",))
 LIVE_CANARY = Tier("live canary", "live and canary", ("tests/smoke",))
-SLOW = Tier("slow", "slow and not live and not eval")
+SLOW = Tier("slow", "slow and not live and not eval and not operator_data")
+CLOUD = Tier("dev cloud", "live and dev", ("tests/smoke/cloud",))
+"""What dev serves, through CloudFront, with no account: the student search pilot's checks (v1-e39-t10)."""
 
 
 @dataclass(frozen=True)
@@ -520,12 +589,14 @@ def smoke(
 
 
 # --------------------------------------------------------------------------------------------
-# slow: the offline slow tier, from the source at the same commit
+# slow and cloud: a tier from the source at the same commit
 # --------------------------------------------------------------------------------------------
 
 
 @dataclass
-class SlowReport:
+class SourceTierReport:
+    """A tier run from a checkout of the commit: the slow tier, or dev's cloud checks."""
+
     sha: str
     tests_commit: str
     tier: dict[str, object] = field(default_factory=dict)
@@ -536,18 +607,20 @@ class SlowReport:
         return not self.problems
 
 
-def slow(
-    sha: str, work: Path, *, pytest_command: Sequence[str] = PYTEST, tier: Tier = SLOW, cwd: Path = REPO_ROOT
-) -> SlowReport:
+def tier_from_source(
+    sha: str, work: Path, tier: Tier, *, pytest_command: Sequence[str] = PYTEST, cwd: Path = REPO_ROOT
+) -> SourceTierReport:
+    """Run `tier` from this checkout, refusing first if the checkout is not `sha`."""
     require_sha(sha)
-    report = SlowReport(sha=sha, tests_commit=tree_commit(cwd))
+    report = SourceTierReport(sha=sha, tests_commit=tree_commit(cwd))
     if report.tests_commit != sha:
         report.problems.append(
-            f"the slow tier would run {report.tests_commit}, not {sha}; check out the validated commit"
+            f"the {tier.name} tier would run {report.tests_commit}, not {sha}; check out the validated commit"
         )
         return report
     environment = environment_for_tests(os.environ)
-    result = run_tier(tier, work / "junit-slow.xml", environment, pytest_command=pytest_command, cwd=cwd)
+    junit = work / f"junit-{tier.name.replace(' ', '-')}.xml"
+    result = run_tier(tier, junit, environment, pytest_command=pytest_command, cwd=cwd)
     report.tier = {
         "name": result.name,
         "exit_code": result.exit_code,
@@ -555,6 +628,19 @@ def slow(
     }
     report.problems.extend(result.problems)
     return report
+
+
+def slow(
+    sha: str, work: Path, *, pytest_command: Sequence[str] = PYTEST, tier: Tier = SLOW, cwd: Path = REPO_ROOT
+) -> SourceTierReport:
+    return tier_from_source(sha, work, tier, pytest_command=pytest_command, cwd=cwd)
+
+
+def cloud(
+    sha: str, work: Path, *, pytest_command: Sequence[str] = PYTEST, tier: Tier = CLOUD, cwd: Path = REPO_ROOT
+) -> SourceTierReport:
+    """Dev's cloud smoke checks, which need no account and no secret (v1-e39-t10)."""
+    return tier_from_source(sha, work, tier, pytest_command=pytest_command, cwd=cwd)
 
 
 # --------------------------------------------------------------------------------------------
@@ -572,6 +658,11 @@ class Conclusion:
 
 REQUIRED_JOBS = ("resolve", "smoke", "slow")
 
+#: What a success says of a job the workflow reports beyond the required three: the run image's,
+#: built from the same pre-release and pulled against the stand-ins inside it (v1-e40-t03), and the
+#: cloud job's, dev's pilot checked through CloudFront with no account (v1-e39-t10).
+REPORTED_JOB_WORDS = {"image": "the run image built and checked", "cloud": "dev pilot up"}
+
 
 def conclude(
     requested_sha: str,
@@ -588,8 +679,13 @@ def conclude(
     `success` goes on the commit the installed build reported, and only when that is the requested
     one and both test trees were too. Anything less goes on the requested commit as `failure`, or as
     `error` when the run was cancelled.
+
+    Every job reported in `jobs` has to succeed, not only the required ones: the workflow reports
+    its image job as well (v1-e40-t03), and a red image is no validated build.
     """
     require_sha(requested_sha)
+    reported_beyond = [job for job in jobs if job not in required]
+    required = (*required, *reported_beyond)
     if any(jobs.get(job) == "cancelled" for job in required):
         return Conclusion(requested_sha, "error", "validation was cancelled before it finished")
     unfinished = [f"{job} {jobs.get(job) or 'did not run'}" for job in required if jobs.get(job) != "success"]
@@ -603,17 +699,120 @@ def conclude(
         if commit != requested_sha:
             return Conclusion(requested_sha, "failure", f"{label} {commit or 'nothing'}, not this commit")
     assert installed_sha is not None
+    also = "".join(f", {REPORTED_JOB_WORDS.get(job, f'{job} green')}" for job in reported_beyond)
     return Conclusion(
         installed_sha,
         "success",
-        f"{tag} installed from its pre-release and validated: recorded and slow tiers green",
+        f"{tag} installed from its pre-release and validated: recorded and slow tiers green{also}",
     )
+
+
+SITE_PENDING = "site only: building this commit's site for prod and checking it"
+SITE_SUCCESS = (
+    "site only: nothing outside site/ changed since main; prod build, policy and consent guards "
+    "and export checks green"
+)
+
+
+def site_resolve(
+    github: GitHub,
+    sha: str,
+    main_ref: str,
+    target_url: str,
+    *,
+    post_status: bool,
+    git: Callable[[Sequence[str]], str] | None = None,
+) -> None:
+    """Refuse, posting nothing, a commit that is not a site-only change; then post pending."""
+    # Imported here, not at the top: the issue step runs this file with nothing beside it.
+    import check_promotion_source as guard  # noqa: PLC0415
+
+    require_sha(sha)
+    try:
+        changed = guard.site_changes(main_ref, sha, git)
+    except guard.GitError as problem:
+        raise ValidationProblem(
+            f"could not list what {sha} changes; no status was posted: {problem}"
+        ) from problem
+    verdict = guard.check_site_only(changed)
+    if not verdict.passed:
+        raise ValidationProblem(f"{sha} is not a site-only change; no status was posted.\n{verdict.message}")
+    print(f"validate-dev site: {verdict.message}", flush=True)
+    if post_status:
+        post(github, Conclusion(sha, "pending", SITE_PENDING), target_url)
+
+
+def conclude_site(requested_sha: str, *, site_commit: str | None, jobs: Mapping[str, str]) -> Conclusion:
+    """The final status for a site-only commit, from what the `site` job reported."""
+    require_sha(requested_sha)
+    result = jobs.get("site") or ""
+    if result == "cancelled":
+        return Conclusion(requested_sha, "error", "validation was cancelled before it finished")
+    if result != "success":
+        return Conclusion(
+            requested_sha, "failure", f"site-only validation failed: site {result or 'did not run'}"
+        )
+    if site_commit != requested_sha:
+        return Conclusion(
+            requested_sha, "failure", f"the site checks ran on {site_commit or 'nothing'}, not this commit"
+        )
+    return Conclusion(requested_sha, "success", SITE_SUCCESS)
 
 
 def post(github: GitHub, conclusion: Conclusion, target_url: str) -> None:
     description = conclusion.description[:DESCRIPTION_LIMIT]
     github.post_status(conclusion.sha, conclusion.state, target_url, description)
     print(f"== posted {STATUS_CONTEXT} {conclusion.state} on {conclusion.sha}: {description}", flush=True)
+
+
+# --------------------------------------------------------------------------------------------
+# issue: a red validate-dev reaches someone
+# --------------------------------------------------------------------------------------------
+
+CONCLUDED_STATES = ("success", "failure", "error")
+
+
+def failure_text(sha: str, tag: str | None, description: str, run_link: str) -> str:
+    return (
+        f"validate-dev failed on `{sha}` ({tag or 'no pre-release found'}): {description}\n\n"
+        f"Run: {run_link}\n\n"
+        "protect-main requires validate-dev green on a promotion's head commit, so no promotion to "
+        "main can merge until dev's head validates. The run's failed job says what failed, and "
+        "`scripts/task list` shows the latest result for dev's head. This issue is closed by the "
+        "next validate-dev run on dev that succeeds."
+    )
+
+
+def success_text(sha: str, tag: str | None, run_link: str) -> str:
+    return f"validate-dev is green again on `{sha}` ({tag or 'no tag'}): {run_link}"
+
+
+def report_on_issue(
+    github: GitHub, state: str, *, sha: str, tag: str | None, description: str, run_link: str
+) -> str:
+    """Open or update the validate-dev issue on a failure, close it on a success; say what was done.
+
+    A cancelled run (`error`) is no verdict on the commit, so it leaves the issue as it is.
+    """
+    require_sha(sha)
+    if tag:
+        tag_order(tag)
+    if state not in CONCLUDED_STATES:
+        raise ValidationProblem(f"{state!r} is not a state conclude posts")
+    if state == "error":
+        return "the run was cancelled; the issue is left as it is"
+    number = github.open_issue(ISSUE_LABEL)
+    if state == "failure":
+        body = failure_text(sha, tag, description, run_link)
+        if number is None:
+            github.create_issue(ISSUE_TITLE, body, ISSUE_LABEL)
+            return f"opened an issue labelled {ISSUE_LABEL}"
+        github.comment_on_issue(number, body)
+        return f"commented on issue #{number}"
+    if number is None:
+        return f"no issue labelled {ISSUE_LABEL} is open"
+    github.close_issue(number, success_text(sha, tag, run_link))
+    return f"closed issue #{number}"
 
 
 # --------------------------------------------------------------------------------------------
@@ -696,6 +895,12 @@ def build_parser() -> argparse.ArgumentParser:
     slow_parser.add_argument("--sha", required=True)
     work_options(slow_parser)
 
+    cloud_parser = sub.add_parser(
+        "cloud", help="run dev's cloud smoke checks, which need no account, from a checkout of the commit"
+    )
+    cloud_parser.add_argument("--sha", required=True)
+    work_options(cloud_parser)
+
     conclude_parser = sub.add_parser("conclude", help="post the final validate-dev status")
     conclude_parser.add_argument("--sha", required=True, help="the commit that was asked to be validated")
     conclude_parser.add_argument("--tag")
@@ -706,7 +911,43 @@ def build_parser() -> argparse.ArgumentParser:
     conclude_parser.add_argument("--github-output", default=os.environ.get("GITHUB_OUTPUT"))
     status_options(conclude_parser)
 
-    run_parser = sub.add_parser("run", help="resolve, smoke, slow and conclude in one process")
+    report_parser = sub.add_parser(
+        "tier-report",
+        help="judge a JUnit report by a tier's rules (a skip fails it); for the image job's smoke check",
+    )
+    report_parser.add_argument("--name", required=True, help="the tier's name in what is printed")
+    report_parser.add_argument("junit", type=Path)
+
+    issue_parser = sub.add_parser(
+        "issue", help="open or update the validate-dev issue on a failure, close it on a success"
+    )
+    issue_parser.add_argument("--sha", required=True, help="the commit that was asked to be validated")
+    issue_parser.add_argument("--state", required=True, choices=CONCLUDED_STATES, help="what conclude posted")
+    issue_parser.add_argument("--description", required=True, help="conclude's description of the result")
+    issue_parser.add_argument("--tag")
+    issue_parser.add_argument("--target-url", help="the run the issue links to (default: this Actions run)")
+
+    site_resolve_parser = sub.add_parser(
+        "site-resolve", help="refuse a commit that is not a site-only change, then post pending (site lane)"
+    )
+    site_resolve_parser.add_argument("--sha", required=True)
+    site_resolve_parser.add_argument("--main-ref", default="origin/main", help="main, as fetched")
+    status_options(site_resolve_parser)
+
+    site_conclude_parser = sub.add_parser(
+        "site-conclude", help="post the final status for a site-only commit"
+    )
+    site_conclude_parser.add_argument(
+        "--sha", required=True, help="the commit that was asked to be validated"
+    )
+    site_conclude_parser.add_argument("--site-commit", help="the commit the site job checked")
+    site_conclude_parser.add_argument(
+        "--job", action="append", default=[], help="name=result, e.g. site=success"
+    )
+    site_conclude_parser.add_argument("--github-output", default=os.environ.get("GITHUB_OUTPUT"))
+    status_options(site_conclude_parser)
+
+    run_parser = sub.add_parser("run", help="resolve, smoke, slow, cloud and conclude in one process")
     run_parser.add_argument("--sha", required=True)
     run_parser.add_argument("--tag")
     run_parser.add_argument("--live", action="store_true")
@@ -743,25 +984,53 @@ def main(argv: list[str] | None = None, *, github: GitHub | None = None) -> int:
                 {"installed_sha": report.installed_commit, "tests_commit": report.tests_commit},
             )
             return finish("smoke", report.problems)
-        if args.command == "slow":
-            slow_report = slow(args.sha, work_dir(args))
-            write_report(args.report, slow_report)
-            write_outputs(args.github_output, {"tests_commit": slow_report.tests_commit})
-            return finish("slow", slow_report.problems)
-        if args.command == "conclude":
-            conclusion = conclude(
-                args.sha,
-                tag=args.tag,
-                installed_sha=args.installed_sha,
-                smoke_commit=args.smoke_commit,
-                slow_commit=args.slow_commit,
-                jobs=parse_jobs(args.job),
-            )
+        if args.command in ("slow", "cloud"):
+            source_report = (slow if args.command == "slow" else cloud)(args.sha, work_dir(args))
+            write_report(args.report, source_report)
+            write_outputs(args.github_output, {"tests_commit": source_report.tests_commit})
+            return finish(args.command, source_report.problems)
+        if args.command == "tier-report":
+            # pytest's exit status was the step's own; this judges what the report holds.
+            return finish(args.name, TierResult(args.name, 0, read_junit(args.junit)).problems)
+        if args.command == "site-resolve":
+            site_resolve(client, args.sha, args.main_ref, target_for(args), post_status=args.post_status)
+            return PASSED
+        if args.command in ("conclude", "site-conclude"):
+            if args.command == "conclude":
+                conclusion = conclude(
+                    args.sha,
+                    tag=args.tag,
+                    installed_sha=args.installed_sha,
+                    smoke_commit=args.smoke_commit,
+                    slow_commit=args.slow_commit,
+                    jobs=parse_jobs(args.job),
+                )
+            else:
+                conclusion = conclude_site(args.sha, site_commit=args.site_commit, jobs=parse_jobs(args.job))
             if args.post_status:
                 post(client, conclusion, target_for(args))
-            write_outputs(args.github_output, {"state": conclusion.state, "status_sha": conclusion.sha})
+            write_outputs(
+                args.github_output,
+                {
+                    "state": conclusion.state,
+                    "status_sha": conclusion.sha,
+                    "description": conclusion.description[:DESCRIPTION_LIMIT],
+                },
+            )
             print(f"validate-dev: {conclusion.state} on {conclusion.sha}: {conclusion.description}")
             return PASSED if conclusion.state == "success" else PROBLEM
+        if args.command == "issue":
+            run_link = args.target_url or run_url(os.environ) or "(no run link)"
+            done = report_on_issue(
+                client,
+                args.state,
+                sha=args.sha,
+                tag=args.tag,
+                description=args.description[:DESCRIPTION_LIMIT],
+                run_link=run_link,
+            )
+            print(f"validate-dev issue: {done}")
+            return PASSED
         return command_run(args, client)
     except ValidationProblem as problem:
         print(f"validate-dev: {problem}", file=sys.stderr)
@@ -806,6 +1075,7 @@ def command_run(args: argparse.Namespace, client: GitHub) -> int:
         jobs["smoke"] = "success" if smoke_report.passed else "failure"
         slow_report = slow(args.sha, work / "slow")
         jobs["slow"] = "success" if slow_report.passed else "failure"
+        jobs["cloud"] = "success" if cloud(args.sha, work / "cloud").passed else "failure"
     conclusion = conclude(
         args.sha,
         tag=tag,

@@ -31,7 +31,7 @@ from pathlib import Path
 import pytest
 
 from debate_core.application.errors import NotFound
-from debate_core.application.ports import EvidenceObjectStore
+from debate_core.application.ports.evidence_store import EvidenceObjectStore
 from debate_core.testing.contracts.harness import AdapterContract
 
 __all__ = ["EvidenceObjectStoreContract", "EvidenceObjectStoreFactory"]

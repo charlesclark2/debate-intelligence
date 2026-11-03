@@ -3,11 +3,16 @@
 #   EvidenceOperator - everyday work: list the documented prefixes, read, write, use the key,
 #                      and list (never delete) the versions a takedown would remove, so a
 #                      removal's dry run can count them and `caselist status` can report what a
-#                      removal left. No DeleteObject at all. This is what the operator and
-#                      `debate-research store sync|ls|get` (v1-e29-t05) run as.
+#                      removal left. Read and write object tags under parsed/ only, so that
+#                      `caselist retire --bucket` can mark a superseded version directory for the
+#                      lifecycle rule (v1-e31-t16). No DeleteObject at all. This is what the
+#                      operator and `debate-research store sync|ls|get` (v1-e29-t05) run as.
 #   EvidenceRemoval  - takedowns only: delete objects and their noncurrent versions under the five
-#                      prefixes that hold disclosed material, and append to the suppression list.
-#                      Assigned to one accountable person.
+#                      prefixes that hold disclosed material, and under reports/tub/search/, the
+#                      student search pilot's index versions, which hold card text (v1-e39-t07);
+#                      delete the landscape bundles' school views, schools.csv and schools.md,
+#                      which name schools and team codes (v1-e32-t13); append to the suppression
+#                      list. Assigned to one accountable person.
 #
 # Why two sets rather than one that can do everything: a removal under
 # docs/policies/caselist-data-use.md is irreversible — the noncurrent versions go too, so there is
@@ -44,12 +49,22 @@ locals {
   # and an absent condition key matches no StringLike, so the root listing is refused. That is the
   # scoping the task spec asks for, and the runbook says so in as many words: list a prefix.
   list_prefix_conditions = flatten([
-    for prefix in local.evidence_prefixes : [prefix, "${prefix}*"]
+    for prefix in concat(local.evidence_prefixes, local.named_list_prefixes) : [prefix, "${prefix}*"]
   ])
+
+  # Prefixes below a documented one that a command lists, named in the grant as the layout document
+  # names them. `reports/*` already matches each; naming it keeps the listing its command depends on
+  # if `reports/` is ever narrowed. `reports/tub/search/` holds the student search pilot's index
+  # versions and their `current.json` (v1-e39-t02); listing it is how an operator sees which versions
+  # are there before v1-e39-t07 prunes them. A listing grant only: nothing here adds a delete.
+  named_list_prefixes = [
+    "reports/tub/search/",
+  ]
 
   # The prefixes a takedown may delete from. reports/ is not among them: a report is derived,
   # regenerable and cites evidence rather than holding it, and leaving it out is what makes "this
-  # credential deletes disclosed material and nothing else" a statement IAM can enforce.
+  # credential deletes disclosed material and nothing else" a statement IAM can enforce. The one
+  # exception is removable_index_prefix below, granted to the takedown credential alone.
   removable_prefixes = [
     "raw/",
     "parsed/",
@@ -65,6 +80,34 @@ locals {
   removable_list_prefix_conditions = flatten([
     for prefix in local.removable_prefixes : [prefix, "${prefix}*"]
   ])
+
+  # The student search pilot's index versions (ADR-0019 (c), the PM's amendment of 2026-10-19 to
+  # v1-e39-t07). An index holds card text, school and team code, so after a removal the rebuilt
+  # index is published and every superseded version is deleted, noncurrent versions included. That
+  # needs delete and version listing here, on the takedown credential only: kept out of
+  # removable_prefixes, which the everyday credential's own version listing reads, and nothing else
+  # under reports/ gains a delete. docs/architecture/evidence-store-layout.md says the same.
+  removable_index_prefix = "reports/tub/search/"
+
+  # The landscape bundles' per-school views (v1-e32-t13): `reports/landscape/<caselist>/<snapshot>/`
+  # holds schools.csv and schools.md, naming schools and team codes as disclosed, beside circuit-wide
+  # files that name none. The data-use policy removes a per-school view with its sources, so a
+  # takedown lists every bundle's versions and deletes those two files, noncurrent versions included,
+  # and nothing else of a bundle. The names are v1-e32-t04's SCHOOL_VIEW_FILES (debate_core's
+  # landscape_bundle_files.py); a test there reads this list and fails if the two part ways. An ARN's
+  # `*` crosses `/`, so each matches the file in every caselist's every snapshot and nothing that
+  # merely ends like it. On the takedown credential only, like removable_index_prefix.
+  landscape_prefix  = "reports/landscape/"
+  school_view_files = ["schools.csv", "schools.md"]
+  school_view_arns = [
+    for name in local.school_view_files : "${aws_s3_bucket.evidence.arn}/${local.landscape_prefix}*/${name}"
+  ]
+
+  removal_list_prefix_conditions = concat(
+    local.removable_list_prefix_conditions,
+    [local.removable_index_prefix, "${local.removable_index_prefix}*"],
+    [local.landscape_prefix, "${local.landscape_prefix}*"],
+  )
 
   # manifests/_suppression/suppression-list.jsonl and removal-log.jsonl (v1-e30-t07). Appending to
   # an append-only list means reading it first, so this prefix — and only this prefix — is
@@ -117,6 +160,21 @@ locals {
         Resource = "${aws_s3_bucket.evidence.arn}/*"
       },
       {
+        # Retiring a superseded parsed-store version directory (v1-e31-t16, PM ruling 2026-10-15):
+        # `caselist retire --bucket` reads each object's tags and adds debate-retention=superseded,
+        # which the lifecycle rule `expire-retired-parsed-version-directories` in main.tf expires
+        # after a grace period. Under parsed/ and nowhere else, and still no delete: a tag on a
+        # source, a manifest or a built file would mean nothing to any rule, and the deletion is the
+        # lifecycle rule's, not this set's. A statement of its own, so its resource is its alone.
+        Sid    = "TagSupersededParsedVersionDirectories"
+        Effect = "Allow"
+        Action = [
+          "s3:GetObjectTagging",
+          "s3:PutObjectTagging",
+        ]
+        Resource = "${aws_s3_bucket.evidence.arn}/${local.retired_parsed_prefix}*"
+      },
+      {
         # Encrypt and GenerateDataKey for writes, Decrypt for reads. No kms:* and no key or
         # grant administration: this set cannot change who else may read the evidence.
         Sid    = "UseEvidenceKey"
@@ -142,7 +200,7 @@ locals {
         Action   = "s3:ListBucketVersions"
         Resource = aws_s3_bucket.evidence.arn
         Condition = {
-          StringLike = { "s3:prefix" = local.removable_list_prefix_conditions }
+          StringLike = { "s3:prefix" = local.removal_list_prefix_conditions }
         }
       },
       {
@@ -154,6 +212,32 @@ locals {
           "s3:DeleteObjectVersion",
         ]
         Resource = local.removable_object_arns
+      },
+      {
+        # Pruning the pilot's superseded index versions after a removal (v1-e39-t07): the same three
+        # actions, under reports/tub/search/ alone. A statement of its own, so the delete-scoping
+        # tests can name exactly which part of reports/ it reaches.
+        Sid    = "DeleteSupersededSearchIndexVersions"
+        Effect = "Allow"
+        Action = [
+          "s3:GetObjectVersion",
+          "s3:DeleteObject",
+          "s3:DeleteObjectVersion",
+        ]
+        Resource = "${aws_s3_bucket.evidence.arn}/${local.removable_index_prefix}*"
+      },
+      {
+        # A removal's school views (v1-e32-t13): the two per-school files of every landscape bundle,
+        # and no circuit-wide file. Delete only: listing them is the statement above, and reading or
+        # writing them is the everyday credential's (`landscape report --publish`). A statement of its
+        # own, so the delete-scoping tests can name exactly which part of reports/ it reaches.
+        Sid    = "DeleteLandscapeSchoolViews"
+        Effect = "Allow"
+        Action = [
+          "s3:DeleteObject",
+          "s3:DeleteObjectVersion",
+        ]
+        Resource = local.school_view_arns
       },
       {
         Sid    = "MaintainSuppressionList"
@@ -186,7 +270,7 @@ resource "aws_ssoadmin_permission_set" "evidence_operator" {
   count = local.create_permission_sets ? 1 : 0
 
   name             = local.operator_permission_set_name
-  description      = "Reads and publishes ${var.environment} evidence in ${local.bucket_name}. No DeleteObject, no bucket-policy or KMS-policy changes (v1-e29-t03)."
+  description      = "Reads and publishes ${var.environment} evidence in ${local.bucket_name}, and tags superseded parsed/ directories. No DeleteObject, no bucket-policy or KMS-policy changes (v1-e29-t03)."
   instance_arn     = var.identity_center_instance_arn
   session_duration = "PT8H"
 }
@@ -206,7 +290,7 @@ resource "aws_ssoadmin_permission_set" "evidence_removal" {
   count = local.create_permission_sets ? 1 : 0
 
   name             = local.removal_permission_set_name
-  description      = "Takedowns only: deletes ${var.environment} evidence and its versions under raw/, parsed/, files/, manifests/ and quarantine/ (docs/policies/caselist-data-use.md)."
+  description      = "Takedowns only: deletes ${var.environment} evidence and its versions under raw/, parsed/, files/, manifests/, quarantine/ and reports/tub/search/ (docs/policies/caselist-data-use.md)."
   instance_arn     = var.identity_center_instance_arn
   session_duration = "PT1H"
 }

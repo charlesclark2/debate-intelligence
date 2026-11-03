@@ -1,0 +1,1432 @@
+"""`debate-research landscape report` and `landscape evaluate`: the landscape, and its model stage measured.
+
+::
+
+    debate-research landscape report --caselist hspolicy26
+    debate-research landscape report --caselist hspolicy26 --snapshot 2026-10-20 --json
+    debate-research landscape report --caselist hspolicy26 --publish --dry-run
+    debate-research landscape report --caselist hspolicy26 --publish --accept-scan-hits 3f9a0c1d2e4b
+    debate-research landscape report --caselist hspolicy26 --restored-copy <copy> --publish
+
+Every decision is :class:`~debate_core.application.landscape_run.LandscapeRunService`'s
+(`v1-e32-t05-landscape-cli`); this is the guards and the rendering.
+
+## The bundle
+
+The run writes seven files, under `<data dir>/reports/landscape/<caselist>/<snapshot>/` unless
+`--out` names a directory (`v1-e32-t12-landscape-cli-seven-files`):
+
+* **circuit-wide**, naming no school, team or debater: `v1-e32-t03`'s `report.md`, `positions.csv`
+  and `top_cards.csv`, `v1-e32-t10`'s `impact_cards.csv`, and `v1-e32-t04`'s `trends.csv`;
+* **school view**, naming each disclosing school and team code as disclosed: `v1-e32-t04`'s
+  `schools.csv` and `schools.md`.
+
+`--help`, the human output and `--json`'s `bundle` mark each file one or the other, read from
+:data:`~debate_core.application.landscape_report.CIRCUIT_WIDE_FILES` and
+:data:`~debate_core.application.landscape_report.SCHOOL_VIEW_FILES`, so an operator sees which files
+name schools before publishing. `--json` also counts the trends (`trends.rows_by_label`, NEW, RISING,
+FALLING and STEADY, and `trends.held_back_by_team_floor`) and the school view (`school_view.schools`,
+`team_codes` and `rows`), all from the run's result and as numbers only.
+
+## A stale report
+
+The status line starts `STALE:` when `v1-e34-t03`'s hook says the report is. When the latest sync run
+of the caselist failed or stopped on an error (`v1-e34-t32`), the line ends with the hook's own
+sentence, :meth:`~debate_core.application.landscape_staleness.FailedSyncRun.sentence`, and `--json`'s
+`staleness.failed_run` holds the run id and the failed stages' names or the error's class, as the hook
+holds them: never a stage's reason or the error's message, which can name a school or a path.
+
+## `--publish`
+
+Uploads the bundle to `reports/landscape/<caselist>/<snapshot>/` in this environment's evidence
+bucket, which is private, skipping a file the bucket holds with the same SHA-256. Dev or prod only,
+and prod only with `--confirm-prod`; `DEBATE_ENV` never defaults to prod. Never a presigned URL.
+
+## The scan before sharing
+
+Every run scans the bundle for the schools, team codes, tournaments and paths its disclosures name,
+and prints each hit with its line. Those lines can name a school or a team: they are for the
+operator's terminal, and `--json` says so in a `notice`. `--publish` is refused, exit `1`, while a
+hit no earlier run accepted remains, naming the digest of those hits. Read them; when none names a
+team, run again with `--accept-scan-hits <digest>`, which is accepted only while it is the digest of
+the hits the run finds. Accepted hits are remembered on this machine, so next week stops only on new
+ones.
+
+A `--publish --dry-run` the scan holds back is refused the same way, and writes no report, so its hint
+says so and names the command to run (`v1-e32-t19`): the command as typed, without `--dry-run` and with
+`--accept-scan-hits <digest>`. `--json` carries that command as `error.details.publish_command`, a key
+only a dry run's refusal has. It echoes only what was typed, root options such as `--json` among them,
+in the order the command declares them: never a default, an environment variable or a value the run
+resolved, such as the newest snapshot.
+
+## `--dry-run`
+
+Writes nothing but the plan-text and analytic-text caches: not the classification cache, the review
+queue, the bundle, the acceptance log, the model cassettes or usage log, or the bucket. The two text
+caches are keyed on the parser version, so the first report after a parser bump reads every on-topic
+source again; a dry run keeps those readings, derived fields and never evidence text, in the data
+directory (never in a `--restored-copy`), and the publish after it parses none of those sources to
+fill them (`v1-e32-t30`, the PM's ruling of 2026-10-31). Like every run, it still reads again, in
+memory, the few sources holding a CP text, alternative or role of the ballot the report quotes.
+`--json`'s `text_caches` says, for each cache, how many sources the run asked for, found cached,
+read and could not read, and how many entries it wrote, in every run. With `--publish` it asks the
+bucket which files would go up. In every model mode it says how many cards it would ask the model
+about (`--json`: `classification.model.would_ask`, `null` in a run that is no dry run), and asks
+none: under `none` that is 0, and under `replay` or `live` it is what a run would send, with what it
+would hold back over `--max-model-items` (`v1-e40-t17`).
+
+## `--restored-copy`
+
+Since the cutover the weekly run is the cloud task, and the weeks it pulls are in the dev bucket, not in
+this machine's data directory. `--restored-copy <copy>` (`v1-e40-t17`) reads the caselist's cards from a
+copy `caselist restore-run-state --with-sources` made and `caselist parse` parsed with this build: its
+manifests, parsed store, suppression list, run log and raw sources. Every piece of the landscape's own
+state stays in the data directory, where a deleted copy cannot take it: the classification cache, the
+review queue, the plan-text and analytic-text caches, the scan acceptances, the model cassettes and
+usage log, and the bundle. `--json`'s `restored_copy` names the copy, `null` without one. Refused, exit
+`2`, for the data directory, a directory inside it or holding it, one inside a checkout, one that is no
+directory, a copy holding no weekly manifest of the caselist, and a copy whose newest parsed directory of
+it is not this build's parser version. In bucket mode `--publish` without it is refused, exit `1`, with
+the runbook in the hint (`docs/runbooks/landscape-report-from-the-cloud-run.md`): the data directory's
+newest snapshot is not the newest week. A dry run, and a report kept on this machine, need no copy.
+
+## Exit codes
+
+`0` when the report was written (and published, when asked). `2` for an unknown caselist or snapshot,
+with the known ones, or a caselist and date `topics.yaml` maps to no topic with a taxonomy, naming
+the file to edit, or a `--restored-copy` refused. `3` for a classification stage whose model was
+throttled or stopped answering partway (`v1-e32-t32`): the cache and the review queue keep what was
+answered, nothing is published, and the next run asks only about the cards not yet cached. `--json`'s
+`error.code` is `MODEL_STAGE_INTERRUPTED`, and `error.details.cause_code` the code of what stopped it
+(`PROVIDER_RATE_LIMITED`, `PROVIDER_UNAVAILABLE`). A rate limit that said how long to wait adds
+`error.details.retry_after_seconds`, and the key is absent otherwise (`v1-e32-t33`). `1` for a
+publish the scan holds back, a classification stage over its model budget or whose model call was refused
+(`MODEL_ACCESS_DENIED`, `MODEL_REQUEST_REJECTED`; also after writing the cache and the review queue,
+publishing nothing), a live run the data-use policy does not yet allow, a publish in bucket mode without
+`--restored-copy`, or a report that cannot be built.
+
+## `--model-mode`
+
+* `none` (the default): classification is deterministic, and no model is called.
+* `replay` and `live` (`v1-e32-t07`): the cards headings cannot place, or place below the review
+  threshold, go to `landscape.classify_position`, at most `--max-model-items` of them a run (one per
+  card fingerprint, the most shared first). `replay` answers from the cassettes this machine recorded
+  under `<data dir>/landscape/model-cassettes/`; `live` calls the routed model, and is refused until
+  the data-use policy records its open question 4 as answered (the E32 gate). A run that holds cards
+  back over the limit exits `1` after caching what it asked, so the next run asks about the rest.
+  `--json`'s `classification.model` counts what was asked, held back, refused and spent in tokens.
+
+## `landscape evaluate`
+
+::
+
+    debate-research landscape evaluate --caselist hspolicy26 --sample <coach CSV> --sample-rows <rows file>
+
+Measures the model stage against cards a coach labelled (`v1-e32-t07` ac4): `v1-e32-t21`'s coach
+sample, the filled CSV and the rows file written beside it. Every labelled card the store holds is asked
+about, and the command prints, for the caselist's format, how many of the cards a report would count
+name the coach's position (the bar is 85%), and what the scan of the prompt inputs, of the prompt
+version's cassettes on this machine and of its repair cassettes filed under the caselist found: counts,
+never a name. The scan reads values, not JSON keys, and leaves out the positions text the prompt sends
+(`v1-e32-t40`). `--model-mode replay` (the default) answers from those cassettes; `record`, once, after
+the data-use policy records its open question 4 as answered, makes the calls and writes them. It caches,
+writes and publishes no report.
+
+The cards are scored two ways (`v1-e32-t43`). `pipeline` is as students meet them: a card the headings
+place surely (a run never sends it) is scored on that placement, a card a coach's override decides argues
+no position is not counted, and every other card on the model's answer. `model_alone` is the model's
+answer for every card; the top-level `counted`, `correct` and `accuracy` are its. Each gives its counted,
+correct, refused and below-threshold cards, its accuracy over the counted and its coverage, the counted
+over the labelled. The bar reads the pipeline's accuracy (`bar_reads`, the PM's ruling of 2026-11-02).
+Exit `0` when the stage ran to the end, the pipeline meets the bar and the
+three scans are clean. A stage the model stopped partway is judged
+as `landscape report`'s is (`v1-e32-t33`): `3` when it was throttled or did not answer, `1` when the call
+was refused, with `error.code` `MODEL_STAGE_INTERRUPTED` and the same `cause_code`, `sent`, `unanswered`
+and, for a rate limit that said how long to wait, `retry_after_seconds` in `error.details`, beside the
+summary. Only `record` calls a model, and a rerun of it asks about every labelled card again. `1`
+otherwise (`EVALUATION_BELOW_BAR`), and for a name any scan found even when the stage also stopped.
+
+`--breakdown` (`v1-e32-t39`) replays only, and is refused with `--model-mode record`: the router it builds
+holds no model, so a request no cassette recorded fails (`MISSING_FIXTURE`) and is never sent. It gives
+every labelled card one outcome (correct, a wrong position of the label's kind, a wrong kind, placed
+though labelled none, refused, below the threshold, lost to a batch that failed validation, not asked,
+not found), beside what the headings alone place, with each batch's calls and what the
+structured-output guard did, a confusion table of position ids, the score on the cards a real run sends
+to the model, and the score by the sample's strata. `data.breakdown` holds those, and the scan's hits as
+counts by kind and field. The hits themselves, each with its text, field, kind, matched words and the
+words either side, are printed in a terminal only: never in `--json`, a log or a file, and not when
+stdout is not a terminal.
+
+The sample may give a card a second label the coach accepts, in an `also` column (`v1-e32-t41`): an answer
+naming either label is correct, and `data.breakdown.second_label` counts the cards with one and those
+right on it; the confusion table and the label kinds stay on the first label. `--check-sample` reads the
+sample against the caselist's taxonomy as the evaluation would, refusing it as the evaluation would, and
+prints its rows by label kind and its second labels by kind. It reads no card, asks no model and records
+nothing, so it takes no `--breakdown`, no `--route` and no `--model-mode record`
+(`CHECK_SAMPLE_ASKS_NO_MODEL`).
+
+`--route <task class>` (`v1-e32-t43`) measures the same cards on another generative route of the routing
+file: that route's model and settings answer the prompt's `high_volume` calls, for the router and the
+budget guard alike, and the cassettes are recorded to and replayed and scanned from
+`<data dir>/landscape/model-cassettes-<route>/`, never the default directory, so a recording on one route
+never replaces or is served as another's. `data.route` names the route that answered. `landscape
+cassettes --route` lists and deletes that directory's cassettes. A route that answers no prompt
+(`embeddings`, `rerank`) is refused, exit `2` (`ROUTE_NOT_GENERATIVE`).
+"""
+
+from __future__ import annotations
+
+import asyncio
+import dataclasses
+import shlex
+import sys
+from datetime import date
+from enum import StrEnum
+from pathlib import Path
+from typing import Annotated, Any, Final, NoReturn
+
+import typer
+from typer.core import TyperOption
+
+from debate_cli.bucket_lock import run_holding_the_bucket_lock
+from debate_cli.context import CliContext, cli_context, command_name
+from debate_cli.exit_codes import ExitCode
+from debate_cli.options.bucket_environment import CONFIRM_PROD_FLAG, SYNCABLE_ENVIRONMENTS
+from debate_cli.options.landscape_config import landscape_config_dir
+from debate_cli.options.snapshot_date import parse_snapshot_date
+from debate_cli.output import CliOutput, CommandFailure, JsonValue, OutputMode
+from debate_core.application.analytic_texts import AnalyticTextCounts
+from debate_core.application.errors import error_code_of
+from debate_core.application.landscape_model_evaluation import (
+    BAR_READS,
+    TARGET_ACCURACY,
+    CoachSampleCheck,
+    EvaluationBreakdown,
+    FormatEvaluation,
+)
+from debate_core.application.landscape_model_stage import (
+    CLASSIFICATION_TASK_CLASS,
+    DEFAULT_MAX_MODEL_ITEMS,
+    POLICY_QUESTION,
+    model_use_gate,
+)
+from debate_core.application.landscape_report import CIRCUIT_WIDE_FILES, SCHOOL_VIEW_FILES
+from debate_core.application.landscape_restored_copy import (
+    LANDSCAPE_RUNBOOK,
+    RESTORED_COPY_FLAG,
+    publish_refusal,
+    restored_copy_refusal,
+)
+from debate_core.application.landscape_run import (
+    LandscapeModelMode,
+    LandscapeRequestRefused,
+    LandscapeRunRequest,
+    LandscapeRunResult,
+    PublishRefusal,
+)
+from debate_core.application.landscape_staleness import FailedSyncRun
+from debate_core.application.plan_texts import PlanTextCounts
+from debate_core.application.settings import Environment, Settings, find_repository_root
+from debate_core.arguments.landscape.evaluation_breakdown import (
+    CardBreakdown,
+    LabelledScore,
+    Score,
+    confusion,
+    deterministic_counts,
+    outcomes_by_label_kind,
+    refusals_by_label,
+    second_label_counts,
+    weighted_accuracy,
+)
+from debate_core.arguments.landscape.model_stage import NameScan
+from debate_core.arguments.landscape.scan_hits import ScanHit, hit_counts, mark_counts
+from debate_core.domain.landscape_trends import LandscapeTrends, TrendLabel
+from debate_core.domain.model_contracts import TaskClass
+
+__all__ = [
+    "CIRCUIT_WIDE",
+    "HITS_NOTICE",
+    "REPORT_HELP",
+    "SCAN_NOTICE",
+    "SCHOOL_VIEW",
+    "EvaluationMode",
+    "breakdown_summary",
+    "evaluate",
+    "evaluation_summary",
+    "report",
+    "run_summary",
+    "sample_check_summary",
+]
+
+POLICY_FILE: Final = Path("docs") / "policies" / "caselist-data-use.md"
+
+SCAN_NOTICE: Final = (
+    "scan.hits quote report lines that may name a school or a team code. For this terminal only: "
+    "never paste them into a report, a document, an issue or a commit (docs/policies/caselist-data-use.md)."
+)
+
+HITS_NOTICE: Final = (
+    "The scan's hits, for this terminal only: never paste them into a session, a report, a document, an "
+    "issue or a commit (docs/policies/caselist-data-use.md)."
+)
+
+CIRCUIT_WIDE: Final = "circuit_wide"
+SCHOOL_VIEW: Final = "school_view"
+_VIEWS: Final = {
+    **dict.fromkeys(CIRCUIT_WIDE_FILES, CIRCUIT_WIDE),
+    **dict.fromkeys(SCHOOL_VIEW_FILES, SCHOOL_VIEW),
+}
+"""Each bundle file's view, by name. A file in neither of t04's lists is a KeyError, not a guess."""
+
+REPORT_HELP: Final = (
+    "Build a caselist's argument landscape report, write it here and, with --publish, to the bucket.\n\n"
+    f"Circuit-wide: {', '.join(CIRCUIT_WIDE_FILES)}. "
+    f"School view, naming schools and team codes: {', '.join(SCHOOL_VIEW_FILES)}."
+)
+"""`--help`'s text, from t04's lists; :func:`report`'s docstring is set to it."""
+
+
+def report(
+    ctx: typer.Context,
+    caselist: Annotated[str, typer.Option("--caselist", help="Caselist slug, e.g. hspolicy26.")],
+    snapshot: Annotated[
+        str | None,
+        typer.Option("--snapshot", help="The weekly snapshot, YYYY-MM-DD. Default: the newest."),
+    ] = None,
+    out: Annotated[
+        Path | None,
+        typer.Option(
+            "--out",
+            file_okay=False,
+            help="Write the bundle here. Default: <data dir>/reports/landscape/<caselist>/<snapshot>/.",
+        ),
+    ] = None,
+    publish: Annotated[
+        bool,
+        typer.Option("--publish/--no-publish", help="Also upload it to this environment's evidence bucket."),
+    ] = False,
+    dry_run: Annotated[
+        bool,
+        typer.Option(
+            "--dry-run",
+            help=(
+                "Say what a run would write and upload, and write nothing but the plan-text and "
+                "analytic-text caches, which the publish after it reads instead of the sources."
+            ),
+        ),
+    ] = False,
+    accept_scan_hits: Annotated[
+        str | None,
+        typer.Option(
+            "--accept-scan-hits",
+            metavar="DIGEST",
+            help="Publish although the scan found these hits: the digest a refused publish printed.",
+        ),
+    ] = None,
+    model_mode: Annotated[
+        LandscapeModelMode,
+        typer.Option(
+            "--model-mode",
+            help="none: deterministic only, no model call. replay: the model stage from recorded cassettes. "
+            "live: the model stage, calling the routed model (behind the data-use policy's gate).",
+        ),
+    ] = LandscapeModelMode.NONE,
+    max_model_items: Annotated[
+        int | None,
+        typer.Option(
+            "--max-model-items",
+            min=0,
+            help=f"Cards the model stage may ask about in this run. Default: {DEFAULT_MAX_MODEL_ITEMS}.",
+        ),
+    ] = None,
+    config_dir: Annotated[
+        Path | None,
+        typer.Option(
+            "--config-dir",
+            file_okay=False,
+            help="The directory holding topics.yaml. Default: config/landscape in this checkout.",
+        ),
+    ] = None,
+    confirm_prod: Annotated[
+        bool, typer.Option(CONFIRM_PROD_FLAG, help="Required to publish to the production evidence bucket.")
+    ] = False,
+    restored_copy: Annotated[
+        Path | None,
+        typer.Option(
+            RESTORED_COPY_FLAG,
+            file_okay=False,
+            help="Read the caselist's cards from this copy restored from the bucket "
+            "(`caselist restore-run-state --with-sources`); the landscape's own state stays in the data "
+            "directory. Required to publish in bucket mode.",
+        ),
+    ] = None,
+    json_output: Annotated[
+        bool, typer.Option("--json", help="Write one machine-readable JSON object to stdout.")
+    ] = False,
+) -> None:
+    cli = cli_context(ctx)
+    if json_output and not cli.output.is_json:
+        cli.output = CliOutput(OutputMode.JSON, verbose=cli.output.verbose)
+    settings = cli.services.settings
+    copy = restored_copy.expanduser().resolve() if restored_copy is not None else None
+    refusal = _environment_refusal(
+        settings, publish=publish, writing=publish and not dry_run, confirmed=confirm_prod
+    ) or _copy_refusal(settings, copy, publish=publish, dry_run=dry_run)
+    if refusal is None and model_mode is LandscapeModelMode.LIVE and not dry_run:
+        refusal = _policy_refusal()
+    if refusal is not None:
+        _end(cli, ctx, refusal)
+    request = LandscapeRunRequest(
+        caselist=caselist,
+        snapshot=parse_snapshot_date(snapshot) if snapshot is not None else None,
+        out=_outside_a_checkout(out),
+        publish=publish,
+        dry_run=dry_run,
+        accept_scan_hits=accept_scan_hits,
+        model_mode=model_mode,
+        max_model_items=max_model_items,
+    )
+    service = cli.services.landscape_run(
+        config_dir=landscape_config_dir(config_dir), with_bucket=publish, restored_copy=copy
+    )
+    try:
+        result = (
+            run_holding_the_bucket_lock(cli, "landscape report --publish", lambda: service.run(request))
+            if publish and not dry_run
+            else asyncio.run(service.run(request))
+        )
+    except LandscapeRequestRefused as refused:
+        _end(cli, ctx, _usage_failure(refused))
+    payload = run_summary(result, settings, restored_copy=copy)
+    failure = _publish_failure(result, payload, ctx)
+    if failure is None or not cli.output.is_json:
+        cli.output.success(command_name(ctx), payload, display=_display(result, settings))
+    if failure is not None:
+        _end(cli, ctx, failure)
+
+
+report.__doc__ = REPORT_HELP
+
+
+class EvaluationMode(StrEnum):
+    """`--model-mode` for an evaluation: replay the cassettes, or record them once."""
+
+    REPLAY = "replay"
+    RECORD = "record"
+
+
+def evaluate(
+    ctx: typer.Context,
+    caselist: Annotated[str, typer.Option("--caselist", help="Caselist slug, e.g. hspolicy26.")],
+    sample: Annotated[
+        Path, typer.Option("--sample", exists=True, dir_okay=False, help="The coach's filled sample CSV.")
+    ],
+    sample_rows: Annotated[
+        Path,
+        typer.Option("--sample-rows", exists=True, dir_okay=False, help="The rows file written beside it."),
+    ],
+    model_mode: Annotated[
+        EvaluationMode,
+        typer.Option("--model-mode", help="replay: from this machine's cassettes. record: call and record."),
+    ] = EvaluationMode.REPLAY,
+    snapshot: Annotated[
+        str | None, typer.Option("--snapshot", help="The weekly snapshot, YYYY-MM-DD. Default: the newest.")
+    ] = None,
+    config_dir: Annotated[
+        Path | None,
+        typer.Option("--config-dir", file_okay=False, help="The directory holding topics.yaml."),
+    ] = None,
+    breakdown: Annotated[
+        bool,
+        typer.Option(
+            "--breakdown",
+            help="Replay only: every labelled card's outcome beside the headings' placement, and the "
+            "scan's hits, listed in this terminal only.",
+        ),
+    ] = False,
+    route: Annotated[
+        TaskClass | None,
+        typer.Option(
+            "--route",
+            help="Another generative route of the routing file answers the stage's calls, recorded to and "
+            "replayed from <data dir>/landscape/model-cassettes-<route>/, never the default directory.",
+        ),
+    ] = None,
+    check_sample: Annotated[
+        bool,
+        typer.Option(
+            "--check-sample",
+            help="Read the sample against the caselist's taxonomy and count its rows by label kind; "
+            "asks no model and reads no card.",
+        ),
+    ] = False,
+    json_output: Annotated[
+        bool, typer.Option("--json", help="Write one machine-readable JSON object to stdout.")
+    ] = False,
+) -> None:
+    """Measure the landscape's model stage against cards a coach labelled."""
+    cli = cli_context(ctx)
+    if json_output and not cli.output.is_json:
+        cli.output = CliOutput(OutputMode.JSON, verbose=cli.output.verbose)
+    if check_sample:
+        return _check_sample(
+            cli,
+            ctx,
+            caselist,
+            (sample, sample_rows),
+            snapshot,
+            config_dir,
+            alone=not breakdown and route is None and model_mode is EvaluationMode.REPLAY,
+        )
+    if breakdown and model_mode is EvaluationMode.RECORD:
+        _end(cli, ctx, _BREAKDOWN_RECORDS_NOTHING)
+    refusal = _route_refusal(route) or (_policy_refusal() if model_mode is EvaluationMode.RECORD else None)
+    if refusal is not None:
+        _end(cli, ctx, refusal)
+    service = cli.services.landscape_evaluation(
+        config_dir=landscape_config_dir(config_dir), record=model_mode is EvaluationMode.RECORD, route=route
+    )
+    through = parse_snapshot_date(snapshot) if snapshot else None
+    with sample.open(encoding="utf-8", newline="") as labels, sample_rows.open(encoding="utf-8") as rows:
+        broken_down = (
+            asyncio.run(service.break_down(caselist, labels, rows, snapshot=through)) if breakdown else None
+        )
+        result = (
+            broken_down.evaluation
+            if broken_down is not None
+            else asyncio.run(service.evaluate(caselist, labels, rows, snapshot=through))
+        )
+    payload = evaluation_summary(result, route=route)
+    display = _evaluation_display(result)
+    if broken_down is not None:
+        payload["breakdown"] = breakdown_summary(broken_down)
+        display = "\n".join([display, *_breakdown_lines(broken_down), *_hit_lines(broken_down)])
+    passed = result.stopped is None and result.meets_target and result.scans_clean
+    if passed or not cli.output.is_json:
+        cli.output.success(command_name(ctx), payload, display=display)
+    if not passed:
+        _end(cli, ctx, _evaluation_failure(result, payload))
+
+
+_BREAKDOWN_RECORDS_NOTHING: Final = CommandFailure(
+    code="BREAKDOWN_REPLAYS_ONLY",
+    message="--breakdown replays the cassettes this machine recorded and calls no model; it takes no "
+    "--model-mode record",
+    exit_code=ExitCode.USAGE_ERROR,
+    hint="Drop --model-mode record, or run the evaluation without --breakdown.",
+)
+
+
+def _route_refusal(route: TaskClass | None) -> CommandFailure | None:
+    """`--route` names a route that answers a prompt: a generative task class (`v1-e32-t43`)."""
+    if route is None or route.is_generative:
+        return None
+    return CommandFailure(
+        code="ROUTE_NOT_GENERATIVE",
+        message=f"--route {route.value} names a route that answers no prompt; the classify prompt needs a "
+        "generative route",
+        exit_code=ExitCode.USAGE_ERROR,
+        hint="Name complex_reasoning, high_volume or deep_audit.",
+    )
+
+
+_CHECK_SAMPLE_ALONE: Final = CommandFailure(
+    code="CHECK_SAMPLE_ASKS_NO_MODEL",
+    message="--check-sample reads the coach's sample and asks no model; it takes no --breakdown, no --route "
+    "and no --model-mode record",
+    exit_code=ExitCode.USAGE_ERROR,
+    hint="Run --check-sample alone, then the evaluation without it.",
+)
+
+
+def _check_sample(
+    cli: CliContext,
+    ctx: typer.Context,
+    caselist: str,
+    files: tuple[Path, Path],
+    snapshot: str | None,
+    config_dir: Path | None,
+    *,
+    alone: bool,
+) -> None:
+    """`--check-sample`: the sample read as the evaluation reads it and counted, with no model asked."""
+    if not alone:
+        _end(cli, ctx, _CHECK_SAMPLE_ALONE)
+    service = cli.services.landscape_evaluation(config_dir=landscape_config_dir(config_dir), record=False)
+    sample, sample_rows = files
+    through = parse_snapshot_date(snapshot) if snapshot else None
+    with sample.open(encoding="utf-8", newline="") as labels, sample_rows.open(encoding="utf-8") as rows:
+        checked = asyncio.run(service.check_sample(caselist, labels, rows, snapshot=through))
+    cli.output.success(
+        command_name(ctx), sample_check_summary(checked), display=_sample_check_display(checked)
+    )
+
+
+def sample_check_summary(checked: CoachSampleCheck) -> dict[str, JsonValue]:
+    """`data` of `--check-sample`: the sample's rows by label kind, and its second labels, counts only."""
+    return {
+        "caselist": checked.caselist,
+        "topic_id": checked.topic_id,
+        "taxonomy_version": checked.taxonomy_version,
+        "snapshot": checked.snapshot.isoformat(),
+        "labelled": checked.labelled,
+        "by_label_kind": dict(checked.by_label_kind),
+        "second_labels": {
+            "rows": sum(checked.second_labels.values()),
+            "by_kind": dict(checked.second_labels),
+        },
+    }
+
+
+def _sample_check_display(checked: CoachSampleCheck) -> str:
+    kinds = ", ".join(f"{kind} {count}" for kind, count in checked.by_label_kind.items())
+    second = ", ".join(f"{kind} {count}" for kind, count in checked.second_labels.items())
+    return (
+        f"The coach's sample reads against {checked.topic_id} {checked.taxonomy_version} "
+        f"({checked.caselist}, snapshot {checked.snapshot.isoformat()}): {checked.labelled} labelled row(s); "
+        f"by the label's kind: {kinds}. Second labels: {sum(checked.second_labels.values())}"
+        f"{f' ({second})' if second else ''}. No model was asked."
+    )
+
+
+def _stdout_is_a_terminal() -> bool:
+    """Whether the hits may be printed: stdout is a terminal, not a pipe or a file."""
+    return sys.stdout.isatty()
+
+
+def breakdown_summary(result: EvaluationBreakdown) -> dict[str, JsonValue]:
+    """`data.breakdown`: outcomes, positions and scores by taxonomy id, and the scan's hits as counts only."""
+    return {
+        "outcomes": dict(result.outcomes),
+        "refused_by_label": {
+            reason: dict(counts) for reason, counts in refusals_by_label(result.cards).items()
+        },
+        "by_label_kind": {
+            kind: dict(counts) for kind, counts in outcomes_by_label_kind(result.cards).items()
+        },
+        "confusion": [
+            {"label": label, "answer": answer, "cards": count}
+            for label, answer, count in confusion(result.cards)
+        ],
+        "wrong_answers_naming_a_related_position": sum(card.related for card in result.cards),
+        "second_label": dict(second_label_counts(result.cards)),
+        "model_set": _score_json(result.model_set),
+        "deterministic": dict(deterministic_counts(result.cards)),
+        "batches": [
+            {
+                "batch": one.number,
+                "cards": one.cards,
+                "calls": one.calls,
+                "outcome": one.outcome,
+                "problems": dict(one.problems),
+                "error_count": one.error_count,
+            }
+            for one in result.batches
+        ],
+        "strata": [
+            {"stratum": one.name, "population": one.population, **_score_json(one.score)}
+            for one in result.strata
+        ],
+        "weighted_accuracy": weighted_accuracy(result.strata),
+        "cards": [_card_json(card) for card in result.cards],
+        "scan_hits": {
+            "prompt_inputs": _hits_json(result.sent_hits),
+            "cassettes": _hits_json(result.cassette_hits),
+            "repair_cassettes": {"texts": result.repair_cassettes, **_hits_json(result.repair_hits)},
+        },
+    }
+
+
+def _score_json(score: Score) -> dict[str, JsonValue]:
+    return {
+        "cards": score.cards,
+        "counted": score.counted,
+        "correct": score.correct,
+        "accuracy": score.accuracy,
+    }
+
+
+def _card_json(card: CardBreakdown) -> dict[str, JsonValue]:
+    placed = card.deterministic
+    return {
+        "sample_row": card.sample_row,
+        "stratum": card.stratum,
+        "label": card.label,
+        "label_kind": card.label_kind,
+        "also": card.also,
+        "outcome": card.outcome.value,
+        "refusal": card.refusal,
+        "answer": card.answer,
+        "confidence": card.confidence,
+        "batch": card.batch,
+        "related": card.related,
+        "deterministic": None
+        if placed is None
+        else {
+            "position_id": placed.position_id,
+            "method": placed.method,
+            "confidence": placed.confidence,
+            "sent_to_model": placed.sent_to_model,
+        },
+    }
+
+
+def _hits_json(hits: tuple[ScanHit, ...]) -> dict[str, JsonValue]:
+    """A text type's hits as counts: by kind and field, and the two flags. Never a hit's words."""
+    counts: dict[str, JsonValue] = {kind: dict(fields) for kind, fields in hit_counts(hits).items()}
+    return {
+        "hits": len(hits),
+        "by_kind_and_field": counts,
+        "tournament_hits_naming_a_team": sum(hit.team_name for hit in hits),
+        "in_taxonomy": sum(hit.in_taxonomy for hit in hits),
+        "json_key": sum(hit.json_key for hit in hits),
+        "in_input": sum(hit.in_input for hit in hits),
+        "marks_by_field": {where: dict(marks) for where, marks in mark_counts(hits).items()},
+    }
+
+
+def _breakdown_lines(result: EvaluationBreakdown) -> list[str]:
+    outcomes = ", ".join(f"{name} {count}" for name, count in result.outcomes.items())
+    refused = "; ".join(
+        f"{reason}: " + ", ".join(f"labelled {label} {count}" for label, count in counts.items())
+        for reason, counts in refusals_by_label(result.cards).items()
+    )
+    lines = [
+        "",
+        f"Breakdown of the {len(result.cards)} labelled card(s): {outcomes}.",
+        f"Refused, by the coach's label: {refused or 'none'}.",
+        "Batches: "
+        + "; ".join(
+            f"{one.number}: {one.cards} card(s), {one.calls} call(s), {one.outcome}"
+            + (f" ({', '.join(f'{kind} {n}' for kind, n in one.problems.items())})" if one.problems else "")
+            for one in result.batches
+        )
+        + ".",
+        f"Sent to the model by a real run (headings unplaced or below the threshold): "
+        f"{_score_line(result.model_set)}.",
+        "Headings alone: "
+        + ", ".join(
+            f"{name.replace('_', ' ')} {count}" for name, count in deterministic_counts(result.cards).items()
+        )
+        + ".",
+    ]
+    if result.strata:
+        weighted = weighted_accuracy(result.strata)
+        lines.append(
+            "By stratum: "
+            + "; ".join(
+                f"{one.name} (of {one.population}): {_score_line(one.score)}" for one in result.strata
+            )
+            + f". Weighted to the strata: {'n/a' if weighted is None else f'{weighted:.1%}'}."
+        )
+    lines.append("By the label's kind: ")
+    lines += [
+        f"  {kind}: " + ", ".join(f"{name} {count}" for name, count in counts.items())
+        for kind, counts in outcomes_by_label_kind(result.cards).items()
+    ]
+    second = second_label_counts(result.cards)
+    lines.append(
+        f"Second labels: {second['cards']} card(s), {second['correct']} scored correct on the second label."
+    )
+    lines.append("Label -> answer (cards):")
+    lines += [f"  {label} -> {answer}: {count}" for label, answer, count in confusion(result.cards)]
+    lines.append("Cards (sample row, stratum: label -> outcome, answer; headings):")
+    lines += [f"  {_card_line(card)}" for card in result.cards]
+    for name, hits in (
+        ("prompt inputs", result.sent_hits),
+        ("cassettes", result.cassette_hits),
+        (f"repair cassettes ({result.repair_cassettes})", result.repair_hits),
+    ):
+        counts = "; ".join(
+            f"{kind}: " + ", ".join(f"{where} {n}" for where, n in fields.items())
+            for kind, fields in hit_counts(hits).items()
+        )
+        lines.append(f"Scan hits in the {name}: {len(hits)}{f' ({counts})' if counts else ''}.")
+    return lines
+
+
+def _score_line(score: Score) -> str:
+    accuracy = "n/a" if score.accuracy is None else f"{score.accuracy:.1%}"
+    return f"{score.cards} card(s), counted {score.counted}, correct {score.correct}: {accuracy}"
+
+
+def _card_line(card: CardBreakdown) -> str:
+    answer = "no answer" if card.answer is None else f"{card.answer} {card.confidence:.2f}"
+    outcome = f"{card.outcome.value} {card.refusal}" if card.refusal else card.outcome.value
+    placed = card.deterministic
+    if placed is None:
+        headings = "not found"
+    elif placed.position_id is None:
+        headings = "decided none" if placed.decided_none else "unplaced"
+    else:
+        headings = f"{placed.position_id} {placed.method} {placed.confidence:.2f}"
+    sent = "" if placed is None else (", sent" if placed.sent_to_model else ", not sent")
+    batch = "" if card.batch is None else f", batch {card.batch}"
+    return (
+        f"row {card.sample_row}, {card.stratum}: {card.label} ({card.label_kind}) -> {outcome}, {answer}"
+        f"{batch}; headings {headings}{sent}"
+    )
+
+
+def _hit_lines(result: EvaluationBreakdown) -> list[str]:
+    """The scan's hits, one line each, for a terminal; a count of them withheld otherwise."""
+    hits = (*result.sent_hits, *result.cassette_hits, *result.repair_hits)
+    if not hits:
+        return []
+    if not _stdout_is_a_terminal():
+        return [f"{len(hits)} scan hit(s) withheld: stdout is not a terminal. Run it in one to read them."]
+    lines = ["", HITS_NOTICE]
+    for number, hit in enumerate(hits, start=1):
+        marked = " (a team's name)" if hit.team_name else ""
+        vocabulary = " (a taxonomy word)" if hit.in_taxonomy else ""
+        key = " (a JSON key)" if hit.json_key else ""
+        sent = " (in the cards sent)" if hit.in_input else ""
+        lines.append(
+            f"  {number}. {hit.text} | {hit.where.value} | {hit.kind.value}{marked}{vocabulary}{key}{sent} | "
+            f"... {hit.before} [{hit.matched}] {hit.after} ..."
+        )
+    return lines
+
+
+def evaluation_summary(result: FormatEvaluation, *, route: TaskClass | None = None) -> dict[str, JsonValue]:
+    """`landscape evaluate`'s `data`: counts, the accuracy against the bar, and the two scans' counts.
+
+    `route` is the task class whose route answered (`v1-e32-t43`): the prompt's own unless `--route`
+    named another."""
+    return {
+        "caselist": result.caselist,
+        "route": (route or CLASSIFICATION_TASK_CLASS).value,
+        "event": result.event,
+        "topic_id": result.topic_id,
+        "taxonomy_version": result.taxonomy_version,
+        "prompt_version": result.prompt_version,
+        "snapshot": _iso(result.snapshot),
+        "labelled": result.labelled,
+        "found": result.found,
+        "asked": result.asked,
+        "calls": result.calls,
+        "counted": result.counted,
+        "correct": result.correct,
+        "accuracy": result.accuracy,
+        "target": TARGET_ACCURACY,
+        "meets_target": result.meets_target,
+        "placed_below_threshold": result.placed_below_threshold,
+        "placed_labelled_none": result.placed_labelled_none,
+        "refused": dict(result.refused),
+        "input_tokens": result.input_tokens,
+        "output_tokens": result.output_tokens,
+        "interrupted": result.interrupted,
+        "bar_reads": BAR_READS,
+        "model_alone": _labelled_score_json(result.model_alone),
+        "pipeline": {
+            **_labelled_score_json(result.pipeline),
+            "by_headings": result.pipeline.by_headings,
+            "decided_none": result.pipeline.decided_none,
+        },
+        "scan": {
+            name: {
+                "texts": scan.texts,
+                "schools": scan.schools,
+                "team_codes": scan.team_codes,
+                "other_names": scan.other_names,
+                "clean": scan.clean,
+            }
+            for name, scan in (
+                ("prompt_inputs", result.sent),
+                ("cassettes", result.cassettes),
+                ("repair_cassettes", result.repair_cassettes),
+            )
+        },
+    }
+
+
+def _labelled_score_json(score: LabelledScore) -> dict[str, JsonValue]:
+    return {
+        "labelled": score.labelled,
+        "counted": score.counted,
+        "correct": score.correct,
+        "accuracy": score.accuracy,
+        "refused": score.refused,
+        "below_threshold": score.below_threshold,
+        "coverage": score.coverage,
+    }
+
+
+def _share_of(part: float | None) -> str:
+    return "n/a" if part is None else f"{part:.1%}"
+
+
+def _evaluation_display(result: FormatEvaluation) -> str:
+    pipeline, alone = result.pipeline, result.model_alone
+    return "\n".join(
+        [
+            f"{result.caselist} ({result.event}) on {result.topic_id} {result.taxonomy_version}, "
+            f"landscape.classify_position {result.prompt_version}.",
+            f"Labelled {result.labelled}, found {result.found}; asked about {result.asked} in "
+            f"{result.calls} call(s).",
+            "As students meet it (the headings' sure placements, the model for the rest): "
+            f"counted {pipeline.counted}, correct {pipeline.correct}: {_share_of(pipeline.accuracy)} "
+            f"(bar {TARGET_ACCURACY:.0%}); {pipeline.by_headings} by the headings, {pipeline.decided_none} "
+            f"decided none by an override, {pipeline.refused} refused, {pipeline.below_threshold} below the "
+            f"threshold; coverage {pipeline.counted} of {pipeline.labelled} "
+            f"({_share_of(pipeline.coverage)}).",
+            f"The model alone: counted {alone.counted}, correct {alone.correct}: "
+            f"{_share_of(alone.accuracy)}; {alone.refused} refused, {alone.below_threshold} below the "
+            f"threshold, {result.placed_labelled_none} labelled none; coverage {alone.counted} of "
+            f"{alone.labelled} ({_share_of(alone.coverage)}).",
+            f"Scan of the prompt inputs: {_scan_line(result.sent)}. Of the cassettes: "
+            f"{_scan_line(result.cassettes)}. Of the repair cassettes: "
+            f"{_scan_line(result.repair_cassettes)}.",
+        ]
+    )
+
+
+def _scan_line(scan: NameScan) -> str:
+    return (
+        f"{scan.texts} text(s), {scan.schools} naming a school, {scan.team_codes} a team code, "
+        f"{scan.other_names} a tournament"
+    )
+
+
+def _evaluation_failure(result: FormatEvaluation, payload: dict[str, JsonValue]) -> CommandFailure:
+    """Why the evaluation failed: a name the scan found, then a stopped stage, then the bar.
+
+    A name in the prompt inputs, the cassettes or the repair cassettes decides first, because no retry
+    removes it. A stage the
+    model stopped partway is judged as `landscape report`'s is (`v1-e32-t33`): the same
+    :class:`~debate_core.application.landscape_model_stage.ModelStageInterrupted`, so the same exit code
+    (`3` for a cause a retry may cure, `1` for a refused or unclassified one), error code and stop details,
+    beside every key of the summary.
+    """
+    stopped = result.stopped
+    if not result.scans_clean:
+        message = (
+            "the scan found a school, team code or tournament in the prompt inputs, the cassettes or the "
+            "repair cassettes"
+        )
+    elif stopped is not None:
+        failure = CommandFailure.from_exception(stopped)
+        return dataclasses.replace(
+            failure,
+            message=f"the model stage stopped on {stopped.error} after {stopped.sent} card(s), with "
+            f"{stopped.unanswered} not asked, so the evaluation is incomplete and was not measured "
+            "against the bar",
+            details={**payload, **failure.details},
+        )
+    else:
+        message = (
+            "the pipeline's accuracy (the headings' sure placements, the model for the rest) is under the "
+            f"bar of {TARGET_ACCURACY:.0%}, or nothing was counted"
+        )
+    return CommandFailure(
+        code="EVALUATION_BELOW_BAR", message=message, exit_code=ExitCode.DOMAIN_FAILURE, details=payload
+    )
+
+
+def _end(cli: CliContext, ctx: typer.Context, failure: CommandFailure) -> NoReturn:
+    cli.output.failure(failure, command=command_name(ctx))
+    raise typer.Exit(code=failure.exit_code)
+
+
+def _policy_refusal() -> CommandFailure | None:
+    """A live model run waits on the data-use policy's open question 4: refused while it is open."""
+    root = find_repository_root()
+    policy = root / POLICY_FILE if root is not None else None
+    reason = model_use_gate(
+        policy.read_text(encoding="utf-8") if policy is not None and policy.is_file() else None
+    )
+    if reason is None:
+        return None
+    return CommandFailure(
+        code="MODEL_USE_NOT_YET_ALLOWED",
+        message=reason,
+        exit_code=ExitCode.DOMAIN_FAILURE,
+        details={"policy": str(POLICY_FILE), "open_question": POLICY_QUESTION},
+        hint="Use --model-mode replay or none until the policy records the answer.",
+    )
+
+
+def _outside_a_checkout(out: Path | None) -> Path | None:
+    """`--out`, refused inside a checkout: a report holds real tags and cites, never committed."""
+    if out is None:
+        return None
+    resolved = out.expanduser().resolve()
+    if find_repository_root(resolved) is not None:
+        raise typer.BadParameter(
+            f"{resolved} is inside a checkout of this repository, and a report holds real tags and cites; "
+            "write it outside, or leave --out out for the data directory",
+            param_hint="--out",
+        )
+    return resolved
+
+
+def _environment_refusal(
+    settings: Settings, *, publish: bool, writing: bool, confirmed: bool
+) -> CommandFailure | None:
+    """A publish needs dev or prod and a bucket; prod needs --confirm-prod. A dry run only reads."""
+    environment = settings.environment
+    if publish and environment not in SYNCABLE_ENVIRONMENTS:
+        return CommandFailure(
+            code="ENVIRONMENT_NOT_SYNCABLE",
+            message=f"`landscape report --publish` writes to dev or prod, not {environment.value}",
+            exit_code=ExitCode.DOMAIN_FAILURE,
+            details={"environment": environment.value},
+            hint="Set DEBATE_ENV=dev and try again.",
+        )
+    if publish and not settings.storage.s3.bucket:
+        return CommandFailure(
+            code="EVIDENCE_STORE_NOT_CONFIGURED",
+            message=f"the {environment.value} environment names no evidence bucket",
+            exit_code=ExitCode.DOMAIN_FAILURE,
+            details={"environment": environment.value},
+            hint="Set storage.s3.bucket for this environment, or run without --publish.",
+        )
+    if writing and environment is Environment.PROD and not confirmed:
+        return CommandFailure(
+            code="CONFIRMATION_REQUIRED",
+            message=f"refusing to publish to the production evidence bucket without {CONFIRM_PROD_FLAG}",
+            exit_code=ExitCode.DOMAIN_FAILURE,
+            details={"environment": environment.value},
+            hint=f"Publish to dev first. Then run with --dry-run, and again with {CONFIRM_PROD_FLAG}.",
+        )
+    return None
+
+
+def _copy_refusal(
+    settings: Settings, copy: Path | None, *, publish: bool, dry_run: bool
+) -> CommandFailure | None:
+    """A `--restored-copy` that is no copy; in bucket mode, a publish without one (`v1-e40-t17`)."""
+    environment = settings.environment.value
+    if copy is not None and (reason := restored_copy_refusal(copy, data_dir=settings.storage.data_dir)):
+        return CommandFailure(
+            code="RESTORED_COPY_REFUSED",
+            message=f"{RESTORED_COPY_FLAG} names no copy to read: {reason}",
+            exit_code=ExitCode.USAGE_ERROR,
+            details={"environment": environment},
+            hint="Name the directory `caselist restore-run-state --into` restored, beside the data dir.",
+        )
+    reason = publish_refusal(
+        run_state=settings.caselist.run_state,
+        publish=publish,
+        dry_run=dry_run,
+        restored_copy=copy is not None,
+    )
+    if reason is None:
+        return None
+    return CommandFailure(
+        code="PUBLISH_NEEDS_A_RESTORED_COPY",
+        message=f"nothing was published: {reason}",
+        exit_code=ExitCode.DOMAIN_FAILURE,
+        details={"environment": environment},
+        hint=f"Restore a copy, parse it, and publish from it: {LANDSCAPE_RUNBOOK}.",
+    )
+
+
+def _usage_failure(refused: LandscapeRequestRefused) -> CommandFailure:
+    details: dict[str, JsonValue] = {"known": list(refused.known)}
+    if refused.file_to_edit is not None:
+        details["file_to_edit"] = refused.file_to_edit
+    return CommandFailure(
+        code=error_code_of(refused),
+        message=str(refused),
+        exit_code=ExitCode.USAGE_ERROR,
+        details=details,
+        hint=f"Edit {refused.file_to_edit}." if refused.file_to_edit else None,
+    )
+
+
+def _publish_failure(
+    result: LandscapeRunResult, payload: dict[str, JsonValue], ctx: typer.Context
+) -> CommandFailure | None:
+    """A publish the scan held back: exit 1, after the result and its hits are printed.
+
+    A dry run's refusal says it wrote no report and names the command to publish with (`v1-e32-t19`),
+    in the hint and in `details["publish_command"]`; a publish's reads as it did before.
+    """
+    refused = result.publish.refused if result.publish is not None else None
+    if refused is None:
+        return None
+    scan = result.scan
+    if refused is PublishRefusal.SCAN_DIGEST_STALE:
+        message = (
+            f"--accept-scan-hits names other hits than the {len(scan.pending)} this run found not yet "
+            f"accepted (digest {scan.digest}); nothing was published"
+        )
+    else:
+        message = (
+            f"the scan found {len(scan.pending)} hit(s) not yet accepted (digest {scan.digest}); "
+            "nothing was published"
+        )
+    details = payload
+    hint = (
+        f"Read each hit's line above. If none names a team, run again with --accept-scan-hits "
+        f"{scan.digest}; the report is written locally at {result.directory}."
+    )
+    if result.dry_run:
+        command = _publish_command(ctx, scan.digest)
+        details = {**payload, "publish_command": command}
+        hint = (
+            "This dry run wrote no report. Read each hit's line above. If none names a team, publish "
+            f"with `{command}`."
+        )
+    return CommandFailure(
+        code=refused.value,
+        message=message,
+        exit_code=ExitCode.DOMAIN_FAILURE,
+        details=details,
+        hint=hint,
+        panel_details={"digest": scan.digest, "hits_not_yet_accepted": len(scan.pending)},
+    )
+
+
+_NOT_IN_THE_PUBLISH_COMMAND: Final = frozenset({"dry_run", "accept_scan_hits"})
+
+
+def _publish_command(ctx: typer.Context, digest: str) -> str:
+    """The command as typed, without `--dry-run` and with `--accept-scan-hits <digest>` (`v1-e32-t19`).
+
+    From the program down to `report`, each command's options read from the command line, in the order
+    the command declares them: never a default, an environment variable or a value the run resolved.
+    """
+    # Walked with `Any`, as `command_name` walks it: Typer vendors Click privately, so its context,
+    # parameter and parameter-source types are not importable. A source is told by its name.
+    nodes: list[Any] = []
+    node: Any = ctx
+    while node is not None:
+        nodes.append(node)
+        node = node.parent
+    words: list[str] = []
+    for node in reversed(nodes):
+        words.append("debate-research" if node.parent is None else str(node.info_name))
+        words += _typed_options(node)
+    return shlex.join([*words, "--accept-scan-hits", digest])
+
+
+def _typed_options(node: Any) -> list[str]:
+    words: list[str] = []
+    for option in node.command.params:
+        name = option.name
+        source = node.get_parameter_source(name) if name is not None else None
+        if name in _NOT_IN_THE_PUBLISH_COMMAND or source is None or source.name != "COMMANDLINE":
+            continue
+        value = node.params[name]
+        if isinstance(option, TyperOption) and option.is_flag:
+            words.append(option.opts[0] if value else option.secondary_opts[0])
+        else:
+            words += [option.opts[0], str(value)]
+    return words
+
+
+def run_summary(
+    result: LandscapeRunResult, settings: Settings, *, restored_copy: Path | None = None
+) -> dict[str, JsonValue]:
+    """The `--json` envelope's `data`: paths, counts, method totals, model calls, scan and publish."""
+    counts = result.classification.counts
+    header = result.report.header
+    unclassified = result.report.unclassified
+    queue = result.classification.review_queue.counts
+    publish = result.publish
+    return {
+        "caselist": result.caselist,
+        "snapshot": result.snapshot.isoformat(),
+        "report_date": result.report_date.isoformat(),
+        "environment": settings.environment.value,
+        "topic_id": result.topic_id,
+        "taxonomy_version": result.taxonomy_version,
+        "overrides_digest": result.overrides_digest,
+        "parsed_version": result.parsed_version,
+        "model_mode": result.model_mode.value,
+        "model_calls": result.model_calls,
+        "dry_run": result.dry_run,
+        "restored_copy": str(restored_copy) if restored_copy is not None else None,
+        "written": result.written,
+        "paths": {"directory": str(result.directory), "files": [str(path) for path in result.files]},
+        "bundle": [
+            {"name": path.name, "path": str(path), "view": _VIEWS[path.name]} for path in result.files
+        ],
+        "counts": {
+            "sources": counts.sources,
+            "sections": counts.sections,
+            "cards": counts.cards,
+            "cards_counted": counts.cards_counted,
+            "cards_below_threshold": counts.cards_below_threshold,
+            "positions": len(result.report.positions),
+            "top_card_rows": len(result.report.top_cards),
+            "rounds": header.rounds,
+            "rounds_with_a_read": header.rounds_with_a_read,
+            "teams": header.teams,
+            "aff_rounds": unclassified.aff_rounds,
+            "aff_rounds_unidentified": unclassified.aff_rounds_unidentified,
+            "neg_rounds": unclassified.neg_rounds,
+            "neg_rounds_unplaced": unclassified.neg_rounds_unplaced,
+            "other_side_position_rounds": unclassified.other_side_position_rounds,
+        },
+        "trends": {
+            "rows_by_label": dict(_trend_counts(result.trends)),
+            "held_back_by_team_floor": result.trends.held_back,
+        },
+        "school_view": {
+            "schools": result.schools.schools,
+            "team_codes": result.schools.teams,
+            "rows": len(result.schools.rows),
+        },
+        "classification": {
+            "cards_by_method": dict(counts.cards_by_method),
+            "sections_by_method": dict(counts.sections_by_method),
+            "cache": {
+                "lookups": counts.lookups,
+                "hits": counts.hits,
+                "misses": counts.misses,
+                "written": counts.cache_written,
+            },
+            "model": {
+                "prompt_version": result.classification.prompt_version,
+                "would_ask": counts.model_items if result.dry_run else None,
+                "asked": counts.model_items,
+                "calls": counts.model_calls,
+                "cached": counts.model_hits,
+                "held_back": counts.model_held_back,
+                "refused": dict(counts.model_refused),
+                "input_tokens": counts.model_input_tokens,
+                "output_tokens": counts.model_output_tokens,
+            },
+        },
+        "review_queue": {
+            "rows": queue.rows,
+            "items": queue.queued_items,
+            "location": result.classification.review_queue_location,
+            "order": result.classification.review_queue_order,
+        },
+        "text_caches": {
+            "plan_texts": _text_cache(result.plan_texts),
+            "analytic_texts": _text_cache(result.analytic_texts.read if result.analytic_texts else None),
+        },
+        "aff_assignments": result.aff_assignments,
+        "aff_identification": {one.method: one.rounds for one in result.report.aff_identification},
+        "staleness": {
+            "stale": result.staleness.stale,
+            "newest_snapshot": _iso(result.staleness.newest_snapshot),
+            "age_days": result.staleness.age_days,
+            "archives_awaiting_download": result.staleness.archives_awaiting_download,
+            "failed_run": _failed_run(result.staleness.failed_run),
+        },
+        "scan": {
+            "hits": [
+                {
+                    "file": hit.file,
+                    "line": hit.line_number,
+                    "kind": hit.kind.value,
+                    "term": hit.term,
+                    "text": hit.line,
+                }
+                for hit in result.scan.hits
+            ],
+            "not_yet_accepted": len(result.scan.pending),
+            "digest": result.scan.digest,
+            "accepted_now": result.scan.accepted_now,
+            "acceptance_log": result.scan.acceptance_log,
+        },
+        "publish": None
+        if publish is None
+        else {
+            "bucket": str(settings.storage.s3.bucket) if settings.storage.s3.bucket else None,
+            "planned": [
+                {
+                    "name": one.name,
+                    "key": one.key,
+                    "sha256": one.sha256,
+                    "action": one.action.value if one.action is not None else None,
+                }
+                for one in publish.planned
+            ],
+            "uploaded": list(publish.uploaded),
+            "unchanged": list(publish.unchanged),
+            "refused": publish.refused.value if publish.refused is not None else None,
+        },
+        "notice": SCAN_NOTICE if result.scan.hits else None,
+    }
+
+
+def _text_cache(counts: PlanTextCounts | AnalyticTextCounts | None) -> dict[str, JsonValue] | None:
+    """How a text cache was read and written (`v1-e32-t30`); None when the run read none of it."""
+    if counts is None:
+        return None
+    return {
+        "sources": counts.sources,
+        "cached": counts.hits,
+        "read": counts.parsed,
+        "unread": counts.unread,
+        "entries_written": counts.parsed if counts.cache_written else 0,
+        "written": counts.cache_written,
+    }
+
+
+def _text_cache_lines(result: LandscapeRunResult) -> list[str]:
+    """Each text cache's line: sources read and already cached, and the entries written, a dry run too."""
+    lines: list[str] = []
+    for label, counts in (
+        ("Plan-text cache", result.plan_texts),
+        ("Analytic-text cache", result.analytic_texts.read if result.analytic_texts else None),
+    ):
+        if counts is None:
+            continue
+        entries = counts.parsed if counts.cache_written else 0
+        written = (
+            f"{entries} {'entry' if entries == 1 else 'entries'} written"
+            if entries
+            else ("older entries dropped" if counts.cache_written else "nothing written")
+        )
+        lines.append(
+            f"{label}: {counts.parsed} of {counts.sources} source(s) read, {counts.hits} already cached, "
+            f"{written}."
+        )
+    return lines
+
+
+def _model_lines(result: LandscapeRunResult) -> list[str]:
+    """The model stage's line, when the run had one: asked, cached, held back, refused, tokens."""
+    if result.model_mode is LandscapeModelMode.NONE:
+        return []
+    counts = result.classification.counts
+    refused = ", ".join(f"{reason} {count}" for reason, count in counts.model_refused.items()) or "none"
+    return [
+        f"Model stage ({result.classification.prompt_version}): asked about {counts.model_items} card(s) in "
+        f"{counts.model_calls} call(s), {counts.model_hits} cached, {counts.model_held_back} held back; "
+        f"refused: {refused}; tokens {counts.model_input_tokens} in, {counts.model_output_tokens} out."
+    ]
+
+
+def _would_ask_lines(result: LandscapeRunResult) -> list[str]:
+    """A dry run's count of the cards it would ask the model about, in every mode; it asked none."""
+    if not result.dry_run:
+        return []
+    counts = result.classification.counts
+    line = f"Dry run: would ask the model about {counts.model_items} card(s)"
+    if result.model_mode is LandscapeModelMode.NONE:
+        return [f"{line}; --model-mode none asks it nothing."]
+    if counts.model_held_back:
+        return [f"{line}, and hold {counts.model_held_back} more back for a later run."]
+    return [f"{line}."]
+
+
+def _display(result: LandscapeRunResult, settings: Settings) -> str:
+    counts = result.classification.counts
+    header = result.report.header
+    unclassified = result.report.unclassified
+    methods = ", ".join(f"{method} {count}" for method, count in counts.cards_by_method.items())
+    lines = [
+        f"{result.caselist} through {result.snapshot.isoformat()} on {result.topic_id} "
+        f"{result.taxonomy_version} "
+        f"(overrides {result.overrides_digest}, model mode {result.model_mode.value}, "
+        f"{result.model_calls} model calls).",
+        f"Sources {counts.sources}; cards {counts.cards}, {counts.cards_counted} counted "
+        f"({_share(counts.cards_counted, counts.cards)}); by method: {methods}.",
+        f"Positions {len(result.report.positions)}; rounds {header.rounds}, "
+        f"{header.rounds_with_a_read} with a read "
+        f"({_share(header.rounds_with_a_read, header.rounds)}); teams {header.teams}.",
+        f"Affirmative rounds with no identified aff: {unclassified.aff_rounds_unidentified} of "
+        f"{unclassified.aff_rounds}; aff assignments {result.aff_assignments}.",
+        *_text_cache_lines(result),
+        *_model_lines(result),
+        *_would_ask_lines(result),
+        f"Review queue: {result.classification.review_queue.counts.rows} rows "
+        f"({result.classification.review_queue_location}).",
+        *([result.classification.review_queue_order] if result.classification.review_queue_order else []),
+        _trends_line(result.trends),
+        f"School view: {result.schools.schools} school(s), {result.schools.teams} team code(s), "
+        f"{len(result.schools.rows)} row(s).",
+        _staleness_line(result),
+        *_bundle_lines(result),
+    ]
+    scan = result.scan
+    lines.append(
+        f"Scan: {len(scan.hits)} hit(s), {len(scan.pending)} not yet accepted"
+        + (f" (digest {scan.digest})." if scan.pending else ".")
+    )
+    lines += [
+        f"  {hit.file}:{hit.line_number} {hit.kind.value} {hit.term!r}"
+        + (" (accepted)" if hit not in scan.pending else "")
+        + f": {hit.line}"
+        for hit in scan.hits
+    ]
+    if scan.accepted_now:
+        lines.append(
+            f"Accepted {len(scan.pending)} hit(s) under digest {scan.digest}; "
+            f"recorded in {scan.acceptance_log}."
+        )
+    if result.publish is not None:
+        target = (
+            f"{settings.environment.value} bucket {settings.storage.s3.bucket}"
+            if settings.storage.s3.bucket
+            else "no bucket"
+        )
+        lines.append(f"Publish to {target}:")
+        lines += [
+            f"  {one.action.value if one.action is not None else 'PLANNED'} {one.key} ({one.sha256[:12]})"
+            for one in result.publish.planned
+        ]
+        lines.append(
+            f"Uploaded {len(result.publish.uploaded)}, unchanged {len(result.publish.unchanged)}."
+            if result.publish.refused is None and not result.dry_run
+            else "Nothing uploaded."
+        )
+    return "\n".join(lines)
+
+
+def _staleness_line(result: LandscapeRunResult) -> str:
+    staleness = result.staleness
+    said = (
+        f"newest snapshot {_iso(staleness.newest_snapshot)}, {staleness.age_days} day(s) old, "
+        f"{staleness.archives_awaiting_download} archive(s) awaiting download"
+    )
+    line = f"STALE: {said}." if staleness.stale else f"Current: {said}."
+    return line if staleness.failed_run is None else f"{line} {staleness.failed_run.sentence()}"
+
+
+def _failed_run(failed: FailedSyncRun | None) -> dict[str, JsonValue] | None:
+    """The hook's failed run as it holds it: the run id, and the stage names or the error's class."""
+    if failed is None:
+        return None
+    return {
+        "run_id": failed.run_id,
+        "stages": list(failed.stages),
+        "stopped_before_stages": failed.stopped_before_stages,
+        "error_class": failed.error_class,
+    }
+
+
+def _trend_counts(trends: LandscapeTrends) -> dict[str, int]:
+    """The trend rows under each label, in report order."""
+    return {label.value: len(trends.labelled(label)) for label in TrendLabel}
+
+
+def _trends_line(trends: LandscapeTrends) -> str:
+    labels = ", ".join(f"{label} {count}" for label, count in _trend_counts(trends).items())
+    return f"Trends: {labels}; {trends.held_back} held back by the team floor."
+
+
+def _bundle_lines(result: LandscapeRunResult) -> list[str]:
+    """Where the bundle went, or would go, and which of its files are circuit-wide or name schools."""
+    files = len(result.files)
+    head = (
+        f"Wrote {files} files to {result.directory}:"
+        if result.written
+        else f"Dry run: the bundle is not written; its {files} files would go to {result.directory}:"
+    )
+    return [
+        head,
+        f"  circuit-wide: {_names_in(result, CIRCUIT_WIDE)}",
+        f"  school view, naming schools and team codes: {_names_in(result, SCHOOL_VIEW)}",
+    ]
+
+
+def _names_in(result: LandscapeRunResult, view: str) -> str:
+    return ", ".join(path.name for path in result.files if _VIEWS[path.name] == view)
+
+
+def _iso(day: date | None) -> str | None:
+    return day.isoformat() if day is not None else None
+
+
+def _share(part: int, whole: int) -> str:
+    return f"{100 * part / whole:.1f}%" if whole else "n/a"

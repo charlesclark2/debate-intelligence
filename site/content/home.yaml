@@ -54,6 +54,18 @@ recentResults:
     label: See every result this season
     href: /results/
 
+# The pinned and newest announcements, from the files in content/announcements/ (v1-e37-t03): every
+# pinned one, then the three newest. These are only the words around them. The band is left off the
+# page while no announcement is published.
+announcements:
+  eyebrow: Team news
+  title: Announcements
+  intro: >-
+    What the team wants families to know right now, pinned items first and then the newest.
+  action:
+    label: See every announcement
+    href: /news/
+
 entryPoints:
   eyebrow: Start here
   title: Four things worth knowing first

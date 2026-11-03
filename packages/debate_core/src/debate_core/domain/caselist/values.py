@@ -218,6 +218,8 @@ class SourceFormat(StrEnum):
     DOC = "DOC"
     PDF = "PDF"
     OTHER = "OTHER"
+    CMIR = "CMIR"
+    """CardMirror's native format: a gzip stream holding a JSON document. Stored, never parsed."""
 
 
 class SourceOrigin(StrEnum):

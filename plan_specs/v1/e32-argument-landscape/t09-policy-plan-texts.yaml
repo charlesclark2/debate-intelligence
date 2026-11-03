@@ -1,0 +1,161 @@
+# TASK v1-e32-t09-policy-plan-texts - Each Policy team's plan text, counted first, so single payer splits by mechanism
+# Epic: E32 Argument Landscape Reports | Release: v1.2 (Argument landscape & file building) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e32-t09-policy-plan-texts
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e32-argument-landscape
+  annotations:
+    debate/title: "Each Policy affirmative round's plan, counted first, so the landscape names what affs read"
+spec:
+  # Filed by the PM, 2026-10-23, from the coach's request of 2026-10-23, recorded in v1-e32-t01's follow-up work.
+  description: >-
+    The coach wants the Policy landscape to split the `single payer` aff by mechanism, which no
+    heading shows: the mechanism is in each team's plan text, usually a short analytic paragraph
+    under a heading such as "Plan" or "Plan Text", which the parsed store may not keep as a
+    card. Counts first (working agreement 7), read-only, over the hspolicy26 store: how many
+    affirmative files carry a plan-text heading (by the normalized forms v1-e32-t01's normalizer
+    gives); for how many the paragraph under it is in the parsed store, and in what unit (an
+    analytic, a card's text, or nothing); and how many distinct plan texts there are, by a
+    normalized fingerprint, counted by teams. Send the counts and one to three ways to get the
+    texts (keep the paragraphs the store already holds; a parser change in E31 to keep analytic
+    paragraphs under a plan heading, with a parser_version bump and a re-parse; or reading the
+    raw sources again in this task) to the PM, and change nothing until the PM rules. Then
+    extract, per team, its plan text's mechanism words deterministically, and write a review
+    sheet for the coach, outside the repository like v1-e32-t01's: each distinct plan text
+    cluster with its team count and the words that tell it apart, never a team code or school.
+    The coach names each mechanism as a child aff of `single payer` with tag keywords he
+    supplies (the PM's ruling for a Medicare for All split, 2026-10-23); this task applies his
+    answers to policy-2026-27-nhi.yaml with a version bump. Plan text never enters a committed
+    file: only the coach's mechanism names and keywords do.
+    (PM amendment 2026-10-23, from v1-e32-t02's round-level coverage.) Widened and raised to
+    priority 1. Headings name the plan in only 17.3% of hspolicy26's affirmative documents, and
+    9.0% of them place an aff, so a heading rule cannot say what affs teams read. This task
+    identifies each affirmative round's plan from the signals headings do not carry, counted
+    first and each counted separately before any rule: the plan text in the round's own file (as
+    above); the same team's other affirmative rounds (a team's aff carried across its rounds
+    only when its own files agree); and the caselist's own record of the round and its cite
+    entries (their titles, matched against the taxonomy's aff aliases, counts only, never a team
+    code or file name in any output). The counts go to the PM with the share of affirmative
+    rounds and teams each signal would identify, alone and together, and nothing is built until
+    the PM rules. The result is a per-round aff assignment the report counts (method recorded,
+    never a guess: a round no signal identifies stays unidentified). The coach's mechanism split
+    of single payer (above) follows on the same plan texts. Also from v1-e32-t02: two heading
+    forms miss the costs-advantage aliases (`adv 1 costs`, `advantage one costs`); fix them in
+    t01's normalizer here, with synthetic cases shown failing first, since this task works on
+    the same headings. Aim to merge before v1-e32-t05's first dev run; the first report does not
+    wait for it.
+    (PM note 2026-10-24.) The coach decided on 2026-10-24, as data-use policy 1.13, that a
+    landscape report may quote a team's plan text word for word, including a text only one team
+    reads, never beside a school or team code. So the coach's review sheet (outside the
+    repository) and the report may show plan texts verbatim; committed files still hold none,
+    and fixtures stay synthetic. The PM's rulings of 2026-10-24 on the counts: read the raw
+    sources in this task (derived cache, never text in the cache); `PLAN_TEXT` from the
+    paragraph under a plan label only; `TEAM_CARRY` with the guard; caselist titles not taken
+    this season; `national health insurance` plans unidentified and clustered for the coach;
+    `medicare for all` and `m4a` identify single payer until a child exists; ac1 to the
+    affirmative side; numbered DAs, CPs and contentions in the normalizer here.
+  priority: 1
+  constraints:
+    # PM ruling 2026-10-24 (v1-e32-t09 review, ruling 3): debate_core.testing (a planted source carries
+    # real bytes and a blob) and tests/fixtures/landscape (the golden report's titles line, by hand).
+    # PM ruling 2026-10-24 (resumed question 2): tests/config, which ac3 names, and whose directory test
+    # lists config/landscape/plan_texts/.
+    packages: [debate_core.arguments, debate_core.application, debate_core.integrations, debate_core.testing, scripts, config/landscape, packages/debate_core/tests, tests/scripts, tests/fixtures/landscape, tests/config, docs/guides]
+    forbidden:
+      - Card text, a school, team code, file name or person's name in any fixture, log, report or commit (synthetic values only)
+      - Network or AWS access in any test
+      - Model calls (deterministic only; model classification is v1-e32-t07's, behind the policy's E32 gate)
+      - Any change to the parser, the parsed store or a fingerprint before the PM rules on the counts
+      - Plan text, or any text from a team's file, in a committed file; only the coach's names and keywords
+  context:
+    - kind: TaskRef
+      name: v1-e32-t01-position-taxonomy
+      relation: dependsOn
+  # PM rulings 2026-10-24, on the session's counts (question numbers as in the session report):
+  # 1 (c) read the raw sources in this task, through the parser port, read-only, with a local cache
+  #   of derived fields only (label place, matched ids, plan-text digest), never text;
+  # 2 (a) method PLAN_TEXT, the paragraph directly under a plan-text label; shape-only stays unidentified;
+  # 3 (a) method TEAM_CARRY, never into a round whose own plan text names something else, counted apart;
+  # 4 (a) no caselist round or cite titles this season, and the report's notes say they are not taken;
+  # 5 (a) a plan text naming no aff is unidentified, and clustered on the coach's sheet;
+  # 6 `medicare for all` and `m4a` identify single payer until the coach names a child;
+  # 7 the sheet clusters by the mechanism words that differ; 8 ac1 is the affirmative side only;
+  # 9 the normalizer rule widens to numbered DAs, CPs and contentions.
+  # Order: ac4, then ac2; ac3 waits on the coach, and the PR may go --partial without it.
+  # PM context for ac3, 2026-10-24 (the coach's answers are final): ac3 extends to the thirteen
+  #   top-level affs the coach named, in the same minor bump to 1.2.0; a child's id is its
+  #   mechanism_name in kebab case plus -aff, a top-level aff keeps the coach's id; keywords go into
+  #   tag_keywords only, no alias; medicare for all and m4a move to the Medicare for All child;
+  #   nhi-aff by a resolutional word set in config next to the taxonomy, never in Python; a text whose
+  #   actor is not the United States federal government is no plan text; C61, C66 and C74 stay
+  #   CONFLICTING; released.yaml is the operator's, at the next publish.
+  # PM rulings 2026-10-24 on the resumed questions: labels in sentence case (the config check), and
+  #   nhi-aff is the least specific aff: beside exactly one other aff it names that aff, and it never
+  #   makes a conflict (the narrowest-aff step); the incarceration and single payer document stays
+  #   CONFLICTING.
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        Counts, on the affirmative side and by teams, of plan-text headings, of the paragraph
+        under them as held in the store (by unit), and of distinct plan texts, sent to the PM
+        with one to three options, before any change.
+    - id: ac2
+      description: >-
+        After the ruling: a deterministic extraction of each team's plan text and a review
+        sheet outside the repository grouping them into clusters with team counts, by tests
+        on synthetic sources shown failing first.
+    - id: ac3
+      description: >-
+        The coach's mechanisms are child affs of single payer in policy-2026-27-nhi.yaml,
+        with his tag keywords, the taxonomy_version bumped, and the config tests passing;
+        the counts of his decisions are in the report.
+    # PM amendment 2026-10-23: the round-level aff identification.
+    - id: ac4
+      description: >-
+        Counts, before any rule, of the affirmative rounds and teams each signal identifies (plan
+        text, the team's other rounds, the caselist's round and cite titles), alone and together, sent
+        to the PM; after the ruling, each identified round carries its aff and the signal that named
+        it, and an unidentified round stays unidentified, by tests on synthetic sources shown failing
+        first.
+status:
+  phase: Succeeded
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e32-t09-policy-plan-texts-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e32-argument-landscape
+spec:
+  description: >-
+    Counts first and the PM's ruling, then extraction and the review sheet, then the coach's
+    answers into the taxonomy.
+  goalRef:
+    name: v1-e32-t09-policy-plan-texts
+  graph:
+    nodes:
+      - id: plan-texts
+        kind: Task
+        name: Policy plan texts
+        description: >-
+          Counts first and the PM's ruling, then extraction and the review sheet, then the
+          coach's answers into the taxonomy.
+        estimatedEffort: 5h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Landscape argument tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/arguments/landscape]
+status:
+  phase: Pending

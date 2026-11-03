@@ -1,0 +1,74 @@
+# TASK v1-e07-t12-gao-and-crs-reports - GAO reports and CRS reports can be found by search
+# Epic: E07 Discovery Provider Adapters | Release: v1.4 (Federated research from the CLI) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e07-t12-gao-and-crs-reports
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.4
+    debate/epic: v1-e07-discovery-adapters
+  annotations:
+    debate/title: "GAO reports and CRS reports can be found by search"
+spec:
+  # Filed by the PM, 2026-11-02, from v1-e07-t07's ruling 2 (the PM's review, 2026-11-02).
+  description: >-
+    GovInfo's GAO collection is an archive frozen in 2008 and it holds no CRS reports; CRS
+    products are on Congress.gov, whose /crsreport takes no keyword (v1-e07-t07's findings).
+    Find where each can be searched by keyword today (GAO's own site and its feeds,
+    Congress.gov's CRS listings, or another official source), from public documentation only,
+    and report the options with their terms of use before building. Build the one the PM
+    approves as a topic-enabled government provider, on v1-e07-t07's rule.
+  priority: 3
+  constraints:
+    packages: [debate_core.integrations.discovery, debate_core.application, config/feeds, packages/debate_core/tests]
+    forbidden:
+      - Scraping a page whose terms forbid automated access
+      - Live calls in tests
+      - Enabling it globally rather than per topic
+  context:
+    - kind: TaskRef
+      name: v1-e07-t07-government-adapters
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        The report lists each source's search options and terms, the PM approves one, and
+        that provider passes the contract kit on hand-written fixtures and runs only for a
+        topic that lists it.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e07-t12-gao-and-crs-reports-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.4
+    debate/epic: v1-e07-discovery-adapters
+spec:
+  description: >-
+    GAO reports and CRS reports can be found by search.
+  goalRef:
+    name: v1-e07-t12-gao-and-crs-reports
+  graph:
+    nodes:
+      - id: gao-and-crs-reports
+        kind: Task
+        name: GAO and CRS
+        description: >-
+          GAO reports and CRS reports can be found by search.
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: GAO and CRS tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/integrations/discovery, -k, gao or crs]
+status:
+  phase: Pending

@@ -30,7 +30,12 @@ The hierarchy::
     ├── InvalidModelOutput
     └── ProviderError
         ├── ProviderUnavailable
-        └── ProviderRateLimited
+        │   ├── ModelUnavailableError
+        │   ├── ProviderTimedOut
+        │   └── ProviderCircuitOpen
+        ├── ProviderRateLimited
+        ├── ModelAccessDenied
+        └── ModelRequestRejected
 
 Each class keeps the facts of the failure as attributes rather than only in its message, so a CLI
 can render "card 01J… was edited by someone else" instead of parsing a string.
@@ -49,8 +54,14 @@ this package never reads anything from there.
 from __future__ import annotations
 
 import re
+from collections.abc import Sequence
+from dataclasses import dataclass
+from datetime import datetime
 from enum import StrEnum
-from typing import ClassVar, Final
+from typing import TYPE_CHECKING, ClassVar, Final
+
+if TYPE_CHECKING:  # pragma: no cover - only the annotation of InvalidModelOutput.usage reads it
+    from debate_core.domain.model_contracts import ModelUsage
 
 __all__ = [
     "LOCAL_STORE_ACCESS_DENIED_HINT",
@@ -63,11 +74,18 @@ __all__ = [
     "InvalidCursor",
     "InvalidModelOutput",
     "LocalStoreAccessDenied",
+    "ModelAccessDenied",
+    "ModelRequestRejected",
+    "ModelUnavailableError",
     "NotFound",
+    "OutputProblem",
+    "ProviderCircuitOpen",
     "ProviderError",
     "ProviderRateLimited",
+    "ProviderTimedOut",
     "ProviderUnavailable",
     "RevisionMismatch",
+    "STORE_ERRORS_TRUE_OF_EVERY_OBJECT",
     "SnapshotIntegrityCheck",
     "SnapshotIntegrityError",
     "StoreAccessDenied",
@@ -79,6 +97,7 @@ __all__ = [
     "error_code_of",
     "error_code_of_class",
     "reported_error_code",
+    "reported_error_message",
 ]
 
 
@@ -429,12 +448,48 @@ class StoreUnavailable(StoreError):
 # --------------------------------------------------------------------------------------------
 
 
+STORE_ERRORS_TRUE_OF_EVERY_OBJECT: Final[tuple[type[StoreError], ...]] = (
+    StoreCredentialsExpired,
+    StoreAccessDenied,
+    StoreProfileNotConfigured,
+)
+"""The store errors that end a run over many objects at the first, instead of being recorded per object.
+
+An expired session, a refusal and a profile the AWS config does not define are each true of every
+object still to go, so recording them once per object would report one failure two thousand times,
+and try every one first. `store sync`, `caselist publish` and the parsed store's publish re-raise
+them (`v1-e29-t09`); every other failure of one object is that object's and is recorded.
+"""
+
+
+@dataclass(frozen=True, slots=True)
+class OutputProblem:
+    """One reason a model's answer is not the schema: where, what kind, and pydantic's sentence for it.
+
+    Never the offending value. A model's answer may hold card or source text, so a problem carries
+    the location, the error type and the message, which is everything a repair prompt or a report
+    needs (v1-e05-t05-structured-output-validation, the PM's ruling of 2026-10-24).
+    :func:`~debate_core.application.model_errors.output_problems` builds them from a pydantic
+    `ValidationError` without ever reading its input.
+    """
+
+    loc: tuple[str | int, ...]
+    """Path to the offending field, `()` for the answer as a whole."""
+    type: str
+    """Pydantic's error type (`missing`, `int_type`, `extra_forbidden`), or this project's own."""
+    msg: str
+    """What is wrong, in pydantic's words; never quotes the answer."""
+
+
 class InvalidModelOutput(DomainError):
     """A model returned something that is not a valid instance of the requested output schema.
 
-    Raised by :meth:`~debate_core.application.ports.providers.ModelRouter.invoke` after the
-    router's own repair attempts, if any, have failed. It carries the prompt identity so a failing
-    prompt version can be found without correlating logs.
+    Raised by :meth:`~debate_core.application.ports.model_router.ModelRouter.generate_structured`
+    when the answer fails strict validation, and, as its subclass
+    :class:`~debate_core.application.model_errors.ModelOutputError`, by the structured-output guard
+    once its one repair attempt has failed too. It carries the prompt identity so a failing prompt
+    version can be found without correlating logs, and the :class:`OutputProblem` list, which holds
+    no part of the answer. Neither the message nor any attribute quotes what the model said.
     """
 
     def __init__(
@@ -444,6 +499,8 @@ class InvalidModelOutput(DomainError):
         message: str,
         *,
         model_id: str | None = None,
+        problems: Sequence[OutputProblem] = (),
+        usage: ModelUsage | None = None,
     ) -> None:
         self.prompt_id = prompt_id
         """Identifier of the prompt whose output failed validation."""
@@ -451,6 +508,11 @@ class InvalidModelOutput(DomainError):
         """Semantic version of that prompt."""
         self.model_id = model_id
         """The model that produced the output, when the router resolved one."""
+        self.problems = tuple(problems)
+        """Why the answer is not the schema, without its values; empty when the router gave none."""
+        self.usage = usage
+        """What the call that produced the answer used: an invalid answer was still a billed call
+        (v1-e05-t07). `None` when the router reported none, as a replayed or scripted answer may."""
         by_model = "" if model_id is None else f" from {model_id}"
         super().__init__(f"invalid output{by_model} for prompt {prompt_id}@{prompt_version}: {message}")
 
@@ -481,6 +543,45 @@ class ProviderUnavailable(ProviderError):
         super().__init__(provider, message)
 
 
+class ProviderTimedOut(ProviderUnavailable):
+    """A provider did not answer within the timeout the platform gives it.
+
+    Raised by :class:`~debate_core.integrations.discovery.resilience.ResilientProvider`, which
+    cancels the call when its time is up, so a slow provider costs a federated search exactly its
+    timeout and no more. To a program it is the same failure as its parent, so it keeps the
+    `PROVIDER_UNAVAILABLE` code.
+    """
+
+    ERROR_CODE: ClassVar[str] = "PROVIDER_UNAVAILABLE"
+
+    def __init__(self, provider: str, timeout_seconds: float) -> None:
+        self.timeout_seconds = timeout_seconds
+        """The timeout the call was given, in seconds."""
+        super().__init__(provider, f"no answer within {timeout_seconds:g}s")
+
+
+class ProviderCircuitOpen(ProviderUnavailable):
+    """A call was refused without reaching the provider, because its circuit breaker is open.
+
+    The provider failed several times in a row, and the platform is giving it a cool-down rather
+    than making every search wait on it (architecture proposal §15). `retry_at` is when the next
+    call may go through as a probe; it is `None` when the cool-down is over but another call is
+    already probing. Keeps the `PROVIDER_UNAVAILABLE` code: to a program the provider is down.
+    """
+
+    ERROR_CODE: ClassVar[str] = "PROVIDER_UNAVAILABLE"
+
+    def __init__(self, provider: str, retry_at: datetime | None) -> None:
+        self.retry_at = retry_at
+        """When the breaker lets a probe through, or `None` while a probe is in flight."""
+        detail = (
+            "another call is already probing it"
+            if retry_at is None
+            else f"skipped until {retry_at.isoformat()}"
+        )
+        super().__init__(provider, f"circuit breaker open after repeated failures; {detail}")
+
+
 class ProviderRateLimited(ProviderError):
     """A provider refused the call because the caller is over its rate limit.
 
@@ -499,6 +600,57 @@ class ProviderRateLimited(ProviderError):
         """Seconds to wait before retrying, when the provider stated a `Retry-After`."""
         wait = "" if retry_after_seconds is None else f" (retry after {retry_after_seconds}s)"
         super().__init__(provider, f"{message}{wait}")
+
+
+class ModelUnavailableError(ProviderUnavailable):
+    """The model a call was routed to could not be reached: a timeout, a server error, a model not ready.
+
+    A :class:`ProviderUnavailable` that also names the model, so a report can say which route is
+    down. It keeps its parent's error code, because to a program it is the same failure and the
+    same retry: `caselist pull` and the CLI's exit status recognise `PROVIDER_UNAVAILABLE`.
+    """
+
+    ERROR_CODE: ClassVar[str] = "PROVIDER_UNAVAILABLE"
+
+    def __init__(self, provider: str, model_id: str, message: str = "unavailable") -> None:
+        self.model_id = model_id
+        """The routed model that could not be reached."""
+        super().__init__(provider, f"{model_id}: {message}")
+
+
+class ModelAccessDenied(ProviderError):
+    """The model provider refused the caller: no usable credentials, or none allowed to call this model.
+
+    Not retried, because no retry changes the answer. Either the session has expired or was never
+    there (log in again: :attr:`hint`), or the role the credentials belong to is not granted the
+    call, or the model has not been enabled in the account. The message names the model and never
+    a credential (v1-e05-t02-bedrock-adapter, ac3).
+    """
+
+    def __init__(self, provider: str, model_id: str, message: str, *, hint: str | None = None) -> None:
+        self.model_id = model_id
+        """The routed model, or inference profile, the call was addressed to."""
+        self.hint = hint
+        """One line on what to do about it, when there is one to give."""
+        super().__init__(provider, f"{model_id}: {message}" + (f" ({hint})" if hint else ""))
+
+
+class ModelRequestRejected(ProviderError):
+    """The model provider refused the request itself: a parameter it refuses, or a model it does not know.
+
+    A defect in the request or the routing file, never a passing condition, so it is never
+    retried: sending the same request again would be refused again, and billed nothing for it only
+    by luck. `provider_code` is the provider's own name for the refusal (`ValidationException`,
+    `ResourceNotFoundException`), kept because the first real call on a route records which
+    parameters a model refuses (v1-e05-t02-bedrock-adapter, ac3 and ac7).
+    """
+
+    def __init__(self, provider: str, model_id: str, provider_code: str, message: str) -> None:
+        self.model_id = model_id
+        """The routed model, or inference profile, the call was addressed to."""
+        self.provider_code = provider_code
+        """The provider's error code for the refusal."""
+        super().__init__(provider, f"{model_id}: {provider_code}: {message}")
 
 
 # --------------------------------------------------------------------------------------------
@@ -535,6 +687,20 @@ def error_code_of(error: BaseException) -> str:
     an `OSError` beside the port errors and report each by its class (`FILE_NOT_FOUND_ERROR`).
     """
     return error_code_of_class(type(error))
+
+
+def reported_error_message(error: BaseException) -> str:
+    """What a failure that did not end the command says of itself, where a report or a message quotes it.
+
+    A :class:`DomainError`'s own message, which this project wrote. Anything else is named by its
+    class, and an `OSError` by its errno too, and never by its text (`v1-e29-t09`): an `OSError`
+    quotes the path it failed on, which carries the home directory and, for a file in the inbox, a
+    camp file's title. The CLI's own handler says the same of one that ends a command (`v1-e01-t25`).
+    """
+    if isinstance(error, DomainError):
+        return str(error) or type(error).__name__
+    errno = error.errno if isinstance(error, OSError) else None
+    return type(error).__name__ + (f" (errno {errno})" if errno is not None else "")
 
 
 def reported_error_code(error: BaseException) -> str:

@@ -37,6 +37,7 @@ from tests.fixtures.caselist.build_synthetic_archives import (
     SYNTHETIC_CASELIST,
     build_snapshot_zips,
 )
+from tests.fixtures.model_routing import EXAMPLE_ROUTING_FILE
 from tests.fixtures.permissions import needs_permissions, refused
 from typer.testing import CliRunner, Result
 
@@ -97,7 +98,7 @@ def installation(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Iterator[Pa
         f'[storage]\ndata_dir = "{data_dir}"\n'
         f'[storage.s3]\nbucket = "{BUCKET}"\nregion = "us-east-1"\naws_profile = "{AWS_PROFILE_NAME}"\n'
         f'[caselist]\nnotifier = "none"\n'
-        f'[models]\nrouting_file = "{tmp_path / "routing.yaml"}"\nbudget_usd_daily = 1.0\n',
+        f'[models]\nrouting_file = "{EXAMPLE_ROUTING_FILE}"\nbudget_usd_daily = 1.0\n',
         encoding="utf-8",
     )
     monkeypatch.setenv("DEBATE_PROFILE_DIR", str(profiles))
@@ -210,8 +211,13 @@ class TestStoreFamily:
         self, installation: Path, bucket: S3Client, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """Each object fails on its own and the run carries on; then the run is a 3, not a 1."""
-        write_local_object(installation, "manifests/testcl26/2026-09-01.jsonl", b"week one\n")
-        write_local_object(installation, "manifests/testcl26/2026-09-08.jsonl", b"week two\n")
+        # Manifests a publish could read, which a push asks about before it sends them (v1-e30-t25).
+        write_local_object(
+            installation, "manifests/testcl26/2026-09-01.jsonl", b'{"kind": "summary", "week": 1}\n'
+        )
+        write_local_object(
+            installation, "manifests/testcl26/2026-09-08.jsonl", b'{"kind": "summary", "week": 2}\n'
+        )
         uploads_answer_503(monkeypatch)
 
         exit_code, envelope = run("store", "sync", "--apply")
@@ -226,7 +232,9 @@ class TestStoreFamily:
         """A key whose two sides disagree is a verdict; a store that also stuttered does not hide it."""
         blob_key = write_local_blob(installation, b"a disclosed file")
         bucket.put_object(Bucket=BUCKET, Key=f"{BLOB_PREFIX}/{blob_key}", Body=b"something else entirely")
-        write_local_object(installation, "manifests/testcl26/2026-09-01.jsonl", b"week one\n")
+        write_local_object(
+            installation, "manifests/testcl26/2026-09-01.jsonl", b'{"kind": "summary", "week": 1}\n'
+        )
         uploads_answer_503(monkeypatch)
 
         exit_code, envelope = run("store", "sync", "--blob-prefix", BLOB_PREFIX, "--apply")

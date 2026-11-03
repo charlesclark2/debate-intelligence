@@ -1,0 +1,33 @@
+{
+  "output": {
+    "confidence": 0.75,
+    "passages": [
+      {
+        "end_offset": 108,
+        "first_paragraph": 2,
+        "last_paragraph": 2,
+        "start_offset": 0
+      },
+      {
+        "end_offset": null,
+        "first_paragraph": 3,
+        "last_paragraph": 3,
+        "start_offset": 0
+      }
+    ],
+    "rationale": "Paragraph 2 reports the failed attempts; paragraph 3 says each delay costs funding for living elephants.",
+    "tag": {
+      "argument_role": "link",
+      "confidence": 0.8,
+      "need_alignment": "direct",
+      "text": "Each delay in reviving the mammoth costs living elephants funding"
+    }
+  },
+  "output_schema": "debate_core.evidence.selection_contract.CardSelection",
+  "prompt_id": "card.select",
+  "prompt_version": "1.0.0",
+  "variables": {
+    "numbered_snapshot": "[P1] A private laboratory that promised a woolly mammoth calf by the end of the decade told investors on Monday that the first birth is now unlikely before 2032, according to a filing reviewed by The Daily Meridian.\n\n[P2] The delay follows two years of failed attempts to grow edited elephant embryos to term in surrogate animals. The company said the setbacks were biological, not financial, and that its funding remained secure.\n\n[P3] Conservation biologists who have criticized the project said the timeline was never realistic. “Every year this slips, the money raised for it is money that did not go to elephants that are alive now,” said Priya Ramaswamy, who studies elephant populations and was not involved in the work.\n\n[P4] Supporters argue that the research has already produced tools that help living species, including faster genetic screening for diseases that kill young elephants in captivity.\n\n[P5] The filing did not say how many embryos had been transferred or how many pregnancies had been lost. A spokesperson declined to give figures, citing the company’s plans to publish its results in a scientific journal.",
+    "research_need": "De-extinction DA: money spent reviving the mammoth is money lost to living elephants"
+  }
+}

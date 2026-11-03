@@ -41,7 +41,10 @@ region = "us-east-1"
 aws_profile = "debate-dev-evidence"
 
 [providers]
-enabled = ["openalex", "crossref", "rss"]
+# Only the providers this build has an adapter for: the registry refuses to build any search while
+# a name it cannot build is enabled (v1-e07-t01). Crossref and Semantic Scholar are added back by
+# the tasks that bring their adapters, v1-e07-t03 and v1-e07-t04 (v1-e08-t05).
+enabled = ["openalex", "rss"]
 
 [http]
 # Slower than prod on purpose: dev is where a new adapter's first, wrong version runs.
@@ -51,10 +54,20 @@ request_timeout_seconds = 30.0
 [models]
 # Cheaper models than prod for every text class; see the file's own header.
 routing_file = "config/model_routing.dev.yaml"
-# The documented dev cap: at most $2 of model spend per day, enforced by the E05 BudgetGuard.
-# Raising it above 2.0 fails test_settings_environments.py; change the documented cap first
+# The documented dev cap: at most $2 of model spend per day, enforced by the E05 BudgetGuard. It is
+# the capped landscape sample's allowance (the PM's ruling of 2026-10-27, v1-e05-t15), above prod's
+# $1.50 on purpose: dev is where the first live pass runs. Raising it above 2.0 fails
+# test_settings_environments.py; change the documented cap first
 # (docs/process/branching-and-environments.md).
 budget_usd_daily = 2.0
+# The coach's ceiling: $50 of model spend a calendar month in America/Chicago, across dev and prod
+# (v1-e05-t15). Both profiles set the whole $50 until the promotion, because only one environment
+# calls models today; the AWS Budgets alarm (v1-e05-t16) watches the account's real total.
+budget_usd_monthly = 50.0
+# The AWS profile every Bedrock call is signed with, never AWS_PROFILE (v1-e05-t08): the SSO profile
+# of DebateDevBedrockInvoker, as `terraform -chdir=infrastructure/envs/dev output bedrock_profile_name`
+# reports it, written here for the same reason as storage.s3.aws_profile. A name, not a secret.
+aws_profile = "debate-dev-bedrock"
 
 [caselist]
 # The E34 gate of docs/policies/caselist-data-use.md. Off by default in
@@ -63,3 +76,27 @@ budget_usd_daily = 2.0
 # weekly cadence was agreed with the OpenCaselist maintainer. The cadence, the 8-per-minute
 # download rate and the 5-per-day bulk cap are the maintainer's and are not raised here.
 api_enabled = true
+
+# The caselists the weekly run follows (ADR-0020 (5), v1-e40-t06). The run's command, in the cloud
+# task and on the Mac alike, is `debate-research caselist pull` with no --caselist, and both read
+# this list from the build they run. A new season's caselists are a change here and a tag, as every
+# other setting the run reads already is. Until the cutover they were the Mac agent's --caselist
+# arguments in its plist, which named these three; prod.toml gains the same line when the run's
+# home moves to prod (ADR-0020 (7)).
+sync_caselists = ["hsld26", "hspolicy26", "hspf26"]
+
+# The backfiles (data-use policy 1.17, Permitted uses 8; v1-e34-t34): earlier seasons' complete
+# archives, imported once each by `caselist backfile-import`, never pulled by the weekly run, never
+# given a landscape or a per-school view, and kept by the annual purge. The four OpenCaselist serves
+# for 2021-22 on (docs/data/caselist-backfile-seasons.md), in the PM's order of 2026-10-25. PF keeps
+# weeklies only and 2021-22 to 2023-24 serve no archive, so neither is here. Never one of
+# sync_caselists: a profile naming a slug in both is refused at startup.
+backfile_caselists = ["hspolicy25", "hsld25", "hspolicy24", "hsld24"]
+
+# Where the weekly run keeps its state: the dev evidence bucket, from the cutover (ADR-0020 (3), (4),
+# v1-e40-t06). Every command that writes to the dev bucket takes the bucket's run lock, and a pull
+# restores its working copy from the bucket first. A bucket that has not been seeded refuses every
+# such command (RUN_STATE_NOT_SEEDED), so a build with this line is installed on the Mac only after
+# the Mac's last scheduled run, and the seed comes next (docs/runbooks/caselist-cutover.md). A
+# command that only reads the bucket, or does not touch it, is unchanged.
+run_state = "bucket"

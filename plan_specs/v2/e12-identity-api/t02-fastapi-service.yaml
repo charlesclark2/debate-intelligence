@@ -24,6 +24,9 @@ spec:
     failures) to status codes, request-id/correlation middleware, OpenAPI metadata with /v1 versioning,
     and a production Dockerfile. Routes contain no business logic. Authentication is E12-t03, resource
     endpoints E12-t05, deployment E12-t04 and client generation E12-t06.
+    (PM amendment 2026-11-01, Charlie's ruling in the dependency audit.) Blocked until Charlie says V2
+    starts. Every other V2 and V3 task depends on this one or on another held with it, so the ready list
+    stays V1's until then.
   priority: 1
   constraints:
     packages: [debate_api]
@@ -57,7 +60,7 @@ spec:
       description: >-
         docker build produces a non-root, multi-stage image under 300 MB that serves /healthz via uvicorn.
 status:
-  phase: Pending
+  phase: Blocked
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

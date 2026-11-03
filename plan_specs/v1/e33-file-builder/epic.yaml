@@ -156,6 +156,7 @@ spec:
       - t02
       - ext-v1-e32-t03-landscape-report
       - t04
+      - t08
       acceptanceCriteria:
       - type: command_succeeds
         name: Task spec v1-e33-t03-file-build-cli reports phase Succeeded
@@ -165,6 +166,14 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e33-t03-file-build-cli
+    - id: ext-v1-e30-t07-source-removal
+      kind: External
+      name: 'Prerequisite from E30: Source removal and suppression list'
+      description: >-
+        Cross-epic prerequisite owned by v1-e30-caselist-ingestion (release v1.1).
+      inputs:
+        goalRef: v1-e30-t07-source-removal
+        specRef: plan_specs/v1/e30-caselist-ingestion/t07-source-removal.yaml
     - id: t04
       kind: Task
       name: Built-file quality checks
@@ -176,6 +185,7 @@ spec:
         goalRef: v1-e33-t04-file-quality-checks
       dependsOn:
       - t02
+      - ext-v1-e30-t07-source-removal
       acceptanceCriteria:
       - type: command_succeeds
         name: Task spec v1-e33-t04-file-quality-checks reports phase Succeeded
@@ -207,5 +217,221 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e33-t05-file-publish
+    - id: t06
+      kind: Task
+      name: 'A recipe can name a camp (OpenEv) card'
+      description: >-
+        A recipe can name a camp (OpenEv) card.
+      inputs:
+        specRef: plan_specs/v1/e33-file-builder/t06-camp-pins.yaml
+        goalRef: v1-e33-t06-camp-pins
+      dependsOn:
+      - t01
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e33-t06-camp-pins reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e33-t06-camp-pins
+    - id: t07
+      kind: Task
+      name: 'A camp occurrence row carries its camp path''s digest, so a camp-path withdrawal stops it before a rebuild'
+      description: >-
+        A camp occurrence row carries its camp path's digest, so a camp-path withdrawal
+        stops it before a rebuild.
+      inputs:
+        specRef: plan_specs/v1/e33-file-builder/t07-camp-path-on-occurrence-rows.yaml
+        goalRef: v1-e33-t07-camp-path-on-occurrence-rows
+      dependsOn:
+      - t06
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e33-t07-camp-path-on-occurrence-rows reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e33-t07-camp-path-on-occurrence-rows
+    - id: t08
+      kind: Task
+      name: 'Built files carry no provenance line; the sidecar keeps the provenance'
+      description: >-
+        Built files carry no provenance line; the sidecar keeps the provenance.
+      inputs:
+        specRef: plan_specs/v1/e33-file-builder/t08-provenance-line-one-function.yaml
+        goalRef: v1-e33-t08-provenance-line-one-function
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e33-t08-provenance-line-one-function reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e33-t08-provenance-line-one-function
+    - id: t09
+      kind: Task
+      name: 'files build refuses a store written under another style profile, as it refuses another parser version'
+      description: >-
+        files build refuses a store written under another style profile, as it refuses
+        another parser version.
+      inputs:
+        specRef: plan_specs/v1/e33-file-builder/t09-style-profile-version-refusal.yaml
+        goalRef: v1-e33-t09-style-profile-version-refusal
+      dependsOn:
+      - t03
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e33-t09-style-profile-version-refusal reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e33-t09-style-profile-version-refusal
+    - id: t10
+      kind: Task
+      name: 'files check and files publish warn when a built file''s style profile is not the running one'
+      description: >-
+        files check and files publish warn when a built file's style profile is not the
+        running one.
+      inputs:
+        specRef: plan_specs/v1/e33-file-builder/t10-sidecar-style-profile-warning.yaml
+        goalRef: v1-e33-t10-sidecar-style-profile-warning
+      dependsOn:
+      - t09
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e33-t10-sidecar-style-profile-warning reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e33-t10-sidecar-style-profile-warning
+    - id: t11
+      kind: Task
+      name: 'files suggest drafts a CP file a coach can build on: a CP text slot first, no other position''s blocks, and plank-dependent blocks marked'
+      description: >-
+        files suggest drafts a CP file a coach can build on: a CP text slot first, no other
+        position's blocks, and plank-dependent blocks marked.
+      inputs:
+        specRef: plan_specs/v1/e33-file-builder/t11-suggest-drafts-a-cp-file-a-coach-can-build-on.yaml
+        goalRef: v1-e33-t11-suggest-drafts-a-cp-file-a-coach-can-build-on
+      dependsOn:
+      - t03
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e33-t11-suggest-drafts-a-cp-file-a-coach-can-build-on reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e33-t11-suggest-drafts-a-cp-file-a-coach-can-build-on
+    - id: t12
+      kind: Task
+      name: 'files check and files build name each warned or failed card, its check and why, as the quality report does'
+      description: >-
+        files check and files build name each warned or failed card, its check and why, as
+        the quality report does.
+      inputs:
+        specRef: plan_specs/v1/e33-file-builder/t12-files-check-names-each-warned-card.yaml
+        goalRef: v1-e33-t12-files-check-names-each-warned-card
+      dependsOn:
+      - t03
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e33-t12-files-check-names-each-warned-card reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e33-t12-files-check-names-each-warned-card
+    - id: t13
+      kind: Task
+      name: 'A CP draft keeps a block an affirmative-side position places, marked to check against the plan'
+      description: >-
+        A CP draft keeps a block an affirmative-side position places, marked to check
+        against the plan.
+      inputs:
+        specRef: plan_specs/v1/e33-file-builder/t13-cp-draft-keeps-aff-side-blocks-marked.yaml
+        goalRef: v1-e33-t13-cp-draft-keeps-aff-side-blocks-marked
+      dependsOn:
+      - t11
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e33-t13-cp-draft-keeps-aff-side-blocks-marked reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e33-t13-cp-draft-keeps-aff-side-blocks-marked
+    - id: t14
+      kind: Task
+      name: 'A coach-edited list of plan-mechanism words in the topic config marks a CP draft''s plan-dependent blocks'
+      description: >-
+        A coach-edited list of plan-mechanism words in the topic config marks a CP draft's
+        plan-dependent blocks.
+      inputs:
+        specRef: plan_specs/v1/e33-file-builder/t14-plan-mechanism-words-in-the-topic-config.yaml
+        goalRef: v1-e33-t14-plan-mechanism-words-in-the-topic-config
+      dependsOn:
+      - t11
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e33-t14-plan-mechanism-words-in-the-topic-config reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e33-t14-plan-mechanism-words-in-the-topic-config
+    - id: t15
+      kind: Task
+      name: 'A built file still holding the CP text placeholder is warned, and a CP draft has a smoke check'
+      description: >-
+        A built file still holding the CP text placeholder is warned, and a CP draft has a
+        smoke check.
+      inputs:
+        specRef: plan_specs/v1/e33-file-builder/t15-unreplaced-cp-text-slot-warned.yaml
+        goalRef: v1-e33-t15-unreplaced-cp-text-slot-warned
+      dependsOn:
+      - t12
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e33-t15-unreplaced-cp-text-slot-warned reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e33-t15-unreplaced-cp-text-slot-warned
+    - id: t16
+      kind: Task
+      name: 'files publish names a quality report written by an older version of the checks, rather than calling it missing'
+      description: >-
+        files publish names a quality report written by an older version of the checks,
+        rather than calling it missing.
+      inputs:
+        specRef: plan_specs/v1/e33-file-builder/t16-publish-names-an-older-quality-report.yaml
+        goalRef: v1-e33-t16-publish-names-an-older-quality-report
+      dependsOn:
+      - t15
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e33-t16-publish-names-an-older-quality-report reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e33-t16-publish-names-an-older-quality-report
 status:
   phase: Pending

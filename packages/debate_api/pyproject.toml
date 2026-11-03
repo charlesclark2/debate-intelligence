@@ -1,10 +1,36 @@
 [project]
 name = "debate-api"
-version = "1.0.0"
+version = "1.1.0"
 description = "HTTP API service (thin surface over debate_core)."
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
-dependencies = ["debate-core"]
+# The student search pilot's app (v1-e39-t04, ADR-0019 (b)): a plain ASGI app served by uvicorn,
+# which the Lambda Web Adapter forwards function URL events to. No Mangum and no Lambda code here,
+# so the same app runs under uvicorn locally, in tests and in V2's container. uvicorn without its
+# `standard` extra: the pure-Python h11 server is enough for one function, and adds nothing to
+# the image that needs compiling.
+#
+# v1-e39-t05 adds sign-in: debate-core's `aws` and `tub` extras for the Cognito, audit and parameter
+# adapters its composition root builds; cryptography for the AES-GCM session cookie; jinja2 for the pages;
+# and segno, pure Python with no dependencies, which draws the authenticator QR code as SVG on the
+# server so the secret never leaves the page as an image request.
+#
+# v1-e39-t08 adds debate-core's `docx` extra: the download builds Verbatim files with the E33 writer
+# and its parser, which read WordprocessingML with lxml. The image installs what uv.lock records here,
+# so without it the function would fail on its first download (as v1-e01-t17 found for the CLI).
+#
+# v1-e39-t17 adds markdown-it-py, which renders the landscape bundles' Markdown on the landscape
+# pages with raw HTML escaped. It was in uv.lock already, through rich, which debate-api does not
+# install, so the image would not have had it.
+dependencies = [
+    "cryptography>=44",
+    "debate-core[aws,docx,tub]",
+    "fastapi>=0.115",
+    "jinja2>=3.1",
+    "markdown-it-py>=4.0",
+    "segno>=1.6",
+    "uvicorn>=0.32",
+]
 
 [tool.uv.sources]
 debate-core = { workspace = true }

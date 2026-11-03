@@ -25,6 +25,9 @@ spec:
     pastes. Pasted cards have provenance_mode=PASTED (not snapshot-backed) and are never labeled VERIFIED.
     This is pure parsing: no model calls. It does NOT extract claim/warrant components (t02) or generate
     extensions (t03).
+    (PM amendment 2026-11-01, Charlie's ruling in the dependency audit.) Blocked until Charlie says V2
+    starts. Every other V2 and V3 task depends on this one or on another held with it, so the ready list
+    stays V1's until then.
   priority: 1
   constraints:
     packages: [debate_core.evidence, debate_core.domain]
@@ -58,7 +61,7 @@ spec:
         Pasted HTML is sanitized (scripts, images, remote styles removed) before parsing, verified by tests
         with malicious fixtures.
 status:
-  phase: Pending
+  phase: Blocked
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

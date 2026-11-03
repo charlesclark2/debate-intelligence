@@ -43,7 +43,9 @@ from debate_cli.exit_codes import (
     codes_exit_as_a_retrieval_failure,
     exit_code_for_failure_codes,
 )
+from debate_core.application.caselist import memory_high_water
 from debate_core.application.caselist_sync import (
+    DataVolumeUsage,
     InboxFileKind,
     InboxFileVerdict,
     InboxRetention,
@@ -189,7 +191,8 @@ def test_a_run_downloads_imports_and_reports_this_weeks_archives(
         if call.request.url.host == "files.opencaselist.example.invalid"
     ]
     assert fetched == [weekly_name(snapshot.snapshot) for snapshot in SNAPSHOTS]
-    assert Path(data["summary_written_to"]).is_file()
+    assert data["summary_written_to"] == f"caselist-sync-runs/{data['run_id']}.json"
+    assert (installation / data["summary_written_to"]).is_file()
 
 
 def test_a_second_run_downloads_nothing_and_says_nothing_is_new(
@@ -662,7 +665,9 @@ def test_a_run_summary_reaches_the_data_directory_where_the_run_log_will_read_it
     """ac4's second half: one JSON file per run, with counts and no school or team code."""
     envelope = pull("--caselist", SYNTHETIC_CASELIST)
 
-    written = Path(envelope["data"]["summary_written_to"])
+    # A path inside the data directory, never the absolute one, which is under the home directory
+    # (`v1-e34-t16`).
+    written = installation / envelope["data"]["summary_written_to"]
     assert written.parent == installation / "caselist-sync-runs"
     body = json.loads(written.read_text(encoding="utf-8"))
     assert body["archives_downloaded"] == 3
@@ -751,7 +756,7 @@ def test_no_output_of_a_pull_names_a_camp_file_by_its_title(
     ]
     assert all(one["inbox_file"].startswith("sha256 ") for one in selections)
     assert all("inbox_name" not in one for one in selections)
-    summary_file = Path(envelope["error"]["details"]["summary_written_to"])
+    summary_file = installation / envelope["error"]["details"]["summary_written_to"]
     assert_no_probe("the run-summary file", summary_file.read_text(encoding="utf-8"))
 
     rendered = printed("caselist", "pull", "--caselist", SYNTHETIC_CASELIST)
@@ -993,7 +998,14 @@ def test_a_run_that_exits_three_notifies_that_the_next_scheduled_run_should_retr
     summary = envelope["error"]["details"]
     assert summary["run_details"]["failure_codes"] == ["PROVIDER_UNAVAILABLE"]
     assert summary["run_details"]["stages"] == [
-        {"stage": "download", "error_codes": ["PROVIDER_UNAVAILABLE"], "hint": None, "earlier_findings": []}
+        {
+            "stage": "download",
+            "error_codes": ["PROVIDER_UNAVAILABLE"],
+            "hint": None,
+            "earlier_findings": [],
+            "drift": [],
+            "not_compared": [],
+        }
     ]
     assert all(sorted(one) == ["outcome", "reason", "stage"] for one in summary["run_record"]["stages"])
 
@@ -1014,3 +1026,103 @@ def test_a_run_that_exits_one_notifies_that_a_person_should_look(
         "A person should look: at least one failure here will be the same on the next scheduled run."
         in notification.message
     )
+
+
+# ------------------------------------------------------------------------------------------------
+# Each stage's times and the data volume's warning (`v1-e40-t03`)
+# ------------------------------------------------------------------------------------------------
+
+
+def test_a_run_reports_each_stages_times_in_its_summary_and_its_details(
+    installation: Path, site: respx.MockRouter
+) -> None:
+    envelope = pull("--caselist", SYNTHETIC_CASELIST)
+
+    data = envelope["data"]
+    every_stage = [
+        "select",
+        "download",
+        "import",
+        "publish",
+        "parse",
+        "search_index",
+        "landscape",
+        "report",
+        "retention",
+    ]
+    assert [one["stage"] for one in data["stage_times"]] == every_stage
+    assert [one["stage"] for one in data["run_details"]["stage_times"]] == every_stage
+    assert data["data_volume"] is None, "storage.volume_warning_percent is unset: no volume is read"
+    assert data["run_details"]["data_volume"] is None
+
+
+@pytest.mark.parametrize("cgroup_peak", ["7516192768\n", None], ids=["cgroup_v2", "no_cgroup"])
+def test_memory_figures_a_run_reports_each_stages_marks_in_its_summary_and_its_details(
+    installation: Path,
+    site: respx.MockRouter,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    cgroup_peak: str | None,
+) -> None:
+    """`v1-e40-t31`: the container's cgroup peak, from a stand-in cgroup, and the main process's own,
+    as each stage ended. With no cgroup, the Mac's case, the container's figure is left out."""
+    cgroup = tmp_path / "cgroup"
+    cgroup.mkdir()
+    if cgroup_peak is not None:
+        (cgroup / "memory.peak").write_text(cgroup_peak, encoding="ascii")
+    monkeypatch.setattr(memory_high_water, "CGROUP_ROOT", cgroup)
+
+    data = pull("--caselist", SYNTHETIC_CASELIST)["data"]
+
+    for entries in (data["stage_times"], data["run_details"]["stage_times"]):
+        assert len(entries) == 9, "every stage the run carried out"
+        figures = [one.get("memory", {}) for one in entries]
+        if cgroup_peak is None:
+            assert [sorted(one) for one in figures] == [["main_process_peak_bytes"]] * 9
+        else:
+            assert [(one.get("container_peak_bytes"), one.get("cgroup")) for one in figures] == [
+                (7516192768, "v2")
+            ] * 9
+        assert all(isinstance(one.get("main_process_peak_bytes"), int) for one in figures)
+        assert all(one["main_process_peak_bytes"] > 0 for one in figures)
+
+
+def test_a_run_under_a_volume_warning_reads_the_data_directorys_volume_and_warns_past_it(
+    installation: Path, site: respx.MockRouter, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The composition root hands the run the setting. This machine's real disk is read, so the
+    threshold is 1%: any disk holding an operating system and this checkout is past it."""
+    monkeypatch.setenv("DEBATE_STORAGE__VOLUME_WARNING_PERCENT", "1")
+
+    envelope = pull("--caselist", SYNTHETIC_CASELIST)
+
+    volume = envelope["data"]["data_volume"]
+    assert volume["warning_percent"] == 1
+    assert volume["peak_percent"] > 1
+    assert volume["warning"].endswith("past the 1% warning: enlarge it before a run fills it")
+    assert envelope["data"]["run_details"]["data_volume"] == volume
+    assert envelope["exit_code"] == ExitCode.OK, "a warning is not a failure"
+
+
+def test_the_caption_carries_the_data_volumes_warning_and_nothing_below_it() -> None:
+    started = datetime(2026, 11, 4, 12, 0, tzinfo=UTC)
+    gib = 1024**3
+
+    def summary(used: int) -> RunSummary:
+        return RunSummary(
+            run_id="20261104T120000Z",
+            started_at=started,
+            finished_at=started,
+            dry_run=False,
+            caselists=(SYNTHETIC_CASELIST,),
+            stages=(StageRecord(SyncStage.SELECT, StageOutcome.COMPLETED),),
+            data_volume=DataVolumeUsage(
+                total_bytes=100 * gib, peak_used_bytes=used, peak_after=SyncStage.PARSE, warning_percent=70
+            ),
+        )
+
+    assert _caption(summary(71 * gib)).endswith(
+        " Warning: the data volume was 71.0% used after the parse stage, past the 70% warning: "
+        "enlarge it before a run fills it. 0.0s."
+    )
+    assert "Warning" not in _caption(summary(70 * gib))

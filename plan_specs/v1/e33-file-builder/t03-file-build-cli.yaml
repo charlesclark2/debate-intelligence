@@ -32,9 +32,44 @@ spec:
     FileBuildService, FileSuggestService and the t04 FileQualityService in debate_core.application.
     Boundaries: the check library and report format are owned by t04 (not re-implemented here);
     `files publish` and its quality gate are t05; this task does not upload anything to S3.
+    (PM amendment 2026-10-19, from v1-e33-t01's Follow-up 1 and the PM's ruling.) AUTO
+    resolution prefers an occurrence with a disclosure on record and takes an unattributed one
+    only when no attributed one remains; `files build` reports each card resolved to an
+    unattributed occurrence before it builds, since t04's provenance check would fail it. This
+    changes t01's documented AUTO rule; change its guide with it.
+    (PM amendment 2026-10-19, from v1-e33-t02's PM review.) The writer finds each card by
+    re-parsing its source with the running parser and matching element indices and fingerprint,
+    so a store parsed by another parser version gives `OCCURRENCE_MISMATCH` for every card.
+    Before resolving anything, `files build` compares the parsed store's parser and fingerprint
+    versions with the running build's and, when they differ, refuses once with a message naming
+    both and saying to re-parse.
+    (PM amendment 2026-10-20, from v1-e31-t26's Follow-up 1 and v1-e33-t06's Follow-up 1.) The
+    resolver asks the held-path rule through `publish_plan.stored_row_hold`, as it asks the
+    suppression list, so a hold merged from another machine stops an occurrence before this
+    machine's next rebuild. And when AUTO prefers attributed occurrences, a camp occurrence with
+    its release record counts as attributed: a camp file has no disclosure, and its provenance
+    line names the camp.
+    (PM amendment 2026-10-21, from v1-e33-t04's PM review and v1-e31-t24's.) `files build` runs
+    v1-e33-t04's quality check through the `FileQualityService` the container wires, and refuses
+    an output directory inside a git working tree (built files hold card text and provenance).
+    The removal runbook's step 8 gains its `files check` command over built files. The writer's
+    `HIGHLIGHTED_CITE_CAUSE` refusal is kept as a safeguard and reached by a writer-level test
+    on a constructed card, since v1-e31-t24's step-over means no parsed card reaches it.
+    (PM amendment 2026-10-22, from data-use policy version 1.11, Charlie's decision of
+    2026-10-22.) `files build` writes no provenance line in a built file; the writer stops
+    writing it in v1-e33-t08, and the sidecar keeps the provenance. The description's references
+    to a camp card's provenance line naming the camp now mean its sidecar entry.
+    (PM amendment 2026-10-22, from v1-e33-t08's PM review.) The writer's
+    `HIGHLIGHTED_CITE_CAUSE` refusal named in the 2026-10-21 amendment no longer exists: with no
+    provenance line written, the build it compared against was identical, so v1-e33-t08 removed
+    it and a read-back refusal is a plain `READBACK_MISMATCH`. That sentence of the 2026-10-21
+    amendment is superseded. A file built by `2026.10.19-file-writer-2` or earlier holds
+    provenance lines and now fails `provenance-complete`; `files check` says so, and `files
+    build` over the same recipe rebuilds it without them.
   priority: 1
   constraints:
-    packages: [debate_cli, debate_core.application, tests/smoke]
+    # PM amendment 2026-10-21: the writer's test, the container and the removal runbook's step 8.
+    packages: [debate_cli, debate_core.application, tests/smoke, debate_core.integrations, packages/debate_core/tests, packages/debate_cli/tests, docs/runbooks]
     forbidden:
       - Business logic in debate_cli (commands only parse options, call a service and render output)
       - Model calls in build or suggest
@@ -49,6 +84,9 @@ spec:
       relation: dependsOn
     - kind: TaskRef
       name: v1-e33-t04-file-quality-checks
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e33-t08-provenance-line-one-function
       relation: dependsOn
   acceptanceCriteria:
     - id: ac1
@@ -78,8 +116,28 @@ spec:
       description: >-
         tests/smoke/test_files_cli.py covers build, check and suggest on synthetic data and runs in
         validate-dev.
+    - id: ac7
+      description: >-
+        (PM amendment 2026-10-19) AUTO prefers attributed occurrences, and `files build`
+        names every card resolved to an unattributed one before building, by tests shown
+        failing first; t01's guide states the rule.
+    - id: ac8
+      description: >-
+        (PM amendment 2026-10-19) A store parsed by another parser or fingerprint version is
+        refused once, before any card is resolved, with both versions and the re-parse
+        named, by test shown failing first.
+    - id: ac9
+      description: >-
+        (PM amendment 2026-10-20) An occurrence a hold stops is never resolved, by AUTO or
+        by a pin, before a rebuild, through `stored_row_hold`; a camp occurrence with a
+        release record counts as attributed for AUTO; each by test shown failing first.
+    - id: ac10
+      description: >-
+        (PM amendment 2026-10-21; amended 2026-10-24, since v1-e33-t08 removed the writer's
+        highlighted-cite refusal) `files build` runs the wired quality check and refuses an
+        output directory inside a git working tree, each shown failing first.
 status:
-  phase: Pending
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

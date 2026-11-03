@@ -28,6 +28,9 @@ spec:
     obtain approval from counsel and the school's administration. This is a documentation and review task:
     it does NOT implement deletion/export (t03) or audit logs (t02), but it sets retention windows those
     tasks read from config. Documents are not legal advice until counsel signs off.
+    (PM amendment 2026-11-01, Charlie's ruling in the dependency audit.) Blocked until Charlie says V2
+    starts. Every other V2 and V3 task depends on this one or on another held with it, so the ready list
+    stays V1's until then.
   priority: 1
   constraints:
     packages: [docs/privacy, docs/legal, web/src/app/legal]
@@ -58,7 +61,7 @@ spec:
         Written approval from counsel and the school administration is referenced in the release review
         before v2.4 school rollout.
 status:
-  phase: Pending
+  phase: Blocked
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

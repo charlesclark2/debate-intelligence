@@ -1,0 +1,74 @@
+# TASK v1-e08-t11-expand-prompt-sends-the-familys-needs - The search.expand prompt names the argument family's needs, not the DA family's
+# Epic: E08 Federated Research Workflows | Release: v1.4 (Federated research from the CLI) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e08-t11-expand-prompt-sends-the-familys-needs
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.4
+    debate/epic: v1-e08-research-workflows
+  annotations:
+    debate/title: "The search.expand prompt names the argument family's needs, not the DA family's"
+spec:
+  # Filed by the PM, 2026-11-02, from v1-e08-t08's question 4 (the PM's ruling, 2026-11-02).
+  description: >-
+    `prompts/search/expand.md`'s system text lists the DA family's five needs. That is wrong for
+    a framework, theory, a counterplan or a kritik, whose needs v1-e08-t08 gave their own
+    families. Release search.expand 1.1.0, which takes the argument's family and its needs as
+    variables, sends them, and lists no family in its fixed text. Lock it with
+    scripts/lock_prompts.py. Model expansion stays off by default and fails open, with fake
+    router fixtures only.
+  priority: 3
+  constraints:
+    packages: [prompts/search, debate_core.application, packages/debate_core/tests, tests/fixtures]
+    forbidden:
+      - A live model call
+      - Model expansion on by default
+      - Evidence text in the prompt or the answer
+  context:
+    - kind: TaskRef
+      name: v1-e08-t08-counterplan-and-kritik-needs
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        search.expand 1.1.0 is registered and locked, sends the argument's family and needs,
+        and a counterplan's expansion asks for its family's needs, by tests on fake router
+        fixtures shown failing first.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e08-t11-expand-prompt-sends-the-familys-needs-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.4
+    debate/epic: v1-e08-research-workflows
+spec:
+  description: >-
+    The search.expand prompt names the argument family's needs, not the DA family's.
+  goalRef:
+    name: v1-e08-t11-expand-prompt-sends-the-familys-needs
+  graph:
+    nodes:
+      - id: expand-prompt-sends-the-familys-needs
+        kind: Task
+        name: Family needs prompt
+        description: >-
+          The search.expand prompt names the argument family's needs, not the DA family's.
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Family needs prompt tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application/test_query_expansion.py, -k, model]
+status:
+  phase: Pending

@@ -21,6 +21,7 @@ from pathlib import Path
 from typing import Any, Final
 
 import pytest
+from tests.fixtures.model_routing import EXAMPLE_ROUTING_FILE
 from tests.smoke.installed_build import CliRun, InstalledCli
 
 from debate_cli.exit_codes import ExitCode
@@ -49,7 +50,7 @@ def installation(installed_cli: InstalledCli, tmp_path: Path) -> Iterator[Path]:
     profiles.mkdir()
     (profiles / "dev.toml").write_text(
         f'[storage]\ndata_dir = "{tmp_path / "data"}"\n'
-        f'[models]\nrouting_file = "{tmp_path / "routing.yaml"}"\nbudget_usd_daily = 1.0\n'
+        f'[models]\nrouting_file = "{EXAMPLE_ROUTING_FILE}"\nbudget_usd_daily = 1.0\n'
         "[parse]\nworkers = 2\nfailure_rate_threshold = 0.0\n",
         encoding="utf-8",
     )
@@ -134,3 +135,24 @@ def test_failures_with_nothing_failed_lists_nothing(installed_cli: InstalledCli,
     listed = reported(installed_cli.run("--json", "caselist", "parse", "--caselist", CASELIST, "--failures"))
 
     assert (listed["present"], listed["failures"], listed["contains_disclosure_paths"]) == (True, [], True)
+
+
+def test_publish_only_beside_an_option_it_has_no_use_for_is_refused_and_writes_nothing(
+    installed_cli: InstalledCli, imported: Path
+) -> None:
+    """`v1-e31-t30`: offline, so no bucket is reached. The refusal is a usage error, exit 2."""
+    reported(installed_cli.run("--json", "caselist", "parse", "--caselist", CASELIST))
+    store = imported / "parsed"
+    before = {path: path.stat().st_mtime_ns for path in store.rglob("*") if path.is_file()}
+
+    for beside in (["--publish"], ["--reparse"], ["--snapshot", SNAPSHOT], ["--dry-run"], ["--failures"]):
+        result = installed_cli.run(
+            "--json", "caselist", "parse", "--caselist", CASELIST, "--publish-only", *beside
+        )
+
+        assert result.exit_code == ExitCode.USAGE_ERROR, result.stdout
+        error = json.loads(result.stdout)["error"]
+        assert error["code"] == "USAGE_ERROR"
+        assert f"so it cannot be combined with {beside[0]}" in error["message"]
+
+    assert {path: path.stat().st_mtime_ns for path in store.rglob("*") if path.is_file()} == before

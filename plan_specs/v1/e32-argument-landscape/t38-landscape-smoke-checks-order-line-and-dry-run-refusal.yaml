@@ -1,0 +1,78 @@
+# TASK v1-e32-t38-landscape-smoke-checks-order-line-and-dry-run-refusal - The landscape smoke check reads the review queue's order line and a dry run's scan refusal
+# Epic: E32 Argument Landscape Reports | Release: v1.2 (Argument landscape & file building) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e32-t38-landscape-smoke-checks-order-line-and-dry-run-refusal
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e32-argument-landscape
+  annotations:
+    debate/title: "The landscape smoke check reads the review queue's order line and a dry run's scan refusal"
+spec:
+  # Filed by the PM, 2026-10-31, from v1-e32-t26's question 3 and v1-e32-t19's follow-up (the PM's reviews, 2026-11-01).
+  description: >-
+    Agreement 5 asks a changed user-facing surface for its smoke check, and two landscape
+    changes went without one because `tests/smoke` was outside their packages: v1-e32-t26's
+    `Review queue order:` line and `review_queue.order` in `--json`, and v1-e32-t19's dry-run
+    scan refusal naming the publish command (`error.details.publish_command`). Add both to
+    `tests/smoke/test_landscape_smoke.py`, in its style, against the checkout's script and an
+    installed build: the order line says off with no model and on with a planted model, and a
+    planted scan hit on a dry run gives the refusal with the command. Each shown failing against
+    a break.
+  priority: 3
+  constraints:
+    packages: [tests/smoke]
+    forbidden:
+      - A model call or network access in a test
+      - A real card, school or team in a fixture
+  context:
+    - kind: TaskRef
+      name: v1-e32-t26-review-queue-proxy-ordering
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e32-t19-dry-run-scan-refusal-wording
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        Both checks run against the checkout's script and an installed build and fail
+        against a break, shown in the report.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e32-t38-landscape-smoke-checks-order-line-and-dry-run-refusal-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e32-argument-landscape
+spec:
+  description: >-
+    The landscape smoke check reads the review queue's order line and a dry run's scan refusal.
+  goalRef:
+    name: v1-e32-t38-landscape-smoke-checks-order-line-and-dry-run-refusal
+  graph:
+    nodes:
+      - id: landscape-smoke-checks-order-line-and-dr
+        kind: Task
+        name: Landscape smoke checks
+        description: >-
+          The landscape smoke check reads the review queue's order line and a dry run's
+          scan refusal.
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Landscape smoke checks tests pass
+            command: uv
+            args: [run, pytest, tests/smoke, -k, landscape]
+status:
+  phase: Pending

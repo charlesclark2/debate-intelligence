@@ -1,0 +1,70 @@
+# TASK v1-e31-t27-parse-time-limit-test - The parse time-limit test does not depend on the machine's load
+# Epic: E31 Debate File Parsing | Release: v1.1 | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e31-t27-parse-time-limit-test
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e31-debate-file-parsing
+  annotations:
+    debate/title: "The parse time-limit test does not depend on the machine's load"
+spec:
+  # Filed by the PM, 2026-10-19, from v1-e34-t27's Follow-up 1.
+  description: >-
+    `test_a_parse_past_the_time_limit_is_stopped_and_the_run_carries_on` measures its limit by
+    the wall clock, and at a load average of 30 to 80 six parses time out where one should. Give
+    the time limit an injected clock, or a parse that blocks until the test releases it, so the
+    test asserts one timeout whatever the load. Not a longer limit.
+  priority: 3
+  constraints:
+    packages: [debate_core.application, packages/debate_core/tests]
+    forbidden:
+      - Raising the limit or adding a retry to the test
+      - Network or AWS access in any test
+  context:
+    - kind: TaskRef
+      name: v1-e31-t17-parse-retries-and-one-publisher
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        The test passes under an artificial load (a busy-loop process per core) 20 times
+        running, and a mutant that removes the limit fails it.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e31-t27-parse-time-limit-test-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e31-debate-file-parsing
+spec:
+  description: >-
+    An injected clock for the parse time limit.
+  goalRef:
+    name: v1-e31-t27-parse-time-limit-test
+  graph:
+    nodes:
+      - id: time-limit
+        kind: Task
+        name: Parse time-limit test
+        description: >-
+          An injected clock for the parse time limit.
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Parse tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application/test_caselist_parse.py]
+status:
+  phase: Pending

@@ -19,6 +19,22 @@
 #      commit and tag, because a release created with GITHUB_TOKEN starts no workflow of its own.
 #   5. prune: delete the release (never the tag) of dev pre-releases beyond the newest 30.
 #
+# A COMMIT DEV HAS MOVED PAST (v1-e01-t36). GitHub sometimes refuses this token a tag, "refusing to
+# allow a GitHub App to create or update workflow ... without `workflows` permission", though the tag
+# changes no file. GitHub does not document when. Observed here: the 2 refusals in 374 runs to
+# 2026-10-24 were both for a dev commit behind dev's head after a later commit changed
+# .github/workflows/; and v1.0.1-dev.1 and .2 were tagged at hotfix heads whose workflows differed
+# from dev's head, so the rule is not "differs from the default branch". Reported (GitHub community
+# discussion #151442): a tag is refused when no branch head has the commit's workflow files. So for a
+# merge to dev, the claim first fetches dev's head; if it is past the commit with different workflow
+# files, the claim ends superseded with a notice naming it, pushes no tag and exits 0, and every later
+# step is skipped: nothing is built, published, dispatched or pruned, and dev's head gets its own
+# pre-release. The check is conservative: it may skip a commit GitHub would have tagged, never the
+# reverse. A push still refused with that wording is superseded only if the check, run again against
+# a fresh head, holds; otherwise it fails after the usual retries. Hotfix claims are not checked.
+# This file runs from the default branch but the claim script from the commit being tagged, so the
+# claim's command line takes no flag an older script lacks.
+#
 # Not part of `ci`, and not a required check. It runs after a merge, on its own trigger, and hands
 # each build to validate-dev (v1-e01-t10), whose status is what protect-main requires; ci.yml's
 # header records when a separate workflow is right.
@@ -98,8 +114,23 @@ jobs:
           export GIT_CONFIG_VALUE_0="AUTHORIZATION: basic $basic"
           python3 scripts/release_version.py claim --source "$VERSION_SOURCE" --sha "$HEAD_SHA"
 
+      - name: Summary of a superseded commit
+        # The claim printed the notice and tagged nothing; every step below is skipped.
+        if: steps.claim.outputs.superseded == 'true'
+        env:
+          SUPERSEDED_SHA: ${{ steps.claim.outputs.sha }}
+          SUPERSEDED_BY: ${{ steps.claim.outputs.superseded_by }}
+        run: |
+          {
+            echo "### Superseded: no pre-release for \`${SUPERSEDED_SHA}\`"
+            echo
+            echo "Dev's head \`${SUPERSEDED_BY}\` changed \`.github/workflows/\` after this commit, so"
+            echo "nothing was tagged, built or published for it. Dev's head gets its own pre-release."
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Skip a commit whose pre-release is already published
         id: existing
+        if: steps.claim.outputs.superseded != 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ steps.claim.outputs.tag }}
@@ -194,6 +225,7 @@ jobs:
         # this commit and tag. Also on a re-run whose release already existed, so re-running this
         # workflow re-validates. A commit from before validate-dev existed (a hotfix branch cut from a
         # main that predates it) has no workflow to dispatch; that is reported, not failed.
+        if: steps.claim.outputs.superseded != 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ steps.claim.outputs.tag }}
@@ -209,6 +241,7 @@ jobs:
 
       - name: Keep the newest 30 dev pre-releases
         # Deletes old releases and keeps their tags, so N keeps counting and is never reused.
+        if: steps.claim.outputs.superseded != 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |

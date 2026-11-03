@@ -84,6 +84,16 @@ The prompt tells the session which spec to execute, to implement the plan nodes 
 hand you any command that runs longer than about 2 minutes, to commit locally but never push,
 and to finish by setting the phase to `Succeeded` and completing the session report.
 
+It also tells the session never to run the whole test suite: CI runs what the pull request's changes
+reach, and the whole suite on dev's push run after the merge
+([working agreement 10](working-agreements.md#10-a-session-tests-what-it-changed-a-pull-request-what-it-reaches-and-dev-and-main-everything)).
+Before the report the session runs the affected set once, with
+`uv run scripts/affected_tests.py --run`, which prints and runs the test files the branch's changes
+can reach (`--explain` says why each one was chosen). When the branch changes shared test ground,
+such as `pyproject.toml` or `uv.lock`, the script says the whole selection is affected and runs
+nothing; if a whole-selection run before the pull request is warranted, the session hands it to you
+as one operator command.
+
 `scripts/task resume <task>` reopens the worktree in VS Code; continue the task's conversation
 from Claude Code's past-conversations list. With `--launch terminal` it runs `claude --continue`.
 For a task merged with `--partial` whose worktree is gone, the same command recreates it (see
@@ -262,7 +272,7 @@ always to keep both sides**, and picking one silently deletes another task's wor
 | `uv.lock` | Two tasks added dependencies | Never hand-merge. `git checkout --ours uv.lock && uv lock && git add uv.lock` - take dev's copy and regenerate against the merged `pyproject.toml`, which must be resolved first |
 | `pyproject.toml`, `packages/*/pyproject.toml` | Two tasks added a dependency or an extra | Keep both entries with their comments, alphabetically. A wrong resolution here breaks `uv lock` with a TOML parse error |
 | `**/__init__.py` | Two tasks exported something | Keep every import and every `__all__` entry from both sides, alphabetically. Ruff and pyright catch a missing import; a missing `__all__` entry passes both |
-| `commands/__init__.py`, `container.py`, `test_app.py`, `tests/smoke/README.md` | Two tasks registered a command, a service or a smoke check | Keep both registrations. The three lists must agree: a service in `container.py` is a service in `test_app.py` |
+| `command_registry.py`, `container.py`, `test_app.py`, `tests/smoke/README.md` | Two tasks registered a command, a service or a smoke check | Keep both registrations. The three lists must agree: a service in `container.py` is a service in `test_app.py` |
 
 Two rules learned the hard way:
 

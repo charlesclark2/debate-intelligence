@@ -1,0 +1,104 @@
+# TASK v1-e32-t43-model-evaluation-system-score-refusals-and-a-second-route - The model stage is scored as students meet it, its refusals are explained, and a second model route is measured on the same cards
+# Epic: E32 Argument Landscape Reports | Release: v1.2 (Argument landscape & file building) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e32-t43-model-evaluation-system-score-refusals-and-a-second-route
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e32-argument-landscape
+  annotations:
+    debate/title: "The model stage is scored as students meet it, its refusals are explained, and a second model route is measured on the same cards"
+spec:
+  # Filed by the PM, 2026-11-02, from v1-e32-t40's re-record under prompt 1.1.0 (2026-11-02, the PM's reading).
+  description: >-
+    v1-e32-t40's re-record of the coach's 47 cards under prompt 1.1.0 and taxonomy 1.5.0 scored
+    19 of 32 counted, 59.4% against the 85% bar (1.0.0 scored 36.8%). Three findings shape this
+    task. (1) The evaluation scores the model alone, but in the pipeline the deterministic stage
+    places a card first and the model sees only the rest: that stage placed 4 of the 47 (rows
+    11, 30, 31 and 59), all naming the coach's label, two of which the model got wrong. Scored
+    as the pipeline (deterministic first, the model for the rest) the PM estimates 21 of 33,
+    about 64%. Add that score beside the model's own, in the JSON and the breakdown, and decide
+    with the PM which one the bar applies to. (2) 12 cards were refused NO_POSITION, 10 of them
+    labelled with a position (midterms-da 2, generic-k 2, and one each of inequality-advantage,
+    data-advantage, pharma-advantage, coverage-advantage, states-cp and advantage-cp). From ids,
+    counts and the recorded answers only, say what those cards had in front of the model (their
+    heading depth, whether a tag or heading was present, their batch, their stratum) and propose
+    what would let the model answer them. (3) Record the same 47 cards on a second model route
+    the router already defines (the PM's choice of route from the options the session lists,
+    with each route's model and price read from the committed pricing file), and compare the two
+    side by side: accuracy, refusals, cost. The recording is the operator's, a few cents, after
+    the PM approves the route. Nothing changes the bar, the threshold or the taxonomy. The hold
+    on live runs stays until a measured result meets the bar.
+  priority: 1
+  constraints:
+    # PM ruling 2026-11-03: the second route stands in for high_volume in build_model_router, for the router and
+    # the budget guard alike, so the packages gain debate_core.integrations.models.
+    packages: [debate_core.application, debate_core.arguments, debate_core.integrations.models, debate_cli, packages/debate_core/tests, packages/debate_cli/tests, docs/data, docs/runbooks]
+    forbidden:
+      - Card text, a tag, heading or label text in the report, docs, logs or a test
+      - A school, team code or debater name anywhere
+      - A change to the 85% bar, the review threshold, the taxonomy or the prompt
+      - A live model call by the session
+      - A price written from memory
+  context:
+    - kind: TaskRef
+      name: v1-e32-t40-model-stage-reads-the-argument-not-the-subject
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e32-t41-coach-sample-second-label-and-three-new-positions
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        The evaluation reports the pipeline's score (deterministic placement first, the
+        model for the rest) beside the model's own, in its JSON and breakdown, by tests
+        shown failing first, with the PM's ruling on which the bar reads.
+    - id: ac2
+      description: >-
+        The report explains the 10 refusals of labelled cards from ids and counts, and
+        proposes a change with the evidence for it.
+    - id: ac3
+      description: >-
+        The operator's recording of the 47 cards on the second route the PM approved, and
+        the side-by-side counts and cost, are recorded in docs/data (operator, recorded by
+        the PM).
+status:
+  phase: InProgress
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e32-t43-model-evaluation-system-score-refusals-and-a-second-route-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e32-argument-landscape
+spec:
+  description: >-
+    The model stage is scored as students meet it, its refusals are explained, and a second
+    model route is measured on the same cards.
+  goalRef:
+    name: v1-e32-t43-model-evaluation-system-score-refusals-and-a-second-route
+  graph:
+    nodes:
+      - id: model-evaluation-system-score-refusals-a
+        kind: Task
+        name: System score
+        description: >-
+          The model stage is scored as students meet it, its refusals are explained, and a
+          second model route is measured on the same cards.
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: System score tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests, packages/debate_cli/tests, -k, evaluat]
+status:
+  phase: Pending

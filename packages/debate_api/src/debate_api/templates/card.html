@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}A card · Team evidence search{% endblock %}
+{% block main %}
+<nav class="back-link" aria-label="Back"><a href="{{ back_href }}">{{ back_words }}</a></nav>
+<article class="card" aria-labelledby="card-tag">
+<p class="card-label">Disclosed evidence, not platform-verified</p>
+<h1 id="card-tag" class="card-tag">{{ card.tag or "A card with no tag" }}</h1>
+<p class="card-cite-line">{{ card.cite }}</p>
+{% if provenance_line %}<p class="provenance">{{ provenance_line }}</p>{% endif %}
+{% if source_link %}<p class="source-link"><a href="{{ source_link.url }}" target="_blank" rel="noopener noreferrer">{{ source_link.label }}<span class="new-tab"> (opens in a new tab)</span></a></p>{% endif %}
+<p class="card-counts">{{ counts }}</p>
+<div class="card-actions">
+<button type="button" data-tub-copy="{{ copy_href }}" aria-describedby="copy-help">Copy card</button>
+<span id="copy-help" class="copy-help">Keeps its formatting.</span>
+<span class="copy-status" data-tub-copy-message role="status"></span>
+<div class="download-actions">
+{% if download_on %}<div class="pocket-name">
+<label for="download-pocket">Pocket name for this card's file</label>
+<input id="download-pocket" type="text" maxlength="{{ pocket_max_length }}" autocomplete="off" spellcheck="false" aria-describedby="download-pocket-help" data-tub-download-pocket>
+<p id="download-pocket-help" class="help">Up to {{ pocket_max_length }} characters. Left blank, the pocket is "{{ pocket_default }}".</p>
+</div>
+<button type="button" data-tub-download="{{ card_reference }}">Download .docx</button>
+<button type="button" class="secondary" data-tub-cart-add="{{ card_reference }}">Add to cart</button>
+<div class="download-status" data-tub-download-message role="status"></div>
+{% else %}<p class="download-off">Download is off until the search's next weekly update. Copy card still works.</p>
+{% endif %}</div>
+</div>
+<!--card-body-->
+{% if long_card %}
+<h2>Read aloud</h2>
+<p class="help">This card is {{ words }} words long, so its underlined and highlighted text comes first.</p>
+<div class="card-text card-read-aloud">{% if card.read_aloud %}{{ read_aloud_html | safe }}{% else %}This card marks nothing to read aloud.{% endif %}</div>
+<details class="card-whole">
+<summary>Show the whole card</summary>
+<div class="card-text">{{ card_html | safe }}</div>
+</details>
+{% else %}
+<div class="card-text">{{ card_html | safe }}</div>
+{% endif %}
+<!--/card-body-->
+<h2>Where it was disclosed</h2>
+<ul class="occurrences">
+{% for line in occurrence_lines %}<li class="provenance">{{ line }}</li>
+{% endfor %}{% if unattributed %}<li>{% if unattributed == 1 %}1 more file{% else %}{{ unattributed }} more files{% endif %}. The search keeps who disclosed a card for its first five files only.</li>
+{% endif %}</ul>
+</article>
+{% endblock %}

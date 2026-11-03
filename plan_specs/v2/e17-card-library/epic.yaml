@@ -205,6 +205,14 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v2-e17-t05-bulk-export
+    - id: ext-v2-e35-t01-tub-data-model
+      kind: External
+      name: 'Prerequisite from E35: Tub data model'
+      description: >-
+        Cross-epic prerequisite owned by v2-e35-debate-tub (release v2.1).
+      inputs:
+        goalRef: v2-e35-t01-tub-data-model
+        specRef: plan_specs/v2/e35-debate-tub/t01-tub-data-model.yaml
     - id: t06
       kind: Task
       name: Organization sharing
@@ -215,6 +223,7 @@ spec:
         goalRef: v2-e17-t06-team-sharing
       dependsOn:
       - t02
+      - ext-v2-e35-t01-tub-data-model
       acceptanceCriteria:
       - type: command_succeeds
         name: Task spec v2-e17-t06-team-sharing reports phase Succeeded

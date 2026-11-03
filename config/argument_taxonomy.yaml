@@ -1,0 +1,993 @@
+# Argument and need query expansion for federated search (v1-e08-t04-argument-need-expansion).
+#
+# `debate-research search "<query>" --argument <argument> --need <need>` asks the search providers
+# the queries below instead of the bare query.
+#
+# Families (v1-e08-t08): each family of arguments has its own needs, and an argument's kind chooses
+# its family (da and advantage, framework, theory, cp, k). An argument lists, for every need of its
+# family and no other, the templates it expands into, and `--need` takes only its family's needs:
+# a framework has no uniqueness or internal link, because the question is whether it is good or not.
+# A need's name means the same need in every family that has it (answers, link, impact).
+#
+# In a template, {query} is what the debater typed, {topic} the topic (from --topic, the topic
+# preset at the bottom of this file, or otherwise the query itself), and {bill} the agenda item a
+# politics DA is about, which only the request can give. A template naming a variable the request
+# did not give is skipped, so every pair keeps at least one template that names only {query} and
+# {topic}. No template names a current event: what changes week to week is a variable.
+#
+# Windows: each need has a default recency window, and a template may set its own. A search with
+# its own --since keeps it. `any` means any age. The coach's windows (2026-11-02): uniqueness one
+# year, 30 days for the politics DA; link, internal link and answers five years; impact any age.
+# Framing has no window: philosophy evidence doesn't go stale. The theory, counterplan and kritik
+# windows are drafts for his review.
+#
+# Loaded and validated by debate_core.application.query_expansion.load_argument_taxonomy; a mistake
+# fails the load naming the field. Raise taxonomy_version on every change. Every entry says
+# `review: awaiting_coach_review` until the coach has read it and changed it to `coach_reviewed`.
+# Version 1.1.0 is the coach's review of 2026-11-02 (v1-e08-t04's ac4): his windows, templates and
+# decisions. Version 1.2.0 (v1-e08-t08, for his review) gives each family its own needs, reshapes
+# util, deontology, structural violence and cost-benefit into framing with his content, gives theory
+# its own family, and adds the landscape's generic counterplans and kritiks. The DAs and advantages
+# he reviewed are unchanged.
+#
+# Ids: an argument the Policy landscape taxonomy also counts (config/landscape/taxonomies/) uses the
+# landscape's id, and says so in landscape_id. The spelling in the task spec is an alias
+# (econ-da -> economy-da, ptx -> politics-da, elections -> midterms-da).
+#
+# Schema 2 (v1-e08-t08): `families`, each with its kinds and needs, replaces the one `needs` list.
+schema_version: 2
+taxonomy_version: 1.2.0
+
+variables:
+  query: What the debater typed as the search query.
+  topic: >-
+    What the topic is about: --topic, or the topic preset's value, or otherwise the query.
+  bill: >-
+    The agenda item a politics DA says the plan trades off with, as the request names it. Never
+    written into a template, because it changes from week to week.
+  impact: >-
+    The impact a debater names for a scenario (for example war), as the request gives it.
+
+families:
+
+  # DAs and advantages: the coach-reviewed needs and windows of taxonomy 1.1.0, unchanged.
+  - id: da-and-advantage
+    label: DAs and advantages
+    kinds: [da, advantage]
+    needs:
+      - id: uniqueness
+        label: Uniqueness
+        description: Where things stand now, before the plan or action.
+        aliases: [uq, u]
+        recency_days: 365
+      - id: link
+        label: Link
+        description: How the plan or action sets the argument off.
+        aliases: [l]
+        recency_days: 1826
+      - id: internal-link
+        label: Internal link
+        description: The step that connects the link to the impact.
+        aliases: [il]
+        recency_days: 1826
+      - id: impact
+        label: Impact
+        description: What happens in the end, and why it matters. Older scholarship is fine.
+        aliases: [i, impacts]
+        recency_days: any
+      - id: answers
+        label: Answers (AT)
+        description: Evidence answering the other side's version of the argument.
+        aliases: [at, a2, answers-to]
+        recency_days: 1826
+
+  # Framing: whether the framework is good or not (the coach, 2026-11-02). No window: philosophy
+  # evidence doesn't go stale.
+  - id: framing
+    label: Framing
+    kinds: [framework]
+    needs:
+      - id: framework-good
+        label: Framework good
+        description: Why the round should be weighed this way.
+        aliases: [fw-good]
+        recency_days: any
+      - id: answers
+        label: Answers (AT)
+        description: Why the round should not be weighed this way.
+        aliases: [at, a2, answers-to]
+        recency_days: any
+
+  # Theory: the rule, why it is good for debate, why breaking it is a reason to vote, and answers.
+  - id: theory
+    label: Theory
+    kinds: [theory]
+    needs:
+      - id: interpretation
+        label: Interpretation
+        description: The rule the theory argument says debaters should follow.
+        aliases: [interp]
+        recency_days: any
+      - id: standards
+        label: Standards
+        description: Why the interpretation is better for debate, such as fairness, education or ground.
+        aliases: [standard]
+        recency_days: any
+      - id: voters
+        label: Voters
+        description: Why breaking the rule is a reason to vote, and what the judge should do about it.
+        aliases: [voter, voting-issue]
+        recency_days: any
+      - id: answers
+        label: Answers (AT)
+        description: Evidence answering the other side's theory argument.
+        aliases: [at, a2, answers-to]
+        recency_days: any
+
+  # Counterplans.
+  - id: counterplan
+    label: Counterplans
+    kinds: [cp]
+    needs:
+      - id: solvency
+        label: Solvency
+        description: That the counterplan solves the affirmative's advantages, or does what the plan does.
+        aliases: [solves]
+        recency_days: 1826
+      - id: net-benefit
+        label: Net benefit
+        description: A reason to prefer the counterplan that the plan, or doing both, does not get.
+        aliases: [nb, net-benefits]
+        recency_days: 1826
+      - id: competition
+        label: Competition
+        description: Why the counterplan is a reason to reject the plan rather than to do both.
+        aliases: [comp]
+        recency_days: any
+      - id: answers
+        label: Answers (AT)
+        description: Evidence answering the counterplan, such as that it does not solve or that both can be done.
+        aliases: [at, a2, answers-to]
+        recency_days: 1826
+
+  # Kritiks.
+  - id: kritik
+    label: Kritiks
+    kinds: [k]
+    needs:
+      - id: link
+        label: Link
+        description: How the affirmative's plan, assumptions or representations link to the kritik.
+        aliases: [l]
+        recency_days: 1826
+      - id: impact
+        label: Impact
+        description: What the linked assumptions lead to, and why it matters.
+        aliases: [i, impacts]
+        recency_days: any
+      - id: alternative
+        label: Alternative
+        description: What the kritik offers instead of the affirmative.
+        aliases: [alt]
+        recency_days: any
+      - id: framework
+        label: Framework
+        description: How the judge should weigh the round, so that the kritik comes first.
+        aliases: [fw]
+        recency_days: any
+      - id: answers
+        label: Answers (AT)
+        description: Evidence answering the kritik, such as the permutation, the alternative failing or the affirmative's framework.
+        aliases: [at, a2, answers-to]
+        recency_days: any
+
+arguments:
+
+  # ---------------------------------------------------------------------------------------------
+  # Policy: disadvantages
+  # ---------------------------------------------------------------------------------------------
+
+  - id: politics-da
+    label: Politics DA
+    kind: da
+    formats: [POLICY]
+    aliases: [ptx, politics, ptx-da]
+    landscape_id: politics-da
+    review: coach_reviewed
+    templates:
+      uniqueness:
+        - {text: "{query} vote count Senate", recency_days: 30}
+        - {text: "{query} likely to pass Congress", recency_days: 30}
+        - {text: "{query} will not pass", recency_days: 30}
+        - {text: "{bill} whip count", recency_days: 30}
+      link:
+        - {text: "{query} political capital"}
+        - {text: "{query} partisan fight Congress"}
+        - {text: "{query} unpopular with voters"}
+        - {text: "{query} popular with Republicans"}
+        - {text: "{query} unpopular with Republicans"}
+        - {text: "{query} popular with Democrats"}
+        - {text: "{query} unpopular with Democrats"}
+      internal-link:
+        - {text: "political capital key to the president's agenda {query}"}
+        - {text: "{bill} needs presidential political capital"}
+        - {text: "popularity key to passage"}
+      impact:
+        - {text: "{bill} benefits"}
+        - {text: "{bill} key to {impact}"}
+        - {text: "{bill} fails consequences"}
+        - {text: "president's agenda impact"}
+      answers:
+        - {text: "winners win political capital {query}"}
+        - {text: "political capital theory wrong {query}"}
+
+  - id: midterms-da
+    label: Midterms DA
+    kind: da
+    formats: [POLICY]
+    aliases: [elections, elections-da]
+    landscape_id: midterms-da
+    review: coach_reviewed
+    note: >-
+      The landscape's id, kept by the coach (2026-11-02), with elections as an alias.
+    templates:
+      uniqueness:
+        - {text: "{topic} midterms polling"}
+        - {text: "{query} election forecast"}
+      link:
+        - {text: "{query} voters election impact"}
+        - {text: "{topic} issue swing voters"}
+      internal-link:
+        - {text: "{query} turnout swing voters"}
+        - {text: "{query} control of Congress"}
+      impact:
+        - {text: "{query} control of Congress consequences"}
+        - {text: "divided government consequences"}
+      answers:
+        - {text: "{query} will not affect elections"}
+        - {text: "{query} low issue salience voters"}
+
+  - id: economy-da
+    label: Economy DA
+    kind: da
+    formats: [POLICY]
+    aliases: [econ-da, econ, economy]
+    landscape_id: economy-da
+    review: coach_reviewed
+    templates:
+      uniqueness:
+        - {text: "{query} economic growth forecast"}
+        - {text: "{query} recession risk"}
+      link:
+        - {text: "{query} cost economy"}
+        - {text: "{topic} economic impact"}
+      internal-link:
+        - {text: "{query} business investment"}
+        - {text: "{query} consumer spending"}
+      impact:
+        - {text: "economic decline causes war"}
+        - {text: "{query} economic decline impact"}
+      answers:
+        - {text: "{query} economy resilient"}
+        - {text: "economic decline does not cause war"}
+        - {text: "{query} helps the economy"}
+        - {text: "{query} economy currently declining"}
+
+  - id: spending-da
+    label: Spending DA
+    kind: da
+    formats: [POLICY]
+    aliases: [spending, fiscal-da]
+    review: coach_reviewed
+    note: >-
+      The NHI landscape has no Spending DA; its closest positions are debt-da and budgets-advantage.
+      Kept separate by the coach (2026-11-02): a different mechanism.
+    templates:
+      uniqueness:
+        - {text: "{query} federal spending debate Congress"}
+        - {text: "Congress spending restraint {query}"}
+      link:
+        - {text: "{query} cost federal budget"}
+        - {text: "{query} CBO cost estimate"}
+      internal-link:
+        - {text: "federal deficit raises interest rates"}
+        - {text: "{query} deficit spending tradeoff"}
+      impact:
+        - {text: "national debt crisis consequences"}
+        - {text: "{query} deficit impact"}
+        - {text: "{query} fiscal cliff"}
+      answers:
+        - {text: "{query} pays for itself savings"}
+        - {text: "deficit spending sustainable"}
+        - {text: "{query} no impact to deficit spending"}
+        - {text: "{query} no spending trade off"}
+        - {text: "{query} federal spending high now"}
+        - {text: "{query} debt crisis now"}
+
+  - id: federalism-da
+    label: Federalism DA
+    kind: da
+    formats: [POLICY]
+    aliases: [federalism]
+    landscape_id: federalism-da
+    review: coach_reviewed
+    templates:
+      uniqueness:
+        - {text: "states lead {query} policy"}
+        - {text: "{query} state innovation federalism"}
+        - {text: "{query} clean federal and state separation now"}
+        - {text: "{query} federalism healthy now"}
+      link:
+        - {text: "{query} federal preemption states"}
+        - {text: "{query} federal government overrides state authority"}
+      internal-link:
+        - {text: "federal preemption spills over federalism"}
+        - {text: "{query} federalism precedent other policy areas"}
+      impact:
+        - {text: "federalism laboratories of democracy"}
+        - {text: "federalism key to democracy {query}"}
+        - {text: "{query} federalism modeled globally"}
+      answers:
+        - {text: "{query} federal action consistent with federalism"}
+        - {text: "federalism resilient to preemption"}
+        - {text: "{query} federalism low now"}
+        - {text: "{query} federal overreach now"}
+
+  # ---------------------------------------------------------------------------------------------
+  # Policy: advantage areas
+  # ---------------------------------------------------------------------------------------------
+
+  - id: heg
+    label: Heg
+    kind: advantage
+    formats: [POLICY]
+    aliases: [hegemony, heg-advantage]
+    review: coach_reviewed
+    note: >-
+      Heg is read as an advantage and as a DA impact; the NHI landscape counts no heg position. Kept
+      by the coach (2026-11-02): a prevalent impact scenario. The answer naming the president is the
+      coach's wording, kept because it answers the argument for years.
+    templates:
+      uniqueness:
+        - {text: "US leadership high now"}
+        - {text: "US leadership low now"}
+      link:
+        - {text: "{topic} boosts US soft power"}
+        - {text: "{topic} US model other countries follow"}
+        - {text: "{query} global health leadership soft power"}
+      internal-link:
+        - {text: "US economic strength key to hegemony"}
+        - {text: "{query} US soft power"}
+        - {text: "{query} soft power key to hard power"}
+      impact:
+        - {text: "US hegemony prevents great power war"}
+        - {text: "US primacy deters conflict"}
+      answers:
+        - {text: "US hegemony unsustainable"}
+        - {text: "{query} heg resilient"}
+        - {text: "{query} Trump has destroyed US leadership"}
+        - {text: "{query} US leadership low now"}
+        - {text: "{query} unipolarity unsustainable"}
+        - {text: "{query} multipolarity inevitable"}
+        - {text: "{query} US leadership causes war"}
+        - {text: "{query} US leadership causes {impact}"}
+
+  - id: economy-advantage
+    label: Economy advantage
+    kind: advantage
+    formats: [POLICY]
+    aliases: [econ-advantage, econ-adv]
+    landscape_id: economy-advantage
+    review: coach_reviewed
+    templates:
+      uniqueness:
+        - {text: "{query} costs hurting the economy"}
+        - {text: "{topic} costs workers employers"}
+      link:
+        - {text: "{topic} boosts economic growth"}
+        - {text: "{query} economic benefits"}
+      internal-link:
+        - {text: "{query} labor market mobility"}
+        - {text: "{query} productivity"}
+      impact:
+        - {text: "economic growth prevents conflict"}
+        - {text: "{query} economic growth impact"}
+      answers:
+        - {text: "{topic} hurts the economy"}
+        - {text: "{query} economic costs"}
+        - {text: "{query} doesn't boost economic growth"}
+        - {text: "{query} productivity not key to the economy"}
+        - {text: "{query} labor market mobility not key to the economy"}
+
+  - id: pandemics-advantage
+    label: Pandemics advantage
+    kind: advantage
+    formats: [POLICY]
+    aliases: [pandemics, pandemic-advantage]
+    landscape_id: pandemics-advantage
+    review: coach_reviewed
+    templates:
+      uniqueness:
+        - {text: "{query} pandemic preparedness gaps"}
+        - {text: "pandemic risk rising {query}"}
+      link:
+        - {text: "{topic} pandemic response"}
+        - {text: "{query} uninsured delay care disease spread"}
+      internal-link:
+        - {text: "uninsured avoid care disease spread"}
+        - {text: "{query} disease surveillance"}
+      impact:
+        - {text: "pandemic extinction risk"}
+        - {text: "{query} pandemic deaths"}
+      answers:
+        - {text: "{topic} does not solve pandemics"}
+        - {text: "pandemic extinction unlikely"}
+        - {text: "{query} pandemics burn out"}
+        - {text: "{query} pandemic response adequate in the status quo"}
+        - {text: "{query} pandemics good"}
+
+  - id: inequality-advantage
+    label: Inequality advantage
+    kind: advantage
+    formats: [POLICY]
+    aliases: [inequality]
+    landscape_id: inequality-advantage
+    review: coach_reviewed
+    templates:
+      uniqueness:
+        - {text: "{query} health disparities"}
+        - {text: "{query} inequality rising"}
+      link:
+        - {text: "{topic} reduces inequality"}
+        - {text: "{query} closes coverage gaps"}
+      internal-link:
+        - {text: "health inequality life expectancy gap"}
+        - {text: "{query} health inequality"}
+      impact:
+        - {text: "inequality undermines democracy"}
+        - {text: "{query} inequality structural violence"}
+        - {text: "{query} inequality populism"}
+        - {text: "{query} inequality economic unrest"}
+      answers:
+        - {text: "{topic} fails to reduce disparities"}
+        - {text: "{query} inequality persists"}
+        - {text: "{query} inequality inevitable"}
+        - {text: "{query} inequality declining"}
+        - {text: "{query} no impact to inequality"}
+
+  # ---------------------------------------------------------------------------------------------
+  # Framing. The coach's content (2026-11-02), written as templates for his review. The November-December de-extinction resolution is not committed yet (v1-e32-t06), so
+  # these templates take {topic} from the request until then.
+  # ---------------------------------------------------------------------------------------------
+
+  - id: util
+    label: Util
+    kind: framework
+    formats: [LD]
+    aliases: [utilitarianism, consequentialism]
+    review: awaiting_coach_review
+    note: >-
+      The coach's points: whether utilitarianism is good or not as a framework; predictions good or
+      not good; predictions accurate or inaccurate; util inevitable.
+    templates:
+      framework-good:
+        - {text: "utilitarianism good framework"}
+        - {text: "predictions good policy making"}
+        - {text: "expert predictions accurate"}
+        - {text: "utilitarianism inevitable"}
+        - {text: "{topic} utilitarianism"}
+      answers:
+        - {text: "utilitarianism bad framework"}
+        - {text: "predictions bad policy making"}
+        - {text: "expert predictions inaccurate"}
+        - {text: "utilitarianism not inevitable"}
+        - {text: "{topic} consequences unpredictable"}
+
+  - id: deontology
+    label: Deontology
+    kind: framework
+    formats: [LD]
+    aliases: [kant, kantianism, deont]
+    review: awaiting_coach_review
+    note: >-
+      The coach's points: whether deontology is good or bad as a framework; for example, deontology
+      allows better policy making.
+    templates:
+      framework-good:
+        - {text: "deontology good framework"}
+        - {text: "deontology allows better policy making"}
+        - {text: "Kantian ethics justification"}
+        - {text: "{topic} rights and duties"}
+      answers:
+        - {text: "deontology bad framework"}
+        - {text: "deontology fails policy making"}
+        - {text: "deontology ignores consequences"}
+        - {text: "{topic} consequences matter more than rights"}
+
+  - id: structural-violence
+    label: Structural violence
+    kind: framework
+    formats: [POLICY, LD, PF]
+    aliases: [sv]
+    review: awaiting_coach_review
+    note: >-
+      A framing argument for Policy and LD (the coach, 2026-11-02), kept for PF too. The coach's
+      points: whether structural violence should be evaluated above other consequences or not;
+      answers are that war turns structural violence, economic decline turns structural violence,
+      structural violence is inevitable, and structural violence can't be solved.
+    templates:
+      framework-good:
+        - {text: "evaluate structural violence above other consequences"}
+        - {text: "structural violence outweighs extinction"}
+        - {text: "structural violence comes first"}
+        - {text: "{topic} structural violence"}
+      answers:
+        - {text: "war turns structural violence"}
+        - {text: "economic decline turns structural violence"}
+        - {text: "structural violence inevitable"}
+        - {text: "structural violence can't be solved"}
+        - {text: "extinction outweighs structural violence"}
+
+  - id: cost-benefit
+    label: Cost-benefit
+    kind: framework
+    formats: [POLICY, LD, PF]
+    aliases: [cba, cost-benefit-analysis]
+    review: awaiting_coach_review
+    note: >-
+      A framing argument for Policy and LD (the coach, 2026-11-02), kept for PF too. The same shape
+      as util until the coach gives his own wording at review.
+    templates:
+      framework-good:
+        - {text: "cost benefit analysis good framework"}
+        - {text: "cost benefit analysis good policy making"}
+        - {text: "cost benefit predictions accurate"}
+        - {text: "cost benefit analysis inevitable"}
+        - {text: "{topic} cost benefit analysis"}
+      answers:
+        - {text: "cost benefit analysis bad framework"}
+        - {text: "cost benefit predictions inaccurate"}
+        - {text: "cost benefit analysis not inevitable"}
+        - {text: "{query} benefits overstated"}
+
+  # ---------------------------------------------------------------------------------------------
+  # Theory: LD.
+  # ---------------------------------------------------------------------------------------------
+
+  - id: theory
+    label: Theory
+    kind: theory
+    formats: [LD]
+    aliases: [ld-theory]
+    review: awaiting_coach_review
+    note: >-
+      The Policy landscape's generic-theory is Policy-only and collects theory headings, so it is
+      not mapped here.
+    templates:
+      interpretation:
+        - {text: "{query} debate interpretation"}
+        - {text: "{query} theory interpretation"}
+        - {text: "competing interpretations debate theory"}
+      standards:
+        - {text: "{query} debate fairness"}
+        - {text: "{query} debate education"}
+        - {text: "{query} debate ground"}
+        - {text: "debate education portable skills"}
+      voters:
+        - {text: "debate fairness voting issue"}
+        - {text: "debate education voting issue"}
+        - {text: "drop the debater theory"}
+        - {text: "drop the argument theory"}
+      answers:
+        - {text: "reasonability debate theory"}
+        - {text: "{query} theory frivolous"}
+        - {text: "theory not a voting issue"}
+        - {text: "{query} counter interpretation"}
+
+  # ---------------------------------------------------------------------------------------------
+  # Policy: counterplans. The landscape's counterplans that are not about a topic's mechanism, under
+  # its ids (config/landscape/taxonomies/). Federalism and free market CPs come with the landscape
+  # task that adds them.
+  # ---------------------------------------------------------------------------------------------
+
+  - id: process-cp
+    label: Process CP
+    kind: cp
+    formats: [POLICY]
+    aliases: [process, cp-process]
+    landscape_id: process-cp
+    review: awaiting_coach_review
+    templates:
+      solvency:
+        - {text: "{query} consultation process solves"}
+        - {text: "{query} commission recommendations implemented"}
+        - {text: "{topic} enacted through a referendum"}
+      net-benefit:
+        - {text: "{query} consultation improves relations"}
+        - {text: "{topic} commission depoliticizes"}
+        - {text: "{query} referendum democratic legitimacy"}
+      competition:
+        - {text: "should means immediate and certain"}
+        - {text: "resolved means a firm decision"}
+        - {text: "{query} counterplan competition"}
+      answers:
+        - {text: "{query} consultation fails"}
+        - {text: "{topic} commission recommendations ignored"}
+        - {text: "permutation do both {query}"}
+
+  - id: states-cp
+    label: States CP
+    kind: cp
+    formats: [POLICY]
+    aliases: [states, cp-states, states-counterplan]
+    landscape_id: states-cp
+    review: awaiting_coach_review
+    templates:
+      solvency:
+        - {text: "states solve {query}"}
+        - {text: "state level {topic}"}
+        - {text: "{query} state innovation"}
+        - {text: "{query} fifty states coordination"}
+      net-benefit:
+        - {text: "{query} federal action undermines federalism"}
+        - {text: "{query} state action avoids politics"}
+        - {text: "{topic} federal spending tradeoff"}
+      competition:
+        - {text: "states counterplan competition federal government"}
+        - {text: "uniform fifty state fiat legitimate"}
+      answers:
+        - {text: "states can't solve {query}"}
+        - {text: "{query} race to the bottom states"}
+        - {text: "states lack funding for {query}"}
+        - {text: "{query} federal action key"}
+
+  - id: courts-cp
+    label: Courts CP
+    kind: cp
+    formats: [POLICY]
+    aliases: [courts, cp-courts]
+    landscape_id: courts-cp
+    review: awaiting_coach_review
+    templates:
+      solvency:
+        - {text: "{query} Supreme Court ruling"}
+        - {text: "courts solve {query}"}
+        - {text: "{topic} judicial decision compliance"}
+      net-benefit:
+        - {text: "{query} court action avoids politics"}
+        - {text: "{topic} courts avoid a fight in Congress"}
+        - {text: "{query} judicial action legitimacy"}
+      competition:
+        - {text: "courts counterplan competition Congress"}
+        - {text: "{query} courts not Congress"}
+      answers:
+        - {text: "courts can't solve {query}"}
+        - {text: "{query} court ruling backlash"}
+        - {text: "{query} courts lack enforcement"}
+        - {text: "court legitimacy low now"}
+
+  - id: delay-cp
+    label: Delay CP
+    kind: cp
+    formats: [POLICY]
+    aliases: [delay, cp-delay]
+    landscape_id: delay-cp
+    review: awaiting_coach_review
+    templates:
+      solvency:
+        - {text: "{query} delay solves"}
+        - {text: "{topic} phased implementation"}
+        - {text: "{query} wait for evidence"}
+      net-benefit:
+        - {text: "{query} bad timing now"}
+        - {text: "{topic} delay avoids political backlash"}
+        - {text: "{query} implementation timing economy"}
+      competition:
+        - {text: "should means immediate"}
+        - {text: "delay counterplan competition immediacy"}
+      answers:
+        - {text: "{query} delay costs"}
+        - {text: "{query} urgent now"}
+        - {text: "{topic} delay never happens"}
+        - {text: "delay counterplans bad theory"}
+
+  - id: advantage-cp
+    label: Advantage CP
+    kind: cp
+    formats: [POLICY]
+    aliases: [adv-cp, advantage-counterplan]
+    landscape_id: advantage-cp
+    review: awaiting_coach_review
+    templates:
+      solvency:
+        - {text: "{query} alternative policy solves"}
+        - {text: "{query} alternative solutions"}
+        - {text: "alternatives to {topic}"}
+      net-benefit:
+        - {text: "{topic} costs too much"}
+        - {text: "{query} cheaper alternative"}
+        - {text: "{query} less disruptive alternative"}
+      competition:
+        - {text: "counterplan competition through net benefits"}
+        - {text: "advantage counterplans legitimate"}
+      answers:
+        - {text: "{query} alternative fails"}
+        - {text: "only {topic} solves {query}"}
+        - {text: "advantage counterplans bad theory"}
+
+  # ---------------------------------------------------------------------------------------------
+  # Policy: kritiks. generic.yaml's named kritiks, under its ids. Its generic-k collects cards that
+  # fit no named kritik, so it is not an argument to research.
+  # ---------------------------------------------------------------------------------------------
+
+  - id: cap-k
+    label: Cap K
+    kind: k
+    formats: [POLICY]
+    aliases: [cap, capitalism-k, k-cap]
+    landscape_id: cap-k
+    review: awaiting_coach_review
+    templates:
+      link:
+        - {text: "{topic} reform props up capitalism"}
+        - {text: "{query} capitalism"}
+        - {text: "{query} commodification"}
+      impact:
+        - {text: "capitalism causes environmental destruction"}
+        - {text: "capitalism structural violence"}
+        - {text: "capitalism causes war"}
+      alternative:
+        - {text: "reject capitalism alternative"}
+        - {text: "socialism alternative to capitalism"}
+        - {text: "{query} socialist alternative"}
+      framework:
+        - {text: "material analysis comes first"}
+        - {text: "{query} capitalism framework"}
+      answers:
+        - {text: "capitalism good"}
+        - {text: "capitalism sustainable"}
+        - {text: "socialism fails"}
+        - {text: "permutation reform and socialism"}
+
+  - id: racial-capitalism-k
+    label: Racial capitalism K
+    kind: k
+    formats: [POLICY]
+    aliases: [racial-cap-k, racial-cap]
+    landscape_id: racial-capitalism-k
+    review: awaiting_coach_review
+    templates:
+      link:
+        - {text: "{topic} racial capitalism"}
+        - {text: "{query} racial hierarchy capitalism"}
+      impact:
+        - {text: "racial capitalism violence"}
+        - {text: "racial capitalism dispossession"}
+      alternative:
+        - {text: "abolition of racial capitalism"}
+        - {text: "{query} Black radical tradition"}
+      framework:
+        - {text: "racial capitalism framework comes first"}
+        - {text: "{query} race analysis first"}
+      answers:
+        - {text: "racial capitalism theory wrong"}
+        - {text: "{query} reform helps communities of color"}
+        - {text: "capitalism reduces racism"}
+
+  - id: security-k
+    label: Security K
+    kind: k
+    formats: [POLICY]
+    aliases: [security, k-security]
+    landscape_id: security-k
+    review: awaiting_coach_review
+    templates:
+      link:
+        - {text: "{query} securitization"}
+        - {text: "{query} threat construction"}
+        - {text: "{topic} securitizes"}
+      impact:
+        - {text: "securitization justifies violence"}
+        - {text: "security logic causes war"}
+      alternative:
+        - {text: "reject security logic"}
+        - {text: "{query} desecuritization"}
+      framework:
+        - {text: "representations come first security"}
+        - {text: "{query} threat discourse matters"}
+      answers:
+        - {text: "securitization good"}
+        - {text: "{query} threat is real"}
+        - {text: "realism true"}
+
+  - id: biopolitics-k
+    label: Biopolitics K
+    kind: k
+    formats: [POLICY]
+    aliases: [biopolitics, biopower-k, k-biopolitics]
+    landscape_id: biopolitics-k
+    review: awaiting_coach_review
+    templates:
+      link:
+        - {text: "{topic} biopolitics"}
+        - {text: "{query} biopower population management"}
+        - {text: "{query} health surveillance"}
+      impact:
+        - {text: "biopolitics justifies killing"}
+        - {text: "biopower control over life"}
+      alternative:
+        - {text: "resist biopolitics"}
+        - {text: "{query} refuse biopower"}
+      framework:
+        - {text: "biopolitics framework comes first"}
+        - {text: "{query} Foucault framework"}
+      answers:
+        - {text: "biopolitics inevitable"}
+        - {text: "biopower good for health"}
+        - {text: "{query} biopolitics not totalizing"}
+
+  - id: settler-colonialism-k
+    label: Settler colonialism K
+    kind: k
+    formats: [POLICY]
+    aliases: [settler-colonialism, set-col-k, k-set-col]
+    landscape_id: settler-colonialism-k
+    review: awaiting_coach_review
+    templates:
+      link:
+        - {text: "{topic} settler colonialism"}
+        - {text: "{query} settler state"}
+        - {text: "{query} Indigenous land"}
+      impact:
+        - {text: "settler colonialism genocide"}
+        - {text: "settler colonialism ongoing violence"}
+      alternative:
+        - {text: "decolonization alternative"}
+        - {text: "{query} land back"}
+        - {text: "{query} Indigenous sovereignty"}
+      framework:
+        - {text: "settler colonialism framework comes first"}
+        - {text: "{query} decolonial framework"}
+      answers:
+        - {text: "settler colonialism theory wrong"}
+        - {text: "{query} reform helps Indigenous communities"}
+        - {text: "decolonization alternative fails"}
+
+  - id: colonialism-k
+    label: Colonialism K
+    kind: k
+    formats: [POLICY]
+    aliases: [colonialism]
+    landscape_id: colonialism-k
+    review: awaiting_coach_review
+    templates:
+      link:
+        - {text: "{topic} colonialism"}
+        - {text: "{query} colonial relations"}
+        - {text: "{query} global health imperialism"}
+      impact:
+        - {text: "colonialism violence"}
+        - {text: "colonial logic causes war"}
+      alternative:
+        - {text: "decolonial alternative"}
+        - {text: "{query} decolonize"}
+      framework:
+        - {text: "decolonial framework comes first"}
+        - {text: "{query} colonial framing"}
+      answers:
+        - {text: "colonialism critique wrong"}
+        - {text: "{query} not colonial"}
+        - {text: "decolonial alternative fails"}
+
+  - id: antiblackness-k
+    label: Antiblackness K
+    kind: k
+    formats: [POLICY]
+    aliases: [antiblackness, k-antiblackness]
+    landscape_id: antiblackness-k
+    review: awaiting_coach_review
+    templates:
+      link:
+        - {text: "{topic} antiblackness"}
+        - {text: "{query} antiblackness"}
+        - {text: "{query} reform cannot reach antiblackness"}
+      impact:
+        - {text: "antiblackness gratuitous violence"}
+        - {text: "antiblackness social death"}
+      alternative:
+        - {text: "afropessimism alternative"}
+        - {text: "{query} Black fugitivity"}
+      framework:
+        - {text: "antiblackness framework comes first"}
+        - {text: "{query} ontology first"}
+      answers:
+        - {text: "afropessimism wrong"}
+        - {text: "antiblackness not ontological"}
+        - {text: "{query} reform helps Black communities"}
+
+  - id: psychoanalysis-k
+    label: Psychoanalysis K
+    kind: k
+    formats: [POLICY]
+    aliases: [psychoanalysis, psycho-k, k-psychoanalysis]
+    landscape_id: psychoanalysis-k
+    review: awaiting_coach_review
+    templates:
+      link:
+        - {text: "{query} desire fantasy"}
+        - {text: "{topic} psychoanalysis"}
+        - {text: "{query} fear of death"}
+      impact:
+        - {text: "death drive violence"}
+        - {text: "fantasy of mastery violence"}
+      alternative:
+        - {text: "traverse the fantasy"}
+        - {text: "{query} psychoanalysis alternative"}
+      framework:
+        - {text: "psychoanalysis framework comes first"}
+        - {text: "{query} Lacan framework"}
+      answers:
+        - {text: "psychoanalysis wrong"}
+        - {text: "psychoanalysis not falsifiable"}
+        - {text: "{query} psychoanalysis fails"}
+
+  - id: queer-k
+    label: Queer K
+    kind: k
+    formats: [POLICY]
+    aliases: [queer, queer-intelligibility-k]
+    landscape_id: queer-k
+    review: awaiting_coach_review
+    templates:
+      link:
+        - {text: "{topic} queer"}
+        - {text: "{query} reproductive futurism"}
+        - {text: "{query} heteronormativity"}
+      impact:
+        - {text: "heteronormativity violence"}
+        - {text: "reproductive futurism excludes queer life"}
+      alternative:
+        - {text: "queer theory alternative"}
+        - {text: "{query} queer futurity"}
+      framework:
+        - {text: "queer theory framework comes first"}
+        - {text: "{query} queer framework"}
+      answers:
+        - {text: "reproductive futurism wrong"}
+        - {text: "queer theory alternative fails"}
+        - {text: "{query} helps queer people"}
+
+  - id: buddhism-k
+    label: Buddhism K
+    kind: k
+    formats: [POLICY]
+    aliases: [buddhism, k-buddhism]
+    landscape_id: buddhism-k
+    review: awaiting_coach_review
+    templates:
+      link:
+        - {text: "{query} attachment to outcomes"}
+        - {text: "{topic} Buddhism"}
+        - {text: "{query} suffering"}
+      impact:
+        - {text: "attachment causes suffering"}
+        - {text: "craving suffering Buddhism"}
+      alternative:
+        - {text: "Buddhist non attachment"}
+        - {text: "{query} mindfulness alternative"}
+      framework:
+        - {text: "Buddhism framework comes first"}
+        - {text: "{query} Buddhist ethics"}
+      answers:
+        - {text: "Buddhism quietism"}
+        - {text: "non attachment fails"}
+        - {text: "{query} Buddhism cannot solve"}
+
+# What a topic gives its variables. Each value is taken word for word from the topic's resolution in
+# config/landscape/topics.yaml; a test checks it. LD's de-extinction topic is added when
+# v1-e32-t06 commits its resolution.
+topics:
+  - id: policy-2026-27-nhi
+    format: POLICY
+    variables:
+      topic: national health insurance

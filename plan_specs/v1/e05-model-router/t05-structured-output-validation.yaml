@@ -26,9 +26,14 @@ spec:
     partial or best-effort result, so the caller must mark the card UNVERIFIED rather than proceed.
     Boundaries: the card-selection schemas and their evidence-quote rejection live in t06; transport
     retries live in t02.
+    (PM amendment 2026-10-19, from v1-e05-t04's PM review.) The guard also checks that the
+    schema and task class a call names are the ones the prompt's registry entry declares, and
+    refuses a mismatch before any model call.
   priority: 1
   constraints:
-    packages: [debate_core.application, debate_core.integrations]
+    # PM amendment 2026-10-24, from the PM's review (Deviation 1): the provenance metadata's repair
+    # fields, and the scripted router and contract suite that hold every router to one validation.
+    packages: [debate_core.application, debate_core.integrations, debate_core.domain, debate_core.testing]
     forbidden:
       - More than one repair retry per call
       - Returning partially valid objects when fail_closed is set
@@ -58,8 +63,18 @@ spec:
       description: >-
         The repair prompt is a registered prompt (prompt_id model.repair) with a semver version, and repair
         calls reuse the original task class route.
+    - id: ac5
+      description: >-
+        A response that never calls the schema's tool, which t02's toolChoice auto allows, is invalid
+        output and gets the one repair attempt like any other; under replay the repair call needs a
+        cassette of its own (v1-e05-t03's Follow-up work). Added by the PM, 2026-10-16.
+    - id: ac6
+      description: >-
+        (PM amendment 2026-10-19) A call whose schema or task class differs from its
+        prompt's registry entry is refused before the model is called, by test shown failing
+        first.
 status:
-  phase: Pending
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

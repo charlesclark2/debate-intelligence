@@ -1,0 +1,84 @@
+# TASK v1-e37-t15-news-in-the-header-and-the-footer - News is in the header navigation and stays in the footer
+# Epic: E37 — Calendar & Announcements (Coach-Editable) | Release: v1.6 (Public team website) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e37-t15-news-in-the-header-and-the-footer
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.6
+    debate/epic: v1-e37-calendar-and-announcements
+  annotations:
+    debate/title: "News is in the header navigation and stays in the footer"
+spec:
+  # Filed by the PM, 2026-11-02, from the coach's decision on v1-e37-t03's /news/ placement (2026-11-02).
+  description: >-
+    v1-e37-t03 put /news/ in the footer's utility links only, because the footer lists every
+    published page the header doesn't. The coach decided on 2026-11-02 that News belongs in the
+    header and the footer both. Add `news` to site.yaml's primaryNavigation where the navigation
+    tests' relations allow, and keep it in the footer: the footer's rule today is 'everything
+    not in the header', so either name the pages the footer always carries or give a page a way
+    to stay there. Update the announcements test that pins /news/ out of the header.
+  priority: 2
+  constraints:
+    # PM ruling, 2026-11-03: the PR's CI met an order-dependent failure in the container factory
+    # test (feed_config "built without it" when the file runs first in a fresh process). It is
+    # fixed here as its own commit, as test tooling and not site work, because the promotion to
+    # main runs the whole selection and would meet it at random.
+    packages:
+      - site/content
+      - site/src
+      - site/tests
+      - packages/debate_cli/tests/test_container_factories.py
+    forbidden:
+      - A page that becomes unreachable
+      - Network calls at build time or in tests
+  context:
+    - kind: TaskRef
+      name: v1-e36-t04-core-pages
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e37-t11-content-guards-follow-the-policy
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        /news/ is in the header navigation and the footer of every page, the navigation
+        tests hold, and `pnpm --dir site lint`, `typecheck`, `test` and `build` pass
+        offline.
+status:
+  phase: Succeeded
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e37-t15-news-in-the-header-and-the-footer-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.6
+    debate/epic: v1-e37-calendar-and-announcements
+spec:
+  description: >-
+    News is in the header navigation and stays in the footer.
+  goalRef:
+    name: v1-e37-t15-news-in-the-header-and-the-footer
+  graph:
+    nodes:
+      - id: news-in-the-header-and-the-footer
+        kind: Task
+        name: News in both
+        description: >-
+          News is in the header navigation and stays in the footer.
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: test_passes
+            name: News in both tests pass
+            command: pnpm
+            args: [--dir, site, test]
+status:
+  phase: Pending

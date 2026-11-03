@@ -16,15 +16,11 @@ from pathlib import Path
 
 import pytest
 
-from debate_core.application.ports import BlobKey
+from debate_core.application.ports.persistence import BlobKey
 from debate_core.integrations.local import BLOB_FILE_MODE, FsSnapshotStore
-from debate_core.testing.contracts import (
-    BlobCopyCounter,
-    BlobCorruptor,
-    SnapshotStoreContract,
-    SnapshotStoreFactory,
-)
-from debate_core.testing.fakes import InMemorySnapshotStore
+from debate_core.testing.contracts.harness import BlobCopyCounter, BlobCorruptor, SnapshotStoreFactory
+from debate_core.testing.contracts.snapshot_store import SnapshotStoreContract
+from debate_core.testing.fakes.persistence import InMemorySnapshotStore
 
 
 class TestInMemorySnapshotStore(SnapshotStoreContract):

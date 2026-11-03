@@ -64,6 +64,11 @@ a withdrawn later upload's copy stays because another *path* holds it, which may
 team's. Each withdrawal's caselist is recorded beside the list, by slug, and the plan prints those
 lines under *WITHDRAWALS* as it prints the path entries.
 
+A `--team --include-shared` plan has a team, but removes a shared file from every holder's path,
+so a later upload it withdraws from another holder's path is that holder's copy: its count and the
+line on what the list stops say so, and never "this team's" (`v1-e30-t20`). A re-run that finds
+nothing left tells the requester it removed nothing, rather than counting what it plans again.
+
 ## A camp path is withdrawn on its own (`v1-e30-t14`)
 
 A camp file's later upload that another release or a team also holds is withdrawn from its camp
@@ -72,6 +77,26 @@ release and the OpenEv id (`withdraw openev 2026-policy openev-640`), never the 
 file's name. How two uploads were found to be at one camp path is said on the later upload's line:
 by the upstream path both ids' rows, or this machine's delivery record, put them at, or by the rows'
 names alone, which is all a release written before `v1-e30-t14` and not yet re-derived offers.
+
+## What the sweep will delete (`v1-e30-t19`)
+
+The plan counts the noncurrent manifest versions the execution's sweep will delete, under
+*MANIFEST VERSIONS SWEPT*, by manifest: those that name a removed file, and those of a manifest an
+earlier run of the request rewrote that are older than its rewrite. A plan with any is never
+*Nothing is left to remove*, and prints the command that carries it out. Where the everyday
+profile may not list or read them it says they were not counted. `--json` carries the same count as
+`manifest_versions_swept`, or `"not counted"`, never 0 (`v1-e30-t20`). A file a re-run plans again from
+the withdrawal record, with no path left to show, says which caselist the record names, or that
+none does.
+
+## Landscape school views (`v1-e32-t13`)
+
+Under *LANDSCAPE SCHOOL VIEWS* the plan lists each `schools.csv` and `schools.md` of the touched
+caselists' landscape bundles, by side and key, and says the circuit-wide files and other caselists'
+bundles stay; under *REPUBLISH* the newest bundle to rebuild without the removed rounds, with its
+`landscape report --publish` command, which this command never runs: the PM coordinates it. A key is
+a caselist, a snapshot and a file's name, so the JSON carries keys too (`school_views`). The `DONE`
+line says how many of the deletions were school views; the removal log counts them with the rest.
 
 ## What is printed and what is not
 
@@ -83,8 +108,14 @@ suppression`).
 `--json` carries none of them (`v1-e30-t11`): no school, team code, path, camp, title or file
 name. A file is its sha256, a disclosure is the digest the suppression list uses for one
 (:func:`~debate_core.application.ports.suppression.disclosure_digest`), a team selector is its
-caselist, and an inbox file is the label an error would give it. JSON is what gets piped, saved and
-pasted, and the policy keeps those names out of everything that is.
+caselist, and an inbox file is the label an error would give it. A withdrawal is its file's sha256,
+its path's digest and its caselist's slug (`withdrawals`, `v1-e30-t20`). JSON is what gets piped,
+saved and pasted, and the policy keeps those names out of everything that is.
+
+Neither the text nor the JSON names a path on this machine, which is under the home directory: the
+runbook asks the operator to keep the plan (`v1-e30-t20`). The inbox is its place in the data
+directory, `inbox`, or the setting `caselist.inbox_dir` when a profile puts it elsewhere, and a run a
+pull's lock stops names the lock by its file name in the data directory.
 
 ## Exit codes
 
@@ -106,16 +137,19 @@ from __future__ import annotations
 
 import asyncio
 import shlex
+from collections import Counter
 from collections.abc import Coroutine
-from typing import Annotated, Any
+from datetime import UTC
+from typing import Annotated, Any, TypedDict
 
 import typer
 
-from debate_cli.commands.store import CONFIRM_PROD_FLAG, SYNCABLE_ENVIRONMENTS
+from debate_cli.bucket_lock import run_holding_the_bucket_lock
 from debate_cli.context import CliContext, cli_context, command_name
 from debate_cli.exit_codes import ExitCode
+from debate_cli.options.bucket_environment import CONFIRM_PROD_FLAG, SYNCABLE_ENVIRONMENTS
 from debate_cli.output import CliOutput, CommandFailure, JsonValue, OutputMode
-from debate_core.application.caselist.inbox_purge import InboxAction, InboxFilePlan
+from debate_core.application.caselist.inbox_purge import INBOX_SETTING, InboxAction, InboxFilePlan
 from debate_core.application.caselist.publish_plan import OPENEV
 from debate_core.application.caselist.removal_path_versions import (
     PathVersion,
@@ -130,12 +164,21 @@ from debate_core.application.caselist.removal_plan import (
     PlannedSource,
     RemovalPlan,
     RemovalSelector,
+    SchoolViewRemoval,
     Side,
     SourceSelector,
+    TeamSelector,
     parse_team_selector,
 )
-from debate_core.application.caselist.removal_service import RemovalReport, UnsuppressPlan, UnsuppressReport
+from debate_core.application.caselist.removal_service import (
+    PREFLIGHT_PREFIX,
+    RemovalReport,
+    UnsuppressPlan,
+    UnsuppressReport,
+    on_the_working_copy,
+)
 from debate_core.application.ports.caselist_source import openev_id_of_inbox_name
+from debate_core.application.ports.evidence_versions import ObjectVersion
 from debate_core.application.ports.suppression import (
     REINSTATEMENT_REASONS,
     REMOVAL_REASONS,
@@ -194,25 +237,37 @@ def remove(
         raise InvalidRemovalRequest("--request is required: the register id, e.g. RM-2026-01")
     _refuse(cli, ctx, _guard(settings, execute=execute, confirmed=confirm_prod, command="caselist remove"))
 
-    service = cli.services.caselist_removal()
-    cli.output.detail(f"planning against {settings.storage.s3.bucket}")
-    plan = _run(
-        service.plan(
-            selector, request_id=request, reason=code, include_shared=include_shared, only_named=only_named
-        )
+    removal, working_copy = cli.services.caselist_removal, cli.services.removal_run_state()
+    asked = RemovalAsked(
+        request_id=request, reason=code, include_shared=include_shared, only_named=only_named
     )
+    cli.output.detail(f"planning against {settings.storage.s3.bucket}")
     if not execute:
+        plan = _run(on_the_working_copy(working_copy, lambda: removal().plan(selector, **asked)))
         cli.output.success(
             command_name(ctx), plan_summary(plan, settings, None), display=render_plan(plan, None)
         )
         return
-    cli.output.detail(
-        f"executing under the takedown profile: {_what_the_plan_covers(plan, carried_out=True)}"
+    cli.output.detail("planning again and executing under the takedown profile")
+    report = run_holding_the_bucket_lock(
+        cli,
+        "caselist remove",
+        lambda: on_the_working_copy(working_copy, lambda: removal().plan_and_execute(selector, **asked)),
     )
-    report = _run(service.execute(plan))
+    plan = report.plan
+    cli.output.detail(f"executed: {_what_the_plan_covers(plan, carried_out=True)}")
     cli.output.success(
         command_name(ctx), plan_summary(plan, settings, report), display=render_plan(plan, report)
     )
+
+
+class RemovalAsked(TypedDict):
+    """What a removal is asked for besides its selector, as :meth:`CaselistRemovalService.plan` takes it."""
+
+    request_id: str
+    reason: ReasonCode
+    include_shared: bool
+    only_named: bool
 
 
 def unsuppress(
@@ -242,7 +297,11 @@ def unsuppress(
     service = cli.services.caselist_removal()
     code = _reason(reason, REINSTATEMENT_REASONS, _REINSTATEMENT_REASONS)
     plan = _run(service.plan_unsuppress(sha256.strip().lower(), reason=code, request_id=request))
-    report = _run(service.unsuppress(plan)) if execute else None
+    report = (
+        run_holding_the_bucket_lock(cli, "caselist unsuppress", lambda: service.unsuppress(plan))
+        if execute
+        else None
+    )
     cli.output.success(
         command_name(ctx), unsuppress_summary(plan, settings, report), display=render_unsuppress(plan, report)
     )
@@ -339,7 +398,13 @@ def render_plan(plan: RemovalPlan, report: RemovalReport | None) -> str:
             f"{report.manifest_rows_dropped} row(s); {report.inbox_files_deleted} inbox file(s) deleted and "
             f"{report.inbox_files_rewritten} rewritten."
         )
+        if report.school_view_files_deleted or report.school_view_versions_deleted:
+            lines.append(
+                f"Of those, {report.school_view_files_deleted} local file(s) and "
+                f"{report.school_view_versions_deleted} bucket version(s) were landscape school views."
+            )
         lines.append(f"It covered {_what_the_plan_covers(plan, carried_out=True)}.")
+        lines += _probes_left_lines(report.preflight_probes_left)
     lines.append(f"Request {plan.request_id}, reason {plan.reason}, selector {_describe(plan.selector)}.")
     if plan.nothing_to_do and not skipped:
         lines += ["", "Nothing is left to remove: everything this selects is already gone and suppressed."]
@@ -363,6 +428,7 @@ def render_plan(plan: RemovalPlan, report: RemovalReport | None) -> str:
             lines += _source_lines(number, source, plan)
 
     lines += _later_upload_lines(plan)
+    lines += _held_at_import_lines(plan)
     lines += _earlier_version_lines(plan)
 
     if plan.manifests:
@@ -370,20 +436,16 @@ def render_plan(plan: RemovalPlan, report: RemovalReport | None) -> str:
         for rewrite in plan.manifests:
             versions = "" if rewrite.versions is None else f", {rewrite.versions} version(s) replaced by one"
             lines.append(f"  {rewrite.side.value:6} {rewrite.key}  -{rewrite.rows_dropped} row(s){versions}")
+    lines += _swept_version_lines(plan)
+    lines += _school_view_lines(plan, report)
 
     lines += ["", *_inbox_lines(plan)]
 
     entries = plan.suppression_entries
-    whole = sum(1 for entry in entries if entry.disclosure is None)
-    paths = (
-        f"{len(entries) - whole} of this team's path(s) to a shared file"
-        if _names_a_team(plan)
-        else f"{len(entries) - whole} path(s) a shared file is withdrawn from"
-    )
     lines += [
         "",
         f"SUPPRESSION ENTRIES appended to the list, here and in the bucket: {len(entries)}",
-        f"  {whole} whole file(s), and {paths}. Each",
+        f"  {_entries_by_kind(plan)}. Each",
         "  line below is exactly what is written, with recorded_at set when it runs; no school, team",
         "  code or name appears in any of them.",
     ]
@@ -412,6 +474,82 @@ def render_plan(plan: RemovalPlan, report: RemovalReport | None) -> str:
     return "\n".join(lines)
 
 
+def _school_view_lines(plan: RemovalPlan, report: RemovalReport | None) -> list[str]:
+    """*LANDSCAPE SCHOOL VIEWS* and *REPUBLISH* (`v1-e32-t13`): which per-school files go, and which
+    bundle the PM is to have republished. Keys only: a caselist, a snapshot and a file's name."""
+    if not plan.school_view_reach:
+        return []
+    caselists = ", ".join(one.caselist for one in plan.school_view_reach)
+    lines = [
+        "",
+        f"LANDSCAPE SCHOOL VIEWS deleted, here and in the bucket: {len(plan.school_views)} file(s) of "
+        f"{caselists}",
+        "  Each names schools and team codes as disclosed. The circuit-wide files beside them",
+        "  (report.md and its CSVs) and every other caselist's bundles are left as they are.",
+    ]
+    for one in plan.school_view_reach:
+        if one.older_than is not None:
+            lines.append(
+                f"  {one.caselist}: only those written before {one.older_than.request_id}'s run completed "
+                f"{one.older_than.completed_at.astimezone(UTC):%Y-%m-%d %H:%M} UTC; this run finishes it."
+            )
+    lines += [f"  {_school_view_line(planned)}" for planned in plan.school_views] or [
+        "  (none: no school view they reach is on this machine or in the bucket)"
+    ]
+    if not plan.school_view_versions_counted and report is None:
+        lines += [
+            "  Bucket versions not counted: the everyday profile lists no versions under reports/.",
+            "  --execute lists every version of every bundle with the removal profile and deletes each",
+            "  this rule reaches, a noncurrent one the listing above could not show included.",
+        ]
+    if plan.republish:
+        lines += [
+            "",
+            "REPUBLISH, once this removal is done: the newest bundle it took a school view from, without",
+            "  the removed rounds. This command never republishes; tell the PM, who coordinates it.",
+            *(
+                f"  {caselist} {snapshot.isoformat()}: debate-research landscape report "
+                f"--caselist {caselist} --snapshot {snapshot.isoformat()} --publish"
+                for caselist, snapshot in plan.republish
+            ),
+        ]
+    return lines
+
+
+def _school_view_line(planned: SchoolViewRemoval) -> str:
+    if planned.side is Side.LOCAL:
+        return f"{planned.side.value:6} {planned.key}"
+    versions = "versions not counted" if planned.versions is None else f"{len(planned.versions)} version(s)"
+    return f"{planned.side.value:6} {planned.key}  {versions}"
+
+
+def _swept_version_lines(plan: RemovalPlan) -> list[str]:
+    """The manifest versions the execution's sweep deletes, by manifest and count (`v1-e30-t19`).
+
+    Until then the plan read current manifests only, and a plan whose execution would sweep a
+    version said *Nothing is left to remove* and printed no command to carry it out.
+    """
+    swept = plan.superseded_versions
+    if swept is None:
+        return [
+            "",
+            "MANIFEST VERSIONS SWEPT from the bucket by --execute: not counted.",
+            "  The everyday profile may not list or read noncurrent manifest versions here. --execute lists",
+            "  them with the takedown profile and deletes each that names a removed file, or is older than",
+            "  this request's own rewrite of its manifest.",
+        ]
+    if not swept:
+        return []
+    by_manifest = Counter(version.key for version in swept)
+    return [
+        "",
+        f"MANIFEST VERSIONS SWEPT from the bucket by --execute: {len(swept)} noncurrent version(s) of "
+        f"{len(by_manifest)} manifest(s).",
+        "  Each names a removed file, or is older than this request's own rewrite of its manifest.",
+        *(f"  bucket {key}  ({count} version(s))" for key, count in sorted(by_manifest.items())),
+    ]
+
+
 def _shared_kept_heading(plan: RemovalPlan, files: int) -> list[str]:
     """The heading over the files the request names whose copies are withdrawn, and the rest kept."""
     if _names_a_team(plan):
@@ -431,6 +569,63 @@ def _shared_kept_heading(plan: RemovalPlan, files: int) -> list[str]:
 def _names_a_team(plan: RemovalPlan) -> bool:
     """Whether a team asked: `--team`. A `--source` plan has no "this team" (`v1-e30-t16`)."""
     return not isinstance(plan.selector, SourceSelector)
+
+
+def _the_teams_own_paths(plan: RemovalPlan) -> frozenset[str]:
+    """The disclosure digests of the paths the plan withdraws a copy from that are the team's own.
+
+    A `--team --include-shared` plan removes a shared file whole, so it takes it from the other
+    holders' paths too, and a later upload at one of them is withdrawn from that holder's path: no
+    path of this team's (`v1-e30-t20`). Empty for a `--source` plan, which names no team.
+    """
+    selector = plan.selector
+    if not isinstance(selector, TeamSelector):
+        return frozenset()
+    return frozenset(
+        disclosure_digest(caselist, path)
+        for source in plan.sources
+        for caselist, path in source.requester_paths
+        if selector.holds(caselist, path)
+    )
+
+
+def _entries_by_kind(plan: RemovalPlan) -> str:
+    """The suppression entries counted by what each stops: a whole file, or a copy at one path."""
+    entries = plan.suppression_entries
+    whole = sum(1 for entry in entries if entry.disclosure is None)
+    if not _names_a_team(plan):
+        return f"{whole} whole file(s), and {len(entries) - whole} path(s) a shared file is withdrawn from"
+    own = _the_teams_own_paths(plan)
+    mine = sum(1 for entry in entries if entry.disclosure in own)
+    others = len(entries) - whole - mine
+    if not others:
+        return f"{whole} whole file(s), and {mine} of this team's path(s) to a shared file"
+    if not mine:
+        return (
+            f"{whole} whole file(s), and {others} path(s) of another holder a later upload is withdrawn from"
+        )
+    return (
+        f"{whole} whole file(s), {mine} of this team's path(s) to a shared file, and {others} path(s) of "
+        "another holder a later upload is withdrawn from"
+    )
+
+
+def _withdrawn_at(plan: RemovalPlan) -> tuple[bool, bool]:
+    """Whether the plan withdraws a copy at a path of the team's own, and at another holder's.
+
+    By the paths each withdrawal takes. One an earlier run withdrew, whose paths that run's
+    deletions left nothing to show, is the team's, as the plan has always called it: a `--team`
+    re-run plans each such file again as the request's own.
+    """
+    own = _the_teams_own_paths(plan)
+    at_the_teams = at_anothers = False
+    for source in plan.of(Disposition.WITHDRAW):
+        taken = {disclosure_digest(caselist, path) for caselist, path in source.requester_paths} | {
+            disclosure for _, disclosure in source.held_at_import
+        }
+        at_the_teams = at_the_teams or not taken or bool(taken & own)
+        at_anothers = at_anothers or bool(taken - own)
+    return at_the_teams, at_anothers
 
 
 def _withdrawal_lines(plan: RemovalPlan) -> list[str]:
@@ -474,8 +669,12 @@ def _path_hold_lines(plan: RemovalPlan) -> list[str]:
     return [*lines, f"  (none: {why})"]
 
 
+_AT_A_REMOVED_PATH = frozenset({Inclusion.LATER_UPLOAD, Inclusion.HELD_AT_IMPORT})
+"""Files a plan adds because they are at a path it takes a named file from, each in its own section."""
+
+
 def _not_later_uploads(plan: RemovalPlan, disposition: Disposition) -> tuple[PlannedSource, ...]:
-    return tuple(source for source in plan.of(disposition) if source.inclusion is not Inclusion.LATER_UPLOAD)
+    return tuple(source for source in plan.of(disposition) if source.inclusion not in _AT_A_REMOVED_PATH)
 
 
 def _what_the_plan_covers(plan: RemovalPlan, *, carried_out: bool = False) -> str:
@@ -493,6 +692,8 @@ def _what_the_plan_covers(plan: RemovalPlan, *, carried_out: bool = False) -> st
         )
     kept = found - plan.later_uploads_added
     also = f" ({kept} more is shared and kept)" if kept else ""
+    refused = len(plan.included_as(Inclusion.HELD_AT_IMPORT))
+    also += f", and {refused} upload(s) an import refused at a held path" if refused else ""
     later = f"{plan.later_uploads_added} later upload(s) at the removed path(s){also}"
     if carried_out:
         return f"the {named} file(s) named and {later}"
@@ -562,6 +763,30 @@ def _later_upload_lines(plan: RemovalPlan) -> list[str]:
             if version.sha256 == digest
         ]
         lines += detail[1:]
+    return lines
+
+
+def _held_at_import_lines(plan: RemovalPlan) -> list[str]:
+    """Uploads an import refused at a held path, known from the held-digest record alone (`v1-e30-t23`)."""
+    refused = plan.included_as(Inclusion.HELD_AT_IMPORT)
+    if not refused:
+        return []
+    lines = [
+        "",
+        f"REFUSED AT IMPORT AT A HELD PATH, ADDED TO THIS PLAN: {len(refused)} file(s)",
+        "  An import refused each at a path this request holds, and recorded its sha256 under the request",
+        "  beside the path entries. Its archive has left the download inbox and the store never took it",
+        "  in, so that record is all that names it. Each goes through what a later upload goes through.",
+    ]
+    for number, source in enumerate(refused, start=1):
+        detail = _source_lines(number, source, plan)
+        caselists = ", ".join(sorted({caselist for caselist, _ in source.held_at_import}))
+        outcome = (
+            "suppressed whole: no other path holds it"
+            if source.disposition is Disposition.REMOVE
+            else _LATER_UPLOAD_OUTCOMES[LaterUploadOutcome.WITHDRAWN_FROM_THE_PATH]
+        )
+        lines += [detail[0], f"     refused at a held path in {caselists}: {outcome}", *detail[1:]]
     return lines
 
 
@@ -636,16 +861,17 @@ def _where_held(version: PathVersion) -> str:
 
 def _inbox_lines(plan: RemovalPlan) -> list[str]:
     """The download inbox: each file holding a removed file, and whether it is deleted or rewritten."""
+    where = _inbox_named(plan)
     if not plan.inbox_exists:
         lines = [
-            f"DOWNLOAD INBOX ({plan.inbox_directory}): does not exist, so there is nothing to check or "
+            f"DOWNLOAD INBOX ({where}): does not exist, so there is nothing to check or "
             "change (an environment that has never pulled has none)."
         ]
     elif not plan.inbox:
-        lines = [f"DOWNLOAD INBOX ({plan.inbox_directory}): nothing in it holds a removed file."]
+        lines = [f"DOWNLOAD INBOX ({where}): nothing in it holds a removed file."]
     else:
         lines = [
-            f"DOWNLOAD INBOX ({plan.inbox_directory}): {len(plan.inbox)} file(s) hold removed files. An",
+            f"DOWNLOAD INBOX ({where}): {len(plan.inbox)} file(s) hold removed files. An",
             "archive still waiting to be imported is rewritten without them, never deleted.",
         ]
         lines += [_inbox_file_line(one) for one in plan.inbox]
@@ -656,6 +882,16 @@ def _inbox_lines(plan: RemovalPlan) -> list[str]:
             "       `caselist pull` to import it, then this same command again.",
         ]
     return lines
+
+
+def _inbox_named(plan: RemovalPlan) -> str:
+    """The inbox by its place in the data directory, or by the setting that puts it elsewhere.
+
+    Never its path on this machine, which is under the home directory (`v1-e30-t20`).
+    """
+    if plan.inbox_directory == INBOX_SETTING:
+        return f"the directory {INBOX_SETTING} names"
+    return f"{plan.inbox_directory} in the data directory"
 
 
 def _inbox_file_line(one: InboxFilePlan) -> str:
@@ -714,12 +950,22 @@ def _source_lines(number: int, source: PlannedSource, plan: RemovalPlan) -> list
     if source.disposition is Disposition.WITHDRAW:
         for caselist, path in source.requester_paths:
             lines.append(f"     withdraw {caselist}  {_withdrawn_path_label(caselist, path)}")
+        for caselist, _ in source.held_at_import:
+            lines.append(f"     withdraw {caselist}  the held path an import refused it at, by its digest")
+        if source.withdrawn_earlier_from:
+            lines.append(
+                f"     withdrawn earlier from {', '.join(source.withdrawn_earlier_from)}, as the withdrawal "
+                "record says: its paths there are gone"
+            )
+        elif not source.requester_paths and not source.held_at_import:
+            lines += [
+                "     withdrawn earlier: no withdrawal record names the caselist it was withdrawn from (a",
+                "     run by a build from before v1-e30-t16), so nothing of it is planned again there",
+            ]
         if source.kept_in:
             # A --team withdrawal is kept for another team; a later upload, or what a --source run
             # left, for any path the removal does not take, which may be the same team's.
-            holder = (
-                "team" if _names_a_team(plan) and source.inclusion is not Inclusion.LATER_UPLOAD else "path"
-            )
+            holder = "team" if _names_a_team(plan) and source.inclusion not in _AT_A_REMOVED_PATH else "path"
             lines.append(f"     kept in  {', '.join(source.kept_in)} (another {holder} there still holds it)")
     for planned in plan.objects:
         if planned.sha256 != source.sha256:
@@ -742,7 +988,10 @@ def _confirmation(plan: RemovalPlan) -> list[str]:
     snapshots = sorted({ref.snapshot for ref in refs})
     removed_whole = len(_not_later_uploads(plan, Disposition.REMOVE))
     copies = len(_not_later_uploads(plan, Disposition.WITHDRAW))
-    if _names_a_team(plan):
+    if plan.nothing_to_do:
+        # A re-run plans again what an earlier run removed, and removes none of it (v1-e30-t20).
+        removed_line = "nothing; this run found nothing left to remove."
+    elif _names_a_team(plan):
         removed_line = f"{removed_whole} file(s), and this team's copies of {copies} shared file(s)."
     elif copies:
         removed_line = (
@@ -751,7 +1000,7 @@ def _confirmation(plan: RemovalPlan) -> list[str]:
     else:
         removed_line = f"{removed_whole} file(s)."
     lines = [f"  - Removed from this environment: {removed_line}"]
-    if plan.later_uploads_added:
+    if plan.later_uploads_added and not plan.nothing_to_do:
         lines.append(
             f"  - Also removed, as later uploads at the same path(s): {plan.later_uploads_added} file(s)."
         )
@@ -759,6 +1008,11 @@ def _confirmation(plan: RemovalPlan) -> list[str]:
         lines.append(
             f"  - Not removed: {plan.later_uploads_found} later upload(s) at the same path(s), because the "
             "request was about one version."
+        )
+    if refused := plan.included_as(Inclusion.HELD_AT_IMPORT):
+        lines.append(
+            "  - Also stopped, as later uploads an import refused at the same path(s): "
+            f"{len(refused)} file(s)."
         )
     if snapshots:
         lines.append(
@@ -780,6 +1034,12 @@ def _confirmation(plan: RemovalPlan) -> list[str]:
         lines.append(
             f"  - Taken out of the download inbox on this machine: {len(plan.inbox)} downloaded file(s) "
             "held it."
+        )
+    if plan.school_views:
+        bundles = len({planned.key.rsplit("/", 1)[0] for planned in plan.school_views})
+        lines.append(
+            f"  - Deleted: the per-school view of {bundles} argument landscape report(s); the newest is "
+            "to be republished without the removed rounds."
         )
     named_removed = {source.sha256 for source in _not_later_uploads(plan, Disposition.REMOVE)}
     held = sum(1 for hold in plan.suppression_after.path_holds if hold.sha256 in named_removed)
@@ -808,17 +1068,27 @@ def _suppressed_line(plan: RemovalPlan) -> str:
     takes it down on OpenCaselist; the list stops it in all of them. A file removed whole is stopped
     by its bytes, and a shared file withdrawn from this team only at the path it was taken from.
     A `--source` removal has no requesting team: what it withdraws is a copy at the path it was
-    withdrawn from (`v1-e30-t16`). Whether a path is held is the line before this one.
+    withdrawn from (`v1-e30-t16`). A `--team --include-shared` removal may withdraw a later upload
+    from another holder's path, which is that holder's copy and not this team's (`v1-e30-t20`).
+    Whether a path is held is the line before this one.
     """
-    withdrawn = (
-        "this team's copy of a shared file at the path it was taken from"
-        if _names_a_team(plan)
-        else "the copy of a shared file at the path it was withdrawn from"
-    )
-    stopped = [
-        *(["a removed file"] if plan.of(Disposition.REMOVE) else []),
-        *([withdrawn] if plan.of(Disposition.WITHDRAW) else []),
-    ]
+    if _names_a_team(plan):
+        at_the_teams, at_anothers = _withdrawn_at(plan)
+        withdrawn = [
+            *(["this team's copy of a shared file at the path it was taken from"] if at_the_teams else []),
+            *(
+                ["another holder's copy of a later upload at the path it was withdrawn from"]
+                if at_anothers
+                else []
+            ),
+        ]
+    else:
+        withdrawn = (
+            ["the copy of a shared file at the path it was withdrawn from"]
+            if plan.of(Disposition.WITHDRAW)
+            else []
+        )
+    stopped = [*(["a removed file"] if plan.of(Disposition.REMOVE) else []), *withdrawn]
     if not stopped:
         return "  - Nothing suppressed: no file was removed, and no copy withdrawn."
     return f"  - Suppressed, so no later archive, weekly or complete, can bring back {', or '.join(stopped)}."
@@ -898,6 +1168,14 @@ def plan_summary(plan: RemovalPlan, settings: Settings, report: RemovalReport | 
         ],
         "suppression_entries": [entry.to_line() for entry in plan.suppression_entries],
         "path_holds": [entry.to_line() for entry in plan.path_holds],
+        "withdrawals": [
+            # By digest and caselist slug alone: the record's line also has the time, reason and
+            # request, which `suppression_entries` carries (v1-e30-t20).
+            {"sha256": entry.sha256, "disclosure": entry.disclosure, "caselist": entry.caselist}
+            for entry in plan.withdrawals
+        ],
+        "manifest_versions_swept": _swept_json(plan),
+        "school_views": _school_views_json(plan),
         "inbox_directory": plan.inbox_directory,
         "inbox_exists": plan.inbox_exists,
         "inbox": [
@@ -926,7 +1204,58 @@ def plan_summary(plan: RemovalPlan, settings: Settings, report: RemovalReport | 
     if report is not None:
         data["outcome"] = str(report.log_entry.outcome)
         data["log_entry"] = report.log_entry.to_line()
+        data["preflight_probes_left"] = _probes_left_json(report.preflight_probes_left)
+        data["school_views_deleted"] = {
+            "local_files": report.school_view_files_deleted,
+            "bucket_versions": report.school_view_versions_deleted,
+        }
     return data
+
+
+def _school_views_json(plan: RemovalPlan) -> dict[str, JsonValue]:
+    """*LANDSCAPE SCHOOL VIEWS* and *REPUBLISH* for a program (`v1-e32-t13`): keys, which hold a
+    caselist, a snapshot and a file's name, and counts."""
+    return {
+        "reach": [
+            {
+                "caselist": one.caselist,
+                "older_than": None
+                if one.older_than is None
+                else {
+                    "request_id": one.older_than.request_id,
+                    "completed_at": one.older_than.completed_at.astimezone(UTC)
+                    .isoformat()
+                    .replace("+00:00", "Z"),
+                },
+            }
+            for one in plan.school_view_reach
+        ],
+        "files": [
+            {
+                "key": planned.key,
+                "side": planned.side.value,
+                "versions": None if planned.versions is None else len(planned.versions),
+            }
+            for planned in plan.school_views
+        ],
+        "versions_counted": plan.school_view_versions_counted,
+        "republish": [
+            {"caselist": caselist, "snapshot": snapshot.isoformat()} for caselist, snapshot in plan.republish
+        ],
+    }
+
+
+def _swept_json(plan: RemovalPlan) -> JsonValue:
+    """What the *MANIFEST VERSIONS SWEPT* line counts, in all and by manifest key (`v1-e30-t20`).
+
+    `"not counted"` where the everyday profile may not list or read the versions, as the line says:
+    never 0, which would say the execution sweeps none.
+    """
+    swept = plan.superseded_versions
+    if swept is None:
+        return "not counted"
+    by_manifest = Counter(version.key for version in swept)
+    return {"total": len(swept), "by_manifest": {key: count for key, count in sorted(by_manifest.items())}}
 
 
 def _selector_json(selector: RemovalSelector) -> dict[str, JsonValue]:
@@ -974,6 +1303,12 @@ def _source_json(source: PlannedSource) -> dict[str, JsonValue]:
         "withdrawn_disclosures": [
             {"caselist": caselist, "disclosure": disclosure_digest(caselist, path)}
             for caselist, path in source.requester_paths
+        ]
+        + [
+            # A held path an import refused it at, which only its digest names (v1-e30-t23).
+            {"caselist": caselist, "disclosure": disclosure}
+            for caselist, disclosure in source.held_at_import
+            if source.disposition is Disposition.WITHDRAW
         ],
         "local_blob": source.local_blob,
         "deletes_source_record": source.delete_source_record,
@@ -998,6 +1333,7 @@ def render_unsuppress(plan: UnsuppressPlan, report: UnsuppressReport | None) -> 
     )
     lines = [
         head,
+        *(_probes_left_lines(report.preflight_probes_left) if report is not None else []),
         f"{plan.sha256} is suppressed now ({', '.join(scopes)}), "
         f"by {plan.previous.request_id or 'no request id'}"
         f" ({plan.previous.reason}).",
@@ -1043,7 +1379,28 @@ def unsuppress_summary(
     }
     if report is not None:
         data["log_entry"] = report.log_entry.to_line()
+        data["preflight_probes_left"] = _probes_left_json(report.preflight_probes_left)
     return data
+
+
+def _probes_left_lines(left: tuple[ObjectVersion, ...]) -> list[str]:
+    """What a person reads about earlier probes the preflight could not delete: a count, and the fix.
+
+    Never a failure (the PM's review of `v1-e29-t09`): the takedown went ahead, and the probes are
+    removed by hand as the runbook describes.
+    """
+    if not left:
+        return []
+    return [
+        f"{len(left)} probe version(s) an earlier preflight left under {PREFLIGHT_PREFIX} could not be "
+        'deleted: remove them by hand (docs/runbooks/caselist-removal.md, "A probe a preflight left '
+        'behind").'
+    ]
+
+
+def _probes_left_json(left: tuple[ObjectVersion, ...]) -> dict[str, JsonValue]:
+    """The same for a program: how many versions, and their keys, which are random hex under the prefix."""
+    return {"versions": len(left), "keys": sorted({version.key for version in left})}
 
 
 def _run[T](awaitable: Coroutine[Any, Any, T]) -> T:

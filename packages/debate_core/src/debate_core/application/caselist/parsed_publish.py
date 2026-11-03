@@ -16,10 +16,11 @@ recorded digest with the file's.
 
 ## Aggregates last
 
-The per-source files go first. `index.jsonl`, `failures.jsonl` and `occurrences.jsonl` follow only
-when every per-source file is confirmed in the bucket, so the bucket never holds an index naming a
-file it does not hold. An aggregate the bucket holds with other bytes is replaced: it is rebuilt by
-every run. A per-source file the bucket holds with other bytes is a failure and is left alone, as
+The per-source files go first. `index.jsonl`, `failures.jsonl` and `occurrences.jsonl`, and the camp
+store's `camp_paths.jsonl` (`v1-e33-t07`), follow only when every per-source file is confirmed in
+the bucket, so the bucket never holds an index naming a file it does not hold. An aggregate the
+bucket holds with other bytes is replaced: it is rebuilt by every run. A per-source file the bucket
+holds with other bytes is a failure and is left alone, as
 `caselist publish` leaves a mismatched source: within one parser and profile version the same
 bytes always parse to the same file, so a difference means something a person should look at.
 
@@ -28,6 +29,21 @@ bytes always parse to the same file, so a difference means something a person sh
 A per-source file whose source the removal suppression list stops (`v1-e30-t07`). The list is a
 required argument. Only the version directory asked for is published, and the command only ever
 asks for the current one, so an older version in the bucket is never overwritten.
+
+Nor the per-source file of a held upload (`v1-e31-t26`): bytes that only a path a removal holds
+discloses, in a snapshot the hold covers, which a build from before `v1-e30-t13` imported and parsed.
+Which sources those are is asked of this machine's manifests through the parse pipeline's own rule
+(:func:`~debate_core.application.caselist.parse_sources.held_only_sources`), which asks the
+publisher's rule for a held row of each disclosure, so `caselist publish` and this command hold back
+the same bytes. Such a file is reported `suppressed`, like a suppressed source's: the hold is on the
+list. Bytes another live path discloses are published as before. The manifests are read only when
+the list holds a path.
+
+Nor anything at all over an occurrence table stamped with a newer fingerprint version than this
+build's (`v1-e34-t29`): the one it would send, or the bucket's it would replace. Before the first
+upload the publish reads the stamps of both, downloading the bucket's only when its bytes differ,
+and is refused with both versions named, leaving the bucket as it was
+(:mod:`debate_core.application.caselist.occurrence_table_guard`).
 
 ## What is logged
 
@@ -38,12 +54,20 @@ digest; the store holds no path or name to leak (`docs/data/parsed-card-store.md
 from __future__ import annotations
 
 import logging
-from collections.abc import Callable
+import tempfile
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Final
 
-from debate_core.application.caselist.evidence_listing import local_file
+from debate_core.application.caselist.evidence_listing import LocalEvidence, local_file
+from debate_core.application.caselist.occurrence_table_guard import (
+    THE_BUCKET,
+    THIS_MACHINES_PARSED_STORE,
+    fingerprint_stamps_of_file,
+    refuse_newer_table,
+)
+from debate_core.application.caselist.parse_sources import enumerate_sources, held_only_sources
 from debate_core.application.caselist.publish_service import (
     DEFAULT_CONCURRENCY,
     SourceResult,
@@ -52,15 +76,15 @@ from debate_core.application.caselist.publish_service import (
 )
 from debate_core.application.caselist.suppression import load_suppression_state
 from debate_core.application.errors import (
+    STORE_ERRORS_TRUE_OF_EVERY_OBJECT,
     UNMODELLED_ERROR_CODE,
     BlobIntegrityError,
     DomainError,
     NotFound,
-    StoreAccessDenied,
-    StoreCredentialsExpired,
+    reported_error_message,
 )
 from debate_core.application.ports.evidence_store import EvidenceObjectStore, ObjectKey
-from debate_core.application.ports.parsed_store import AGGREGATE_NAMES, PARSED_PREFIX
+from debate_core.application.ports.parsed_store import OCCURRENCES_NAME, PARSED_PREFIX, REBUILT_NAMES
 from debate_core.application.ports.suppression import SuppressionList, SuppressionState
 
 __all__ = ["ParsedObjectOutcome", "ParsedPublishReport", "ParsedStorePublisher"]
@@ -80,6 +104,9 @@ class ParsedObjectOutcome:
     aggregate: bool
     error_code: str | None = None
     error_message: str | None = None
+    """Why it failed, for a person. An error this project did not write is named by its class and an
+    `OSError` by its errno too, never by its text, which can quote a path on this machine
+    (:func:`~debate_core.application.errors.reported_error_message`, `v1-e29-t09`)."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -131,6 +158,8 @@ class ParsedStorePublisher:
         local_path_for: The file a local key is stored at, so it is uploaded in place.
         remote: The environment's evidence bucket.
         suppression: The removal suppression list. Required: nothing is published without it.
+        evidence: This machine's manifests and blobs, whose rows say which sources only a held path
+            discloses (`v1-e31-t26`). Required, like the list.
     """
 
     def __init__(
@@ -140,6 +169,7 @@ class ParsedStorePublisher:
         local_path_for: Callable[[ObjectKey], Path] | None,
         remote: EvidenceObjectStore,
         suppression: SuppressionList,
+        evidence: LocalEvidence,
         concurrency: int = DEFAULT_CONCURRENCY,
     ) -> None:
         if concurrency < 1:
@@ -148,6 +178,7 @@ class ParsedStorePublisher:
         self._local_path_for = local_path_for
         self._remote = remote
         self._suppression = suppression
+        self._evidence = evidence
         self._concurrency = concurrency
 
     async def publish(self, caselist: str, version: str) -> ParsedPublishReport:
@@ -155,16 +186,22 @@ class ParsedStorePublisher:
         directory = f"{caselist}/{version}/"
         prefix = f"{PARSED_PREFIX}/{directory}"
         state = await load_suppression_state(self._suppression)
+        held = (
+            held_only_sources(await enumerate_sources(self._evidence, caselist), state)
+            if state.held_paths
+            else {}
+        )
         local_keys = [info.key for info in await self._local.list_objects(directory)]
         listed = {info.key for info in await self._remote.list_objects(prefix)}
+        await self._refuse_a_newer_table(caselist, version, local_keys, listed)
         sources = [key for key in local_keys if key.split("/")[2:3] == [_SOURCE_SEGMENT]]
         aggregates = [
-            key for key in local_keys if key.rsplit("/", 1)[-1] in AGGREGATE_NAMES and key.count("/") == 2
+            key for key in local_keys if key.rsplit("/", 1)[-1] in REBUILT_NAMES and key.count("/") == 2
         ]
 
         outcomes = list(
             await _bounded(
-                [lambda key=key: self._source(key, prefix, listed, state) for key in sources],
+                [lambda key=key: self._source(key, prefix, listed, state, held) for key in sources],
                 limit=self._concurrency,
             )
         )
@@ -182,12 +219,44 @@ class ParsedStorePublisher:
         _log(report)
         return report
 
+    async def _refuse_a_newer_table(
+        self, caselist: str, version: str, local_keys: Sequence[ObjectKey], listed: set[ObjectKey]
+    ) -> None:
+        """Ask :func:`~debate_core.application.caselist.occurrence_table_guard.refuse_newer_table`
+        of the occurrence table this publish would send, and of the bucket's it would replace when
+        the bucket holds other bytes, before anything is uploaded."""
+        key = f"{caselist}/{version}/{OCCURRENCES_NAME}"
+        if key not in local_keys:
+            return
+        async with local_file(self._local, self._local_path_for, key) as path:
+            stamps = fingerprint_stamps_of_file(path)
+        refuse_newer_table(stamps, caselist=caselist, version=version, store=THIS_MACHINES_PARSED_STORE)
+        remote_key = f"{PARSED_PREFIX}/{key}"
+        if remote_key not in listed:
+            return
+        try:
+            present = await self._remote.head(remote_key)
+        except NotFound:
+            return
+        if present.sha256 == (await self._local.head(key)).sha256:
+            return
+        with tempfile.TemporaryDirectory(prefix="debate-publish-") as directory:
+            downloaded = Path(directory) / OCCURRENCES_NAME
+            await self._remote.get_file(remote_key, downloaded)
+            stamps = fingerprint_stamps_of_file(downloaded)
+        refuse_newer_table(stamps, caselist=caselist, version=version, store=THE_BUCKET)
+
     async def _source(
-        self, key: ObjectKey, prefix: str, listed: set[ObjectKey], state: SuppressionState
+        self,
+        key: ObjectKey,
+        prefix: str,
+        listed: set[ObjectKey],
+        state: SuppressionState,
+        held: Mapping[str, str],
     ) -> ParsedObjectOutcome:
         remote_key = f"{PARSED_PREFIX}/{key}"
         digest = key.rsplit("/", 1)[-1].split(".", 1)[0]
-        if state.suppresses_source(digest):
+        if state.suppresses_source(digest) or digest in held:
             return ParsedObjectOutcome(key=remote_key, result=SourceResult.SUPPRESSED, aggregate=False)
         return await self._object(key, remote_key, listed, aggregate=False)
 
@@ -221,7 +290,7 @@ class ParsedStorePublisher:
             recorded = (await self._remote.head(remote_key)).sha256
             if sent.sha256 != local.sha256 or recorded != local.sha256:
                 raise BlobIntegrityError(remote_key, recorded)
-        except (StoreCredentialsExpired, StoreAccessDenied):
+        except STORE_ERRORS_TRUE_OF_EVERY_OBJECT:
             raise
         except (DomainError, OSError) as failure:
             return ParsedObjectOutcome(
@@ -229,7 +298,7 @@ class ParsedStorePublisher:
                 result=SourceResult.FAILED,
                 aggregate=aggregate,
                 error_code=error_code_of(failure),
-                error_message=str(failure),
+                error_message=reported_error_message(failure),
             )
         return ParsedObjectOutcome(key=remote_key, result=SourceResult.UPLOADED, aggregate=aggregate)
 

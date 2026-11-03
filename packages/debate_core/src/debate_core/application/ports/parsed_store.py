@@ -1,13 +1,14 @@
 """The parsed card store: what `debate-research caselist parse` writes, and E32, E33 and E34 read.
 
 `v1-e31-t06-parse-pipeline` turns imported caselist and camp sources into this store. Each
-caselist has one directory per parser version, and in it one file per source plus three aggregates
+caselist has one directory per parser version, and in it one file per source plus the aggregates
 rebuilt on every run::
 
     parsed/<caselist>/<version>/sha256/ab/cd/<sha256>.jsonl   one source: its entry, then its cards
     parsed/<caselist>/<version>/index.jsonl                   every source's entry, by sha256
     parsed/<caselist>/<version>/failures.jsonl                the entries that did not parse
     parsed/<caselist>/<version>/occurrences.jsonl             every card, once per disclosure
+    parsed/openev/<version>/camp_paths.jsonl                  each camp row's live camp paths, by digest
 
 The same keys under `<data_dir>/parsed/` on this machine and under `parsed/` in the environment's
 evidence bucket. `docs/data/parsed-card-store.md` is the reader's description of the layout; this
@@ -34,6 +35,20 @@ disclosure_digest` of its caselist and path, the same pseudonym the suppression 
 withdrawn disclosure under. A card's provenance path is left out of the stored document and put
 back on read from the manifests (:meth:`DocumentRecord.to_parsed_document`).
 
+## A camp row's camp paths, beside its table (`v1-e33-t07`)
+
+A camp occurrence row carries :attr:`OccurrenceRecord.camp_path_disclosures`, the
+:func:`~debate_core.application.ports.suppression.camp_path_disclosure` of each live path its file is
+at in its release, so a reader asks the suppression list about a camp path withdrawn after the table
+was built, as it asks about a caselist disclosure. Every earlier build reads `occurrences.jsonl` with
+a model that refuses a key it does not know, and refuses a record version it does not know, so the
+digests are not written into the table. The local store writes them to `camp_paths.jsonl` beside it,
+one :class:`CampPathRecord` per camp path, each naming the SHA-256 of the table it was written with,
+and puts them back on the rows when it reads a table whose bytes have that SHA-256. A table with other
+bytes, rewritten since with other rows by a build that writes no digests, reads with none: its camp
+rows behave as they did before. An earlier build's rebuild of the same rows writes the same bytes,
+and they keep the digests.
+
 ## The skip key
 
 A source is parsed once per :class:`SkipKey`: its SHA-256, the parser version and the style
@@ -59,7 +74,7 @@ of the running parser version is ever written to.
 from __future__ import annotations
 
 import re
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 from datetime import date
 from enum import StrEnum
 from typing import Final, Literal, NamedTuple, Protocol, Self, runtime_checkable
@@ -74,13 +89,16 @@ from debate_core.domain.debate_files import CardCompleteness, ParsedDocument, Pa
 
 __all__ = [
     "AGGREGATE_NAMES",
+    "CAMP_PATHS_NAME",
     "FAILURES_NAME",
     "INDEX_NAME",
     "OCCURRENCES_NAME",
     "OPENEV_STORE",
     "PARSED_PREFIX",
     "PARSED_STORE_SCHEMA_VERSION",
+    "REBUILT_NAMES",
     "REPARSE_SEPARATOR",
+    "CampPathRecord",
     "DocumentRecord",
     "OccurrenceRecord",
     "ParsedStore",
@@ -92,6 +110,7 @@ __all__ = [
     "StoreRecord",
     "parse_version_directory",
     "skip_key",
+    "source_digest_of_key",
     "source_object_key",
     "version_directory_name",
 ]
@@ -120,9 +139,15 @@ OPENEV_STORE: Final = "openev"
 INDEX_NAME: Final = "index.jsonl"
 FAILURES_NAME: Final = "failures.jsonl"
 OCCURRENCES_NAME: Final = "occurrences.jsonl"
+CAMP_PATHS_NAME: Final = "camp_paths.jsonl"
+"""The camp rows' camp path digests, beside `occurrences.jsonl` (`v1-e33-t07`); only in `openev`."""
 
 AGGREGATE_NAMES: Final = (INDEX_NAME, FAILURES_NAME, OCCURRENCES_NAME)
-"""The files rebuilt from the per-source files on every run, and deleted by a removal."""
+"""The files rebuilt from the per-source files on every run, which every version directory holds."""
+
+REBUILT_NAMES: Final = (*AGGREGATE_NAMES, CAMP_PATHS_NAME)
+"""Every file a run rebuilds, a publish sends after the per-source files and a removal deletes: the
+aggregates, and `camp_paths.jsonl` where the table has a camp row at a camp path (`v1-e33-t07`)."""
 
 REPARSE_SEPARATOR: Final = "_reparse-"
 """Between a parser version and its generation in a version directory's name."""
@@ -171,6 +196,18 @@ def source_object_key(caselist: str, version: str, sha256: str) -> str:
     `caselist remove` matches a parsed file by.
     """
     return f"{caselist}/{version}/sha256/{sha256[0:2]}/{sha256[2:4]}/{sha256}.jsonl"
+
+
+def source_digest_of_key(key: str) -> str | None:
+    """The digest a per-source file's key names, the inverse of :func:`source_object_key`.
+
+    `None` for any other key under the store's root, such as an aggregate's.
+    """
+    parts = key.split("/")
+    if len(parts) != 6 or parts[2] != "sha256" or not parts[5].endswith(".jsonl"):
+        return None
+    digest = parts[5].removesuffix(".jsonl")
+    return digest if source_object_key(parts[0], parts[1], digest) == key else None
 
 
 class SkipKey(NamedTuple):
@@ -278,7 +315,12 @@ class SourceEntry(StoreRecord):
     """
 
     record: Literal["source"] = "source"
-    source_format: SourceFormat = Field(description="DOCX, DOC, PDF or OTHER, from the manifest.")
+    source_format: SourceFormat = Field(
+        description=(
+            "DOCX, DOC, PDF or OTHER, from the manifest; CMIR when the parser found a CardMirror "
+            "native file filed under another extension."
+        )
+    )
     byte_size: int = Field(ge=0, description="Size of the source in bytes.")
     outcome: SourceOutcome
     reason: str | None = Field(default=None, description="Why it has no document; None when PARSED.")
@@ -421,6 +463,11 @@ class OccurrenceRecord(StoreRecord):
     and a new row, with no special case. A camp file has no disclosure and records `None`, one row
     per card per release, with `last_snapshot` equal to `snapshot`. Who disclosed it is a join with
     the manifests, never a field here.
+
+    A camp row's :attr:`camp_path_disclosures` are the digests of the paths its file is at in its
+    release, so the suppression list can be asked about each (`v1-e33-t07`). They are kept out of
+    the row as it is written, because an earlier build refuses a key it does not know; the store
+    keeps them beside the table, as :class:`CampPathRecord` lines.
     """
 
     record: Literal["occurrence"] = "occurrence"
@@ -435,6 +482,15 @@ class OccurrenceRecord(StoreRecord):
     cluster_id: Sha256Hex = Field(description="The near-duplicate cluster the card was placed in.")
     membership: ClusterMembership = Field(description="How the card joined its cluster.")
     completeness: CardCompleteness = Field(description="FULL, ABBREVIATED or CITE_ONLY, as parsed.")
+    camp_path_disclosures: tuple[Sha256Hex, ...] = Field(
+        default=(),
+        exclude=True,
+        description=(
+            "For a camp row, the camp path digest of each live path its file is at in its release, sorted; "
+            "empty for a caselist row, and for a camp row read from a table written without them. Never "
+            "written into `occurrences.jsonl`: the store keeps them in `camp_paths.jsonl`."
+        ),
+    )
 
     @model_validator(mode="after")
     def _check_span(self) -> Self:
@@ -450,6 +506,32 @@ class OccurrenceRecord(StoreRecord):
                 raise ValueError(f"a caselist snapshot is YYYY-MM-DD; got {self.last_snapshot!r}")
             if self.last_snapshot < self.snapshot:
                 raise ValueError("last_snapshot is before snapshot")
+            if self.camp_path_disclosures:
+                raise ValueError("only a camp row is at a camp path")
+        if list(self.camp_path_disclosures) != sorted(set(self.camp_path_disclosures)):
+            raise ValueError("camp path digests are listed once each, sorted")
+        return self
+
+
+class CampPathRecord(StoreRecord):
+    """One camp path of one camp file in one release: a line of `camp_paths.jsonl` (`v1-e33-t07`).
+
+    Its `snapshot` and `source_sha256` are the release and file of the occurrence rows it belongs to;
+    `camp_path_disclosure` is the digest of `openev/<release>/<row path>`, never the path.
+    `occurrence_table_sha256` is the SHA-256 of the `occurrences.jsonl` bytes it was written beside: a
+    reader gives the digest to that table's rows and to no other's.
+    """
+
+    record: Literal["camp_path"] = "camp_path"
+    camp_path_disclosure: Sha256Hex = Field(description="Digest of `openev/<release>/<row path>`.")
+    occurrence_table_sha256: Sha256Hex = Field(
+        description="SHA-256 of the `occurrences.jsonl` this line was written beside."
+    )
+
+    @model_validator(mode="after")
+    def _check_store(self) -> Self:
+        if self.caselist != OPENEV_STORE:
+            raise ValueError(f"only a camp file is at a camp path; got {self.caselist!r}")
         return self
 
 
@@ -503,9 +585,14 @@ class ParsedStore(Protocol):
         *,
         index: Sequence[SourceEntry],
         failures: Sequence[SourceEntry],
-        occurrences: Sequence[OccurrenceRecord],
+        occurrences: Iterable[OccurrenceRecord],
     ) -> None:
-        """Replace the index, failures and occurrence files of a version directory, each atomically."""
+        """Replace the index, failures and occurrence files of a version directory, each atomically.
+
+        `occurrences` is read once, in order, and may be made as it is read (`v1-e40-t36`): the
+        parse pipeline builds each row as the store writes it, so a caselist's rows are never held
+        at once. A row that fails to build leaves every file as it was.
+        """
         ...
 
     async def read_index(self, caselist: str, version: str) -> tuple[SourceEntry, ...] | None:
@@ -518,4 +605,21 @@ class ParsedStore(Protocol):
 
     async def read_occurrences(self, caselist: str, version: str) -> tuple[OccurrenceRecord, ...] | None:
         """`occurrences.jsonl`, or `None` when it is absent."""
+        ...
+
+    async def read_occurrence_stamps(self, caselist: str, version: str) -> frozenset[str] | None:
+        """The fingerprint version of every row of `occurrences.jsonl`, or `None` when it is absent.
+
+        Read without the record's model (`v1-e34-t29`): a newer build may write rows this build
+        cannot validate, and its table must still say which version wrote it
+        (:func:`~debate_core.application.caselist.occurrence_table_guard.fingerprint_stamps`).
+        """
+        ...
+
+    async def read_occurrence_profiles(self, caselist: str, version: str) -> frozenset[str] | None:
+        """The style profile version of every row of `occurrences.jsonl`, or `None` when it is absent.
+
+        Read without the record's model, as :meth:`read_occurrence_stamps` is (`v1-e33-t09`,
+        :func:`~debate_core.application.caselist.occurrence_table_guard.profile_stamps`).
+        """
         ...

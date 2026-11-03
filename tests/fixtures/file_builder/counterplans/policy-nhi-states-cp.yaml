@@ -1,0 +1,21 @@
+# Synthetic counterplan recipe, for the smoke check of a counterplan's draft (v1-e33-t15).
+# Every fingerprint, heading and tag here is invented for the repository. Kept out of recipes/,
+# which holds t01's three examples and the file-recipe guide quotes each of them.
+schema_version: 1
+title: States CP
+topic: nhi
+format: POLICY
+caselist: hspolicy26
+position: states-cp
+side: NEG
+fingerprint_version: card-fingerprint-v3
+structure:
+  - pocket: States CP
+    blocks:
+      - block: Solvency - the states can run it
+        items:
+          - fingerprint: 4f0c9a1e7b2d5c8f3a6e9b1d4c7f0a3e6b9d2c5f8a1e4b7d0c3f6a9e2b5d8c1f
+          - fingerprint: 9e3b6d1a4c7f0e2b5d8a1c4f7e0b3d6a9c2f5e8b1d4a7c0f3e6b9d2a5c8f1e4b
+      - block: Net benefit - federalism
+        items:
+          - fingerprint: c2a5f8b1e4d7a0c3f6b9e2d5a8c1f4b7e0d3a6c9f2b5e8d1a4c7f0b3e6d9a2c5

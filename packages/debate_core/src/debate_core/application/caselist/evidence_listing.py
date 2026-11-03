@@ -30,25 +30,31 @@ from debate_core.application.caselist.publish_plan import (
     LocalSnapshot,
     digest_of_local_blob_key,
     full_archive_date,
+    held_only_digests,
     manifest_prefix,
     remote_source_prefix,
+    skipped_paths_in_manifest,
     snapshot_of_manifest_key,
     sources_in_manifest,
     stored_rows_in_manifest,
     validate_publish_target,
 )
 from debate_core.application.caselist.withdrawals import EarlierSnapshots
-from debate_core.application.ports.evidence_store import EvidenceObjectStore, ObjectKey
+from debate_core.application.ports.evidence_store import EvidenceObjectStore, ObjectInfo, ObjectKey
+from debate_core.application.ports.suppression import SuppressionState
 from debate_core.domain import Sha256Hex
 
 __all__ = [
     "LocalEvidence",
+    "digests_in_each_earlier_manifest",
     "digests_in_earlier_manifests",
+    "held_back_digests",
     "list_local_caselists",
     "list_remote_caselists",
     "list_remote_evidence",
     "local_blob_sizes",
     "local_file",
+    "read_local_manifest",
     "read_local_snapshots",
     "snapshots_before_full_archive",
 ]
@@ -96,19 +102,59 @@ async def read_local_snapshots(
         named = snapshot_of_manifest_key(caselist, info.key, full_archives=with_full)
         if named is None or (snapshot is not None and named != snapshot):
             continue
-        async with local_file(local.objects, local.object_path_for, info.key) as path:
-            # By its path, so through the one reader that says a refused file is a refusal.
-            lines = read_manifest_file(path)
-        found.append(
-            LocalSnapshot(
-                caselist=caselist,
-                snapshot=named,
-                sources=sources_in_manifest(info.key, lines),
-                manifest_size=info.size,
-                stored_rows=stored_rows_in_manifest(lines),
-            )
-        )
+        found.append(await _read_snapshot(local, caselist, named, info))
     return tuple(sorted(found, key=lambda local_snapshot: local_snapshot.snapshot))
+
+
+async def read_local_manifest(local: LocalEvidence, manifest: ObjectInfo) -> LocalSnapshot | None:
+    """The snapshot one local manifest is, from the listing that found it (`v1-e30-t25`).
+
+    `None` when its key is not a snapshot's manifest, weekly, complete or a camp release's: anything
+    else under `manifests/`, which no publish ever uploads. Read as :func:`read_local_snapshots`
+    reads each manifest, with no other listing.
+    """
+    for caselist in _caselists_in((manifest.key,)):
+        snapshot = snapshot_of_manifest_key(caselist, manifest.key, full_archives=True)
+        if snapshot is not None:
+            return await _read_snapshot(local, caselist, snapshot, manifest)
+    return None
+
+
+async def _read_snapshot(
+    local: LocalEvidence, caselist: str, snapshot: str, info: ObjectInfo
+) -> LocalSnapshot:
+    async with local_file(local.objects, local.object_path_for, info.key) as path:
+        # By its path, so through the one reader that says a refused file is a refusal.
+        lines = read_manifest_file(path)
+    return LocalSnapshot(
+        caselist=caselist,
+        snapshot=snapshot,
+        sources=sources_in_manifest(info.key, lines),
+        manifest_size=info.size,
+        stored_rows=stored_rows_in_manifest(lines),
+        skipped_paths=skipped_paths_in_manifest(lines),
+    )
+
+
+async def held_back_digests(local: LocalEvidence, suppression: SuppressionState) -> frozenset[Sha256Hex]:
+    """Every digest this machine's manifests name only in rows at a path a removal holds (`v1-e30-t22`).
+
+    What `store sync` does not push: the bytes the publisher leaves out of a snapshot
+    (:func:`~debate_core.application.caselist.publish_plan.held_only_digests`), less any that a row of
+    another manifest names at a path nothing holds, in any caselist or camp release. A blob carries no
+    record of which corpus it belongs to, so another row anywhere is another holder's copy, which is
+    never held back. Reads nothing when no path is held.
+    """
+    if not suppression.held_paths:
+        return frozenset()
+    held: set[Sha256Hex] = set()
+    unheld: set[Sha256Hex] = set()
+    for caselist in await list_local_caselists(local):
+        for snapshot in await read_local_snapshots(local, caselist, full_archives=True):
+            only = held_only_digests(snapshot, suppression)
+            held |= only
+            unheld |= {source.sha256 for source in snapshot.sources} - only
+    return frozenset(held - unheld)
 
 
 async def digests_in_earlier_manifests(
@@ -132,14 +178,36 @@ async def digests_in_earlier_manifests(
     withdrawn and superseded counts
     (:func:`~debate_core.application.caselist.withdrawals.count_withdrawals`), which read every
     earlier snapshot, weekly and complete alike.
+
+    "Before" compares dates, a complete archive's included, so `full_archives=False` alone is what
+    keeps complete archives out. Until `v1-e30-t18` it compared snapshot names as strings, and
+    `full/<date>` sorts after every date, so the comparison kept them out as well and a mutation
+    run could not tell the flag from its absence (`v1-e30-t17`).
     """
-    before = snapshot.isoformat()
-    return frozenset(
-        source.sha256
-        for held in await read_local_snapshots(local, caselist, full_archives=False)
-        if held.snapshot < before
-        for source in held.sources
+    return frozenset[Sha256Hex]().union(
+        *(await digests_in_each_earlier_manifest(local, caselist, snapshot)).values()
     )
+
+
+async def digests_in_each_earlier_manifest(
+    local: LocalEvidence, caselist: str, snapshot: date
+) -> dict[str, frozenset[Sha256Hex]]:
+    """:func:`digests_in_earlier_manifests`, manifest by manifest: `{weekly snapshot: digests}`.
+
+    The same manifests by the same rule. What measuring a later manifest again after a late weekly
+    reads (`v1-e30-t18`), which needs to know what the late weekly's own manifest adds.
+    """
+    return {
+        held.snapshot: frozenset(source.sha256 for source in held.sources)
+        for held in await read_local_snapshots(local, caselist, full_archives=False)
+        if _date_of_snapshot(held.snapshot) < snapshot
+    }
+
+
+def _date_of_snapshot(snapshot: str) -> date:
+    """The date a snapshot is of: a weekly's own name, or a complete archive's `full/<date>`."""
+    full = full_archive_date(snapshot)
+    return full if full is not None else date.fromisoformat(snapshot)
 
 
 async def snapshots_before_full_archive(
@@ -159,7 +227,7 @@ async def snapshots_before_full_archive(
     count = 0
     for held in await read_local_snapshots(local, caselist, full_archives=True):
         full = full_archive_date(held.snapshot)
-        held_date = full if full is not None else date.fromisoformat(held.snapshot)
+        held_date = _date_of_snapshot(held.snapshot)
         if held_date >= archive_date:
             continue
         count += 1

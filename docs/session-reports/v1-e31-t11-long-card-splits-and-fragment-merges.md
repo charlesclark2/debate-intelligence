@@ -746,3 +746,30 @@ start. I give the operator one combined order of steps from both reports.
 * **Your 9 and 10:** the E01 trim task. One is a flaky timing test; the other is a test that reads
   `HEAD`.
 * **Your 11:** I record the figures at close-out.
+
+### The re-parse and the samples, recorded (PM, 2026-10-16)
+
+The operator ran steps 1 to 8 on 2026-10-16, combined with `v1-e31-t12`'s re-parse. The figures are
+in [Card matching under `card-fingerprint-v3`, measured](../data/caselist-parse-report.md#card-matching-under-card-fingerprint-v3-measured-v1-e31-t11).
+The Goal is `Succeeded`, with ac2 amended as below.
+
+* **Step 2, counts against `v2`:** merged into another 18, 14, 19 and 0, against your estimate of
+  18, 10, 17 and 0; nothing divided; no exact fingerprint changed. **Step 4:** 2 short cuts within
+  the rule and still apart, as you predicted.
+* **Step 3, the join sample:** 17 same, 2 unsure, 1 different card. The different pair is two
+  hspolicy26 bodies sharing no text, joined because a third body holds all of both: your
+  Follow-up 6 in its worst form. Prod was published anyway, on my ruling: nothing reads prod's
+  parsed store yet, and the fix rewrites only the occurrence table.
+* **Step 5, the largest clusters:** stopped after hsld26 and hspf26 (60 pairs: 42 same, 17
+  different, 1 unsure). Judging long cuts of one article by eye was too slow and too uncertain to
+  finish. In its place, the share of pairs sharing no text over every caselist's three largest
+  clusters: 62% in hspf26's largest and 51% in hspolicy26's, and 0% to 25% elsewhere. It agrees
+  with the by-eye tallies. ac2 is amended to say so.
+* **Step 6, against `v1`:** 56 pairs still divided. Each is one the diagnosis explains by a short
+  cut, and none is a part that no short cut links to the rest.
+
+**Why the Goal is `Succeeded` with a false join known.** This task's criteria were a diagnosis,
+fixes that keep the labelled sets' precision at 1.000, and the operator's measurements. All are
+met. The false join and the chained clusters are what `v1-e31-t20` is for. It now carries my
+ruling on your Follow-up 2: a card is a passage, and bodies join only on text they share directly.
+Leaving this task open would only block `v1-e31-t20`, which depends on it.

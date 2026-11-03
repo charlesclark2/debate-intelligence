@@ -16,23 +16,58 @@ The goal is a short wait between opening a PR and being able to merge it into `d
   before it is a problem. Until `v1-e01-t27` the `test` job alone took 4 to 6 minutes.
 * **The test job runs in parts.** `ci.yml`'s `test` job is a matrix, and each part runs
   `pytest --part K/N` on its own runner. A part is not a list of directories:
-  `tests/pytest_plugins/run_in_parts.py` deals each test file's tests round the N parts, so every
-  selected test is in exactly one part and the parts stay level with nothing to maintain. The
-  parts together are the whole default selection; `tests/scripts/test_ci_workflow_test_job.py`
-  collects all of them and proves it on every run. No test is moved off the PR path to make room.
+  `tests/pytest_plugins/run_in_parts.py` deals the selection to the N parts, so every selected
+  test is in exactly one part. It deals whole test files by the seconds each took on dev's last
+  push run (`v1-e41-t17`), so a file's module-scoped fixtures are built in one part instead of in
+  all of them: every push part times its files, `ci.yml`'s `test-durations` job adds them up and
+  saves them in GitHub's Actions cache, and `test-selection` restores them once and hands every part
+  the same deal. A file with no record counts as the record's median, and a file heavier than a
+  part's share is dealt test by test. A record that is missing, older than two weeks, or that knows
+  under three quarters of the chosen files deals every file's tests round the parts as before,
+  and the job summary says why; it never fails a run (`scripts/ci_test_durations.py`). The
+  parts together are the selection: on a pull request into `dev` the tests its changes reach, and
+  otherwise the whole default selection ([agreement 10](#10-a-session-tests-what-it-changed-a-pull-request-what-it-reaches-and-dev-and-main-everything)).
+  `ci.yml`'s `test-selection` job chooses it once and every part reads it; when it chooses no test,
+  the parts are skipped and `ci` still passes (`v1-e41-t15`).
+* **The selection decides how many parts run** (`v1-e41-t16`): one part per 30 test files chosen,
+  at least one and at most eight, and eight for the whole selection. `test-selection` counts its
+  own list, so the count costs nothing, and hands the `test` matrix a list of part numbers; each
+  part asks for `--part K/N` with N the matrix's size. Thirty test files are about 1,000 tests on
+  today's suite, which a runner's part runs in about 100 seconds. A small affected set saves
+  runners and the queue for them; most task pull requests reach a third of the suite or more and
+  still get seven or eight parts, so sizing does not shorten their wait
+  ([`docs/process/ci-test-part-costs.md`](ci-test-part-costs.md) has the figures). A dispatch of
+  `ci.yml` can ask for pytest-xdist's `--dist load` (the `xdist_dist` input); every other run uses
+  `--dist worksteal`, the default since the PM's comparison on one commit (2026-11-02).
+* **The parts are proved to be the selection.**
+  `tests/scripts/test_ci_workflow_test_job.py` collects every part and proves it, for an affected
+  set and for the whole selection, dealt by durations and test by test, in a job of its own, `partition-proof`: on every push to `dev` and `main`, and on a pull request that
+  changes what the proof covers (`ci.yml`, `tests/pytest_plugins/`, the selection scripts, pytest's
+  configuration, the proof itself). The proof collects the whole suite nine times, and in a part it
+  held that part for about 70 seconds. It also deals the real collection at every size the matrix
+  can take, one part to eight, with the plugin's own dealing function, under a deal and under none.
+  No other test is moved off the PR path to make room.
+* **A pull request's newer push cancels its older run; nothing else is cancelled.** A push to `dev`
+  or `main` and a dispatched run each have a concurrency group of their own, so every merge commit
+  gets its own verdict and never waits for the run before it (`v1-e41-t15`).
 * **When it drifts**, read the `test` parts of a few recent pull requests. Each ends with its 25
   slowest tests.
-  * `ci` over 3 minutes on ordinary pull requests, or one part's pytest step over 2: append the
-    next number to `matrix.part` in `ci.yml` (`[1, 2, 3, 4]` becomes `[1, 2, 3, 4, 5]`). Nothing
-    else changes. Each extra part repeats the job's setup, about 15 seconds, and its own collection.
+  * One part's pytest step over 2 minutes on a whole-selection run: raise `MOST_PARTS` in
+    `scripts/ci_test_selection.py` (8 becomes 9). Over 2 minutes on an affected set: lower its
+    `TEST_FILES_PER_PART` (30). Nothing else changes. Each extra part repeats the job's setup,
+    about 15 seconds, and its own collection. `ci` over 3 minutes on ordinary pull requests while
+    every part is under 2 is not a part count to change: read the costs page first.
   * One part steadily slower than the others: a few slow tests have landed together. Its durations
-    name them. Make them cheaper; never mark them `slow` to get them out of the way.
-* **The same option splits a long local run.** `uv run pytest --part 1/2` and then `--part 2/2`
-  are the whole default selection between them, for any N, so a session that has to stay under
-  the two minutes of agreement 2 runs the parts one after another and says so in its report.
+    name them, and `test-selection`'s summary says whether the parts were dealt by durations, from
+    which record, and the seconds it expected of each part. Make them cheaper; never mark them
+    `slow` to get them out of the way.
+* **The same option splits a long local run** for the operator: `uv run pytest --part 1/2` and
+  then `--part 2/2` are the whole default selection between them, for any N. A session does not use
+  it to run the whole selection in pieces; what a session runs is [agreement 10](#10-a-session-tests-what-it-changed-a-pull-request-what-it-reaches-and-dev-and-main-everything).
 * **Coverage is not measured on a PR, or by a plain `uv run pytest`.** It took a third of the
-  suite's time and nothing is gated on it. `ci.yml`'s `coverage` job measures it over the whole
-  selection on every push to `dev` and `main`. Locally, ask for it:
+  suite's time and nothing is gated on it. On every push to `dev` and `main`, each test part measures
+  its share and `ci.yml`'s `coverage` job combines them (`v1-e01-t42`), so the push run waits only for
+  its parts. A push part that takes over 8 minutes means one part more: a larger `MOST_PARTS`. Locally, ask for it:
   `uv run pytest --cov --cov-report=term-missing`.
 * **What runs on every PR:** formatting and lint, type checks, fast unit and contract tests,
   import-boundary checks, spec validation. All offline: recorded fixtures and the fake/replay
@@ -202,3 +237,111 @@ be always passes.
   pull request adds or changes it. A `#` inside quotes, a heredoc body or a word such as a URL's
   `#anchor` is not a comment and passes.
 
+## 10. A session tests what it changed, a pull request what it reaches, and dev and main everything
+
+The whole default selection takes about six minutes on the operator's Mac and grows with almost every
+task. Sessions were running it in eighths several times each (at red, at green, after formatting,
+after mutation runs, after a sync), and that had become most of a session's wall-clock time. CI ran
+the whole selection on every pull request, in parallel parts, in about three minutes, once per push
+rather than once per idea. (Added by the PM, 2026-10-19.) By 2026-10-26 that run neared the
+5-minute budget of [agreement 1](#1-ci-stays-light), so a pull request into `dev` now runs only the
+tests its changes reach, and the whole selection runs once per merge instead (`v1-e01-t38`).
+
+* **A pull request into `dev` runs the affected set.** ci.yml's `test-selection` job reads
+  `scripts/affected_tests.py`'s selection against the pull request's base commit, always-run list
+  included, once, with the deal of its files to the parts, and the `test` parts follow it. When the pull request changes
+  shared test ground (ci.yml among it), or its selection fails, comes back empty or has no base
+  commit to compare with, the parts run the whole selection instead: it fails toward more tests,
+  never fewer. The job summary says how many test files it chose and, for the whole selection, why.
+  The one change that runs no test is the two generated files alone, `ROADMAP.md` and
+  `docs/README.md`: the bot's refresh pull request, and the run it dispatches on its branch, run
+  only the doc checks (`v1-e41-t15`); since `v1-e41-t16` that dispatch also runs no type check,
+  import check, Terraform, site or workflow job, as its pull request runs none. An affected set
+  runs in one part per 30 test files, at most eight, and the whole selection in eight.
+* **Dev's push run and every promotion run everything.** A push to `dev` or `main`, a pull request
+  into `main` and a dispatched run each run the whole default selection, and the `coverage` job
+  measures it on every push. The dev pre-release waits for dev's push run, so a test the affected set
+  missed fails there, before any release.
+* **A red push run on `dev` is fixed by the next pull request, before anything else merges.** A red
+  push run means a test is failing on `dev` that a pull request's affected set did not reach, or
+  that two pull requests broke only together. Nothing else merges into `dev` until a pull request
+  fixes it. That pull request's session runs the failing tests by
+  name as well as its affected set, because the fix's own selection may not reach them.
+* **A session never runs the whole default selection**, in one command or in parts. Not at red, not
+  before the report, not after a sync. The whole-suite run is CI's: the pull request's `ci` check
+  when the selection is the whole one, and dev's push run after every merge.
+* **While working, run the tests for what you are changing:** the new or changed test files, the
+  test directory of the module under change, and the plan node's own acceptance command. A red run
+  is the new tests alone, shown failing.
+* **Before the report, run the affected set once**, plus the cheap whole-repo checks:
+  * the affected set, run with `uv run scripts/affected_tests.py --run` (`v1-e01-t28`). It prints
+    every test file the branch's changes can reach, committed or not: through imports, directly or
+    through any chain of modules, the conftest files above a test, a script or fixture a test names
+    by path, and an always-run list (`tests/architecture`, `tests/specs`, the CLI's wiring tests).
+    Then it runs pytest over them with CI's markers. `--explain` says why each file was chosen. When
+    the branch changes shared test ground (`pyproject.toml`, `uv.lock`, the root `conftest.py`,
+    `tests/pytest_plugins/`, `ci.yml`) it prints that the whole selection is affected and runs
+    nothing: that run is CI's, or the operator's under the exception below;
+  * **when the affected set would take longer than about two minutes,** the session does not hand it
+    to the operator: it says so in the report and leaves it to the pull request's `ci` check, which
+    runs the same affected set, or the whole selection. It still runs, within the two minutes, the
+    test directories of what it changed and the always-run list (the PM's ruling of 2026-10-19,
+    written in 2026-10-20);
+  * `ruff format --check`, `ruff check`, `pyright packages/<changed packages>`, `lint-imports`,
+    `scripts/validate_specs.py`, and the docs checks when docs changed. These take seconds.
+* **A test run's time limit stops its whole process group.** A session bounds every test run it
+  starts at 115 seconds with `scripts/hard_stop.py`:
+  `.venv/bin/python scripts/hard_stop.py 115 .venv/bin/python -m pytest ...`. The script runs the
+  command in a process group of its own, which pytest-xdist's workers join. At the limit it sends
+  TERM to the whole group, then KILL after 5 seconds, says on stderr that it stopped the run at its
+  115-second limit, and exits 124. A run that finishes in time exits with its own code. The perl
+  alarm sessions used before stopped only the process it was set on: on `uv` it left uv's pytest
+  running (`v1-e39-t09`), and on pytest it left behind the xdist workers and the subprocesses
+  their tests had started, which run on as orphans. `v1-e40-t22`'s run went on for about 30 minutes
+  at a load near 50 after its alarm (`v1-e41-t05`). The group kill reaches all of them, and the
+  limit still goes on `.venv/bin/python`, which skips uv's sync. A process that starts its own
+  session or process group escapes the kill; pytest, xdist and the subprocesses of a test do not.
+* **Tests that share process-wide state are checked in one process.** A logging filter, a logger's
+  handlers or any module-level registry is shared by every test in an xdist worker, so a test can
+  pass or fail, or a leak can be hidden, by which other suite ran first. When a task's tests assert
+  on such state, they start from it bare and restore it, and before the report they run once with
+  `-n 0 -p no:randomly` after the neighbouring suites that touch the same state. The httpx and
+  httpcore loggers are the known case (`v1-e07-t01`'s CI, written in by the PM, 2026-10-21).
+* **After a sync or rebase**, run the affected set again, never the whole selection.
+* **When CI fails** on the pull request, the operator pastes the failing part's output into the
+  session, which fixes it, runs the affected set and the failing tests, and commits; the operator
+  pushes the branch again (`git -C <worktree> push`) and the open pull request runs `ci` again. The
+  session is still open until `scripts/task finish`, so this costs one round trip.
+* **The report records what was run**: the commands and their results, not a table of parts. The PM
+  does not ask for a whole-suite run in a review.
+* **Mutation runs are scoped and capped.** They target the module the task's logic lives in, run
+  only the test files that cover it, and stop at about 20 mutants unless the spec asks for more.
+  They are worth their time for integrity-critical rules (evidence text, removal and suppression,
+  fingerprints, access control) and rarely elsewhere. Agreement 8 still applies to every run.
+* **Exceptions go to the operator, not the session.** A change to shared test ground (`conftest.py`,
+  `tests/pytest_plugins/`, `pyproject.toml` or `uv.lock`, the parser version with its golden
+  fixtures) may deserve one whole-selection run before the pull request. The session hands it over
+  as one operator command (`uv run pytest -n auto -m "not slow and not live"`, about six minutes),
+  once, at the end, under agreement 2.
+
+## 11. An operator block that changes shared state cannot be pasted wrong
+
+Two hand-offs on 2026-10-22 went wrong for the same reason. A removal's dry run and its `--execute`
+were one paste, so the plan, which listed every caselist's aggregates, was never read before they
+were deleted. Then the rebuild of those aggregates ran in a window where an earlier block had left
+`DEBATE_STORAGE__DATA_DIR` naming a scratch store, and it published empty aggregates to the dev
+bucket. Its success check, "0 parsed", is also what an empty store prints. (Added by the PM,
+2026-10-22.)
+
+* **A command that deletes, removes, publishes or applies is two blocks.** The first is its dry run
+  or plan. The prose between them says what to read in that output and what stops the operator.
+  The second is the real run, with its confirmation code if it takes one. A block never holds both.
+* **A block that writes shared state refuses an environment it did not set.** It starts by
+  checking that no leftover `DEBATE_*` override is set (or clears it for that command with
+  `env -u`), and that no `caselist pull` is running, and stops with a plain message otherwise. A
+  block that sets an override for one step unsets it at the end of that step.
+* **A success check tells "nothing to do" from "nothing there".** "0 parsed" or "0 uploaded" also
+  describes an empty store, so a check names a count that must be above zero as well, for example
+  `Sources` equal to `Skipped` and above zero.
+* **The PM checks these three things** when reviewing a session's operator blocks, and a session
+  writing a runbook step follows them too.

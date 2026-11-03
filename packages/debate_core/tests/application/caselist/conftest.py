@@ -14,8 +14,9 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
+from inspect import signature
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import pytest
 from tests.fixtures.caselist.build_synthetic_archives import (
@@ -56,7 +57,8 @@ from debate_core.integrations.local.suppression_list import (
     local_suppression_list_file,
 )
 from debate_core.integrations.s3 import S3EvidenceObjectStore, S3EvidenceVersionStore
-from debate_core.testing.fakes import FixedClock, empty_suppression_list
+from debate_core.testing.fakes.clock_and_ids import FixedClock
+from debate_core.testing.fakes.suppression import empty_suppression_list
 
 if TYPE_CHECKING:  # pragma: no cover - import for the type checker only
     from mypy_boto3_s3.client import S3Client
@@ -207,6 +209,13 @@ class RemovalWorld:
         )
 
     def planner(self, *, versions: EvidenceVersionStore | None = None) -> RemovalPlanner:
+        # The removal log is the planner's since v1-e30-t19. The older builds' sources that
+        # `check_an_older_build_reads_this_builds_files.py` runs this world against take none.
+        log = (
+            {"removal_log": self.removal_log()}
+            if "removal_log" in signature(RemovalPlanner).parameters
+            else {}
+        )
         return RemovalPlanner(
             caselists=self.repository,
             local=self.local,
@@ -219,7 +228,16 @@ class RemovalWorld:
             clock=FixedClock(REMOVAL_TIME),
             environment="dev",
             bucket=self.bucket_name,
+            **log,
+            # The landscape bundles under reports/ are the planner's since v1-e32-t13, likewise.
+            **self._local_reports(RemovalPlanner),
         )
+
+    def _local_reports(self, built: type) -> dict[str, Any]:
+        """The data directory keyed as the bucket is, for a build whose planner and service take it."""
+        if "local_reports" not in signature(built).parameters:
+            return {}
+        return {"local_reports": FsEvidenceVersionStore(self.data_dir)}
 
     def takedown(self) -> TakedownAccess:
         """The takedown credential's reach, on moto (which does not enforce IAM: the tests that need a
@@ -247,6 +265,7 @@ class RemovalWorld:
             takedown=takedown or self.takedown,
             clock=FixedClock(REMOVAL_TIME),
             environment="dev",
+            **self._local_reports(CaselistRemovalService),
         )
 
     def tree(self) -> dict[str, bytes]:

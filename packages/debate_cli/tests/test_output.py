@@ -43,7 +43,11 @@ from debate_core.application.errors import (
     ArchiveTooLarge,
     BlobIntegrityError,
     DomainError,
+    ModelAccessDenied,
+    ModelRequestRejected,
+    ModelUnavailableError,
     NotFound,
+    ProviderError,
     ProviderRateLimited,
     ProviderUnavailable,
     RevisionMismatch,
@@ -54,6 +58,7 @@ from debate_core.application.errors import (
     StoreProfileNotConfigured,
     StoreUnavailable,
 )
+from debate_core.application.landscape_model_stage import ModelStageInterrupted
 
 ENVELOPE_KEYS = {"schema_version", "status", "command", "data", "error"}
 ERROR_KEYS = {"code", "message", "exit_code", "details", "hint"}
@@ -358,6 +363,89 @@ def test_exit_code_for(exception: BaseException, expected: ExitCode) -> None:
     assert exit_code_for(exception) is expected
 
 
+#: What the Bedrock adapter raises for a call no retry fixes (v1-e05-t02): the caller is not allowed
+#: to make it, or the provider refuses the request itself. The identifiers are invented.
+REFUSED_MODEL_CALLS = [
+    (
+        ModelAccessDenied("bedrock", "example-model", "no usable AWS credentials", hint="aws sso login"),
+        "MODEL_ACCESS_DENIED",
+    ),
+    (
+        ModelAccessDenied("bedrock", "example-model", "AccessDeniedException: not granted", hint="ask"),
+        "MODEL_ACCESS_DENIED",
+    ),
+    (
+        ModelRequestRejected("bedrock", "example-model", "ValidationException", "temperature is refused"),
+        "MODEL_REQUEST_REJECTED",
+    ),
+]
+
+#: What it raises for a call that may succeed later: throttled, or the model did not answer.
+MODEL_CALLS_A_RETRY_MAY_CURE = [
+    (ProviderRateLimited("bedrock", "example-model: ThrottlingException"), "PROVIDER_RATE_LIMITED"),
+    (
+        ModelUnavailableError("bedrock", "example-model", "ServiceUnavailableException"),
+        "PROVIDER_UNAVAILABLE",
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    ("exception", "code"), REFUSED_MODEL_CALLS, ids=["no-credentials", "not-granted", "rejected-parameter"]
+)
+def test_a_refused_model_call_exits_as_a_domain_failure(exception: Exception, code: str) -> None:
+    """No retry fixes it, so a script reading the exit code must not retry it (v1-e05-t09)."""
+    failure = CommandFailure.from_exception(exception)
+
+    assert exit_code_for(exception) is ExitCode.DOMAIN_FAILURE
+    assert (failure.code, failure.exit_code) == (code, ExitCode.DOMAIN_FAILURE)
+
+
+@pytest.mark.parametrize(
+    ("exception", "code"), MODEL_CALLS_A_RETRY_MAY_CURE, ids=["throttled", "unavailable"]
+)
+def test_a_model_call_a_retry_may_cure_still_exits_as_a_retrieval_failure(
+    exception: Exception, code: str
+) -> None:
+    failure = CommandFailure.from_exception(exception)
+
+    assert exit_code_for(exception) is ExitCode.RETRIEVAL_FAILURE
+    assert (failure.code, failure.exit_code) == (code, ExitCode.RETRIEVAL_FAILURE)
+
+
+@pytest.mark.parametrize(
+    ("cause", "cause_code", "expected"),
+    [
+        *((cause, code, ExitCode.RETRIEVAL_FAILURE) for cause, code in MODEL_CALLS_A_RETRY_MAY_CURE),
+        *((cause, code, ExitCode.DOMAIN_FAILURE) for cause, code in REFUSED_MODEL_CALLS),
+        (ProviderError("bedrock", "a failure nobody classified"), "PROVIDER_ERROR", ExitCode.DOMAIN_FAILURE),
+    ],
+    ids=[
+        "landscape-stage-throttled",
+        "landscape-stage-unavailable",
+        "landscape-stage-no-credentials",
+        "landscape-stage-not-granted",
+        "landscape-stage-rejected-parameter",
+        "landscape-stage-unclassified",
+    ],
+)
+def test_a_stopped_landscape_model_stage_exits_as_its_cause_and_reports_the_causes_code(
+    cause: ProviderError, cause_code: str, expected: ExitCode
+) -> None:
+    """3 only for a cause on RETRYABLE_PROVIDER_FAILURES; a refused call stays a verdict (v1-e32-t32)."""
+    stopped = ModelStageInterrupted(cause, sent=1, unanswered=1)
+    failure = CommandFailure.from_exception(stopped)
+
+    assert exit_code_for(stopped) is expected
+    assert (failure.code, failure.exit_code) == ("MODEL_STAGE_INTERRUPTED", expected)
+    assert failure.details == {
+        "error": type(cause).__name__,
+        "cause_code": cause_code,
+        "sent": 1,
+        "unanswered": 1,
+    }
+
+
 #: The three store failures a retry may cure (v1-e01-t20): a store that did not answer, a session
 #: that expired, a store or directory that refused. None of them is an answer about the request.
 RETRYABLE_STORE_FAILURES = [
@@ -448,6 +536,56 @@ def test_a_removal_stopped_by_anything_else_stays_a_domain_failure(
     # A takedown profile that is not defined is not a store that may answer next time (v1-e29-t07).
     unconfigured = StoreProfileNotConfigured("debate-dev-evidence-removal", setting="DEBATE_REMOVAL_PROFILE")
     assert exit_code_for(raised_from(wrapper, unconfigured)) is ExitCode.DOMAIN_FAILURE
+
+
+@pytest.mark.parametrize(
+    ("cause", "exit_code", "cause_details"),
+    [
+        pytest.param(
+            StoreCredentialsExpired("the AWS session is not usable", hint="aws sso login --profile p"),
+            ExitCode.RETRIEVAL_FAILURE,
+            {"cause_code": "STORE_CREDENTIALS_EXPIRED"},
+            id="an expired session",
+        ),
+        pytest.param(
+            StoreProfileNotConfigured("a-typo", setting="DEBATE_REMOVAL_PROFILE", hint="set it"),
+            ExitCode.DOMAIN_FAILURE,
+            {
+                "cause_code": "STORE_PROFILE_NOT_CONFIGURED",
+                "cause_profile": "a-typo",
+                "cause_setting": "DEBATE_REMOVAL_PROFILE",
+            },
+            id="a profile the AWS config lacks",
+        ),
+        pytest.param(
+            StoreUnavailable("ListObjectVersions", "s3://b", "503"),
+            ExitCode.RETRIEVAL_FAILURE,
+            {
+                "cause_code": "STORE_UNAVAILABLE",
+                "cause_operation": "ListObjectVersions",
+                "cause_resource": "s3://b",
+            },
+            id="a store that did not answer",
+        ),
+    ],
+)
+def test_a_preflight_failure_carries_its_causes_code_and_details_with_the_exit_unchanged(
+    cause: DomainError, exit_code: ExitCode, cause_details: dict[str, object]
+) -> None:
+    """`v1-e29-t09` ac3: what the wrapper used to drop. The cause's hint is the envelope's hint, once."""
+    failure = CommandFailure.from_exception(raised_from(preflight_failed, cause))
+
+    assert failure.code == "TAKEDOWN_PREFLIGHT_FAILED"
+    assert failure.exit_code is exit_code
+    assert failure.details == {
+        "profile": "debate-dev-evidence-removal",
+        "step": "list object versions",
+        **cause_details,
+    }
+    assert failure.hint == (
+        getattr(cause, "hint", None) or "aws sso login --profile debate-dev-evidence-removal"
+    )
+    assert "cause_hint" not in failure.details
 
 
 def test_a_removal_that_completed_unlogged_is_not_retried_whatever_refused_the_log() -> None:

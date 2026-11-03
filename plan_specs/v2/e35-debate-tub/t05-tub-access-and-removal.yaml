@@ -61,6 +61,9 @@ spec:
     - kind: TaskRef
       name: v1-e30-t07-source-removal
       relation: dependsOn
+    - kind: TaskRef
+      name: v1-e29-t08-takedown-preflight-identity
+      relation: dependsOn
   acceptanceCriteria:
     - id: ac1
       description: >-

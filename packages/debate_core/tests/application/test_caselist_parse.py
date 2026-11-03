@@ -23,6 +23,7 @@ below, and `caselist/test_parsed_store_removal.py`.
 
 from __future__ import annotations
 
+import gzip
 import hashlib
 import inspect
 import json
@@ -34,6 +35,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Final, cast
 
 import pytest
+from tests.fixtures.caselist.interruptible_bucket import ScriptedBucket
 from tests.fixtures.caselist.publish_expectations import FICTIONAL_IDENTIFIERS
 from tests.fixtures.parse_pipeline.build_parse_world import (
     BODIES,
@@ -60,8 +62,9 @@ from debate_core.application.caselist.parse_workers import (
 from debate_core.application.caselist.parsed_publish import ParsedStorePublisher
 from debate_core.application.caselist.publish_service import SourceResult
 from debate_core.application.caselist.suppression import RecordedSuppressionList
-from debate_core.application.caselist_card_stats import CardPlacement, CaselistCardStatsService
+from debate_core.application.caselist_card_stats import CaselistCardStatsService, ClusterPlacement
 from debate_core.application.caselist_parse import CaselistParseService, ParseRunReport
+from debate_core.application.errors import StoreProfileNotConfigured
 from debate_core.application.ports.debate_files import DebateFileParser
 from debate_core.application.ports.parsed_store import (
     AGGREGATE_NAMES,
@@ -83,7 +86,8 @@ from debate_core.integrations.local import FsEvidenceObjectStore
 from debate_core.integrations.local.parsed_store import LocalParsedStore
 from debate_core.integrations.local.suppression_list import local_suppression_list_file
 from debate_core.integrations.s3 import S3EvidenceObjectStore
-from debate_core.testing.fakes import MisbehavingDebateFileParser, build_fake_caselist_repository
+from debate_core.testing.fakes.caselist import build_fake_caselist_repository
+from debate_core.testing.fakes.debate_files import MisbehavingDebateFileParser
 
 if TYPE_CHECKING:  # pragma: no cover - imported for the type checker only
     from mypy_boto3_s3.client import S3Client
@@ -199,7 +203,7 @@ class World:
             parser=parser or DebateDocxParser(),
             runner=runner or InProcessParseRunner(),
             suppression=self.suppression,
-            place_cards=CaselistCardStatsService(build_fake_caselist_repository()).place,
+            card_placer=CaselistCardStatsService(build_fake_caselist_repository()).placer,
             failure_rate_threshold=threshold,
             failure_rate_minimum_sources=minimum,
         )
@@ -268,7 +272,19 @@ async def test_a_first_run_parses_every_source_and_reports_the_hand_derived_coun
         expected["occurrences"],
     )
     assert report.plan.version == DOCX_PARSER_VERSION
-    assert not report.plan.new_version
+    assert report.plan.new_version
+    assert report.plan.superseded is None
+
+
+@pytest.mark.anyio
+async def test_progress_hears_how_many_sources_are_done_after_each_one(world: World) -> None:
+    """What a backfile import's progress lines count (`v1-e40-t32`): a number, never which source."""
+    service = world.service()
+    heard: list[int] = []
+
+    await service.run(await service.plan(CASELIST), progress=heard.append)
+
+    assert heard == list(range(1, EXPECTED["after_0908"]["sources"] + 1))
 
 
 @pytest.mark.anyio
@@ -442,6 +458,76 @@ async def test_a_dry_run_plans_and_writes_nothing(world: World) -> None:
     assert not (world.data_dir / "parsed").exists()
 
 
+# ------------------------------------------------------------------------------------------------
+# The dry run says when a new version directory starts, and which it supersedes (v1-e31-t16 ac3)
+# ------------------------------------------------------------------------------------------------
+#
+# Before v1-e31-t16 a plan said `new_version: false` and `superseded: null` for a parser version
+# bump, which starts a new directory and leaves the previous parser's behind, and for the first
+# parse of a caselist. Only a new generation of the same parser version was reported.
+
+
+@pytest.mark.anyio
+async def test_a_dry_run_for_a_parser_version_bump_names_the_directory_it_supersedes(world: World) -> None:
+    await world.run()
+    service = world.service(CountingParser(parser_version="2099.01.01-docx-99"))
+
+    plan = await service.plan(CASELIST)
+    service.dry_run(plan)
+
+    assert (plan.version, plan.new_version, plan.superseded) == (
+        "2099.01.01-docx-99",
+        True,
+        DOCX_PARSER_VERSION,
+    )
+    assert not (world.store.root / CASELIST / "2099.01.01-docx-99").exists()
+
+
+@pytest.mark.anyio
+async def test_a_parser_version_bump_supersedes_the_newest_generation_of_the_parser_before(
+    world: World,
+) -> None:
+    await world.run()
+    await world.run(reparse=True)
+
+    plan = await world.service(CountingParser(parser_version="2099.01.01-docx-99")).plan(CASELIST)
+
+    assert (plan.new_version, plan.superseded) == (True, version_directory_name(DOCX_PARSER_VERSION, 2))
+
+
+@pytest.mark.anyio
+async def test_a_first_parse_starts_a_new_directory_and_supersedes_nothing(world: World) -> None:
+    plan = await world.service().plan(CASELIST)
+
+    assert (plan.version, plan.new_version, plan.superseded) == (DOCX_PARSER_VERSION, True, None)
+
+
+@pytest.mark.anyio
+async def test_a_run_into_the_current_directory_is_not_new(world: World) -> None:
+    await world.run()
+
+    plan = await world.service().plan(CASELIST)
+
+    assert (plan.version, plan.new_version, plan.superseded) == (DOCX_PARSER_VERSION, False, None)
+
+
+@pytest.mark.anyio
+async def test_a_directory_written_by_a_newer_build_is_never_what_a_new_directory_supersedes(
+    world: World,
+) -> None:
+    """An older build starting its own directory supersedes the newest directory older than it."""
+    await world.run()
+    await world.run(CountingParser(parser_version="2099.01.01-docx-99"))
+
+    plan = await world.service(CountingParser(parser_version="2050.01.01-docx-50")).plan(CASELIST)
+
+    assert (plan.version, plan.new_version, plan.superseded) == (
+        "2050.01.01-docx-50",
+        True,
+        DOCX_PARSER_VERSION,
+    )
+
+
 @pytest.mark.anyio
 async def test_a_source_missing_from_this_machine_is_recorded_and_tried_again(world: World) -> None:
     blob = world.local.blob_path_for
@@ -549,23 +635,30 @@ class RewritingParser(CountingParser):
         return result.model_copy(update={"cards": (rewritten,)})
 
 
-def placed_as_card_fingerprint_v1_did(cards: Sequence[ParsedCard]) -> list[CardPlacement]:
+class PlacedAsCardFingerprintV1Did:
     """What `card-fingerprint-v1` did with this test's cards, written out: each its own cluster.
 
     The two full cards differ by one word in 33, under v1's containment threshold, and the wiki
     file's abbreviated cards match neither.
     """
-    return [
-        CardPlacement(
-            card,
-            fingerprint := card_fingerprint(card).exact_fingerprint,
-            fingerprint,
-            ClusterMembership.NEAR_DUPLICATE
-            if card.completeness is CardCompleteness.FULL
-            else ClusterMembership.UNLINKED,
+
+    def __init__(self) -> None:
+        self._placed: list[ClusterPlacement] = []
+
+    def add(self, card: ParsedCard) -> None:
+        fingerprint = card_fingerprint(card).exact_fingerprint
+        self._placed.append(
+            ClusterPlacement(
+                fingerprint,
+                fingerprint,
+                ClusterMembership.NEAR_DUPLICATE
+                if card.completeness is CardCompleteness.FULL
+                else ClusterMembership.UNLINKED,
+            )
         )
-        for card in cards
-    ]
+
+    def placements(self) -> list[ClusterPlacement]:
+        return self._placed
 
 
 def names_a_fingerprint_or_a_cluster(value: object) -> bool:
@@ -604,7 +697,7 @@ async def test_a_rebuild_after_the_fingerprint_version_changed_leaves_no_old_sta
             parser=parser,
             runner=InProcessParseRunner(),
             suppression=world.suppression,
-            place_cards=placed_as_card_fingerprint_v1_did,
+            card_placer=PlacedAsCardFingerprintV1Did,
             failure_rate_threshold=0.5,
             failure_rate_minimum_sources=1,
         )
@@ -658,6 +751,47 @@ async def test_one_failing_source_is_recorded_with_its_reason_and_the_run_carrie
     }
     assert {row["source_format"] for row in failures if row["outcome"] == "UNSUPPORTED"} == {"PDF", "DOC"}
     assert report.parsed == EXPECTED["after_0908"]["parsed"]
+
+
+class CardMirrorNativeParser(CountingParser):
+    """The real parser, handed a CardMirror `.cmir` for the source the world files as `broken`.
+
+    The shape the first corpus parse met (`v1-e31-t09`): CardMirror's native gzip-and-JSON file,
+    uploaded under a `.docx` name. The manifest says DOCX; the bytes say otherwise.
+    """
+
+    CMIR: Final = gzip.compress(b'{"format":"cardmirror-native","doc":{"type":"doc"}}', mtime=0)
+
+    def parse(
+        self,
+        content: bytes,
+        source: SourceDocument,
+        *,
+        source_path: str,
+        snapshot: SnapshotDate | None = None,
+        camp: str | None = None,
+    ) -> ParsedDocument | ParseFailure:
+        if source.sha256 == digest_of("broken"):
+            content = self.CMIR
+        return super().parse(content, source, source_path=source_path, snapshot=snapshot, camp=camp)
+
+
+@pytest.mark.anyio
+async def test_a_cardmirror_native_file_counts_as_unsupported_under_its_own_format(world: World) -> None:
+    """`v1-e31-t15`: unsupported rather than failed, and named for what it is rather than DOCX."""
+    report = await world.run(CardMirrorNativeParser())
+
+    assert report.unsupported == {"CMIR": 1, "DOC": 1, "PDF": 1}
+    assert report.failed == {}
+    rows = {row["source_sha256"]: row for row in world.lines("failures.jsonl")}
+    assert (rows[digest_of("broken")]["outcome"], rows[digest_of("broken")]["source_format"]) == (
+        "UNSUPPORTED",
+        "CMIR",
+    )
+    assert (rows[digest_of("pdf")]["source_format"], rows[digest_of("doc")]["source_format"]) == (
+        "PDF",
+        "DOC",
+    )
 
 
 @pytest.mark.anyio
@@ -918,6 +1052,50 @@ async def test_a_camp_release_is_parsed_with_its_camp_and_no_disclosure(tmp_path
     } == {("OPENEV", "Cascade Institute", None)}
 
 
+@pytest.mark.anyio
+async def test_a_camp_refiled_in_its_manifest_reaches_the_occurrence_rows_at_the_next_run_unparsed(
+    tmp_path: Path,
+) -> None:
+    """`v1-e30-t32`: a metadata re-import rewrites the manifest row's camp; the next run, with nothing to
+    parse, rebuilds the occurrence rows with it. No parser or fingerprint version is bumped for it."""
+    world = World(data_dir=tmp_path / "evidence", zips_dir=tmp_path / "zips")
+    body = (
+        Path(__file__).resolve().parents[4]
+        / "tests/fixtures/debate_files/structural/cardmirror-camp-file.docx"
+    ).read_bytes()
+    sha = hashlib.sha256(body).hexdigest()
+    blob = world.data_dir / "blobs" / "sha256" / sha[0:2] / sha[2:4] / sha
+    blob.parent.mkdir(parents=True)
+    blob.write_bytes(body)
+    row = {
+        "kind": "member",
+        "classification": "NEW",
+        "path": "Climate Adv CP - Ridgeline Classic 2026 AB.docx",
+        "sha256": sha,
+        "byte_size": len(body),
+        "format": "DOCX",
+        "camp": "Ridgeline",
+        "imported_on": "2026-09-14",
+    }
+    manifest = world.data_dir / "objects" / "manifests" / "openev" / "2026-policy.jsonl"
+    manifest.parent.mkdir(parents=True)
+    manifest.write_text(json.dumps(row) + "\n", encoding="utf-8")
+    service = world.service()
+    occurrences = world.store.root / "openev" / DOCX_PARSER_VERSION / "occurrences.jsonl"
+    await service.run(await service.plan("openev"))
+    assert {json.loads(line)["camp"] for line in occurrences.read_text().splitlines()} == {"Ridgeline"}
+
+    manifest.write_text(json.dumps(row | {"camp": "Ridgeline Classic"}) + "\n", encoding="utf-8")
+    parser = CountingParser()
+    again = world.service(parser)
+    report = await again.run(await again.plan("openev"))
+
+    assert (len(report.plan.to_parse), parser.parsed) == (0, [])
+    assert [json.loads(line)["camp"] for line in occurrences.read_text().splitlines()] == [
+        "Ridgeline Classic"
+    ] * 2
+
+
 # ------------------------------------------------------------------------------------------------
 # Failures listing
 # ------------------------------------------------------------------------------------------------
@@ -963,7 +1141,7 @@ async def test_nothing_the_run_logs_names_a_school_a_team_a_path_or_a_card(
     assert record is not None
     for card in record.to_parsed_document("x").cards:
         assert card.evidence_text[:40] not in logged
-        assert card.tag not in logged
+        assert card.tag is None or card.tag not in logged
     assert repr(report.plan).count("Maple") == 0
 
 
@@ -977,10 +1155,14 @@ def bucket(evidence_bucket: str, s3_client: S3Client) -> S3EvidenceObjectStore:
     return S3EvidenceObjectStore(bucket=evidence_bucket, client=s3_client)
 
 
-def publisher(world: World, bucket: S3EvidenceObjectStore) -> ParsedStorePublisher:
+def publisher(world: World, bucket: Any) -> ParsedStorePublisher:
     local = FsEvidenceObjectStore(world.data_dir, subdirectory=Path("parsed"))
     return ParsedStorePublisher(
-        local=local, local_path_for=local.path_for, remote=bucket, suppression=world.suppression
+        local=local,
+        local_path_for=local.path_for,
+        remote=bucket,
+        suppression=world.suppression,
+        evidence=world.local,
     )
 
 
@@ -1120,3 +1302,46 @@ async def test_publish_names_nothing_but_digests_and_versions(
         metadata = s3_client.head_object(Bucket=evidence_bucket, Key=key)["Metadata"]
         assert set(metadata) == {"sha256"}
     assert all(SourceOutcome.PARSED.value not in key for key in listed)
+
+
+@pytest.mark.anyio
+async def test_publish_stops_at_the_first_object_when_the_profile_is_not_defined(
+    world: World, bucket: S3EvidenceObjectStore, s3_client: S3Client, evidence_bucket: str
+) -> None:
+    """Raised as an expired session is, not recorded once per object (`v1-e29-t09` ac1)."""
+    await world.run()
+    missing = StoreProfileNotConfigured("debate-dev-evidence-typo", setting="storage.s3.aws_profile")
+
+    def not_defined(_: str, count: int) -> None:
+        raise missing
+
+    scripted = ScriptedBucket(bucket, not_defined)
+
+    with pytest.raises(StoreProfileNotConfigured) as raised:
+        await publisher(world, scripted).publish(CASELIST, DOCX_PARSER_VERSION)
+
+    assert raised.value is missing, "raised, where it used to be recorded once per object"
+    assert s3_client.list_objects_v2(Bucket=evidence_bucket).get("Contents", []) == []
+
+
+@pytest.mark.anyio
+async def test_publish_names_an_os_error_by_its_class_and_errno_and_never_its_text(
+    world: World, bucket: S3EvidenceObjectStore
+) -> None:
+    """`v1-e29-t09` ac7: an `OSError` quotes its path, which holds a home directory and a camp's title."""
+    await world.run()
+    probe = "/Users/zqxprobe-home/debate-data/inbox/Zqxprobe Lantern Camp Release.docx"
+
+    def refused_by_the_os(_: str, count: int) -> None:
+        raise PermissionError(13, "Permission denied", probe)
+
+    report = await publisher(world, ScriptedBucket(bucket, refused_by_the_os)).publish(
+        CASELIST, DOCX_PARSER_VERSION
+    )
+
+    failed = [outcome for outcome in report.objects if outcome.result is SourceResult.FAILED]
+    assert failed, "every upload was refused"
+    assert {(outcome.error_code, outcome.error_message) for outcome in failed} == {
+        ("PERMISSION_ERROR", "PermissionError (errno 13)")
+    }
+    assert "zqxprobe" not in repr(report).lower()

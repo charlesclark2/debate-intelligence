@@ -312,7 +312,7 @@ def test_the_normalized_rounds_are_the_nine_prelims_and_five_elims() -> None:
 def test_the_enum_values_are_the_tokens_the_specs_use() -> None:
     assert {member.value for member in Event} == {"LD", "POLICY", "PF"}
     assert {member.value for member in Side} == {"AFF", "NEG", "PRO", "CON", "UNKNOWN"}
-    assert {member.value for member in SourceFormat} == {"DOCX", "DOC", "PDF", "OTHER"}
+    assert {member.value for member in SourceFormat} == {"DOCX", "DOC", "PDF", "OTHER", "CMIR"}
     assert {member.value for member in SourceOrigin} == {"CASELIST_ARCHIVE", "OPENEV"}
     assert {member.value for member in Acquisition} == {"MANUAL_DOWNLOAD", "API"}
     assert {member.value for member in CompetitionLevel} == {"HIGH_SCHOOL", "COLLEGE", "MIDDLE_SCHOOL"}

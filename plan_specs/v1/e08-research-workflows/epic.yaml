@@ -271,5 +271,140 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e08-t07-daily-command
+    - id: t08
+      kind: Task
+      name: 'Counterplans and kritiks get the research needs their arguments have'
+      description: >-
+        Counterplans and kritiks get the research needs their arguments have.
+      inputs:
+        specRef: plan_specs/v1/e08-research-workflows/t08-counterplan-and-kritik-needs.yaml
+        goalRef: v1-e08-t08-counterplan-and-kritik-needs
+      dependsOn:
+      - t04
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e08-t08-counterplan-and-kritik-needs reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e08-t08-counterplan-and-kritik-needs
+    - id: t09
+      kind: Task
+      name: 'An installed build carries the configuration `search` reads: the argument taxonomy, the ranking table and the feed lists'
+      description: >-
+        An installed build carries the configuration `search` reads: the argument taxonomy,
+        the ranking table and the feed lists.
+      inputs:
+        specRef: plan_specs/v1/e08-research-workflows/t09-installed-build-carries-search-configuration.yaml
+        goalRef: v1-e08-t09-installed-build-carries-search-configuration
+      dependsOn:
+      - ext-v1-e06-t06-cut-command
+      - t04
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e08-t09-installed-build-carries-search-configuration reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e08-t09-installed-build-carries-search-configuration
+    - id: t10
+      kind: Task
+      name: 'One search asks each provider once, however many queries the expansion gives'
+      description: >-
+        One search asks each provider once, however many queries the expansion gives.
+      inputs:
+        specRef: plan_specs/v1/e08-research-workflows/t10-search-asks-each-provider-once.yaml
+        goalRef: v1-e08-t10-search-asks-each-provider-once
+      dependsOn:
+      - t05
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e08-t10-search-asks-each-provider-once reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e08-t10-search-asks-each-provider-once
+    - id: t11
+      kind: Task
+      name: 'The search.expand prompt names the argument family''s needs, not the DA family''s'
+      description: >-
+        The search.expand prompt names the argument family's needs, not the DA family's.
+      inputs:
+        specRef: plan_specs/v1/e08-research-workflows/t11-expand-prompt-sends-the-familys-needs.yaml
+        goalRef: v1-e08-t11-expand-prompt-sends-the-familys-needs
+      dependsOn:
+      - t08
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e08-t11-expand-prompt-sends-the-familys-needs reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e08-t11-expand-prompt-sends-the-familys-needs
+    - id: ext-v1-e07-t03-crossref-adapter
+      kind: External
+      name: 'Prerequisite from E07: Crossref adapter'
+      description: >-
+        Cross-epic prerequisite owned by v1-e07-discovery-adapters (release v1.4).
+      inputs:
+        goalRef: v1-e07-t03-crossref-adapter
+        specRef: plan_specs/v1/e07-discovery-adapters/t03-crossref-adapter.yaml
+    - id: t12
+      kind: Task
+      name: '`search --json` says whether a result''s date is a day, a month or a year'
+      description: >-
+        `search --json` says whether a result's date is a day, a month or a year.
+      inputs:
+        specRef: plan_specs/v1/e08-research-workflows/t12-search-json-names-a-dates-precision.yaml
+        goalRef: v1-e08-t12-search-json-names-a-dates-precision
+      dependsOn:
+      - ext-v1-e07-t03-crossref-adapter
+      - t04
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e08-t12-search-json-names-a-dates-precision reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e08-t12-search-json-names-a-dates-precision
+    - id: ext-v1-e07-t07-government-adapters
+      kind: External
+      name: 'Prerequisite from E07: Government and policy source adapters'
+      description: >-
+        Cross-epic prerequisite owned by v1-e07-discovery-adapters (release v1.4).
+      inputs:
+        goalRef: v1-e07-t07-government-adapters
+        specRef: plan_specs/v1/e07-discovery-adapters/t07-government-adapters.yaml
+    - id: t13
+      kind: Task
+      name: 'An expansion on a topic only a feed file names falls back cleanly, and a pair''s templates are capped'
+      description: >-
+        An expansion on a topic only a feed file names falls back cleanly, and a pair's
+        templates are capped.
+      inputs:
+        specRef: plan_specs/v1/e08-research-workflows/t13-topic-expansion-fallback-and-templates-per-pair.yaml
+        goalRef: v1-e08-t13-topic-expansion-fallback-and-templates-per-pair
+      dependsOn:
+      - ext-v1-e07-t07-government-adapters
+      - t04
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e08-t13-topic-expansion-fallback-and-templates-per-pair reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e08-t13-topic-expansion-fallback-and-templates-per-pair
 status:
   phase: Pending

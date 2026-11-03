@@ -807,3 +807,22 @@ install of a build that carries this task, comes only after them.
 * **The runbook's `2026.10.10-docx-2` references:** corrected as history in the PM's next
   close-out.
 * **`v1-e31-t11`:** is told about the changed evidence text.
+
+### The re-parse, recorded (PM, 2026-10-16)
+
+The operator ran steps 1 to 8 on 2026-10-16, combined with `v1-e31-t11`'s. The figures are in
+[The re-parse, 2026-10-16](../data/caselist-parse-report.md#the-re-parse-2026-10-16). ac4 is met,
+and the Goal is `Succeeded`.
+
+* **Dev:** 12,701 sources, 1,575 more than on 2026-10-12, from the weekly run of 2026-10-14. Every
+  run exited 0, with the same 7 failures as before. 233,643 cards. Over the sources your read-only
+  run covered, the stored completeness, tag, cite and rule counts equal your "after" tables
+  exactly. The second run parsed and uploaded nothing.
+* **Step 6, five files by eye:** 73 of 75 answers right. Two cards in one file have no tag where
+  the document may hold one, and four cards in two files have no short cite under one cite shape.
+  No cite was read as a sentence, and no evidence text began with a cite. Both shapes go to
+  `v1-e31-t19`.
+* **Prod:** published from the dev data directory, nothing parsed or failed, uploads equal to
+  dev's.
+* **Step 8:** the agent was reinstalled on `v1.1.0-dev.7` the same day, and its dry run found
+  nothing to parse.

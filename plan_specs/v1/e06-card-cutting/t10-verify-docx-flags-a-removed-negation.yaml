@@ -1,0 +1,76 @@
+# TASK v1-e06-t10-verify-docx-flags-a-removed-negation - `verify` warns when a deletion in a .docx body removes a negation
+# Epic: E06 Card Cutting, Citation & Export | Release: v1.3 (URL → verified card) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e06-t10-verify-docx-flags-a-removed-negation
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.3
+    debate/epic: v1-e06-card-cutting
+  annotations:
+    debate/title: "`verify` warns when a deletion in a .docx body removes a negation"
+spec:
+  # Filed by the PM, 2026-11-02, from v1-e06-t07's follow-up 1 (the PM's review, 2026-11-02).
+  description: >-
+    v1-e06-t07's body check accepts the deletion of whole words, but E03's DeleteRange reports a
+    NegationFlag when a cut removes a negating word (not, never and the others the edit policy
+    lists), and the body check does not. The flag reads the snapshot's text, and the verifier
+    does not hand the loaded snapshot on. Give the body check that text, or the policy's own
+    negation test over the deleted tokens, and report a `NEGATION_REMOVED` warning, with the
+    evidence range, on a card that stays VERIFIED, in the table and in `--json`. Use the edit
+    policy's own word list, not a second copy. No evidence text in the output.
+  priority: 3
+  constraints:
+    packages: [debate_core.evidence, debate_core.application, debate_cli, packages/debate_core/tests, packages/debate_cli/tests]
+    forbidden:
+      - A card made UNVERIFIED by the warning alone
+      - A second list of negating words beside the edit policy's
+      - Evidence text in --json output
+      - Network access in a test
+  context:
+    - kind: TaskRef
+      name: v1-e06-t07-verify-docx
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        A deletion in a .docx body that removes a negating word gives NEGATION_REMOVED as a
+        warning with its evidence range, the card stays VERIFIED, and a deletion that
+        removes none gives no warning, by tests shown failing first.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e06-t10-verify-docx-flags-a-removed-negation-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.3
+    debate/epic: v1-e06-card-cutting
+spec:
+  description: >-
+    `verify` warns when a deletion in a .docx body removes a negation.
+  goalRef:
+    name: v1-e06-t10-verify-docx-flags-a-removed-negation
+  graph:
+    nodes:
+      - id: verify-docx-flags-a-removed-negation
+        kind: Task
+        name: Negation warning
+        description: >-
+          `verify` warns when a deletion in a .docx body removes a negation.
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Negation warning tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/evidence/test_docx_verify.py, -k, negation]
+status:
+  phase: Pending

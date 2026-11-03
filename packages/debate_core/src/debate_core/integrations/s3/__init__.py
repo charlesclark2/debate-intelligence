@@ -19,6 +19,11 @@ Three adapters, matching the shapes evidence comes in:
   :class:`~debate_core.application.ports.evidence_versions.EvidenceVersionStore`: every version of an
   object, and deleting them. Takedowns only (`v1-e30-t07`).
 
+And :class:`~debate_core.integrations.s3.search_index_source.S3SearchIndexSource` —
+:class:`~debate_core.application.ports.search_index_source.SearchIndexSource`, the student search
+pilot's published index read by its function: the pointer by conditional GET, the manifest, and the
+object streamed (`v1-e39-t06`).
+
 And one that is not a store: :class:`~debate_core.integrations.s3.caller_identity.StsCallerIdentity`
 — :class:`~debate_core.application.ports.caller_identity.CallerIdentity`, which role a profile is
 signed in as, asked of STS before a takedown does anything (`v1-e29-t08`).
@@ -57,7 +62,7 @@ if importlib.util.find_spec("boto3") is None:  # pragma: no cover - depends on h
         "(or `pip install 'debate-core[aws]'`)."
     )
 
-from debate_core.integrations.s3.caller_identity import StsCallerIdentity
+from debate_core.integrations.s3.caller_identity import IDENTITY_TIME_LIMIT_SECONDS, StsCallerIdentity
 from debate_core.integrations.s3.client import (
     DEFAULT_MULTIPART_PART_SIZE_BYTES,
     DEFAULT_MULTIPART_THRESHOLD_BYTES,
@@ -73,6 +78,7 @@ from debate_core.integrations.s3.errors import (
     translate_s3_error,
 )
 from debate_core.integrations.s3.object_store import S3EvidenceObjectStore
+from debate_core.integrations.s3.search_index_source import S3SearchIndexSource
 from debate_core.integrations.s3.snapshot_store import (
     BLOB_KEY_SEGMENT,
     SHA256_METADATA_NAME,
@@ -85,11 +91,13 @@ __all__ = [
     "DEFAULT_MULTIPART_PART_SIZE_BYTES",
     "DEFAULT_MULTIPART_THRESHOLD_BYTES",
     "GRANTS_ARE_LISTED_IN",
+    "IDENTITY_TIME_LIMIT_SECONDS",
     "MINIMUM_PART_SIZE_BYTES",
     "SHA256_METADATA_NAME",
     "S3Call",
     "S3EvidenceObjectStore",
     "S3EvidenceVersionStore",
+    "S3SearchIndexSource",
     "S3SnapshotStore",
     "StsCallerIdentity",
     "build_s3_client",

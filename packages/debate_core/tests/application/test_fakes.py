@@ -17,7 +17,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any, cast
 
 import pytest
-from pydantic import BaseModel
+from pydantic import BaseModel, JsonValue
 
 from debate_core.application.errors import (
     AlreadyExists,
@@ -27,11 +27,6 @@ from debate_core.application.errors import (
     NotFound,
     ProviderUnavailable,
     RevisionMismatch,
-)
-from debate_core.application.ports import (
-    CandidateResult,
-    ModelTaskClass,
-    ProviderQuery,
 )
 from debate_core.domain import (
     ULID_PATTERN,
@@ -46,20 +41,20 @@ from debate_core.domain import (
     SourceSnapshot,
     new_id,
 )
-from debate_core.testing import (
-    FAKE_EPOCH,
-    FakeArticleFetcher,
-    FakeContentExtractor,
-    FakeModelRouter,
-    FakeSearchProvider,
-    FixedClock,
+from debate_core.domain.discovery import CandidateResult, ProviderQuery
+from debate_core.domain.model_contracts import ModelParams, ModelPrompt, ModelProvider, TaskClass
+from debate_core.retrieval.extraction import UnsupportedContentType
+from debate_core.retrieval.fetch_types import HttpStatusError
+from debate_core.testing.fakes.all_ports import build_fake_ports
+from debate_core.testing.fakes.clock_and_ids import FAKE_EPOCH, FixedClock, SequentialIdGenerator
+from debate_core.testing.fakes.model_router import ScriptedModelRouter
+from debate_core.testing.fakes.persistence import (
     InMemoryArticleRepository,
     InMemoryCardRepository,
     InMemorySearchRepository,
     InMemorySnapshotStore,
-    SequentialIdGenerator,
-    build_fake_ports,
 )
+from debate_core.testing.fakes.providers import FakeArticleFetcher, FakeContentExtractor, FakeSearchProvider
 
 
 def run[ResultT](coroutine: Coroutine[Any, Any, ResultT]) -> ResultT:
@@ -476,13 +471,14 @@ def test_searches_are_fetched_by_id_and_listed_newest_first_per_owner() -> None:
 # --------------------------------------------------------------------------------------------
 
 
-def candidate(title: str) -> CandidateResult:
-    return CandidateResult(provider="fake-provider", title=title, url=f"https://example.org/{title}")
+def candidate(title: str, provider: str = "fake-provider") -> CandidateResult:
+    return CandidateResult(provider=provider, title=title, url=f"https://example.org/{title}")
 
 
 def test_the_fake_provider_answers_from_its_script_and_records_the_query() -> None:
     provider = FakeSearchProvider(
-        "openalex-fake", results_by_query={"methane": [candidate("a"), candidate("b")]}
+        "openalex-fake",
+        results_by_query={"methane": [candidate("a", "openalex-fake"), candidate("b", "openalex-fake")]},
     )
     response = run(provider.search(ProviderQuery(query="methane")))
     assert provider.name == "openalex-fake"
@@ -525,9 +521,13 @@ def test_the_fetcher_serves_what_was_registered_and_404s_the_rest() -> None:
     assert found.byte_size == len(b"<html>body</html>")
     assert found.fetched_at == FAKE_EPOCH
 
+    # As the real fetcher answers a 404 (PM amendment 2026-10-21): the classifier decides NOT_FOUND.
     missing = run(fetcher.fetch("https://example.org/gone"))
     assert missing.status_code == 404
-    assert missing.access_status is AccessStatus.NOT_FOUND
+    assert missing.access_status is AccessStatus.UNKNOWN
+    assert isinstance(missing.error, HttpStatusError)
+    assert missing.error.status_code == 404
+    assert missing.error.message == "example.org answered HTTP 404"
     assert fetcher.requested_urls == ["https://example.org/a", "https://example.org/gone"]
 
 
@@ -555,12 +555,20 @@ def test_the_extractor_splits_paragraphs_and_refuses_what_it_cannot_read() -> No
     assert extracted.metadata_hints.canonical_url == "https://example.org/a"
 
     pdf = fetcher.add("https://example.org/a.pdf", b"%PDF-1.7", content_type="application/pdf")
-    with pytest.raises(ValueError, match="does not handle application/pdf"):
+    with pytest.raises(UnsupportedContentType, match="declared 'application/pdf'"):
         FakeContentExtractor().extract(pdf)
 
 
+def test_a_registered_error_status_carries_the_error_the_real_fetcher_attaches() -> None:
+    fetcher = FakeArticleFetcher()
+    refused = fetcher.add("https://example.org/members", b"<html>Subscribe</html>", status_code=403)
+    assert isinstance(refused.error, HttpStatusError)
+    assert refused.error.status_code == 403
+    assert refused.body == b"<html>Subscribe</html>"
+
+
 # --------------------------------------------------------------------------------------------
-# FakeModelRouter
+# ScriptedModelRouter
 # --------------------------------------------------------------------------------------------
 
 
@@ -576,89 +584,117 @@ class SomethingElse(BaseModel):
     note: str
 
 
-def test_the_router_returns_a_validated_instance_and_call_metadata() -> None:
-    router = FakeModelRouter([PassageChoice(paragraph_id=2, start_offset=0, end_offset=40)])
-    invocation = run(
-        router.invoke(
-            task_class=ModelTaskClass.COMPLEX_REASONING,
-            prompt_id="select-passage",
-            prompt_version="1.2.0",
-            output_type=PassageChoice,
-            variables={"tag": "Warming is anthropogenic"},
+def prompt(prompt_id: str = "p", **variables: JsonValue) -> ModelPrompt:
+    return ModelPrompt(prompt_id=prompt_id, prompt_version="1.0.0", variables=variables)
+
+
+def test_the_router_returns_a_validated_instance_with_its_route_and_usage() -> None:
+    router = ScriptedModelRouter([PassageChoice(paragraph_id=2, start_offset=0, end_offset=40)])
+    response = run(
+        router.generate_structured(
+            TaskClass.COMPLEX_REASONING,
+            ModelPrompt(
+                prompt_id="select-passage",
+                prompt_version="1.2.0",
+                variables={"tag": "Warming is anthropogenic"},
+            ),
+            PassageChoice,
         )
     )
-    assert invocation.output.paragraph_id == 2
-    assert invocation.metadata.model_id == "fake-model"
-    assert invocation.metadata.prompt_version == "1.2.0"
-    assert invocation.metadata.task_class is ModelTaskClass.COMPLEX_REASONING
-    assert invocation.metadata.invoked_at == FAKE_EPOCH
-    assert router.calls[0].variables == {"tag": "Warming is anthropogenic"}
+    assert response.output.paragraph_id == 2
+    assert response.route.model_id == "fake-model"
+    assert response.route.provider is ModelProvider.FAKE
+    assert response.route.task_class is TaskClass.COMPLEX_REASONING
+    assert response.prompt_version == "1.2.0"
+    assert response.usage.latency_ms == 1.0
+    assert response.invoked_at == FAKE_EPOCH
+    assert router.calls[0].prompt.variables == {"tag": "Warming is anthropogenic"}
+    assert router.calls[0].output_schema.endswith(".PassageChoice")
+
+
+def test_a_call_override_is_reported_on_the_route() -> None:
+    router = ScriptedModelRouter([PassageChoice(paragraph_id=1, start_offset=0, end_offset=1)])
+    response = run(
+        router.generate_structured(
+            TaskClass.HIGH_VOLUME, prompt(), PassageChoice, ModelParams(temperature=0.3, max_tokens=7)
+        )
+    )
+    assert (response.route.temperature, response.route.max_tokens) == (0.3, 7)
+    assert router.calls[0].params == ModelParams(temperature=0.3, max_tokens=7)
 
 
 def test_a_mapping_is_validated_against_the_requested_schema() -> None:
-    router = FakeModelRouter([{"paragraph_id": 1, "start_offset": 0, "end_offset": 10}])
-    invocation = run(
-        router.invoke(
-            task_class=ModelTaskClass.HIGH_VOLUME,
-            prompt_id="p",
-            prompt_version="1.0.0",
-            output_type=PassageChoice,
-        )
-    )
-    assert invocation.output == PassageChoice(paragraph_id=1, start_offset=0, end_offset=10)
+    router = ScriptedModelRouter([{"paragraph_id": 1, "start_offset": 0, "end_offset": 10}])
+    response = run(router.generate_structured(TaskClass.HIGH_VOLUME, prompt(), PassageChoice))
+    assert response.output == PassageChoice(paragraph_id=1, start_offset=0, end_offset=10)
 
 
 def test_output_that_does_not_fit_the_schema_raises_invalid_model_output() -> None:
-    router = FakeModelRouter([{"paragraph_id": "not a number"}, SomethingElse(note="wrong type")])
+    router = ScriptedModelRouter([{"paragraph_id": "not a number"}, SomethingElse(note="wrong type")])
     for _ in range(2):
         with pytest.raises(InvalidModelOutput) as caught:
-            run(
-                router.invoke(
-                    task_class=ModelTaskClass.HIGH_VOLUME,
-                    prompt_id="select-passage",
-                    prompt_version="1.0.0",
-                    output_type=PassageChoice,
-                )
-            )
+            run(router.generate_structured(TaskClass.HIGH_VOLUME, prompt("select-passage"), PassageChoice))
         assert caught.value.prompt_id == "select-passage"
         assert caught.value.model_id == "fake-model"
 
 
 def test_responses_can_be_enqueued_after_construction() -> None:
-    router = FakeModelRouter()
+    router = ScriptedModelRouter()
     router.enqueue(PassageChoice(paragraph_id=9, start_offset=1, end_offset=2))
-    invocation = run(
-        router.invoke(
-            task_class=ModelTaskClass.DEEP_AUDIT,
-            prompt_id="p",
-            prompt_version="1.0.0",
-            output_type=PassageChoice,
-        )
-    )
-    assert invocation.output.paragraph_id == 9
+    response = run(router.generate_structured(TaskClass.DEEP_AUDIT, prompt(), PassageChoice))
+    assert response.output.paragraph_id == 9
+
+
+def test_a_scoring_class_is_refused_by_generate_structured() -> None:
+    router = ScriptedModelRouter([PassageChoice(paragraph_id=9, start_offset=1, end_offset=2)])
+    with pytest.raises(ValueError, match="use embed or rerank"):
+        run(router.generate_structured(TaskClass.EMBEDDINGS, prompt(), PassageChoice))
 
 
 def test_an_unreachable_model_and_an_empty_script_are_both_provider_failures() -> None:
-    router = FakeModelRouter([ProviderUnavailable("bedrock-fake", "throttled")])
+    router = ScriptedModelRouter([ProviderUnavailable("bedrock-fake", "throttled")])
     with pytest.raises(ProviderUnavailable):
-        run(
-            router.invoke(
-                task_class=ModelTaskClass.HIGH_VOLUME,
-                prompt_id="p",
-                prompt_version="1.0.0",
-                output_type=PassageChoice,
-            )
-        )
+        run(router.generate_structured(TaskClass.HIGH_VOLUME, prompt(), PassageChoice))
     with pytest.raises(ProviderUnavailable, match="no scripted response"):
-        run(
-            router.invoke(
-                task_class=ModelTaskClass.HIGH_VOLUME,
-                prompt_id="p",
-                prompt_version="1.0.0",
-                output_type=PassageChoice,
-            )
-        )
+        run(router.generate_structured(TaskClass.HIGH_VOLUME, prompt(), PassageChoice))
     assert len(router.calls) == 2
+
+
+def test_embed_returns_the_scripted_vectors_in_input_order() -> None:
+    router = ScriptedModelRouter([[[1, 0], [0.5, 0.5]]])
+    response = run(router.embed(["first", "second"]))
+    assert response.vectors == ((1.0, 0.0), (0.5, 0.5))
+    assert response.route.task_class is TaskClass.EMBEDDINGS
+    assert response.dimensions == 2
+
+
+def test_rerank_sorts_the_scripted_scores_and_names_documents_by_position() -> None:
+    router = ScriptedModelRouter([[0.1, 0.9, 0.5]])
+    response = run(router.rerank("query", ["a", "b", "c"]))
+    assert [result.index for result in response.results] == [1, 2, 0]
+    assert response.route.task_class is TaskClass.RERANK
+
+
+def test_a_script_that_does_not_fit_the_call_is_a_test_mistake() -> None:
+    with pytest.raises(TypeError, match="2 vectors for 1 texts"):
+        run(ScriptedModelRouter([[[1.0], [2.0]]]).embed(["one"]))
+    words_for_scores: Any = [["high", "low"]]  # the mistake under test, so not a valid script type
+    with pytest.raises(TypeError, match="rerank scores must be numbers"):
+        run(ScriptedModelRouter(words_for_scores).rerank("q", ["a", "b"]))
+    with pytest.raises(TypeError, match="where a structured output was expected"):
+        run(ScriptedModelRouter([[0.1]]).generate_structured(TaskClass.HIGH_VOLUME, prompt(), PassageChoice))
+
+
+def test_nothing_to_embed_or_rerank_is_a_caller_error() -> None:
+    router = ScriptedModelRouter()
+    with pytest.raises(ValueError, match="at least one text"):
+        run(router.embed([]))
+    with pytest.raises(ValueError, match="no text may be blank"):
+        run(router.embed(["  "]))
+    with pytest.raises(ValueError, match="at least one document"):
+        run(router.rerank("q", []))
+    with pytest.raises(ValueError, match="needs a query"):
+        run(router.rerank(" ", ["a"]))
 
 
 # --------------------------------------------------------------------------------------------
@@ -743,11 +779,4 @@ def test_build_fake_ports_wires_one_fake_per_port_on_a_shared_clock() -> None:
     assert fetched.fetched_at == FAKE_EPOCH
     # The fetcher and the router read the same clock, so their timestamps advance together.
     with pytest.raises(ProviderUnavailable):
-        run(
-            ports.model_router.invoke(
-                task_class=ModelTaskClass.HIGH_VOLUME,
-                prompt_id="p",
-                prompt_version="1.0.0",
-                output_type=PassageChoice,
-            )
-        )
+        run(ports.model_router.generate_structured(TaskClass.HIGH_VOLUME, prompt(), PassageChoice))

@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import type { ReactNode } from 'react'
 
 import { SiteFrame } from '@/components/SiteFrame'
+import { announcementsGuardedContent } from '@/lib/announcements'
 import {
   announcementFields,
   buildNavigation,
@@ -48,9 +49,12 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   // or a name is not checked. loadGuardedContent() is that list, scheduleGuardedContent() adds
   // content/schedule.yaml and every text field in content/tournaments.yaml, and
   // resultsGuardedContent() every result in content/results.yaml, in the words the page prints.
+  // announcementsGuardedContent() is every file in content/announcements/ and the words in
+  // content/news.yaml; loading it refuses, in every environment, an announcement that breaks the
+  // policy, and a [[TBD]] in one fails a prod build here.
   // consentGuardedContent() carries no copy, only any consent reference still written as [[TBD]].
-  // announcementFields() is the facts an announcement promises (none since the October 1 panel
-  // was replaced; v1-e37-t03 adds them). They go through the guard as fields rather than as copy
+  // announcementFields() is the facts an announcement panel built from fields promises (none since
+  // the October 1 panel was replaced; the Markdown announcements have no such fields). They go through the guard as fields rather than as copy
   // because a fact nobody has supplied leaves no trace in the copy. A prod build fails while one
   // is unset.
   enforcePublishingPolicy({
@@ -58,6 +62,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
       ...loadGuardedContent(),
       ...scheduleGuardedContent(),
       ...resultsGuardedContent(),
+      ...announcementsGuardedContent(),
       ...consentGuardedContent(),
     ],
     settings,

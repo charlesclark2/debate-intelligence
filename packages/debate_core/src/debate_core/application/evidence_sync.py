@@ -42,15 +42,58 @@ cannot delete, and removing evidence is an operator procedure with its own crede
 still worth doing: it is how an operator notices that the bucket holds a corpus their laptop does
 not.
 
-## Two things a sync never moves, either way
+## Four things a sync never moves, either way
 
 * **`manifests/_suppression/`** — the suppression list and the removal log. They are append-only
   and merged as a set union by `caselist remove` and `unsuppress`
   (`debate_core.application.caselist.suppression`); a sync that copied one side over the other
-  would truncate whichever had more lines. Planned as `skipped`, whatever is on either side.
+  would truncate whichever had more lines. A key at both ends is planned `skipped`, whatever
+  either side holds, and so is a key only at the source. A key only at the destination is reported
+  `would_delete` and, like every `would_delete`, left alone: it says the destination holds a list
+  or log the source does not.
 * **A blob whose digest is on the removal suppression list.** A takedown deleted it everywhere;
   a sync from a store that still held a copy must not put it back. Planned as `skipped`. The list
   is a required constructor argument, like every other path that can store a source (`v1-e30-t07`).
+* **`parsed/`** — the parsed card store (`v1-e29-t12`). `caselist parse --publish` is its only
+  publisher, and it reads the store from `<data_dir>/parsed/`, which is not a keyspace here. A pull
+  used to copy the bucket's `parsed/` into `<data_dir>/objects/parsed/`, which no reader opens, and
+  a push from a machine that had pulled could put an older per-source file, index, failures file or
+  occurrence table over the one the publisher had sent since. Planned as `skipped`, whatever is on
+  either side: a key only at the destination is skipped too, never `would_delete`, because the
+  bucket's parsed store is not something this machine's `objects/` was meant to hold. A stale
+  `objects/parsed/` copy is reported by :meth:`EvidenceSyncService.stale_parsed_copy`, for the
+  operator to remove, and never deleted here.
+* **`manifests/_run-state/`** — the run-state bundle (`v1-e40-t04`): this machine's manifests and
+  database, which a bucket-mode run saves, the seed uploads and a removal rewrites and purges. Its
+  rules are theirs (saved only when every snapshot it records is confirmed, never with a manifest
+  the publisher withholds), and a sync that copied it would keep none of them. Skipped whatever is
+  on either side, as `parsed/` is, never `would_delete`.
+
+A push also leaves out **a blob that only rows at a path a removal holds name** (`v1-e30-t22`): the
+bytes a build from before `v1-e30-t13` imported at a removed file's path, which `caselist publish`
+does not upload. Planned as `skipped`, from :data:`HeldBackDigests`, which the composition root
+gives the service; a pull, which writes to this machine, is not affected.
+
+And it leaves out **a manifest `caselist publish` withholds** (`v1-e30-t25`): one with a row the
+list stops or at a path a removal holds, whose upload would publish the removed path, school and
+team code again. The push asks the publisher, through :data:`WithheldManifests`, about each key
+under `manifests/` it would otherwise send, `new` or `changed`, and plans it `skipped` with the
+publisher's own message as the reason. The rule stays the publisher's, so it cannot drift from
+what a publish does. A manifest the publisher cannot read, which a publish refuses whole, is
+skipped with that refusal, which names the key and the line number. Asking costs no request: the
+manifest is read from the local listing's entry, once per manifest the push would send, and one
+already in the bucket, identical or journaled, is not asked about. A pull is not affected.
+
+From `v1-e34-t29` until `v1-e29-t12` a sync moved `parsed/` and guarded only its occurrence
+tables, refusing one stamped with a newer fingerprint version than this build's
+(:mod:`debate_core.application.caselist.occurrence_table_guard`). Skipping `parsed/` leaves that
+guard nothing to refuse here; the parse pipeline and the parsed store's publisher still ask it.
+
+Every one of these skips, and the ordinary ones, carries a :class:`SkipKind` beside its reason, set
+by the branch that skipped it (`v1-e29-t11`). :attr:`SyncPlan.skipped_reasons` groups by the kind,
+because the reason is free text and the publisher's names rows by digest, so no two manifests share
+one. The publisher says whether it withholds a manifest or cannot read it, and which requests its
+message names (:class:`ManifestWithholding`), so the grouping never reads the message.
 
 ## How few HeadObject calls this makes
 
@@ -85,9 +128,12 @@ the journal is only allowed to make the digest check free.
 
 A transfer that fails marks that object `failed` and the run continues, because 2,300 objects should
 not be abandoned over one of them; the report carries every failure and the command exits non-zero.
-The two exceptions are :class:`~debate_core.application.errors.StoreCredentialsExpired` and
-:class:`~debate_core.application.errors.StoreAccessDenied`, which end the run immediately: they will
-be true of every remaining object, and 2,300 copies of "your SSO session expired" is not a report.
+The exceptions are :class:`~debate_core.application.errors.StoreCredentialsExpired`,
+:class:`~debate_core.application.errors.StoreAccessDenied` and
+:class:`~debate_core.application.errors.StoreProfileNotConfigured`
+(:data:`~debate_core.application.errors.STORE_ERRORS_TRUE_OF_EVERY_OBJECT`), which end the run
+immediately: they will be true of every remaining object, and 2,300 copies of "your SSO session
+expired" is not a report.
 """
 
 from __future__ import annotations
@@ -95,20 +141,21 @@ from __future__ import annotations
 import json
 import os
 import tempfile
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from enum import StrEnum
 from pathlib import Path
 
+from debate_core.application.caselist.manifest import MANIFEST_DIRECTORY
 from debate_core.application.caselist.suppression import is_suppression_key, load_suppression_state
 from debate_core.application.errors import (
+    STORE_ERRORS_TRUE_OF_EVERY_OBJECT,
     BlobIntegrityError,
     DomainError,
     NotFound,
-    StoreAccessDenied,
-    StoreCredentialsExpired,
     error_code_of,
+    reported_error_message,
 )
 from debate_core.application.ports.evidence_store import (
     EvidenceObjectStore,
@@ -116,7 +163,9 @@ from debate_core.application.ports.evidence_store import (
     ObjectKey,
     validate_object_key,
 )
+from debate_core.application.ports.parsed_store import PARSED_PREFIX
 from debate_core.application.ports.providers import Clock
+from debate_core.application.ports.run_state import RUN_STATE_PREFIX
 from debate_core.application.ports.suppression import SuppressionList, SuppressionState
 from debate_core.domain import Sha256Hex
 
@@ -124,9 +173,15 @@ __all__ = [
     "BLOB_KEY_SEGMENT",
     "EVIDENCE_PREFIXES",
     "JOURNAL_DIRECTORY",
+    "PARSED_STORE_PREFIX",
     "EvidenceSyncService",
+    "HeldBackDigests",
     "JournalEntry",
+    "ManifestWithholding",
     "PlannedObject",
+    "SkipKind",
+    "SkippedReason",
+    "StaleParsedCopy",
     "SyncAction",
     "SyncDirection",
     "SyncJournal",
@@ -135,6 +190,7 @@ __all__ = [
     "SyncReport",
     "TransferOutcome",
     "UnsyncableKeyspace",
+    "WithheldManifests",
 ]
 
 EVIDENCE_PREFIXES: tuple[str, ...] = (
@@ -157,6 +213,21 @@ passing every test against moto, which grants everything. So an unfiltered run l
 turn, and an object whose key is under none of them is reported and not transferred.
 """
 
+type WithheldManifests = Callable[[ObjectInfo, SuppressionState], Awaitable[ManifestWithholding | None]]
+"""Why `caselist publish` withholds a local manifest, or `None` when it does not (`v1-e30-t25`).
+
+:func:`~debate_core.application.caselist.publish_service.withheld_manifest_reason` over this machine's
+store is the one the composition root passes. Given the local listing's entry for the manifest and
+the suppression state the plan read.
+"""
+
+type HeldBackDigests = Callable[[SuppressionState], Awaitable[frozenset[Sha256Hex]]]
+"""The digests a push leaves out because only rows at a held path name them (`v1-e30-t22`).
+
+:func:`~debate_core.application.caselist.evidence_listing.held_back_digests` over this machine's
+store is the one the composition root passes. Given the suppression state the plan read.
+"""
+
 BLOB_KEY_SEGMENT = "sha256/"
 """The segment that marks the content-addressed part of a key, as both stores build it.
 
@@ -170,6 +241,12 @@ JOURNAL_DIRECTORY = Path("sync-journal")
 
 A sibling of `objects/` and `blobs/` rather than a file inside either, so that the record of a sync
 can never be mistaken for something the sync is supposed to move.
+"""
+
+PARSED_STORE_PREFIX = f"{PARSED_PREFIX}/"
+"""The parsed card store's prefix, which a sync plans `skipped` either way (`v1-e29-t12`).
+
+`caselist parse --publish` publishes it from `<data_dir>/parsed/`; see this module's docstring.
 """
 
 
@@ -197,13 +274,75 @@ class SyncAction(StrEnum):
     """Present at the destination with different bytes; will be overwritten. Named objects only."""
 
     SKIPPED = "skipped"
-    """Present at the destination and identical, or outside the documented prefixes."""
+    """Present at the destination and identical, outside the documented prefixes, or one of the
+    things a sync never moves; :class:`SkipKind` says which."""
 
     WOULD_DELETE = "would_delete"
     """At the destination and not at the source. Reported; V1 never deletes."""
 
     MISMATCHED = "mismatched"
     """A content-addressed key whose two sides differ. Never written over; fails the run."""
+
+
+class SkipKind(StrEnum):
+    """Why the planner skipped an object, as one stable word a summary can group by (`v1-e29-t11`).
+
+    :attr:`PlannedObject.reason` is free text, and some reasons carry specifics: the publisher's
+    message names rows by digest and request id. Grouping by that text would give one group per
+    object, so every `skipped` object also carries one of these, and the `skipped_reasons` breakdown
+    of `store sync --json` is grouped by it. The reason text stays the plan's own; this names its kind.
+    """
+
+    IDENTICAL = "identical"
+    """The destination already holds these bytes: the same digest, or a blob's key on both sides."""
+
+    JOURNALED = "journaled"
+    """Present at the destination, and the journal recorded this digest as transferred."""
+
+    HELD_ONLY_BLOB = "held_only_blob"
+    """A push: a blob only manifest rows at a path a removal holds name (`v1-e30-t22`)."""
+
+    WITHHELD_MANIFEST = "withheld_manifest"
+    """A push: a manifest `caselist publish` withholds for its rows (`v1-e30-t25`)."""
+
+    UNREADABLE_MANIFEST = "unreadable_manifest"
+    """A push: a manifest `caselist publish` cannot read, and so refuses whole (`v1-e30-t25`)."""
+
+    SUPPRESSED_SOURCE = "suppressed_source"
+    """A blob whose digest is on the removal suppression list, either way (`v1-e30-t07`)."""
+
+    SUPPRESSION_RECORD = "suppression_record"
+    """Under `manifests/_suppression/`, which only `caselist remove` and `unsuppress` append to."""
+
+    PARSED_STORE = "parsed_store"
+    """Under `parsed/`, either way and on either side, which only `caselist parse --publish` publishes
+    (`v1-e29-t12`)."""
+
+    RUN_STATE = "run_state"
+    """Under `manifests/_run-state/`, either way and on either side: the run-state bundle, which a
+    bucket-mode run, the seed and a removal write, and nothing copies (`v1-e40-t04`)."""
+
+    ANOTHER_KEYSPACE = "another_keyspace"
+    """A key another keyspace's longer prefix owns, so that one plans it and this one moves nothing."""
+
+    UNDOCUMENTED_PREFIX = "undocumented_prefix"
+    """A key under none of :data:`EVIDENCE_PREFIXES`."""
+
+
+PUBLISHER_SKIP_KINDS: frozenset[SkipKind] = frozenset(
+    {SkipKind.WITHHELD_MANIFEST, SkipKind.UNREADABLE_MANIFEST}
+)
+"""The kinds whose reason is the publisher's message, which the breakdown carries word for word."""
+
+KEY_PREFIX_LENGTH = 12
+"""How much of a key the breakdown shows: `manifests/hs`, `raw/caselist`, `files/hsld26`.
+
+Short enough that a key under any of :data:`EVIDENCE_PREFIXES` is cut before anything after its
+caselist or tenant segment, which is where a built file's name would start.
+"""
+
+KEY_PREFIXES_PER_REASON = 3
+"""At most this many distinct key prefixes per kind of skip."""
 
 
 class UnsyncableKeyspace(DomainError):
@@ -289,6 +428,23 @@ class SyncKeyspace:
 
 
 @dataclass(frozen=True, slots=True)
+class ManifestWithholding:
+    """Why `caselist publish` would not upload one local manifest: its answer to a push (`v1-e30-t25`).
+
+    :func:`~debate_core.application.caselist.publish_service.withheld_manifest_reason` builds it.
+    The message is the publisher's own, which a push plans as the skip's reason word for word.
+    """
+
+    message: str
+    """The publisher's words: the rows by digest and the requests holding their paths, or the
+    refusal of a manifest it cannot read, which names the key and the line number."""
+    unreadable: bool = False
+    """True when the publisher cannot read the manifest at all, rather than withholding it for rows."""
+    request_ids: tuple[str, ...] = ()
+    """The removal requests :attr:`message` names, sorted: the removal to run again."""
+
+
+@dataclass(frozen=True, slots=True)
 class PlannedObject:
     """One object and what the planner decided about it."""
 
@@ -302,11 +458,44 @@ class PlannedObject:
     """Short, stable English for why: `absent at the destination`, `journaled at this digest`."""
     sha256: Sha256Hex | None = None
     """The source digest, when the planner had to work it out. `None` when it did not need to."""
+    skip_kind: SkipKind | None = None
+    """What kind of skip this is, for :attr:`SyncAction.SKIPPED` and nothing else."""
+    request_ids: tuple[str, ...] = ()
+    """The removal requests the publisher's reason names, for a manifest it withholds."""
+
+    def __post_init__(self) -> None:
+        if (self.action is SyncAction.SKIPPED) is (self.skip_kind is None):
+            raise ValueError(
+                f"{self.remote_key} is planned {self.action.value} with skip_kind {self.skip_kind}: a "
+                "skip carries the kind of reason it was skipped for, and nothing else carries one"
+            )
 
     @property
     def transfers(self) -> bool:
         """Whether executing the plan moves this object's bytes."""
         return self.action in (SyncAction.NEW, SyncAction.CHANGED)
+
+
+@dataclass(frozen=True, slots=True)
+class SkippedReason:
+    """Every object one plan skipped for one kind of reason, as `store sync --json` reports it."""
+
+    kind: SkipKind
+    count: int
+    key_prefixes: tuple[str, ...]
+    """Up to three distinct 12-character key prefixes, in key order."""
+    messages: tuple[str, ...] = ()
+    """The publisher's message for each object, word for word, for the two publisher kinds only."""
+    request_ids: tuple[str, ...] = ()
+    """The removal requests those messages name, sorted, for the two publisher kinds only."""
+
+    def as_json(self) -> dict[str, int | list[str]]:
+        """The entry under this kind's name in `store sync --json`'s `skipped_reasons`."""
+        entry: dict[str, int | list[str]] = {"count": self.count, "key_prefixes": list(self.key_prefixes)}
+        if self.kind in PUBLISHER_SKIP_KINDS:
+            entry["messages"] = list(self.messages)
+            entry["request_ids"] = list(self.request_ids)
+        return entry
 
 
 @dataclass(frozen=True, slots=True)
@@ -354,6 +543,34 @@ class SyncPlan:
     def byte_counts(self) -> dict[str, int]:
         return {action.value: self.bytes_for(action) for action in SyncAction}
 
+    @property
+    def skipped_reasons(self) -> tuple[SkippedReason, ...]:
+        """One entry per kind of skip this plan has, in :class:`SkipKind`'s order (`v1-e29-t11`).
+
+        Grouped by :attr:`PlannedObject.skip_kind`, never by the reason's text, which for a manifest
+        the publisher withholds is different for every manifest. A kind the plan has no skip of is
+        absent, so a pull simply has no push-only kind.
+        """
+        skipped = self.of(SyncAction.SKIPPED)
+        return tuple(
+            _skipped_reason(kind, [planned for planned in skipped if planned.skip_kind is kind])
+            for kind in SkipKind
+            if any(planned.skip_kind is kind for planned in skipped)
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class StaleParsedCopy:
+    """What an earlier `store sync --pull` copied of the bucket's `parsed/` onto this machine (`v1-e29-t12`).
+
+    `<data_dir>/objects/parsed/`, which no reader opens: the parsed store is `<data_dir>/parsed/`.
+    A dry run reports it for the operator to remove; nothing in this module deletes it, and it is
+    never journaled. A count and the directory, never a file's name.
+    """
+
+    directory: Path
+    files: int
+
 
 @dataclass(frozen=True, slots=True)
 class TransferOutcome:
@@ -366,6 +583,9 @@ class TransferOutcome:
     error_code: str | None = None
     """The failure's class name in upper snake case, or `None`. Never a credential, never content."""
     error_message: str | None = None
+    """Why it failed, for a person. An error this project did not write is named by its class and an
+    `OSError` by its errno too, never by its text, which can quote a path on this machine
+    (:func:`~debate_core.application.errors.reported_error_message`, `v1-e29-t09`)."""
 
     @property
     def key(self) -> ObjectKey:
@@ -579,10 +799,14 @@ class EvidenceSyncService:
         journal: Where verified transfers are recorded and read back from. A dry run is given
             :meth:`SyncJournal.unwritten`, which remembers nothing.
         remote_name: The bucket, for the journal's entries. Never a credential.
+        held_back: The digests a push leaves out because only rows at a held path name them
+            (:data:`HeldBackDigests`, `v1-e30-t22`). Without it, none is left out.
+        withheld_manifests: Why the publisher withholds a manifest a push would send
+            (:data:`WithheldManifests`, `v1-e30-t25`). Without it, none is left out.
         clock: Supplies the journal's timestamps. Optional, and the only clock in this package that
             has a default: a journal timestamp is operational bookkeeping an operator reads, not
             provenance a card depends on. A test that asserts on journal contents injects
-            :class:`~debate_core.testing.fakes.FixedClock`.
+            :class:`~debate_core.testing.fakes.clock_and_ids.FixedClock`.
     """
 
     def __init__(
@@ -593,6 +817,8 @@ class EvidenceSyncService:
         journal: SyncJournal | None = None,
         remote_name: str = "",
         clock: Clock | None = None,
+        held_back: HeldBackDigests | None = None,
+        withheld_manifests: WithheldManifests | None = None,
     ) -> None:
         if not keyspaces:
             raise ValueError("a sync needs at least one keyspace")
@@ -601,6 +827,8 @@ class EvidenceSyncService:
         self._journal = journal if journal is not None else SyncJournal.unwritten(remote=remote_name)
         self._remote_name = remote_name
         self._clock = clock
+        self._held_back = held_back
+        self._withheld_manifests = withheld_manifests
 
     @property
     def keyspaces(self) -> tuple[SyncKeyspace, ...]:
@@ -628,8 +856,15 @@ class EvidenceSyncService:
         planned: list[PlannedObject] = []
         heads = 0
         suppression = await load_suppression_state(self._suppression)
+        held_back = (
+            await self._held_back(suppression)
+            if self._held_back is not None and direction is SyncDirection.PUSH
+            else frozenset[Sha256Hex]()
+        )
         for keyspace in self._keyspaces:
-            objects, keyspace_heads = await self._plan_keyspace(keyspace, prefix, direction, suppression)
+            objects, keyspace_heads = await self._plan_keyspace(
+                keyspace, prefix, direction, suppression, held_back
+            )
             planned.extend(objects)
             heads += keyspace_heads
         planned.sort(key=lambda entry: (entry.keyspace, entry.remote_key))
@@ -641,7 +876,12 @@ class EvidenceSyncService:
         )
 
     async def _plan_keyspace(
-        self, keyspace: SyncKeyspace, prefix: str, direction: SyncDirection, suppression: SuppressionState
+        self,
+        keyspace: SyncKeyspace,
+        prefix: str,
+        direction: SyncDirection,
+        suppression: SuppressionState,
+        held_back: frozenset[Sha256Hex],
     ) -> tuple[list[PlannedObject], int]:
         local_filter = _local_filter_for(keyspace, prefix)
         if local_filter is None:
@@ -663,12 +903,14 @@ class EvidenceSyncService:
         heads = 0
         for key in sorted(source):
             entry, cost = await self._classify(
-                keyspace, side, key, source[key], destination.get(key), suppression
+                keyspace, side, key, source[key], destination.get(key), suppression, held_back
             )
+            if direction is SyncDirection.PUSH and entry.transfers:
+                entry = await self._unless_withheld(keyspace, entry, source[key], suppression)
             planned.append(entry)
             heads += cost
         planned.extend(
-            _planned(keyspace, key, SyncAction.WOULD_DELETE, destination[key].size, "absent at the source")
+            _only_at_the_destination(keyspace, key, destination[key].size)
             for key in sorted(set(destination) - set(source))
         )
         return planned, heads
@@ -681,6 +923,7 @@ class EvidenceSyncService:
         source: ObjectInfo,
         destination: ObjectInfo | None,
         suppression: SuppressionState,
+        held_back: frozenset[Sha256Hex],
     ) -> tuple[PlannedObject, int]:
         """Decide one object's action, spending as few `HeadObject` calls as the answer allows."""
         remote_key = keyspace.remote_key(key)
@@ -692,9 +935,14 @@ class EvidenceSyncService:
                     SyncAction.SKIPPED,
                     source.size,
                     "the suppression list and removal log are appended to by caselist remove only",
+                    skip_kind=SkipKind.SUPPRESSION_RECORD,
                 ),
                 0,
             )
+        if _is_parsed_store_key(remote_key):
+            return _parsed_store_skip(keyspace, key, source.size), 0
+        if _is_run_state_key(remote_key):
+            return _run_state_skip(keyspace, key, source.size), 0
         if keyspace.content_addressed:
             digest = keyspace.digest_of_key(key)
             if digest is not None and suppression.suppresses_source(digest):
@@ -706,6 +954,20 @@ class EvidenceSyncService:
                         source.size,
                         "on the removal suppression list",
                         digest,
+                        skip_kind=SkipKind.SUPPRESSED_SOURCE,
+                    ),
+                    0,
+                )
+            if digest is not None and digest in held_back:
+                return (
+                    _planned(
+                        keyspace,
+                        key,
+                        SyncAction.SKIPPED,
+                        source.size,
+                        "named only by manifest rows at a path a removal holds",
+                        digest,
+                        skip_kind=SkipKind.HELD_ONLY_BLOB,
                     ),
                     0,
                 )
@@ -721,6 +983,7 @@ class EvidenceSyncService:
                     SyncAction.SKIPPED,
                     source.size,
                     f"in the {owner.name} keyspace, not this one",
+                    skip_kind=SkipKind.ANOTHER_KEYSPACE,
                 ),
                 0,
             )
@@ -732,6 +995,7 @@ class EvidenceSyncService:
                     SyncAction.SKIPPED,
                     source.size,
                     "not under a documented evidence prefix",
+                    skip_kind=SkipKind.UNDOCUMENTED_PREFIX,
                 ),
                 0,
             )
@@ -767,6 +1031,7 @@ class EvidenceSyncService:
                     source.size,
                     "already stored under this digest",
                     keyspace.digest_of_key(key),
+                    skip_kind=SkipKind.IDENTICAL,
                 ),
                 0,
             )
@@ -781,7 +1046,13 @@ class EvidenceSyncService:
         if source_digest is not None and journaled == source_digest:
             return (
                 _planned(
-                    keyspace, key, SyncAction.SKIPPED, source.size, "journaled at this digest", source_digest
+                    keyspace,
+                    key,
+                    SyncAction.SKIPPED,
+                    source.size,
+                    "journaled at this digest",
+                    source_digest,
+                    skip_kind=SkipKind.JOURNALED,
                 ),
                 0,
             )
@@ -790,11 +1061,47 @@ class EvidenceSyncService:
         heads = 1 if side.destination is keyspace.remote else 0
         if source_digest is not None and source_digest == destination_digest:
             return (
-                _planned(keyspace, key, SyncAction.SKIPPED, source.size, "identical", source_digest),
+                _planned(
+                    keyspace,
+                    key,
+                    SyncAction.SKIPPED,
+                    source.size,
+                    "identical",
+                    source_digest,
+                    skip_kind=SkipKind.IDENTICAL,
+                ),
                 heads,
             )
         reason = "no digest recorded at the destination" if destination_digest is None else "different digest"
         return _planned(keyspace, key, SyncAction.CHANGED, source.size, reason, source_digest), heads
+
+    async def _unless_withheld(
+        self, keyspace: SyncKeyspace, entry: PlannedObject, source: ObjectInfo, suppression: SuppressionState
+    ) -> PlannedObject:
+        """`entry`, or `skipped` with the publisher's reason when it is a manifest a publish withholds.
+
+        Asked only of a named object under `manifests/` that the push would send; `_suppression/` was
+        planned `skipped` before this is reached.
+        """
+        if (
+            self._withheld_manifests is None
+            or keyspace.content_addressed
+            or not entry.remote_key.startswith(f"{MANIFEST_DIRECTORY}/")
+        ):
+            return entry
+        withholding = await self._withheld_manifests(source, suppression)
+        if withholding is None:
+            return entry
+        return _planned(
+            keyspace,
+            entry.local_key,
+            SyncAction.SKIPPED,
+            entry.size,
+            withholding.message,
+            entry.sha256,
+            skip_kind=SkipKind.UNREADABLE_MANIFEST if withholding.unreadable else SkipKind.WITHHELD_MANIFEST,
+            request_ids=withholding.request_ids,
+        )
 
     async def _list_remote(self, keyspace: SyncKeyspace, local_filter: str) -> tuple[ObjectInfo, ...]:
         """List the remote side, never asking for the bucket root.
@@ -850,7 +1157,7 @@ class EvidenceSyncService:
     ) -> TransferOutcome:
         try:
             digest = await self._move(keyspace, planned, direction)
-        except (StoreCredentialsExpired, StoreAccessDenied):
+        except STORE_ERRORS_TRUE_OF_EVERY_OBJECT:
             # True of every remaining object. Ending here is the difference between one line an
             # operator can act on and 2,300 copies of it.
             raise
@@ -859,7 +1166,7 @@ class EvidenceSyncService:
                 planned=planned,
                 transferred=False,
                 error_code=error_code_of(failure),
-                error_message=str(failure),
+                error_message=reported_error_message(failure),
             )
         self._journal.record(
             JournalEntry(
@@ -935,6 +1242,28 @@ class EvidenceSyncService:
     def _now(self) -> str:
         moment = self._clock.now() if self._clock is not None else datetime.now(UTC)
         return moment.isoformat()
+
+    # --------------------------------------------------------------------------------------
+    # The stale parsed copy an earlier pull left
+    # --------------------------------------------------------------------------------------
+
+    async def stale_parsed_copy(self) -> StaleParsedCopy | None:
+        """The `parsed/` copy a pull from before `v1-e29-t12` left in this machine's store, or `None`.
+
+        Read from the local side of each named-object keyspace that can name its files, and never
+        acted on: the operator removes it with the command a dry run prints. `None` when no such
+        keyspace holds a file under `parsed/`.
+        """
+        for keyspace in self._keyspaces:
+            local_filter = _local_filter_for(keyspace, PARSED_STORE_PREFIX)
+            if keyspace.content_addressed or keyspace.local_path_for is None or local_filter is None:
+                continue
+            held = await keyspace.local.list_objects(local_filter)
+            if held:
+                return StaleParsedCopy(
+                    directory=keyspace.local_path_for(local_filter.rstrip("/")), files=len(held)
+                )
+        return None
 
     # --------------------------------------------------------------------------------------
     # The two read-only commands
@@ -1021,6 +1350,9 @@ def _planned(
     size: int,
     reason: str,
     sha256: Sha256Hex | None = None,
+    *,
+    skip_kind: SkipKind | None = None,
+    request_ids: tuple[str, ...] = (),
 ) -> PlannedObject:
     return PlannedObject(
         keyspace=keyspace.name,
@@ -1030,6 +1362,63 @@ def _planned(
         size=size,
         reason=reason,
         sha256=sha256,
+        skip_kind=skip_kind,
+        request_ids=request_ids,
+    )
+
+
+def _parsed_store_skip(keyspace: SyncKeyspace, local_key: ObjectKey, size: int) -> PlannedObject:
+    return _planned(
+        keyspace,
+        local_key,
+        SyncAction.SKIPPED,
+        size,
+        "the parsed store is published by caselist parse --publish only",
+        skip_kind=SkipKind.PARSED_STORE,
+    )
+
+
+def _run_state_skip(keyspace: SyncKeyspace, local_key: ObjectKey, size: int) -> PlannedObject:
+    return _planned(
+        keyspace,
+        local_key,
+        SyncAction.SKIPPED,
+        size,
+        "the run-state bundle is written by a bucket-mode run, the seed and a removal only",
+        skip_kind=SkipKind.RUN_STATE,
+    )
+
+
+def _only_at_the_destination(keyspace: SyncKeyspace, local_key: ObjectKey, size: int) -> PlannedObject:
+    """`would_delete`, except under `parsed/` and `manifests/_run-state/`, skipped on either side."""
+    if _is_parsed_store_key(keyspace.remote_key(local_key)):
+        return _parsed_store_skip(keyspace, local_key, size)
+    if _is_run_state_key(keyspace.remote_key(local_key)):
+        return _run_state_skip(keyspace, local_key, size)
+    return _planned(keyspace, local_key, SyncAction.WOULD_DELETE, size, "absent at the source")
+
+
+def _skipped_reason(kind: SkipKind, skipped: Sequence[PlannedObject]) -> SkippedReason:
+    """One kind's entry in the breakdown, from the plan's skips of that kind in key order.
+
+    A key under no documented prefix gives no prefix: it is whatever someone put in the local tree,
+    and its first 12 characters can be a school's name. The publisher's messages are the plans'
+    reasons as they are, and only the two publisher kinds carry them.
+    """
+    prefixes: list[str] = []
+    for planned in skipped:
+        prefix = planned.remote_key[:KEY_PREFIX_LENGTH]
+        if _is_documented_prefix(planned.remote_key) and prefix not in prefixes:
+            prefixes.append(prefix)
+    publisher = kind in PUBLISHER_SKIP_KINDS
+    return SkippedReason(
+        kind=kind,
+        count=len(skipped),
+        key_prefixes=tuple(prefixes[:KEY_PREFIXES_PER_REASON]),
+        messages=tuple(planned.reason for planned in skipped) if publisher else (),
+        request_ids=tuple(sorted({request for planned in skipped for request in planned.request_ids}))
+        if publisher
+        else (),
     )
 
 
@@ -1072,6 +1461,14 @@ def _local_filter_for(keyspace: SyncKeyspace, prefix: str) -> str | None:
 
 def _is_documented_prefix(remote_key: ObjectKey) -> bool:
     return any(remote_key.startswith(documented) for documented in EVIDENCE_PREFIXES)
+
+
+def _is_parsed_store_key(remote_key: ObjectKey) -> bool:
+    return remote_key.startswith(PARSED_STORE_PREFIX)
+
+
+def _is_run_state_key(remote_key: ObjectKey) -> bool:
+    return remote_key.startswith(RUN_STATE_PREFIX)
 
 
 def _stated_digest(landed: ObjectInfo, key: ObjectKey) -> Sha256Hex:

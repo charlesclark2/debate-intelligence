@@ -12,13 +12,17 @@ the checkout, pins the console script by its full path, and refuses every path t
 use under a folder macOS protects or inside a working tree (v1-e34-t10). Those are tested here
 over the rendered plist and over the files an install writes.
 
-`plutil` is macOS's, and the agent is macOS's, so the lint and the launchd check are skipped
-elsewhere; everything that is not macOS-specific runs everywhere.
+`plutil` and `launchctl` are macOS's. Every run of the installer here finds two stand-ins first on
+its PATH, on every platform: a fake `launchctl` that keeps its state in a file, and a `plutil` over
+`plistlib` that answers the verbs the installer uses as `plutil` does (`v1-e34-t24`). So the launchd
+check and the reinstall, which reads the installed plist, run on Linux in CI as they do on a Mac.
+Two tests stay macOS-only, because they are about the real `plutil`: the lint of the rendered
+plist, and the comparison that holds the stand-in to the real one.
 
-Nothing here loads, bootstraps or enables anything, and nothing writes outside `tmp_path`: `HOME`
-is a temporary directory, the console script is a fake that records how it was called, and the
-launchd check runs against a fake `launchctl`. The one thing this suite must never do is put a
-schedule on the machine it runs on.
+Nothing here loads, bootstraps or enables anything, nothing writes outside `tmp_path`, and nothing
+asks the machine's own launchd anything: `HOME` is a temporary directory, the console script is a
+fake that records how it was called, and `launchctl` is the fake. The one thing this suite must
+never do is put a schedule on the machine it runs on.
 
 ## The profile check, and how it is proven off macOS (`v1-e34-t22`)
 
@@ -37,16 +41,38 @@ defined ending the check with `1` and naming its setting. The second needs no st
 network, because boto3 refuses the session before any request. What `doctor` does with a profile
 that *is* defined is `packages/debate_cli/tests/commands/test_doctor_evidence_profiles.py`.
 
-The launchd half is macOS's, and stays skipped elsewhere: the tests marked `on_macos` show the
-check's log, its failing exit code and the label booted out, against the fake `launchctl`.
+The launchd half, the check's log, its failing exit code and the label booted out, was skipped off
+macOS until `v1-e34-t24` gave it the `plutil` stand-in.
+
+## The search index check (`v1-e34-t30`)
+
+The wrapper's `--check` runs `doctor --evidence-profiles --search-index`, which also fails on a store
+the weekly run's search index stage would index that this build has never parsed. Which stores
+depends on the agent's caselists. Since `v1-e40-t06` those are the build's own
+`caselist.sync_caselists`, which the check reads as the agent's pull does. An agent installed before
+then names them as `--caselist` arguments, and `--check` takes no argument, so `--check-launchd` puts
+them in the check's environment as `DEBATE_CASELIST__SYNC_CASELISTS`. What `doctor` does with them is
+`packages/debate_cli/tests/commands/test_doctor_search_index.py`; here it is that the installer hands
+them over, and the real command's verdict through the wrapper. The installer's own check before an
+install stays `doctor --evidence-profiles`: a first install comes before the first parse.
+
+## A reinstall keeps what is installed (`v1-e34-t24`)
+
+Over an installed agent the installer reads the installed plist: its `DEBATE_ENV` is kept unless an
+option says otherwise, a different `--env` is refused unless confirmed, and an
+install that would move the agent's data directory is refused unless confirmed. Before writing
+anything, a dry run included, it runs the build's `doctor --evidence-profiles` as the agent will
+run it, and refuses a profile this machine's AWS config does not define.
 """
 
 from __future__ import annotations
 
+import itertools
 import json
 import os
 import platform
 import plistlib
+import re
 import shutil
 import stat
 import subprocess
@@ -55,6 +81,7 @@ from collections.abc import Callable, Iterator
 from pathlib import Path
 
 import pytest
+from tests.fixtures.model_routing import EXAMPLE_ROUTING_FILE
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 LAUNCHD_DIRECTORY = REPOSITORY_ROOT / "ops" / "launchd"
@@ -65,15 +92,176 @@ LABEL = "com.debate-intelligence.caselist-sync"
 SYSTEM_PATH = "/usr/bin:/bin:/usr/sbin:/sbin"
 
 on_macos = pytest.mark.skipif(
-    platform.system() != "Darwin", reason="launchd and plutil are macOS's; the agent runs there"
+    platform.system() != "Darwin", reason="about macOS's own plutil, which is not on this machine"
 )
+
+
+FAKE_LAUNCHCTL = '''#!@PYTHON@
+"""A stand-in for launchctl: loads plists into a JSON file and runs a job the way launchd would."""
+import json, os, plistlib, subprocess, sys
+from pathlib import Path
+
+state_file = Path(@STATE@)
+state = json.loads(state_file.read_text()) if state_file.exists() else {}
+with open(@CALLS@, "a") as calls:
+    calls.write(" ".join(sys.argv[1:]) + "\\n")
+command, target = sys.argv[1], sys.argv[-1]
+label = target.rsplit("/", 1)[-1]
+
+if command == "print":
+    job = state.get(label)
+    if job is None:
+        print(f"Could not find service \\"{label}\\" in domain", file=sys.stderr)
+        sys.exit(113)
+    exit_code = job["last_exit_code"]
+    print(f"{target} = {{")
+    print(f"\\tstate = not running\\n\\truns = {job['runs']}\\n\\tlast exit code = {exit_code}\\n}}")
+elif command == "bootstrap":
+    plist = plistlib.loads(Path(target).read_bytes())
+    state[plist["Label"]] = {
+        "plist": target, "runs": 0, "last_exit_code": "(never exited)",
+        "program": plist["ProgramArguments"], "environment": plist["EnvironmentVariables"],
+        "cwd": plist["WorkingDirectory"],
+        "stdout": plist["StandardOutPath"], "stderr": plist["StandardErrorPath"],
+    }
+elif command == "kickstart":
+    job = state[label]
+    with open(job["stdout"], "a") as out, open(job["stderr"], "a") as err:
+        ran = subprocess.run(job["program"], env=job["environment"], cwd=job["cwd"], stdout=out, stderr=err)
+    job["runs"] += 1
+    job["last_exit_code"] = ran.returncode
+    if os.environ.get("FAKE_LAUNCHCTL_ALSO_RUNS") in state:
+        state[os.environ["FAKE_LAUNCHCTL_ALSO_RUNS"]]["runs"] += 1
+elif command == "bootout":
+    state.pop(label, None)
+state_file.write_text(json.dumps(state))
+'''
+
+PLUTIL_STAND_IN = '''#!@PYTHON@
+"""A stand-in for macOS's plutil over plistlib: the verbs install.sh uses, answering as plutil does.
+
+`-lint`; `-extract <keypath> raw`, which prints a string as it is, a boolean as true or false, an
+array's length and a dictionary's keys, sorted, one to a line, and with `-expect <type>` refuses a
+value of another type; `-replace` and `-insert` with `-string`, `-bool` or `-array`; and
+`-remove`. A key path is keys and array indices joined by dots.
+On macOS, `test_the_plutil_stand_in_answers_as_plutil_does` holds it to the real one.
+"""
+import plistlib, sys
+from pathlib import Path
+
+with open(@CALLS@, "a") as calls:
+    calls.write(" ".join(sys.argv[1:]) + "\\n")
+verb, *rest = sys.argv[1:]
+named = rest[-1]
+file = Path(named)
+
+
+def refuse(message):
+    print(f"{named}: {message}", file=sys.stderr)
+    sys.exit(1)
+
+
+try:
+    document = plistlib.loads(file.read_bytes())
+except Exception as error:
+    refuse(f"the stand-in could not read it as a plist ({type(error).__name__})")
+if verb == "-lint":
+    print(f"{named}: OK")
+    sys.exit(0)
+
+keypath = rest[0]
+*parents, last = keypath.split(".")
+try:
+    container = document
+    for part in parents:
+        container = container[int(part)] if isinstance(container, list) else container[part]
+    if isinstance(container, list):
+        last = int(last)
+except (KeyError, IndexError, ValueError, TypeError):
+    container = None
+
+if verb == "-extract":
+    if rest[1] != "raw":
+        refuse(f"the stand-in answers -extract in raw only, not {rest[1]}")
+    try:
+        value = container[last]
+    except (KeyError, IndexError, TypeError):
+        refuse(f"Could not extract value, error: No value at that key path or invalid key path: {keypath}")
+    if rest[2] == "-expect":
+        types = [(bool, "bool"), (int, "integer"), (float, "float"), (str, "string"),
+                 (dict, "dictionary"), (list, "array"), (bytes, "data")]
+        actual = next(name for kind, name in types if isinstance(value, kind))
+        if rest[3] != actual:
+            refuse(f"Value at [{keypath}] expected to be {rest[3]} but is {actual}")
+    if isinstance(value, bool):
+        print("true" if value else "false")
+    elif isinstance(value, dict):
+        print("\\n".join(sorted(value)))
+    elif isinstance(value, list):
+        print(len(value))
+    else:
+        print(value)
+    sys.exit(0)
+
+if verb == "-remove":
+    try:
+        del container[last]
+    except (KeyError, IndexError, TypeError):
+        refuse(f"No value to remove at key path {keypath}")
+elif verb in ("-replace", "-insert"):
+    kind = rest[1]
+    value = {"-string": lambda: rest[2], "-bool": lambda: rest[2].lower() in ("true", "yes", "1"),
+             "-array": lambda: []}[kind]()
+    if isinstance(container, list) and verb == "-insert":
+        if last > len(container):
+            refuse(f"Index {last} out of bounds in array at key path {keypath}")
+        container.insert(last, value)
+    elif isinstance(container, list):
+        container[last] = value
+    elif isinstance(container, dict):
+        if verb == "-insert" and last in container:
+            refuse(f"Value already exists at key path {keypath}")
+        container[last] = value
+    else:
+        refuse(f"No value at key path {keypath}")
+else:
+    refuse(f"the stand-in does not know {verb}")
+file.write_bytes(plistlib.dumps(document))
+'''
+
+
+def stand_ins(home: Path) -> Path:
+    """The directory holding the fake `launchctl` and the `plutil` stand-in, beside the temporary
+    HOME, written the first time a test asks for it. Every run of the installer here has it first
+    on its PATH, so no test asks the machine's own launchd anything, even read-only."""
+    directory = home.parent / "stand-ins"
+    if not directory.exists():
+        directory.mkdir()
+        for name, template in (("launchctl", FAKE_LAUNCHCTL), ("plutil", PLUTIL_STAND_IN)):
+            script = directory / name
+            script.write_text(
+                template.replace("@PYTHON@", sys.executable)
+                .replace("@STATE@", repr(str(directory / "launchctl-state.json")))
+                .replace("@CALLS@", repr(str(directory / f"{name}-calls.log"))),
+                encoding="utf-8",
+            )
+            script.chmod(0o755)
+    return directory
+
+
+def plutil_calls(home: Path) -> list[str]:
+    record = stand_ins(home) / "plutil-calls.log"
+    return record.read_text(encoding="utf-8").splitlines() if record.exists() else []
 
 
 def install(
     *arguments: str, home: Path, path_prefix: tuple[Path, ...] = ()
 ) -> subprocess.CompletedProcess[str]:
-    """Run the installer with `HOME` pointed at a temporary directory, never the operator's."""
-    search_path = os.pathsep.join([*(str(entry) for entry in path_prefix), os.environ["PATH"]])
+    """Run the installer with `HOME` pointed at a temporary directory, never the operator's, and
+    the stand-ins for `launchctl` and `plutil` ahead of anything else on its PATH."""
+    search_path = os.pathsep.join(
+        [str(stand_ins(home)), *(str(entry) for entry in path_prefix), os.environ["PATH"]]
+    )
     environment = dict(os.environ, HOME=str(home), PATH=search_path)
     return subprocess.run(
         [str(INSTALL_SCRIPT), *arguments],
@@ -92,41 +280,64 @@ CONFIG_SHOW = json.dumps({
     "status": "ok",
     "data": {
         "environment": "dev",
-        "settings": {"storage.data_dir": "%s", "caselist.api_enabled": True},
+        "settings": {
+            "storage.data_dir": "%s", "caselist.api_enabled": True, "caselist.sync_caselists": "@LIST@"
+        },
         "sources": {"storage.data_dir": "profile:/bundled/config/profiles/dev.toml"},
     },
-})  # fmt: skip
+}).replace('"@LIST@"', "%s")  # fmt: skip
+
+BUILD_CASELISTS = ["testcl26", "othercl26"]
+"""The caselists the fake build's profile names (`caselist.sync_caselists`), unless a test says otherwise."""
 
 
 PROFILE_CHECK = "doctor --evidence-profiles"
-"""What the wrapper's `--check` runs after `--version`, written out as the runbook gives it."""
+"""What the installer runs before it installs, written out as the runbook gives it."""
+
+AGENTS_CHECKS = "doctor --evidence-profiles --search-index"
+"""What the wrapper's `--check` runs after `--version`: the profile check and the search index check."""
 
 
 def fake_console_script(directory: Path, *, data_directory: str | None = None) -> Path:
     """A `debate-research` that records each call beside itself and answers what is asked of it.
 
     `--json config show` reports a data directory the way the real build does: `data_directory`
-    when given, otherwise the profile default `$HOME/.debate-research/$DEBATE_ENV`, so that the
+    when given, otherwise `DEBATE_STORAGE__DATA_DIR` when that is set, as the settings loader
+    reads it, otherwise the profile default `$HOME/.debate-research/$DEBATE_ENV`, so that the
     installer's check of the agent's data directory can be driven from a test.
 
-    `doctor --evidence-profiles` prints one line and exits `0`, or with the number in the file
-    `profile-check-exit` beside the script when a test has written one (:func:`profile_check_exits`).
+    It reports :data:`BUILD_CASELISTS` as `caselist.sync_caselists`, or the JSON list in the file
+    `sync-caselists` beside the script when a test has written one (:func:`build_names_caselists`).
+
+    `doctor --evidence-profiles`, with or without `--search-index`, prints one line and exits `0`,
+    or with the number in the file `profile-check-exit` beside the script when a test has written one
+    (:func:`profile_check_exits`).
+
+    Each call's environment is kept beside it, numbered as the call is (:func:`environment_of_call`).
     """
     directory.mkdir(parents=True, exist_ok=True)
     script = directory / "debate-research"
     record = directory / "calls.log"
     profile_check_exit = directory / "profile-check-exit"
-    reported = data_directory or "${HOME}/.debate-research/${DEBATE_ENV}"
+    caselists = directory / "sync-caselists"
+    reported = data_directory or "${DEBATE_STORAGE__DATA_DIR:-${HOME}/.debate-research/${DEBATE_ENV}}"
     script.write_text(
         "#!/bin/sh\n"
         f"printf '%s\\n' \"$*\" >> '{record}'\n"
+        f"env > '{directory}/environment-of-call-'\"$(wc -l < '{record}' | tr -d ' ')\"\n"
         'case "$*" in\n'
         "    '--json config show')\n"
-        f"        printf '{CONFIG_SHOW}\\n' \"{reported}\" ;;\n"
+        f"        caselists='{json.dumps(BUILD_CASELISTS)}'\n"
+        f"        if [ -f '{caselists}' ]; then caselists=$(cat '{caselists}'); fi\n"
+        f'        printf \'{CONFIG_SHOW}\\n\' "{reported}" "$caselists" ;;\n'
         "    '--version') echo 'debate-research 0.0.0+fake' ;;\n"
-        f"    '{PROFILE_CHECK}')\n"
+        f"    '{PROFILE_CHECK}'|'{AGENTS_CHECKS}')\n"
         "        echo 'stand-in doctor: the evidence profiles were checked'\n"
-        f"        if [ -f '{profile_check_exit}' ]; then exit \"$(cat '{profile_check_exit}')\"; fi ;;\n"
+        f"        if [ -f '{profile_check_exit}' ]; then\n"
+        '            echo "stand-in doctor: debate-${DEBATE_ENV}-evidence'
+        ' (storage.s3.aws_profile): not defined"\n'
+        f"            exit \"$(cat '{profile_check_exit}')\"\n"
+        "        fi ;;\n"
         "esac\n"
         "exit 0\n",
         encoding="utf-8",
@@ -136,13 +347,30 @@ def fake_console_script(directory: Path, *, data_directory: str | None = None) -
 
 
 def profile_check_exits(console_script: Path, exit_code: int) -> None:
-    """Have the fake build's `doctor --evidence-profiles` end with `exit_code` from now on."""
+    """Have the fake build's `doctor --evidence-profiles` end with `exit_code` from now on, with or
+    without `--search-index`."""
     (console_script.parent / "profile-check-exit").write_text(f"{exit_code}\n", encoding="utf-8")
+
+
+def build_names_caselists(console_script: Path, caselists: list[str]) -> None:
+    """Have the fake build report `caselists` as its `caselist.sync_caselists` from now on."""
+    (console_script.parent / "sync-caselists").write_text(json.dumps(caselists), encoding="utf-8")
 
 
 def calls_to(console_script: Path) -> list[str]:
     record = console_script.parent / "calls.log"
     return record.read_text(encoding="utf-8").splitlines() if record.exists() else []
+
+
+def environment_of_call(console_script: Path, call: str) -> dict[str, str]:
+    """The environment the fake build was run with the first time it was asked `call`."""
+    number = calls_to(console_script).index(call) + 1
+    lines = (console_script.parent / f"environment-of-call-{number}").read_text(encoding="utf-8")
+    return dict(line.split("=", 1) for line in lines.splitlines() if "=" in line)
+
+
+def installed_plist_bytes(home: Path) -> bytes:
+    return (home / "Library" / "LaunchAgents" / f"{LABEL}.plist").read_bytes()
 
 
 def rendered_plist(result: subprocess.CompletedProcess[str]) -> dict[str, object]:
@@ -202,8 +430,7 @@ def console_script(tmp_path: Path) -> Path:
 
 def test_a_dry_run_renders_every_placeholder_and_writes_nothing(home: Path, console_script: Path) -> None:
     rendered = install(
-        "--caselist", "testcl26", "--caselist", "othercl26",
-        "--env", "dev", "--aws-profile", "debate-dev-evidence",
+        "--env", "dev",
         "--weekday", "3", "--hour", "6", "--minute", "0",
         "--log-dir", str(home / "Library" / "Logs" / "debate-research"),
         "--debate-research", str(console_script),
@@ -215,10 +442,8 @@ def test_a_dry_run_renders_every_placeholder_and_writes_nothing(home: Path, cons
     assert "@" not in rendered.stdout, "a placeholder was left unfilled"
     assert "<key>StartCalendarInterval</key>" in rendered.stdout
     assert "<key>Weekday</key>\n        <integer>3</integer>" in rendered.stdout
-    assert "<string>--caselist</string>\n        <string>testcl26</string>" in rendered.stdout
-    assert "<string>--caselist</string>\n        <string>othercl26</string>" in rendered.stdout
+    assert "--caselist" not in rendered.stdout, "the caselists are the build's setting, not the plist's"
     assert "<string>dev</string>" in rendered.stdout
-    assert "<string>debate-dev-evidence</string>" in rendered.stdout
     assert list((home / "Library" / "LaunchAgents").iterdir()) == [], "a dry run installed an agent"
     assert not (home / ".local").exists(), "a dry run copied the wrapper"
 
@@ -229,8 +454,6 @@ def test_the_rendered_plist_is_one_launchctl_will_load(
 ) -> None:
     """The criterion the whole schedule rests on: `plutil -lint` is what `launchctl` runs too."""
     rendered = install(
-        "--caselist",
-        "testcl26",
         "--env",
         "dev",
         "--debate-research",
@@ -247,6 +470,70 @@ def test_the_rendered_plist_is_one_launchctl_will_load(
     assert linted.returncode == 0, linted.stdout + linted.stderr
 
 
+@on_macos
+def test_the_plutil_stand_in_answers_as_plutil_does(home: Path, tmp_path: Path, console_script: Path) -> None:
+    """`v1-e34-t24`. The stand-in is what lets the launchd check and the reinstall run on Linux, so
+    it is held to macOS's own `plutil` here: over a plist the installer rendered, every verb and
+    kind of key path the installer uses, and each way they fail, answered alike, to the byte, and
+    leaving the same document."""
+    rendered = install(
+        "--env", "dev",
+        "--debate-research", str(console_script), "--dry-run", home=home,
+    )  # fmt: skip
+    assert rendered.returncode == 0, rendered.stderr
+    steps = [
+        ("-lint",),
+        ("-extract", "Label", "raw", "-o", "-"),
+        ("-extract", "ProgramArguments.0", "raw", "-o", "-"),
+        ("-extract", "ProgramArguments.4", "raw", "-o", "-"),
+        ("-extract", "ProgramArguments.5", "raw", "-o", "-"),
+        ("-extract", "ProgramArguments", "raw", "-o", "-"),
+        ("-extract", "EnvironmentVariables", "raw", "-o", "-"),
+        ("-extract", "EnvironmentVariables.DEBATE_ENV", "raw", "-o", "-"),
+        ("-extract", "EnvironmentVariables.NOT_SET", "raw", "-o", "-"),
+        ("-extract", "StandardOutPath", "raw", "-o", "-"),
+        ("-extract", "RunAtLoad", "raw", "-o", "-"),
+        ("-extract", "StartCalendarInterval.Hour", "raw", "-expect", "integer", "-o", "-"),
+        ("-extract", "StartCalendarInterval.Hour", "raw", "-expect", "string", "-o", "-"),
+        ("-extract", "StartCalendarInterval.Second", "raw", "-expect", "integer", "-o", "-"),
+        ("-extract", "StartCalendarInterval", "raw", "-expect", "integer", "-o", "-"),
+        ("-extract", "StandardOutPath", "raw", "-expect", "string", "-o", "-"),
+        ("-extract", "ProgramArguments.0", "raw", "-expect", "string", "-o", "-"),
+        ("-extract", "ProgramArguments", "raw", "-expect", "string", "-o", "-"),
+        ("-replace", "StartCalendarInterval.Hour", "-string", "7"),
+        ("-extract", "StartCalendarInterval.Hour", "raw", "-expect", "integer", "-o", "-"),
+        ("-replace", "Label", "-string", "renamed"),
+        ("-replace", "EnvironmentVariables.NOT_SET", "-string", '["testcl26"]'),
+        ("-extract", "EnvironmentVariables.NOT_SET", "raw", "-o", "-"),
+        ("-remove", "ProgramArguments.1"),
+        ("-insert", "ProgramArguments.1", "-string", "--check"),
+        ("-insert", "ProgramArguments.9", "-string", "too-far"),
+        ("-insert", "EnvironmentVariables.DEBATE_ENV", "-string", "prod"),
+        ("-replace", "EnvironmentVariables.DEBATE_ENV", "-string", "prod"),
+        ("-remove", "StartCalendarInterval"),
+        ("-remove", "StartCalendarInterval"),
+        ("-replace", "RunAtLoad", "-bool", "true"),
+        ("-extract", "RunAtLoad", "raw", "-o", "-"),
+        ("-lint",),
+    ]
+    answers: dict[str, tuple[list[tuple[object, ...]], object]] = {}
+    for name, program in (("plutil", "/usr/bin/plutil"), ("stand-in", str(stand_ins(home) / "plutil"))):
+        copy = tmp_path / f"answered-by-{name}.plist"
+        copy.write_text(rendered.stdout, encoding="utf-8")
+        said: list[tuple[object, ...]] = []
+        for step in steps:
+            ran = subprocess.run([program, *step, str(copy)], capture_output=True, text=True, check=False)
+            said.append((
+                step, ran.returncode,
+                ran.stdout.replace(str(copy), "<plist>"), ran.stderr.replace(str(copy), "<plist>"),
+            ))  # fmt: skip
+        answers[name] = (said, plistlib.loads(copy.read_bytes()))
+
+    for real, stand_in in zip(answers["plutil"][0], answers["stand-in"][0], strict=True):
+        assert stand_in == real
+    assert answers["stand-in"][1] == answers["plutil"][1]
+
+
 # --- The agent runs nothing from a checkout (v1-e34-t10 ac1) ----------------------------------
 
 
@@ -255,9 +542,7 @@ def test_the_rendered_plist_names_nothing_inside_the_repository(home: Path, cons
     whatever branch was checked out at 06:00 on Wednesday, under ~/Documents where launchd may not
     open it. Every path the plist names must lie outside this repository and every other working
     tree."""
-    plist = rendered_plist(
-        install("--caselist", "testcl26", "--debate-research", str(console_script), "--dry-run", home=home)
-    )
+    plist = rendered_plist(install("--debate-research", str(console_script), "--dry-run", home=home))
 
     named = list(every_path_in(plist))
     inside = [path for path in named if path.is_relative_to(REPOSITORY_ROOT) or working_tree_containing(path)]
@@ -275,11 +560,7 @@ def test_the_rendered_plist_names_nothing_inside_the_repository(home: Path, cons
 def test_the_plist_pins_the_console_script_it_was_given(home: Path, console_script: Path) -> None:
     """ac2. `--debate-research` used to decide only whether to print a warning."""
     environment = environment_of(
-        rendered_plist(
-            install(
-                "--caselist", "testcl26", "--debate-research", str(console_script), "--dry-run", home=home
-            )
-        )
+        rendered_plist(install("--debate-research", str(console_script), "--dry-run", home=home))
     )
 
     assert environment["DEBATE_RESEARCH_BIN"] == str(console_script)
@@ -290,9 +571,7 @@ def test_without_the_option_the_plist_pins_the_one_found_on_the_installers_path(
     home: Path, console_script: Path
 ) -> None:
     environment = environment_of(
-        rendered_plist(
-            install("--caselist", "testcl26", "--dry-run", home=home, path_prefix=(console_script.parent,))
-        )
+        rendered_plist(install("--dry-run", home=home, path_prefix=(console_script.parent,)))
     )
 
     assert environment["DEBATE_RESEARCH_BIN"] == str(console_script)
@@ -308,9 +587,7 @@ def test_a_console_script_reached_through_a_symlink_is_pinned_as_found(
     (bin_directory / "debate-research").symlink_to(console_script)
 
     environment = environment_of(
-        rendered_plist(
-            install("--caselist", "testcl26", "--dry-run", home=home, path_prefix=(bin_directory,))
-        )
+        rendered_plist(install("--dry-run", home=home, path_prefix=(bin_directory,)))
     )
 
     assert environment["DEBATE_RESEARCH_BIN"] == str(bin_directory / "debate-research")
@@ -324,7 +601,7 @@ def test_a_debate_research_earlier_on_path_is_not_the_one_the_wrapper_execs(
     in one of them must not be what the agent runs, even if it is first on the agent's PATH."""
     shadow = fake_console_script(tmp_path / "anaconda3" / "bin")
     installed = install(
-        "--caselist", "testcl26", "--debate-research", str(console_script),
+        "--debate-research", str(console_script),
         home=home, path_prefix=(shadow.parent,),
     )  # fmt: skip
     assert installed.returncode == 0, installed.stderr
@@ -335,7 +612,7 @@ def test_a_debate_research_earlier_on_path_is_not_the_one_the_wrapper_execs(
     ran = subprocess.run(program_of(plist), env=environment, capture_output=True, text=True, check=False)
 
     assert ran.returncode == 0, ran.stderr
-    assert "--json caselist pull --caselist testcl26" in calls_to(console_script)
+    assert "--json caselist pull" in calls_to(console_script)
     assert [call for call in calls_to(shadow) if "caselist" in call] == []
 
 
@@ -345,7 +622,7 @@ def test_the_wrapper_hands_launchd_the_commands_exit_code_unchanged(
 ) -> None:
     """v1-e01-t20. 3 (the bucket did not answer) reaches launchd as 3, distinct from 1 and 70; the
     wrapper reads none of them, so it can never be the thing that turns one into another."""
-    installed = install("--caselist", "testcl26", "--debate-research", str(console_script), home=home)
+    installed = install("--debate-research", str(console_script), home=home)
     assert installed.returncode == 0, installed.stderr
     plist = installed_plist(home)
     script = console_script.read_text(encoding="utf-8")
@@ -356,7 +633,7 @@ def test_the_wrapper_hands_launchd_the_commands_exit_code_unchanged(
     )
 
     assert ran.returncode == exit_code, ran.stderr
-    assert "--json caselist pull --caselist testcl26" in calls_to(console_script)
+    assert "--json caselist pull" in calls_to(console_script)
 
 
 def test_no_exit_code_makes_launchd_run_the_agent_again(home: Path, console_script: Path) -> None:
@@ -364,7 +641,7 @@ def test_no_exit_code_makes_launchd_run_the_agent_again(home: Path, console_scri
     the last exit code and waits for the next calendar slot; a `KeepAlive` (or its
     `SuccessfulExit` and `Crashed` keys) would relaunch on an exit code, and a 3 that means "try
     later" would become a loop against the bucket and the site."""
-    plist = rendered_plist(install("--caselist", "testcl26", "--debate-research", str(console_script),
+    plist = rendered_plist(install("--debate-research", str(console_script),
                                    "--dry-run", home=home))  # fmt: skip
 
     assert "KeepAlive" not in plist
@@ -395,7 +672,7 @@ def test_a_console_script_inside_a_checkout_or_a_venv_is_refused(
         "a symlink into a working tree": ((), (link_directory,), "git working tree"),
     }[where]
 
-    refused = install("--caselist", "testcl26", *arguments, home=home, path_prefix=prefix)
+    refused = install(*arguments, home=home, path_prefix=prefix)
 
     assert refused.returncode == 2
     assert "console script" in refused.stderr and reason in refused.stderr
@@ -410,14 +687,14 @@ def test_an_install_copies_the_wrapper_and_a_reinstall_replaces_the_copy(
 ) -> None:
     """ac3. An updated wrapper reaches the agent by reinstalling, and only by reinstalling."""
     copy = home / ".local" / "share" / "debate-research" / "launchd" / "run-caselist-sync.sh"
-    first = install("--caselist", "testcl26", "--debate-research", str(console_script), home=home)
+    first = install("--debate-research", str(console_script), home=home)
     assert first.returncode == 0, first.stderr
     assert program_of(installed_plist(home))[0] == str(copy)
     assert copy.read_bytes() == WRAPPER_SCRIPT.read_bytes()
 
     copy.write_text("#!/bin/sh\necho 'the wrapper from an older build'\n", encoding="utf-8")
     copy.chmod(0o700)
-    second = install("--caselist", "testcl26", "--debate-research", str(console_script), home=home)
+    second = install("--debate-research", str(console_script), home=home)
 
     assert second.returncode == 0, second.stderr
     assert not copy.is_symlink(), "the agent's wrapper must not lead back into the checkout"
@@ -475,9 +752,7 @@ def test_a_path_under_a_folder_macos_protects_is_refused(
         "console script": console_script,
     }[what]
 
-    refused = install(
-        "--caselist", "testcl26", "--debate-research", str(console_script), *arguments, home=home
-    )
+    refused = install("--debate-research", str(console_script), *arguments, home=home)
 
     assert refused.returncode == 2, refused.stdout
     assert f"the {what} {refused_path}" in refused.stderr
@@ -490,7 +765,7 @@ def test_a_path_under_a_folder_macos_protects_is_refused(
 def test_a_protected_folder_is_refused_whatever_case_it_is_spelt_in(home: Path, console_script: Path) -> None:
     """The Mac's disk is case-insensitive: ~/documents is ~/Documents."""
     refused = install(
-        "--caselist", "testcl26", "--debate-research", str(console_script),
+        "--debate-research", str(console_script),
         "--log-dir", str(home / "documents" / "logs"), home=home,
     )  # fmt: skip
 
@@ -503,8 +778,6 @@ def test_a_protected_folder_reached_through_a_symlink_is_refused(home: Path, con
     (home / "logs").symlink_to(home / "Documents" / "logs")
 
     refused = install(
-        "--caselist",
-        "testcl26",
         "--debate-research",
         str(console_script),
         "--log-dir",
@@ -519,9 +792,7 @@ def test_a_protected_folder_reached_through_a_symlink_is_refused(home: Path, con
 
 def test_the_defaults_are_outside_every_protected_folder(home: Path, console_script: Path) -> None:
     """ac4. The default destination, log directory and data directory need no option to be safe."""
-    plist = rendered_plist(
-        install("--caselist", "testcl26", "--debate-research", str(console_script), "--dry-run", home=home)
-    )
+    plist = rendered_plist(install("--debate-research", str(console_script), "--dry-run", home=home))
     protected = [location(home) for location in PROTECTED_LOCATIONS.values()]
 
     for path in every_path_in(plist):
@@ -529,14 +800,13 @@ def test_the_defaults_are_outside_every_protected_folder(home: Path, console_scr
     assert program_of(plist)[0].startswith(str(home / ".local" / "share" / "debate-research"))
 
 
-def test_the_installer_asks_the_build_for_its_data_directory_as_the_agent_runs_it(
+def test_the_installer_asks_the_build_for_its_data_directory_and_checks_its_profile_as_the_agent_runs_it(
     home: Path, console_script: Path
 ) -> None:
     """The data directory comes from the profile bundled into the installed build, so the build is
-    what is asked, with the agent's environment and nothing of this shell's."""
+    what is asked, with the agent's environment and nothing of this shell's. Then the build's own
+    profile check, `v1-e34-t24`, the same way: what launchd will give the agent, and no more."""
     install(
-        "--caselist",
-        "testcl26",
         "--env",
         "dev",
         "--debate-research",
@@ -545,7 +815,17 @@ def test_the_installer_asks_the_build_for_its_data_directory_as_the_agent_runs_i
         home=home,
     )
 
-    assert calls_to(console_script) == ["--json config show"]
+    assert calls_to(console_script) == ["--json config show", PROFILE_CHECK]
+    for call in calls_to(console_script):
+        environment = environment_of_call(console_script, call)
+        environment.pop("PWD", None)
+        environment.pop("SHLVL", None)
+        environment.pop("_", None)
+        assert environment == {
+            "HOME": str(home),
+            "PATH": f"{console_script.parent}:{SYSTEM_PATH}",
+            "DEBATE_ENV": "dev",
+        }, call
 
 
 def test_a_build_that_cannot_say_where_its_data_is_is_not_installed(home: Path, tmp_path: Path) -> None:
@@ -554,7 +834,7 @@ def test_a_build_that_cannot_say_where_its_data_is_is_not_installed(home: Path, 
     silent.write_text("#!/bin/sh\nexit 1\n", encoding="utf-8")
     silent.chmod(0o755)
 
-    refused = install("--caselist", "testcl26", "--debate-research", str(silent), home=home)
+    refused = install("--debate-research", str(silent), home=home)
 
     assert refused.returncode == 2
     assert "data directory" in refused.stderr
@@ -580,15 +860,16 @@ def run_wrapper(
 def test_the_wrapper_check_mode_prints_the_version_then_checks_the_profiles_and_never_pulls(
     home: Path, console_script: Path
 ) -> None:
-    """ac5 of `v1-e34-t10`, and ac3 of `v1-e34-t22`. `--check` resolves DEBATE_RESEARCH_BIN, runs
-    `--version` and then the profile check, in that order, and nothing else: it can spend nothing."""
+    """ac5 of `v1-e34-t10`, ac3 of `v1-e34-t22`, and `v1-e34-t30`. `--check` resolves
+    DEBATE_RESEARCH_BIN, runs `--version` and then the profile and search index checks, in that
+    order, and nothing else: it can spend nothing."""
     checked = run_wrapper("--check", console_script=console_script, home=home)
 
     assert checked.returncode == 0, checked.stderr
     assert str(console_script) in checked.stdout
     assert "debate-research 0.0.0+fake" in checked.stdout
     assert "stand-in doctor: the evidence profiles were checked" in checked.stdout
-    assert calls_to(console_script) == ["--version", "doctor --evidence-profiles"]
+    assert calls_to(console_script) == ["--version", AGENTS_CHECKS]
 
 
 @pytest.mark.parametrize("exit_code", [1, 2, 70])
@@ -604,7 +885,7 @@ def test_the_wrapper_check_mode_ends_with_the_profile_checks_exit_code(
 
     assert checked.returncode == exit_code
     assert "stand-in doctor: the evidence profiles were checked" in checked.stdout, "what it said is kept"
-    assert calls_to(console_script) == ["--version", "doctor --evidence-profiles"]
+    assert calls_to(console_script) == ["--version", AGENTS_CHECKS]
 
 
 def test_the_wrapper_check_mode_takes_no_other_arguments(home: Path, console_script: Path) -> None:
@@ -629,16 +910,19 @@ MISSPELT_PROFILE = "debate-dev-evidence-typo"
 AWS_CONFIG_NAME = "an-aws-config-written-for-this-test"
 
 
-def this_checkouts_command(directory: Path) -> Path:
+def this_checkouts_command(directory: Path, *, caselists: str | None = None) -> Path:
     """`debate-research` as this checkout's code, behind a script the wrapper can exec.
 
     The console script's own entry point, run by the interpreter the suite runs on. Nothing is
     stubbed: what the wrapper's `--check` gets back is what an installed build would give it.
+    `caselists`, a JSON list, stands for a published build's profile naming them: this checkout's
+    command, run outside it, reads no profile.
     """
     directory.mkdir(parents=True, exist_ok=True)
     script = directory / "debate-research"
+    named = f"DEBATE_CASELIST__SYNC_CASELISTS='{caselists}' " if caselists is not None else ""
     script.write_text(
-        f'#!/bin/sh\nexec "{sys.executable}" -c "from debate_cli.app import main; main()" "$@"\n',
+        f'#!/bin/sh\n{named}exec "{sys.executable}" -c "from debate_cli.app import main; main()" "$@"\n',
         encoding="utf-8",
     )
     script.chmod(0o755)
@@ -658,13 +942,17 @@ def an_installation_whose_profile_setting_names(profile: str, directory: Path) -
         f'[storage]\ndata_dir = "{directory / "data"}"\n'
         f'[storage.s3]\nbucket = "debate-dev-evidence-not-a-bucket"\nregion = "us-east-1"\n'
         f'aws_profile = "{profile}"\n'
-        '[caselist]\nnotifier = "none"\n'
-        f'[models]\nrouting_file = "{directory / "routing.yaml"}"\nbudget_usd_daily = 1.0\n',
+        '[caselist]\nnotifier = "none"\nsync_caselists = ["testcl26"]\n'
+        f'[models]\nrouting_file = "{EXAMPLE_ROUTING_FILE}"\nbudget_usd_daily = 1.0\n',
         encoding="utf-8",
     )
     return {
         "DEBATE_ENV": "dev",
         "DEBATE_PROFILE_DIR": str(profiles),
+        # Nothing is parsed here, and the wrapper's `--check` also checks the stores the search
+        # index stage would index (`v1-e34-t30`). Off, that check does not apply, and what the
+        # wrapper reports is the profile check's alone.
+        "DEBATE_CASELIST__REFRESH_SEARCH_INDEX": "false",
         "AWS_CONFIG_FILE": str(config),
         "AWS_SHARED_CREDENTIALS_FILE": str(directory / "no-credentials"),
         "AWS_EC2_METADATA_DISABLED": "true",
@@ -714,84 +1002,74 @@ def test_over_the_real_command_the_check_passes_where_no_evidence_profile_is_con
     )
 
     assert checked.returncode == 0, checked.stdout + checked.stderr
-    assert "none configured for this environment" in " ".join(checked.stdout.split())
+    said = " ".join(re.sub(r"[│╭╮╰╯─┌┐└┘├┤┬┴┼]", " ", checked.stdout).split())
+    assert "none configured for this environment" in said
+    assert "Search index stores does not apply: no search index stage is wired in" in said
 
 
-# --- The installer's launchd check (ac5), against a fake launchctl ------------------------------
+def test_over_the_real_command_the_check_fails_on_a_store_never_parsed_and_names_its_parse_command(
+    home: Path, tmp_path: Path
+) -> None:
+    """`v1-e34-t30`, as `install.sh --check-launchd` runs it: the wrapper's `--check` over this
+    checkout's `debate-research`, with the agent's caselist given as the launchd check gives it and
+    nothing parsed. The installation is `test`'s, which configures no evidence profile, with a
+    bucket named so that the run has the stage. No profile is asked about and the store check lists
+    directories, so no network is reached."""
+    command = this_checkouts_command(tmp_path / "bin")
+    data = tmp_path / "installation" / "data"
 
-FAKE_LAUNCHCTL = '''#!{python}
-"""A stand-in for launchctl: loads plists into a JSON file and runs a job the way launchd would."""
-import json, os, plistlib, subprocess, sys
-from pathlib import Path
+    checked = run_wrapper(
+        "--check",
+        console_script=command,
+        home=home,
+        DEBATE_ENV="test",
+        DEBATE_STORAGE__DATA_DIR=str(data),
+        DEBATE_STORAGE__S3__BUCKET="debate-test-evidence-not-a-bucket",
+        DEBATE_CASELIST__SYNC_CASELISTS='["testcl26"]',
+        AWS_CONFIG_FILE=os.devnull,
+        AWS_SHARED_CREDENTIALS_FILE=os.devnull,
+        AWS_EC2_METADATA_DISABLED="true",
+        AWS_ENDPOINT_URL="http://127.0.0.1:9",
+    )
 
-state_file = Path({state!r})
-state = json.loads(state_file.read_text()) if state_file.exists() else {{}}
-with open({calls!r}, "a") as calls:
-    calls.write(" ".join(sys.argv[1:]) + "\\n")
-command, target = sys.argv[1], sys.argv[-1]
-label = target.rsplit("/", 1)[-1]
+    said = " ".join(re.sub(r"[│╭╮╰╯─┌┐└┘├┤┬┴┼]", " ", checked.stdout + checked.stderr).split())
+    assert checked.returncode == 1, said
+    assert "SEARCH_INDEX_STORE_NOT_READY" in said
+    assert "testcl26: not parsed by this build's parser" in said
+    assert "debate-research caselist parse --caselist testcl26" in said
+    assert "debate-research caselist parse --caselist openev" in said
+    assert str(data) not in checked.stdout + checked.stderr
 
-if command == "print":
-    job = state.get(label)
-    if job is None:
-        print(f"Could not find service \\"{{label}}\\" in domain", file=sys.stderr)
-        sys.exit(113)
-    exit_code = job["last_exit_code"]
-    print(f"{{target}} = {{{{")
-    print(f"\\tstate = not running\\n\\truns = {{job['runs']}}\\n\\tlast exit code = {{exit_code}}\\n}}}}")
-elif command == "bootstrap":
-    plist = plistlib.loads(Path(target).read_bytes())
-    state[plist["Label"]] = {{
-        "plist": target, "runs": 0, "last_exit_code": "(never exited)",
-        "program": plist["ProgramArguments"], "environment": plist["EnvironmentVariables"],
-        "cwd": plist["WorkingDirectory"],
-        "stdout": plist["StandardOutPath"], "stderr": plist["StandardErrorPath"],
-    }}
-elif command == "kickstart":
-    job = state[label]
-    with open(job["stdout"], "a") as out, open(job["stderr"], "a") as err:
-        ran = subprocess.run(job["program"], env=job["environment"], cwd=job["cwd"], stdout=out, stderr=err)
-    job["runs"] += 1
-    job["last_exit_code"] = ran.returncode
-    if os.environ.get("FAKE_LAUNCHCTL_ALSO_RUNS") in state:
-        state[os.environ["FAKE_LAUNCHCTL_ALSO_RUNS"]]["runs"] += 1
-elif command == "bootout":
-    state.pop(label, None)
-state_file.write_text(json.dumps(state))
-'''
+
+# --- The installer's launchd check (ac5), against the fake launchctl and the plutil stand-in ----
 
 
 @pytest.fixture
-def fake_launchctl(tmp_path: Path) -> tuple[Path, Path, Path]:
-    """`launchctl` on PATH ahead of the real one: its directory, its state file and its call log."""
-    directory = tmp_path / "fake-launchctl"
-    directory.mkdir()
-    state, calls = directory / "state.json", directory / "calls.log"
-    script = directory / "launchctl"
-    script.write_text(
-        FAKE_LAUNCHCTL.format(python=sys.executable, state=str(state), calls=str(calls)), encoding="utf-8"
-    )
-    script.chmod(0o755)
-    return directory, state, calls
+def fake_launchctl(home: Path) -> tuple[Path, Path, Path]:
+    """The stand-ins' directory, the fake `launchctl`'s state file and its call log."""
+    directory = stand_ins(home)
+    return directory, directory / "launchctl-state.json", directory / "launchctl-calls.log"
 
 
 def install_and_load(home: Path, console_script: Path, state: Path) -> None:
     """Install the agent into the temporary HOME and mark it loaded, with a week of runs behind it."""
-    installed = install("--caselist", "testcl26", "--debate-research", str(console_script), home=home)
+    installed = install("--debate-research", str(console_script), home=home)
     assert installed.returncode == 0, installed.stderr
     state.write_text(json.dumps({LABEL: {"runs": 7, "last_exit_code": 0}}), encoding="utf-8")
     console_script.parent.joinpath("calls.log").unlink()
 
 
 def check_launchd(
-    home: Path, launchctl_directory: Path, **environment: str
+    home: Path, launchctl_directory: Path, *arguments: str, **environment: str
 ) -> subprocess.CompletedProcess[str]:
+    """`install.sh --check-launchd`, then `arguments`, under the temporary HOME and the stand-ins."""
     search_path = os.pathsep.join([str(launchctl_directory), os.environ["PATH"]])
-    assert shutil.which("launchctl", path=search_path) == str(launchctl_directory / "launchctl"), (
-        "the fake launchctl is not the one the installer would run"
-    )
+    for tool in ("launchctl", "plutil"):
+        assert shutil.which(tool, path=search_path) == str(launchctl_directory / tool), (
+            f"the stand-in {tool} is not the one the installer would run"
+        )
     return subprocess.run(
-        [str(INSTALL_SCRIPT), "--check-launchd"],
+        [str(INSTALL_SCRIPT), "--check-launchd", *arguments],
         capture_output=True,
         text=True,
         check=False,
@@ -800,7 +1078,6 @@ def check_launchd(
     )
 
 
-@on_macos
 def test_the_launchd_check_runs_the_installed_wrapper_under_its_own_label_and_never_pulls(
     home: Path, console_script: Path, fake_launchctl: tuple[Path, Path, Path]
 ) -> None:
@@ -815,7 +1092,7 @@ def test_the_launchd_check_runs_the_installed_wrapper_under_its_own_label_and_ne
     assert "stand-in doctor: the evidence profiles were checked" in checked.stdout
     assert "exit code 0" in checked.stdout
     assert f"{LABEL} runs: 7 before, 7 after" in checked.stdout
-    assert calls_to(console_script) == ["--version", "doctor --evidence-profiles"], (
+    assert calls_to(console_script) == ["--version", AGENTS_CHECKS], (
         "the check ran something other than --version and the profile check"
     )
     commands = calls.read_text(encoding="utf-8").splitlines()
@@ -835,7 +1112,43 @@ def test_the_launchd_check_runs_the_installed_wrapper_under_its_own_label_and_ne
     assert not Path(check_plist).exists(), "the check's plist was left behind"
 
 
-@on_macos
+def test_the_launchd_check_leaves_an_agents_caselists_to_the_builds_setting(
+    home: Path, console_script: Path, fake_launchctl: tuple[Path, Path, Path]
+) -> None:
+    """`v1-e40-t06`. An agent installed now passes its wrapper no argument, so `doctor --search-index`
+    reads the stores of the build's own `caselist.sync_caselists`, and the check sets nothing over it."""
+    launchctl_directory, state, _calls = fake_launchctl
+    install_and_load(home, console_script, state)
+
+    checked = check_launchd(home, launchctl_directory)
+
+    assert checked.returncode == 0, checked.stdout + checked.stderr
+    assert calls_to(console_script) == ["--version", AGENTS_CHECKS]
+    assert "DEBATE_CASELIST__SYNC_CASELISTS" not in environment_of_call(console_script, AGENTS_CHECKS)
+
+
+def test_the_launchd_check_hands_an_older_agents_caselists_to_the_check_as_the_setting_a_pull_follows(
+    home: Path, console_script: Path, fake_launchctl: tuple[Path, Path, Path]
+) -> None:
+    """`v1-e34-t30`. An agent installed before `v1-e40-t06` names its caselists as `--caselist`
+    arguments, and the check's `--check` takes none, so they reach `doctor --search-index` as
+    `caselist.sync_caselists` in the check's environment: the stores that agent's run will index.
+    The agent's plist is not changed."""
+    launchctl_directory, state, _calls = fake_launchctl
+    install_and_load(home, console_script, state)
+    an_agent_installed_before_the_cutover(home, "--caselist", "testcl26", "--caselist", "othercl26")
+    agent_before = installed_plist_bytes(home)
+
+    checked = check_launchd(home, launchctl_directory)
+
+    assert checked.returncode == 0, checked.stdout + checked.stderr
+    assert calls_to(console_script) == ["--version", AGENTS_CHECKS]
+    environment = environment_of_call(console_script, AGENTS_CHECKS)
+    assert environment["DEBATE_CASELIST__SYNC_CASELISTS"] == '["testcl26","othercl26"]'
+    assert installed_plist_bytes(home) == agent_before, "the check changed the agent's plist"
+    assert "DEBATE_CASELIST__SYNC_CASELISTS" not in environment_of(installed_plist(home))
+
+
 def test_the_launchd_check_reports_a_failing_wrapper_and_still_boots_out(
     home: Path, console_script: Path, fake_launchctl: tuple[Path, Path, Path]
 ) -> None:
@@ -850,7 +1163,6 @@ def test_the_launchd_check_reports_a_failing_wrapper_and_still_boots_out(
     assert LABEL + ".check" not in json.loads(state.read_text(encoding="utf-8"))
 
 
-@on_macos
 def test_the_launchd_check_fails_when_a_profile_is_not_defined_prints_what_was_said_and_boots_out(
     home: Path, console_script: Path, fake_launchctl: tuple[Path, Path, Path]
 ) -> None:
@@ -868,10 +1180,9 @@ def test_the_launchd_check_fails_when_a_profile_is_not_defined_prints_what_was_s
     assert f"{LABEL}.check exit code 1" in checked.stdout
     assert f"{LABEL} runs: 7 before, 7 after" in checked.stdout
     assert LABEL + ".check" not in json.loads(state.read_text(encoding="utf-8"))
-    assert calls_to(console_script) == ["--version", "doctor --evidence-profiles"]
+    assert calls_to(console_script) == ["--version", AGENTS_CHECKS]
 
 
-@on_macos
 def test_the_launchd_check_says_a_build_without_the_profile_check_needs_replacing(
     home: Path, console_script: Path, fake_launchctl: tuple[Path, Path, Path]
 ) -> None:
@@ -886,11 +1197,11 @@ def test_the_launchd_check_says_a_build_without_the_profile_check_needs_replacin
 
     assert checked.returncode == 1
     assert f"{LABEL}.check exit code 2" in checked.stdout
-    assert "does not have the profile check" in checked.stderr
+    assert "does not have the profile check or the search index check" in checked.stderr
+    assert "doctor --evidence-profiles --search-index" in checked.stderr
     assert "scripts/install_channel.sh" in checked.stderr
 
 
-@on_macos
 def test_the_launchd_check_fails_if_the_real_agent_ran_meanwhile(
     home: Path, console_script: Path, fake_launchctl: tuple[Path, Path, Path]
 ) -> None:
@@ -903,7 +1214,6 @@ def test_the_launchd_check_fails_if_the_real_agent_ran_meanwhile(
     assert "7 before, 8 after" in checked.stdout + checked.stderr
 
 
-@on_macos
 def test_the_launchd_check_refuses_an_agent_installed_before_the_wrapper_was_copied_out(
     home: Path, console_script: Path, fake_launchctl: tuple[Path, Path, Path]
 ) -> None:
@@ -923,23 +1233,907 @@ def test_the_launchd_check_refuses_an_agent_installed_before_the_wrapper_was_cop
     assert not any(line.startswith("bootstrap") for line in called)
 
 
+# --- The launchd check takes no option it would ignore (v1-e34-t27) -----------------------------
+
+
+def options_the_installer_parses() -> dict[str, bool]:
+    """Every option `install.sh`'s argument loop has a branch for, read from the loop itself, and
+    whether it takes a value (`shift 2`). Read rather than listed, so that an option added to the
+    installer is a case below without anybody remembering to add it."""
+    lines = INSTALL_SCRIPT.read_text(encoding="utf-8").splitlines()
+    start = lines.index("while [ $# -gt 0 ]; do")
+    end = lines.index("done", start)
+    options: dict[str, bool] = {}
+    for line in lines[start + 1 : end]:
+        branch = re.match(r"^\s+(-[-a-z|]+)\)", line)
+        if branch:
+            for option in branch.group(1).split("|"):
+                options[option] = "shift 2" in line
+    return options
+
+
+INSTALLER_OPTIONS = options_the_installer_parses()
+CHECK_LAUNCHD_ACCEPTS = {"--check-launchd", "--label"}
+"""What `--check-launchd` uses: which installed agent to check, by its label."""
+NOT_ABOUT_THE_CHECK = {"--aws-profile", "--caselist", "-h", "--help"}
+"""Refused whatever else is given (`--aws-profile`, `--caselist`), or the help text and nothing else."""
+IGNORED_BY_THE_CHECK = sorted(set(INSTALLER_OPTIONS) - CHECK_LAUNCHD_ACCEPTS - NOT_ABOUT_THE_CHECK)
+SAMPLE_VALUES = {"--env": "dev", "--weekday": "4", "--hour": "7", "--minute": "30"}
+
+
+def test_the_options_are_read_from_the_installers_argument_loop() -> None:
+    """The cases below come from the loop; this is what keeps a change in its shape from leaving
+    them empty."""
+    named_by_the_task = {"--weekday", "--hour", "--minute", "--log-dir", "--wrapper-dir"}
+
+    assert named_by_the_task <= set(IGNORED_BY_THE_CHECK), INSTALLER_OPTIONS
+    assert set(INSTALLER_OPTIONS) >= CHECK_LAUNCHD_ACCEPTS | NOT_ABOUT_THE_CHECK
+    assert INSTALLER_OPTIONS["--weekday"] and not INSTALLER_OPTIONS["--dry-run"]
+
+
+@pytest.mark.parametrize("option", IGNORED_BY_THE_CHECK)
+def test_the_launchd_check_refuses_every_option_it_would_ignore_naming_it(
+    home: Path, console_script: Path, fake_launchctl: tuple[Path, Path, Path], option: str
+) -> None:
+    """`v1-e34-t27` (2). The check reads the installed plist and nothing else, so `--check-launchd
+    --weekday 4` checked the Wednesday agent and said nothing of Thursday. Every option the
+    installer parses but the check does not use is refused, by name, before anything is loaded."""
+    launchctl_directory, state, calls = fake_launchctl
+    install_and_load(home, console_script, state)
+    installed = installed_plist_bytes(home)
+    value = SAMPLE_VALUES.get(option, str(home / "elsewhere"))
+    arguments = [option, value] if INSTALLER_OPTIONS[option] else [option]
+
+    refused = check_launchd(home, launchctl_directory, *arguments)
+
+    assert refused.returncode == 2, refused.stdout + refused.stderr
+    assert re.search(rf"(?<![\w-]){re.escape(option)}(?![\w-])", refused.stderr), refused.stderr
+    assert "--label" in refused.stderr, "the refusal does not say what the check does take"
+    called = calls.read_text(encoding="utf-8").splitlines() if calls.exists() else []
+    assert [line for line in called if not line.startswith("print")] == [], "the check loaded something"
+    assert calls_to(console_script) == []
+    assert installed_plist_bytes(home) == installed
+
+
+def test_the_launchd_check_takes_the_label_of_the_agent_to_check(
+    home: Path, console_script: Path, fake_launchctl: tuple[Path, Path, Path]
+) -> None:
+    """`--label` is the one option the check uses: which installed agent it checks."""
+    launchctl_directory, state, calls = fake_launchctl
+    other = "org.example.caselist-sync"
+    installed = install("--label", other, "--debate-research", str(console_script), home=home)
+    assert installed.returncode == 0, installed.stderr
+    state.write_text(json.dumps({other: {"runs": 2, "last_exit_code": 0}}), encoding="utf-8")
+
+    checked = check_launchd(home, launchctl_directory, "--label", other)
+
+    assert checked.returncode == 0, checked.stdout + checked.stderr
+    assert f"{other}.check exit code 0" in checked.stdout
+    assert f"{other} runs: 2 before, 2 after" in checked.stdout
+    assert any(line.startswith("bootstrap gui/") and f"{other}.check.plist" in line
+               for line in calls.read_text(encoding="utf-8").splitlines())  # fmt: skip
+
+
+# --- The AWS profile is the build's, and is checked before anything is written (v1-e34-t24) ------
+
+
+def test_the_plist_names_no_aws_profile_because_nothing_the_agent_runs_reads_one(
+    home: Path, console_script: Path
+) -> None:
+    """ac2. `--aws-profile` wrote `AWS_PROFILE` into the plist, and the run builds its session from
+    `storage.s3.aws_profile`, which every dev and prod build sets, so the variable chose nothing.
+    The option is gone and so is the variable: the profile is the build's setting, and the
+    installer checks it rather than appearing to choose it."""
+    environment = environment_of(
+        rendered_plist(
+            install(
+                "--env",
+                "dev",
+                "--debate-research",
+                str(console_script),
+                "--dry-run",
+                home=home,
+            )  # fmt: skip
+        )
+    )
+
+    assert set(environment) == {"DEBATE_ENV", "HOME", "DEBATE_RESEARCH_BIN", "PATH"}
+
+
+def test_the_aws_profile_option_is_refused_and_says_where_the_profile_comes_from(
+    home: Path, console_script: Path
+) -> None:
+    refused = install(
+        "--aws-profile", "debate-dev-evidence",
+        "--debate-research", str(console_script), "--dry-run", home=home,
+    )  # fmt: skip
+    helped = install("--help", home=home)
+
+    assert refused.returncode == 2
+    assert "--aws-profile" in refused.stderr and "storage.s3.aws_profile" in refused.stderr
+    assert calls_to(console_script) == [], "the build was asked something before the option was refused"
+    assert helped.returncode == 0
+    assert "--aws-profile NAME" not in helped.stdout
+    assert "AWS_PROFILE" not in TEMPLATE.read_text(encoding="utf-8")
+
+
+@pytest.mark.parametrize("dry_run", [False, True], ids=["install", "dry run"])
+def test_a_profile_the_aws_config_does_not_define_is_refused_naming_it_and_nothing_is_written(
+    home: Path, console_script: Path, dry_run: bool
+) -> None:
+    """ac2. What the runbook's reinstall step 2 checks by hand, the installer checks too: the
+    build's `doctor --evidence-profiles`, as the agent will run it. On a failure it shows what the
+    build said, which names the profile and its setting, and installs nothing."""
+    profile_check_exits(console_script, 1)
+
+    refused = install(
+        "--env", "dev", "--debate-research", str(console_script),
+        *(["--dry-run"] if dry_run else []), home=home,
+    )  # fmt: skip
+
+    assert refused.returncode == 2
+    assert refused.stdout == ""
+    assert "debate-dev-evidence (storage.s3.aws_profile): not defined" in refused.stderr
+    assert "nothing was installed" in refused.stderr
+    assert list((home / "Library" / "LaunchAgents").iterdir()) == []
+    assert not (home / ".local").exists()
+    assert not (home / "Library" / "Logs").exists()
+
+
+def test_a_build_without_the_profile_check_is_not_installed_and_is_said_to_be_too_old(
+    home: Path, console_script: Path
+) -> None:
+    """Exit 2 from `doctor --evidence-profiles` is a build from before `v1-e34-t22` refusing the
+    option, which says nothing about any profile."""
+    profile_check_exits(console_script, 2)
+
+    refused = install("--debate-research", str(console_script), home=home)
+
+    assert refused.returncode == 2
+    assert "does not have the profile check" in refused.stderr
+    assert "scripts/install_channel.sh" in refused.stderr
+    assert list((home / "Library" / "LaunchAgents").iterdir()) == []
+
+
+@pytest.mark.parametrize("dry_run", [False, True], ids=["install", "dry run"])
+def test_over_the_real_command_the_installer_refuses_a_profile_the_aws_config_lacks_naming_it(
+    home: Path, tmp_path: Path, dry_run: bool
+) -> None:
+    """ac2 and ac3, with nothing standing in for the build: this checkout's `debate-research`, run
+    by the installer as the agent will run it, in a HOME whose AWS config defines another profile.
+    boto3 refuses the session before any request, so no network is reached, and the machine's own
+    AWS config is not read: the installer gives the build the temporary HOME and nothing else.
+    A refused install, its dry run included, leaves HOME as it found it."""
+    (home / ".aws").mkdir()
+    (home / ".aws" / "config").write_text("[profile someone-elses-profile]\nregion = us-east-1\n")
+    command = this_checkouts_command(tmp_path / "bin", caselists='["testcl26"]')
+    before = sorted(home.rglob("*"))
+
+    refused = install(
+        "--env", "dev", "--debate-research", str(command),
+        *(["--dry-run"] if dry_run else []), home=home,
+    )  # fmt: skip
+
+    # The build's report is a table and a panel 80 columns wide, so its sentences wrap inside borders.
+    said = " ".join(re.sub("[│┃╭╮╰╯─]", " ", refused.stdout + refused.stderr).split())
+    assert refused.returncode == 2, said
+    assert "debate-dev-evidence" in said
+    assert "not defined in this" in said
+    assert "storage.s3.aws_profile" in said
+    assert "nothing was installed" in said
+    assert sorted(home.rglob("*")) == before, "the refused install created something under HOME"
+    assert str(home / ".aws") not in said and ".aws/config" not in said
+
+
+# --- The wrapper sets no AWS_PROFILE, and the run uses the setting's profile (v1-e34-t27) --------
+
+
+def test_the_wrapper_sets_no_aws_profile() -> None:
+    """`v1-e34-t27` (1). The wrapper exported `AWS_PROFILE` when it was set. A variable a POSIX
+    shell inherits is exported already, so the two lines changed nothing, and under launchd it is
+    never set: the plist names none (`v1-e34-t24`). They went, and this is what keeps them gone.
+    The comment still says what becomes of one set by hand."""
+    code = [
+        line for line in WRAPPER_SCRIPT.read_text(encoding="utf-8").splitlines()
+        if line.strip() and not line.lstrip().startswith("#")
+    ]  # fmt: skip
+    header = " ".join(header_of(WRAPPER_SCRIPT).split())
+
+    assert [line for line in code if "AWS_PROFILE" in line] == []
+    assert "it is exported" not in header
+    assert "storage.s3.aws_profile" in header
+
+
+STORE_BUCKET = "debate-dev-evidence-launchd-moto"
+SETTING_PROFILE = "debate-dev-evidence"
+OTHER_PROFILE = "someone-elses-profile"
+
+RECORDING_BUILD = '''#!@PYTHON@
+"""The build at the path the plist names: this checkout's `debate-research`, in an installation
+written for the test. It records the environment the wrapper ran it with, before it adds the
+installation's profile directory, and the profile of every boto3 session the run builds. moto
+answers S3, every socket is refused, and nothing of the machine's own AWS config is read: the
+AWS config is the one under the HOME the plist gives the agent."""
+import json, os, socket, sys
+from pathlib import Path
+
+record = Path(@RECORD@)
+given = dict(os.environ)
+os.environ["DEBATE_PROFILE_DIR"] = @PROFILES@
+os.environ["AWS_EC2_METADATA_DISABLED"] = "true"
+
+
+def no_network(*arguments, **keywords):
+    raise OSError("this test reaches no network")
+
+
+socket.socket.connect = no_network
+socket.create_connection = no_network
+
+import boto3
+import boto3.session
+from moto import mock_aws
+
+profiles = []
+build_session = boto3.session.Session.__init__
+
+
+def recording(self, *arguments, **keywords):
+    profiles.append(keywords.get("profile_name"))
+    build_session(self, *arguments, **keywords)
+
+
+boto3.session.Session.__init__ = recording
+with mock_aws():
+    store = boto3.session.Session(profile_name=@SETTING_PROFILE@).client("s3", region_name="us-east-1")
+    store.create_bucket(Bucket=@BUCKET@)
+    del profiles[:]
+    from debate_cli.app import main
+
+    exit_code = 0
+    try:
+        main()
+    except SystemExit as ended:
+        exit_code = ended.code if isinstance(ended.code, int) else 1
+    keys = [item["Key"] for item in store.list_objects_v2(Bucket=@BUCKET@).get("Contents", [])]
+record.write_text(json.dumps({"argv": sys.argv[1:], "environment": given, "profiles": profiles,
+                              "keys": keys, "exit_code": exit_code}))
+sys.exit(exit_code)
+'''
+
+
+def a_dev_installation_reaching_the_store(home: Path, directory: Path) -> tuple[Path, Path]:
+    """The recording build at `directory/debate-research`, and the file it records the run in.
+
+    Its profile is a dev one whose `storage.s3.aws_profile` is the everyday profile, with the
+    OpenCaselist API off, so the run is refused at its first guard, before any download, and the
+    run monitor publishes its record to the bucket through the store the setting's profile
+    signs. The AWS config, under the agent's HOME, defines that profile and another one."""
+    profiles = directory / "profiles"
+    profiles.mkdir(parents=True)
+    (profiles / "dev.toml").write_text(
+        f'[storage]\ndata_dir = "{directory / "data"}"\n'
+        f'[storage.s3]\nbucket = "{STORE_BUCKET}"\nregion = "us-east-1"\naws_profile = "{SETTING_PROFILE}"\n'
+        '[caselist]\napi_enabled = false\nnotifier = "none"\nsync_caselists = ["testcl26"]\n'
+        f'[models]\nrouting_file = "{EXAMPLE_ROUTING_FILE}"\nbudget_usd_daily = 1.0\n',
+        encoding="utf-8",
+    )
+    (home / ".aws").mkdir()
+    (home / ".aws" / "config").write_text(
+        "".join(
+            f"[profile {name}]\nregion = us-east-1\n"
+            "aws_access_key_id = testing\naws_secret_access_key = testing\n"
+            for name in (SETTING_PROFILE, OTHER_PROFILE)
+        ),
+        encoding="utf-8",
+    )
+    record = directory / "the-run.json"
+    build = directory / "debate-research"
+    build.write_text(
+        RECORDING_BUILD.replace("@PYTHON@", sys.executable)
+        .replace("@RECORD@", repr(str(record)))
+        .replace("@PROFILES@", repr(str(profiles)))
+        .replace("@SETTING_PROFILE@", repr(SETTING_PROFILE))
+        .replace("@BUCKET@", repr(STORE_BUCKET)),
+        encoding="utf-8",
+    )
+    build.chmod(0o755)
+    return build, record
+
+
+@pytest.mark.parametrize("plist", ["as installed", "with AWS_PROFILE added by hand"])
+def test_a_scheduled_run_reaches_the_store_with_the_settings_profile_and_no_aws_profile(
+    home: Path, console_script: Path, fake_launchctl: tuple[Path, Path, Path], plist: str
+) -> None:
+    """`v1-e34-t27` ac1. The agent, kickstarted under the fake launchctl as launchd runs it: the
+    plist's program and environment and nothing else. The run reaches the bucket and publishes its
+    record there through a store whose session names `storage.s3.aws_profile`, and the wrapper
+    hands the build no `AWS_PROFILE`. With one put in the plist by hand, as every agent installed
+    before `v1-e34-t24` had, the setting's profile still signs the store, which is why the
+    variable never chose anything."""
+    launchctl_directory, _state, _calls = fake_launchctl
+    install_first(home, console_script, "--env", "dev")
+    build, record = a_dev_installation_reaching_the_store(home, console_script.parent)
+    assert build == console_script, "the recording build is not at the path the plist names"
+    if plist == "with AWS_PROFILE added by hand":
+        edit_installed_plist(home, AWS_PROFILE=OTHER_PROFILE)
+    launchctl = str(launchctl_directory / "launchctl")
+    agent = home / "Library" / "LaunchAgents" / f"{LABEL}.plist"
+
+    subprocess.run([launchctl, "bootstrap", f"gui/{os.getuid()}", str(agent)], check=True)
+    subprocess.run([launchctl, "kickstart", f"gui/{os.getuid()}/{LABEL}"], check=True)
+
+    run = json.loads(record.read_text(encoding="utf-8"))
+    errors = (home / "Library" / "Logs" / "debate-research" / "caselist-sync.err.log").read_text(
+        encoding="utf-8"
+    )
+    assert run["argv"] == ["--json", "caselist", "pull"], run["argv"]
+    assert run["profiles"] and set(run["profiles"]) == {SETTING_PROFILE}, (run["profiles"], errors)
+    assert [key for key in run["keys"] if key.startswith("reports/sync-runs/")], (run["keys"], errors)
+    if plist == "as installed":
+        assert "AWS_PROFILE" not in run["environment"]
+    else:
+        assert run["environment"]["AWS_PROFILE"] == OTHER_PROFILE
+
+
+# --- A reinstall keeps what is installed (v1-e34-t24 ac4) ----------------------------------------
+
+
+def install_first(home: Path, console_script: Path, *arguments: str) -> None:
+    installed = install(*arguments, "--debate-research", str(console_script), home=home)
+    assert installed.returncode == 0, installed.stderr
+
+
+def edit_installed_plist(home: Path, **environment: str) -> None:
+    """Add to the installed plist's environment, as `PlistBuddy` would by hand."""
+    plist_file = home / "Library" / "LaunchAgents" / f"{LABEL}.plist"
+    plist = plistlib.loads(plist_file.read_bytes())
+    plist["EnvironmentVariables"].update(environment)
+    plist_file.write_bytes(plistlib.dumps(plist))
+
+
+def test_a_first_install_without_env_is_prod(home: Path, console_script: Path) -> None:
+    """Unchanged: with nothing installed there is nothing to keep, and the schedule is prod's job."""
+    install_first(home, console_script)
+
+    assert environment_of(installed_plist(home))["DEBATE_ENV"] == "prod"
+
+
+def test_a_reinstall_with_no_env_keeps_the_installed_one_and_says_so(
+    home: Path, console_script: Path
+) -> None:
+    """ac4. At the reinstall of 2026-10-14, a dev agent reinstalled with the runbook's example
+    would have been switched to prod and an empty store, because `--env` defaulted to prod. Over
+    an installed agent, an option left out now keeps what is installed, and the installer says
+    what it kept."""
+    install_first(home, console_script, "--env", "dev")
+
+    again = install("--debate-research", str(console_script), home=home)
+
+    assert again.returncode == 0, again.stderr
+    plist = installed_plist(home)
+    assert environment_of(plist)["DEBATE_ENV"] == "dev"
+    assert program_of(plist)[1:] == []
+    said = " ".join(again.stdout.split())
+    assert "Keeping the installed agent's environment, dev" in said
+    assert "The agent's pull follows the build's caselist.sync_caselists: testcl26 othercl26." in said
+    assert f"keeps its data in {home}/.debate-research/dev" in said
+    assert environment_of_call(console_script, PROFILE_CHECK)["DEBATE_ENV"] == "dev", (
+        "the profile checked was not the kept environment's"
+    )
+
+
+def test_a_dry_run_over_an_installed_agent_renders_what_is_installed_and_says_so_beside_the_plist(
+    home: Path, console_script: Path
+) -> None:
+    install_first(home, console_script, "--env", "dev")
+
+    rendered = install("--debate-research", str(console_script), "--dry-run", home=home)
+
+    plist = rendered_plist(rendered)
+    assert environment_of(plist)["DEBATE_ENV"] == "dev"
+    assert program_of(plist)[1:] == []
+    assert "Keeping the installed agent's environment, dev" in rendered.stderr
+
+
+@pytest.mark.parametrize("dry_run", [False, True], ids=["install", "dry run"])
+def test_a_different_env_over_an_installed_agent_is_refused_and_changes_nothing(
+    home: Path, console_script: Path, dry_run: bool
+) -> None:
+    """ac4. `--env prod` over a dev agent is a switch to another data directory and another
+    bucket. Given without its confirmation, it is a mistake until shown otherwise."""
+    install_first(home, console_script, "--env", "dev")
+    before = installed_plist_bytes(home)
+    asked_before = calls_to(console_script)
+
+    refused = install(
+        "--env", "prod", "--debate-research", str(console_script), *(["--dry-run"] if dry_run else []),
+        home=home,
+    )  # fmt: skip
+
+    said = " ".join(refused.stderr.split())
+    assert refused.returncode == 2, refused.stdout
+    assert refused.stdout == ""
+    assert "runs as dev" in said and "--env prod" in said
+    assert "--confirm-env-change" in said
+    assert "Nothing was installed" in said
+    assert installed_plist_bytes(home) == before
+    assert calls_to(console_script) == asked_before, "the build was asked something before the refusal"
+
+
+def test_a_different_env_confirmed_switches_the_agent_and_says_so(home: Path, console_script: Path) -> None:
+    install_first(home, console_script, "--env", "dev")
+
+    switched = install(
+        "--env", "prod", "--confirm-env-change", "--debate-research", str(console_script), home=home
+    )
+
+    assert switched.returncode == 0, switched.stderr
+    plist = installed_plist(home)
+    assert environment_of(plist)["DEBATE_ENV"] == "prod"
+    said = " ".join(switched.stdout.split())
+    assert "from dev to prod" in said
+    assert f"keeps its data in {home}/.debate-research/prod" in said
+
+
+def test_the_installed_env_given_again_is_no_change(home: Path, console_script: Path) -> None:
+    install_first(home, console_script, "--env", "dev")
+
+    again = install("--env", "dev", "--debate-research", str(console_script), home=home)
+
+    assert again.returncode == 0, again.stderr
+    assert environment_of(installed_plist(home))["DEBATE_ENV"] == "dev"
+
+
+def an_agent_installed_before_the_cutover(home: Path, *arguments: str) -> None:
+    """Give the installed plist the arguments an agent installed before `v1-e40-t06` passed its wrapper."""
+    plist_file = home / "Library" / "LaunchAgents" / f"{LABEL}.plist"
+    plist = plistlib.loads(plist_file.read_bytes())
+    plist["ProgramArguments"] = [plist["ProgramArguments"][0], *arguments]
+    plist_file.write_bytes(plistlib.dumps(plist))
+
+
+def test_the_caselist_option_is_refused_naming_the_setting_before_the_build_is_asked(
+    home: Path, console_script: Path
+) -> None:
+    """ADR-0020 (5), `v1-e40-t06`: the caselists are the build's setting, in the environment's profile."""
+    refused = install(
+        "--caselist", "testcl26", "--debate-research", str(console_script), "--dry-run", home=home
+    )
+
+    said = " ".join(refused.stderr.split())
+    assert refused.returncode == 2
+    assert "there is no --caselist any more" in said and "caselist.sync_caselists" in said
+    assert "Nothing was installed" in said
+    assert calls_to(console_script) == [], "the build was asked something before the option was refused"
+
+
+def test_a_reinstall_over_an_agent_installed_before_the_cutover_drops_its_caselists_and_says_which(
+    home: Path, console_script: Path
+) -> None:
+    """The Mac's agent at the cutover: `--caselist` pairs in its plist, which the reinstall drops."""
+    install_first(home, console_script, "--env", "dev")
+    an_agent_installed_before_the_cutover(home, "--caselist", "testcl26", "--caselist", "othercl26")
+
+    again = install("--debate-research", str(console_script), home=home)
+
+    assert again.returncode == 0, again.stderr
+    plist = installed_plist(home)
+    assert program_of(plist)[1:] == []
+    assert environment_of(plist)["DEBATE_ENV"] == "dev"
+    said = " ".join(again.stdout.split())
+    assert (
+        "Not carried over from the installed plist: the arguments --caselist testcl26 --caselist othercl26"
+        in said
+    )
+    assert "The agent's pull follows the build's caselist.sync_caselists: testcl26 othercl26." in said
+    assert "The installed agent followed" not in said, "the same caselists are no change to say"
+
+
+def test_a_reinstall_says_when_the_builds_caselists_are_not_the_ones_the_agent_followed(
+    home: Path, console_script: Path
+) -> None:
+    install_first(home, console_script, "--env", "dev")
+    an_agent_installed_before_the_cutover(home, "--caselist", "testcl26", "--caselist", "othercl26")
+    build_names_caselists(console_script, ["thirdcl26"])
+
+    again = install("--debate-research", str(console_script), "--dry-run", home=home)
+
+    assert again.returncode == 0, again.stderr
+    said = " ".join(again.stderr.split())
+    assert "The installed agent followed testcl26 othercl26; the build names thirdcl26." in said
+
+
+@pytest.mark.parametrize("dry_run", [False, True], ids=["install", "dry run"])
+def test_a_reinstall_that_would_move_the_data_directory_is_refused_unless_confirmed(
+    home: Path, tmp_path: Path, console_script: Path, dry_run: bool
+) -> None:
+    """The task's forbidden list: an agent's data directory never changes without an explicit
+    option. A variable added to the installed plist by hand is not one this script writes, so a
+    reinstall drops it; where that would move the data, the reinstall is refused, naming both
+    directories and the variables it would drop."""
+    install_first(home, console_script, "--env", "dev")
+    elsewhere = tmp_path / "kept-elsewhere"
+    edit_installed_plist(home, DEBATE_STORAGE__DATA_DIR=str(elsewhere))
+    before = installed_plist_bytes(home)
+    dry = ["--dry-run"] if dry_run else []
+
+    refused = install("--debate-research", str(console_script), *dry, home=home)
+    confirmed = install("--confirm-env-change", "--debate-research", str(console_script), *dry, home=home)
+
+    said = " ".join(refused.stderr.split())
+    assert refused.returncode == 2, refused.stdout
+    assert str(elsewhere) in said and f"{home}/.debate-research/dev" in said
+    assert "DEBATE_STORAGE__DATA_DIR" in said and "--confirm-env-change" in said
+    assert confirmed.returncode == 0, confirmed.stderr
+    if dry_run:
+        assert installed_plist_bytes(home) == before
+        assert "DEBATE_STORAGE__DATA_DIR" not in environment_of(rendered_plist(confirmed))
+    else:
+        assert "DEBATE_STORAGE__DATA_DIR" not in environment_of(installed_plist(home))
+
+
+def test_a_variable_this_script_does_not_write_is_named_when_a_reinstall_drops_it(
+    home: Path, console_script: Path
+) -> None:
+    """The parse stage's switch is added to the plist by hand, and a reinstall writes the plist
+    afresh without it, as the runbook says. It moves no data, so the reinstall goes ahead, and
+    now says what it dropped."""
+    install_first(home, console_script, "--env", "dev")
+    edit_installed_plist(home, DEBATE_CASELIST__PARSE_IMPORTED_SOURCES="false")
+
+    again = install("--debate-research", str(console_script), home=home)
+
+    assert again.returncode == 0, again.stderr
+    assert "DEBATE_CASELIST__PARSE_IMPORTED_SOURCES" not in environment_of(installed_plist(home))
+    said = " ".join(again.stdout.split())
+    assert "Not carried over from the installed plist: DEBATE_CASELIST__PARSE_IMPORTED_SOURCES" in said
+
+
+def test_an_agent_installed_with_aws_profile_keeps_its_environment_and_loses_the_variable(
+    home: Path, console_script: Path
+) -> None:
+    """Every agent installed before `v1-e34-t24` has `AWS_PROFILE` in its plist. A reinstall
+    keeps its environment, drops the variable, and says why it went."""
+    install_first(home, console_script, "--env", "dev")
+    edit_installed_plist(home, AWS_PROFILE="debate-dev-evidence")
+
+    again = install("--debate-research", str(console_script), home=home)
+
+    assert again.returncode == 0, again.stderr
+    environment = environment_of(installed_plist(home))
+    assert environment["DEBATE_ENV"] == "dev"
+    assert "AWS_PROFILE" not in environment
+    said = " ".join(again.stdout.split())
+    assert "AWS_PROFILE" in said and "storage.s3.aws_profile" in said
+
+
+def test_an_installed_agents_argument_this_script_does_not_write_is_dropped_and_named(
+    home: Path, console_script: Path
+) -> None:
+    """Until `v1-e40-t06` an argument other than `--caselist` refused the reinstall, because the
+    caselists could not be read past it. This script writes no argument now, so it is dropped and said."""
+    install_first(home, console_script, "--env", "dev")
+    an_agent_installed_before_the_cutover(home, "--caselist", "testcl26", "--full-archive", "testcl26")
+
+    again = install("--debate-research", str(console_script), home=home)
+
+    assert again.returncode == 0, again.stderr
+    assert program_of(installed_plist(home))[1:] == []
+    said = " ".join(again.stdout.split())
+    assert "the arguments --caselist testcl26 --full-archive testcl26 after the wrapper" in said
+
+
+def test_a_build_that_names_no_caselist_is_not_installed(home: Path, console_script: Path) -> None:
+    """Its agent's pull would be refused every week (`NO_CASELISTS_CONFIGURED`)."""
+    build_names_caselists(console_script, [])
+
+    refused = install("--env", "dev", "--debate-research", str(console_script), home=home)
+
+    said = " ".join(refused.stderr.split())
+    assert refused.returncode == 2
+    assert "names no caselist for dev" in said and "caselist.sync_caselists is empty" in said
+    assert list((home / "Library" / "LaunchAgents").iterdir()) == []
+
+
+# --- A reinstall keeps the schedule and the other options too (v1-e34-t25 ac1) -------------------
+#
+# `v1-e34-t24` kept the environment and the caselists. The schedule, the log directory and the
+# wrapper directory still went back to their defaults, so an agent installed for Thursday was moved
+# to Wednesday 06:00 by a reinstall that did not repeat `--weekday`. Each is now read from the
+# installed plist as the environment is, and an option still changes it.
+
+THURSDAY_AGENT = ("--weekday", "4", "--hour", "7", "--minute", "30")
+"""A schedule that is none of the defaults, so that a value kept and a default are told apart."""
+
+
+def schedule_of(plist: dict[str, object]) -> dict[str, int]:
+    interval = plist["StartCalendarInterval"]
+    assert isinstance(interval, dict)
+    return {str(key): int(value) for key, value in interval.items()}
+
+
+def logs_of(plist: dict[str, object]) -> tuple[str, str]:
+    return str(plist["StandardOutPath"]), str(plist["StandardErrorPath"])
+
+
+def install_a_thursday_agent(home: Path, console_script: Path) -> tuple[Path, Path]:
+    """A dev agent installed with every option this task keeps set away from its default; its log
+    and wrapper directories are returned."""
+    log_directory, wrapper_directory = home / "agent-logs", home / "agent-wrapper"
+    install_first(
+        home, console_script, "--env", "dev", *THURSDAY_AGENT,
+        "--log-dir", str(log_directory), "--wrapper-dir", str(wrapper_directory),
+    )  # fmt: skip
+    return log_directory, wrapper_directory
+
+
+def write_installed_plist(home: Path, change: Callable[[dict[str, object]], None]) -> bytes:
+    """Change the installed plist as an edit by hand would, and return its bytes afterwards."""
+    plist_file = home / "Library" / "LaunchAgents" / f"{LABEL}.plist"
+    plist = plistlib.loads(plist_file.read_bytes())
+    change(plist)
+    plist_file.write_bytes(plistlib.dumps(plist))
+    return plist_file.read_bytes()
+
+
+@pytest.mark.parametrize("dry_run", [False, True], ids=["install", "dry run"])
+def test_a_reinstall_with_no_options_keeps_the_schedule_and_both_directories_and_says_where_each_came_from(
+    home: Path, console_script: Path, dry_run: bool
+) -> None:
+    """ac1. Every value is the installed one, and the installer names each, with the plist key it
+    read it from: the operator's dry run over the real agent reads Wednesday 06:00 off this."""
+    log_directory, wrapper_directory = install_a_thursday_agent(home, console_script)
+
+    again = install("--debate-research", str(console_script), *(["--dry-run"] if dry_run else []), home=home)
+
+    assert again.returncode == 0, again.stderr
+    plist = rendered_plist(again) if dry_run else installed_plist(home)
+    assert schedule_of(plist) == {"Weekday": 4, "Hour": 7, "Minute": 30}
+    assert logs_of(plist) == (
+        f"{log_directory}/caselist-sync.jsonl",
+        f"{log_directory}/caselist-sync.err.log",
+    )
+    assert program_of(plist)[0] == f"{wrapper_directory}/run-caselist-sync.sh"
+    said = " ".join((again.stderr if dry_run else again.stdout).split())
+    assert (
+        "Keeping the installed agent's schedule, Thursday at 07:30, from its plist's "
+        "StartCalendarInterval (--weekday, --hour and --minute change it)."
+    ) in said
+    assert (
+        f"Keeping the installed agent's log directory, {log_directory}, from its plist's "
+        "StandardOutPath and StandardErrorPath (--log-dir changes it)."
+    ) in said
+    assert (
+        f"Keeping the installed agent's wrapper directory, {wrapper_directory}, from its plist's "
+        "ProgramArguments (--wrapper-dir changes it)."
+    ) in said
+    assert "Keeping the installed agent's environment, dev, from its plist's DEBATE_ENV" in said
+    if not dry_run:
+        assert (wrapper_directory / "run-caselist-sync.sh").read_bytes() == WRAPPER_SCRIPT.read_bytes()
+        assert not (home / ".local" / "share" / "debate-research" / "launchd").exists(), (
+            "the reinstall copied the wrapper to the default directory as well"
+        )
+
+
+def test_an_agent_installed_with_the_defaults_is_reinstalled_with_them_and_says_wednesday_at_06_00(
+    home: Path, console_script: Path
+) -> None:
+    """ac4's shape, offline: the real agent runs Wednesday at 06:00, and the dry run says so."""
+    install_first(home, console_script, "--env", "dev")
+
+    rendered = install("--debate-research", str(console_script), "--dry-run", home=home)
+
+    assert schedule_of(rendered_plist(rendered)) == {"Weekday": 3, "Hour": 6, "Minute": 0}
+    assert "Keeping the installed agent's schedule, Wednesday at 06:00, from its plist's" in " ".join(
+        rendered.stderr.split()
+    )
+
+
+def test_a_first_install_takes_the_default_schedule_and_directories(home: Path, console_script: Path) -> None:
+    """Unchanged: with no plist installed there is nothing to keep, and nothing is said kept."""
+    first = install("--debate-research", str(console_script), home=home)
+
+    assert first.returncode == 0, first.stderr
+    plist = installed_plist(home)
+    assert schedule_of(plist) == {"Weekday": 3, "Hour": 6, "Minute": 0}
+    assert logs_of(plist)[0] == f"{home}/Library/Logs/debate-research/caselist-sync.jsonl"
+    assert program_of(plist)[0] == f"{home}/.local/share/debate-research/launchd/run-caselist-sync.sh"
+    assert "Keeping" not in first.stdout
+
+
+@pytest.mark.parametrize(
+    ("option", "value", "expected", "said"),
+    [
+        pytest.param(
+            "--weekday", "1", {"schedule": {"Weekday": 1, "Hour": 7, "Minute": 30}},
+            "Changing the installed agent's schedule from Thursday at 07:30 to Monday at 07:30 (--weekday).",
+            id="weekday",
+        ),
+        pytest.param(
+            "--hour", "6", {"schedule": {"Weekday": 4, "Hour": 6, "Minute": 30}},
+            "Changing the installed agent's schedule from Thursday at 07:30 to Thursday at 06:30 (--hour).",
+            id="hour",
+        ),
+        pytest.param(
+            "--minute", "0", {"schedule": {"Weekday": 4, "Hour": 7, "Minute": 0}},
+            "Changing the installed agent's schedule from Thursday at 07:30 to Thursday at 07:00 (--minute).",
+            id="minute",
+        ),
+        pytest.param(
+            "--log-dir", "@HOME@/new-logs", {"logs": "@HOME@/new-logs"},
+            "Moving the installed agent's logs from @HOME@/agent-logs to @HOME@/new-logs (--log-dir).",
+            id="log-dir",
+        ),
+        pytest.param(
+            "--wrapper-dir", "@HOME@/new-wrapper", {"wrapper": "@HOME@/new-wrapper"},
+            "Moving the installed agent's wrapper from @HOME@/agent-wrapper to @HOME@/new-wrapper "
+            "(--wrapper-dir); the copy in @HOME@/agent-wrapper is left where it is.",
+            id="wrapper-dir",
+        ),
+    ],
+)  # fmt: skip
+def test_an_option_given_over_an_installed_agent_changes_that_setting_alone_and_says_so(
+    home: Path, console_script: Path, option: str, value: str, expected: dict[str, object], said: str
+) -> None:
+    """ac1. The option changes what it names, and every option left out is still kept."""
+    log_directory, wrapper_directory = install_a_thursday_agent(home, console_script)
+
+    def at_home(text: str) -> str:
+        return text.replace("@HOME@", str(home))
+
+    changed = install(option, at_home(value), "--debate-research", str(console_script), home=home)
+
+    assert changed.returncode == 0, changed.stderr
+    plist = installed_plist(home)
+    assert schedule_of(plist) == expected.get("schedule", {"Weekday": 4, "Hour": 7, "Minute": 30})
+    logs = Path(at_home(str(expected.get("logs", log_directory))))
+    assert logs_of(plist) == (f"{logs}/caselist-sync.jsonl", f"{logs}/caselist-sync.err.log")
+    wrapper = Path(at_home(str(expected.get("wrapper", wrapper_directory))))
+    assert program_of(plist)[0] == f"{wrapper}/run-caselist-sync.sh"
+    assert (wrapper / "run-caselist-sync.sh").read_bytes() == WRAPPER_SCRIPT.read_bytes()
+    assert at_home(said) in " ".join(changed.stdout.split())
+    assert environment_of(plist)["DEBATE_ENV"] == "dev"
+
+
+def test_an_option_given_with_the_installed_value_is_no_change_and_says_none(
+    home: Path, console_script: Path
+) -> None:
+    log_directory, _wrapper_directory = install_a_thursday_agent(home, console_script)
+
+    again = install(
+        *THURSDAY_AGENT, "--log-dir", str(log_directory), "--debate-research", str(console_script), home=home
+    )
+
+    assert again.returncode == 0, again.stderr
+    assert schedule_of(installed_plist(home)) == {"Weekday": 4, "Hour": 7, "Minute": 30}
+    assert "Changing" not in again.stdout and "Moving" not in again.stdout
+
+
+def string_hour(plist: dict[str, object]) -> None:
+    interval = plist["StartCalendarInterval"]
+    assert isinstance(interval, dict)
+    interval["Hour"] = "7"
+
+
+def no_minute(plist: dict[str, object]) -> None:
+    interval = plist["StartCalendarInterval"]
+    assert isinstance(interval, dict)
+    del interval["Minute"]
+
+
+def sunday_as_zero(plist: dict[str, object]) -> None:
+    interval = plist["StartCalendarInterval"]
+    assert isinstance(interval, dict)
+    interval["Weekday"] = 0
+
+
+def two_intervals(plist: dict[str, object]) -> None:
+    plist["StartCalendarInterval"] = [plist["StartCalendarInterval"], {"Weekday": 1, "Hour": 7, "Minute": 30}]
+
+
+def logs_split_across_directories(plist: dict[str, object]) -> None:
+    plist["StandardErrorPath"] = str(Path(str(plist["StandardOutPath"])).parent.parent / "elsewhere.err.log")
+
+
+def a_wrapper_of_another_name(plist: dict[str, object]) -> None:
+    arguments = plist["ProgramArguments"]
+    assert isinstance(arguments, list)
+    arguments[0] = str(Path(arguments[0]).parent / "my-own-sync.sh")
+
+
+@pytest.mark.parametrize(
+    ("change", "named", "option", "given"),
+    [
+        pytest.param(string_hour, "StartCalendarInterval.Hour", "--hour", ("--hour", "7"),
+                     id="an hour that is a string"),
+        pytest.param(no_minute, "StartCalendarInterval.Minute", "--minute", ("--minute", "30"),
+                     id="no minute"),
+        pytest.param(sunday_as_zero, "StartCalendarInterval.Weekday", "--weekday", ("--weekday", "7"),
+                     id="Sunday as 0"),
+        pytest.param(two_intervals, "StartCalendarInterval.Weekday", "--weekday", THURSDAY_AGENT,
+                     id="two calendar intervals"),
+        pytest.param(
+            logs_split_across_directories, "StandardErrorPath", "--log-dir",
+            ("--log-dir", "@HOME@/agent-logs"), id="logs in two directories",
+        ),
+        pytest.param(
+            a_wrapper_of_another_name, "ProgramArguments.0", "--wrapper-dir",
+            ("--wrapper-dir", "@HOME@/agent-wrapper"), id="a wrapper of another name",
+        ),
+    ],
+)  # fmt: skip
+def test_a_setting_the_installed_plist_does_not_hold_readably_is_refused_never_replaced_by_the_default(
+    home: Path,
+    console_script: Path,
+    change: Callable[[dict[str, object]], None],
+    named: str,
+    option: str,
+    given: tuple[str, ...],
+) -> None:
+    """ac1. A value this script cannot read back as one it writes is not guessed at, and not set to
+    the default: the reinstall is refused, naming the key and the option that sets it, and the
+    installed plist is left as it is. Given the options it cannot read, the reinstall goes ahead."""
+    install_a_thursday_agent(home, console_script)
+    before = write_installed_plist(home, change)
+    asked_before = calls_to(console_script)
+
+    refused = install("--debate-research", str(console_script), home=home)
+    dry = install("--debate-research", str(console_script), "--dry-run", home=home)
+
+    said = " ".join(refused.stderr.split())
+    assert refused.returncode == 2, refused.stdout
+    assert named in said and "cannot be kept" in said and "nothing was installed" in said
+    assert f"Give {option}" in said
+    assert installed_plist_bytes(home) == before
+    assert calls_to(console_script) == asked_before, "the build was asked something before the refusal"
+    assert dry.returncode == 2 and dry.stdout == "", "a dry run rendered a plist with a default in it"
+
+    given_now = install(
+        *(argument.replace("@HOME@", str(home)) for argument in given),
+        "--debate-research", str(console_script), home=home,
+    )  # fmt: skip
+    assert given_now.returncode == 0, given_now.stderr
+
+
+def test_a_kept_wrapper_directory_inside_a_checkout_is_refused_and_says_the_option_moves_it(
+    home: Path, console_script: Path
+) -> None:
+    """An agent installed before `v1-e34-t10` runs the checkout's own wrapper. Kept, that directory
+    is refused as any wrapper destination inside a working tree is, and the refusal says it is the
+    installed agent's and which option moves it."""
+    install_first(home, console_script, "--env", "dev")
+
+    def the_checkouts_wrapper(plist: dict[str, object]) -> None:
+        plist["ProgramArguments"] = [str(WRAPPER_SCRIPT), "--caselist", "testcl26"]
+
+    write_installed_plist(home, the_checkouts_wrapper)
+
+    refused = install("--debate-research", str(console_script), home=home)
+
+    said = " ".join(refused.stderr.split())
+    assert refused.returncode == 2, refused.stdout
+    assert f"the wrapper destination {LAUNCHD_DIRECTORY}" in said and "git working tree" in said
+    assert "--wrapper-dir" in said and "installed agent's" in said
+
+
 # --- What the installer says to do next -----------------------------------------------------------
 
 
-def test_after_a_first_install_the_next_steps_give_each_caselist_its_flag(
+def test_after_a_first_install_the_next_steps_name_no_caselist(
     home: Path, console_script: Path, fake_launchctl: tuple[Path, Path, Path]
 ) -> None:
-    """The validation pull it prints has to be one the command accepts, `--caselist` per slug."""
+    """The validation pull it prints follows the build's caselists, as the agent's will (ADR-0020 (5))."""
     launchctl_directory, _state, _calls = fake_launchctl
     installed = install(
-        "--caselist", "testcl26", "--caselist", "othercl26", "--debate-research", str(console_script),
+        "--debate-research", str(console_script),
         home=home, path_prefix=(launchctl_directory,),
     )  # fmt: skip
 
     assert installed.returncode == 0, installed.stderr
     assert "Nothing is scheduled yet" in installed.stdout
-    assert "caselist pull --caselist testcl26 --caselist othercl26 --dry-run" in installed.stdout
-    assert "caselist pull testcl26" not in installed.stdout
+    assert "DEBATE_ENV=dev debate-research caselist pull --dry-run" in installed.stdout
+    assert "--caselist" not in installed.stdout
 
 
 def test_a_reinstall_over_a_loaded_agent_suggests_a_reload_and_the_check_never_a_pull(
@@ -950,7 +2144,7 @@ def test_a_reinstall_over_a_loaded_agent_suggests_a_reload_and_the_check_never_a
     state.write_text(json.dumps({LABEL: {"runs": 1, "last_exit_code": 0}}), encoding="utf-8")
 
     installed = install(
-        "--caselist", "testcl26", "--debate-research", str(console_script),
+        "--debate-research", str(console_script),
         home=home, path_prefix=(launchctl_directory,),
     )  # fmt: skip
 
@@ -967,24 +2161,8 @@ def test_a_reinstall_over_a_loaded_agent_suggests_a_reload_and_the_check_never_a
 # --- Unchanged from v1-e34-t02 -------------------------------------------------------------------
 
 
-def test_the_installer_refuses_a_run_with_no_caselist(home: Path) -> None:
-    """No default list, here or anywhere: which caselists to follow is the operator's decision."""
-    refused = install("--dry-run", home=home)
-
-    assert refused.returncode == 2
-    assert "--caselist" in refused.stderr
-
-
-def test_the_installer_refuses_anything_that_is_not_a_caselist_slug(home: Path) -> None:
-    """The slug goes into an XML document the agent runs weekly; it is checked before it does."""
-    refused = install("--caselist", "hsld26 && curl evil.invalid", "--dry-run", home=home)
-
-    assert refused.returncode == 2
-    assert "not a caselist slug" in refused.stderr
-
-
 def test_the_installer_refuses_an_environment_that_is_not_dev_or_prod(home: Path) -> None:
-    refused = install("--caselist", "testcl26", "--env", "staging", "--dry-run", home=home)
+    refused = install("--env", "staging", "--dry-run", home=home)
 
     assert refused.returncode == 2
     assert "dev or prod" in refused.stderr
@@ -1023,6 +2201,56 @@ def test_the_shell_scripts_pass_shellcheck() -> None:
     assert checked.returncode == 0, checked.stdout + checked.stderr
 
 
+def header_of(script: Path) -> str:
+    """The comment at the top of a shell script, less its `#` marks."""
+    lines = script.read_text(encoding="utf-8").splitlines()[1:]
+    return "\n".join(line[1:] for line in itertools.takewhile(lambda line: line.startswith("#"), lines))
+
+
+def comment_above(script: Path, code: str) -> str:
+    """The comment lines directly above the first line that is `code`, on one line."""
+    lines = script.read_text(encoding="utf-8").splitlines()
+    at = lines.index(code)
+    start = at
+    while start > 0 and lines[start - 1].startswith("#"):
+        start -= 1
+    return " ".join(" ".join(line.lstrip("#") for line in lines[start:at]).split())
+
+
+def test_the_wrapper_says_the_installer_writes_into_the_plist_only_what_it_writes(
+    home: Path, console_script: Path
+) -> None:
+    """`v1-e34-t25` ac2. Until this task the wrapper listed `AWS_PROFILE` among the variables
+    "templated into the plist by install.sh", which `v1-e34-t24` stopped writing."""
+    plist = rendered_plist(install("--debate-research", str(console_script), "--dry-run", home=home))
+    header = header_of(WRAPPER_SCRIPT)
+    listed = re.findall(r"^   ([A-Z][A-Z_]+) {2,}", header, flags=re.MULTILINE)
+
+    assert listed, "the wrapper's comment no longer lists the variables it is run with"
+    assert set(listed) <= set(environment_of(plist)), listed
+    assert "AWS_PROFILE" not in environment_of(plist)
+    assert "AWS_PROFILE is not in the plist" in " ".join(header.split())
+    assert "templated into the plist" not in header
+
+
+def test_the_installers_comment_on_the_profile_check_says_how_long_the_aws_question_may_wait() -> None:
+    """`v1-e34-t25` ac2, from `v1-e29-t09`: the comment said the check asks AWS a question for each
+    profile, and not that each question gives up after the time limit `v1-e29-t09` set. The limit
+    is read from its source, because importing the S3 integration opens a socket."""
+    source = (
+        REPOSITORY_ROOT / "packages" / "debate_core" / "src" / "debate_core" / "integrations" / "s3"
+        / "caller_identity.py"
+    ).read_text(encoding="utf-8")  # fmt: skip
+    [limit] = re.findall(r"^IDENTITY_TIME_LIMIT_SECONDS: Final = ([0-9.]+)$", source, flags=re.MULTILINE)
+    time_limit = float(limit)
+
+    comment = comment_above(INSTALL_SCRIPT, "PROFILE_CHECK_STATUS=0")
+
+    assert "IDENTITY_TIME_LIMIT_SECONDS" in comment
+    assert f"waits at most {time_limit:g} seconds for each answer" in comment
+    assert f"at most {time_limit:g} seconds on top of doctor's local checks" in comment
+
+
 def test_the_wrapper_only_calls_the_command(home: Path) -> None:
     """The spec forbids pipeline logic in the wrapper: it sets the environment and execs."""
     text = WRAPPER_SCRIPT.read_text(encoding="utf-8")
@@ -1030,3 +2258,18 @@ def test_the_wrapper_only_calls_the_command(home: Path) -> None:
 
     assert body[-1].startswith('exec "${DEBATE_RESEARCH_BIN}" --json caselist pull')
     assert "curl" not in text and "aws s3" not in text and "unzip" not in text
+
+
+# --- The caselists are the build's setting (`v1-e40-t06`, ADR-0020 (5)) --------------------------
+#
+# The agent's wrapper is given no argument, and its pull follows `caselist.sync_caselists` from the
+# build's profile, as the cloud run's does. The tests of a reinstall over an agent that still has
+# `--caselist` arguments are with the other reinstall tests above.
+
+
+def test_the_template_gives_the_wrapper_no_argument() -> None:
+    template = TEMPLATE.read_text(encoding="utf-8")
+    program = template[template.index("<key>ProgramArguments</key>") : template.index("</array>")]
+
+    assert re.findall(r"<string>([^<]*)</string>", program) == ["@WRAPPER@"]
+    assert "@CASELIST_ARGUMENTS@" not in template

@@ -46,9 +46,13 @@ member at a held path, in a snapshot dated after the removed file first appeared
 as `SUPPRESSED` exactly as a listed one is: no blob, no record, no row. It is also counted under
 the request that holds the path (:attr:`PipelineRun.held_by_request`), which is the import's record
 of whose removal stopped it. The import appends nothing to the list for it: only `caselist remove`
-and `caselist unsuppress` write the takedown's records, and running the same removal again finds
-the upload in the download inbox and puts it on the list
-(:mod:`~debate_core.application.caselist.removal_plan`).
+and `caselist unsuppress` write the list, and running the same removal again puts the upload on it
+(:mod:`~debate_core.application.caselist.removal_plan`). What the import does write is the upload's
+sha256 and the request holding the path, to the held-digest record beside the path holds
+(:class:`~debate_core.application.ports.suppression.HeldDigestEntry`, `v1-e30-t23`), as it meets
+the member and before anything else happens to the run: once retention or the take-out removes the
+archive, that line is the only thing that names the bytes. A dry run writes none, and an import
+that cannot write it fails.
 
 A caller says which snapshot it is importing (`snapshot`, required like `disclosure_scope`), so an
 import cannot ask about a hold without a date to ask with. A camp-file import records no
@@ -60,6 +64,14 @@ name it, but its path can still name the removed file and the team that disclose
 :func:`withheld_skipped_paths` marks a skipped member :attr:`ImportedEntry.withheld` when it shadows
 a suppressed file, or when every real file in its directory is suppressed (a whole team removed);
 it is still counted as skipped and given no row.
+
+So is a skipped member at a path a removal holds, in a snapshot the hold covers
+(:func:`hold_on_skipped_member`, `v1-e30-t22`): a symbolic link named as the removed file is not a
+later upload, since nothing in it can be imported, but its row would name the removed path, and
+its body is often the file's name. The removal's manifest rewrite and `caselist status` ask the
+same question of a row an earlier build wrote. An AppleDouble member `__MACOSX/<dir>/._<name>` is
+asked about the file it shadows as well as its own path (`v1-e30-t25`), so the junk macOS zips
+beside such a link is held with it.
 
 What stays with each service is what genuinely differs: where the baseline comes from (the
 previous weekly snapshot, or the camp release's existing manifest), which records are written,
@@ -81,18 +93,19 @@ goes on to write its disclosure or camp-file record against it.
 
 from __future__ import annotations
 
-from collections.abc import Awaitable, Callable, Iterable, Mapping
+from collections.abc import Awaitable, Callable, Collection, Iterable, Mapping
 from dataclasses import dataclass, field
 from datetime import date
 from enum import StrEnum
 from typing import Protocol
 
-from debate_core.application.caselist.suppression import load_suppression_state
+from debate_core.application.caselist.suppression import load_suppression_state, record_held_digests
 from debate_core.application.errors import DomainError
 from debate_core.application.ports.archive import ArchiveEntry, ArchiveMember, SkipReason
 from debate_core.application.ports.caselist import CaselistRepository
 from debate_core.application.ports.persistence import SnapshotStore
 from debate_core.application.ports.suppression import (
+    HeldDigestEntry,
     PathHoldEntry,
     SuppressionList,
     SuppressionState,
@@ -111,7 +124,9 @@ __all__ = [
     "SourceImportPipeline",
     "SourceMetadata",
     "SuppressedWriteRefused",
+    "classify_stored",
     "file_source",
+    "hold_on_skipped_member",
     "withheld_skipped_paths",
 ]
 
@@ -224,7 +239,8 @@ class ImportedEntry[MetadataT]:
     """
 
     withheld: bool = False
-    """A skipped member that shadows suppressed files: counted as skipped, given no manifest row."""
+    """A skipped member that shadows suppressed files, or is at a path a removal holds (`v1-e30-t22`):
+    counted as skipped, given no manifest row."""
 
     @property
     def is_skipped(self) -> bool:
@@ -306,7 +322,9 @@ class SourceImportPipeline:
         first appeared there (`v1-e30-t13`). `None`, with `disclosure_scope`, for an import that
         records no disclosures. Required for the same reason.
 
-        Writes nothing — no blob and no record — when `dry_run` is set.
+        A member a hold refuses is appended to the held-digest record beside the list as it is met
+        (`v1-e30-t23`). Writes nothing — no blob, no record and no held digest — when `dry_run` is
+        set.
         """
         suppression = await load_suppression_state(self._suppression)
         held_by_request: dict[str, int] = {}
@@ -335,6 +353,15 @@ class SourceImportPipeline:
             hold = None if listed else _path_hold(suppression, entry, disclosure_scope, snapshot)
             if hold is not None:
                 held_by_request[hold.request_id] = held_by_request.get(hold.request_id, 0) + 1
+                if not dry_run:
+                    await record_held_digests(
+                        self._suppression,
+                        [
+                            HeldDigestEntry(
+                                sha256=entry.sha256, disclosure=hold.disclosure, request_id=hold.request_id
+                            )
+                        ],
+                    )
             classification = _classify(
                 entry,
                 baseline=baseline,
@@ -389,7 +416,15 @@ class SourceImportPipeline:
                 if entry.classification is not None
             },
             [entry.path for entry in imported if entry.is_skipped],
-        )
+        ) | {
+            entry.path
+            for entry in imported
+            if entry.is_skipped
+            and hold_on_skipped_member(
+                suppression, caselist=disclosure_scope, path=entry.path, snapshot=snapshot
+            )
+            is not None
+        }
         if withheld:
             imported = [
                 ImportedEntry(
@@ -471,6 +506,31 @@ def withheld_skipped_paths(real: Mapping[str, bool], skipped: Iterable[str]) -> 
     return frozenset(withheld)
 
 
+def hold_on_skipped_member(
+    suppression: SuppressionState, *, caselist: str | None, path: str, snapshot: date | None
+) -> PathHoldEntry | None:
+    """The hold on a skipped member's path, when a removal holds it in this snapshot (`v1-e30-t22`).
+
+    The rule an upload is refused by (:meth:`~debate_core.application.ports.suppression.
+    SuppressionState.path_hold`), asked of a member that was never read: such a member gets no
+    manifest row. `None` for a camp release or an archive of no date, which no hold covers. Shared by
+    the importer, the removal's rewrite of a manifest and of an inbox archive, and `caselist status`,
+    so all four leave out the same rows.
+
+    macOS's `__MACOSX/<dir>/._<name>` names the file `<dir>/<name>` it shadows, so it is asked about
+    that path too (`v1-e30-t25`): junk beside a link at a held path is held with the link, and so is
+    such junk with nothing beside it, since its name gives the held path all the same.
+    """
+    if caselist is None or snapshot is None:
+        return None
+    shadowed = _apple_double_target(path)
+    for named in (path,) if shadowed is None else (path, shadowed):
+        hold = suppression.path_hold(caselist=caselist, path=named, snapshot=snapshot)
+        if hold is not None:
+            return hold
+    return None
+
+
 def _directory_of(path: str) -> str:
     """The directory a member belongs to, with macOS's metadata mirror folded onto the real one."""
     parts = path.split("/")
@@ -479,13 +539,23 @@ def _directory_of(path: str) -> str:
     return "/".join(parts[:-1])
 
 
+def _apple_double_target(path: str) -> str | None:
+    """`<dir>/<name>` for `__MACOSX/<dir>/._<name>`, the file macOS wrote that sidecar for; else `None`."""
+    name = path.rsplit("/", 1)[-1]
+    if path.split("/")[0] != _MACOS_METADATA_DIRECTORY or not name.startswith(_APPLE_DOUBLE_PREFIX):
+        return None
+    directory = _directory_of(path)
+    prefix = f"{directory}/" if directory else ""
+    return prefix + name[len(_APPLE_DOUBLE_PREFIX) :]
+
+
 def _shadowed(path: str, real: Mapping[str, bool]) -> list[str]:
     """The real paths a junk member is metadata for, if it is one."""
+    apple_double = _apple_double_target(path)
+    if apple_double is not None:
+        return [apple_double]
     directory = _directory_of(path)
     name = path.rsplit("/", 1)[-1]
-    prefix = f"{directory}/" if directory else ""
-    if path.split("/")[0] == _MACOS_METADATA_DIRECTORY and name.startswith(_APPLE_DOUBLE_PREFIX):
-        return [prefix + name[len(_APPLE_DOUBLE_PREFIX) :]]
     if name.startswith(_WORD_LOCK_PREFIX):
         rest = name[len(_WORD_LOCK_PREFIX) :]
         return [
@@ -531,12 +601,31 @@ def _classify(
     """
     if suppressed:
         return Classification.SUPPRESSED
-    previously = baseline.get(member.path)
-    if previously == member.sha256:
+    return classify_stored(
+        member.path, member.sha256, baseline=baseline, baseline_digests=baseline_digests, known=known
+    )
+
+
+def classify_stored(
+    path: str,
+    sha256: str,
+    *,
+    baseline: Mapping[str, str],
+    baseline_digests: Collection[str],
+    known: Collection[str],
+) -> Classification:
+    """What a member the suppression list does not stop is, against the previous import.
+
+    The one rule, shared with the measuring of a later manifest again after a weekly imported out
+    of date order (:mod:`~debate_core.application.caselist.later_manifests`, `v1-e30-t18`), which
+    has the member's path and digest from its manifest row and no archive to read.
+    """
+    previously = baseline.get(path)
+    if previously == sha256:
         return Classification.UNCHANGED
     if previously is not None:
         return Classification.CHANGED
-    if member.sha256 in known or member.sha256 in baseline_digests:
+    if sha256 in known or sha256 in baseline_digests:
         return Classification.DUPLICATE
     return Classification.NEW
 

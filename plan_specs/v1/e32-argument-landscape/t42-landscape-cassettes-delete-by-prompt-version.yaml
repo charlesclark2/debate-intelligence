@@ -1,0 +1,75 @@
+# TASK v1-e32-t42-landscape-cassettes-delete-by-prompt-version - `landscape cassettes --delete` can delete only one prompt version's cassettes
+# Epic: E32 Argument Landscape Reports | Release: v1.2 (Argument landscape & file building) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e32-t42-landscape-cassettes-delete-by-prompt-version
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e32-argument-landscape
+  annotations:
+    debate/title: "`landscape cassettes --delete` can delete only one prompt version's cassettes"
+spec:
+  # Filed by the PM, 2026-11-02, from v1-e32-t40's question 2 (the PM's ruling, 2026-11-02).
+  description: >-
+    On 2026-11-02, hspolicy26's four 1.0.0 cassettes held names the scrub had missed, and they
+    had to go while the 1.1.0 recordings were kept. That was possible only because no 1.1.0
+    cassette existed yet: `landscape cassettes --delete` removes a caselist's cassettes of every
+    prompt version. Add `--prompt-version` to the listing and the delete. It counts and deletes
+    only that version's cassettes (and the repair cassettes of its calls), with its own
+    confirmation code read off its dry run, and it never touches another version's. Counts,
+    slugs and codes only; never a cassette's content, name or path.
+  priority: 3
+  constraints:
+    packages: [debate_core.application, debate_cli, packages/debate_core/tests, packages/debate_cli/tests, docs/runbooks]
+    forbidden:
+      - Deleting a cassette of another prompt version
+      - A cassette's content, name or path in output
+      - A confirmation code that stands in for the delete without --prompt-version
+  context:
+    - kind: TaskRef
+      name: v1-e32-t36-landscape-cassettes-smoke-check-and-removal-form
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        With --prompt-version the listing counts and the delete removes only that version's
+        cassettes and their repairs, under its own confirmation code, and another version's
+        cassettes are untouched, by tests shown failing first.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e32-t42-landscape-cassettes-delete-by-prompt-version-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e32-argument-landscape
+spec:
+  description: >-
+    `landscape cassettes --delete` can delete only one prompt version's cassettes.
+  goalRef:
+    name: v1-e32-t42-landscape-cassettes-delete-by-prompt-version
+  graph:
+    nodes:
+      - id: landscape-cassettes-delete-by-prompt-ver
+        kind: Task
+        name: Delete by version
+        description: >-
+          `landscape cassettes --delete` can delete only one prompt version's cassettes.
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Delete by version tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests, packages/debate_cli/tests, -k, cassette]
+status:
+  phase: Pending

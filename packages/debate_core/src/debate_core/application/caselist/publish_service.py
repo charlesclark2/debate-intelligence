@@ -27,7 +27,11 @@ part-way all leave a key outside that set, and the manifest is withheld.
 
 A required constructor argument, read at the start of every plan (`v1-e30-t07`). A suppressed
 source is never uploaded, and a manifest that still has a stored row the list stops is withheld
-rather than published (`publish_plan`, "A manifest that still names a suppressed file").
+rather than published (`publish_plan`, "A manifest that still names a suppressed file"). So is one
+with a stored row at a path a removal holds, with the same outcome and the same code (`v1-e30-t21`),
+and bytes that only such rows name are not uploaded at all (`v1-e30-t22`; `publish_plan`, "Bytes
+only held rows name are not uploaded"). `store sync` asks the same plan before it pushes a manifest,
+and pushes none a publish withholds (:func:`withheld_manifest_reason`, `v1-e30-t25`).
 
 ## Idempotent and resumable
 
@@ -70,6 +74,7 @@ from debate_core.application.caselist.evidence_listing import (
     list_remote_evidence,
     local_blob_sizes,
     local_file,
+    read_local_manifest,
     read_local_snapshots,
 )
 from debate_core.application.caselist.publish_plan import (
@@ -77,6 +82,7 @@ from debate_core.application.caselist.publish_plan import (
     PublishPlan,
     SnapshotPlan,
     SourceAction,
+    UnreadableManifest,
     build_publish_plan,
     local_blob_key,
     manifest_prefix,
@@ -84,16 +90,17 @@ from debate_core.application.caselist.publish_plan import (
 )
 from debate_core.application.caselist.suppression import load_suppression_state
 from debate_core.application.errors import (
+    STORE_ERRORS_TRUE_OF_EVERY_OBJECT,
     UNMODELLED_ERROR_CODE,
     BlobIntegrityError,
     DomainError,
     NotFound,
-    StoreAccessDenied,
-    StoreCredentialsExpired,
     error_code_of,
+    reported_error_message,
 )
+from debate_core.application.evidence_sync import ManifestWithholding
 from debate_core.application.ports.evidence_store import EvidenceObjectStore, ObjectInfo, ObjectKey
-from debate_core.application.ports.suppression import SuppressionList
+from debate_core.application.ports.suppression import SuppressionList, SuppressionState
 from debate_core.domain import Sha256Hex
 
 __all__ = [
@@ -107,6 +114,7 @@ __all__ = [
     "SourceOutcome",
     "SourceResult",
     "error_code_of",
+    "withheld_manifest_reason",
 ]
 
 logger = logging.getLogger(__name__)
@@ -121,7 +129,8 @@ the adapter's thread pool are not the bottleneck being tuned.
 
 
 MANIFEST_NAMES_SUPPRESSED_SOURCE: Final = "MANIFEST_NAMES_SUPPRESSED_SOURCE"
-"""The code of a manifest withheld because the local copy still has a row the suppression list stops.
+"""The code of a manifest withheld because the local copy still has a row the suppression list stops,
+or a row at a path a removal holds (`v1-e30-t21`).
 
 An outcome's code, like `CHECKSUM_MISMATCH` and `MISSING_LOCALLY` on a source: nothing was raised,
 and running the publish again gives the same answer until `caselist remove` rewrites the manifest.
@@ -180,6 +189,9 @@ class SourceOutcome:
     result: SourceResult
     error_code: str | None = None
     error_message: str | None = None
+    """Why it failed, for a person. An error this project did not write is named by its class and an
+    `OSError` by its errno too, never by its text, which can quote a path on this machine
+    (:func:`~debate_core.application.errors.reported_error_message`, `v1-e29-t09`)."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -192,7 +204,9 @@ class SnapshotOutcome:
     sources: tuple[SourceOutcome, ...]
     manifest: ManifestOutcome
     manifest_error: str | None = None
-    """Why the manifest was withheld or failed, for a person. Never read for a decision."""
+    """Why the manifest was withheld or failed, for a person. Never read for a decision. An error
+    this project did not write is named by its class and an `OSError` by its errno too, never by
+    its text (:func:`~debate_core.application.errors.reported_error_message`, `v1-e29-t09`)."""
 
     manifest_error_code: str | None = None
     """The error code of a manifest that failed on its own, for a program (`v1-e34-t13`).
@@ -245,7 +259,7 @@ class PublishReport:
         """True for a dry run whose plan blocks nothing, and for a run that completed every snapshot."""
         if not self.applied:
             return all(
-                not snapshot.blocked and not snapshot.suppressed_rows for snapshot in self.plan.snapshots
+                not snapshot.blocked and not snapshot.withholding_rows for snapshot in self.plan.snapshots
             )
         return all(snapshot.complete for snapshot in self.snapshots)
 
@@ -270,6 +284,11 @@ class PublishReport:
     def suppressed_rows(self) -> tuple[Sha256Hex, ...]:
         """Digests of suppressed rows that withheld (or, dry, would withhold) a manifest."""
         return tuple(sorted({digest for plan in self.plan.snapshots for digest in plan.suppressed_rows}))
+
+    @property
+    def held_rows(self) -> tuple[Sha256Hex, ...]:
+        """Digests of rows at a held path that withheld (or, dry, would withhold) a manifest."""
+        return tuple(sorted({row.sha256 for plan in self.plan.snapshots for row in plan.held_rows}))
 
     def count(self, result: SourceResult) -> int:
         """How many *distinct* source objects ended with `result` across the run."""
@@ -337,8 +356,10 @@ class CaselistPublishService:
 
         Failures of one source are collected, not raised: the report names every one and the
         command's exit code comes from :attr:`PublishReport.succeeded`. The exceptions are an
-        expired or refused credential, which would be true of every remaining object and end the
-        run at once — with no manifest written for the snapshot in progress.
+        expired or refused credential and a profile the AWS config does not define
+        (:data:`~debate_core.application.errors.STORE_ERRORS_TRUE_OF_EVERY_OBJECT`), which would be
+        true of every remaining object and end the run at once — with no manifest written for the
+        snapshot in progress.
         """
         confirmed: set[ObjectKey] = set()
         failed: dict[ObjectKey, SourceOutcome] = {}
@@ -364,18 +385,14 @@ class CaselistPublishService:
             limit=self._concurrency,
         )
 
-        if plan.suppressed_rows:
+        if plan.withholding_rows:
             return SnapshotOutcome(
                 caselist=plan.caselist,
                 snapshot=plan.snapshot,
                 manifest_key=plan.manifest_key,
                 sources=tuple(sources),
                 manifest=ManifestOutcome.WITHHELD,
-                manifest_error=(
-                    f"the local manifest still has {len(plan.suppressed_rows)} row(s) for suppressed "
-                    f"source(s): {', '.join(plan.suppressed_rows)}; re-run `caselist remove` for them "
-                    "on this machine to rewrite it"
-                ),
+                manifest_error=_withheld_for_rows(plan),
                 manifest_error_code=MANIFEST_NAMES_SUPPRESSED_SOURCE,
             )
 
@@ -403,11 +420,11 @@ class CaselistPublishService:
         manifest_error_code: str | None = None
         try:
             manifest = await self._publish_manifest(plan)
-        except (StoreCredentialsExpired, StoreAccessDenied):
+        except STORE_ERRORS_TRUE_OF_EVERY_OBJECT:
             raise
         except (DomainError, OSError) as failure:
             manifest = ManifestOutcome.FAILED
-            manifest_error = str(failure) or type(failure).__name__
+            manifest_error = reported_error_message(failure)
             manifest_error_code = error_code_of(failure)
         return SnapshotOutcome(
             caselist=plan.caselist,
@@ -463,10 +480,10 @@ class CaselistPublishService:
                     confirmed.add(planned.key)
                     return _outcome(planned, SourceResult.SKIPPED)
             await self._upload(planned)
-        except (StoreCredentialsExpired, StoreAccessDenied):
+        except STORE_ERRORS_TRUE_OF_EVERY_OBJECT:
             raise
         except (DomainError, OSError) as failure:
-            return self._failed(planned, failed, error_code_of(failure), str(failure))
+            return self._failed(planned, failed, error_code_of(failure), reported_error_message(failure))
         confirmed.add(planned.key)
         return _outcome(planned, SourceResult.UPLOADED)
 
@@ -513,9 +530,78 @@ class CaselistPublishService:
         return outcome
 
 
+async def withheld_manifest_reason(
+    local: LocalEvidence, manifest: ObjectInfo, suppression: SuppressionState
+) -> ManifestWithholding | None:
+    """Why a publish withholds this local manifest, in its own words; `None` when it does not.
+
+    What `store sync` asks before it pushes a manifest (`v1-e30-t25`), so that a push never sends
+    what a publish withholds. The answer is the plan of that one snapshot
+    (:attr:`~debate_core.application.caselist.publish_plan.SnapshotPlan.withholding_rows`), as
+    `caselist status` asks it for its hint (`v1-e30-t19`), and the message is the one a withheld
+    outcome carries (:attr:`SnapshotOutcome.manifest_error`): digests and request ids, never a path.
+
+    `manifest` is this machine's listing entry for it, so nothing is listed again. The plan is built
+    with no blob or bucket listing: its source actions are not read, only the rows that withhold the
+    manifest. `None` for a key that is not a snapshot's manifest, which no publish uploads.
+
+    A manifest a publish cannot read is refused, and nothing of it is published, so its refusal is
+    the reason: :class:`~debate_core.application.caselist.publish_plan.UnreadableManifest` names the
+    key and the line number, never the line.
+
+    The answer says which of the two it is, and which removal requests the message names, so that
+    `store sync` can group and caption it without reading the message (`v1-e29-t11`).
+    """
+    try:
+        snapshot = await read_local_manifest(local, manifest)
+    except UnreadableManifest as refused:
+        return ManifestWithholding(str(refused), unreadable=True)
+    if snapshot is None:
+        return None
+    (plan,) = build_publish_plan(
+        snapshot.caselist, [snapshot], local_blobs=(), remote={}, suppression=suppression
+    ).snapshots
+    if not plan.withholding_rows:
+        return None
+    return ManifestWithholding(_withheld_for_rows(plan), request_ids=_requests_named(plan))
+
+
 # ------------------------------------------------------------------------------------------------
 # Helpers
 # ------------------------------------------------------------------------------------------------
+
+
+def _withheld_for_rows(plan: SnapshotPlan) -> str:
+    """Why a manifest with a suppressed or held row is withheld: the rows by digest, and the fix.
+
+    A skipped member's row at a held path has no digest, and is named by the request holding the path
+    alone (`v1-e30-t23`).
+    """
+    rows: list[str] = []
+    if plan.suppressed_rows:
+        rows.append(
+            f"{len(plan.suppressed_rows)} row(s) for suppressed source(s): {', '.join(plan.suppressed_rows)}"
+        )
+    if plan.held_rows:
+        held = ", ".join(f"{row.sha256} ({row.request_id})" for row in plan.held_rows)
+        rows.append(f"{len(plan.held_rows)} row(s) at a path a removal holds: {held}")
+        if plan.held_back:
+            rows[-1] += f", whose bytes no other row names and were not uploaded ({len(plan.held_back)})"
+    if plan.held_skipped_rows:
+        requests = ", ".join(sorted(set(plan.held_skipped_rows)))
+        rows.append(
+            f"{len(plan.held_skipped_rows)} skipped member row(s) at a path a removal holds ({requests})"
+        )
+    return (
+        f"the local manifest still has {'; and '.join(rows)}; re-run `caselist remove` for them on this "
+        "machine to rewrite it"
+    )
+
+
+def _requests_named(plan: SnapshotPlan) -> tuple[str, ...]:
+    """The removal requests :func:`_withheld_for_rows` names, sorted: each held row's and each held
+    skipped row's. A row the list stops is named by its digest alone."""
+    return tuple(sorted({*(row.request_id for row in plan.held_rows), *plan.held_skipped_rows}))
 
 
 def _presence_problem(planned: PlannedSource, present: ObjectInfo) -> str | None:

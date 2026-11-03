@@ -1,0 +1,76 @@
+{
+  "count": 37,
+  "offsetMark": "AoJw8tjF6I4DKENSUFQtMTE5aHJwdDIxMg==",
+  "results": [
+    {
+      "title": "H.R. 4821 (IH) - Invented National Health Coverage Act of 2025",
+      "packageId": "BILLS-119hr4821ih",
+      "lastModified": "2025-07-24T09:12:31Z",
+      "governmentAuthor": ["Congress. House"],
+      "dateIssued": "2025-07-22",
+      "collectionCode": "BILLS",
+      "resultLink": "https://api.govinfo.gov/packages/BILLS-119hr4821ih/summary",
+      "download": {
+        "pdfLink": "https://api.govinfo.gov/packages/BILLS-119hr4821ih/pdf",
+        "txtLink": "https://api.govinfo.gov/packages/BILLS-119hr4821ih/htm",
+        "xmlLink": "https://api.govinfo.gov/packages/BILLS-119hr4821ih/xml"
+      }
+    },
+    {
+      "title": "Invented Single-Payer Transition Cost Estimates",
+      "packageId": "CRPT-119hrpt212",
+      "lastModified": "2025-10-02T14:00:00Z",
+      "governmentAuthor": ["Congress. House. Committee on Energy and Commerce", " Congress. House "],
+      "dateIssued": "2025-09",
+      "collectionCode": "CRPT",
+      "resultLink": "https://api.govinfo.gov/packages/CRPT-119hrpt212/summary",
+      "download": {"pdfLink": "https://api.govinfo.gov/packages/CRPT-119hrpt212/pdf"}
+    },
+    {
+      "title": "Invented Hearing on Health Insurance Coverage for Rural Families",
+      "packageId": "CHRG-119shrg58210",
+      "granuleId": "CHRG-119shrg58210-1",
+      "lastModified": "2026-03-11T08:30:00Z",
+      "governmentAuthor": ["Congress. Senate. Committee on Finance"],
+      "dateIssued": "2026",
+      "collectionCode": "CHRG",
+      "resultLink": "https://api.govinfo.gov/packages/CHRG-119shrg58210/granules/CHRG-119shrg58210-1/summary"
+    },
+    {
+      "title": "Invented Single-Payer Transition Cost Estimates, Part 2",
+      "packageId": "CRPT-119hrpt212",
+      "granuleId": "CRPT-119hrpt212-2",
+      "lastModified": "2025-10-02T14:00:00Z",
+      "governmentAuthor": ["Congress. House. Committee on Energy and Commerce"],
+      "dateIssued": "2025-09-30",
+      "collectionCode": "CRPT",
+      "resultLink": "https://api.govinfo.gov/packages/CRPT-119hrpt212/granules/CRPT-119hrpt212-2/summary"
+    },
+    {
+      "title": "S. 77 (IS) - A bill whose package id names no Congress",
+      "packageId": "BILLS-s77is",
+      "lastModified": "2025-05-01T00:00:00Z",
+      "governmentAuthor": ["Congress. Senate"],
+      "dateIssued": "2025-05-01",
+      "collectionCode": "BILLS",
+      "resultLink": "https://api.govinfo.gov/packages/BILLS-s77is/summary"
+    },
+    {
+      "title": null,
+      "packageId": "CPRT-119HPRT61022",
+      "lastModified": "2025-06-01T00:00:00Z",
+      "governmentAuthor": ["Congress. House. Committee on Ways and Means"],
+      "dateIssued": "2025-06-01",
+      "collectionCode": "CPRT",
+      "resultLink": "https://api.govinfo.gov/packages/CPRT-119HPRT61022/summary"
+    },
+    {
+      "title": "Invented Committee Print on Coverage Mandates",
+      "packageId": "CPRT-119SPRT60044",
+      "lastModified": "2025-03-03T00:00:00Z",
+      "dateIssued": "2025-02-30",
+      "collectionCode": "CPRT",
+      "resultLink": "https://api.govinfo.gov/packages/CPRT-119SPRT60044/summary"
+    }
+  ]
+}

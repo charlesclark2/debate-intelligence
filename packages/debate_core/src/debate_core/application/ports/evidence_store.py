@@ -54,7 +54,8 @@ have to read the object to find out", and `v1-e29-t05` treats such an object as 
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from datetime import datetime
 from pathlib import Path
 from typing import Protocol, runtime_checkable
 
@@ -153,6 +154,12 @@ class ObjectInfo:
     audit walk (`docs/runbooks/caselist-removal.md`). The filesystem store keeps no versions and
     leaves this `None`, and nothing in the platform may require it to be set.
     """
+
+    last_modified: datetime | None = field(default=None, compare=False)
+    """When the store wrote the object, as :meth:`EvidenceObjectStore.list_objects` reports it: S3's
+    `LastModified`. `None` from any other method, and from a store that does not say, such as the
+    filesystem store. What `caselist status` compares a landscape school view's age with a removal's
+    completion by (`v1-e32-t13`): the everyday profile may list `reports/` but not its versions."""
 
 
 @runtime_checkable

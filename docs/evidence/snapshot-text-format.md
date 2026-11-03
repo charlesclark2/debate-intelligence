@@ -296,7 +296,7 @@ The `RevisionMismatch` used is the one the repository already raises (`debate_co
 after, the verification status before and after, the time, and the negation flag (which omission, as
 snapshot offsets). A status is not student data. No evidence text, no
 deleted text, no tag, cite or interpolation, no payload, and no student data beyond the actor id. The
-port has an in-memory fake (`debate_core.testing.InMemoryCardEditLog`) and no production adapter yet:
+port has an in-memory fake (`debate_core.testing.fakes.card_edit_log.InMemoryCardEditLog`) and no production adapter yet:
 no V1 command edits a card. The card is saved before the entry is appended, so a failure between them
 loses an entry rather than logging an edit that never happened; the V2 adapter writes both in one
 transaction (`v2-e12-t05` ac6).
@@ -383,6 +383,20 @@ There is no card to compare, so nothing is checked against a snapshot; the rest 
 still verified. `VerifyManifest`
 ([`debate_core.application.verify_manifest`](../../packages/debate_core/src/debate_core/application/verify_manifest.py),
 `v1-e03-t06`) reports it.
+
+Four more come from `VerifyManifest` since `v1-e06-t07`, also never from the verifier, and each makes
+its card `UNVERIFIED` whatever the verifier said:
+
+| Found by `VerifyManifest` | Reason code |
+|---|---|
+| A version-2 manifest's reference to the card's snapshot differs from the stored record (`sha256`, normalized text hash, normalizer or extractor version, `retrieved_at`, `canonical_url`), or is missing | `SNAPSHOT_REFERENCE_MISMATCH` |
+| A .docx body changes the card's quoted words beyond the edit policy: a word changed, added, joined or partly deleted | `MANUAL_EDIT`, with the `evidence_text` range and the body range |
+| A .docx body holds no card for a manifest card | `BODY_CARD_MISSING` |
+| A .docx body holds a card its manifest does not list, such as one pasted in by hand; reported on that body card's own entry, by its body position | `BODY_CARD_NOT_IN_MANIFEST` |
+
+A bracketed interpolation in a .docx body is not a reason: the card stays `VERIFIED`, with the warning
+`INTERPOLATION_PRESENT` and the offset it is read before
+([`debate_core.evidence.docx_verify`](../../packages/debate_core/src/debate_core/evidence/docx_verify.py)).
 
 The first differing offset is in **evidence-text coordinates**: an index into the card's
 `evidence_text`. For a card with no omissions, the snapshot offset is `evidence_start_offset` plus

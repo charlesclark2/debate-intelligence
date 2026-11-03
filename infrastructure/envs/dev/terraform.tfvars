@@ -24,3 +24,8 @@ redirect_domain_names = []
 # Standard-IA transition drops out on purpose: S3 rejects a version that expires on the day it
 # would move, and Standard-IA bills a 30-day minimum for a version that is about to be deleted.
 evidence_noncurrent_version_retention_days = 30
+
+# The student evidence search pilot (v1-e39-t04-pilot-infrastructure, ADR-0019). dev is under the
+# preview host's own subdomain; the managed login is at auth.tub.dev.wfbdebate.com. The dev pool
+# holds the maintainer and synthetic users only (ADR-0013).
+evidence_search_host = "tub.dev.wfbdebate.com"

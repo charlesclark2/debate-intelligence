@@ -43,8 +43,13 @@ output "evidence_prefixes" {
 }
 
 output "removable_prefixes" {
-  description = "The prefixes a takedown may delete from. reports/ is deliberately not among them."
+  description = "The prefixes of disclosed material a takedown may delete from. reports/ is deliberately not among them; the one part of it a takedown may delete under is removable_index_prefix."
   value       = local.removable_prefixes
+}
+
+output "removable_index_prefix" {
+  description = "The student search pilot's index versions, the one part of reports/ the takedown credential may delete under (v1-e39-t07)."
+  value       = local.removable_index_prefix
 }
 
 output "operator_permission_set_name" {
@@ -75,4 +80,9 @@ output "removal_permission_set_arn" {
 output "removal_profile_name" {
   description = "The name to give the takedown SSO profile for this environment (debate-dev-evidence-removal / debate-prod-evidence-removal)."
   value       = local.removal_profile_name
+}
+
+output "operator_policy_json" {
+  description = "The everyday evidence permissions, the EvidenceOperator permission set's inline policy, as JSON. The weekly cloud run's role holds this same document (v1-e40-t03, ADR-0020 (3)), so the run never does more with the evidence than the everyday credential: it lists, reads and publishes, and never deletes."
+  value       = local.operator_policy
 }

@@ -2,7 +2,7 @@
 # the uv workspace definition, the shared dev tooling and every tool's configuration.
 [project]
 name = "debate-intelligence"
-version = "1.0.0"
+version = "1.1.0"
 description = "Workspace root for the Debate Intelligence Platform."
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
@@ -27,8 +27,21 @@ dev = [
     # the adapter, and boto3-stubs because pyright runs strict over debate_core and boto3 itself
     # ships no inline types. moto, below, is what answers the adapter in place of AWS.
     "boto3>=1.35",
-    "boto3-stubs[s3]>=1.35",
+    # cognito-idp, logs and ssm for the pilot's adapters (v1-e39-t05), for the same reason as s3.
+    "boto3-stubs[cognito-idp,logs,s3,ssm]>=1.35",
+    # scripts/affected_tests.py (v1-e01-t28) builds the workspace packages' import graph with grimp.
+    # import-linter brings it in too, but the script uses it directly, so it is named here. The lock
+    # holds the version; the floor is the 3 series, whose build_graph takes cache_dir=None. The floor is
+    # not the locked minor version because tests/architecture/test_single_interpreter_source.py reads
+    # a three-point-teen specifier as a Python version.
+    "grimp>=3.0",
+    # PM ruling 2026-10-22 (v1-e07-t05: feedparser falls back to a loose parser on a hostile feed).
+    # The feed providers parse untrusted RSS and Atom with defusedxml, debate-core's `feeds` extra.
+    "defusedxml>=0.7.1",
     "httpx>=0.28",
+    # Starlette's TestClient, which the pilot's app tests run through, deprecates httpx in favour of
+    # httpx2 from Starlette 1.9 (v1-e39-t04's report; added by v1-e39-t05, which writes most of them).
+    "httpx2>=2.15",
     "hypothesis>=6.100",
     # `uv run lint-imports` checks the ports-and-adapters boundaries. v1-e29-t04 adds the first
     # contract (no AWS SDK outside debate_core.integrations.s3); v1-e02-t06-import-boundary-guard
@@ -50,6 +63,18 @@ dev = [
     "flask>=3.0",
     "flask-cors>=5.0",
     "numbers-parser>=4.19",
+    # The student search pilot's pages are tested in Chromium (v1-e39-t06): Playwright drives it, and
+    # axe-playwright-python carries axe-core's script, which the tests inject into a page and the app
+    # never serves. The browser is Playwright's own build, installed once per machine with
+    # `uv run playwright install chromium`; the tests are marked `slow` (working agreement 1: browser
+    # suites run outside the PR path). The lock holds playwright 1.63.0, whose Chromium is v1243.
+    "axe-playwright-python>=0.1.8",
+    "playwright>=1.63",
+    # debate-core's `extraction` extra (v1-e04-t04): the HTML and PDF extractors, tested on synthetic
+    # pages and a PDF written by tests/fixtures/extraction/build_pdf_fixtures.py, never a download.
+    "pypdf>=6.0",
+    "readability-lxml>=0.8.1",
+    "trafilatura>=2.0",
     "pre-commit>=4.0",
     "pre-commit-hooks>=5.0",
     "pyright[nodejs]>=1.1.400",
@@ -60,11 +85,17 @@ dev = [
     "python-docx>=1.1",
     "respx>=0.22",
     "ruff>=0.11",
+    # debate-core's `local-classifier` extra (v1-e32-t21): the landscape's local classifier comparison
+    # and its tests, which train on synthetic fixtures. Never a pretrained model or a download.
+    "scikit-learn>=1.5",
     # ShellCheck as a wheel rather than a brew install, so `uv run shellcheck` works the same way
     # on a laptop and on a CI runner. scripts/site_deploy.sh (v1-e36-t05) is the first shell script
     # with a lint criterion of its own.
     "shellcheck-py>=0.10",
-    # PyYAML ships no inline types; debate_core.application.routing_config is type-checked strictly.
+    # PM ruling 2026-10-22 (v1-e07-t05: feedparser falls back to a loose parser on a hostile feed).
+    # defusedxml ships no inline types; the feed parser is type-checked strictly. Same reason as lxml-stubs.
+    "types-defusedxml>=0.7",
+    # PyYAML ships no inline types; debate_core.integrations.models.routing_policy is type-checked strictly.
     "types-pyyaml>=6.0",
 ]
 
@@ -101,8 +132,12 @@ known-first-party = ["debate_core", "debate_cli", "debate_api", "debate_workers"
 # ---------------------------------------------------------------------------------------------
 # pyright: strict for the domain core, standard for the delivery packages
 # ---------------------------------------------------------------------------------------------
+# CI runs a bare `uv run --frozen pyright`, so `include` is its whole scope. tests/architecture and
+# tests/smoke are in it (v1-e01-t35); the rest of tests/ is not yet clean. They import helpers
+# from scripts/ through a sys.path insert, which `extraPaths` lets pyright resolve.
 [tool.pyright]
-include = ["packages"]
+include = ["packages", "tests/architecture", "tests/smoke"]
+extraPaths = ["scripts"]
 exclude = ["**/__pycache__", "**/.*"]
 venvPath = "."
 venv = ".venv"
@@ -142,50 +177,115 @@ type = "forbidden"
 # which is what keeps `debate-core` installable and usable with no AWS SDK present at all.
 # `debate_core.integrations` is named by its subpackages rather than whole, because listing the
 # parent would include `integrations.s3` itself; a new adapter subpackage is added to this list in
-# the PR that creates it.
+# the PR that creates it. `integrations.bedrock` (v1-e05-t02-bedrock-adapter) is the other adapter
+# allowed the SDK, so it is not listed; it is on the httpx and lxml lists below instead. So are the
+# student search pilot's three (v1-e39-t05): `cognito`, `cloudwatch_audit` and `parameter_store`.
+#
+# `debate_api` left this list in v1-e39-t05, as ADR-0019 (Where the code goes) decided: its
+# composition root builds the pilot's Cognito, audit and parameter adapters, so it is held to the
+# direct form of the rule below, as the CLI is.
 source_modules = [
     "debate_core.domain",
+    "debate_core.retrieval",
+    "debate_core.arguments",
     "debate_core.application",
     "debate_core.testing",
     "debate_core.integrations.local",
+    "debate_core.integrations.landscape",
+    "debate_core.integrations.models",
     "debate_core.integrations.docx_parser",
+    "debate_core.integrations.docx_file_writer",
     "debate_core.integrations.file_streaming",
     "debate_core.integrations.opencaselist",
-    "debate_api",
+    "debate_core.integrations.discovery",
+    "debate_core.integrations.crossref_doi",
+    "debate_core.integrations.http_fetcher",
+    "debate_core.integrations.html_extractor",
+    "debate_core.integrations.pdf_extractor",
     "debate_workers",
 ]
 forbidden_modules = ["boto3", "botocore"]
 
 [[tool.importlinter.contracts]]
-name = "The HTTP client and the keychain library stay inside debate_core.integrations.opencaselist"
+name = "The HTTP client stays inside the adapters that talk HTTP"
 type = "forbidden"
-# v1-e34-t01-caselist-api-client brings httpx and keyring in as the `opencaselist` extra. Like
-# boto3, neither may reach the domain, the application layer, the shared test fakes or another
-# adapter, even indirectly. The article fetcher (v1-e04-t02) adds its own adapter to the allowed
-# side when it arrives, by leaving it off this list.
+# httpx is the `http` extra (PM ruling 2026-10-21, v1-e04-t02 packaging). Like boto3, it may not
+# reach the domain, the application layer, the shared test fakes or an adapter that has no business
+# on the network, even indirectly. The adapters allowed it are the ones left off this list:
+# debate_core.integrations.opencaselist (v1-e34-t01), debate_core.integrations.discovery (E07),
+# debate_core.integrations.http_fetcher (v1-e04-t02) and debate_core.integrations.crossref_doi
+# (v1-e06-t01). `debate_core.retrieval` is on it (PM ruling,
+# v1-e04-t01, 2026-10-19): retrieval holds the types, errors and rules, and the fetching adapter
+# lives in debate_core.integrations.
 source_modules = [
     "debate_core.domain",
+    "debate_core.retrieval",
+    "debate_core.arguments",
     "debate_core.application",
     "debate_core.testing",
     "debate_core.integrations.local",
+    "debate_core.integrations.landscape",
+    "debate_core.integrations.docx_file_writer",
     "debate_core.integrations.file_streaming",
     "debate_core.integrations.s3",
+    "debate_core.integrations.bedrock",
+    "debate_core.integrations.cognito",
+    "debate_core.integrations.cloudwatch_audit",
+    "debate_core.integrations.parameter_store",
+    "debate_core.integrations.secrets_manager",
+    "debate_core.integrations.sns",
+    "debate_core.integrations.html_extractor",
+    "debate_core.integrations.pdf_extractor",
     "debate_api",
     "debate_workers",
 ]
-forbidden_modules = ["httpx", "keyring"]
+forbidden_modules = ["httpx"]
 
 [[tool.importlinter.contracts]]
-name = "The CLI reaches httpx and keyring only through debate_core.integrations.opencaselist"
+name = "The keychain library stays inside debate_core.integrations.opencaselist"
 type = "forbidden"
-# The composition root builds the OpenCaselist client, so the chain to httpx is by design; what is
-# forbidden is a command importing httpx or keyring itself.
+# keyring is the `opencaselist` extra: the operator's caselist_token lives in the macOS keychain
+# (v1-e34-t01). Nothing else reads a keychain, so every other module is held off it, the other
+# HTTP adapters included.
+source_modules = [
+    "debate_core.domain",
+    "debate_core.retrieval",
+    "debate_core.arguments",
+    "debate_core.application",
+    "debate_core.testing",
+    "debate_core.integrations.local",
+    "debate_core.integrations.landscape",
+    "debate_core.integrations.docx_file_writer",
+    "debate_core.integrations.file_streaming",
+    "debate_core.integrations.s3",
+    "debate_core.integrations.bedrock",
+    "debate_core.integrations.cognito",
+    "debate_core.integrations.cloudwatch_audit",
+    "debate_core.integrations.parameter_store",
+    "debate_core.integrations.secrets_manager",
+    "debate_core.integrations.sns",
+    "debate_core.integrations.discovery",
+    "debate_core.integrations.crossref_doi",
+    "debate_core.integrations.http_fetcher",
+    "debate_core.integrations.html_extractor",
+    "debate_core.integrations.pdf_extractor",
+    "debate_api",
+    "debate_workers",
+]
+forbidden_modules = ["keyring"]
+
+[[tool.importlinter.contracts]]
+name = "The CLI reaches httpx and keyring only through debate_core.integrations"
+type = "forbidden"
+# The composition root builds the OpenCaselist client (and, from v1-e04-t06, the article fetcher),
+# so the chain to httpx is by design; what is forbidden is a command importing httpx or keyring
+# itself.
 allow_indirect_imports = true
 source_modules = ["debate_cli"]
 forbidden_modules = ["httpx", "keyring"]
 
 [[tool.importlinter.contracts]]
-name = "The CLI reaches the AWS SDK only through debate_core.integrations.s3"
+name = "The CLI and the API reach the AWS SDK only through debate_core.integrations"
 type = "forbidden"
 # The delivery packages are held to the *direct* form of the same rule, because a composition root
 # has to be able to construct an adapter: `debate_cli.container` imports
@@ -195,10 +295,13 @@ type = "forbidden"
 # `botocore` exception caught outside the adapter that is supposed to translate it — which is the
 # part that would put AWS back into code that is meant not to know about it (ADR-0003, §6).
 #
+# `debate_api` is held to the same form since v1-e39-t05 (ADR-0019): `debate_api.container` builds
+# the pilot's Cognito, audit and parameter adapters, and no route or page imports boto3 itself.
+#
 # The layers contract below is what forbids debate_core.application from importing
 # debate_core.integrations at all.
 allow_indirect_imports = true
-source_modules = ["debate_cli"]
+source_modules = ["debate_cli", "debate_api"]
 forbidden_modules = ["boto3", "botocore"]
 
 # v1-e31-t03-debate-docx-parser. A document library is an adapter's business: the parse output
@@ -208,14 +311,32 @@ forbidden_modules = ["boto3", "botocore"]
 [[tool.importlinter.contracts]]
 name = "Document libraries stay inside debate_core.integrations.docx_parser"
 type = "forbidden"
+# `debate_core.retrieval` is on this list for the same reason it is on the httpx one: HTML and PDF
+# extraction (v1-e04-t04) is an adapter in debate_core.integrations; retrieval keeps its models.
+# `debate_core.integrations.html_extractor` is left off: it parses pages with lxml, and trafilatura
+# and readability-lxml are built on it. The PDF extractor is on it; pypdf needs no lxml.
 source_modules = [
     "debate_core.domain",
+    "debate_core.retrieval",
+    "debate_core.arguments",
     "debate_core.application",
     "debate_core.testing",
     "debate_core.integrations.local",
+    "debate_core.integrations.landscape",
     "debate_core.integrations.s3",
+    "debate_core.integrations.bedrock",
     "debate_core.integrations.file_streaming",
-    "debate_api",
+    "debate_core.integrations.cognito",
+    "debate_core.integrations.cloudwatch_audit",
+    "debate_core.integrations.parameter_store",
+    "debate_core.integrations.secrets_manager",
+    "debate_core.integrations.sns",
+    "debate_core.integrations.http_fetcher",
+    "debate_core.integrations.pdf_extractor",
+    # PM ruling 2026-10-22 (v1-e07-t05: feedparser falls back to a loose parser on a hostile feed).
+    # The feed providers parse XML with defusedxml only, so lxml stays out of discovery too.
+    "debate_core.integrations.discovery",
+    "debate_core.integrations.crossref_doi",
     "debate_workers",
 ]
 forbidden_modules = ["lxml", "docx"]
@@ -231,13 +352,127 @@ allow_indirect_imports = true
 source_modules = ["debate_cli"]
 forbidden_modules = ["lxml", "docx"]
 
+# v1-e39-t08-card-download. The pilot's download builds a Verbatim file with the E33 writer inside the
+# function, so `debate_api.container` imports `debate_core.integrations.docx_file_writer` and
+# `docx_parser`, and the chain to lxml is by design. `debate_api` left the list above for the direct
+# form, as the CLI did in v1-e31-t06 and as the API did for the AWS SDK in v1-e39-t05: no route or
+# page imports lxml or python-docx itself.
+[[tool.importlinter.contracts]]
+name = "The API reaches lxml only through debate_core.integrations"
+type = "forbidden"
+allow_indirect_imports = true
+source_modules = ["debate_api"]
+forbidden_modules = ["lxml", "docx"]
+
+# v1-e05-t09 (PM amendment 2026-10-19, from v1-e05-t04's review). The prompt registry renders its
+# templates with jinja2's sandbox in debate_core.integrations.models (v1-e05-t04), and the API's pages
+# use it as the delivery package they are. Prompt text and its rendering are an adapter's business, as
+# a document library is: the domain holds the prompt's id, version and variables, never a template.
+[[tool.importlinter.contracts]]
+name = "The template engine never reaches the domain or the application layer"
+type = "forbidden"
+source_modules = ["debate_core.domain", "debate_core.application"]
+forbidden_modules = ["jinja2"]
+
+# v1-e04-t04-content-extraction. trafilatura, readability-lxml and pypdf are debate-core's
+# `extraction` extra. Only the two extractors may import them: html_extractor (trafilatura and
+# readability) and pdf_extractor (pypdf). The rules that decide a PDF's text live in
+# debate_core.retrieval.pdf_layout and see none of them, which is what lets them be tested on lines
+# written by hand.
+[[tool.importlinter.contracts]]
+name = "The extraction libraries stay inside the HTML and PDF extractors"
+type = "forbidden"
+source_modules = [
+    "debate_core.domain",
+    "debate_core.retrieval",
+    "debate_core.evidence",
+    "debate_core.arguments",
+    "debate_core.application",
+    "debate_core.testing",
+    "debate_core.integrations.local",
+    "debate_core.integrations.landscape",
+    "debate_core.integrations.models",
+    "debate_core.integrations.docx_parser",
+    "debate_core.integrations.docx_file_writer",
+    "debate_core.integrations.file_streaming",
+    "debate_core.integrations.s3",
+    "debate_core.integrations.bedrock",
+    "debate_core.integrations.cognito",
+    "debate_core.integrations.cloudwatch_audit",
+    "debate_core.integrations.parameter_store",
+    "debate_core.integrations.secrets_manager",
+    "debate_core.integrations.sns",
+    "debate_core.integrations.opencaselist",
+    "debate_core.integrations.discovery",
+    "debate_core.integrations.crossref_doi",
+    "debate_core.integrations.http_fetcher",
+    "debate_api",
+    "debate_workers",
+]
+forbidden_modules = ["trafilatura", "readability", "pypdf"]
+
+# v1-e04-t04-content-extraction. The fetch command (v1-e04-t06) will have the composition root build
+# the extractors, so the chain is by design; no command imports an extraction library itself.
+[[tool.importlinter.contracts]]
+name = "The CLI reaches the extraction libraries only through debate_core.integrations"
+type = "forbidden"
+allow_indirect_imports = true
+source_modules = ["debate_cli"]
+forbidden_modules = ["trafilatura", "readability", "pypdf"]
+
+# PM ruling 2026-10-22 (v1-e07-t05: feedparser falls back to a loose parser on a hostile feed).
+# defusedxml is the `feeds` extra: the feed providers in debate_core.integrations.discovery parse RSS
+# and Atom from strangers with it, refusing entity declarations and external references. Nothing
+# else parses feeds, so every other module is held off it, the other adapters included.
+[[tool.importlinter.contracts]]
+name = "The safe XML parser stays inside debate_core.integrations.discovery"
+type = "forbidden"
+source_modules = [
+    "debate_core.domain",
+    "debate_core.retrieval",
+    "debate_core.arguments",
+    "debate_core.application",
+    "debate_core.testing",
+    "debate_core.integrations.local",
+    "debate_core.integrations.landscape",
+    "debate_core.integrations.models",
+    "debate_core.integrations.docx_parser",
+    "debate_core.integrations.docx_file_writer",
+    "debate_core.integrations.file_streaming",
+    "debate_core.integrations.s3",
+    "debate_core.integrations.bedrock",
+    "debate_core.integrations.cognito",
+    "debate_core.integrations.cloudwatch_audit",
+    "debate_core.integrations.parameter_store",
+    "debate_core.integrations.secrets_manager",
+    "debate_core.integrations.sns",
+    "debate_core.integrations.opencaselist",
+    "debate_core.integrations.http_fetcher",
+    "debate_core.integrations.crossref_doi",
+    "debate_core.integrations.html_extractor",
+    "debate_core.integrations.pdf_extractor",
+    "debate_api",
+    "debate_workers",
+]
+forbidden_modules = ["defusedxml"]
+
+# PM ruling 2026-10-22 (v1-e07-t05: feedparser falls back to a loose parser on a hostile feed).
+# A composition root that builds the feed providers reaches defusedxml through them by design; no
+# command imports it itself.
+[[tool.importlinter.contracts]]
+name = "The CLI reaches defusedxml only through debate_core.integrations.discovery"
+type = "forbidden"
+allow_indirect_imports = true
+source_modules = ["debate_cli"]
+forbidden_modules = ["defusedxml"]
+
 # v1-e02-t06-import-boundary-guard. The contracts from here down are the shape of the architecture
 # itself (§1, §2): the ones above keep a named library inside its adapter, these keep each layer
 # in its place. tests/architecture/test_import_contracts.py breaks each one on purpose and checks
 # that lint-imports names it, so a contract here that stops biting fails that suite.
 
 [[tool.importlinter.contracts]]
-name = "debate_core layers: integrations and testing above application above evidence above domain"
+name = "debate_core layers: integrations and testing above application above evidence and retrieval above domain"
 type = "layers"
 # Each layer may import the ones below it and never the ones above: the domain model imports
 # nothing else in debate_core, the evidence algorithms see only the domain, the application layer
@@ -245,11 +480,21 @@ type = "layers"
 # the shared test fakes. `|` makes integrations and testing independent: neither may import the
 # other. `exhaustive` means a new debate_core subpackage fails this contract until it is placed in
 # a layer here, rather than slipping in unconstrained.
+#
+# `retrieval` (v1-e04-t01-url-canonicalization) sits beside `evidence`: the pure procedures that
+# turn a URL and fetched bytes into an article (canonical URLs, identifiers, and later access
+# classification and extracted-content types) see only the domain, and the `|` keeps the two
+# independent of each other. ArticleService in the application layer composes both.
 containers = ["debate_core"]
+#
+# `arguments` (v1-e32-t01-position-taxonomy) sits beside them too: the argument landscape's pure
+# procedures (heading normalization, taxonomy seeding counts, and later the matcher) see only the
+# domain, and the application layer composes them. Its YAML adapter is
+# `debate_core.integrations.landscape`, on the library lists above.
 layers = [
     "integrations | testing",
     "application",
-    "evidence",
+    "evidence | retrieval | arguments",
     "domain",
 ]
 exhaustive = true
@@ -264,6 +509,8 @@ type = "forbidden"
 source_modules = [
     "debate_core.domain",
     "debate_core.evidence",
+    "debate_core.retrieval",
+    "debate_core.arguments",
     "debate_core.application",
 ]
 forbidden_modules = ["typer", "click", "rich", "fastapi", "starlette"]
@@ -286,7 +533,8 @@ name = "Delivery packages reach debate_core.integrations only through their comp
 type = "forbidden"
 # A command, route or job calls use cases in debate_core.application; which adapter implements a
 # port is decided in one place per front end, the composition root (`debate_cli.container` for the
-# CLI; debate_api and debate_workers add theirs to ignore_imports when they get one). Indirect
+# CLI, `debate_api.container` for the pilot's app since v1-e39-t05; debate_workers adds its own to
+# ignore_imports when it gets one). Indirect
 # chains through that root are the design, so only direct imports are checked.
 #
 # The composition roots are the only entries. The four command imports that were grandfathered here
@@ -297,6 +545,7 @@ source_modules = ["debate_cli", "debate_api", "debate_workers"]
 forbidden_modules = ["debate_core.integrations"]
 ignore_imports = [
     "debate_cli.container -> debate_core.integrations.**",
+    "debate_api.container -> debate_core.integrations.**",
 ]
 
 [[tool.importlinter.contracts]]
@@ -310,6 +559,19 @@ type = "forbidden"
 # out, directly or through any chain.
 source_modules = ["debate_cli", "debate_api", "debate_workers"]
 forbidden_modules = ["debate_core.testing"]
+
+[[tool.importlinter.contracts]]
+name = "No debate_api module but the composition root imports debate_api.container"
+type = "forbidden"
+# v1-e41-t11, from v1-e39-t23: the container imports the app to build it, never the other way. A
+# route, page or app.py that imported it would reach, for the test selector, every adapter the
+# function wires. Each module is its own source (`as_packages = false`), the package's __init__ by
+# `debate_api` and every module under it by `debate_api.**`: listed as a package, `debate_api`
+# holds the container itself, and imports inside one package are not checked, so a planted import
+# left the contract kept. The container is among the sources too; it never imports itself.
+as_packages = false
+source_modules = ["debate_api", "debate_api.**"]
+forbidden_modules = ["debate_api.container"]
 
 # ---------------------------------------------------------------------------------------------
 # pytest: every project marker is registered here, once. Later tasks use them, never add their own.
@@ -335,7 +597,8 @@ addopts = [
     # No --cov here (v1-e01-t27). Coverage took a third of the suite's wall-clock (182 s against
     # 123 s on the operator's Mac, 5,812 tests) and nothing is gated on it, so a plain
     # `uv run pytest` and a pull request's `test` job both run without it. CI measures it on every
-    # push to dev and main, in ci.yml's `coverage` job; locally, ask for it:
+    # push to dev and main, in each part of ci.yml's `test` job, and its `coverage` job combines the
+    # parts into one report (v1-e01-t42); locally, ask for it:
     # `uv run pytest --cov --cov-report=term-missing`. [tool.coverage] below still says what is
     # measured, so the report is the one this file used to produce on every run.
     #
@@ -354,8 +617,10 @@ markers = [
     "slow: takes more than a few seconds; excluded by default, opt in with -m slow",
     "live: needs the network or a real model/provider; excluded by default, opt in with -m live",
     "eval: LLM evaluation suite, run outside the PR CI path",
+    "operator_data: needs data only the operator's machine holds; validate-dev's slow tier leaves it out",
     "dev: cloud smoke check targeting the dev environment",
     "prod: cloud smoke check targeting the prod environment",
+    "partition_proof: proves ci.yml's test parts together are the selection; ci.yml's partition-proof job runs it, the parts leave it out",
 ]
 
 [tool.coverage.run]

@@ -8,7 +8,8 @@ source; its output is in the README. This module holds the other direction, and 
 what they say they are:
 
 * the older builds wrote the same rows, byte for byte once the two keys are taken off, and the same
-  summary row, so the two keys are the whole difference;
+  summary row, so the two keys are the whole difference, with the listing's camp word
+  (`v1-e30-t31`), which this build's rows carry as a third;
 * this build's pull, removal plan, re-derive, publish and status read an older build's manifest, and
   keep its rows byte for byte where they kept them before;
 * the stored file of this build is what its pull writes now.
@@ -60,6 +61,9 @@ from .test_sync_skips_suppressed_downloads import ESTUARY_SHA256, FakeOpenEvSour
 pytestmark = pytest.mark.anyio
 
 IDENTITY = ("openev_id", "upstream_path_sha256")
+CAMP_WORD = "openev_camp_word"
+#: Every key this build's rows carry and the older builds' rows do not.
+ADDED = (*IDENTITY, CAMP_WORD)
 OLDER_BUILDS = ("written_by_the_installed_build", "written_by_the_start_commit")
 THIS_BUILD = STORED / "written_by_this_build" / MANIFEST_NAME
 
@@ -72,13 +76,17 @@ PULLED_IDENTITY = {
     "openev-417-TSF-Spillway Advantage.docx": (417, None),
 }
 
+#: The camp word each pulled row of this build's stored file carries, from the history's listings:
+#: their upstream paths' camp folders. The hand-imported rows carry `null`.
+PULLED_WORDS = {ROWS[0]: "Tamarack", ROWS[1]: "Tamarack", ROWS[2]: "Quillfeather"}
+
 
 def rows(path: Path) -> list[dict[str, object]]:
     return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()]
 
 
 def without_the_keys(row: dict[str, object]) -> dict[str, object]:
-    return {key: value for key, value in row.items() if key not in IDENTITY}
+    return {key: value for key, value in row.items() if key not in ADDED}
 
 
 def by_path(lines: list[str]) -> dict[str, str]:
@@ -110,14 +118,15 @@ def test_an_older_build_wrote_the_same_rows_and_summary_without_the_two_keys(wri
     theirs, mine = rows(STORED / written_by / MANIFEST_NAME), rows(THIS_BUILD)
 
     assert [without_the_keys(row) for row in mine] == theirs
-    assert not [row for row in theirs if set(IDENTITY) & set(row)]
+    assert not [row for row in theirs if set(ADDED) & set(row)]
     assert mine[-1] == theirs[-1] and mine[-1]["kind"] == "summary", "the summary row is unchanged"
 
 
-def test_every_member_row_this_build_wrote_carries_both_keys_and_the_pulled_ones_their_values() -> None:
+def test_every_member_row_this_build_wrote_carries_the_keys_and_the_pulled_ones_their_values() -> None:
     members = [row for row in rows(THIS_BUILD) if row["kind"] == "member"]
 
-    assert all(set(IDENTITY) <= set(row) for row in members)
+    assert all(set(ADDED) <= set(row) for row in members)
+    assert {str(row["path"]): row[CAMP_WORD] for row in members if row[CAMP_WORD] is not None} == PULLED_WORDS
     assert {
         str(row["path"]): (row["openev_id"], row["upstream_path_sha256"])
         for row in members
@@ -168,7 +177,8 @@ async def test_this_builds_pull_reads_it_and_keeps_its_rows_byte_for_byte(
     }
     merged = by_path(release_lines(world))
     assert {path: merged[path] for path in theirs} == theirs
-    assert (json.loads(merged[NEXT_WEEK_ROW])["openev_id"], len(merged)) == (900, len(theirs) + 1)
+    new_row = json.loads(merged[NEXT_WEEK_ROW])
+    assert (new_row["openev_id"], new_row.get(CAMP_WORD), len(merged)) == (900, "Juniper", len(theirs) + 1)
 
 
 def next_weeks_listing() -> FakeOpenEvSource:
@@ -230,6 +240,7 @@ async def test_this_builds_re_derive_gives_every_row_the_keys_and_changes_nothin
 
     assert report.identities_added == len(by_path(theirs))
     rederived = [json.loads(line) for line in report.manifest_lines]
+    assert not [row for row in rederived if CAMP_WORD in row], "no delivery record knows a camp word"
     untouched = (*IDENTITY, *DERIVED_FIELDS)
     assert [{key: value for key, value in row.items() if key not in untouched} for row in rederived[:-1]] == [
         {key: value for key, value in json.loads(line).items() if key not in DERIVED_FIELDS}

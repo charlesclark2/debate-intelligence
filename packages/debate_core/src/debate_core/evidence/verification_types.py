@@ -25,6 +25,16 @@ the first, so one run reports everything wrong with a card:
 * ``PROVENANCE_MISMATCH``: the card's ``provenance_mode`` is not its snapshot's.
 * ``CARD_INVALID``: a card read from a manifest is not a valid ``Card``, so it was never verified.
   Reported by the manifest reader, not by the verifier.
+* ``SNAPSHOT_REFERENCE_MISMATCH``: the manifest's reference to the card's snapshot is not the stored
+  snapshot record. Reported by the manifest reader (`v1-e06-t07`).
+* ``MANUAL_EDIT`` and ``BODY_CARD_MISSING``: in a .docx, the body's evidence was changed in a way the
+  edit policy does not allow, or the body holds no card for a manifest card. Reported by the manifest
+  reader from the document body (`v1-e06-t07`).
+* ``BODY_CARD_NOT_IN_MANIFEST``: in a .docx, a card in the body that the manifest does not list, such
+  as one pasted in by hand. It is reported on that body card, not on a manifest card (`v1-e06-t07`).
+
+A :class:`WarningCode` is not a reason: it is something a reader of the card should know that leaves
+the card VERIFIED, such as a bracketed interpolation in a .docx body (``INTERPOLATION_PRESENT``).
 
 ## What VERIFIED means, and what it does not
 
@@ -53,6 +63,7 @@ __all__ = [
     "VerificationCheck",
     "VerificationReason",
     "VerificationResult",
+    "WarningCode",
 ]
 
 VERIFIER_VERSION: Final = "evidence-verifier-v2"
@@ -119,6 +130,44 @@ class ReasonCode(StrEnum):
 
     Not ``CARD_INCOMPLETE``, which says something re-verification needs is missing: every field may be
     present here, and a reader sent looking for an absent one would look in the wrong place."""
+
+    SNAPSHOT_REFERENCE_MISMATCH = "SNAPSHOT_REFERENCE_MISMATCH"
+    """The manifest's reference to the card's snapshot (its ``sha256``, normalized text hash,
+    normalizer and extractor versions, ``retrieved_at`` or ``canonical_url``) is not the stored
+    snapshot record's, or a version-2 manifest lists no valid reference to it (`v1-e06-t07`, the PM's
+    amendment of 2026-10-26). The card may still be verbatim from the stored snapshot; what is wrong is
+    what the manifest says about where that snapshot came from. Reported by
+    :class:`~debate_core.application.verify_manifest.VerifyManifest`, never by the verifier; the detail
+    names the differing fields, not their values. Not ``HASH_MISMATCH``, which says stored content is
+    damaged: here the store is intact and the manifest is not."""
+
+    MANUAL_EDIT = "MANUAL_EDIT"
+    """A .docx body changes the card's evidence in a way the edit policy does not allow: a changed,
+    added or partly deleted word (:mod:`debate_core.evidence.docx_verify`, `v1-e06-t07`). Carries the
+    ``evidence_text`` range it replaced and the body range that replaced it, never the words.
+    Reported by :class:`~debate_core.application.verify_manifest.VerifyManifest`."""
+
+    BODY_CARD_MISSING = "BODY_CARD_MISSING"
+    """A .docx's manifest lists the card and its body holds no card for it: no tag paragraph where the
+    card should be (`v1-e06-t07`). Nothing in the document shows the card's evidence, so nothing shown
+    can be called verified. Reported by
+    :class:`~debate_core.application.verify_manifest.VerifyManifest`."""
+
+    BODY_CARD_NOT_IN_MANIFEST = "BODY_CARD_NOT_IN_MANIFEST"
+    """A .docx's body holds a card its manifest does not list, such as one pasted in by hand
+    (`v1-e06-t07`, the PM's ruling of 2026-11-02). Nothing about it can be checked against a snapshot,
+    so it is UNVERIFIED, and a document holding it is not a verified document. Carried by the body
+    card's own entry, never by a manifest card's verdict; the detail gives its position in the body.
+    Reported by :class:`~debate_core.application.verify_manifest.VerifyManifest`."""
+
+
+class WarningCode(StrEnum):
+    """Something about a VERIFIED card a reader should know. Never a reason: the status stays VERIFIED."""
+
+    INTERPOLATION_PRESENT = "INTERPOLATION_PRESENT"
+    """A .docx body shows a bracketed interpolation in the card's evidence: words that are the
+    debater's, not the source's (`v1-e06-t07`). The edit policy allows them; the report says where each
+    is read and how long it is, never its words."""
 
 
 class VerificationCheck(StrEnum):

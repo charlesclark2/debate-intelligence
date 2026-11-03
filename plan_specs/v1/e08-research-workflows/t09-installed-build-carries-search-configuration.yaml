@@ -1,0 +1,89 @@
+# TASK v1-e08-t09-installed-build-carries-search-configuration - An installed build carries the configuration `search` reads: the argument taxonomy, the ranking table and the feed lists
+# Epic: E08 Federated Research Workflows | Release: v1.4 (Federated research from the CLI) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e08-t09-installed-build-carries-search-configuration
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.4
+    debate/epic: v1-e08-research-workflows
+  annotations:
+    debate/title: "An installed build carries the configuration `search` reads: the argument taxonomy, the ranking table and the feed lists"
+spec:
+  # Filed by the PM, 2026-11-02, from validate-dev's failure on v1.1.0-dev.323 (2026-11-02), found by the PM.
+  description: >-
+    validate-dev failed on v1.1.0-dev.322 and dev.323. Its installed-build smoke tier ran
+    tests/smoke/test_search_smoke.py against the published pre-release, and three checks failed.
+    The first,
+    test_an_installed_build_carries_the_taxonomy_ranking_table_and_feed_lists_it_searches_with,
+    found the files missing. The other two got INVALID_ARGUMENT_TAXONOMY, and exit 1 where 2 was
+    expected, because an installed `search` can't find its taxonomy. `scripts/stamp_build.py`'s
+    bundle_configuration copies the profiles, the routing and pricing files, the format profiles
+    and the prompts, but not config/argument_taxonomy.yaml, config/federated_ranking.yaml or
+    config/feeds/*.yaml. v1-e08-t05's smoke check passed only against the checkout's console
+    script, which reads the checkout's copies. Bundle every file `search` reads in an installed
+    build (check the container for any other, such as the landscape topics if the taxonomy's
+    preset check reads them). Make `check-wheels` require them, as it requires `cut`'s prompts.
+    Prove it on a locally stamped, installed build, as v1-e06-t06 did: red on a wheel stamped by
+    today's script, green on this one's. A pre-release from this change must pass validate-dev's
+    smoke tier.
+  priority: 1
+  constraints:
+    packages: [scripts, tests/scripts, tests/smoke, debate_cli, packages/debate_cli/tests]
+    forbidden:
+      - A configuration file read from the working directory or the user's home by an installed build
+      - A change to any bundled file's content
+      - Network access in a test
+  context:
+    - kind: TaskRef
+      name: v1-e06-t06-cut-command
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e08-t04-argument-need-expansion
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        The stamp bundles the argument taxonomy, the ranking table and every feed list (and
+        anything else search reads), check-wheels refuses a wheel without them, and the
+        search smoke check passes on a locally stamped, installed build, red on today's
+        stamp first.
+status:
+  phase: Succeeded
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e08-t09-installed-build-carries-search-configuration-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.4
+    debate/epic: v1-e08-research-workflows
+spec:
+  description: >-
+    An installed build carries the configuration `search` reads: the argument taxonomy, the
+    ranking table and the feed lists.
+  goalRef:
+    name: v1-e08-t09-installed-build-carries-search-configuration
+  graph:
+    nodes:
+      - id: installed-build-carries-search-configura
+        kind: Task
+        name: Search config bundled
+        description: >-
+          An installed build carries the configuration `search` reads: the argument
+          taxonomy, the ranking table and the feed lists.
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Search config bundled tests pass
+            command: uv
+            args: [run, pytest, tests/scripts/test_stamp_build.py, tests/smoke/test_search_smoke.py]
+status:
+  phase: Pending

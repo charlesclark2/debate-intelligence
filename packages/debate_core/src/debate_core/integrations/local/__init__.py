@@ -63,6 +63,7 @@ from debate_core.integrations.local.fs_object_store import (
 )
 from debate_core.integrations.local.sqlite_db import (
     DATABASE_FILENAME,
+    DatabaseFromNewerBuild,
     Migration,
     MigrationError,
     SqliteDatabase,
@@ -86,6 +87,7 @@ __all__ = [
     "read_archive",
     "BLOB_FILE_MODE",
     "DATABASE_FILENAME",
+    "DatabaseFromNewerBuild",
     "OBJECT_DIRECTORY",
     "CorruptRecordError",
     "FsEvidenceObjectStore",

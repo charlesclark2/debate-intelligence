@@ -24,9 +24,17 @@ spec:
     shared `--max-cost` option helper for debate_cli so any model-using command (landscape classification
     in E32, cut in E06, auto-cut and daily in E08) can adopt it, plus `debate-research usage` for a daily
     summary. Boundaries: does not implement CloudWatch metrics (V2) or change routing decisions (t01); the fake router reports zero cost.
+    (PM amendment 2026-10-24, from v1-e05-t05's follow-up.) An attempt that fails validation raises
+    `InvalidModelOutput`, which carries no `ModelUsage`, so the tokens of a repaired call's first
+    attempt are lost today. The error, or the structured-output guard's attempt record, carries the
+    attempt's usage, and telemetry and the budget guard count both attempts of a repaired call, by
+    test.
   priority: 2
   constraints:
-    packages: [debate_core.integrations, debate_core.application, debate_cli]
+    # PM context 2026-10-26: config/model_pricing.yaml, the settings and tests, and the
+    # bedrock-access runbook's line on usage.
+    # PM ruling 2026-10-26, from the review (Deviation 3): the usage command's smoke check.
+    packages: [debate_core.integrations, debate_core.application, debate_cli, config, packages/debate_core/tests, packages/debate_cli/tests, docs/runbooks, tests/smoke]
     forbidden:
       - Logging prompt bodies or source text in telemetry records
       - Hard-coded per-token prices in Python code
@@ -38,8 +46,9 @@ spec:
   acceptanceCriteria:
     - id: ac1
       description: >-
-        Every ModelResponse carries a UsageRecord (run_id, prompt_id, model_id, input/output tokens,
-        latency_ms, estimated_cost_usd) and records are appended to a local JSONL usage log.
+        Every call made through the real router yields a UsageRecord (run_id, prompt_id, model_id,
+        input/output tokens, latency_ms, estimated_cost_usd) appended to a local JSONL usage log; the
+        response keeps its ModelUsage. (PM amendment 2026-10-26, from the review's ruling 2.)
     - id: ac2
       description: >-
         Cost is computed from config/model_pricing.yaml; an unpriced model_id yields cost=null and a warning
@@ -53,7 +62,7 @@ spec:
         `debate-research usage --date 2026-09-17` prints calls, tokens and cost grouped by prompt_id and
         model_id, and `--json` emits the same data machine-readably.
 status:
-  phase: Pending
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

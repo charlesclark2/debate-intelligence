@@ -11,6 +11,15 @@ binary, never against this checkout's code. :func:`resolve_build` decides which 
   the binary is this workspace's own console script, which reports channel ``local`` and the
   checkout's commit.
 
+An installed build reads the profiles it carries in its wheel, which ``scripts/stamp_build.py``
+copied from this checkout's ``config/profiles``, from any working directory. The checkout's script
+has no such copy, and it runs from a scratch directory where no checkout is found, so on its own it
+reads the built-in values instead: a check could pass in ``ci`` on a premise the installed build
+breaks (validate-dev, 2026-10-26 and 2026-10-27, on the dev profile's ``caselist.api_enabled``).
+So the checkout's build is told where those same files are, with ``DEBATE_PROFILE_DIR``, and an
+installed build is told nothing (v1-e01-t41). A check that names a profile directory of its own
+still wins, as it does over an installed build's bundled copy.
+
 :class:`InstalledCli` runs it as a process with a fresh ``HOME``, working directory and data
 directory, in an environment built from scratch: no inherited ``DEBATE_*``, AWS or token
 variables, the checkout's ``.venv`` taken off ``PATH``, ``DEBATE_ENV=dev`` and
@@ -33,9 +42,12 @@ from pathlib import Path
 
 SMOKE_DIRECTORY = Path(__file__).resolve().parent
 REPO_ROOT = SMOKE_DIRECTORY.parents[1]
+BUNDLED_PROFILES = Path("config") / "profiles"
+"""The profiles under a checkout that a stamped build carries copies of (scripts/stamp_build.py)."""
 NETWORK_GUARD = SMOKE_DIRECTORY / "network_guard"
 
 SMOKE_BIN = "DEBATE_SMOKE_BIN"
+PROFILE_DIR = "DEBATE_PROFILE_DIR"
 EXPECT_SHA = "DEBATE_SMOKE_EXPECT_SHA"
 EXPECT_TAG = "DEBATE_SMOKE_EXPECT_TAG"
 NETWORK_LOG = "DEBATE_SMOKE_NETWORK_LOG"
@@ -66,6 +78,8 @@ class SmokeBuild:
     commit: str
     tag: str | None
     channel: str
+    profile_directory: Path | None = None
+    """Where the build reads its profiles, when it does not carry them itself: the checkout's script."""
 
 
 def interpreter_of(binary: Path) -> Path:
@@ -89,7 +103,9 @@ def resolve_build(environ: Mapping[str, str], *, repo_root: Path = REPO_ROOT) ->
         commit = subprocess.run(
             ["git", "-C", str(repo_root), "rev-parse", "HEAD"], capture_output=True, text=True, check=True
         ).stdout.strip()
-        return SmokeBuild(binary, interpreter_of(binary), False, commit, None, "local")
+        return SmokeBuild(
+            binary, interpreter_of(binary), False, commit, None, "local", repo_root / BUNDLED_PROFILES
+        )
 
     binary = Path(named).expanduser().resolve()
     if not binary.is_file() or not os.access(binary, os.X_OK):
@@ -188,6 +204,8 @@ class InstalledCli:
             "AWS_SHARED_CREDENTIALS_FILE": os.devnull,
             "AWS_EC2_METADATA_DISABLED": "true",
         }
+        if self.build.profile_directory is not None:
+            environment[PROFILE_DIR] = str(self.build.profile_directory)
         if not self.network:
             environment |= {"PYTHONPATH": str(NETWORK_GUARD), NETWORK_LOG: str(self.network_log)}
             if self.stand_ins:

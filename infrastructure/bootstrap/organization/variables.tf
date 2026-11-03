@@ -73,13 +73,18 @@ variable "monthly_budget_usd" {
   }
 }
 
-variable "bedrock_monthly_budget_usd" {
+variable "model_budget_notification_emails" {
   description = <<-EOT
-    Monthly cap for Amazon Bedrock spend across both environments, as early warning on model
-    cost before the ModelRouter quotas of E19 exist.
+    Who receives the model spend budget's four notices (modules/model_spend_budget): the coach's
+    address. Kept apart from budget_notification_emails so the coach gets these notices and none of
+    this root's other mail.
   EOT
-  type        = number
-  default     = 40
+  type        = list(string)
+
+  validation {
+    condition     = length(var.model_budget_notification_emails) > 0
+    error_message = "At least one notification email is required; a budget nobody receives is not a control."
+  }
 }
 
 variable "budget_notification_emails" {

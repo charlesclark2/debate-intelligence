@@ -56,7 +56,9 @@ from dataclasses import dataclass
 
 from debate_core.application.errors import RevisionMismatch
 from debate_core.application.evidence_verifier import EvidenceVerifier
-from debate_core.application.ports import ArticleRepository, CardEditEntry, CardEditLog, CardRepository, Clock
+from debate_core.application.ports.card_edit_log import CardEditEntry, CardEditLog
+from debate_core.application.ports.persistence import ArticleRepository, CardRepository
+from debate_core.application.ports.providers import Clock
 from debate_core.application.snapshot_service import SnapshotService
 from debate_core.domain import Card, Ulid, VerificationStatus
 from debate_core.evidence.edit_policy import (

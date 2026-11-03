@@ -31,3 +31,7 @@ redirect_domain_names = []
 # is kept for a year, in Standard-IA after the first 30 days. Current versions are never expired
 # — evidence comes out on request (docs/runbooks/caselist-removal.md) or not at all.
 evidence_noncurrent_version_retention_days = 365
+
+# The student evidence search pilot (v1-e39-t04-pilot-infrastructure, ADR-0019). These two names,
+# tub.wfbdebate.com and auth.tub.wfbdebate.com, are what school IT allows through the web filter.
+evidence_search_host = "tub.wfbdebate.com"

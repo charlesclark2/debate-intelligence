@@ -1,0 +1,10 @@
+{
+  "query": {"query": "single payer health insurance", "filters": {"since": "2025-01-01T00:00:00Z", "until": "2026-06-30T00:00:00Z", "max_results": 6}},
+  "exchanges": [
+    {
+      "request": {"method": "POST", "url": "https://api.govinfo.gov/search"},
+      "response": {"status": 200, "headers": {"content-type": "text/html"}, "body": "<html><body>Maintenance</body></html>"}
+    }
+  ],
+  "expected_results_file": "search_errors.expected.json"
+}

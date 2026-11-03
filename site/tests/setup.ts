@@ -1,6 +1,8 @@
 import { cleanup } from '@testing-library/react'
 import { afterEach, beforeEach, vi } from 'vitest'
 
+import { TEST_BUILD_DATE } from './build-date'
+
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean
 }
@@ -40,6 +42,9 @@ globalThis.IntersectionObserver = InertIntersectionObserver
  * a real request, which is what docs/process/working-agreements.md §1 asks of PR-path tests.
  */
 beforeEach(() => {
+  // Every test builds the site as of one fixed day, so none reads the clock (tests/build-date.ts).
+  // vi.unstubAllEnvs() below restores it after each test, and the next test sets it again.
+  vi.stubEnv('SITE_BUILD_DATE', TEST_BUILD_DATE)
   vi.stubGlobal('fetch', () => {
     throw new Error('Network access is not allowed in the site test suite')
   })

@@ -242,13 +242,16 @@ than asserted.
    git -C ../debate-intelligence worktree add "$PWD/prod-deploy" main
    cd prod-deploy
    git pull --ff-only
-   git branch --show-current   # expect: main
+   git branch --show-current
    pnpm --dir site install --frozen-lockfile
    aws sso login --sso-session debate
    AWS_PROFILE=debate-admin terraform -chdir=infrastructure/envs/prod init -reconfigure -input=false
    scripts/site_deploy.sh prod
    uv run scripts/site_smoke.py --env prod --url https://wfbdebate.com --expect-sha "$(git rev-parse HEAD)"
    ```
+
+   `git branch --show-current` prints `main`. (Comment moved out of the block by the PM, 2026-10-31,
+   for agreement 9's check.)
 
    Success looks like:
    - `clean, on main, and equal to origin/main.`;
@@ -343,3 +346,13 @@ promises families a removal channel should record when that channel changed and 
 **Reviewed by / date:**
 
 **Notes:**
+
+## Operator records (recorded by the PM, 2026-10-31)
+
+Added by the PM. Nothing above is changed, and this section is not a review.
+
+| Criterion | Was | Now | Record |
+|---|---|---|---|
+| ac6 (amended 2026-10-01): a subscriber export at least monthly, kept outside Buttondown and the repository, the guide recording the last one, and the plan for a second person stated | NOT MET, interim | PASS | The second export, 2026-10-31, by Charlie, kept outside Buttondown and outside the repository; the guide's "The monthly subscriber export" now records it. The plan for a second person, with the start of 2027-28 as the backstop, was already stated in "Who owns the list" |
+
+Every criterion passes under ac6 as amended, so the Goal is `Succeeded`. The monthly export continues, and the guide's line is updated by whoever records the next one.

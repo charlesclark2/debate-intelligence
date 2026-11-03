@@ -1,0 +1,53 @@
+{
+  "count": 41,
+  "description": "Documents matching 'health insurance marketplace', of type Rule, Proposed Rule or Notice, published 2025-01-01 to 2026-06-30",
+  "total_pages": 9,
+  "next_page_url": "https://www.federalregister.gov/api/v1/documents.json?conditions%5Bterm%5D=health+insurance+marketplace&page=2&per_page=5",
+  "results": [
+    {
+      "document_number": "2025-90101",
+      "title": "Marketplace Enrollment Verification Standards for Plan Year 2027",
+      "publication_date": "2025-03-14",
+      "agency_names": ["Health and Human Services Department", "Centers for Medicare & Medicaid Services"],
+      "abstract": "This final rule sets enrollment verification standards for the individual health insurance marketplaces beginning with plan year 2027.",
+      "html_url": "https://www.federalregister.gov/documents/2025/03/14/2025-90101/marketplace-enrollment-verification-standards-for-plan-year-2027",
+      "pdf_url": "https://www.govinfo.gov/content/pkg/FR-2025-03-14/pdf/2025-90101.pdf"
+    },
+    {
+      "document_number": "2025-90102",
+      "title": "Premium Tax Credit Reconciliation for Marketplace Coverage",
+      "publication_date": "2025-08-01",
+      "agency_names": ["Treasury Department"],
+      "abstract": null,
+      "html_url": null,
+      "pdf_url": "https://www.govinfo.gov/content/pkg/FR-2025-08-01/pdf/2025-90102.pdf"
+    },
+    {
+      "document_number": "2025-90103",
+      "title": null,
+      "publication_date": "2025-09-12",
+      "agency_names": ["Health and Human Services Department"],
+      "abstract": "A document the Register lists without a title.",
+      "html_url": "https://www.federalregister.gov/documents/2025/09/12/2025-90103/untitled",
+      "pdf_url": "https://www.govinfo.gov/content/pkg/FR-2025-09-12/pdf/2025-90103.pdf"
+    },
+    {
+      "document_number": "2026-90104",
+      "title": "Agency Information Collection Activities: Marketplace Navigator Grant Reports",
+      "publication_date": "2026-02-30",
+      "agency_names": [],
+      "abstract": "   ",
+      "html_url": "https://www.federalregister.gov/documents/2026/02/27/2026-90104/agency-information-collection-activities-marketplace-navigator-grant-reports",
+      "pdf_url": null
+    },
+    {
+      "document_number": "2026-90105",
+      "title": "Marketplace Open Enrollment Period Notice",
+      "publication_date": "2026-04-03",
+      "agency_names": ["Centers for Medicare & Medicaid Services"],
+      "abstract": "A document with neither an HTML nor a PDF link.",
+      "html_url": null,
+      "pdf_url": null
+    }
+  ]
+}

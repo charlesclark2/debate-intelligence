@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <title>Example Health Ledger</title>
+  <id>tag:example.com,2026:health</id>
+  <updated>2026-10-20T13:00:00Z</updated>
+  <link rel="self" href="https://www.example.com/atom/health.xml"/>
+  <entry>
+    <title>Health insurance mergers draw scrutiny</title>
+    <link rel="self" href="https://www.example.com/atom/entries/mergers.xml"/>
+    <link rel="alternate" type="text/html" href="https://www.example.com/2026/10/20/insurer-mergers"/>
+    <id>tag:example.com,2026:mergers</id>
+    <published>2026-10-20T08:00:00-04:00</published>
+    <updated>2026-10-20T13:00:00Z</updated>
+    <author><name>Priya Raman</name></author>
+    <summary type="html">&lt;p&gt;Regulators question two &lt;em&gt;health insurance&lt;/em&gt; mergers.&lt;/p&gt;</summary>
+    <content type="html">&lt;p&gt;FULL ARTICLE TEXT FROM THE FEED. Two of the largest carriers announced their deal in June. This paragraph must never reach a candidate.&lt;/p&gt;</content>
+  </entry>
+  <entry>
+    <title>Health insurance costs, explained</title>
+    <link href="https://www.example.com/2026/10/16/costs-explained"/>
+    <id>tag:example.com,2026:costs</id>
+    <updated>2026-10-16T23:30:00Z</updated>
+    <author><name>Lee Okafor</name></author>
+    <author><name>Sam Ortiz</name></author>
+    <summary>Why premiums rise.</summary>
+  </entry>
+  <entry>
+    <title>Health insurance glossary</title>
+    <link href="https://www.example.com/glossary"/>
+    <id>tag:example.com,2026:glossary</id>
+    <summary>Terms defined.</summary>
+  </entry>
+  <entry>
+    <title>Health insurance with a date and no offset</title>
+    <link href="https://www.example.com/2026/10/18/no-offset"/>
+    <id>tag:example.com,2026:no-offset</id>
+    <published>2026-10-18T10:00:00</published>
+  </entry>
+  <entry>
+    <title type="html">Employers &lt;i&gt;rethink&lt;/i&gt; coverage</title>
+    <link rel="alternate" href="https://www.example.com/2026/10/14/employers"/>
+    <id>tag:example.com,2026:employers</id>
+    <published>2026-10-14T00:00:00Z</published>
+    <summary type="xhtml"><div xmlns="http://www.w3.org/1999/xhtml"><p>Employer <b>health insurance</b> shifts.</p></div></summary>
+  </entry>
+</feed>

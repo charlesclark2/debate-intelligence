@@ -1,0 +1,23 @@
+{
+  "output": {
+    "queries": [
+      {
+        "evidence": "An invented sentence standing in for quoted evidence text.",
+        "query": "rural hospital staffing shortages",
+        "rationale": "Finds reporting on staffing gaps."
+      }
+    ]
+  },
+  "output_schema": "debate_core.application.query_expansion.QueryExpansion",
+  "prompt_id": "search.expand",
+  "prompt_version": "1.0.0",
+  "variables": {
+    "argument": "Test DA (da)",
+    "max_queries": 3,
+    "need": "Uniqueness",
+    "need_description": "Where things stand now.",
+    "query": "rural hospital staffing",
+    "template_queries": "- rural hospital staffing now\n- rural hospital staffing polling",
+    "topic": "rural hospital staffing"
+  }
+}

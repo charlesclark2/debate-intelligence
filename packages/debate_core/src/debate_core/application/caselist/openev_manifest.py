@@ -38,6 +38,16 @@ handles both: `jq`, a dataframe, and the publisher's
     (:func:`~debate_core.application.caselist.openev_metadata_reimport.rederive_release`). Both are
     additive keys, so `schema_version` stays `1`: every reader of a release manifest reads a row as
     a mapping and ignores, or keeps byte for byte, a key it does not know.
+`openev_camp_word`
+    OpenEv's own word for the camp, as `GET /openev` lists it on the file (`OpenEvFile.camp`,
+    `v1-e30-t31`): the `<word>` of the camp's page, `https://opencaselist.com/openev/<year>/<word>`.
+    `camp` is the importer's canonical camp from `camp_aliases.yaml`, which is often not OpenEv's
+    word. Kept only when it is one address word, letters and digits matched whole as the camp link
+    checks them (:data:`~debate_core.domain.search_source_links.OPENEV_CAMP_WORD_PATTERN`), and not
+    `UNKNOWN`; any other word, and a hand import, which has no listing, carry `null`. A camp release
+    that is a zip gives every member row the zip's word. Rows written before `v1-e30-t31` have no
+    such key, and nothing re-derives one: the delivery record does not keep the word. Additive, like
+    the two above, so `schema_version` stays `1`.
 
 The summary row keeps the caselist summary's keys, adds `year` and `archives` (every download
 digest the rows name, sorted), and leaves `archive_sha256` and `previous_snapshot` `null`, because
@@ -88,7 +98,7 @@ from dataclasses import dataclass
 from datetime import date
 from typing import Final
 
-from debate_core.application.caselist.camp_metadata import ParsedCampPath
+from debate_core.application.caselist.camp_metadata import UNKNOWN_CAMP, ParsedCampPath
 from debate_core.application.caselist.manifest import (
     DISCLOSURE_FIELDS,
     MANIFEST_SCHEMA_VERSION,
@@ -110,13 +120,16 @@ from debate_core.application.ports.caselist_source import openev_id_of_inbox_nam
 from debate_core.application.ports.evidence_store import ObjectKey
 from debate_core.application.ports.suppression import SuppressionState, camp_path_disclosure, camp_path_scope
 from debate_core.domain.caselist import Event
+from debate_core.domain.search_source_links import OPENEV_CAMP_WORD_PATTERN
 
 __all__ = [
     "CAMP_FIELDS",
     "OpenEvUpstream",
     "RecordedRelease",
     "merged_manifest_lines",
+    "openev_camp_word",
     "openev_manifest_key",
+    "openev_ids_by_source",
     "openev_release_name",
     "read_recorded_release",
     "row_upstream_identity",
@@ -135,22 +148,26 @@ CAMP_FIELDS: Final = (
     "existing_caselist",
     "openev_id",
     "upstream_path_sha256",
+    "openev_camp_word",
 )
 """The member-row fields an OpenEv manifest adds to a caselist manifest's."""
 
 _SHA256_HEX: Final = re.compile(r"^[0-9a-f]{64}$")
+_OPENEV_WORD: Final = re.compile(OPENEV_CAMP_WORD_PATTERN)
 
 
 @dataclass(frozen=True, slots=True)
 class OpenEvUpstream:
-    """Which OpenEv file a download was: its id, and the SHA-256 of its upstream path if known.
+    """Which OpenEv file a download was: its id, the SHA-256 of its upstream path, and its camp word.
 
     What the pull hands an import so that every row of the download carries it (`v1-e30-t14`).
-    Digests and an id only: the upstream path names the camp and the file.
+    Digests and an id only: the upstream path names the camp and the file. `camp` is the listing's
+    camp as `GET /openev` gave it (`v1-e30-t31`), checked only when a row is written.
     """
 
     openev_id: int
     path_sha256: str | None
+    camp: str | None = None
 
 
 _STORED: Final = frozenset(str(classification) for classification in STORED_CLASSIFICATIONS)
@@ -298,10 +315,32 @@ def _member_row(
 
 
 def upstream_fields(path: str, upstream: OpenEvUpstream | None) -> dict[str, object]:
-    """The two identity keys of a row at `path`: from the pull's `upstream`, or what the name says."""
+    """The upstream keys of a row at `path`: from the pull's `upstream`, or what the name says.
+
+    The two identity keys, then the listing's camp word, which a hand import never knows.
+    """
     if upstream is not None:
-        return {"openev_id": upstream.openev_id, "upstream_path_sha256": upstream.path_sha256}
-    return {"openev_id": openev_id_of_inbox_name(path.rsplit("/", 1)[-1]), "upstream_path_sha256": None}
+        return {
+            "openev_id": upstream.openev_id,
+            "upstream_path_sha256": upstream.path_sha256,
+            "openev_camp_word": openev_camp_word(upstream.camp),
+        }
+    return {
+        "openev_id": openev_id_of_inbox_name(path.rsplit("/", 1)[-1]),
+        "upstream_path_sha256": None,
+        "openev_camp_word": None,
+    }
+
+
+def openev_camp_word(camp: object) -> str | None:
+    """`camp` when it is one OpenEv address word, else `None`: what a row keeps of the listing's camp.
+
+    Letters and digits, matched whole, so a trailing newline is refused as a space or a slash is,
+    and never `UNKNOWN`, the importer's word for no camp, which the camp link refuses too.
+    """
+    if not isinstance(camp, str) or _OPENEV_WORD.fullmatch(camp) is None or camp == UNKNOWN_CAMP:
+        return None
+    return camp
 
 
 def row_upstream_identity(row: Mapping[str, object]) -> tuple[int, str] | None:
@@ -316,6 +355,26 @@ def row_upstream_identity(row: Mapping[str, object]) -> tuple[int, str] | None:
     if not isinstance(digest, str) or _SHA256_HEX.match(digest) is None:
         return None
     return openev_id, digest
+
+
+def openev_ids_by_source(recorded: RecordedRelease) -> dict[str, int]:
+    """Each stored camp file's OpenEv id, by its SHA-256: what the search index links a camp card to.
+
+    From every stored member row whose `openev_id` is a positive whole number (`v1-e30-t14`), whether
+    or not it also carries the path's digest: a hand import named `openev-<id>-…` knows the id alone.
+    A row from before `v1-e30-t14`, or one with no id, gives none. A file at two paths of the release
+    has the smaller of its ids, the first upload of those bytes, so the answer is the same whatever
+    order the rows are in (`v1-e39-t16`).
+    """
+    ids: dict[str, int] = {}
+    for row in recorded.rows.values():
+        sha256, openev_id = row.get("sha256"), row.get("openev_id")
+        if row.get("classification") not in _STORED or not isinstance(sha256, str):
+            continue
+        if isinstance(openev_id, bool) or not isinstance(openev_id, int) or openev_id < 1:
+            continue
+        ids[sha256] = min(openev_id, ids.get(sha256, openev_id))
+    return ids
 
 
 def summary_row(

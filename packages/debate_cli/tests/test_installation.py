@@ -66,20 +66,75 @@ runner = CliRunner()
 
 
 def test_the_container_wires_these_integrations() -> None:
-    # Read by hand from debate_cli/container.py: four module-level imports from `local`, the
+    # Read by hand from debate_cli/container.py: six module-level imports from `local`, the
     # `local` package itself, `macos_notifier` inside sync_notifier, `docx_parser` inside the parse
-    # factory, `opencaselist` under TYPE_CHECKING and inside two factories, and `s3` inside four
-    # factories.
+    # and retention factories, `models.routing_policy` at module level for the startup check of the
+    # routing file (v1-e05-t03), `opencaselist` under TYPE_CHECKING and inside two factories, `s3`
+    # inside four factories, `s3.version_directories` inside the retention factory (v1-e31-t16),
+    # `cloudwatch_audit` and `cognito` inside the pilot accounts factory (v1-e39-t05), and
+    # `landscape.classification_store`, `landscape.plan_text_store` and
+    # `landscape.yaml_taxonomy_repository` at module level for the landscape run (v1-e32-t05), with
+    # `landscape.analytic_text_store` for its analytic texts (v1-e32-t11), and
+    # `secrets_manager` inside the caselist secret factory (v1-e40-t02),
+    # `docx_file_writer.writer` inside the file build factory (v1-e33-t03), `sns` inside
+    # sync_notifier (v1-e40-t05), and for the landscape's model stage (v1-e32-t07) `models.factory`,
+    # `models.model_mode` and `models.prompt_registry` at module level, with `bedrock` inside its
+    # factory for a record or live run; and for `fetch` (v1-e04-t06) `http_fetcher`, `html_extractor`
+    # and `pdf_extractor` inside the article fetch factory; and `models.usage` at module level for the
+    # usage log `usage` reads and every real model call is recorded in (v1-e05-t07); and
+    # `models.record_replay` inside the landscape cassettes factory and under TYPE_CHECKING (v1-e32-t34);
+    # and for `cut` (v1-e06-t06) `crossref_doi` inside the card cutting factory, whose other imports
+    # (`local`, `models.prompt_registry`, `models.factory`, `models.model_mode`, `bedrock`) are wired already;
+    # and for `search` (v1-e08-t05) `discovery.feed_cache`, `discovery.feed_config`, `discovery.feeds`,
+    # `discovery.google_news_rss` and `discovery.openalex` inside the discovery providers factory, with
+    # `discovery.registry` there and under TYPE_CHECKING, and `discovery.feed_config` under TYPE_CHECKING too;
+    # and `discovery.crossref` in the same factory (v1-e07-t03), with `discovery.federal_register` and
+    # `discovery.govinfo` there (v1-e07-t07).
     assert wired_integrations() == (
+        "debate_core.integrations.bedrock",
+        "debate_core.integrations.cloudwatch_audit",
+        "debate_core.integrations.cognito",
+        "debate_core.integrations.crossref_doi",
+        "debate_core.integrations.discovery.crossref",
+        "debate_core.integrations.discovery.federal_register",
+        "debate_core.integrations.discovery.feed_cache",
+        "debate_core.integrations.discovery.feed_config",
+        "debate_core.integrations.discovery.feeds",
+        "debate_core.integrations.discovery.google_news_rss",
+        "debate_core.integrations.discovery.govinfo",
+        "debate_core.integrations.discovery.openalex",
+        "debate_core.integrations.discovery.registry",
+        "debate_core.integrations.docx_file_writer.writer",
         "debate_core.integrations.docx_parser",
+        "debate_core.integrations.html_extractor",
+        "debate_core.integrations.http_fetcher",
+        "debate_core.integrations.landscape.analytic_text_store",
+        "debate_core.integrations.landscape.classification_store",
+        "debate_core.integrations.landscape.plan_text_store",
+        "debate_core.integrations.landscape.yaml_taxonomy_repository",
         "debate_core.integrations.local",
         "debate_core.integrations.local.fs_version_store",
         "debate_core.integrations.local.macos_notifier",
         "debate_core.integrations.local.parsed_store",
+        "debate_core.integrations.local.run_state_files",
+        "debate_core.integrations.local.search_index",
         "debate_core.integrations.local.sqlite_caselist_repository",
         "debate_core.integrations.local.suppression_list",
+        "debate_core.integrations.local.version_directories",
+        "debate_core.integrations.models.factory",
+        "debate_core.integrations.models.model_mode",
+        "debate_core.integrations.models.prompt_registry",
+        "debate_core.integrations.models.record_replay",
+        "debate_core.integrations.models.routing_policy",
+        "debate_core.integrations.models.usage",
         "debate_core.integrations.opencaselist",
+        "debate_core.integrations.pdf_extractor",
         "debate_core.integrations.s3",
+        "debate_core.integrations.s3.fencing",
+        "debate_core.integrations.s3.run_lock_object",
+        "debate_core.integrations.s3.version_directories",
+        "debate_core.integrations.secrets_manager",
+        "debate_core.integrations.sns",
     )
 
 
@@ -153,7 +208,7 @@ def test_this_checkout_is_a_complete_installation() -> None:
     report = check_installation()
 
     assert report.complete, report.as_dict()
-    assert report.declared_extras == ("aws", "docx", "opencaselist")
+    assert report.declared_extras == ("aws", "docx", "extraction", "feeds", "http", "opencaselist", "tub")
 
 
 def test_an_integration_that_does_not_import_makes_the_installation_incomplete() -> None:
@@ -210,7 +265,7 @@ def test_the_check_exits_zero_and_reports_json_for_this_checkout(capsys: pytest.
     report = json.loads(capsys.readouterr().out)
     assert report["complete"] is True
     assert report["covered"] is True
-    assert len(report["imported"]) == len(report["wired"]) == 9
+    assert len(report["imported"]) == len(report["wired"]) == 44
 
 
 # ---------------------------------------------------------------------------------------------
@@ -300,23 +355,85 @@ def test_debate_cli_declares_every_distribution_its_wired_integrations_import() 
 
 
 def test_dropping_the_aws_extra_leaves_the_s3_adapter_without_boto3() -> None:
-    gaps = undeclared_imports(_with_core_extras("docx,opencaselist"), wired_integrations())
+    gaps = undeclared_imports(
+        _with_core_extras("docx,extraction,http,opencaselist,tub"), wired_integrations()
+    )
 
-    assert gaps == {"debate_core.integrations.s3": {"boto3", "botocore"}}
+    # The pilot's two adapters (v1-e39-t05), the caselist secrets' (v1-e40-t02) and the alert
+    # topic's (v1-e40-t05) take boto3 from the same extra.
+    assert gaps == {
+        "debate_core.integrations.s3": {"boto3", "botocore"},
+        "debate_core.integrations.cognito": {"boto3", "botocore"},
+        "debate_core.integrations.cloudwatch_audit": {"boto3", "botocore"},
+        "debate_core.integrations.secrets_manager": {"boto3", "botocore"},
+        "debate_core.integrations.sns": {"boto3", "botocore"},
+        # The bucket's run lock (v1-e40-t04) reads a conditional write's refusal off botocore's error.
+        "debate_core.integrations.s3.run_lock_object": {"botocore"},
+        # The landscape model stage's live router (v1-e32-t07).
+        "debate_core.integrations.bedrock": {"boto3", "botocore"},
+    }
 
 
-def test_dropping_the_opencaselist_extra_leaves_the_client_without_httpx_and_keyring() -> None:
-    gaps = undeclared_imports(_with_core_extras("aws,docx"), wired_integrations())
+def test_dropping_the_tub_extra_leaves_the_cognito_adapter_without_cryptography() -> None:
+    """`opencaselist` goes too: on Linux, its `keyring` brings `cryptography` through `SecretStorage`."""
+    gaps = undeclared_imports(_with_core_extras("aws,docx,extraction,http"), wired_integrations())
 
-    assert gaps == {"debate_core.integrations.opencaselist": {"httpx", "keyring"}}
+    assert gaps == {
+        "debate_core.integrations.cognito": {"cryptography"},
+        "debate_core.integrations.opencaselist": {"keyring"},
+    }
+
+
+def test_dropping_the_opencaselist_extra_leaves_the_client_without_keyring() -> None:
+    gaps = undeclared_imports(_with_core_extras("aws,docx,extraction,http,tub"), wired_integrations())
+
+    assert gaps == {"debate_core.integrations.opencaselist": {"keyring"}}
+
+
+def test_dropping_the_http_extra_leaves_the_client_without_httpx() -> None:
+    """httpx has its own extra since v1-e04-t02 (PM ruling 2026-10-21), shared by every HTTP adapter."""
+    gaps = undeclared_imports(_with_core_extras("aws,docx,extraction,opencaselist,tub"), wired_integrations())
+
+    # The article fetcher behind `fetch` (v1-e04-t06), the Crossref client behind `cut`'s cites
+    # (v1-e06-t06), and the discovery adapters behind `search` (v1-e08-t05) take httpx from the same extra.
+    assert gaps == {
+        "debate_core.integrations.crossref_doi": {"httpx"},
+        "debate_core.integrations.discovery.crossref": {"httpx"},
+        "debate_core.integrations.discovery.federal_register": {"httpx"},
+        "debate_core.integrations.discovery.feeds": {"httpx"},
+        "debate_core.integrations.discovery.google_news_rss": {"httpx"},
+        "debate_core.integrations.discovery.govinfo": {"httpx"},
+        "debate_core.integrations.discovery.openalex": {"httpx"},
+        "debate_core.integrations.http_fetcher": {"httpx"},
+        "debate_core.integrations.opencaselist": {"httpx"},
+    }
+
+
+def test_dropping_the_extraction_extra_leaves_the_extractors_without_their_libraries() -> None:
+    """`fetch` (v1-e04-t06) wires both extractors; lxml still arrives through the `docx` extra."""
+    gaps = undeclared_imports(_with_core_extras("aws,docx,http,opencaselist,tub"), wired_integrations())
+
+    assert gaps == {
+        "debate_core.integrations.html_extractor": {"readability-lxml", "trafilatura"},
+        "debate_core.integrations.pdf_extractor": {"pypdf"},
+    }
 
 
 def test_once_the_docx_parser_is_wired_dropping_the_docx_extra_is_caught() -> None:
-    """The container does not wire the parser yet (v1-e31-t06 will); when it does, this applies."""
+    """The container does not wire the parser yet (v1-e31-t06 will); when it does, this applies.
+
+    Since `fetch` (v1-e04-t06), trafilatura in the `extraction` extra brings lxml too, so dropping
+    `docx` alone leaves no gap; dropping both shows what the docx modules need.
+    """
     wired = (*wired_integrations(), "debate_core.integrations.docx_parser")
 
-    assert undeclared_imports(_with_core_extras("aws,opencaselist"), wired) == {
-        "debate_core.integrations.docx_parser": {"lxml"}
+    assert undeclared_imports(_with_core_extras("aws,extraction,http,opencaselist,tub"), wired) == {}
+    assert undeclared_imports(_with_core_extras("aws,http,opencaselist,tub"), wired) == {
+        "debate_core.integrations.docx_parser": {"lxml"},
+        # The file builder's writer (v1-e33-t03) reads and writes OOXML with lxml as the parser does.
+        "debate_core.integrations.docx_file_writer.writer": {"lxml"},
+        "debate_core.integrations.html_extractor": {"lxml", "readability-lxml", "trafilatura"},
+        "debate_core.integrations.pdf_extractor": {"pypdf"},
     }
     assert undeclared_imports(_cli_dependencies(), wired) == {}
 

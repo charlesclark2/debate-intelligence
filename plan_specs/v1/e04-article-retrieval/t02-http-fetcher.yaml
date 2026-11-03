@@ -24,7 +24,14 @@ spec:
     classifies paywalls (t03) or extracts text (t04), and it never attempts to bypass access controls.
   priority: 2
   constraints:
-    packages: [debate_core.retrieval, debate_core.integrations]
+    packages:
+      - debate_core.retrieval
+      - debate_core.integrations
+      - debate_core.application.settings  # PM ruling 2026-10-21 (v1-e04-t02 packaging)
+      - packages/debate_core/pyproject.toml  # PM ruling 2026-10-21 (v1-e04-t02 packaging)
+      - packages/debate_cli/pyproject.toml  # PM ruling 2026-10-21 (v1-e04-t02 packaging)
+      - pyproject.toml  # PM ruling 2026-10-21 (v1-e04-t02 packaging)
+      - uv.lock  # PM ruling 2026-10-21 (v1-e04-t02 packaging)
     forbidden:
       - Importing boto3/typer/fastapi in debate_core
       - Circumventing robots.txt, paywalls, logins or CAPTCHAs
@@ -64,7 +71,7 @@ spec:
         A per-host rate limiter enforces a configurable minimum interval, and every request sends an
         identifying User-Agent with a contact URL.
 status:
-  phase: Pending
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

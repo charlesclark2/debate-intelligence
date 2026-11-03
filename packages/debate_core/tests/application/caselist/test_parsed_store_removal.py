@@ -50,7 +50,8 @@ from debate_core.application.ports.suppression import (
 from debate_core.integrations.docx_parser import DOCX_PARSER_VERSION, DebateDocxParser
 from debate_core.integrations.local import FsEvidenceObjectStore
 from debate_core.integrations.local.parsed_store import LocalParsedStore
-from debate_core.testing.fakes import build_fake_caselist_repository, empty_suppression_list
+from debate_core.testing.fakes.caselist import build_fake_caselist_repository
+from debate_core.testing.fakes.suppression import empty_suppression_list
 
 from .conftest import REMOVAL_TIME, RemovalWorld
 
@@ -78,7 +79,7 @@ def parse_service(world: RemovalWorld) -> CaselistParseService:
         parser=DebateDocxParser(),
         runner=InProcessParseRunner(),
         suppression=world.suppression(),
-        place_cards=CaselistCardStatsService(build_fake_caselist_repository()).place,
+        card_placer=CaselistCardStatsService(build_fake_caselist_repository()).placer,
         failure_rate_threshold=1.0,
         failure_rate_minimum_sources=1,
     )
@@ -89,7 +90,11 @@ async def parse(world: RemovalWorld, *, reparse: bool = False) -> ParseRunReport
     report = await service.run(await service.plan(CASELIST, reparse=reparse))
     local = FsEvidenceObjectStore(world.data_dir, subdirectory=Path("parsed"))
     publisher = ParsedStorePublisher(
-        local=local, local_path_for=local.path_for, remote=world.bucket, suppression=world.suppression()
+        local=local,
+        local_path_for=local.path_for,
+        remote=world.bucket,
+        suppression=world.suppression(),
+        evidence=world.local,
     )
     assert (await publisher.publish(CASELIST, report.plan.version)).succeeded
     return report

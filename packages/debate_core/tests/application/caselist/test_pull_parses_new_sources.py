@@ -33,7 +33,7 @@ from __future__ import annotations
 import json
 from collections.abc import Iterator, Sequence
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any, Final, cast
 
 import pytest
 from tests.fixtures.caselist.interruptible_bucket import ScriptedBucket
@@ -63,7 +63,11 @@ from debate_core.application.caselist_sync import (
     SyncStage,
     caselists_to_parse,
 )
-from debate_core.application.errors import StoreCredentialsExpired, StoreUnavailable
+from debate_core.application.errors import (
+    StoreCredentialsExpired,
+    StoreProfileNotConfigured,
+    StoreUnavailable,
+)
 from debate_core.application.ports.debate_files import DebateFileParser
 from debate_core.application.ports.evidence_store import EvidenceObjectStore, ObjectKey
 from debate_core.application.ports.parsed_store import version_directory_name
@@ -75,14 +79,14 @@ from debate_core.integrations.docx_parser import DOCX_PARSER_VERSION, DebateDocx
 from debate_core.integrations.local import FsEvidenceObjectStore
 from debate_core.integrations.local.parsed_store import LocalParsedStore
 from debate_core.integrations.s3 import S3EvidenceObjectStore
-from debate_core.testing.fakes import (
-    MisbehavingDebateFileParser,
-    build_fake_caselist_repository,
-    empty_suppression_list,
-)
+from debate_core.testing.fakes.caselist import build_fake_caselist_repository
+from debate_core.testing.fakes.debate_files import MisbehavingDebateFileParser
+from debate_core.testing.fakes.suppression import empty_suppression_list
 
 from .test_inbox_retention import (
     CASELIST,
+    ESTUARY,
+    ESTUARY_BODY,
     WEEK_1,
     WEEK_2,
     WEEK_3,
@@ -104,6 +108,16 @@ FIRST_TWO_WEEKS = ("verbatim", "wiki", "pdf", "cardmirror", "doc", "broken")
 
 BUMPED_PARSER = "2099.01.01-docx-9"
 """A parser version later than the one the store was parsed under."""
+
+PUBLISH_ONLY: Final = f"debate-research caselist parse --caselist {CASELIST} --publish-only"
+"""What finishes a parse stage whose rebuild read every copy of the list and whose publish did not
+finish (`v1-e34-t31`). This installation's list is one copy, read whole, so every rebuild here did."""
+
+PUBLISH_ONLY_FIX: Final = (
+    f"`{PUBLISH_ONLY}` publishes the parsed store as this run rebuilt it from every copy of the "
+    "suppression list, and rebuilds nothing. The next pull does the same; "
+    "`caselist pull --publish-pending` does not."
+)
 
 COUNTS_OF_THE_FIRST_PARSE = (
     "1 caselist(s) parsed: 6 source(s) attempted, 0 skipped as parsed already, 2 unsupported, "
@@ -230,6 +244,7 @@ def parsed_store_publisher(
         local_path_for=local.path_for,
         remote=remote or installation.bucket,
         suppression=suppression or installation.suppression or empty_suppression_list(),
+        evidence=installation.local,
     )
 
 
@@ -248,7 +263,7 @@ def parse_service(
         parser=parser or DebateDocxParser(),
         runner=runner or InProcessParseRunner(),
         suppression=installation.suppression or empty_suppression_list(),
-        place_cards=CaselistCardStatsService(build_fake_caselist_repository()).place,
+        card_placer=CaselistCardStatsService(build_fake_caselist_repository()).placer,
         failure_rate_threshold=threshold,
         failure_rate_minimum_sources=minimum,
     )
@@ -511,7 +526,7 @@ async def test_a_parsed_store_the_bucket_does_not_answer_for_fails_the_stage_wit
         "ListObjectsV2 on s3://debate-test-evidence-moto/manifests/testcl26/ failed: SlowDown; "
         f"the parsed store of {CASELIST} is not published"
     )
-    assert "caselist parse --caselist <slug> --publish" in str(parse["hint"])
+    assert str(parse["hint"]).endswith(PUBLISH_ONLY_FIX), "the rebuild is done: only the publish is owed"
     assert counts(watched.summary)["not_published"] == 1
     assert_the_import_and_the_raw_publish_stand(installation, watched.summary)
     # The parse itself is whole on this machine; only its copy in the bucket is missing.
@@ -531,8 +546,51 @@ async def test_a_bucket_that_refuses_the_parsed_store_fails_the_stage_and_names_
     assert (parse["outcome"], parse["error_codes"]) == ("failed", ["STORE_ACCESS_DENIED"])
     assert "lacks a grant" in str(parse["hint"])
     assert str(missing_grant().hint) in str(parse["hint"]), "the adapter's sentence, read from the error"
-    assert "caselist parse --caselist <slug> --publish" in str(parse["hint"])
+    assert str(parse["hint"]).endswith(PUBLISH_ONLY_FIX)
     assert_the_import_and_the_raw_publish_stand(installation, summary)
+
+
+class ParsesAndCannotPublish:
+    """A parse stage that parses each caselist and is refused every publish with `error`."""
+
+    def __init__(self, error: Exception) -> None:
+        self.error = error
+        self.asked: list[tuple[str, str]] = []
+
+    async def parse_new_sources(self, caselist: str) -> ParsedCaselist:
+        self.asked.append(("parse", caselist))
+        return ParsedCaselist(version=DOCX_PARSER_VERSION)
+
+    async def publish(self, caselist: str, version: str) -> PublishedParsedStore:
+        self.asked.append(("publish", caselist))
+        raise self.error
+
+
+async def test_a_profile_the_aws_config_lacks_stops_the_parsed_publish_at_the_first_caselist(
+    installation: Installation,
+) -> None:
+    """True of every caselist still to publish, as a refusal is, so none after the first is tried.
+
+    A weekly and a camp file make two caselists to parse: the weekly's and `openev` (`v1-e29-t09`
+    ac1). Both are parsed; only the first is offered to the bucket.
+    """
+    missing = StoreProfileNotConfigured(
+        "debate-dev-evidence-typo",
+        setting="storage.s3.aws_profile",
+        hint="set storage.s3.aws_profile to a profile this machine's AWS config defines",
+    )
+    asked = ParsesAndCannotPublish(missing)
+    source = FakeSource(installation.archives, weeks=[WEEK_1], openev=[(ESTUARY, ESTUARY_BODY)])
+
+    summary = await installation.sync(source, parse=asked).run([CASELIST])
+
+    parsed = [caselist for kind, caselist in asked.asked if kind == "parse"]
+    assert sorted(parsed) == sorted([CASELIST, "openev"])
+    assert [one for one in asked.asked if one[0] == "publish"] == [("publish", parsed[0])]
+    parse = stage(summary, SyncStage.PARSE)
+    assert (parse["outcome"], parse["error_codes"]) == ("failed", ["STORE_PROFILE_NOT_CONFIGURED"])
+    assert str(missing.hint) in str(parse["hint"])
+    assert counts(summary)["not_published"] == 2
 
 
 async def test_objects_the_bucket_did_not_take_are_recorded_under_the_publishers_codes(
@@ -565,6 +623,7 @@ async def test_objects_the_bucket_did_not_take_are_recorded_under_the_publishers
     assert f"{CASELIST}: 2 object(s) of the parsed store not confirmed in the bucket" in str(parse["reason"])
     assert counts(summary)["uploaded"] == 4
     assert counts(summary)["not_published"] == 1
+    assert parse["hint"] == PUBLISH_ONLY_FIX, "the rebuild is done: only the publish is owed (`v1-e34-t31`)"
     assert not any(key.endswith(("index.jsonl", "occurrences.jsonl")) for key in parsed_keys())
     assert_the_import_and_the_raw_publish_stand(installation, summary)
 
@@ -818,13 +877,14 @@ async def test_with_no_session_the_stage_parses_here_sends_nothing_and_is_pendin
     parse = stage(summary, SyncStage.PARSE)
     assert parse["outcome"] == "pending"
     assert parse["error_codes"] == []
+    # This installation's list is one copy, read whole, so the rebuild read every copy and only the
+    # publish is owed (`v1-e34-t31`). The pull's own list, whose bucket copy needs the login too, is
+    # read from this machine's copy alone on such a day, and the stage then names `--publish`:
+    # `test_aggregates_rebuilt_from_this_machines_copy_of_the_list_alone_are_not_published` below.
     assert parse["reason"] == (
         f"{COUNTS_OF_THE_FIRST_PARSE}; 0 object(s) of the parsed store uploaded; the parsed store of "
         f"{CASELIST} is not published, for want of an AWS login (the publish stage found no AWS "
-        "session): `debate-research caselist parse --caselist <slug> --publish` publishes a "
-        "caselist's parsed store: it parses nothing already parsed, rebuilds the aggregates and "
-        "uploads what the bucket lacks. The next pull that imports into that caselist does the same; "
-        "`caselist pull --publish-pending` does not."
+        f"session): {PUBLISH_ONLY_FIX}"
     )
     assert counts(summary)["not_published"] == 1
     assert len(aggregate(installation, "index.jsonl")) == 6
@@ -841,7 +901,7 @@ async def test_with_no_session_the_stage_parses_here_sends_nothing_and_is_pendin
     # One notification, for the login, and it says the parsed store waits on it too.
     [notification] = watched.notifier.sent
     assert notification.title == "caselist publish waiting for an AWS login"
-    assert PARSE_COMMAND in notification.message
+    assert f"The parsed store waits too; after the login: {PUBLISH_ONLY}" in notification.message
     # The run log keeps the stage's whole sentence, which is where `caselist runs` reads the counts
     # and the command from: it is longer than the 500 characters other stages are cut to.
     [recorded] = [one for one in watched.pulled.record.stages if one.stage == "parse"]
@@ -867,13 +927,13 @@ async def test_a_session_that_expires_during_the_parsed_stores_publish_leaves_th
     parse = stage(summary, SyncStage.PARSE)
     assert parse["outcome"] == "pending"
     assert "is not published, for want of an AWS login" in str(parse["reason"])
-    assert "caselist parse --caselist <slug> --publish" in str(parse["reason"])
+    assert str(parse["reason"]).endswith(PUBLISH_ONLY_FIX)
     assert counts(summary)["not_published"] == 1
     assert parsed_keys() == set()
     assert_the_import_and_the_raw_publish_stand(installation, summary)
     assert watched.pulled.record is not None
     assert watched.pulled.record.outcome is SyncRunOutcome.PUBLISH_PENDING
-    assert any(PARSE_COMMAND in one.message for one in watched.notifier.sent)
+    assert any(f"after the login: {PUBLISH_ONLY}" in one.message for one in watched.notifier.sent)
 
 
 async def test_publish_pending_does_not_publish_the_parsed_store_and_caselist_parse_publish_does(
@@ -906,6 +966,8 @@ async def test_publish_pending_does_not_publish_the_parsed_store_and_caselist_pa
         "error_codes": [],
         "hint": None,
         "earlier_findings": [],
+        "drift": [],
+        "not_compared": [],
     }
     assert parsed_keys() == set()
 
@@ -979,6 +1041,9 @@ async def test_aggregates_rebuilt_from_this_machines_copy_of_the_list_alone_are_
     assert parse["outcome"] == "pending"
     assert "the suppression list's bucket copy needed an AWS login" in str(parse["reason"])
     assert "this machine's copy of the suppression list alone was read" in str(parse["reason"])
+    # So the command named rebuilds first, and never publishes these aggregates (`v1-e34-t31`).
+    assert f"`debate-research caselist parse --caselist {CASELIST} --publish`" in str(parse["reason"])
+    assert "--publish-only" not in str(parse["reason"])
     assert summary.suppression_list_local_copy_only is not None
     assert counts(summary)["not_published"] == 1
     assert len(aggregate(installation, "index.jsonl")) == 6

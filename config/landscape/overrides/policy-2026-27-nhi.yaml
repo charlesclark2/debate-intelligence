@@ -1,0 +1,142 @@
+# The coach's decisions from the landscape review queue: each heading, as the normalizer writes it,
+# and the position it names, or null for a heading that names no position. Written by
+# scripts/classify_landscape_positions.py apply-decisions; docs/guides/landscape-taxonomy.md says how.
+# The matcher reads these before the taxonomy's aliases. No team, school or person is named here.
+schema_version: 1
+topic_id: policy-2026-27-nhi
+overrides:
+  - heading: adv
+    position_id: null
+    decided: '2026-10-24'
+  - heading: adv framing
+    position_id: null
+    decided: '2026-10-24'
+  - heading: advantage
+    position_id: null
+    decided: '2026-10-24'
+  - heading: ai
+    position_id: ai-da
+    decided: '2026-10-24'
+  - heading: alt
+    position_id: null
+    decided: '2026-10-24'
+  - heading: biotech
+    position_id: biotech-advantage
+    decided: '2026-10-24'
+  - heading: burnout
+    position_id: disease-advantage
+    decided: '2026-10-24'
+  - heading: collapse
+    position_id: null
+    decided: '2026-10-24'
+  - heading: cost
+    position_id: costs-advantage
+    decided: '2026-10-24'
+  - heading: costs declining
+    position_id: costs-advantage
+    decided: '2026-10-24'
+  - heading: cp
+    position_id: null
+    decided: '2026-10-24'
+  - heading: da
+    position_id: null
+    decided: '2026-10-24'
+  - heading: data
+    position_id: data-advantage
+    decided: '2026-10-24'
+  - heading: debt
+    position_id: debt-da
+    decided: '2026-10-24'
+  - heading: defense
+    position_id: null
+    decided: '2026-10-24'
+  - heading: democracy
+    position_id: democracy-da
+    decided: '2026-10-24'
+  - heading: extra
+    position_id: null
+    decided: '2026-10-24'
+  - heading: federalism
+    position_id: federalism-da
+    decided: '2026-10-24'
+  - heading: framework
+    position_id: null
+    decided: '2026-10-24'
+  - heading: framing
+    position_id: null
+    decided: '2026-10-24'
+  - heading: full text
+    position_id: null
+    decided: '2026-10-24'
+  - heading: impact
+    position_id: null
+    decided: '2026-10-24'
+  - heading: internal
+    position_id: null
+    decided: '2026-10-24'
+  - heading: k
+    position_id: null
+    decided: '2026-10-24'
+  - heading: link
+    position_id: null
+    decided: '2026-10-24'
+  - heading: link turn
+    position_id: null
+    decided: '2026-10-24'
+  - heading: new
+    position_id: null
+    decided: '2026-10-24'
+  - heading: o v
+    position_id: null
+    decided: '2026-10-24'
+  - heading: overview
+    position_id: null
+    decided: '2026-10-24'
+  - heading: presumption
+    position_id: null
+    decided: '2026-10-24'
+  - heading: projection
+    position_id: null
+    decided: '2026-10-24'
+  - heading: solvency
+    position_id: null
+    decided: '2026-10-24'
+  - heading: speech
+    position_id: null
+    decided: '2026-10-24'
+  - heading: stocks
+    position_id: stocks-da
+    decided: '2026-10-24'
+  - heading: sustainability
+    position_id: sustainability-advantage
+    decided: '2026-10-24'
+  - heading: t
+    position_id: null
+    decided: '2026-10-24'
+  - heading: topicality
+    position_id: null
+    decided: '2026-10-24'
+  - heading: turn
+    position_id: null
+    decided: '2026-10-24'
+  - heading: u
+    position_id: null
+    decided: '2026-10-24'
+  - heading: unions
+    position_id: unions-da
+    decided: '2026-10-24'
+  - heading: uniqueness
+    position_id: null
+    decided: '2026-10-24'
+  - heading: fiat good
+    position_id: generic-theory
+    decided: '2026-10-24'
+  - heading: ontology
+    position_id: generic-k
+    decided: '2026-10-24'
+  - heading: state good
+    position_id: generic-theory
+    decided: '2026-10-24'
+  - heading: uq
+    position_id: null
+    decided: '2026-10-24'

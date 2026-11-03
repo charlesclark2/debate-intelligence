@@ -51,7 +51,7 @@ from debate_core.integrations.local.archive_reader import archive_digest, read_a
 from debate_core.integrations.local.fs_blob_store import BLOB_DIRECTORY, FsSnapshotStore
 from debate_core.integrations.local.sqlite_caselist_repository import SqliteCaselistRepository
 from debate_core.integrations.local.sqlite_db import SqliteDatabase
-from debate_core.testing.fakes import InMemoryAppendOnlyRecord
+from debate_core.testing.fakes.suppression import InMemoryAppendOnlyRecord
 
 EVENT = Event(SYNTHETIC_EVENT)
 GENEROUS_LIMITS = {"max_archive_bytes": 64 * 1024 * 1024, "max_unpacked_bytes": 64 * 1024 * 1024}
@@ -356,7 +356,7 @@ def test_re_importing_stores_no_further_blobs(harness: ImportHarness) -> None:
 
 
 def test_an_archive_older_than_the_latest_imported_is_refused(harness: ImportHarness) -> None:
-    """ac3. The weeks after it were measured without it (`test_import_window_ordering.py`)."""
+    """ac3. Importing it rewrites the later weeks, so it takes the flag (`test_import_window_ordering.py`)."""
     harness.import_one(SNAPSHOTS[-1].snapshot)
 
     with pytest.raises(SnapshotOutOfOrder) as raised:

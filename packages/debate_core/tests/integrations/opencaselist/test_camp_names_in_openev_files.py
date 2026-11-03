@@ -74,7 +74,7 @@ CAMP_NAME_SHAPES: list[tuple[str, str, str, str]] = [
     (
         "camp at the end, spelled in two words",
         "Affirmatives/Ferry Aff - Michigan Classic 2026 PQR.docx",
-        "Michigan",
+        "Michigan Classic",
         "Ferry Aff",
     ),
     (

@@ -1,0 +1,84 @@
+# TASK v1-e31-t32-bold-in-part-tags - A tag with a word left unbolded, above a cite, counted before any rule
+# Epic: E31 Debate File Parsing | Release: v1.1 | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e31-t32-bold-in-part-tags
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e31-debate-file-parsing
+  annotations:
+    debate/title: "A tag with a word left unbolded, above a cite, counted before any rule"
+spec:
+  # Filed by the PM, 2026-10-21, from v1-e31-t24's Follow-up work.
+  description: >-
+    v1-e31-t24's rule reads a line above a cite as a tag only when, as Word shows it, it is bold
+    throughout. Of the 3,573 lines it left on `docx-5`, the sample found 1 tag in 6, and the
+    likeliest place for the rest is the 967 lines that are bold in part: a tag with a word left
+    unbolded. Draw again from that stratum by its first failing condition
+    (`scripts/sample_cite_shapes.py`), have the operator say which are tags and describe, in
+    formatting terms only, how the unbolded part differs, then count the narrower shape across
+    every caselist. A rule is proposed to the PM only from the counts, and built only on a
+    ruling, with the same guards as v1-e31-t24's.
+  priority: 3
+  constraints:
+    packages: [debate_core.evidence, debate_core.integrations.docx_parser, packages/debate_core/tests, scripts, tests/scripts, docs/data]
+    forbidden:
+      - Any rule change before the PM rules on the counts
+      - Card text, a school, team code, file name or person's name in any fixture, log, report or commit (synthetic values only)
+      - Writing a baseline (`--write-baseline`) or changing a label file
+      - Network or AWS access in any test
+  context:
+    - kind: TaskRef
+      name: v1-e31-t24-bold-tag-above-bracketed-cite
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        A sample of the bold-in-part stratum, with the operator's tallies and formatting
+        descriptions (no card text), and a count of the narrower shape per caselist, sent to
+        the PM before any rule.
+    - id: ac2
+      description: >-
+        A ruled rule, if any, is a synthetic fixture shown failing first; tag precision does
+        not fall on the pr-subset; `parser_version` is bumped with the operator's re-parse
+        written out.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e31-t32-bold-in-part-tags-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e31-debate-file-parsing
+spec:
+  description: >-
+    Sample the bold-in-part stratum, describe and count the narrower shape, then build only what
+    the PM rules.
+  goalRef:
+    name: v1-e31-t32-bold-in-part-tags
+  graph:
+    nodes:
+      - id: bold-in-part
+        kind: Task
+        name: Bold-in-part tags
+        description: >-
+          Sample the bold-in-part stratum, describe and count the narrower shape, then
+          build only what the PM rules.
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Parser tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/integrations/docx_parser]
+status:
+  phase: Pending

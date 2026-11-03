@@ -43,6 +43,7 @@ from tests.fixtures.caselist.build_synthetic_archives import (
 )
 from tests.fixtures.caselist.publish_expectations import digest_of_body
 from tests.fixtures.identity_center_roles import EVERYDAY_ROLE, TAKEDOWN_ROLE, sign_in
+from tests.fixtures.model_routing import EXAMPLE_ROUTING_FILE
 from tests.fixtures.openev.build_synthetic_openev import DOCUMENT_BODIES
 from tests.fixtures.permissions import needs_permissions, refused
 from typer.testing import CliRunner, Result
@@ -131,7 +132,7 @@ def installation(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Iterator[Pa
         # The parse stage is on, as it is for the agent (`v1-e34-t17`). One worker, so that each
         # pull here starts one process and not the machine's cores less one.
         "[parse]\nworkers = 1\n"
-        f'[models]\nrouting_file = "{tmp_path / "routing.yaml"}"\nbudget_usd_daily = 1.0\n',
+        f'[models]\nrouting_file = "{EXAMPLE_ROUTING_FILE}"\nbudget_usd_daily = 1.0\n',
         encoding="utf-8",
     )
     monkeypatch.setenv("DEBATE_PROFILE_DIR", str(profiles))
@@ -542,7 +543,10 @@ def test_a_session_that_expires_part_way_through_publish_owes_every_snapshot_it_
     assert {one["stage"]: one["outcome"] for one in data["stages"]}["publish"] == "completed"
     assert data["pending_publish"] == []
     assert not (installation / "data" / PENDING_WORK_FILE).exists()
-    published = {one["Key"] for one in bucket.list_objects_v2(Bucket=BUCKET, Prefix="manifests/")["Contents"]}
+    published = {
+        str(one.get("Key"))
+        for one in bucket.list_objects_v2(Bucket=BUCKET, Prefix="manifests/").get("Contents", [])
+    }
     assert f"manifests/{SYNTHETIC_CASELIST}/2026-09-01.jsonl" in published
     status = run("caselist", "status")
     assert status["exit_code"] == ExitCode.OK, status
@@ -709,6 +713,9 @@ def test_the_week_after_a_refused_run_the_pull_imports_publishes_and_publishes_t
     times = iter([datetime(2026, 9, 16, 6, 0, tzinfo=UTC), datetime(2026, 9, 23, 6, 0, tzinfo=UTC)])
     now = {"at": next(times)}
     monkeypatch.setattr(ServiceContainer, "clock", lambda _: lambda: now["at"])
+    # This world parses no camp store, so the search index stage would fail on `openev` every run;
+    # it is about the refused run's record, not the index (PM ruling 2026-10-20, v1-e39-t09 Q6).
+    monkeypatch.setenv("DEBATE_CASELIST__REFRESH_SEARCH_INDEX", "false")
     monkeypatch.setenv("DEBATE_STORAGE__S3__AWS_PROFILE", MISSPELT_PROFILE)
     refused = run("caselist", "pull")
     assert refused["exit_code"] == ExitCode.DOMAIN_FAILURE, refused
@@ -720,7 +727,8 @@ def test_the_week_after_a_refused_run_the_pull_imports_publishes_and_publishes_t
     assert pulled["exit_code"] == ExitCode.OK, pulled
     assert run_summary(pulled)["objects_published"] > 0
     listed = [
-        str(one.get("Key")) for one in bucket.list_objects_v2(Bucket=BUCKET, Prefix="reports/")["Contents"]
+        str(one.get("Key"))
+        for one in bucket.list_objects_v2(Bucket=BUCKET, Prefix="reports/").get("Contents", [])
     ]
     assert sorted(key for key in listed if key.startswith("reports/sync-runs/")) == [
         "reports/sync-runs/2026/20260916T060000Z.json",
@@ -762,7 +770,8 @@ def records_owed_to_the_bucket(installation: Path) -> list[str]:
 # Unreadable local files, and what the notification says (v1-e34-t19)
 # ------------------------------------------------------------------------------------------------
 
-RETRY_TITLE = "caselist pull failed: will be retried"
+FIX_FIRST_TITLE = "caselist pull failed: retried once fixed"
+"""A failure a retry gets past only once its fix is made: a refusal, exit `3` (`v1-e34-t23`)."""
 PERSON_TITLE = "caselist pull failed: needs a person"
 """The two banners of a failed run, by hand, as `docs/runbooks/caselist-scheduled-sync.md` gives them."""
 
@@ -812,7 +821,7 @@ def test_a_manifest_this_mac_will_not_let_be_written_fails_the_import_with_three
     assert data["snapshots_imported"] == [f"openev {OPENEV_YEAR}-policy"]
     assert stages["publish"]["outcome"] == "completed"
     [notification] = notified.sent
-    assert notification.title == RETRY_TITLE
+    assert notification.title == FIX_FIRST_TITLE
     assert notification.hint == stages["import"]["hint"]
     assert "aws sso login" not in everything_said(pulled, notified)
     assert str(installation) not in everything_said(pulled, notified)
@@ -849,8 +858,9 @@ def test_a_manifest_file_this_mac_will_not_open_stops_the_run_with_three_and_nev
         call.request.url.host == "files.opencaselist.example.invalid" for call in site.calls[downloads:]
     )
     [notification] = notified.sent
-    assert notification.title == RETRY_TITLE
-    assert "stopped with LocalStoreAccessDenied" in notification.message
+    assert notification.title == FIX_FIRST_TITLE
+    assert "stopped: this machine or the bucket refused it." in notification.message
+    assert "LocalStoreAccessDenied" not in notification.message
     assert notification.hint is not None and "the manifest directory" in notification.hint
     said = json.dumps([stopped["error"], notification.title, notification.message, notification.hint])
     assert str(installation) not in said
@@ -944,11 +954,14 @@ def test_a_manifest_the_publisher_cannot_read_fails_publish_with_one_and_the_run
     assert stages["publish"]["error_codes"] == ["UNREADABLE_MANIFEST"]
     assert data["pending_publish"] == [f"{SYNTHETIC_CASELIST} 2026-09-01"]
     assert owed_in_the_file(installation) == [f"{SYNTHETIC_CASELIST} 2026-09-01"]
-    assert Path(data["summary_written_to"]).is_file()
+    assert (installation / "data" / data["summary_written_to"]).is_file()
     assert data["run_record"]["outcome"] == "failed"
     assert data["run_record"]["error_class"] is None
     assert stages["report"]["outcome"] == "completed"
-    published = {one["Key"] for one in bucket.list_objects_v2(Bucket=BUCKET, Prefix="manifests/")["Contents"]}
+    published = {
+        str(one.get("Key"))
+        for one in bucket.list_objects_v2(Bucket=BUCKET, Prefix="manifests/").get("Contents", [])
+    }
     assert f"manifests/{SYNTHETIC_CASELIST}/2026-09-08.jsonl" in published
     assert f"manifests/{SYNTHETIC_CASELIST}/2026-09-01.jsonl" not in published
     assert [one.title for one in notified.sent] == [PERSON_TITLE]
@@ -966,6 +979,9 @@ def test_a_mismatch_and_then_an_expired_session_exits_zero_and_says_a_person_is_
     Publish is pending and the exit is `0`, exactly as before: a pending stage carries no code for
     the exit. What changed is that the mismatch is no longer invisible until the retry: it is on
     the stage as an earlier finding, and the login banner says a person has to look as well."""
+    # This world parses no camp store, so the search index stage would fail on `openev` every run;
+    # it is about the publish's earlier finding, not the index (PM ruling 2026-10-20, v1-e39-t09 Q6).
+    monkeypatch.setenv("DEBATE_CASELIST__REFRESH_SEARCH_INDEX", "false")
     week_one_only = digest_of_body("grove-round-2-neg-first")
     key = f"raw/caselist/{SYNTHETIC_CASELIST}/sha256/{week_one_only[:2]}/{week_one_only[2:4]}/{week_one_only}"
     bucket.put_object(Bucket=BUCKET, Key=key, Body=b"other bytes")
@@ -990,7 +1006,14 @@ def test_a_mismatch_and_then_an_expired_session_exits_zero_and_says_a_person_is_
     assert stages["publish"]["earlier_findings"] == ["CHECKSUM_MISMATCH"]
     assert data["run_details"]["failure_codes"] == []
     assert data["run_details"]["stages"] == [
-        {"stage": "publish", "error_codes": [], "hint": None, "earlier_findings": ["CHECKSUM_MISMATCH"]}
+        {
+            "stage": "publish",
+            "error_codes": [],
+            "hint": None,
+            "earlier_findings": ["CHECKSUM_MISMATCH"],
+            "drift": [],
+            "not_compared": [],
+        }
     ]
     [notification] = notified.sent
     assert notification.title == "caselist publish waiting for an AWS login"

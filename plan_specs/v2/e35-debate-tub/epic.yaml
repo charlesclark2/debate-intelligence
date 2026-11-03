@@ -21,6 +21,17 @@ spec:
     Give debaters a signed-in "debate tub" in the web app: browse, search and download the team's built
     files, caselist sources and camp files from the S3 evidence store, organized by topic, position and
     side.
+    (PM amendment 2026-10-19.) Card-level search over disclosed and camp cards reaches students
+    first through the v1.7 pilot (v1-e39), on a smaller stack (ADR-0019). This epic keeps the
+    file-level tub (browse, download and upload of whole files) and builds on the pilot's user
+    pool, audit log and removal wiring rather than beside them.
+    (PM amendment 2026-10-22, from the coach's testing of the pilot.) The coach asked to get a
+    whole disclosed file, not just a card. The pilot links out to the file's page on
+    openCaselist or OpenEv (v1-e39-t11); this epic's caselist-source download is the full-file
+    download, planned for after the pilot. Before it ships: the data-use policy's v2-e35 gate is
+    met; a download honours the suppression list's path holds as well as its digests, so a file
+    a removal held by path never downloads; and a downloaded caselist source is served as the
+    source itself, not rebuilt with any added line.
   priority: 9
   constraints:
     majorVersion: v2
@@ -207,6 +218,14 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v2-e35-t04-tub-ui
+    - id: ext-v1-e29-t08-takedown-preflight-identity
+      kind: External
+      name: 'Prerequisite from E29: The takedown preflight refuses the everyday profile before it writes anything'
+      description: >-
+        Cross-epic prerequisite owned by v1-e29-cloud-evidence-store (release v1.1).
+      inputs:
+        goalRef: v1-e29-t08-takedown-preflight-identity
+        specRef: plan_specs/v1/e29-cloud-evidence-store/t08-takedown-preflight-identity.yaml
     - id: t05
       kind: Task
       name: Access audit and removal
@@ -220,6 +239,7 @@ spec:
       - t03
       - ext-v1-e30-t01-caselist-data-use-policy
       - ext-v1-e30-t07-source-removal
+      - ext-v1-e29-t08-takedown-preflight-identity
       acceptanceCriteria:
       - type: command_succeeds
         name: Task spec v2-e35-t05-tub-access-and-removal reports phase Succeeded

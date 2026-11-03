@@ -27,7 +27,8 @@ all but a takedown role whose own grants are broken fail before anything is writ
 The question comes first because nothing the bucket allows tells the two profiles apart short of a
 delete. From `v1-e29-t06`, which let the everyday profile list versions, until `v1-e29-t08`, that
 profile named by mistake listed, wrote the probe and was refused only at the delete, leaving the
-probe behind. `docs/runbooks/caselist-removal.md` says how to remove one left from then.
+probe behind. A preflight that passes now deletes every probe it found there before it wrote its
+own (`v1-e29-t09`); `docs/runbooks/caselist-removal.md` says when one is still removed by hand.
 
 ## The order is the safety
 
@@ -38,10 +39,19 @@ probe behind. `docs/runbooks/caselist-removal.md` says how to remove one left fr
    before them, beside the list too, the caselist each withdrawn copy is taken from (`v1-e30-t16`),
    so no suppressed disclosure is on a copy without its caselist beside it.
 2. **The bucket**: every version of every `raw/` and `parsed/` object, listed again with the
-   takedown credential so nothing the dry run could not see is missed; then each rewritten
-   manifest, written and every superseded version of it purged; then every noncurrent version of
-   any other manifest of the same caselists that still names what was removed.
-3. **This machine**: blobs and parsed files, then manifests, then the sync's download inbox
+   takedown credential so nothing the dry run could not see is missed; then every version of each
+   landscape school view the plan reaches (`v1-e32-t13`), listed the same way and chosen by the
+   selection the plan used (:mod:`~debate_core.application.caselist.removal_school_views`). Each
+   of the two is listed once more after its delete, and a version or delete marker still there
+   stops the run `INCOMPLETE`, counts only (:class:`BucketObjectsLeft` from `v1-e30-t29`,
+   :class:`SchoolViewsLeft`); then
+   each rewritten manifest, written and every superseded version of it purged; then the sweep
+   (:mod:`~debate_core.application.caselist.manifest_sweep`): every noncurrent version of any other
+   manifest of the same caselists that still names what was removed, and of each manifest an
+   earlier run of the same request rewrote, every version older than that rewrite (`v1-e30-t19`).
+   The dry run counted the same sweep with the everyday credential.
+3. **This machine**: blobs and parsed files, then the school views under `reports/landscape/`, then
+   manifests, then the sync's download inbox
    (`v1-e30-t09`: removed camp files and imported archives deleted, archives still waiting to be
    imported rewritten without the removed files; see
    :mod:`~debate_core.application.caselist.inbox_purge`), then — last — the records. The records
@@ -56,26 +66,32 @@ probe behind. `docs/runbooks/caselist-removal.md` says how to remove one left fr
 
 ## What it never deletes
 
-Anything under `manifests/_suppression/` but its own preflight probe
-(:func:`refuse_protected_versions`): the suppression list and the removal log are append-only and
-their versions are the record of what was asked. And nothing under `reports/`, which IAM would refuse
-anyway.
+Anything under `manifests/_suppression/` but the preflight's probes, its own and those earlier
+preflights left (:func:`refuse_protected_versions`): the suppression list and the removal log are
+append-only and their versions are the record of what was asked. And nothing under `reports/` but
+the landscape bundles' school views (`v1-e32-t13`), which is all the removal profile may delete
+there besides the search pilot's superseded index versions: never a circuit-wide landscape file,
+another caselist's bundle, or the run-state bundle.
+
+The bundle the removal took school views from is not republished here. The plan names the newest
+snapshot's (:attr:`~debate_core.application.caselist.removal_plan.RemovalPlan.republish`), and the PM
+coordinates `landscape report --publish` once the removal is done.
 """
 
 from __future__ import annotations
 
-import json
+import contextlib
 import re
 import tempfile
 import uuid
-from collections.abc import Callable, Sequence
+from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Final
+from typing import Final, Protocol
 
 from debate_core.application.caselist.evidence_listing import LocalEvidence
 from debate_core.application.caselist.inbox_purge import CaselistInbox, InboxPurge, purge_inbox
-from debate_core.application.caselist.publish_plan import OPENEV
+from debate_core.application.caselist.publish_plan import snapshot_of_manifest_key
 from debate_core.application.caselist.publish_service import error_code_of
 from debate_core.application.caselist.removal_plan import (
     Disposition,
@@ -86,8 +102,9 @@ from debate_core.application.caselist.removal_plan import (
     RemovalPlanner,
     RemovalSelector,
     Side,
-    TeamSelector,
 )
+from debate_core.application.caselist.removal_school_views import LANDSCAPE_PREFIX, reached
+from debate_core.application.caselist.run_state import RUN_STATE_BUNDLE_KEY
 from debate_core.application.caselist.suppression import (
     REMOVAL_LOG_KEY,
     SUPPRESSION_LIST_KEY,
@@ -97,12 +114,14 @@ from debate_core.application.caselist.suppression import (
     RecordedSuppressionList,
     load_suppression_state,
 )
+from debate_core.application.caselist_sync import ParseOwed, ParseOwedUnreadable, PendingSnapshot
 from debate_core.application.errors import (
     DomainError,
     StoreAccessDenied,
     StoreCredentialsExpired,
     StoreError,
     StoreProfileNotConfigured,
+    reported_error_message,
 )
 from debate_core.application.ports.caller_identity import CallerIdentity
 from debate_core.application.ports.caselist import CaselistRepository
@@ -123,22 +142,25 @@ from debate_core.application.ports.suppression import (
     SuppressionAction,
     SuppressionEntry,
     SuppressionList,
-    SuppressionState,
-    camp_path_scope,
-    disclosure_digest,
 )
 from debate_core.domain import SHA256_HEX_PATTERN
 
 __all__ = [
     "PREFLIGHT_PREFIX",
+    "BucketObjectsLeft",
+    "BundleSaved",
     "CaselistRemovalService",
     "NotSuppressed",
     "NotTheTakedownRole",
     "RemovalIncomplete",
     "RemovalReport",
+    "RemovalRunState",
+    "RunStateBundleNotRewritten",
+    "SchoolViewsLeft",
     "TakedownAccess",
     "TakedownNotConfigured",
     "TakedownPreflightFailed",
+    "on_the_working_copy",
     "UnsuppressPlan",
     "UnsuppressReport",
     "permission_set_of",
@@ -224,6 +246,13 @@ class TakedownPreflightFailed(DomainError):
     the command's exit status is read from: an expired session or a store that did not answer may
     be cured by running the command again, and a profile that is not defined or not the takedown
     role is a setting to correct.
+
+    It carries the cause's code as :attr:`cause_code`, and each of the cause's own facts as an
+    attribute named `cause_` and the fact's name (`v1-e29-t09`): `cause_setting` for a profile the
+    AWS config does not define, `cause_signed_in_as` and `cause_required` for the wrong role. They
+    are what a script reads from the `--json` envelope's `error.details`, which until then held only
+    the profile and the step, and the setting to correct was in the message alone. The cause's
+    `hint` is not among them: it is this error's own :attr:`hint`.
     """
 
     def __init__(
@@ -231,6 +260,10 @@ class TakedownPreflightFailed(DomainError):
     ) -> None:
         self.profile = profile
         self.step = step
+        self.cause_code = error_code_of(failure)
+        """The error code of what failed, e.g. `"STORE_PROFILE_NOT_CONFIGURED"`."""
+        for name, value in _facts_of(failure).items():
+            setattr(self, f"cause_{name}", value)
         self.hint = getattr(failure, "hint", None) or (
             f"aws sso login --profile {profile}" if profile else "set DEBATE_REMOVAL_PROFILE"
         )
@@ -240,6 +273,21 @@ class TakedownPreflightFailed(DomainError):
             f"({error_code_of(failure)}), so it "
             f"cannot carry out a removal: {_what_to_correct(failure)}; nothing was deleted{leftover}"
         )
+
+
+def _facts_of(failure: BaseException) -> dict[str, str | int | float | bool | None]:
+    """The facts a :class:`DomainError` keeps as attributes, as the CLI reports them; none for another.
+
+    Public, single-valued attributes only, and never its `hint`. Anything that is not this
+    project's error has no facts this project chose, and its message is not passed on either.
+    """
+    if not isinstance(failure, DomainError):
+        return {}
+    return {
+        name: value
+        for name, value in vars(failure).items()
+        if not name.startswith("_") and name != "hint" and isinstance(value, str | int | float | bool | None)
+    }
 
 
 def _what_to_correct(failure: BaseException) -> str:
@@ -267,6 +315,9 @@ class RemovalIncomplete(DomainError):
     The message says what is true of this run: whether the suppression entries reached every copy
     before it stopped (if appending them is what failed, nothing was deleted either), and whether
     the `INCOMPLETE` log entry could be written. `failure` is always the first thing that went wrong.
+    It is quoted by :func:`~debate_core.application.errors.reported_error_message`: an `OSError` by
+    its class and errno, never by its text, which names the path it failed on (`v1-e29-t09`). The
+    same goes for :class:`RemovalCompletedUnlogged`.
     """
 
     def __init__(
@@ -290,10 +341,11 @@ class RemovalIncomplete(DomainError):
             ""
             if unlogged is None
             else f" The removal log entry could not be written either "
-            f"({error_code_of(unlogged)}): {unlogged}."
+            f"({error_code_of(unlogged)}): {reported_error_message(unlogged)}."
         )
         super().__init__(
-            f"the removal stopped part-way ({self.error_code}): {failure}. {state}{logged} "
+            f"the removal stopped part-way ({self.error_code}): {reported_error_message(failure)}. "
+            f"{state}{logged} "
             "Re-run the same command to finish."
         )
 
@@ -341,7 +393,8 @@ class RemovalCompletedUnlogged(DomainError):
             f"version(s) deleted; {report.manifests_rewritten} manifest(s) rewritten without "
             f"{report.manifest_rows_dropped} row(s); {report.inbox_files_deleted} inbox file(s) deleted and "
             f"{report.inbox_files_rewritten} rewritten. Its removal-log entry was not written to "
-            f"{self.log_copies_without_entry} ({self.error_code}: {failure}).{held} Record these counts "
+            f"{self.log_copies_without_entry} ({self.error_code}: {reported_error_message(failure)}).{held} "
+            "Record these counts "
             "in the register from this output: running the command again finds nothing left to remove "
             "and would log zero counts."
         )
@@ -377,7 +430,7 @@ def refuse_protected_versions(versions: Sequence[ObjectVersion]) -> None:
             )
 
 
-async def preflight(access: TakedownAccess, *, environment: str) -> None:
+async def preflight(access: TakedownAccess, *, environment: str) -> tuple[ObjectVersion, ...]:
     """Prove the credential is the takedown's and can write, list and delete, before any real change.
 
     First asks which role the credential is signed in as, and stops unless it is the role of
@@ -394,6 +447,20 @@ async def preflight(access: TakedownAccess, *, environment: str) -> None:
 
     A takedown role whose own delete grant is missing still gets as far as the delete, since nothing
     short of a delete shows that. It leaves its probe, and the error names the key.
+
+    A preflight that passes then deletes every version its first listing found under
+    :data:`PREFLIGHT_PREFIX` (`v1-e29-t09`): probes that earlier preflights wrote and were refused
+    the delete of. They were there before its own probe was written, so they are older than it, and
+    the credential has just shown it may delete there. A probe written after that listing, by a
+    preflight running beside this one, is not touched.
+
+    That sweep is housekeeping, and never holds a takedown back (the PM's review of `v1-e29-t09`):
+    a takedown withdraws someone's data, and an old probe that cannot be deleted for a reason of
+    its own would otherwise stop every takedown after it. Each version is deleted on its own, a
+    refusal of one does not stop the others, and the versions that could not be deleted are
+    returned, for the run's report to count; they are removed by hand
+    (`docs/runbooks/caselist-removal.md`). The preflight's own probe is its proof, and a refused
+    delete of that one still fails it.
     """
     required = takedown_permission_set(environment)
     key = f"{PREFLIGHT_PREFIX}{uuid.uuid4().hex}.txt"
@@ -406,7 +473,12 @@ async def preflight(access: TakedownAccess, *, environment: str) -> None:
                 access.profile, role_name=role_name, required=required, environment=environment
             )
         step = "list object versions"
-        await access.versions.list_versions(PREFLIGHT_PREFIX)
+        earlier = tuple(
+            version
+            for version in await access.versions.list_versions(PREFLIGHT_PREFIX)
+            if version.key.startswith(PREFLIGHT_PREFIX)
+        )
+        refuse_protected_versions(earlier)
         step = "write a probe under manifests/_suppression/"
         with tempfile.TemporaryDirectory(prefix="debate-preflight-") as directory:
             probe = Path(directory) / "probe.txt"
@@ -430,6 +502,26 @@ async def preflight(access: TakedownAccess, *, environment: str) -> None:
         raise TakedownPreflightFailed(
             access.profile, step, failure, left=key if written else None
         ) from failure
+    return await _sweep_earlier_probes(access, earlier)
+
+
+async def _sweep_earlier_probes(
+    access: TakedownAccess, earlier: Sequence[ObjectVersion]
+) -> tuple[ObjectVersion, ...]:
+    """Delete each version an earlier preflight left; return the ones the store would not delete.
+
+    Listed before the preflight wrote its own probe, so older than it (`v1-e29-t09`), and deleted
+    with the credential that has just shown it may delete there. One at a time, because the store
+    stops a batch at its first refusal, and a refusal is counted rather than raised: this is
+    housekeeping, and the takedown goes ahead whatever it leaves.
+    """
+    left: list[ObjectVersion] = []
+    for version in earlier:
+        try:
+            await access.versions.delete_versions((version,))
+        except StoreError:
+            left.append(version)
+    return tuple(left)
 
 
 @dataclass(slots=True)
@@ -439,6 +531,8 @@ class _Counts:
     manifests_rewritten: int = 0
     manifest_rows_dropped: int = 0
     s3_versions_deleted: int = 0
+    school_view_files_deleted: int = 0
+    school_view_versions_deleted: int = 0
     inbox: InboxPurge = field(default_factory=InboxPurge)
     rewrites: list[ManifestRewriteRecord] = field(default_factory=lambda: [])
     """Each manifest rewritten in the bucket so far, with the version its rewrite is."""
@@ -457,6 +551,15 @@ class RemovalReport:
     s3_versions_deleted: int
     inbox_files_deleted: int = 0
     inbox_files_rewritten: int = 0
+    preflight_probes_left: tuple[ObjectVersion, ...] = ()
+    """Versions earlier preflights left under :data:`PREFLIGHT_PREFIX` that this run's preflight
+    could not delete (`v1-e29-t09`). Counted in the command's output, and removed by hand; never a
+    failure. Empty when the preflight ran in an earlier call of the same service."""
+    school_view_files_deleted: int = 0
+    """Of :attr:`local_files_deleted`, the landscape school-view files (`v1-e32-t13`). For the
+    command's output only: a removal-log line's keys are pinned, so the log counts them with the rest."""
+    school_view_versions_deleted: int = 0
+    """Of :attr:`s3_versions_deleted`, the versions of landscape school-view files."""
 
     @property
     def completed(self) -> bool:
@@ -486,6 +589,90 @@ class UnsuppressPlan:
 class UnsuppressReport:
     plan: UnsuppressPlan
     log_entry: RemovalLogEntry
+    preflight_probes_left: tuple[ObjectVersion, ...] = ()
+    """Versions earlier preflights left under :data:`PREFLIGHT_PREFIX` that this run's preflight
+    could not delete (`v1-e29-t09`). Counted in the command's output, and removed by hand; never a
+    failure. Empty when the preflight ran in an earlier call of the same service."""
+
+
+class RemovalRunState(Protocol):
+    """The run's state in the bucket, as a removal in bucket mode reaches it (`v1-e40-t04`, ADR-0020 (3)).
+
+    :class:`~debate_core.application.caselist.run_state.RunState`, named here by its shape.
+    """
+
+    async def restore(self, caselists: Sequence[str], *, parsed_version: str | None) -> object: ...
+
+    async def save_state_files(self) -> None: ...
+
+    async def save_bundle(self) -> BundleSaved: ...
+
+
+class BundleSaved(Protocol):
+    @property
+    def saved(self) -> bool: ...
+
+    @property
+    def reason(self) -> str: ...
+
+    @property
+    def version_id(self) -> str | None: ...
+
+
+async def on_the_working_copy[T](run_state: RemovalRunState | None, work: Callable[[], Awaitable[T]]) -> T:
+    """In bucket mode, restore the working copy, then do `work`, which builds the removal service.
+
+    The restore comes first because it replaces this machine's database whole, and the service opens
+    the database when it is built. A removal that executes runs this holding the bucket's run lock, so
+    the copy it plans from is the copy it rewrites the bundle from (`v1-e40-t04`). `None`, local mode,
+    restores nothing.
+    """
+    if run_state is not None:
+        await run_state.restore((), parsed_version=None)
+    return await work()
+
+
+class SchoolViewsLeft(DomainError):
+    """After deleting, the removal credential still lists versions of school views the removal reached.
+
+    A delete the store answered and did not carry out, or a view written again while the removal
+    ran. The run stops `INCOMPLETE`; running the same removal again takes them. Counts only: no key.
+    """
+
+    def __init__(self, versions: int) -> None:
+        self.versions = versions
+        super().__init__(
+            f"{versions} version(s) or delete marker(s) of landscape school views this removal reached "
+            "are still in the bucket after it deleted them; run the same removal again"
+        )
+
+
+class BucketObjectsLeft(DomainError):
+    """After deleting, the removal credential still lists versions of `raw/` or `parsed/` keys it reached.
+
+    The same check as :class:`SchoolViewsLeft`, for the source and parsed files (`v1-e30-t29`): a
+    delete the store answered and did not carry out, or a key written again while the removal ran.
+    The run stops `INCOMPLETE`; running the same removal again takes them. Counts only: no key.
+    """
+
+    def __init__(self, versions: int, files: int) -> None:
+        self.versions = versions
+        self.files = files
+        super().__init__(
+            f"{versions} version(s) or delete marker(s) of {files} source or parsed file(s) this removal "
+            "reached are still in the bucket after it deleted them; run the same removal again"
+        )
+
+
+class RunStateBundleNotRewritten(DomainError):
+    """The removal's rewrite of the run-state bundle was not confirmed in the bucket: nothing of it purged."""
+
+    def __init__(self, reason: str) -> None:
+        self.reason = reason
+        super().__init__(
+            f"the run-state bundle was not rewritten without the removed files ({reason}), so its earlier "
+            "versions were not purged; run the same removal again"
+        )
 
 
 @dataclass
@@ -501,6 +688,8 @@ class CaselistRemovalService:
     local: LocalEvidence
     local_blobs: EvidenceVersionStore
     local_parsed: EvidenceVersionStore
+    local_reports: EvidenceVersionStore
+    """The data directory, keyed as the bucket is, for the landscape bundles' school views (`v1-e32-t13`)."""
     inbox: CaselistInbox
     """The sync's download inbox in this environment. Required, so no removal can forget it."""
     remote: EvidenceObjectStore
@@ -512,6 +701,13 @@ class CaselistRemovalService:
     takedown: Callable[[], TakedownAccess]
     clock: Clock
     environment: str
+    run_state: RemovalRunState | None = None
+    """In bucket mode (`v1-e40-t04`): the run's state, restored before a plan and rewritten after a
+    removal, its earlier versions then purged. `None` in local mode, where no bundle exists: a local-mode
+    command refuses a bucket that holds one (the PM's ruling 3(a))."""
+    parse_owed: ParseOwed | None = None
+    """The parses the runs owe (`v1-e40-t08`): a removal clears the entry of each snapshot it reaches.
+    In bucket mode, the restored file, saved with the other state files by the bundle's rewrite."""
     _access: TakedownAccess | None = field(default=None, init=False)
 
     # --------------------------------------------------------------------------------------
@@ -530,7 +726,8 @@ class CaselistRemovalService:
         """The dry run. Reads only, with the everyday profile only.
 
         The plan includes the later uploads the store holds at each removed path unless
-        `only_named` (`v1-e30-t11`); :meth:`execute` carries out whichever plan it is given.
+        `only_named` (`v1-e30-t11`); :meth:`execute` carries out whichever plan it is given. In bucket
+        mode the service is built on the working copy :func:`on_the_working_copy` restored first.
         """
         return await self.planner.plan(
             selector,
@@ -540,6 +737,26 @@ class CaselistRemovalService:
             only_named=only_named,
         )
 
+    async def plan_and_execute(
+        self,
+        selector: RemovalSelector,
+        *,
+        request_id: str,
+        reason: ReasonCode,
+        include_shared: bool = False,
+        only_named: bool = False,
+    ) -> RemovalReport:
+        """:meth:`plan` and :meth:`execute` as one step, for a command that holds the bucket's run lock
+        across both: in bucket mode the working copy the plan is made from is the one executed."""
+        plan = await self.plan(
+            selector,
+            request_id=request_id,
+            reason=reason,
+            include_shared=include_shared,
+            only_named=only_named,
+        )
+        return await self.execute(plan)
+
     async def execute(self, plan: RemovalPlan) -> RemovalReport:
         """Carry out `plan`. Raises before any change if the takedown credential is missing or refused.
 
@@ -548,7 +765,7 @@ class CaselistRemovalService:
         :class:`RemovalCompletedUnlogged` if every step succeeded and only the log entry could not be
         written to every copy.
         """
-        access = await self._authorised()
+        access, probes_left = await self._authorised()
         suppression = RecordedSuppressionList(
             self.local_suppression, self._bucket_record(access, SUPPRESSION_LIST_KEY)
         )
@@ -556,17 +773,24 @@ class CaselistRemovalService:
         failure: BaseException | None = None
         suppressed = False
         try:
+            # What this machine's imports held at a held path, given to the bucket's copy, which
+            # only the takedown credential writes (v1-e30-t23). Nothing new is appended.
+            await suppression.append_held_digests(())
             await suppression.append_withdrawals(plan.withdrawals)
             await suppression.append(plan.suppression_entries)
             await suppression.append_path_holds(plan.path_holds)
             suppressed = True
             await self._delete_bucket_objects(plan, access, counts)
+            await self._delete_bucket_school_views(plan, access, counts)
             await self._rewrite_bucket_manifests(plan, access, counts)
             await self._sweep_superseded_manifests(plan, access, counts)
             await self._delete_local_files(plan, counts)
+            await self._delete_local_school_views(plan, counts)
             await self._rewrite_local_manifests(plan, counts)
+            self._clear_parses_owed(plan)
             await self._purge_inbox(plan, counts)
             await self._delete_records(plan, counts)
+            await self._rewrite_run_state(access, counts)
         except (DomainError, OSError) as stopped:
             failure = stopped
         entry = self._log_entry(plan, counts, failure)
@@ -593,6 +817,9 @@ class CaselistRemovalService:
             s3_versions_deleted=counts.s3_versions_deleted,
             inbox_files_deleted=counts.inbox.deleted,
             inbox_files_rewritten=counts.inbox.rewritten,
+            preflight_probes_left=probes_left,
+            school_view_files_deleted=counts.school_view_files_deleted,
+            school_view_versions_deleted=counts.school_view_versions_deleted,
         )
         if failure is not None:
             raise RemovalIncomplete(report, failure, suppressed=suppressed, unlogged=unlogged) from failure
@@ -604,15 +831,61 @@ class CaselistRemovalService:
     async def _delete_bucket_objects(
         self, plan: RemovalPlan, access: TakedownAccess, counts: _Counts
     ) -> None:
-        """Every version of every `raw/` and `parsed/` object, as the takedown credential lists them now."""
-        for planned in plan.objects_on(Side.BUCKET):
-            versions = tuple(
-                version
-                for version in await access.versions.list_versions(planned.key)
-                if version.key == planned.key
-            )
+        """Every version of every `raw/` and `parsed/` object, as the takedown credential lists them now.
+
+        Then it lists each key again, and a version or delete marker of one still there is
+        :class:`BucketObjectsLeft` (`v1-e30-t29`), as :meth:`_delete_bucket_school_views` does for
+        the school views. A listing by key is a listing by prefix, so each is read for its own key.
+        """
+        planned = plan.objects_on(Side.BUCKET)
+        for one in planned:
+            versions = await self._bucket_versions(access, one.key)
             refuse_protected_versions(versions)
             counts.s3_versions_deleted += await access.versions.delete_versions(versions)
+        left = [await self._bucket_versions(access, key) for key in dict.fromkeys(one.key for one in planned)]
+        if any(left):
+            raise BucketObjectsLeft(
+                sum(len(versions) for versions in left), sum(1 for versions in left if versions)
+            )
+
+    @staticmethod
+    async def _bucket_versions(access: TakedownAccess, key: ObjectKey) -> tuple[ObjectVersion, ...]:
+        """Every version and delete marker of exactly `key`, as the takedown credential lists them now."""
+        return tuple(version for version in await access.versions.list_versions(key) if version.key == key)
+
+    async def _delete_bucket_school_views(
+        self, plan: RemovalPlan, access: TakedownAccess, counts: _Counts
+    ) -> None:
+        """Every version of every landscape school view the plan reaches, as the takedown lists them now.
+
+        One listing of every bundle, read through the plan's own selection, so a version the dry run
+        could not see (the everyday profile lists no versions under `reports/`) is taken by the same
+        rule as the current object it saw. Counted with the other bucket versions; the log holds counts.
+
+        Then it lists them again, and a version or delete marker the rule still reaches is
+        :class:`SchoolViewsLeft` (the PM's ruling 4 of 2026-10-24): `caselist status` sees only the
+        current school views, so this is the check that none of their versions survived.
+        """
+        if not plan.school_view_reach:
+            return
+        doomed = await self._school_view_versions(plan, access)
+        refuse_protected_versions(doomed)
+        if doomed:
+            deleted = await access.versions.delete_versions(doomed)
+            counts.s3_versions_deleted += deleted
+            counts.school_view_versions_deleted += deleted
+        left = await self._school_view_versions(plan, access)
+        if left:
+            raise SchoolViewsLeft(len(left))
+
+    @staticmethod
+    async def _school_view_versions(plan: RemovalPlan, access: TakedownAccess) -> tuple[ObjectVersion, ...]:
+        """Every version and delete marker under `reports/landscape/` the plan's reach takes."""
+        return tuple(
+            version
+            for version in await access.versions.list_versions(LANDSCAPE_PREFIX)
+            if reached(version.key, version.last_modified, plan.school_view_reach)
+        )
 
     async def _rewrite_bucket_manifests(
         self, plan: RemovalPlan, access: TakedownAccess, counts: _Counts
@@ -634,29 +907,17 @@ class CaselistRemovalService:
     async def _sweep_superseded_manifests(
         self, plan: RemovalPlan, access: TakedownAccess, counts: _Counts
     ) -> None:
-        """Noncurrent versions of the affected caselists' other manifests that still name what was removed.
+        """The sweep, as the takedown credential lists and reads the versions now.
 
-        The current version of each was checked by the plan; an earlier one may hold a row the
-        current one no longer does — a manifest re-published after a re-import, say — and a
-        restorable version of a removed row is the row not removed.
+        The current version of each manifest was checked by the plan; an earlier one may hold a row
+        the current one no longer does — a manifest re-published after a re-import, say — and a
+        restorable version of a removed row is the row not removed. A version of a key an earlier
+        run of this request rewrote, older than that rewrite, is one its purge should have taken.
         """
-        rewritten = {rewrite.key for rewrite in plan.manifests_on(Side.BUCKET)}
-        for caselist in plan.affected_caselists:
-            for version in await access.versions.list_versions(f"manifests/{caselist}/"):
-                if version.is_latest or version.is_delete_marker or version.key in rewritten:
-                    continue
-                if await self._version_names_removed(plan, access, caselist, version):
-                    refuse_protected_versions([version])
-                    counts.s3_versions_deleted += await access.versions.delete_versions([version])
-
-    async def _version_names_removed(
-        self, plan: RemovalPlan, access: TakedownAccess, caselist: str, version: ObjectVersion
-    ) -> bool:
-        with tempfile.TemporaryDirectory(prefix="debate-removal-") as directory:
-            staged = Path(directory) / "version.jsonl"
-            await access.versions.get_version_file(version, staged)
-            lines = staged.read_text(encoding="utf-8").splitlines()
-        return any(_names_removed(plan, caselist, line, key=version.key) for line in lines if line.strip())
+        swept = await plan.swept_from(access.versions)
+        refuse_protected_versions(swept)
+        if swept:
+            counts.s3_versions_deleted += await access.versions.delete_versions(swept)
 
     async def _delete_local_files(self, plan: RemovalPlan, counts: _Counts) -> None:
         for planned in plan.objects_on(Side.LOCAL):
@@ -666,11 +927,43 @@ class CaselistRemovalService:
             )
             counts.local_files_deleted += await store.delete_versions(versions)
 
+    async def _delete_local_school_views(self, plan: RemovalPlan, counts: _Counts) -> None:
+        """This machine's landscape school views the plan reaches, by the same selection."""
+        if not plan.school_view_reach:
+            return
+        doomed = tuple(
+            version
+            for version in await self.local_reports.list_versions(LANDSCAPE_PREFIX)
+            if reached(version.key, version.last_modified, plan.school_view_reach)
+        )
+        deleted = await self.local_reports.delete_versions(doomed)
+        counts.local_files_deleted += deleted
+        counts.school_view_files_deleted += deleted
+
     async def _rewrite_local_manifests(self, plan: RemovalPlan, counts: _Counts) -> None:
         for rewrite in plan.manifests_on(Side.LOCAL):
             await self._put_lines(self.local.objects, rewrite)
             counts.manifests_rewritten += 1
             counts.manifest_rows_dropped += rewrite.rows_dropped
+
+    def _clear_parses_owed(self, plan: RemovalPlan) -> None:
+        """The parse owed for each snapshot whose manifest the removal rewrote (`v1-e40-t08`).
+
+        A removal is followed by the rebuild of each caselist it touched, `caselist parse --publish`
+        (`caselist-removal.md`), which parses whatever of the caselist is unparsed. A file that cannot
+        be read is left as it is, for the parse stage to fail on: it never stops a removal.
+        """
+        if self.parse_owed is None:
+            return
+        reached = {
+            PendingSnapshot(caselist=caselist, snapshot=snapshot)
+            for rewrite in plan.manifests
+            for caselist in plan.touched_caselists
+            if (snapshot := snapshot_of_manifest_key(caselist, rewrite.key, full_archives=True)) is not None
+        }
+        if reached:
+            with contextlib.suppress(ParseOwedUnreadable):
+                self.parse_owed.clear_snapshots(reached)
 
     async def _purge_inbox(self, plan: RemovalPlan, counts: _Counts) -> None:
         """The sync's inbox, as planned: after this machine's store, before the records."""
@@ -694,6 +987,29 @@ class CaselistRemovalService:
                 )
             if source.delete_source_record:
                 counts.local_records_deleted += int(await self.caselists.delete_source(source.sha256))
+
+    async def _rewrite_run_state(self, access: TakedownAccess, counts: _Counts) -> None:
+        """Bucket mode, after the records: the bundle rewritten, confirmed, then its other versions purged.
+
+        The PM's ruling of 2026-10-23: under the removal credential, after the rewrite is confirmed in
+        the bucket. The save confirms it (the bucket's current version is the one written, with the
+        digest written), and a save that is not confirmed is :class:`RunStateBundleNotRewritten`,
+        with nothing purged: the earlier versions still name the removed files, so the removal is
+        incomplete until it is run again.
+        """
+        if self.run_state is None:
+            return
+        await self.run_state.save_state_files()
+        rewritten = await self.run_state.save_bundle()
+        if not rewritten.saved or rewritten.version_id is None:
+            raise RunStateBundleNotRewritten(rewritten.reason)
+        stale = tuple(
+            version
+            for version in await access.versions.list_versions(RUN_STATE_BUNDLE_KEY)
+            if version.key == RUN_STATE_BUNDLE_KEY and version.version_id != rewritten.version_id
+        )
+        refuse_protected_versions(stale)
+        counts.s3_versions_deleted += await access.versions.delete_versions(stale)
 
     @staticmethod
     async def _put_lines(store: EvidenceObjectStore, rewrite: ManifestRewrite) -> str | None:
@@ -774,7 +1090,7 @@ class CaselistRemovalService:
         imported again. The entry also lifts the hold on each path the file's removal took it from,
         with nothing more appended: a hold follows the file it came from.
         """
-        access = await self._authorised()
+        access, probes_left = await self._authorised()
         suppression = RecordedSuppressionList(
             self.local_suppression, self._bucket_record(access, SUPPRESSION_LIST_KEY)
         )
@@ -791,14 +1107,19 @@ class CaselistRemovalService:
         await RecordedRemovalLog(self.local_removal_log, self._bucket_record(access, REMOVAL_LOG_KEY)).append(
             [entry]
         )
-        return UnsuppressReport(plan=plan, log_entry=entry)
+        return UnsuppressReport(plan=plan, log_entry=entry, preflight_probes_left=probes_left)
 
     # --------------------------------------------------------------------------------------
     # The takedown credential
     # --------------------------------------------------------------------------------------
 
-    async def _authorised(self) -> TakedownAccess:
-        """The takedown credential, proven by :func:`preflight`. Built and checked once per service."""
+    async def _authorised(self) -> tuple[TakedownAccess, tuple[ObjectVersion, ...]]:
+        """The takedown credential, proven by :func:`preflight`. Built and checked once per service.
+
+        With it, the earlier probes this call's preflight could not delete: none when the
+        credential was proven by an earlier call.
+        """
+        probes_left: tuple[ObjectVersion, ...] = ()
         if self._access is None:
             try:
                 access = self.takedown()
@@ -807,9 +1128,9 @@ class CaselistRemovalService:
                 # what an operator who typed `--execute` reads first is that nothing was deleted.
                 named = refused.profile if isinstance(refused, StoreProfileNotConfigured) else None
                 raise TakedownPreflightFailed(named, "start an AWS session", refused) from refused
-            await preflight(access, environment=self.environment)
+            probes_left = await preflight(access, environment=self.environment)
             self._access = access
-        return self._access
+        return self._access, probes_left
 
     def _bucket_record(self, access: TakedownAccess, key: ObjectKey) -> ObjectStoreAppendOnlyRecord:
         """The bucket's copy: appended with the takedown credential, read with the everyday one."""
@@ -831,33 +1152,3 @@ async def _copies_holding(
             present = False
         (holding if present else missing).append(record.location)
     return tuple(holding), tuple(missing)
-
-
-def _names_removed(plan: RemovalPlan, caselist: str, line: str, *, key: str) -> bool:
-    """Whether one manifest line names something this removal took out: what the sweep looks for.
-
-    `key` is the manifest's: a camp release's rows are asked about at their camp path in the release
-    the key names (`v1-e30-t14`), as a caselist's are at their caselist path.
-    """
-    try:
-        row: object = json.loads(line)
-    except json.JSONDecodeError:
-        return False
-    if not isinstance(row, dict) or row.get("kind") != "member":  # pyright: ignore[reportUnknownMemberType]
-        return False
-    fields: dict[str, object] = row  # pyright: ignore[reportUnknownVariableType]
-    path, digest = fields.get("path"), fields.get("sha256")
-    if (
-        isinstance(plan.selector, TeamSelector)
-        and isinstance(path, str)
-        and plan.selector.holds(caselist, path)
-    ):
-        return True
-    if isinstance(digest, str):
-        release = key.rsplit("/", 1)[-1].removesuffix(".jsonl")
-        scope = camp_path_scope(release) if caselist == OPENEV else caselist
-        after: SuppressionState = plan.suppression_after
-        return after.suppresses(
-            digest, disclosure=disclosure_digest(scope, path) if isinstance(path, str) else None
-        )
-    return False

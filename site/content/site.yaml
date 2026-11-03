@@ -26,6 +26,10 @@ skipLinkLabel: Skip to main content
 # next when and where the tournaments are, and the two side by side keep "Events" (what the debate
 # events are) from being mistaken for the list of dates.
 #
+# News sits after Results and before Join: what is coming, how it went, then what the coaches want
+# families to know now. It is the coach's decision of 2026-11-02 that News is in the header and
+# the footer both (v1-e37-t15).
+#
 # src/lib/content.ts validates it at build time: a slug here that is not a published page fails
 # the build naming the slug, so renaming a page cannot silently empty a nav item.
 primaryNavigation:
@@ -34,9 +38,20 @@ primaryNavigation:
   - events
   - schedule
   - results
+  - news
   - join
   - coaches
   - faq
+
+# THE PAGES THE FOOTER KEEPS
+# --------------------------
+# The footer carries every published page the header does not. A page named here stays in the
+# footer even though the header carries it too, in the footer's usual order. News was a footer link
+# before it joined the header, and a visitor who found it along the foot of the page still finds it
+# there. Validated like primaryNavigation: a slug that is not a published page, or one listed
+# twice, fails the build naming it.
+alwaysInFooter:
+  - news
 logoAlternativeText: Whitefish Bay Blue Dukes
 footerNote: >-
   A site run by the Whitefish Bay High School Debate Team, Whitefish Bay, Wisconsin. It is

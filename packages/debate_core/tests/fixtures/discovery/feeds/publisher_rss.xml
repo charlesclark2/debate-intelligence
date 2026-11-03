@@ -1,0 +1,91 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0"
+     xmlns:content="http://purl.org/rss/1.0/modules/content/"
+     xmlns:dc="http://purl.org/dc/elements/1.1/">
+  <channel>
+    <title>The Example Courier - Politics</title>
+    <link>https://news.example.org/politics</link>
+    <description>Invented politics coverage for the feed adapter's tests.</description>
+    <item>
+      <title>Senate panel advances health insurance subsidy bill</title>
+      <link>https://news.example.org/2026/10/20/senate-subsidy-bill</link>
+      <guid isPermaLink="false">courier-1001</guid>
+      <pubDate>Tue, 20 Oct 2026 14:05:00 +0000</pubDate>
+      <dc:creator>Dana Whitfield</dc:creator>
+      <description><![CDATA[<p>The <b>health insurance</b> subsidies would expire in January without a vote.</p>]]></description>
+      <content:encoded><![CDATA[<p>FULL ARTICLE TEXT FROM THE FEED. The committee met for four hours and heard from twelve witnesses before the vote. This paragraph must never reach a candidate.</p>]]></content:encoded>
+    </item>
+    <item>
+      <title>Insurers brace for an enrollment drop</title>
+      <link>https://news.example.org/2026/10/19/enrollment-drop</link>
+      <guid isPermaLink="false">courier-1002</guid>
+      <pubDate>Mon, 19 Oct 2026 09:30:00 -0000</pubDate>
+      <description>Marketplace health insurance premiums rise again &amp; enrollment may fall.</description>
+    </item>
+    <item>
+      <title>Governors split over Medicaid health insurance waivers</title>
+      <link>https://news.example.org/2026/10/18/medicaid-waivers</link>
+      <guid isPermaLink="false">courier-1003</guid>
+      <pubDate>Sun, 18 Oct 2026 10:15:00 EDT</pubDate>
+      <author>newsroom@example.org (Marcus Bell)</author>
+      <description>State plans differ.</description>
+    </item>
+    <item>
+      <title>Health insurance in Nepal's new budget</title>
+      <link>https://news.example.org/2026/10/17/nepal-budget</link>
+      <guid isPermaLink="false">courier-1004</guid>
+      <pubDate>Sat, 17 Oct 2026 19:50:00 +0545</pubDate>
+    </item>
+    <item>
+      <title>Undated health insurance explainer</title>
+      <link>https://news.example.org/explainers/health-insurance</link>
+      <guid isPermaLink="false">courier-1005</guid>
+      <description>What a deductible is.</description>
+    </item>
+    <item>
+      <title>Senate panel advances health insurance subsidy bill</title>
+      <link>https://news.example.org/2026/10/20/senate-subsidy-bill</link>
+      <guid isPermaLink="false">courier-1001</guid>
+      <pubDate>Tue, 20 Oct 2026 14:05:00 +0000</pubDate>
+      <description>The same story, listed a second time.</description>
+    </item>
+    <item>
+      <title>Polling shows a tight Senate race</title>
+      <link>https://news.example.org/2026/10/16/senate-poll</link>
+      <guid isPermaLink="false">courier-1007</guid>
+      <pubDate>Fri, 16 Oct 2026 12:00:00 +0000</pubDate>
+      <description>A new poll of likely voters.</description>
+    </item>
+    <item>
+      <title>Health insurance rules from last year</title>
+      <link>https://news.example.org/2025/09/25/last-year-rules</link>
+      <guid isPermaLink="false">courier-1008</guid>
+      <pubDate>Thu, 25 Sep 2025 12:00:00 +0000</pubDate>
+    </item>
+    <item>
+      <title>UK health insurance comparison</title>
+      <link>https://news.example.org/2026/10/16/uk-comparison</link>
+      <guid isPermaLink="false">courier-1009</guid>
+      <pubDate>Fri, 16 Oct 2026 12:00:00 BST</pubDate>
+    </item>
+    <item>
+      <title>Health insurance item without a link</title>
+      <guid isPermaLink="false">courier-1010</guid>
+      <pubDate>Fri, 16 Oct 2026 12:00:00 +0000</pubDate>
+    </item>
+    <item>
+      <title>India health insurance expansion</title>
+      <link>https://news.example.org/2026/10/15/india-expansion</link>
+      <guid isPermaLink="false">courier-1011</guid>
+      <pubDate>Thu, 15 Oct 2026 19:35:00 +05:30</pubDate>
+      <description>Coverage widens.</description>
+    </item>
+    <item>
+      <title>Reinsurance pool and health costs</title>
+      <link>https://news.example.org/2026/10/14/reinsurance</link>
+      <guid isPermaLink="false">courier-1012</guid>
+      <pubDate>Wed, 14 Oct 2026 12:00:00 +0000</pubDate>
+      <description>Reinsurance only.</description>
+    </item>
+  </channel>
+</rss>

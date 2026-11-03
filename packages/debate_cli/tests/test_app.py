@@ -24,7 +24,7 @@ from typer.testing import CliRunner, Result
 
 from debate_cli import UNKNOWN_VERSION, __version__, package_version
 from debate_cli.app import create_app, main
-from debate_cli.commands import command_group
+from debate_cli.command_registry import command_group
 from debate_cli.container import ServiceContainer, Settings, SettingsNotConfigured
 from debate_cli.context import cli_context, command_name
 from debate_cli.exit_codes import ExitCode
@@ -145,10 +145,18 @@ def test_doctor_reports_the_environment_as_json() -> None:
     # (v1-e30-t05) the next, the OpenCaselist token store and client (v1-e34-t01) after them, and
     # the OpenEv importer (v1-e30-t04), the sync run monitor and history (v1-e34-t03), and the
     # manifest verifier (v1-e03-t06), the parse pipeline (v1-e31-t06), and the check of the
-    # configured evidence profiles (v1-e34-t22) the last.
+    # configured evidence profiles (v1-e34-t22), the search pilot's index build and publish
+    # (v1-e39-t02), the coach's pilot accounts (v1-e39-t05), and the check of the stores the weekly
+    # index stage would find unparsed (v1-e34-t30), the file builder's build, quality check and
+    # suggestion (v1-e33-t03), its publish (v1-e33-t05), the card cutting behind `cut`
+    # (v1-e06-t06), and the discovery providers and federated search behind `search` (v1-e08-t05)
+    # the last.
     # A later epic adding one adds it here too: this is the list an operator reads to find out
     # what this installation is wired for.
     assert data["services"] == [
+        "article_fetch",
+        "bucket_write_guard",
+        "card_cutting",
         "caselist_import",
         "caselist_parse",
         "caselist_publish",
@@ -158,10 +166,20 @@ def test_doctor_reports_the_environment_as_json() -> None:
         "caselist_sync_history",
         "caselist_sync_monitor",
         "caselist_token_store",
+        "discovery_providers",
         "evidence_profile_check",
         "evidence_sync",
+        "federated_search",
+        "file_build",
+        "file_publish",
+        "file_quality",
+        "file_suggest",
         "openev_import",
         "opencaselist_client",
+        "search_index_build",
+        "search_index_publish",
+        "search_index_store_check",
+        "tub_account_administration",
         "verify_manifest",
     ]
 

@@ -1,0 +1,64 @@
+# Federated search ranking: the weight table (v1-e08-t03-feature-ranking).
+#
+# Every number the rank stage uses is here, and nothing else decides an order. Each result's score is
+#
+#   total = sum over the seven features of (weight x feature value)
+#
+# where every feature value is between 0 and 1, or unknown. An unknown feature contributes nothing
+# and is not mentioned in the result's explanation. Loaded by
+# debate_core.application.federated_ranking.load_federated_ranking_config; a key this file does
+# not define, or a missing one, is refused when it is loaded.
+#
+# These are descriptive features, never a judgment of an outlet or an author: there is no
+# publisher list, and no score a reader cannot see. source_type_values below says how much each
+# kind of source counts, by category only.
+
+weights:
+  # Query terms in the title and abstract or snippet (BM25 over the result set, scaled so the best
+  # match is 1). Relevance comes first: a recent, open, much-cited paper on the wrong question is
+  # still the wrong paper.
+  bm25: 0.45
+  # How recent, within the search's date window when it has one.
+  recency: 0.15
+  # The kind of source, from source_type_values.
+  source_type: 0.10
+  # No discovery provider reports peer review yet, so this is unknown for every result and adds
+  # nothing. It is never guessed from the source type: a preprint is scholarly and not reviewed.
+  peer_reviewed: 0.10
+  # An open copy exists, so the card can be cut from it.
+  open_access: 0.05
+  # Citations, log-scaled, scholarship only.
+  citations: 0.10
+  # Found by more than one of the providers that answered.
+  provider_agreement: 0.05
+
+bm25:
+  # The usual Okapi BM25 parameters: k1 caps how much a repeated term adds, b how much a long
+  # abstract is discounted against a short headline.
+  k1: 1.2
+  b: 0.75
+
+recency:
+  # With no date window: a result this many days old scores 0.5, twice as old 0.25. With a
+  # window, recency is the result's position in it instead (its start 0, its end 1).
+  half_life_days: 90
+
+citations:
+  # This many citations or more scores 1; fewer score log(1 + count) / log(1 + saturation).
+  saturation: 1000
+
+source_type_values:
+  # What each kind of source counts for, between 0 and 1. Scholarship and government sources are
+  # what debaters most often cite as authority; news and think tanks are where most uniqueness and
+  # link evidence comes from; "other" is everything a provider could not classify.
+  scholarly: 1.0
+  government: 1.0
+  think_tank: 0.8
+  news: 0.8
+  other: 0.4
+
+explanation:
+  # How many of the largest contributions the explanation names.
+  max_features: 4
+  # A scaled BM25 at or above this reads "strong term match"; below it, "some term match".
+  strong_term_match: 0.6

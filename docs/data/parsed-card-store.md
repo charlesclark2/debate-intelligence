@@ -26,6 +26,8 @@ parsed/hsld26/2026.09.20-docx-1/
     index.jsonl                        every source's entry, sorted by sha256
     failures.jsonl                     the entries of the sources that did not parse
     occurrences.jsonl                  every card, once per disclosure
+parsed/openev/2026.09.20-docx-1/
+    camp_paths.jsonl                   each camp row's live camp paths, as digests (v1-e33-t07)
 ```
 
 The per-source files fan out by the first four hex characters of the digest, as the blob store
@@ -42,7 +44,14 @@ beside it, and neither touches the old one:
   `2026.09.20-docx-1_reparse-2`, then `_reparse-3`.
 
 The current directory of a caselist is the newest generation of the parser version the reader
-runs. Nothing ever writes into an older one again; the local adapter refuses to.
+runs. Nothing ever writes into an older one again; the local adapter refuses to. An older one is
+superseded, and is retired under the rule in [Retention](#retention).
+
+`caselist parse --dry-run` says which directory a run would write, whether it would start it
+(`new_version`), and which directory it supersedes (`superseded`): the newest one below it, of an
+earlier parser version or an earlier generation, never one a newer build wrote. A caselist's first
+parse starts a directory and supersedes nothing. Before `v1-e31-t16` a parser version bump was
+reported as `new_version: false` and `superseded: null`.
 
 A parser version is bumped whenever what the parser emits changes, and also when the only change
 is that a file once refused is now read: a refusal is a recorded entry like any other, so under the
@@ -53,6 +62,9 @@ same version the skip key below would pass that file over for good.
 | `2026.09.20-docx-1` | The first full corpus, 2026-10-10 ([caselist-parse-report.md](caselist-parse-report.md)) | |
 | `2026.10.10-docx-2` | The re-parse of 2026-10-11 | Reads 23 files refused for the words `system "` and `public '` in card text. Keeps a body paragraph guessed to be a cite in its card. Does not take a blank line in a heading style for a heading. Calls a card `ABBREVIATED` for the shape of a first-and-last-words disclosure, not for an ellipsis. Writes "no tag" as `null`, under record `schema_version` 2 (`v1-e31-t09`) |
 | `2026.10.12-docx-3` | Written by the next `caselist parse` | Reads cites the two before it missed or misread ([caselist-parse-report.md](caselist-parse-report.md#cites-the-parser-missed-or-misread-v1-e31-t12)): a cite in the cite character style past 1,000 characters, a cite line longer than 400 characters that opens in bold or holds everything after its name and year in one bracket, and a cite written wholly inside a bracket. Does not take a line that opens with a word such as *In* and a year for a cite. Reads a guessed cite entry longer than 2,000 characters as body whatever its formatting. No field moved (`v1-e31-t12`) |
+| `2026.10.18-docx-4` | Written by the next `caselist parse` | Reads a file whose compression ratio is over the limit only in a part the reader never opens, such as a page thumbnail. Reads a file whose text holds a raw character XML 1.0 forbids, each replaced by U+FFFD and counted in the document's `warnings` ([below](#a-character-xml-forbids-replaced-by-ufffd)). Files a CardMirror `.cmir` uploaded under another extension as `UNSUPPORTED` with `source_format` `CMIR`, not as a `NOT_A_ZIP` failure. No field added; `CMIR` is a new value of `source_format` (`v1-e31-t15`) |
+| `2026.10.18-docx-5` | Written by the next `caselist parse` | Reads a cite behind a first name or a title, and a highlighted cite with a body below it, where a cite stands. Reads the cite and body rules through a paragraph style that maps to no unit (`Normal (Web)`, `List Paragraph`, …), never the heading rules. Holds a long guessed cite by its cite style only when the style marks a name and a year at its head. Reads `Okonkwo ‘26`, a left quote before the year, as a short cite, keeping the quote as written ([caselist-parse-report.md](caselist-parse-report.md#the-remaining-cite-shapes-v1-e31-t19)). No field moved (`v1-e31-t19`) |
+| `2026.10.20-docx-6` | The re-parse of 2026-10-21 ([caselist-parse-report.md](caselist-parse-report.md#the-re-parse-to-docx-6-operator-run-after-the-merge)) | Reads a line above a cite that Word shows bold throughout as the tag of a card that had none (`v1-e31-t24`, with its four guards): 875 cards gain a tag, 150 cards above them lose a stray last paragraph, and 5 entries that were never cards become analytics. Written by the PM, 2026-10-22 |
 
 ## The skip key
 
@@ -79,7 +91,7 @@ Every line of every file is one JSON object with sorted keys, and every one carr
 | `source_sha256` | The source file's SHA-256 |
 | `parser_version` | The parser that read it, e.g. `2026.09.20-docx-1` |
 | `profile_version` | The style profile it resolved through, e.g. `2026.09.20-verbatim-1` |
-| `fingerprint_version` | The card matching rules, e.g. `card-fingerprint-v3`. What it says depends on the record: see [Fingerprint versions](#fingerprint-versions) |
+| `fingerprint_version` | The card matching rules, e.g. `card-fingerprint-v4`. What it says depends on the record: see [Fingerprint versions](#fingerprint-versions) |
 
 ### Schema versions
 
@@ -103,7 +115,7 @@ record kind.
 | Field | What it is |
 |---|---|
 | `snapshot` | The snapshot the source was parsed under: the earliest that disclosed it then |
-| `source_format` | `DOCX`, `DOC`, `PDF` or `OTHER`, from the manifest |
+| `source_format` | `DOCX`, `DOC`, `PDF` or `OTHER`, from the manifest; `CMIR` when the parser found CardMirror's native file under another extension (from `2026.10.18-docx-4`) |
 | `byte_size` | The source's size in bytes |
 | `outcome` | `PARSED`, `UNSUPPORTED` or `FAILED` |
 | `reason` | Why it has no document; `null` when `PARSED` |
@@ -112,14 +124,17 @@ record kind.
 
 `UNSUPPORTED` is a PDF, a legacy `.doc` or another format V1 stores without parsing. It is an
 outcome, not a failure: PF alone discloses hundreds of PDFs. Its `reason` is `UNSUPPORTED_FORMAT`
-and its `source_format` says which.
+and its `source_format` says which. A CardMirror `.cmir`, a gzip stream holding a JSON document, is
+told by its first inflated byte and filed under `CMIR` whatever its name; the manifest still gives
+the format its extension named.
 
 `FAILED` has one of these reasons, each counted against the run's failure-rate threshold:
 
 | Reason | Meaning |
 |---|---|
 | `MALFORMED_PACKAGE`, `NOT_A_ZIP`, `MISSING_DOCUMENT_PART`, `MALFORMED_XML` | A broken file |
-| `TOO_LARGE`, `TOO_MANY_ENTRIES`, `COMPRESSION_RATIO_EXCEEDED` | Oversized, or shaped like a zip bomb |
+| `TOO_LARGE`, `TOO_MANY_ENTRIES` | Oversized: more than 128 MiB uncompressed or 1,024 entries, counting every entry, read or not |
+| `COMPRESSION_RATIO_EXCEEDED` | Shaped like a zip bomb: a part the parser opens expands more than 200-fold. From `2026.10.18-docx-4` a part it never opens is not judged |
 | `MACRO_ENABLED` | A Word package carrying a VBA project |
 | `ENCRYPTED` | Password-protected |
 | `FORBIDDEN_XML_CONSTRUCT` | A part that declares a document type (`<!DOCTYPE`) or an entity, in any encoding. The words `SYSTEM` and `PUBLIC` in card text are not one |
@@ -152,10 +167,27 @@ confidence, rule ids, `UNVERIFIED` status and `FILE_IMPORT` provenance with its 
 reader in Python calls `DocumentRecord.to_parsed_document(path)` with a path from the manifests and
 gets a validated `ParsedDocument` back.
 
+#### A character XML forbids, replaced by U+FFFD
+
+From `2026.10.18-docx-4`, a raw character XML 1.0 forbids in a part the parser reads (a C0 control
+other than tab, line feed and carriage return, or U+FFFE or U+FFFF) is replaced one for one by
+U+FFFD before the part is parsed. The PM decided it with Charlie on 2026-10-18; it is recorded in
+`v1-e31-t15`'s spec. Nothing is deleted and every other character keeps its offset, so formatting
+spans are where they were. A source that had any says how many in its document's `warnings`:
+
+```text
+4 character(s) XML 1.0 forbids were each replaced by U+FFFD; no other character moved
+```
+
+A forbidden character written as a character reference, `&#1;` and the like, is still
+`MALFORMED_XML`. The first corpus parse had five such files, all CardMirror exports, with 66
+characters between them, every one in evidence text.
+
 #### A card with no tag
 
 A file may give a card no tag. In a record that is **`"tag": null`**, and from `2026.10.10-docx-2`
-on it is never an empty string. In Python, ask `card.has_tag`.
+on it is never an empty string. In Python it is **`card.tag is None`**, which `card.has_tag` also
+says (`v1-e31-t14`); before that task the attribute held `""`.
 
 `null` is not a parser failure to work around. What it means depends on the card's `completeness`:
 
@@ -169,6 +201,31 @@ both. That directory also holds 15,528 such cards against 4,455 expected in the 
 about 11,000 of them were not cards the file holds: a paragraph inside a card's body had been
 read as the cite of a new one. A card whose `rule_ids` include
 `assembly-cite-guess-inside-card-body:…` kept such a paragraph in its body.
+
+**What each output says for a card with no tag**, as of `v1-e31-t14`. The task changed the
+in-memory value and the JSON of the cards statistics. No stored record changed shape, so the
+record `schema_version` stays 2 and nothing is re-parsed or rebuilt.
+
+| Output | Says for no tag | Before `v1-e31-t14` |
+|---|---|---|
+| A stored card, in a per-source file's `document` record | `"tag": null` (`schema_version` 2) | the same since `v1-e31-t09`; `"tag": ""` under `schema_version` 1 |
+| A line of `occurrences.jsonl` | nothing: an occurrence record has no `tag` field | the same |
+| Any `ParsedCard` or `ParsedDocument` JSON, such as the files `caselist cards --parsed` reads | `"tag": null` | the same since `v1-e31-t09` |
+| `ParsedCard.tag` in Python | `None` | `""` |
+| `CardOccurrence.tag` in Python, and in its JSON | `None`, and `"tag": null` | `""` |
+| `caselist cards --json`, a top cluster's `tag` | `null` | `""` |
+| `caselist cards` table, the Tag column | `-`, as the Short cite column shows no short cite | an empty cell |
+
+Every reader takes both spellings: `ParsedCard` and `CardOccurrence` read `""` and `null` alike as
+`None`, so a version 1 record, or a file an earlier build wrote, reads as it did. A
+`CardOccurrence` is built in memory by the cards statistics and is never stored. A reader of the
+store takes a card's tag from its `document` record, and finds `null` there, or `""` in a
+version 1 directory.
+
+The cards statistics label a cluster with its most frequent (short cite, tag) and break a tie by
+the smallest. No tag counts as `""` there, as it always did, so it sorts before every tag and a
+tagged card's cluster keeps the label and the place it had
+([`test_untagged_cards_keep_the_order_of_tagged_cards.py`](../../packages/debate_core/tests/application/test_untagged_cards_keep_the_order_of_tagged_cards.py)).
 
 A heading in a card's `section_path` is never an empty string either. In `2026.09.20-docx-1`,
 1,847 cards carry one, from a blank line in a heading style.
@@ -212,7 +269,9 @@ gain evidence text, and `CITE_ONLY` falls from 4,731 to 2,254 over the same sour
 | `assembly-cite-guess-longer-than-a-cite:` | A guessed cite over 2,000 characters, the first thing under a tag and formatted as body, is the body. The card has no cite: `full_cite` is empty and `short_cite` is `null` |
 
 The part after the colon is the guess that was overruled. A cite read from a cite *style* is never
-re-read, at any length.
+re-read, at any length. From `2026.10.18-docx-5` a guess is held as a cite by a cite-style run only
+when the style marks a name and a year at its head; on a phrase further in the style is emphasis,
+and 25 such guesses over 2,000 characters are body (`v1-e31-t19`).
 
 **Still expect a long `full_cite` now and then.** 460 `CITE_ONLY` cards hold a cite paragraph of
 more than 100 words after the change. Most are a card written as one paragraph behind a bold name,
@@ -246,10 +305,19 @@ A rule id on a card says how its cite was read:
 | `heuristic-cite-line-bracketed` | A line of 401 to 2,000 characters: a name and a year, then one bracket to the end but for the cutter's signature |
 | `assembly-bracketed-cite-before-the-body:…` | A paragraph wholly inside one bracket with a name and a year at its head, under a tag or under the card's cite and before any body. The part after the colon is what the classifier had called it |
 | `heuristic-wiki-cite-entry` | A paragraph holding an ellipsis and a name with a year. A guess, and the least sure |
+| `assembly-cite-behind-a-name-before-the-body:…` | From `2026.10.18-docx-5`: a line of 2,000 characters or fewer whose name and year start within 40 characters behind one to three capitalised words or a title, set in bold or followed by one bracket, under a tag or under the card's cite and before any body |
+| `assembly-highlighted-cite-before-the-body:…` | From `2026.10.18-docx-5`: a highlighted paragraph with a cite's shape (a bold name and year at its head, everything after the year in one bracket, or the cite style on a name and year at its head), where a cite stands and with a body below it |
+| `<rule>:verbatim-…` | From `2026.10.18-docx-5`: the rule before the colon read the paragraph through a paragraph style that maps to no unit, named after it. The same rule ids apply to body paragraphs |
 
 A card still has no cite when the file gives it none, when its cite is on the tag line, or when
-the line under its tag is a cite in a shape no rule takes: 7,200 have a name and a year a few
-words into that line, behind a first name or a title.
+the line under its tag is a cite in a shape no rule takes. In `2026.10.12-docx-3` 7,200 such cards
+had a name and a year a few words into that line, behind a first name or a title; from
+`2026.10.18-docx-5` the parser reads that cite when it is set in bold or followed by one bracket,
+and 19,544 tagged cards over the same sources have no cite.
+
+**A short cite keeps its characters.** `Okonkwo ‘26` is matched as `Okonkwo ’26` and stored as
+written, with its left quote: 9,602 cards hold such a short cite from `2026.10.18-docx-5`, none
+before.
 
 ### `occurrence`: a line of `occurrences.jsonl`
 
@@ -284,6 +352,40 @@ Who disclosed a card is a join, not a field: compute `sha256(f"{caselist}/{path}
 row of the caselist's manifests and match it to `disclosure`. The digest is the same one the
 removal suppression list records a withdrawn disclosure under.
 
+**A camp row's camp paths (`v1-e33-t07`).** A camp row also carries, in memory,
+`camp_path_disclosures`: the digest of `openev/<release>/<row path>` for each path its file is at in
+its release, sorted, the digest a removal withdraws one camp path under (`v1-e30-t14`). Most files
+are at one path; the same bytes uploaded under two OpenEv ids give two. The parse writes the digests
+of the release's live paths, and a reader asks the suppression list about each: a camp row is
+stopped when its source is suppressed as a whole or every one of its camp paths is withdrawn, before
+any rebuild, and another release of the same file is not. The digests are **not** a key of
+`occurrences.jsonl`. Every earlier build reads that file with a model that refuses an unknown key,
+and refuses a record version it does not know, so a key there would make the table unreadable to
+them (`v1.1.0-dev.200`, `v1.1.0-dev.251`). They are kept in `camp_paths.jsonl` beside the table,
+below. A row read from a table with no such file beside it, or with one written for other bytes,
+carries none, and only its whole source stops it, as before this task.
+
+### `camp_path`: a line of `camp_paths.jsonl` (`openev` only)
+
+One line per camp path of each camp file in each release the table has rows for, sorted by release,
+source and digest, and only when the table has a camp row with a camp path; otherwise the file is
+removed. It carries the six fields every record does, the release as `snapshot`, and:
+
+| Field | What it is |
+|---|---|
+| `record` | `camp_path` |
+| `camp_path_disclosure` | SHA-256 of `openev/<release>/<row path>`: the camp path's pseudonym, never the path |
+| `occurrence_table_sha256` | SHA-256 of the `occurrences.jsonl` bytes it was written beside |
+
+The local store gives the digests of the lines whose `occurrence_table_sha256` is the SHA-256 of the
+table as read to that table's rows of the same release and source. A table rewritten since with
+other rows has other bytes, so its rows get none. An earlier build's rebuild of the same rows writes
+the same bytes (the rows carry no digest), so they keep the digests: a camp path withdrawn after it
+still stops its release for this build's readers. A line this build cannot read (a later build's
+shape) makes it give none at all. No earlier build opens the file. Like the
+other aggregates it is rebuilt by every run, published after the per-source files and deleted by a
+removal.
+
 **What the span means.** A weekly archive is a window of about a week's editing activity, not the
 whole caselist (`docs/data/caselist-backfill-2026-09.md`), so a manifest lists a path in the weeks
 a team uploaded or touched it. `last_snapshot` is the latest week that happened, not proof that the
@@ -303,6 +405,7 @@ each version and what it changed).
 | `card-fingerprint-v1` | `v1-e31-t04` | | |
 | `card-fingerprint-v2` | `v1-e31-t08` | the same as `v1` | changed: short cards and abbreviated disclosures that `v1` left apart now share clusters |
 | `card-fingerprint-v3` | `v1-e31-t11` | the same as `v1` | changed for short cards only: a short cut inside nested copies of a card joins the smallest of them, and its size is compared with the smallest body that holds it. A long card's cluster changes only by gaining such a cut, which can give the cluster a smaller id |
+| `card-fingerprint-v4` | `v1-e31-t20` | the same as `v1` | changed for long and short cards: a cut, long or short, joins the one cluster that holds it, found from either of its ends, where `v3` joined a long cut only when the banding paired the two. Every two bodies in a cluster overlap (share at least three-tenths of the smaller's five-word runs) or one holds the other: a body holding a cut and another passage the cut does not overlap is no witness for it, and no join puts two bodies that do not overlap in one cluster. A cut's own cluster counts among its witnesses, and a cut may be as little as a tenth of the body it joins (a quarter in `v3`). Clusters `v3` chained together through bodies holding several passages come apart; nested and overlapping copies come together |
 
 **What the stamp says depends on the record.**
 
@@ -313,7 +416,19 @@ each version and what it changed).
   it is the version that was in force when the source was parsed, and nothing in the record depends
   on it. A parsed document holds cards as the parser read them: no fingerprint, no cluster id.
   These records are never rewritten, so after a version change they go on saying the old one,
-  beside sources parsed since that say the new one. That is not staleness.
+  beside sources parsed since that say the new one. That is not staleness. The stamp is part of a
+  per-source file's bytes, though, so two machines at different fingerprint versions write different
+  per-source files for the same source bytes, and when both publish, the second meets the first's
+  file in the bucket as `CHECKSUM_MISMATCH` and leaves it untouched (`v1-e29-t12`).
+
+**Every build reads every version.** No code compares a row's `fingerprint_version` with its own:
+the field is free text to the models, and the tools that read the table, such as
+`scripts/compare_card_clusters.py`, report it. What differs between builds is what they *write*.
+Every `caselist parse`, and the parse stage of every `caselist pull`, rebuilds the whole table of the
+caselist it parses under the running build's version. So a build from before a version change
+rewrites the table under the older version the next time it parses that caselist, and publishes it
+where that run publishes. After a version change, reinstall the agent on a build that carries it
+before its next scheduled run ([`caselist-scheduled-sync.md`](../runbooks/caselist-scheduled-sync.md#reinstalling-the-agent)).
 
 **A version change re-parses nothing.** The skip key has no fingerprint version in it, and does not
 need one: the only records a fingerprint version decides are the occurrence rows, and the next
@@ -343,7 +458,8 @@ evidence-store layout puts it and where a removal rewrites it.
 2026-10-10, which keeps the policy as it is). Keeping `parsed/` free of personal data means a
 removal has fewer places to clean, and a leak of `parsed/` alone names nobody; a reader that needs
 the team joins the manifests, which live under the same controls. `disclosure` is a pseudonym, not
-anonymisation: anyone holding the manifests can recompute it. Two tests in
+anonymisation: anyone holding the manifests can recompute it. So is `camp_path_disclosure`, of a camp
+path, which names no school or team. Two tests in
 [`test_local_parsed_store.py`](../../packages/debate_core/tests/integrations/test_local_parsed_store.py)
 hold the line. `test_no_record_has_a_field_for_a_path_school_team_tournament_or_round` checks the
 record models' field names. `test_no_file_names_the_disclosure_path_or_anything_in_it` scans every
@@ -355,11 +471,22 @@ already holds the whole file.
 
 ## How the aggregates are kept
 
-`index.jsonl`, `failures.jsonl` and `occurrences.jsonl` are rebuilt from scratch at the end of every
-run, from the per-source files of the current directory, the local manifests and the removal
-suppression list. Nothing is carried forward from the previous aggregate. Each aggregate leaves out
-a source the suppression list stops, and `occurrences.jsonl` also leaves out each withdrawn
-disclosure.
+`index.jsonl`, `failures.jsonl` and `occurrences.jsonl`, and `camp_paths.jsonl` in `openev`, are
+rebuilt from scratch at the end of every run, from the per-source files of the current directory, the
+local manifests and the removal suppression list. Nothing is carried forward from the previous
+aggregate. Each aggregate leaves out a source the suppression list stops, and `occurrences.jsonl`
+also leaves out each withdrawn disclosure, and each camp release whose every camp path is withdrawn
+(`v1-e33-t07`), whether or not this machine's release manifest has been rewritten yet.
+
+They also leave out each disclosure at a path a removal holds, in a snapshot the hold covers
+(`v1-e31-t26`): a later upload at the removed file's path, which a build from before `v1-e30-t13`
+imported. The rule is the publisher's own for a held manifest row (`publish_plan.stored_row_hold`),
+asked of each disclosure. A source only held paths disclose is not parsed and has no row in any
+aggregate; a source another live path discloses keeps its rows, less the held disclosure's
+occurrence rows. A disclosure listed before the hold's date and again after it keeps a row spanning
+the snapshots before. An earlier build may have parsed such a source into the current directory:
+its per-source file stays there, out of every aggregate and never published, until the same removal
+run again deletes it.
 
 A source's file is written as its parse finishes, and every file is written to a temporary name and
 renamed into place. A run stopped part-way leaves whole per-source files that the next run skips,
@@ -378,8 +505,12 @@ filed there as never parsed (`v1-e31-t09`). Another caselist's unreadable direct
 `caselist remove --execute` deletes, locally and in the bucket with every noncurrent version:
 
 * every per-source file named for a removed digest, in every version directory;
-* `index.jsonl`, `failures.jsonl` and `occurrences.jsonl` in every version directory of each caselist
-  the removal touched, because each may hold rows derived from the removed source or disclosure.
+* `index.jsonl`, `failures.jsonl` and `occurrences.jsonl`, and `camp_paths.jsonl` where there is
+  one, in every version directory of each caselist the removal touched, because each may hold rows
+  derived from the removed source or disclosure. A removal by a build from before `v1-e33-t07` leaves
+  `camp_paths.jsonl`. It was written for the table that removal deleted, so a table rebuilt without
+  the removed rows has other bytes and gets none of its digests; this build's next run or removal
+  replaces or deletes it.
 
 Until the next `caselist parse` the current directory has no aggregates, and readers treat that as
 "not built yet". The next run rebuilds them without the removed source, and `--publish` uploads
@@ -394,6 +525,89 @@ files go first and the aggregates last, so the bucket never holds an index namin
 not hold. An object already in the bucket with the same SHA-256 is skipped, so a re-run uploads
 nothing. A per-source file the bucket holds with a different checksum is reported and left alone; an
 aggregate is replaced. Only the current version directory is ever published.
+
+A per-source file is never sent when the suppression list stops its source, or when only paths a
+removal holds disclose it (`v1-e31-t26`), read from this machine's manifests by the rule the
+aggregates use. Either is counted `suppressed`. If an earlier build's `--publish` already sent such
+a file, `caselist status` names it, under *HELD UPLOADS PARSED IN THE BUCKET*, by caselist, digest
+prefix and request, and the same removal run again deletes it with every version.
+
+## Retention
+
+A superseded version directory is a full copy of the store that nothing reads or writes again, about
+5.8 GB in each place. `debate-research caselist retire` lists the directories and retires the
+superseded ones (`v1-e31-t16`); the procedure is
+[parsed-store-retention.md](../runbooks/parsed-store-retention.md).
+
+**Which directory is current.** In each place (this machine, the dev bucket, the prod bucket) and
+for each caselist, every directory is judged against the parser version of the build that runs the
+command, by the order the store sorts them in: parser version, then generation.
+
+| Standing | Which directories | Retired? |
+|---|---|---|
+| `current` | The newest generation of this build's parser version | Never: the command refuses it |
+| `newer_than_this_build` | A parser version after this build's, written by a newer build | Never by this build: the command refuses it |
+| `superseded` | Every directory below the current one | On request, with a dry run and a confirmation |
+| `not_yet_superseded` | An older directory in a place that has no directory of this build's parser version yet, such as a bucket the new directory has not been published to | No: that place would be left with nothing to read |
+
+So a directory is retired in a bucket only once its successor has been published there.
+
+**What retiring does.**
+
+* **On this machine** the directory is deleted at once.
+* **In a bucket** nothing is deleted by the command: the everyday permission set has no
+  `s3:DeleteObject`, by design, and only a takedown deletes (PM ruling, 2026-10-15). Each current
+  object of the directory is tagged `debate-retention=superseded`, and a lifecycle rule on
+  `parsed/` expires what carries that tag. Expiry is counted from an object's creation, not its
+  tagging, so the rule expires the tagged current version a day after creation, which for any
+  directory worth retiring is the next daily lifecycle run, and then keeps it as a noncurrent
+  version for a **30-day grace period** before deleting it. Until that first run,
+  `caselist retire --bucket --restore` undoes it by setting the tag to `restored`. After it, and for
+  the grace period, copying the noncurrent versions back does (amended by the PM, 2026-10-16: S3
+  counts Expiration from creation, so the grace runs on noncurrent versions). Expiring a current
+  version leaves a delete marker, which carries no tags; once the version behind it is deleted, a
+  second rule on `parsed/`, by prefix alone, removes it. That rule removes only a marker with
+  nothing behind it, and expires no object.
+
+**Why 30 days, and why that agrees with the data-use policy.** The
+[retention section](../policies/caselist-data-use.md#retention) sets an upper bound: parsed cards
+are kept on the clock of their sources and deleted with them, and noncurrent versions expire after
+365 days in prod and 30 in dev. Retiring a superseded directory early keeps within it. Every card
+in the superseded directory is in the current directory too, read again from the same sources, and
+those cards stay on their sources' clock. What is retired is derived, holds no personal data (see
+[What the store does not hold](#what-the-store-does-not-hold)), and can be rebuilt from the sources
+by the parser version that wrote it. Thirty days is the window dev already gives every superseded
+version and the policy's dev exception names. It is four weekly pulls, which is long enough to
+notice a reader that still needed the old directory. Prod's 365-day window exists to recover from
+a bad publish of evidence, and a retired directory is not one: keeping it a year would hold a second
+5.8 GB copy for no reader. The policy's table does not yet have a row for retired `parsed/`
+directories; the session report of `v1-e31-t16` proposes one.
+
+**Removal beats retention, as everywhere.** A `caselist remove --execute` during the grace period
+deletes a removed source's per-source files, tagged or not, current and noncurrent, as it always has.
+
+### Retired so far
+
+Counts from the operator's runs (`docs/runbooks/parsed-store-retention.md`). Objects and bytes are
+what the dry run listed; nothing else is recorded here.
+
+The last column is the runbook's check of a bucket 32 days after the first lifecycle run: the
+versions and the delete markers left under one caselist's `sha256/`, which should both be `0`.
+
+| Directory | Place | Retired on | Objects | Bytes | Left after 32 days |
+|---|---|---|---|---|---|
+| `2026.09.20-docx-1` | this machine | 2026-10-11, by hand, before the command existed | not counted | about 5.8 GB | |
+| `2026.09.20-docx-1` | dev bucket | 2026-10-17, tagged | 11,138 | about 6.2 GB | |
+| `2026.09.20-docx-1` | prod bucket | not yet | | | |
+| `2026.10.10-docx-2` | this machine | 2026-10-17, deleted | 11,138 | about 6.3 GB | |
+| `2026.10.10-docx-2` | dev bucket | 2026-10-17, tagged | 11,138 | about 6.3 GB | |
+| `2026.10.10-docx-2` | prod bucket | not yet | | | |
+| `2026.10.12-docx-3` | dev bucket | 2026-10-20, tagged | 12,713 | about 7.5 GB (hsld26 4,973 objects, 2.5 GB; hspf26 4,440, 1.3 GB; hspolicy26 3,193, 3.5 GB; openev 107, 198.9 MB) | |
+| `2026.10.12-docx-3` | this machine | 2026-10-20, deleted | 12,713 | about 7.5 GB | |
+| `2026.10.12-docx-3` | prod bucket | not yet: refused (`STORE_ACCESS_DENIED` on `GetObjectTagging`) until prod has v1-e31-t16's Terraform, at the promotion | | | |
+| `2026.10.18-docx-5` | dev bucket | 2026-10-22, tagged | 12,713 | about 7.5 GB (hsld26 4,973 objects, 2.5 GB; hspf26 4,440, 1.3 GB; hspolicy26 3,193, 3.5 GB; openev 107, 200.7 MB) | |
+| `2026.10.18-docx-5` | this machine | 2026-10-22, deleted | 12,713 | about 7.5 GB | |
+| `2026.10.18-docx-5` | prod bucket | not yet: at the promotion, with the three before it ([evidence-search runbook](../runbooks/evidence-search.md#promoting-the-pilot-to-prod), item 9) | | | |
 
 ## Reading it from a shell
 

@@ -141,9 +141,15 @@ which tournament rounds, what was kept and what was not done), and **TO CARRY IT
 `--execute` command. Add `--json` for the same plan as one
 JSON object. The JSON carries no school, team code, path, camp, title or file name (`v1-e30-t11`):
 a file is its sha256, a disclosure is the digest the suppression list uses for one, a `--team`
-selector is its caselist, and an inbox file is a weekly archive's name or `openev-<id>`. So the JSON
+selector is its caselist, and an inbox file is a weekly archive's name or `openev-<id>`. Its
+`withdrawals` are the *WITHDRAWALS* lines, each by the file's sha256, the path's digest and the
+caselist's slug, and `manifest_versions_swept` is the *MANIFEST VERSIONS SWEPT* count, in all and by
+manifest key, or `"not counted"` where the line says so (`v1-e30-t20`). So the JSON
 can be saved or pasted where the text of the plan cannot. Check the plan against the request in
-the text. The everyday profile may list object versions under the prefixes a takedown removes
+the text. Neither the text nor the JSON names a path on this machine, so you can keep both: the
+inbox is *inbox in the data directory* (`"inbox_directory": "inbox"`), or *the directory
+caselist.inbox_dir names* when a profile puts it elsewhere, and a run a pull's lock stops names the
+lock as *caselist-sync.lock in the data directory* (`v1-e30-t20`). The everyday profile may list object versions under the prefixes a takedown removes
 from (`v1-e29-t06`), so the plan shows each object's version count. In an environment where that
 grant has not been applied yet ([evidence-store.md, Later applies](evidence-store.md#later-applies)
 records when it was), the plan says *Versions not counted* instead; everything else in it is still
@@ -230,7 +236,10 @@ Read the plan before going further. Confirm:
       `kept in` line says *another path there still holds it*, which may be the same team's. A
       `--source` plan never says "this team's": no team asked. It says what happens at the removed
       path instead (*N path(s) a shared file is withdrawn from*, *the copy of a shared file at the
-      path it was withdrawn from*).
+      path it was withdrawn from*). Nor does a `--team --include-shared` plan of a later upload it
+      takes from another team's path, since it removes the shared file from that path too: it
+      counts *N path(s) of another holder a later upload is withdrawn from*, and the list stops
+      *another holder's copy of a later upload* there (`v1-e30-t20`).
 - [ ] **Shared references.** If the plan lists sources also disclosed by another team, or that are
       also a camp file, decide explicitly: without `--include-shared` only this team's `Disclosure`
       records and manifest rows are dropped and the shared blob stays, and each of this team's
@@ -259,7 +268,17 @@ Before the first change the command checks the takedown profile in two steps. Fi
 account which role the profile is signed in as, and stops unless that is this environment's
 `EvidenceRemoval` permission set (`v1-e29-t08`). Asking needs no grant and writes nothing. Then it
 proves the profile can list, write and delete a probe version under
-`manifests/_suppression/preflight/`.
+`manifests/_suppression/preflight/`. `caselist unsuppress --execute`
+([If you removed the wrong thing](#if-you-removed-the-wrong-thing)) runs the same check, in the same
+two steps, before it appends anything, and stops in the same ways.
+
+Once its own probe is gone, a check that passed deletes every probe it found under
+`manifests/_suppression/preflight/` before it wrote its own: what earlier checks left
+(`v1-e29-t09`). It deletes them with the takedown profile, and nothing outside that prefix. This is
+housekeeping: if the bucket refuses to delete one of them, the command still carries out the
+request. The `DONE` output then ends with *N probe version(s) an earlier preflight left … could not
+be deleted*, and `--json` gives the count and the keys under `data.preflight_probes_left`. Remove
+them by hand afterwards ([A probe a preflight left behind](#a-probe-a-preflight-left-behind)).
 
 An unset `DEBATE_REMOVAL_PROFILE`, one that names a profile your AWS config lacks, a signed-out
 session, or the everyday profile named by mistake stops it at or before the first step: nothing
@@ -270,16 +289,41 @@ session exits 3 with the `aws sso login` line to run.
 
 A probe is left behind only when the takedown role itself is refused the delete, which means its
 grants are not what [evidence-store.md](evidence-store.md) says they are. The error gives the
-probe's key, and [A probe a preflight left behind](#a-probe-a-preflight-left-behind) says how to
-remove it.
+probe's key. Once the grant is fixed, the next `--execute` removes it;
+[A probe a preflight left behind](#a-probe-a-preflight-left-behind) says when to remove one by hand.
 
 It then appends the suppression entries and the path entries first, deletes from the bucket, then
 from this machine — the store, then the download inbox (step 8) — and writes one removal-log entry. The `DONE` output says
 how many files the request named and how many later uploads the run covered; the removal log lists
 every sha256 it removed or withdrew, later uploads included. If it stops part-way it
-says so, logs `INCOMPLETE`, and the fix is to run the same command again, with the same flags. The inbox is changed only
+says so, logs `INCOMPLETE`, and the fix is to run the same command again, with the same flags. After
+deleting, `--execute` lists the `raw/` and `parsed/` keys and the landscape school views it reached
+again: a version still there stops it `INCOMPLETE` with `BUCKET_OBJECTS_LEFT` or `SCHOOL_VIEWS_LEFT`,
+counts only, and running it again finishes it (`v1-e30-t29`, `v1-e32-t13`). The inbox is changed only
 while no `caselist pull` is running: if one holds the sync's lock, the removal stops `INCOMPLETE`
 with *a caselist pull is running*, and you re-run it once the pull has finished.
+
+**In bucket mode** (after the cutover: `caselist.run_state = "bucket"`, `v1-e40-t04`, ADR-0020
+(3)), the same command, run with `DEBATE_CASELIST__RUN_STATE=bucket` until `v1-e40-t06` puts it in
+the profile, does three things more, and nothing in what you type changes:
+
+* **It works on the bucket's copy.** Before it plans, the dry run as well, it restores this
+  machine's manifests, database and state files from the run-state bundle
+  (`manifests/_run-state/run-state.tar.gz`): a few seconds. So the plan is of the state the cloud
+  run left, not of an older one on this machine.
+* **`--execute` holds the bucket's run lock** for the whole of it, planning included. While the
+  cloud run holds the lock, the removal is refused with `RUN_LOCK_HELD` and nothing is changed:
+  run it again once that run has finished (`caselist runs --remote --last 1`).
+* **It rewrites the run-state bundle, and only then purges the bundle's old versions.** Every
+  version of the bundle holds the removed file's manifest rows and database records. After its
+  records step, the removal saves the bundle again without them, confirms that the bucket's current
+  version is the one it wrote, and then deletes every other version with the takedown profile. A
+  rewrite the bucket does not confirm deletes nothing and stops the removal `INCOMPLETE` with
+  `RUN_STATE_BUNDLE_NOT_REWRITTEN`: run the same command again. The count of versions deleted in the
+  `DONE` output includes the bundle's.
+
+The parse in the next block runs in bucket mode too, with the same variable. It fetches from the
+bucket's `raw/` any source it has to parse and this machine lacks.
 
 **Then rebuild the parsed card store's aggregates.** The removal deletes the removed file's parsed
 cards and, for every caselist it touches, the store's `index.jsonl`, `failures.jsonl` and
@@ -299,6 +343,16 @@ DEBATE_ENV=dev uv run debate-research caselist parse --caselist hsld26 --publish
 It exits 0 and prints the rebuilt counts. The new aggregates leave out every source and disclosure
 the suppression list stops, which now includes this removal's.
 
+**A backfile listed there is rebuilt differently** (`v1-e34-t34`). A caselist in
+`caselist.backfile_caselists` (`hspolicy25`, `hsld25`, `hspolicy24`, `hsld24`) keeps its parsed store
+in the bucket, not on this Mac, so the parse above cannot rebuild it. Its rebuild is `caselist
+backfile-import` run again where backfile imports run, dry run first: the cloud task that
+`ops/caselist_run/start_backfile_import.py` starts, as
+[caselist-cloud-run.md, "Backfile imports"](caselist-cloud-run.md#backfile-imports) says (`v1-e40-t09`): it downloads nothing, restores
+the parsed store, and publishes the aggregates without this removal's file. It obeys the backfile
+no-import window, Tuesday 06:00 to Thursday 00:00 Chicago. That is about 2 h 10 min and 56 GB restored
+for all four ([caselist-backfiles.md, "A removal adds a rebuild"](caselist-backfiles.md#a-removal-adds-a-rebuild-for-each-backfile)).
+
 ## Step 6 — Verify dev
 
 First, the store and S3 agree and the sources are gone:
@@ -308,8 +362,7 @@ DEBATE_ENV=dev uv run debate-research caselist status
 ```
 
 Then re-import a snapshot that still contains the file. It reports the file as `SUPPRESSED`, stores
-no blob and writes no manifest row. An archive older than the newest one imported needs
-`--allow-out-of-order`.
+no blob and writes no manifest row.
 
 ```bash
 DEBATE_ENV=dev uv run debate-research caselist import <archive> --caselist hsld26 --snapshot <date>
@@ -327,6 +380,9 @@ DEBATE_ENV=dev uv run debate-research caselist import <archive> --caselist hsld2
       [When `caselist status` reports removal residue](#when-caselist-status-reports-removal-residue).
 - [ ] The `DONE` line counts the inbox files deleted and rewritten, and the dry run run again says
       *DOWNLOAD INBOX (…): nothing in it holds a removed file.*
+- [ ] Where the plan listed *LANDSCAPE SCHOOL VIEWS*, the `DONE` line counts them, status reports no
+      *school view file(s)* as residue, and the PM has the caselist and snapshot of the *REPUBLISH*
+      line ([Argument landscape bundles](#argument-landscape-bundles-e32)).
 - [ ] The re-import counts the file as `SUPPRESSED`.
 - [ ] The parse in step 5 exited 0, and each `index.jsonl` key the plan listed is back:
       `DEBATE_ENV=dev uv run debate-research store ls <that key>` lists 1 object.
@@ -408,13 +464,48 @@ DEBATE_ENV=prod DEBATE_STORAGE__DATA_DIR="$HOME/.debate-research/dev" uv run deb
       are. A removal made by a build from before `v1-e30-t16` wrote none, so its withdrawals have no
       caselist recorded. A camp path withdrawn on its own (`v1-e30-t14`) has a line here too, which
       names `openev`; its disclosure digest is of `openev/<release>/<row path>`.
+- [ ] After running a `--source` removal again, if any import since refused an upload at a held
+      path, confirm the same lines are beside the list in both places (`v1-e30-t23`):
+      `<data_dir>/suppression/held-digests.jsonl` on this machine and
+      `manifests/_suppression/held-digests.jsonl` in each bucket. Each is one upload the import
+      refused: its sha256, the held path's digest and the request holding the path, and nothing
+      else. The import writes this machine's copy, as it refuses the upload. The bucket's is
+      written by the removal, by the pull's search index stage, and in bucket mode by each save of
+      the run-state bundle under the run's lock (`v1-e40-t12`). It is append-only and merged like the list, and a file of its own for the reason
+      the path entries are.
 - [ ] Find every built file whose provenance sidecar cites a removed sha256 (E33). Withdraw it from
       use immediately and rebuild it without those cards before anyone reads it in a round.
+      `files check` finds them (`v1-e33-t03`): it runs the built-file quality check over a file and
+      its sidecar, and its `suppression` check FAILs each card whose source or disclosure the list
+      stops, naming the request. It reads this machine's copy of the list, so run it here after the
+      removal's `--execute`, over each environment's built files, `<data_dir>/files/built/`. In dev:
+
+      ```bash
+      find ~/.debate-research/dev/files/built -name '*.docx' -print0 | DEBATE_ENV=dev xargs -0 -n 1 uv run debate-research files check
+      ```
+
+      And in prod:
+
+      ```bash
+      find ~/.debate-research/prod/files/built -name '*.docx' -print0 | DEBATE_ENV=prod xargs -0 -n 1 uv run debate-research files check
+      ```
+
+      Each file prints its table of checks; a file with no `FAIL` under `suppression` holds no
+      removed card. `xargs` exits 123 when any file failed a check, and a file can fail another check
+      for another reason (a file built before `v1-e33-t08` fails `provenance-complete`, and says so),
+      so read the `suppression` row of each. `find` printing nothing means no file has been built in
+      that environment. Rebuild each file that failed it with `debate-research files build <recipe>`
+      over its recipe: AUTO passes over the removed occurrence, and a pin to it is refused with
+      `SUPPRESSED_OCCURRENCE`, so edit that pin first.
 - [ ] If the file was shared inside the team outside the evidence store — a copy in someone's
       Dropbox, a printout in a tub — retrieve and destroy it. Per policy there should be none; if
       there is, note it in the register as an incident.
 - [ ] **V2 only:** mark the matching tub files `REMOVED` so they stop listing and presigning
       (v2-e35-t05). The tub takedown flow uses this same suppression list.
+- [ ] **The student search pilot (E39), in each environment whose pilot is deployed:** the card
+      gone within five minutes, the index rebuilt and published, and every superseded index version
+      deleted, noncurrent versions included ([The student search pilot](#the-student-search-pilot-e39)).
+      A removal that appended only path holds is followed by the rebuild and publish straight away.
 - [ ] **The download inbox: what the command did.** `caselist pull` downloads into an inbox —
       `caselist.inbox_dir` in the environment's profile, or `<data_dir>/inbox` when it is not set —
       and never clears it. `caselist remove --execute` purges it in the environment it runs in
@@ -497,6 +588,372 @@ DEBATE_ENV=prod DEBATE_STORAGE__DATA_DIR="$HOME/.debate-research/dev" uv run deb
       Any other copy you find is an incident under the policy: delete it in the same run and record it
       in the register.
 
+## The student search pilot (E39)
+
+The pilot's index (`reports/tub/search/`) is a copy of disclosed cards, with the school and team code
+of each disclosure in it. A removal reaches it three ways: the running function hides the removed
+occurrences within five minutes, a rebuilt and published index no longer holds them, and every
+superseded index version is deleted, noncurrent versions included (data-use policy, E39 gate items 1
+and 5; `v1-e39-t07`). Do this in each environment whose pilot is deployed, after `--execute` has
+printed `DONE` there. The blocks are dev's; prod's are the same with prod's names and profiles, and
+`--confirm-prod` on the publish and on P4's delete.
+
+**What the function does by itself.** It re-reads `manifests/_suppression/suppression-list.jsonl`
+at most five minutes apart and hides every occurrence the list stops, from results, card pages,
+copies and downloads ([evidence-search runbook](evidence-search.md#what-the-function-fetches-and-when)).
+A card whose representative occurrence was removed answers as not found until the rebuilt index
+chooses another; a card that only lost another team's copy stays, without that team's line.
+
+**A removal that only holds a path.** The function does not read `path-holds.jsonl`, and the index
+keeps no paths, so a removal that appended path holds and **no suppression entry** hides nothing by
+itself. Rebuild and publish straight away (P3 below), so the card is gone in minutes, not at next
+week's build. The plan's *SUPPRESSION* section says whether the removal appended entries.
+
+### P1 — Before `--execute`: find the card in the pilot
+
+Signed in to the pilot (in dev, as your own synthetic account), search for words from the removed
+card's tag, open it, and write down its path, `/cards/<caselist>/<cluster id>`, and the sha256 the
+dry run names. Nothing here is copied into the register: a cluster id and a sha256 are digests.
+
+### P1b — Right after `DONE`: rebuild the parsed store's aggregates
+
+Step 5's rebuild, and not optional here. A whole-file removal deletes every caselist's
+`index.jsonl`, `failures.jsonl` and `occurrences.jsonl` in the bucket, every version directory, and
+until they are rebuilt anything that reads the bucket's parsed store finds none. That holds for any
+removal or exercise that touches dev, a synthetic one included, and the same in prod: a prod removal
+leaves prod's aggregates gone until they are rebuilt. Do not wait for the weekly run: it rebuilds a
+caselist's aggregates only when it imported something into that caselist that week, and a run that
+imported nothing rebuilds nothing ([scheduled sync, the parse stage](caselist-scheduled-sync.md#the-parse-stage)).
+Rebuild each caselist whose `parsed/<caselist>/<version>/index.jsonl` the plan listed, `openev`
+included, from this Mac's own store for the environment (not a scratch store), with the everyday
+profile. A backfile the plan listed is not rebuilt here but by `caselist backfile-import` run again in its
+cloud task, as step 5 says.
+
+**Operator command** (expected runtime a few minutes per caselist; nothing is parsed again)
+Where: a new terminal window, so no `DEBATE_STORAGE__DATA_DIR` from another step is set
+```bash
+PULL=$(pgrep -fl 'debate-research( --json)? caselist pull')
+echo "running pull: ${PULL:-none}"
+echo "data dir override: ${DEBATE_STORAGE__DATA_DIR:-none}"
+if [[ -n "$PULL" || -n "${DEBATE_STORAGE__DATA_DIR:-}" ]]; then
+  echo "STOP: the line above that is not none says why. Wait for the pull to finish, or open a new window."
+else
+  aws sso login --profile debate-dev-evidence
+  for SLUG in hsld26 hspf26 hspolicy26 openev; do
+    env -u DEBATE_STORAGE__DATA_DIR DEBATE_ENV=dev debate-research caselist parse --caselist "$SLUG" --publish
+  done
+fi
+```
+Success looks like, for each caselist, a table whose **Sources** and **Skipped (already parsed)**
+are the store's full count, equal and not zero, with **Parsed 0** and **Published 3 uploaded**. A
+`Sources 0` means the parse read a store that does not hold the caselist, such as a scratch one:
+stop, because what it uploaded is empty aggregates. Name only the caselists the plan listed. The
+first two lines name any running `debate-research caselist pull` (the CLI only, not a test or an
+editor whose command line holds those words) and any data directory override; a `STOP` line means
+one of them is not `none`, and nothing ran.
+
+### P2 — Five minutes after `DONE`: the card is gone
+
+Note the time `--execute` printed `DONE`. Five minutes later, open the card's path: **That card is
+not in the search** (or, for one team's copy of a shared card, the card without that team's line).
+Search the same words: the card is not among the results. Write down both times.
+
+### P3 — Rebuild and publish the index
+
+The build reads this Mac's copy of the suppression list, which `caselist remove` wrote with the
+bucket's. It indexes the stores the current index was built from, which the first lines read from its
+manifest.
+
+**Operator command** (expected runtime: a rebuild of the stores the index holds, minutes for the full
+corpus; seconds for a synthetic store)
+Where: your Mac, a checkout of this repository whose build matches the weekly agent's (the
+bucket's name is read from `config/profiles/dev.toml`: the everyday profile may not list buckets)
+```bash
+aws sso login --profile debate-dev-evidence
+export AWS_PROFILE=debate-dev-evidence
+BUCKET=$(python3 -c 'import tomllib; print(tomllib.load(open("config/profiles/dev.toml", "rb"))["storage"]["s3"]["bucket"])')
+echo "bucket: $BUCKET"
+MANIFEST_KEY=$(aws s3 cp "s3://${BUCKET}/reports/tub/search/current.json" - | python3 -c 'import json, sys; print(json.load(sys.stdin)["manifest_key"])')
+STORES=$(aws s3 cp "s3://${BUCKET}/${MANIFEST_KEY}" - | python3 -c 'import json, sys; print(" ".join("--caselist " + one["caselist"] for one in json.load(sys.stdin)["stores"]))')
+echo "rebuilding: $STORES"
+DEBATE_ENV=dev debate-research tub index build ${=STORES}
+DEBATE_ENV=dev debate-research tub index publish --env dev --newest
+unset AWS_PROFILE
+```
+Success looks like the build's new index id, and the publish's table ending in
+`reports/tub/search/current.json` naming that id.
+
+**If the publish is refused for shrinking the index** (`v1-e39-t14`): it says `would shrink the
+published search index: <store> has N documents against M in index <id>`, uploaded nothing, and left
+`current.json` naming the index the card is still in (the function hides the card meanwhile, from the
+suppression list). A one-file removal from a store of thousands keeps far more than 90% and passes;
+a removal from a small store, a synthetic one in dev included, may not. Compare `M - N` with the
+cards the dry run listed for that store. If they agree, publish the same index with the request id as
+the reason, by the block in [the scheduled sync runbook's shrink guard](caselist-scheduled-sync.md#the-shrink-guard).
+If they do not, stop: something besides the removal emptied the store. A refusal that a store's
+`aggregates hold no occurrence rows` means P1b has not rebuilt it: run P1b for that store, then P3
+again.
+
+**Then confirm the rebuilt index no longer holds the removed source.** Set `REMOVED` to the sha256
+the dry run named. The index is the newest directory under the data directory's `tub-index`.
+
+**Operator command** (expected runtime seconds)
+Where: your Mac, anywhere
+```bash
+REMOVED=put-the-removed-sha256-here
+INDEX_DIR=$(ls -td "${HOME}/.debate-research/dev/tub-index"/*/ | head -1)
+echo "$INDEX_DIR"
+sqlite3 -readonly "${INDEX_DIR}search-index.sqlite" "select count(*) from occurrences where source_sha256 = '${REMOVED}'"
+```
+Success looks like `0`. Five minutes after the publish, open the card's path again. If the removed
+file was the card's only occurrence, it is still not in the search. If other teams' or camps' copies
+survive, the card is back, chosen from them, with no line for the removed file. That is the
+rebuilt index doing what the build always does.
+
+### P4 — Delete the superseded index versions, noncurrent versions included
+
+`debate-research tub index prune` does it (`v1-e39-t15`). It lists versions and deletes them under the
+takedown profile, which since `v1-e39-t07` may do both under `reports/tub/search/` and nowhere else
+under `reports/`, and reads `current.json` under the everyday profile. Both runs need
+`DEBATE_REMOVAL_PROFILE`, and the command stops unless that profile is signed in as this environment's
+takedown role.
+
+The dry run reads `current.json` and **keeps the current index's directory and the current version of
+`current.json`**. It lists every other version and delete marker under `reports/tub/search/`, older
+versions of `current.json` among them: they name superseded indexes and hold no card. It prints
+counts by index directory, each shortened to the first eight characters of its id, and a
+confirmation code, never a key. It refuses (`POINTER_NOT_IN_LISTING`) when `current.json` names an
+index the listing does not hold. `--execute --confirm <code>` lists again and deletes only if the
+listing is the one the code was printed for: exactly what the dry run listed. It refuses on a
+Wednesday in Chicago, the cloud run's day, and while the bucket's run lock is held. It holds the lock
+while it deletes and reads `current.json` again before the first delete, so a publish since the dry
+run deletes nothing.
+
+The installed build must have the command (a build from `v1-e39-t15` on); the block checks.
+
+**Operator command** (expected runtime seconds; reads only)
+Where: your Mac, a new terminal window
+```bash
+PULL=$(pgrep -fl 'debate-research( --json)? caselist pull')
+echo "running pull: ${PULL:-none}"
+if [[ -n "$PULL" ]] || env | grep -q '^DEBATE_'; then
+  echo "STOP: a caselist pull is running, or a DEBATE_ variable is set in this shell; open a new window"
+elif debate-research tub index prune --help > /dev/null 2>&1; then
+  aws sso login --profile debate-dev-evidence
+  aws sso login --profile debate-dev-evidence-removal
+  DEBATE_ENV=dev DEBATE_REMOVAL_PROFILE=debate-dev-evidence-removal debate-research tub index prune --env dev
+else
+  echo "STOP: the installed build has no tub index prune; install a newer one with scripts/install_channel.sh"
+fi
+```
+Success looks like a table titled `tub index prune on s3://<bucket>: current index <eight characters>`,
+whose eight characters begin the index id P3 published. It has one row per index directory and one
+for `current.json`. The current index's row reads `kept`, `current.json`'s reads `current kept, older
+would be deleted`, and every other row reads `would be deleted`. Below the table it
+says what it would delete and ends `To carry it out, add: --execute --confirm <code>`. Write down its
+counts for P5. `Dry run: nothing to delete` means there is nothing to delete; stop here.
+
+**Stop, and do not run the next block, if:** the current index is not the one P3 published; a row
+other than the current index's and `current.json`'s says `kept`; or the command refused. A refusal
+`POINTER_NOT_IN_LISTING` means a publish was under way or the current index is damaged: run the dry
+run again in a few minutes, and tell the PM if it persists. `NOT_THE_TAKEDOWN_ROLE` means
+`debate-dev-evidence-removal` is not signed in as the takedown role: sign in again.
+
+**Then delete.** Set `CODE` to the code the dry run printed.
+
+**Operator command** (expected runtime seconds; deletes, and cannot be undone)
+Where: your Mac, the same window as the dry run
+```bash
+CODE=put-the-code-the-dry-run-printed-here
+PULL=$(pgrep -fl 'debate-research( --json)? caselist pull')
+if [[ -n "$PULL" ]] || env | grep -q '^DEBATE_'; then
+  echo "STOP: a caselist pull is running, or a DEBATE_ variable is set in this shell; open a new window"
+else
+  DEBATE_ENV=dev DEBATE_REMOVAL_PROFILE=debate-dev-evidence-removal debate-research tub index prune --env dev --execute --confirm "$CODE"
+fi
+```
+Success looks like the same table with `deleted` where the dry run said `would be deleted`, and a line
+below it beginning `Deleted N:`, where N is the dry run's versions and delete markers together.
+Then run the dry run again as the check: it says `Dry run: nothing to delete` under the same current
+index.
+
+**If it refuses**, it deleted nothing:
+
+| Error code | What it means | What to do |
+|---|---|---|
+| `CONFIRMATION_MISMATCH` | The listing changed since the dry run (a publish, or another prune), or `CODE` is not its code | Run the dry run again, read it again, and use its code |
+| `SEARCH_INDEX_POINTER_MOVED` | A publish moved `current.json` while the command waited for the lock | The same |
+| `PRUNE_ON_CLOUD_RUN_DAY` | It is Wednesday in Chicago | Run both blocks on another day |
+| `RUN_LOCK_HELD` | The cloud run, a publish or a removal holds the bucket's run lock | Wait for it (`debate-research caselist runs --remote --last 1`), then run the dry run again |
+
+**In prod**, the blocks are the same with `debate-prod-evidence`, `debate-prod-evidence-removal`,
+`DEBATE_ENV=prod` and `--env prod`, and `--confirm-prod` after `--confirm "$CODE"` on the delete.
+
+### P5 — Record it
+
+In the register's entry for the request: the time of `DONE`, the time P2 found the card gone, the
+index id P3 published, and P4's counts. No cluster id, path, tag or card text goes in the register.
+
+## Argument landscape bundles (E32)
+
+Since `v1-e32-t04`, a landscape bundle under `reports/landscape/<caselist>/<snapshot>/`, in the
+private bucket and in the operator's local `<data dir>/reports/landscape/`, holds a per-school view:
+`schools.csv` and `schools.md`, with schools and team codes as disclosed. The data-use policy keeps
+per-school views on the same clock as their sources and removes them with their sources. The
+circuit-wide files (`report.md` and its CSVs) name no school or team: a removal never touches them,
+and reaches them in the next report, as policy 1.13 says for quoted texts.
+
+Since `v1-e32-t13`, `caselist remove` reaches the school views itself; the manual steps the PM added
+here on 2026-10-24 are gone. What to read and do, in the steps above:
+
+- **Step 4, the dry run.** Under *LANDSCAPE SCHOOL VIEWS* the plan lists, by side and key, every
+  `schools.csv` and `schools.md` of every bundle of each caselist the removal touches, on this
+  machine and in the bucket. A key is a caselist, a snapshot and a file's name, nothing else. No
+  circuit-wide file and no other caselist's bundle is ever listed. In dev and prod the bucket lines
+  say *versions not counted*: the everyday profile may list `reports/` but not its versions, and
+  `--execute` lists every version with the removal profile instead. When the caselist has no bundle
+  the section says *(none: …)*.
+- **A dry run that stops with `UNKNOWN_LANDSCAPE_FILE`.** A bundle of a caselist the removal touches
+  holds a file that is neither a school view nor a circuit-wide file, and the error names its key.
+  Nothing was planned or changed. Look at the file. A `.schools.csv.incoming` or
+  `.schools.md.incoming` is a school view an interrupted `landscape report` left half-written:
+  delete it on this machine and run the dry run again. Anything else, stop and tell the PM the key.
+- **Step 5, `--execute`.** It deletes them, every version, under the removal profile, after the
+  `raw/` and `parsed/` objects and before the records. The `DONE` line says how many of the local
+  files and bucket versions it deleted were school views. Nothing is done by hand.
+- **REPUBLISH.** The plan names the newest snapshot's bundle it takes a school view from, with the
+  `landscape report --publish` command that rebuilds it without the removed rounds. The removal
+  never republishes. After `DONE`, tell the PM the caselist and snapshot the *REPUBLISH* line names,
+  and nothing else: not the school, not the team code. The PM coordinates the republish.
+- **Step 6, `caselist status`.** A school view a removal should have deleted is *REMOVAL RESIDUE*:
+  see [Landscape school views](#landscape-school-views) below. A view written after the removal, such
+  as the republished one, is never counted.
+- **Register.** In the request's entry: how many school-view files and bucket versions the `DONE`
+  line says were deleted, and that the republish is with the PM. No key, school, team code or path.
+
+**Before the first such removal in an environment**, the removal profile's grant has to be applied
+there (`v1-e32-t13`'s Terraform change to `operator_access.tf`). Without it, `--execute` stops
+`INCOMPLETE` with `STORE_ACCESS_DENIED` at the school views, after the suppression entries and the
+`raw/` and `parsed/` deletes and before anything on this machine. Running the same command again
+after the apply finishes it.
+
+### The local classifier's files (E32)
+
+`v1-e32-t21`'s comparison keeps a feature table, trained models and the coach's sample under
+`<data dir>/landscape/local-classifier/<caselist>/` on this machine only. They hold tags and
+headings derived from the caselist's cards. Its commands refuse a table whose sources a removal has
+reached, but nothing deletes the directory, so after `DONE` for a removal that touched a caselist,
+delete that caselist's directory here (PM ruling, 2026-10-25). Nothing of it is in a bucket. A coach
+sample deleted this way is drawn again with `scripts/compare_local_classifier.py features` and then
+`sample`; tell the PM if one was waiting to be labelled. The review queue's order model
+(`<topic>-review-order-model.json`, `v1-e32-t26`) goes with the directory: until it is trained again
+with `features` and then `train-queue-order`, the queue keeps its plain order and says so.
+
+**Operator command** (expected runtime a few seconds)
+Where: your Mac, anywhere. Change `hspolicy26` to the caselist the removal touched, and `dev` to
+`prod` for a prod removal.
+```bash
+DIR="$HOME/.debate-research/dev/landscape/local-classifier/hspolicy26"
+if [ -d "$DIR" ]; then ls "$DIR"; rm -r "$DIR"; echo "deleted: $DIR"; else echo "nothing to delete: $DIR"; fi
+```
+Success looks like the directory's files listed and `deleted: …`, or `nothing to delete: …` where
+the comparison never ran. In the request's register entry, record that it was deleted, with no path.
+
+### The model stage's cassettes (E32)
+
+The landscape model stage's cassettes (`v1-e32-t07`), once the operator has recorded them, hold
+scrubbed excerpts of real cards under `<data dir>/landscape/model-cassettes/` on this machine only. A
+cassette names the caselists it was recorded or replayed for (`v1-e32-t31`), and an identical card in
+two caselists is one cassette naming both. After `DONE` for a removal that touched a caselist, delete
+every cassette that may hold the removed text, and tell the PM, since the evaluation is then recorded
+again (PM rulings, 2026-10-25 and 2026-10-31). `debate-research landscape cassettes --for-removal`
+(`v1-e32-t36`) does it:
+
+An evaluation recorded on another route (`landscape evaluate --route`, `v1-e32-t43`) keeps its cassettes
+apart, in `<data dir>/landscape/model-cassettes-<route>/`, which the blocks below do not read. The same
+command with `--route <route>` lists and deletes them the same way, behind a code of its own. Until this
+section has blocks for them, check whether `<data dir>/landscape` holds a `model-cassettes-` directory,
+and if it does, tell the PM before the removal is closed.
+
+* **the caselist's alone**: deleted;
+* **shared** with another caselist: deleted too, since it holds the removed text for that caselist as
+  well. The other caselist records it again on its next run, and never gets a wrong answer meanwhile;
+* **unattributed**, naming no caselist because it was recorded before `v1-e32-t31`: deleted too, since
+  it may hold the text;
+* **other caselists' only**: kept.
+
+This is not the annual purge's form ([annual-purge.md, step 4](annual-purge.md)), which keeps shared
+and unattributed cassettes. Each form prints a code of its own, and refuses the other's. The command
+reads the directory for the environment's `storage.data_dir`, and runs from the checkout with `uv
+run`, as the removal does. It prints counts, the slug, the environment and the code: never a
+cassette's content or name, or a path. Without `--delete` it changes nothing. Run both blocks for each
+environment the removal ran in, `dev` first, then with `REMOVAL_ENV=prod`. Change `hspolicy26` to the
+caselist the removal touched.
+
+**Operator command** (expected runtime seconds; reads only)
+Where: your Mac, in the checkout, in a new terminal window
+```bash
+CASELIST=hspolicy26
+REMOVAL_ENV=dev
+if env | grep -q '^DEBATE_'; then
+  echo "STOP: a DEBATE_ variable is set in this shell; open a new window"
+else
+  DEBATE_ENV="$REMOVAL_ENV" uv run debate-research landscape cassettes --caselist "$CASELIST" --for-removal
+fi
+```
+Success looks like the counts, for example:
+
+```text
+Model cassettes of hspolicy26 in dev, for a removal, in the landscape model stage's directory, <data dir>/landscape/model-cassettes/:
+  3 this caselist's alone: a removal deletes them.
+  1 shared with another caselist: a removal deletes them too, since they hold this caselist's text; the other caselist records them again.
+  0 unattributed, naming no caselist (recorded before v1-e32-t31): a removal deletes them too, since one may hold this caselist's text.
+  12 of other caselists only: untouched.
+Dry run: nothing was changed. To carry it out, add: --delete --confirm 5d20b7e1c94a
+```
+
+`No model cassettes in dev: …` with `Nothing to delete.` means the model stage never recorded on this
+Mac, which is today's state, and `Dry run: nothing was changed, and a removal would delete nothing.`
+means none of them can hold the text: either way, skip the delete block, and record in the register
+entry that there was nothing to delete. Stop, and do not run the next block, if the first line names
+another caselist or environment than the removal's, if it prints `CASSETTE_UNREADABLE` (a file there
+is not a cassette: tell the PM, and delete nothing), or if it prints `No such command 'cassettes'` or
+`No such option: --for-removal` (the checkout predates `v1-e32-t36`: pull `dev` and paste the block
+again).
+
+**Then delete them.** Set `CASSETTES_CODE` to the code after `--confirm` in the dry run's last line.
+The command lists again and deletes only if that listing's code is the one given, so a cassette
+recorded since the dry run, or a code from another caselist's dry run or from the annual purge's form,
+is refused with `CONFIRMATION_MISMATCH` and nothing is changed: paste the dry run block again and read
+it. In prod the command also takes `--confirm-prod`, which the block adds.
+
+**Operator command** (expected runtime seconds; deletes, and cannot be undone)
+Where: your Mac, in the same window, after the block above
+```bash
+CASSETTES_CODE=
+if [ -z "$CASSETTES_CODE" ]; then
+  echo "STOP: set CASSETTES_CODE to the code the dry run printed"
+elif env | grep -q '^DEBATE_'; then
+  echo "STOP: a DEBATE_ variable is set in this shell; open a new window"
+elif [ "$REMOVAL_ENV" = "prod" ]; then
+  DEBATE_ENV=prod uv run debate-research landscape cassettes --caselist "$CASELIST" --for-removal --delete --confirm "$CASSETTES_CODE" --confirm-prod
+else
+  DEBATE_ENV="$REMOVAL_ENV" uv run debate-research landscape cassettes --caselist "$CASELIST" --for-removal --delete --confirm "$CASSETTES_CODE"
+fi
+```
+Success looks like `Deleted 3 cassette(s) only this caselist named.`, `Deleted 1 shared cassette(s): …`
+and `Deleted 0 unattributed cassette(s), …`, with the counts the dry run printed, then `Tell the PM:
+this caselist's model evaluation is recorded again.` **The check:** the dry run block again prints `0`
+for the caselist's own, its shared and the unattributed cassettes, and the same count of other
+caselists' as before. Then tell the PM the caselist and the three counts, and nothing else, and in the
+request's register entry record that its cassettes were deleted, with the counts and no path.
+
+## The annual purge: landscape school views
+
+The annual purge's school-view steps, which were here, are in
+[annual-purge.md, Step 2](annual-purge.md#step-2--landscape-school-views), with the purge's other
+stores (`v1-e30-t28`).
+
 ## Step 9 — Check nothing re-imports it
 
 At the next import (or immediately, if you have the next archive on hand):
@@ -510,11 +967,56 @@ At the next import (or immediately, if you have the next archive on hand):
       import's table then says, under its counts, *SUPPRESSED includes N new upload(s) at a removed
       path (N under RM-…), refused because that removal holds the path*, and `--json` gives
       `held_at_removed_paths` as request ids and counts. The upload is not in the store, the bucket
-      or any manifest. It is still inside the archive in the download inbox, and its sha256 is not
-      on the suppression list yet, because only `caselist remove` writes the list.
+      or any manifest. Its sha256 is not on the suppression list yet, because only `caselist remove`
+      writes the list. The import does write its sha256 and the request, and nothing else, to
+      `held-digests.jsonl` beside the path entries on this machine (`v1-e30-t23`), so running the
+      removal again lists it however long after, once the archive is gone too.
+      In bucket mode a cloud task's copy goes when the task stops, so its run gives
+      `manifests/_suppression/held-digests.jsonl` the lines at each save of the run-state bundle,
+      under its lock (`v1-e40-t12`). The removal run again and `caselist status` read that object
+      from any machine, under *REFUSED AT IMPORT AT A HELD PATH*. *HELD UPLOADS IN THE DOWNLOAD
+      INBOX* reads this machine's inbox only, and a cloud task's inbox is never there. A task killed
+      before its first save leaves the week to the next run, which meets the upload again.
+- [ ] **Where the upload is now** (`v1-e30-t21`). A weekly archive whose every member was removed or
+      held leaves the inbox when `caselist pull` finishes importing it, and the import stage's
+      reason says *N archive(s) taken out of the inbox, which held only files removed or held at a
+      removed path*. Any other archive, and every complete archive, holds other teams' files as
+      well, so it stays until retention removes it, once its snapshot is confirmed in the bucket
+      (usually the same run). An archive you imported by hand with `caselist import` stays where it
+      is either way.
+- [ ] **`caselist status` says when the removal is owed again** (`v1-e30-t21`). Under its table:
+      - *HELD UPLOADS IN THE DOWNLOAD INBOX for `<caselist>`*: an upload at a held path in an
+        archive in the inbox, refused at import or waiting to be;
+      - *HELD PATH ROWS in `<caselist>` `<snapshot>`: N row(s) at a path a removal holds*: a stored
+        row at a held path, which a build from before `v1-e30-t13` imported. `caselist publish`
+        withholds that snapshot's manifest, with the code `MANIFEST_NAMES_SUPPRESSED_SOURCE`, as it
+        withholds one with a suppressed row. It does not upload the row's bytes either, unless
+        another row names them, such as another team's copy at its own path (`v1-e30-t22`), and
+        `store sync` does not push them. They stay in this machine's store until the re-run below.
+        Bytes a build before `v1-e30-t22` published are in the bucket until then;
+      - *HELD PATH ROWS in `<caselist>` `<snapshot>`: N skipped member row(s) at a path a removal
+        holds*: the row of a symbolic link or other skipped member at a held path, which every build
+        before `v1-e30-t22` wrote. Its body is often the removed file's name. This build's import
+        gives such a member no row. `caselist publish` withholds a manifest that has one an earlier
+        build wrote, with the code `MANIFEST_NAMES_SUPPRESSED_SOURCE`, as it withholds one with a
+        held row (`v1-e30-t23`), so a publish that succeeded over it now fails until the re-run below
+        drops the row. A manifest an earlier build published is in the bucket until then;
+      - *REFUSED AT IMPORT AT A HELD PATH in `<caselist>`: N upload(s) the same removal has not yet
+        listed* (`v1-e30-t24`): an upload this build refused at a held path, from
+        `held-digests.jsonl` in either place, which the re-run below has not yet put on the list,
+        whole or for the held path. It is named whether or not its archive is still in the inbox,
+        so an upload that left with its archive is still said to be owed. An upload whose archive
+        is still waiting is in the *HELD UPLOADS* line too;
+      - then *RM-… is owed again*. Each file is named by the first twelve characters of its sha256
+        and the request holding its path, a skipped member by the request alone, and `--json` gives
+        the same as `held_in_inbox`, `refused_at_import`, each snapshot's `held_rows`,
+        `held_row_prefixes`, `held_row_requests`, `held_skipped_rows` and
+        `held_skipped_row_requests`, and `removals_owed`.
+      None changes the exit code: the command still exits 0 when the bucket agrees.
 - [ ] **Finish it by running the same removal again**, dry run first: the same `--source`, the same
       `--request` and `--reason`, in dev and then prod. Do this after any pull that reported a held
-      upload, and after every pull while the agent runs a build from before `v1-e30-t13`.
+      upload or after which `caselist status` says the removal is owed, and after every pull while
+      the agent runs a build from before `v1-e30-t13`.
 
       ```bash
       DEBATE_ENV=dev uv run debate-research caselist remove --source <sha256> --request RM-2026-01 --reason REQUESTED_BY_TEAM
@@ -525,9 +1027,22 @@ At the next import (or immediately, if you have the next archive on hand):
       - *in the download inbox …, not in the store*: this build refused it. `--execute` puts its
         sha256 on the list under the request and deletes the imported archive from the inbox.
       - *held in `<snapshot>`*: a build from before `v1-e30-t13` imported it. `--execute` removes it
-        from the store and the bucket as it removes any later upload, every version.
+        from the store and the bucket as it removes any later upload, every version: its blob on
+        this machine goes too, unless another team's row names the same bytes at its own path, when
+        only its row at the held path goes. Its bytes are in the bucket only if a build before
+        `v1-e30-t22` published them.
+      - under its own heading, *REFUSED AT IMPORT AT A HELD PATH*: this build refused it, and its
+        archive has since left the inbox. The plan finds it in `held-digests.jsonl` (`v1-e30-t23`)
+        and names it by its sha256 and the caselist alone, since nothing else records its path.
+        `--execute` puts its sha256 on the list under the request, so the same bytes are refused at
+        any path from then on. Where another team's row names the same bytes at its own path, only
+        the held path is suppressed, and their copy stays.
       - nothing, and *Nothing is left to remove*: nothing arrived.
-      Then execute as in step 5, and verify as in step 6. The path stays held afterwards.
+      Then execute as in step 5, and verify as in step 6. The path stays held afterwards. A
+      symbolic link or other skipped member at the held path, in an archive waiting to be
+      imported, is taken out of it in the same rewrite (`v1-e30-t21`); its body is often the file's
+      name. A row an earlier build wrote for one in a manifest is dropped from that manifest, here
+      and in the bucket (`v1-e30-t22`). `caselist status` then says nothing is owed.
 - [ ] **After a `--team` removal**, run the same `--team` dry run again once the next weekly is
       imported: it selects by the team's directories, so it lists anything new there, and
       `--execute` removes it under the same request id. A `--team` removal holds no path, so until
@@ -547,7 +1062,9 @@ holds other teams' disclosures too, and the importer refuses the removed files i
       environment (the `DONE` line), and the date completed. Counts and codes only, as for the rest
       of the entry — no filename.
 - [ ] Reply to the requester confirming completion, naming what was removed in their terms (their
-      team, their rounds) and anything that was not, with the reason.
+      team, their rounds) and anything that was not, with the reason. Take it from the run that
+      removed it: a run of the same command again that finds nothing left says *Removed from this
+      environment: nothing; this run found nothing left to remove* (`v1-e30-t20`).
 - [ ] Commit the register update. No personal data in the diff or the commit message.
 
 ## Camp rows that carry no upstream identity
@@ -559,6 +1076,12 @@ no delivery record, matches as dev does. Rows written before `v1-e30-t14`, or si
 agent on an older build, carry neither, and a plan over them says *matched by file name alone*. A
 hand-imported row carries the id only if its name gives one, and never the path; it is never a later
 upload, so nothing needs it.
+
+**Since the cutover, dev is in bucket mode, and the blocks below are not how dev runs it**: there,
+`caselist reimport-openev-metadata` is a dry run unless `--execute`, works on the bucket's run state,
+and publishes the manifest itself, and a publish from the Mac would put the Mac's copy over the cloud
+run's. Use [caselist-cloud-run.md, "A camp table change"](caselist-cloud-run.md#a-camp-table-change-the-openev-metadata-re-import)
+(`v1-e40-t34`). The blocks are kept as they were run before the cutover.
 
 Give the rows their identity in the dev data directory, from this machine's delivery record, with
 a build that has `v1-e30-t14` (`uv run` in a checkout of `dev` after it merges). Do it for each
@@ -619,6 +1142,9 @@ some of these:
   `RM-…`, completed `<date> <time>` UTC.* The command exits 1. See
   [Versions older than a removal](#versions-older-than-a-removal) below. One line can carry both
   kinds, separated by a semicolon.
+- *REMOVAL RESIDUE in `<caselist>`: N school view file(s) and N local school view file(s) older than
+  `RM-…`, completed `<date> <time>` UTC.* (`v1-e32-t13`.) The command exits 1. See
+  [Landscape school views](#landscape-school-views) below.
 - *SUPPRESSED SOURCE OBJECTS in `<caselist>`: N current object(s) (sha256 `<twelve characters>`,
   …).* The bucket's current listing of the caselist's sources still holds a removed file
   (`v1-e30-t12`). The command exits 1. Where the residue was checked the same file is in a REMOVAL
@@ -630,6 +1156,25 @@ some of these:
   before `v1-e30-t15`, which did not record which caselists it touched, so nothing is compared with
   it. That is not a finding of none either, and it does not change the exit code. It stays for as
   long as that log entry is the request's.
+- *WITHDRAWN COPIES LEFT in `<caselist>`: N current object(s), N noncurrent version(s) and N delete
+  marker(s) of N file(s) withdrawn from `<caselist>` (sha256 `<twelve characters>`, `RM-…`, …).*
+  (`v1-e30-t19`.) A shared file withdrawn from one team is suppressed for that team's path, not
+  whole, so the lines above never name it. But a caselist's copy is its own object, and the
+  withdrawal deleted it because no other holder in that caselist kept the file. The withdrawal
+  record beside the list (`withdrawals.jsonl`, `v1-e30-t16`) says which caselist each copy was taken
+  from and under which request, so this line names both. The command exits 1, as `REMOVAL_RESIDUE`
+  when every snapshot agrees (`v1-e30-t24`; until then it did not change the exit code). Clear it as
+  [Versions older than a removal](#versions-older-than-a-removal) says: run that request's command
+  again.
+- *Withdrawals NOT ATTRIBUTED to a caselist: `RM-…`.* A withdrawal the list still suppresses that no
+  withdrawal record attributes: a removal by a build from before `v1-e30-t16`, which recorded no
+  caselist. What is left of its copies is not checked. That is not a finding of none, and it does
+  not change the exit code.
+
+When the command exits 1, the panel under the table says why in counts (`v1-e30-t24`): the
+environment and bucket, how many snapshots were compared and how many differ, and one line for each
+snapshot that differs, naming at most three of its digests by their first twelve characters. Every
+digest in full is in `--json`, under `error.details`, which holds the whole report.
 
 Each file is one removed file, named by the first twelve characters of its sha256 and by counts.
 The report prints no school, team code, path or file name, in the text or in `removal_residue` of
@@ -757,40 +1302,87 @@ DEBATE_ENV=dev uv run debate-research caselist remove --source <sha256> --reques
 - **Aggregates.** The plan lists every aggregate under *WILL BE REMOVED*, the old versions with
   the new ones, because a removal of a whole file deletes every caselist's. `--execute` deletes
   them all. Rebuild them afterwards as in step 5.
-- **A manifest version alone.** The plan reads current manifests only, so it may say *Nothing is
-  left to remove* and print no command to carry it out. Run it with `--execute` anyway. The sweep
-  happens during the execution: it reads each noncurrent manifest version of every caselist with
-  the takedown profile and deletes the ones that name the removed file.
+- **A manifest version alone.** The plan prints *MANIFEST VERSIONS SWEPT from the bucket by
+  --execute: N noncurrent version(s) of N manifest(s)*, each manifest with its count, and the
+  command under *TO CARRY IT OUT* (`v1-e30-t19`). Until then it read current manifests only and said
+  *Nothing is left to remove*. The sweep deletes two kinds, and only these: a noncurrent version of
+  a manifest of the caselist that names the removed file, and a noncurrent version of a manifest
+  this request rewrote that the run's purge should have taken, whatever it names. For a run that
+  completed, that is the version `caselist status` counts: other than the rewrite, and older than
+  the run's completion less fifteen minutes (`v1-e30-t24`). One status and the sweep disagreed on
+  until then, such as a version in the same second as the rewrite or a publish from another machine
+  while the run went on, is now cleared by the re-run. For a run that stopped, which status never
+  counts, it is a version older than its rewrite. It never deletes the current version, the
+  latest rewrite, a version written after the run, or a version of a manifest no run of this
+  request rewrote that names nothing removed. Where the everyday profile may not list or read
+  those versions the line says *not counted*, and the command is still printed.
+- **A request that removed no whole file** (its `removed_sha256` is empty, only `withdrawn_sha256`).
+  Run the request's own command again: the same `--team`, `--request` and `--reason`. Its first run
+  deleted the team's records and rows, so nothing shows the team's paths any more; the plan names
+  each file *withdrawn earlier from `<caselist>`, as the withdrawal record says*, and lists that
+  caselist's aggregates, and the copy in the caselist when no other holder there keeps it. A
+  `--source` request's withdrawn later upload is planned again the same way when its copy is still
+  in such a caselist.
 
-Then run `caselist status` again. Both kinds are cleared that way, and
+Then run `caselist status` again. Every kind is cleared that way, and
 `test_versions_older_than_a_removal_are_cleared_by_running_it_again_under_the_same_request` and
-`test_an_old_manifest_version_alone_is_cleared_by_executing_a_plan_that_says_nothing_is_left`
-(`tests/smoke/test_caselist_remove_smoke.py`) prove it. Two cases are not cleared that way. Tell
-the PM about either, and do not delete anything by hand:
+`test_an_old_manifest_version_alone_is_counted_by_the_dry_run_and_cleared_by_its_execution`
+(`tests/smoke/test_caselist_remove_smoke.py`), and `test_residue_clearing_gaps.py`,
+`test_status_and_the_sweep_share_one_rule.py` and `test_one_rule_for_rewritten_manifests_property.py`
+(`packages/debate_core/tests/application/caselist/`), prove it. Two cases are still not cleared
+that way. Tell the PM about either, and do not delete anything by hand:
 
-- the same manifest count after the re-run: that version names nothing the removal took, since the
-  sweep reads each one;
-- a request that removed no whole file (its `removed_sha256` is empty, only `withdrawn_sha256`):
-  running it again plans no aggregates.
+- a manifest count that stays after the re-run, where the plan swept nothing of that manifest:
+  status and the sweep decide those versions by one rule since `v1-e30-t24`, so this should not
+  happen;
+- a withdrawal-only request whose plan says *no withdrawal record names the caselist it was
+  withdrawn from*: a build from before `v1-e30-t16` made its first run.
 
 **What the report does not see.** It matches `raw/` and `parsed/` objects by their key, which is
 the file's sha256, and the aggregates and the rewritten manifests by their time. So:
 
-- It does not read manifests. A version of a manifest the removal *did not rewrite*, older than it,
+- It does not read manifests. A current manifest version is never counted as older than a removal:
+  where it is not this machine's, it is a manifest mismatch in the table. A version of a manifest
+  the removal *did not rewrite*, older than it,
   is not counted, even if it still names a removed row: the removal's sweep reads those, keeps the
   ones that name nothing removed, and deletes the rest. Telling the two apart would mean downloading
   each. A camp release's manifest re-published by `caselist reimport-openev-metadata` keeps such a
   version by design. Every executed removal sweeps them again, a re-run included.
 - It compares nothing with a removal whose build did not record its scope (the *NOT CHECKED
   against `RM-…`* line), and nothing in a caselist no removal touched.
-- It does not report a shared file that was withdrawn from one team and kept for another. That file
-  is suppressed for one path, not whole, and the other holder's copy is the same object.
+- It reports a shared file withdrawn from one team and kept for another only by the withdrawal
+  record (*WITHDRAWN COPIES LEFT*, above), and only in a caselist that keeps no holder of it, where
+  its copy is the withdrawal's to have deleted. In a caselist another holder keeps it in, its copy
+  is that holder's. A withdrawal with no record is *NOT ATTRIBUTED*, and nothing of it is checked.
 - `manifests/_suppression/` is never residue. The list, the removal log, the path holds and the
   scopes are appended to, and their old versions hold sha256 values and request ids, the record of
   what was asked. No removal deletes them.
 
 So the clean line means what it says about `raw/`, `parsed/`, the aggregates and the manifests a
 removal rewrote, and no more. The AWS CLI check in step 6 is still there for one key.
+
+### Landscape school views
+
+A removal deletes the `schools.csv` and `schools.md` of every landscape bundle of each caselist it
+touches, here and in the bucket (`v1-e32-t13`, [Argument landscape bundles](#argument-landscape-bundles-e32)).
+So a school view of such a caselist written before the removal is one it should have taken. Status
+compares each with the latest completed removal **run** whose own scope names the caselist, by the
+same 15-minute margin, and counts it under *school view* (the bucket) or *local school view* (this
+machine). A view written after that run, such as the bundle republished without the removed rounds,
+is never counted.
+
+| What is left | How it gets there |
+|---|---|
+| A school view in the bucket or on this machine, written before the removal | A build from before `v1-e32-t13` made the removal and never reached the views; a run that stopped at them; or an older bundle copied back |
+
+**Clearing it.** Run the same removal again, exactly as above for older versions. Its plan reaches
+each caselist an earlier completed run of the request touched, but only the views written before
+that run completed, so it takes exactly what status counts and leaves a republished view alone.
+
+**What this does not see.** In the bucket it reads a plain listing of `reports/landscape/`, the
+current objects only: the everyday profile may not list versions under `reports/`. A noncurrent
+version of a school view left under a newer one is not counted; the same removal run again lists
+and deletes those with the removal profile, by the same rule.
 
 ### Not checked
 
@@ -822,8 +1414,35 @@ One can be left in two ways:
 - **At any time**, by the takedown role being refused the delete. Fix the grant first
   ([evidence-store.md, If something is wrong](evidence-store.md#if-something-is-wrong)).
 
-Either way the error named the key: *its probe object was left at …*. Nothing removes a probe by
-itself. It is a current version, and no lifecycle rule expires one outside `exports/`.
+Either way the error named the key: *its probe object was left at …*. It is a current version,
+and no lifecycle rule expires one outside `exports/`.
+
+**The next takedown removes it** (`v1-e29-t09`). A `caselist remove --execute` or
+`caselist unsuppress --execute` whose check passes deletes, with the takedown profile, every version
+it found under `manifests/_suppression/preflight/` before it wrote its own probe. So a probe left in
+an environment goes with the next request carried out there, and nothing is needed by hand.
+
+**A takedown may report probes it left.** Removing earlier probes never holds a request back: if
+the bucket refuses to delete one, the request is still carried out and the command reports it.
+The `DONE` output says *N probe version(s) an earlier preflight left under
+manifests/_suppression/preflight/ could not be deleted*, and `--json` has the same count, with the
+probes' keys, under `data.preflight_probes_left`. Nothing goes in the removal log for them. Remove
+them by hand as described below, once you have finished with the request.
+
+**Remove one by hand only when** one of these is true:
+
+- **A takedown or an un-suppress reported probes it could not delete.** They stay until they are
+  removed by hand, because the next request would most likely be refused them again.
+
+- **You want the prefix empty before the next request**, and none is due. The count below says
+  whether there is anything to remove.
+- **The takedown role is the one refused the delete.** Its check never passes, so nothing removes
+  probes until the grant is fixed. Fix the grant first
+  ([evidence-store.md, If something is wrong](evidence-store.md#if-something-is-wrong)); after
+  that the next request removes them, and removing them by hand is only for not waiting.
+- **A probe is still there after a request was carried out.** The check leaves alone a probe written
+  after it listed the prefix, which only another takedown running at the same moment writes. Count
+  again once neither is running; the next request removes any that is left.
 
 **Count them.** Read-only, with the everyday profile. For prod, use `debate-prod-evidence` and
 `debate-prod-evidence-a7508de8`.
@@ -837,7 +1456,7 @@ aws s3api list-object-versions --profile debate-dev-evidence --bucket debate-dev
 `{"versions": 0, "delete_markers": 0}` means there is nothing to do.
 
 **Delete them**, with the takedown profile, each version by its id. This is the one place this
-runbook deletes with the AWS CLI, because no command owns a probe. The suppression list and the
+runbook deletes with the AWS CLI, because no command removes a probe outside a takedown. The suppression list and the
 removal log are one level up, under `manifests/_suppression/`, and are never deleted: keep the
 prefix exactly as written, ending in `preflight/`. The loop also skips any key that is not under
 it. For prod, set `PROFILE=debate-prod-evidence-removal` and `BUCKET=debate-prod-evidence-a7508de8`.
@@ -888,9 +1507,8 @@ DEBATE_ENV=dev DEBATE_REMOVAL_PROFILE=debate-dev-evidence-removal uv run debate-
     --sha256 <sha256> --reason REMOVED_IN_ERROR --request RM-2026-01 --execute
 ```
 
-Then prod, with `--confirm-prod`, and re-import the archive that holds the file (with
-`--allow-out-of-order` if a newer one is already imported). `--reason` is `REMOVED_IN_ERROR` or
-`REQUEST_WITHDRAWN`. One `unsuppress` lifts every suppression of that sha256, whole-file and
+Then prod, with `--confirm-prod`, and re-import the archive that holds the file. `--reason` is
+`REMOVED_IN_ERROR` or `REQUEST_WITHDRAWN`. One `unsuppress` lifts every suppression of that sha256, whole-file and
 per-path. It also releases the hold on each path that file was removed from (`v1-e30-t13`), and
 the dry run says how many: a later upload there is imported again from the next archive that holds
 it. Nothing is appended to `path-holds.jsonl` for that. A later upload that a removal put on the
@@ -939,7 +1557,9 @@ register keeps the original one.
   profile's read-only version listing, which the dry run's version counts and the residue report
   both use.
 - `plan_specs/v1/e29-cloud-evidence-store/t08-takedown-preflight-identity.yaml` — the check of
-  which role the takedown profile is signed in as, and the probe clean-up.
+  which role the takedown profile is signed in as, and the probe clean-up by hand.
+- `plan_specs/v1/e29-cloud-evidence-store/t09-store-error-loose-ends.yaml` — a passing check
+  removes the probes earlier checks left, and `unsuppress` runs the same check.
 - `plan_specs/v1/e29-cloud-evidence-store/t03-evidence-buckets.yaml` — bucket lifecycle and the
   `EvidenceOperator` and `EvidenceRemoval` permission sets.
 - `plan_specs/v2/e35-debate-tub/t05-tub-access-and-removal.yaml` — the V2 takedown flow built on

@@ -17,20 +17,31 @@ disable sockets.
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 import os
+import shlex
 from collections.abc import Iterator
+from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import boto3
 import pytest
 from moto import mock_aws
+from tests.fixtures.caselist.build_revised_path_archives import CASELIST as HELD_CASELIST
+from tests.fixtures.caselist.build_revised_path_archives import KEPT_PATH, REVISED_PATH
+from tests.fixtures.model_routing import EXAMPLE_ROUTING_FILE
 from typer.testing import CliRunner, Result
 
 from debate_cli.app import create_app
 from debate_cli.exit_codes import ExitCode
+from debate_core.application.caselist.suppression import RecordedSuppressionList
+from debate_core.application.errors import LocalStoreAccessDenied
+from debate_core.application.evidence_sync import EvidenceSyncService
+from debate_core.application.ports.suppression import PathHoldEntry, ReasonCode, disclosure_digest
+from debate_core.integrations.local.suppression_list import local_suppression_list_file
 from debate_core.integrations.s3 import SHA256_METADATA_NAME
 
 if TYPE_CHECKING:  # pragma: no cover - import for the type checker only
@@ -105,12 +116,12 @@ def isolated_environment(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Ite
             f'[storage]\ndata_dir = "{tmp_path / environment}"\n'
             f'[storage.s3]\nbucket = "{bucket}"\nregion = "us-east-1"\n'
             f'aws_profile = "{profile}"\n'
-            f'[models]\nrouting_file = "{tmp_path / "routing.yaml"}"\nbudget_usd_daily = 1.0\n',
+            f'[models]\nrouting_file = "{EXAMPLE_ROUTING_FILE}"\nbudget_usd_daily = 1.0\n',
             encoding="utf-8",
         )
     (profiles / "test.toml").write_text(
         f'allow_network = false\n[providers]\nenabled = []\n[storage]\ndata_dir = "{tmp_path / "test"}"\n'
-        f'[models]\nrouting_file = "{tmp_path / "routing.yaml"}"\nbudget_usd_daily = 0.0\n',
+        f'[models]\nrouting_file = "{EXAMPLE_ROUTING_FILE}"\nbudget_usd_daily = 0.0\n',
         encoding="utf-8",
     )
     monkeypatch.setenv("DEBATE_PROFILE_DIR", str(profiles))
@@ -161,6 +172,42 @@ def put_remote_object(client: S3Client, bucket: str, key: str, body: bytes) -> N
 def remote_keys(client: S3Client, bucket: str) -> list[str]:
     listing = client.list_objects_v2(Bucket=bucket)
     return sorted(str(stored.get("Key", "")) for stored in listing.get("Contents", []))
+
+
+def hold_the_revised_path(data_dir: Path) -> None:
+    """A removal's hold on `REVISED_PATH` of the held caselist after 2026-09-08, on this machine's list."""
+    asyncio.run(
+        RecordedSuppressionList(local_suppression_list_file(data_dir)).append_path_holds(
+            [
+                PathHoldEntry(
+                    caselist=HELD_CASELIST,
+                    disclosure=disclosure_digest(HELD_CASELIST, REVISED_PATH),
+                    sha256="0" * 64,
+                    after_snapshot=date(2026, 9, 8),
+                    recorded_at=datetime(2026, 10, 1, 12, 0, tzinfo=UTC),
+                    reason=ReasonCode.REQUESTED_BY_TEAM,
+                    request_id="RM-2026-01",
+                )
+            ]
+        )
+    )
+
+
+def manifest_of(rows: list[tuple[str, str, int]]) -> bytes:
+    """A manifest an older build wrote, one stored `NEW` row per `(path, blob key, size)`."""
+    return "".join(
+        json.dumps(
+            {
+                "kind": "member",
+                "path": path,
+                "classification": "NEW",
+                "sha256": key.rsplit("/", 1)[-1],
+                "byte_size": size,
+            }
+        )
+        + "\n"
+        for path, key, size in rows
+    ).encode()
 
 
 def envelope_of(result: Result) -> dict[str, Any]:
@@ -292,6 +339,543 @@ class TestSyncPlansByDefault:
 
         assert data["journal"] == str(dev_data_dir / "sync-journal" / "dev.jsonl")
         assert Path(data["journal"]).is_file()
+
+    def test_a_push_leaves_out_bytes_only_a_row_at_a_held_path_names(
+        self, buckets: S3Client, dev_data_dir: Path, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """`v1-e30-t22`, through the composition root. A removal holds a path of the synthetic
+        caselist after 2026-09-08, and a manifest an older build wrote for 2026-10-08 has a row
+        there; another row names a file at a path nothing holds. `caselist publish` uploads only
+        the second, and `store sync` must not push the first behind its back."""
+        monkeypatch.setenv("HOME", str(tmp_path / "home"))
+        held = write_local_blob(dev_data_dir, b"uploaded again after the removal")
+        other = write_local_blob(dev_data_dir, b"the other team's file")
+        write_local_object(
+            dev_data_dir,
+            f"manifests/{HELD_CASELIST}/2026-10-08.jsonl",
+            manifest_of(
+                [
+                    (REVISED_PATH, held, len(b"uploaded again after the removal")),
+                    (KEPT_PATH, other, len(b"the other team's file")),
+                ]
+            ),
+        )
+        hold_the_revised_path(dev_data_dir)
+        prefix = f"raw/caselist/{HELD_CASELIST}"
+
+        result = invoke(
+            "--json", "store", "sync", "--prefix", f"{prefix}/", "--blob-prefix", prefix, "--apply"
+        )
+
+        assert result.exit_code == ExitCode.OK, result.stdout
+        data = envelope_of(result)["data"]
+        assert (data["counts"]["new"], data["counts"]["skipped"]) == (1, 1)
+        assert remote_keys(buckets, DEV_BUCKET) == [f"{prefix}/{other}"]
+
+    def test_a_push_leaves_out_a_manifest_the_publisher_withholds(
+        self, buckets: S3Client, dev_data_dir: Path, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """`v1-e30-t25`, through the composition root. The same hold, and the manifest an older build
+        wrote for 2026-10-08 with a row at the held path; `caselist publish` withholds it, and so must a
+        push. The week after, with only the other team's row, is pushed beside it."""
+        monkeypatch.setenv("HOME", str(tmp_path / "home"))
+        held = write_local_blob(dev_data_dir, b"uploaded again after the removal")
+        other = write_local_blob(dev_data_dir, b"the other team's file")
+        withheld = f"manifests/{HELD_CASELIST}/2026-10-08.jsonl"
+        pushed = f"manifests/{HELD_CASELIST}/2026-10-15.jsonl"
+        write_local_object(
+            dev_data_dir,
+            withheld,
+            manifest_of(
+                [
+                    (REVISED_PATH, held, len(b"uploaded again after the removal")),
+                    (KEPT_PATH, other, len(b"the other team's file")),
+                ]
+            ),
+        )
+        write_local_object(
+            dev_data_dir, pushed, manifest_of([(KEPT_PATH, other, len(b"the other team's file"))])
+        )
+        hold_the_revised_path(dev_data_dir)
+
+        result = invoke("--json", "store", "sync", "--prefix", f"manifests/{HELD_CASELIST}/", "--apply")
+
+        assert result.exit_code == ExitCode.OK, result.stdout
+        data = envelope_of(result)["data"]
+        assert (data["counts"]["new"], data["counts"]["skipped"]) == (1, 1)
+        assert remote_keys(buckets, DEV_BUCKET) == [pushed]
+        assert REVISED_PATH not in result.stdout
+
+
+# ------------------------------------------------------------------------------------------------
+# store sync: why it skipped what it skipped (v1-e29-t11)
+# ------------------------------------------------------------------------------------------------
+
+#: Every key of `store sync --json`'s `data` before `v1-e29-t11`, as `v1.1.0-dev.59` writes it.
+PAYLOAD_KEYS_BEFORE_SKIP_REASONS = frozenset(
+    {
+        "environment",
+        "bucket",
+        "direction",
+        "prefix",
+        "applied",
+        "counts",
+        "bytes",
+        "remote_head_requests",
+        "transferred",
+        "bytes_transferred",
+        "failed",
+        "mismatched",
+        "journal",
+    }
+)
+HELD_BODY = b"uploaded again after the removal"
+OTHER_BODY = b"the other team's file"
+WITHHELD_WEEK = f"manifests/{HELD_CASELIST}/2026-10-08.jsonl"
+PUSHED_WEEK = f"manifests/{HELD_CASELIST}/2026-10-15.jsonl"
+
+
+def a_week_the_publisher_withholds(data_dir: Path) -> str:
+    """`v1-e30-t25`'s scene: a removal holds the revised path, and an older build's manifest for
+    2026-10-08 has a row there whose bytes no other row names, beside the other team's row. The week
+    after has only the other team's row. Returns the held upload's digest."""
+    held = write_local_blob(data_dir, HELD_BODY)
+    other = write_local_blob(data_dir, OTHER_BODY)
+    write_local_object(
+        data_dir,
+        WITHHELD_WEEK,
+        manifest_of([(REVISED_PATH, held, len(HELD_BODY)), (KEPT_PATH, other, len(OTHER_BODY))]),
+    )
+    write_local_object(data_dir, PUSHED_WEEK, manifest_of([(KEPT_PATH, other, len(OTHER_BODY))]))
+    hold_the_revised_path(data_dir)
+    return held.rsplit("/", 1)[-1]
+
+
+def flattened(result: Result) -> str:
+    """The output with every run of whitespace one space: a caption wraps at the table's width."""
+    return " ".join(result.stdout.split())
+
+
+def push_everything(*options: str) -> Result:
+    return invoke(*options, "store", "sync", "--blob-prefix", f"raw/caselist/{HELD_CASELIST}", "--apply")
+
+
+class TestSkipReasons:
+    @pytest.fixture(autouse=True)
+    def temporary_home(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+        monkeypatch.setenv("HOME", str(tmp_path / "home"))
+
+    def test_the_json_breaks_the_skips_down_by_kind_with_the_publishers_message(
+        self, buckets: S3Client, dev_data_dir: Path
+    ) -> None:
+        """A push that withholds a manifest and leaves out a held-only blob: each kind with its count
+        and key prefixes, and the withheld manifest with the publisher's message, word for word."""
+        held = a_week_the_publisher_withholds(dev_data_dir)
+
+        result = push_everything("--json")
+
+        assert result.exit_code == ExitCode.OK, result.stdout
+        assert envelope_of(result)["data"]["skipped_reasons"] == {
+            "held_only_blob": {"count": 1, "key_prefixes": ["raw/caselist"]},
+            "withheld_manifest": {
+                "count": 1,
+                "key_prefixes": ["manifests/te"],
+                "messages": [
+                    f"the local manifest still has 1 row(s) at a path a removal holds: {held} (RM-2026-01), "
+                    "whose bytes no other row names and were not uploaded (1); re-run `caselist remove` "
+                    "for them on this machine to rewrite it"
+                ],
+                "request_ids": ["RM-2026-01"],
+            },
+        }
+        assert not [word for word in ("Alder Point", "Birch Hill", "KR", ".docx") if word in result.stdout]
+
+    def test_the_caption_names_the_withheld_manifest_and_the_removal_to_run_again(
+        self, buckets: S3Client, dev_data_dir: Path
+    ) -> None:
+        a_week_the_publisher_withholds(dev_data_dir)
+
+        result = push_everything()
+
+        assert result.exit_code == ExitCode.OK, result.stdout
+        assert (
+            "WITHHELD MANIFESTS: 1 manifest(s) the publisher withholds, left on this machine (RM-2026-01). "
+            "Run the same removal again on this machine (caselist remove … --request RM-2026-01) to "
+            "rewrite them, then push again; --json has the publisher's message for each."
+        ) in flattened(result)
+        assert "held_only_blob" not in result.stdout
+        assert not [word for word in ("Alder Point", "Birch Hill", ".docx") if word in result.stdout]
+
+    def test_a_manifest_the_publisher_cannot_read_has_its_own_caption_line(
+        self, buckets: S3Client, dev_data_dir: Path
+    ) -> None:
+        unreadable = f"manifests/{HELD_CASELIST}/2026-10-13.jsonl"
+        write_local_object(dev_data_dir, unreadable, b"not a manifest row\n")
+
+        table = invoke("store", "sync", "--prefix", "manifests/")
+        data = envelope_of(invoke("--json", "store", "sync", "--prefix", "manifests/"))["data"]
+
+        assert (
+            "UNREADABLE MANIFESTS: 1 manifest(s) the publisher cannot read, left on this machine; "
+            "--json has the key and line number of each."
+        ) in flattened(table)
+        assert "WITHHELD MANIFESTS" not in flattened(table)
+        assert data["skipped_reasons"] == {
+            "unreadable_manifest": {
+                "count": 1,
+                "key_prefixes": ["manifests/te"],
+                "messages": [f"{unreadable} line 1 is not a usable manifest row: not JSON"],
+                "request_ids": [],
+            }
+        }
+
+    def test_identical_and_journaled_skips_stay_a_count_with_no_caption_line(
+        self, buckets: S3Client, dev_data_dir: Path
+    ) -> None:
+        """One manifest pushed by this machine, so journaled, and one report the bucket already held."""
+        write_local_object(dev_data_dir, MANIFEST_KEY, MANIFEST_BODY)
+        invoke("store", "sync", "--apply")
+        write_local_object(dev_data_dir, "reports/sync/run.json", b"{}")
+        put_remote_object(buckets, DEV_BUCKET, "reports/sync/run.json", b"{}")
+
+        data = envelope_of(invoke("--json", "store", "sync"))["data"]
+        table = invoke("store", "sync")
+
+        assert data["skipped_reasons"] == {
+            "identical": {"count": 1, "key_prefixes": ["reports/sync"]},
+            "journaled": {"count": 1, "key_prefixes": ["manifests/hs"]},
+        }
+        assert "MANIFESTS:" not in flattened(table)
+        assert "Planned only" in flattened(table)
+
+    def test_a_pull_reports_the_same_way(self, buckets: S3Client, dev_data_dir: Path) -> None:
+        write_local_object(dev_data_dir, MANIFEST_KEY, MANIFEST_BODY)
+        put_remote_object(buckets, DEV_BUCKET, MANIFEST_KEY, MANIFEST_BODY)
+
+        data = envelope_of(invoke("--json", "store", "sync", "--pull"))["data"]
+
+        assert data["skipped_reasons"] == {"identical": {"count": 1, "key_prefixes": ["manifests/hs"]}}
+
+    def test_every_earlier_key_keeps_its_shape_and_value_beside_the_new_one(
+        self, buckets: S3Client, dev_data_dir: Path
+    ) -> None:
+        """Acceptance criterion 2. `skipped_reasons` is the one key added; a reader that knows only the
+        earlier keys reads each with the value it had: one manifest and one blob sent, one of each
+        left out, nothing failed."""
+        a_week_the_publisher_withholds(dev_data_dir)
+
+        data = envelope_of(push_everything("--json"))["data"]
+
+        assert set(data) == PAYLOAD_KEYS_BEFORE_SKIP_REASONS | {"skipped_reasons"}
+        withheld_size = (dev_data_dir / "objects" / WITHHELD_WEEK).stat().st_size
+        pushed_size = (dev_data_dir / "objects" / PUSHED_WEEK).stat().st_size
+        assert {key: data[key] for key in PAYLOAD_KEYS_BEFORE_SKIP_REASONS} == {
+            "environment": "dev",
+            "bucket": DEV_BUCKET,
+            "direction": "push",
+            "prefix": "",
+            "applied": True,
+            "counts": {"new": 2, "changed": 0, "skipped": 2, "would_delete": 0, "mismatched": 0},
+            "bytes": {
+                "new": len(OTHER_BODY) + pushed_size,
+                "changed": 0,
+                "skipped": len(HELD_BODY) + withheld_size,
+                "would_delete": 0,
+                "mismatched": 0,
+            },
+            "remote_head_requests": 0,
+            "transferred": 2,
+            "bytes_transferred": len(OTHER_BODY) + pushed_size,
+            "failed": [],
+            "mismatched": [],
+            "journal": str(dev_data_dir / "sync-journal" / "dev.jsonl"),
+        }
+
+    def test_a_failed_run_carries_the_breakdown_for_the_scheduled_consumer(
+        self, buckets: S3Client, dev_data_dir: Path
+    ) -> None:
+        key = write_local_blob(dev_data_dir, b"a disclosed file")
+        put_remote_object(buckets, DEV_BUCKET, f"{BLOB_PREFIX}/{key}", b"something else entirely")
+        write_local_object(dev_data_dir, MANIFEST_KEY, MANIFEST_BODY)
+        put_remote_object(buckets, DEV_BUCKET, MANIFEST_KEY, MANIFEST_BODY)
+
+        details = envelope_of(invoke("--json", "store", "sync", "--blob-prefix", BLOB_PREFIX))["error"][
+            "details"
+        ]
+
+        assert details["skipped_reasons"] == {"identical": {"count": 1, "key_prefixes": ["manifests/hs"]}}
+
+
+# ------------------------------------------------------------------------------------------------
+# store sync never moves parsed/, and names the stale copy an earlier pull left (v1-e29-t12)
+# ------------------------------------------------------------------------------------------------
+
+PARSED_TABLE = "parsed/hsld26/2099.01.01-docx-9/occurrences.jsonl"
+PARSED_INDEX = "parsed/hsld26/2099.01.01-docx-9/index.jsonl"
+PARSED_SOURCE_NAME = f"{'5e88' * 16}.jsonl"
+PARSED_SOURCE = f"parsed/hsld26/2099.01.01-docx-9/sha256/5e/88/{PARSED_SOURCE_NAME}"
+
+
+def parsed_store_line(count: int) -> str:
+    return (
+        f"PARSED STORE: {count} object(s) under parsed/ left as they are on both sides. store sync never "
+        "moves the parsed store: caselist parse --publish is what publishes it."
+    )
+
+
+def stale_copy_line(data_dir: Path, files: int) -> str:
+    directory = data_dir / "objects" / "parsed"
+    return (
+        f"STALE PARSED COPY: {directory} holds {files} file(s) an earlier store sync --pull copied from "
+        "the bucket. Nothing reads them, and store sync no longer moves them. Remove them with: "
+        f"rm -r {shlex.quote(str(directory))}"
+    )
+
+
+def a_stale_copy(data_dir: Path) -> None:
+    """What `store sync --pull` copied into `objects/parsed/` before this task: three files."""
+    for key in (PARSED_TABLE, PARSED_INDEX, PARSED_SOURCE):
+        write_local_object(data_dir, key, b'{"record": "synthetic"}\n')
+
+
+class TestTheParsedStoreIsNotSynced:
+    def test_a_push_moves_nothing_under_parsed_and_says_who_publishes_it(
+        self, buckets: S3Client, dev_data_dir: Path
+    ) -> None:
+        a_stale_copy(dev_data_dir)
+        put_remote_object(buckets, DEV_BUCKET, PARSED_TABLE, b'{"record": "the bucket\'s"}\n')
+        write_local_object(dev_data_dir, MANIFEST_KEY, MANIFEST_BODY)
+
+        result = invoke("store", "sync", "--apply")
+
+        assert result.exit_code == ExitCode.OK, result.stdout
+        assert parsed_store_line(3) in flattened(result)
+        assert remote_keys(buckets, DEV_BUCKET) == [MANIFEST_KEY, PARSED_TABLE]
+        assert buckets.get_object(Bucket=DEV_BUCKET, Key=PARSED_TABLE)["Body"].read() == (
+            b'{"record": "the bucket\'s"}\n'
+        )
+
+    def test_a_pull_brings_nothing_under_parsed_down_and_says_the_same(
+        self, buckets: S3Client, dev_data_dir: Path
+    ) -> None:
+        for key in (PARSED_TABLE, PARSED_INDEX):
+            put_remote_object(buckets, DEV_BUCKET, key, b'{"record": "synthetic"}\n')
+        put_remote_object(buckets, DEV_BUCKET, MANIFEST_KEY, MANIFEST_BODY)
+
+        result = invoke("store", "sync", "--pull", "--apply")
+
+        assert result.exit_code == ExitCode.OK, result.stdout
+        assert parsed_store_line(2) in flattened(result)
+        assert (dev_data_dir / "objects" / MANIFEST_KEY).read_bytes() == MANIFEST_BODY
+        assert not (dev_data_dir / "objects" / "parsed").exists()
+
+    def test_the_json_counts_parsed_as_its_own_kind_of_skip(
+        self, buckets: S3Client, dev_data_dir: Path
+    ) -> None:
+        a_stale_copy(dev_data_dir)
+        put_remote_object(buckets, DEV_BUCKET, "parsed/hsld26/2099.01.01-docx-9/failures.jsonl", b"{}\n")
+
+        for direction in ((), ("--pull",)):
+            data = envelope_of(invoke("--json", "store", "sync", *direction))["data"]
+            assert data["skipped_reasons"] == {"parsed_store": {"count": 4, "key_prefixes": ["parsed/hsld2"]}}
+            assert data["counts"]["would_delete"] == 0
+
+    @pytest.mark.parametrize("direction", [(), ("--pull",)])
+    def test_a_dry_run_reports_a_stale_copy_with_the_command_that_removes_it(
+        self, buckets: S3Client, dev_data_dir: Path, direction: tuple[str, ...]
+    ) -> None:
+        a_stale_copy(dev_data_dir)
+
+        result = invoke("store", "sync", *direction)
+
+        assert result.exit_code == ExitCode.OK, result.stdout
+        assert stale_copy_line(dev_data_dir, 3) in result.stderr.splitlines()
+        assert (dev_data_dir / "objects" / PARSED_SOURCE).is_file()
+        assert PARSED_SOURCE_NAME not in result.stdout + result.stderr
+        assert "occurrences.jsonl" not in result.stdout + result.stderr
+
+    def test_the_stale_copy_is_reported_on_the_console_and_nowhere_else(
+        self, buckets: S3Client, dev_data_dir: Path
+    ) -> None:
+        """Not in the `--json` payload and not in the journal, and never deleted by an apply either."""
+        a_stale_copy(dev_data_dir)
+        write_local_object(dev_data_dir, MANIFEST_KEY, MANIFEST_BODY)
+
+        payload = invoke("--json", "store", "sync").stdout
+        applied = invoke("store", "sync", "--apply")
+
+        assert "objects/parsed" not in payload
+        assert "STALE PARSED COPY" not in applied.stdout + applied.stderr
+        journal = (dev_data_dir / "sync-journal" / "dev.jsonl").read_text(encoding="utf-8")
+        assert [json.loads(line)["key"] for line in journal.splitlines()] == [MANIFEST_KEY]
+        assert (dev_data_dir / "objects" / PARSED_SOURCE).is_file()
+
+    def test_the_command_quotes_a_data_directory_a_shell_would_split(
+        self, buckets: S3Client, isolated_environment: Path, tmp_path: Path
+    ) -> None:
+        """A space and an apostrophe in the path: the printed `rm -r` names the one directory."""
+        data_dir = tmp_path / "Charlie's evidence" / "dev"
+        dev_profile = isolated_environment / "dev.toml"
+        dev_profile.write_text(
+            dev_profile.read_text(encoding="utf-8").replace(
+                f'data_dir = "{tmp_path / "dev"}"', f'data_dir = "{data_dir}"'
+            ),
+            encoding="utf-8",
+        )
+        a_stale_copy(data_dir)
+
+        result = invoke("store", "sync")
+
+        assert result.exit_code == ExitCode.OK, result.stdout
+        [line] = [line for line in result.stderr.splitlines() if line.startswith("STALE PARSED COPY")]
+        assert line == stale_copy_line(data_dir, 3)
+        assert line.endswith(f"rm -r '{tmp_path}/Charlie'\"'\"'s evidence/dev/objects/parsed'")
+
+    def test_a_machine_with_no_stale_copy_hears_nothing_about_one(
+        self, buckets: S3Client, dev_data_dir: Path
+    ) -> None:
+        write_local_object(dev_data_dir, MANIFEST_KEY, MANIFEST_BODY)
+
+        result = invoke("store", "sync")
+
+        assert result.exit_code == ExitCode.OK, result.stdout
+        assert "STALE PARSED COPY" not in result.stdout + result.stderr
+        assert "PARSED STORE" not in flattened(result)
+
+
+# ------------------------------------------------------------------------------------------------
+# The stale-copy note comes before the plan, so a refused plan cannot hide it (v1-e29-t13)
+# ------------------------------------------------------------------------------------------------
+
+UNMAPPED_BLOB_REFUSAL = (
+    "the blobs keyspace holds 1 object(s) and no remote prefix was given for them; a "
+    "content-addressed key needs the prefix that says which corpus it belongs to, such as "
+    "raw/caselist/hsld26 or raw/openev/2026 (docs/architecture/evidence-store-layout.md)"
+)
+CHECK_FAILED_LINE = (
+    "STALE PARSED COPY: could not look for one ({code}); the plan below does not depend on it."
+)
+
+
+def stale_copy_lines(result: Result) -> list[str]:
+    return [line for line in result.stderr.splitlines() if line.startswith("STALE PARSED COPY")]
+
+
+def assert_the_unmapped_blob_refusal(result: Result) -> None:
+    """The refusal `store sync` gave before v1-e29-t13: the same code, message and exit."""
+    assert result.exit_code == ExitCode.DOMAIN_FAILURE, result.stdout
+    error = envelope_of(result)["error"]
+    assert error["code"] == "UNSYNCABLE_KEYSPACE"
+    assert error["message"] == UNMAPPED_BLOB_REFUSAL
+
+
+class TestTheStaleCopyNoteComesBeforeThePlan:
+    def test_a_dry_run_refused_for_want_of_a_blob_prefix_still_reports_the_stale_copy(
+        self, buckets: S3Client, dev_data_dir: Path
+    ) -> None:
+        """The run of 2026-10-22: blobs on this machine, no --blob-prefix, and an old parsed copy."""
+        a_stale_copy(dev_data_dir)
+        write_local_blob(dev_data_dir, b"a disclosed file")
+
+        result = invoke("store", "sync")
+
+        assert result.exit_code == ExitCode.DOMAIN_FAILURE, result.stdout
+        stderr = result.stderr.splitlines()
+        assert stale_copy_lines(result) == [stale_copy_line(dev_data_dir, 3)]
+        refusal = next(index for index, line in enumerate(stderr) if "UNSYNCABLE_KEYSPACE" in line)
+        assert stderr.index(stale_copy_line(dev_data_dir, 3)) < refusal
+        assert "STALE PARSED COPY" not in result.stdout
+        assert (dev_data_dir / "objects" / PARSED_SOURCE).is_file()
+        assert PARSED_SOURCE_NAME not in result.stdout + result.stderr
+
+    def test_the_refusal_is_the_same_with_the_note_in_front_of_it(
+        self, buckets: S3Client, dev_data_dir: Path
+    ) -> None:
+        a_stale_copy(dev_data_dir)
+        write_local_blob(dev_data_dir, b"a disclosed file")
+
+        refused = invoke("--json", "store", "sync")
+
+        assert_the_unmapped_blob_refusal(refused)
+        assert stale_copy_lines(refused) == [stale_copy_line(dev_data_dir, 3)]
+        assert "STALE PARSED COPY" not in refused.stdout
+        assert "objects/parsed" not in refused.stdout
+
+    def test_a_refused_dry_run_with_no_stale_copy_hears_nothing_about_one(
+        self, buckets: S3Client, dev_data_dir: Path
+    ) -> None:
+        write_local_blob(dev_data_dir, b"a disclosed file")
+
+        refused = invoke("--json", "store", "sync")
+        console = invoke("store", "sync")
+
+        assert_the_unmapped_blob_refusal(refused)
+        assert console.exit_code == ExitCode.DOMAIN_FAILURE
+        for result in (refused, console):
+            assert "STALE PARSED COPY" not in result.stdout + result.stderr
+
+    @pytest.mark.parametrize("output", [(), ("--json",)])
+    def test_a_dry_run_that_plans_prints_the_note_once(
+        self, buckets: S3Client, dev_data_dir: Path, output: tuple[str, ...]
+    ) -> None:
+        a_stale_copy(dev_data_dir)
+        write_local_blob(dev_data_dir, b"a disclosed file")
+
+        result = invoke(*output, "store", "sync", "--blob-prefix", BLOB_PREFIX)
+
+        assert result.exit_code == ExitCode.OK, result.stdout
+        assert stale_copy_lines(result) == [stale_copy_line(dev_data_dir, 3)]
+        assert "STALE PARSED COPY" not in result.stdout
+        assert "objects/parsed" not in result.stdout
+
+    def test_an_apply_refused_for_want_of_a_blob_prefix_is_unchanged(
+        self, buckets: S3Client, dev_data_dir: Path
+    ) -> None:
+        a_stale_copy(dev_data_dir)
+        write_local_blob(dev_data_dir, b"a disclosed file")
+
+        refused = invoke("--json", "store", "sync", "--apply")
+
+        assert_the_unmapped_blob_refusal(refused)
+        assert "STALE PARSED COPY" not in refused.stdout + refused.stderr
+        assert remote_keys(buckets, DEV_BUCKET) == []
+        assert (dev_data_dir / "objects" / PARSED_SOURCE).is_file()
+
+    @pytest.mark.parametrize(
+        ("failure", "code"),
+        [
+            (LocalStoreAccessDenied("list", "the named-object directory"), "STORE_ACCESS_DENIED"),
+            (
+                PermissionError(13, "Permission denied", "/Users/someone/dev/objects/parsed"),
+                "PermissionError",
+            ),
+        ],
+    )
+    def test_a_check_that_fails_neither_hides_nor_replaces_the_refusal(
+        self,
+        buckets: S3Client,
+        dev_data_dir: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        failure: Exception,
+        code: str,
+    ) -> None:
+        """The note is advice: when the check cannot be made, the plan's own outcome is the run's."""
+
+        async def the_check_fails(self: EvidenceSyncService) -> None:
+            raise failure
+
+        monkeypatch.setattr(EvidenceSyncService, "stale_parsed_copy", the_check_fails)
+        write_local_blob(dev_data_dir, b"a disclosed file")
+
+        refused = invoke("--json", "store", "sync")
+        planned = invoke("--json", "store", "sync", "--blob-prefix", BLOB_PREFIX)
+
+        assert_the_unmapped_blob_refusal(refused)
+        assert planned.exit_code == ExitCode.OK, planned.stdout
+        for result in (refused, planned):
+            assert stale_copy_lines(result) == [CHECK_FAILED_LINE.format(code=code)]
+            assert "/Users/someone" not in result.stdout + result.stderr
+            assert "STALE PARSED COPY" not in result.stdout
 
 
 # ------------------------------------------------------------------------------------------------

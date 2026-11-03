@@ -14,8 +14,10 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
+import zipfile
 from collections.abc import Iterator
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -23,6 +25,7 @@ import boto3
 import pytest
 from moto import mock_aws
 from tests.fixtures.caselist.build_synthetic_archives import (
+    DOCUMENT_BODIES,
     SNAPSHOTS,
     SYNTHETIC_CASELIST,
     build_snapshot_zips,
@@ -33,12 +36,14 @@ from tests.fixtures.caselist.publish_expectations import (
     expected_publish,
     expected_source_key,
 )
+from tests.fixtures.model_routing import EXAMPLE_ROUTING_FILE
 from typer.testing import CliRunner, Result
 
 from debate_cli.app import create_app
 from debate_cli.exit_codes import ExitCode
 from debate_core.application.errors import StoreUnavailable
 from debate_core.application.ports.evidence_store import ObjectInfo
+from debate_core.application.ports.suppression import PathHoldEntry, ReasonCode, disclosure_digest
 from debate_core.integrations.s3 import SHA256_METADATA_NAME, S3EvidenceObjectStore
 
 if TYPE_CHECKING:  # pragma: no cover - import for the type checker only
@@ -94,12 +99,12 @@ def installation(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Iterator[Pa
             f'[storage]\ndata_dir = "{data_dir}"\n'
             f'[storage.s3]\nbucket = "{bucket}"\nregion = "us-east-1"\n'
             f'aws_profile = "{PROFILES[environment]}"\n'
-            f'[models]\nrouting_file = "{tmp_path / "routing.yaml"}"\nbudget_usd_daily = 1.0\n',
+            f'[models]\nrouting_file = "{EXAMPLE_ROUTING_FILE}"\nbudget_usd_daily = 1.0\n',
             encoding="utf-8",
         )
     (profiles / "test.toml").write_text(
         f'allow_network = false\n[providers]\nenabled = []\n[storage]\ndata_dir = "{data_dir}"\n'
-        f'[models]\nrouting_file = "{tmp_path / "routing.yaml"}"\nbudget_usd_daily = 0.0\n',
+        f'[models]\nrouting_file = "{EXAMPLE_ROUTING_FILE}"\nbudget_usd_daily = 0.0\n',
         encoding="utf-8",
     )
     monkeypatch.setenv("DEBATE_PROFILE_DIR", str(profiles))
@@ -316,6 +321,25 @@ class TestStatus:
                 digest_of_body(name) for name in week["sources"]
             )
 
+    def test_the_panel_before_a_publish_counts_each_week_on_one_line_and_names_no_whole_digest(
+        self, buckets: S3Client, imported: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """`v1-e30-t24`, item 4: the panel printed the whole details record, every missing digest
+        in full. The terminal is wide enough here that no line of the panel wraps."""
+        monkeypatch.setenv("COLUMNS", "2000")
+
+        result = invoke("caselist", "status", "--caselist", SYNTHETIC_CASELIST)
+
+        assert result.exit_code == ExitCode.DOMAIN_FAILURE
+        assert re.findall(r"[0-9a-f]{64}", result.output) == []
+        panel = [line.strip("│ ") for line in result.stderr.splitlines()]
+        for week in EXPECTED["snapshots"]:
+            (counted,) = [
+                line for line in panel if line.startswith(f"{SYNTHETIC_CASELIST} {week['snapshot']}:")
+            ]
+            assert f"no manifest in the bucket, {len(week['sources'])} source(s) not in the bucket" in counted
+        assert not [word for word in FICTIONAL_IDENTIFIERS if word in result.output]
+
     def test_status_after_a_publish_exits_zero(self, buckets: S3Client, imported: Path) -> None:
         publish()
 
@@ -329,18 +353,22 @@ class TestStatus:
         ]
         for entry in data["snapshots"]:
             # Every field from before v1-e30-t12 is still here; `mismatches` and the two
-            # suppressed-row fields were added beside them.
+            # suppressed-row fields were added beside them, the three held-row fields
+            # beside those (v1-e30-t21), and the two held skipped-row fields (v1-e30-t22).
             assert set(entry) == {
                 "caselist", "snapshot", "manifest_key", "in_sync", "local_manifest", "manifest_present",
                 "sources", "local_files", "published_sources", "missing_sources", "missing_local",
                 "checksum_mismatches", "suppressed", "mismatches", "suppressed_rows",
-                "suppressed_row_prefixes",
+                "suppressed_row_prefixes", "held_rows", "held_row_prefixes", "held_row_requests",
+                "held_skipped_rows", "held_skipped_row_requests",
             }  # fmt: skip
             assert (entry["mismatches"], entry["suppressed_rows"], entry["suppressed_row_prefixes"]) == (
                 [],
                 0,
                 [],
             )
+            assert (entry["held_rows"], entry["held_row_prefixes"], entry["held_row_requests"]) == (0, [], [])
+            assert (entry["held_skipped_rows"], entry["held_skipped_row_requests"]) == (0, [])
         assert data["suppressed_objects"] == [
             {"caselist": SYNTHETIC_CASELIST, "objects": 0, "sha256_prefixes": []}
         ]
@@ -360,6 +388,118 @@ class TestStatus:
         result = invoke("--json", "caselist", "status", "--snapshot", "2026-09-15")
 
         assert result.exit_code == ExitCode.DOMAIN_FAILURE
+
+
+# ------------------------------------------------------------------------------------------------
+# v1-e30-t21: caselist status says when a removal's hold is owed again, and exits as before
+# ------------------------------------------------------------------------------------------------
+
+HELD_PATH = "Maple Grove/QX/Maple Grove-QX-Neg-Grove City Invitational-Round 2.docx"
+FIRST = hashlib.sha256(DOCUMENT_BODIES["grove-round-2-neg-first"]).hexdigest()
+REVISED = hashlib.sha256(DOCUMENT_BODIES["grove-round-2-neg-revised"]).hexdigest()
+NEXT_WEEKS_UPLOAD = b"invented bytes of a later upload at the held path"
+NEXT_WEEKS = hashlib.sha256(NEXT_WEEKS_UPLOAD).hexdigest()
+REQUEST = "RM-2026-09"
+#: Every word of the held path, and the inbox archive's own name.
+IDENTIFYING = ("Maple Grove", "QX", "Grove City", "Round 2", ".docx", "weekly-2026-09-22")
+
+
+def the_removal_holds_the_path(data_dir: Path) -> None:
+    """The path entry, as `caselist remove --source <first version>` appends it on this machine."""
+    entry = PathHoldEntry(
+        caselist=SYNTHETIC_CASELIST,
+        disclosure=disclosure_digest(SYNTHETIC_CASELIST, HELD_PATH),
+        sha256=FIRST,
+        after_snapshot=date(2026, 9, 1),
+        recorded_at=datetime(2026, 9, 2, 12, 0, tzinfo=UTC),
+        reason=ReasonCode.REQUESTED_BY_TEAM,
+        request_id=REQUEST,
+    )
+    record = data_dir / "suppression" / "path-holds.jsonl"
+    record.parent.mkdir(parents=True, exist_ok=True)
+    record.write_text(entry.to_line() + "\n", encoding="utf-8")
+
+
+def next_week_waits_in_the_inbox(data_dir: Path) -> None:
+    inbox = data_dir / "inbox"
+    inbox.mkdir(parents=True, exist_ok=True)
+    with zipfile.ZipFile(inbox / f"{SYNTHETIC_CASELIST}-weekly-2026-09-22.zip", "w") as archive:
+        archive.writestr(f"testcl26-0922/{HELD_PATH}", NEXT_WEEKS_UPLOAD)
+
+
+class TestStatusOfAHeldPath:
+    """`caselist status` says when a removal's hold is owed again (`v1-e30-t21`).
+
+    After the three weeks are published, the state an older build leaves after a `--source`
+    removal: the path entry the removal of the round-two negative's first version writes, holding
+    its path after `2026-09-01`; the revision at that path in `2026-09-08` and `2026-09-15`, which
+    stands for what a build from before `v1-e30-t13` imports there, reading no path entry; and next
+    week's archive in the download inbox with another upload at the path. Nothing here needs a name
+    this task added, so it runs against the build at the start commit too, which exits 0 and says
+    nothing of the hold.
+    """
+
+    def test_status_names_the_held_rows_and_the_held_upload_and_still_exits_zero(
+        self, buckets: S3Client, imported: Path
+    ) -> None:
+        assert publish().exit_code == ExitCode.OK
+        the_removal_holds_the_path(imported)
+        next_week_waits_in_the_inbox(imported)
+
+        result = invoke("--json", "caselist", "status", "--caselist", SYNTHETIC_CASELIST)
+
+        assert result.exit_code == ExitCode.OK, result.stdout
+        data = envelope_of(result)["data"]
+        assert data["in_sync"] is True
+        held = {
+            entry["snapshot"]: (
+                entry.get("held_rows"),
+                entry.get("held_row_prefixes"),
+                entry.get("held_row_requests"),
+            )
+            for entry in data["snapshots"]
+        }
+        assert held == {
+            "2026-09-01": (0, [], []),
+            "2026-09-08": (1, [REVISED[:12]], [REQUEST]),
+            "2026-09-15": (1, [REVISED[:12]], [REQUEST]),
+        }
+        assert data.get("held_in_inbox") == [
+            {
+                "caselist": SYNTHETIC_CASELIST,
+                "uploads": 1,
+                "sha256_prefixes": [NEXT_WEEKS[:12]],
+                "requests": [REQUEST],
+            }
+        ]
+        assert data.get("removals_owed") == [REQUEST]
+        assert not [word for word in IDENTIFYING if word in result.stdout]
+
+    def test_the_table_tells_a_person_what_is_held_and_to_run_the_removal_again(
+        self, buckets: S3Client, imported: Path
+    ) -> None:
+        assert publish().exit_code == ExitCode.OK
+        the_removal_holds_the_path(imported)
+        next_week_waits_in_the_inbox(imported)
+
+        result = invoke("caselist", "status", "--caselist", SYNTHETIC_CASELIST)
+
+        assert result.exit_code == ExitCode.OK, result.stdout
+        told = " ".join(result.stdout.split())
+        assert f"HELD PATH ROWS in {SYNTHETIC_CASELIST} 2026-09-08: 1 row(s)" in told
+        assert f"HELD UPLOADS IN THE DOWNLOAD INBOX for {SYNTHETIC_CASELIST}: 1 upload(s)" in told
+        assert f"{REQUEST} is owed again" in told
+        assert not [word for word in IDENTIFYING if word in result.stdout]
+
+    def test_without_a_hold_the_json_says_nothing_is_owed(self, buckets: S3Client, imported: Path) -> None:
+        assert publish().exit_code == ExitCode.OK
+
+        data = envelope_of(invoke("--json", "caselist", "status"))["data"]
+
+        assert data.get("removals_owed") == []
+        assert json.dumps(data.get("held_in_inbox")) == json.dumps(
+            [{"caselist": SYNTHETIC_CASELIST, "uploads": 0, "sha256_prefixes": [], "requests": []}]
+        )
 
 
 # ------------------------------------------------------------------------------------------------
@@ -659,6 +799,139 @@ class TestStatusShowsSuppressedRowsAndObjects:
         assert "caselist-removal.md" in error["hint"]
         assert "caselist publish" not in error["hint"]
         assert f"SUPPRESSED SOURCE OBJECTS in {SYNTHETIC_CASELIST}: 1 current object(s)" in shown
+
+
+# ------------------------------------------------------------------------------------------------
+# v1-e30-t19: a manifest mismatch the publisher withholds the manifest of gets the removal hint
+# ------------------------------------------------------------------------------------------------
+
+BAYVIEW_PATH = "Maple Grove/QX/Maple Grove-QX-Neg-Bayview Open [2]-Semis.docx"
+"""The Bayview semifinal negative's one path, in the weekly of 2026-09-15 alone."""
+LINK_PATH = "Cedar Hollow/ZaLu/latest-aff.docx"
+"""The symbolic link the weekly of 2026-09-15 holds: a skipped member's row."""
+FINISH_THE_REMOVAL = "Finish the removal first"
+
+
+def withheld_hint_for(snapshots: str) -> str:
+    """The start of the hint for manifest mismatches whose manifest the publisher withholds."""
+    return f"A manifest mismatch in {snapshots} is not cleared by a publish"
+
+
+def withdraw_at(data_dir: Path, sha256: str, path: str) -> None:
+    """Suppress one disclosure on this machine's list, as a `--team` withdrawal that stopped does."""
+    from debate_core.application.ports.suppression import SuppressionAction, SuppressionEntry
+    from debate_core.integrations.local.suppression_list import local_suppression_list_file
+
+    record = local_suppression_list_file(data_dir).path
+    record.parent.mkdir(parents=True, exist_ok=True)
+    entry = SuppressionEntry(
+        action=SuppressionAction.SUPPRESS,
+        sha256=sha256,
+        disclosure=disclosure_digest(SYNTHETIC_CASELIST, path),
+        recorded_at=datetime(2026, 9, 30, 12, 0, tzinfo=UTC),
+        reason=ReasonCode.REQUESTED_BY_TEAM,
+        request_id="RM-2026-01",
+    )
+    with record.open("a", encoding="utf-8") as stream:
+        stream.write(entry.to_line() + "\n")
+
+
+def hold_the_link(data_dir: Path) -> None:
+    """A removal's hold on the link's path after 2026-09-01: the row an earlier build wrote there."""
+    entry = PathHoldEntry(
+        caselist=SYNTHETIC_CASELIST,
+        disclosure=disclosure_digest(SYNTHETIC_CASELIST, LINK_PATH),
+        sha256=FIRST,
+        after_snapshot=date(2026, 9, 1),
+        recorded_at=datetime(2026, 9, 2, 12, 0, tzinfo=UTC),
+        reason=ReasonCode.REQUESTED_BY_TEAM,
+        request_id=REQUEST,
+    )
+    record = data_dir / "suppression" / "path-holds.jsonl"
+    record.parent.mkdir(parents=True, exist_ok=True)
+    record.write_text(entry.to_line() + "\n", encoding="utf-8")
+
+
+#: What else is in the weekly of 2026-09-15's local manifest beside its rewrite, and whether the
+#: publisher of this build withholds it then. Written from `publish_plan` ("A manifest that still
+#: names a suppressed file is withheld") and the PM's amendment of 2026-10-18 to `v1-e30-t23`, which
+#: withholds a manifest for a held skipped row too, not from a run.
+BESIDE_THE_REWRITE = {
+    "nothing": (lambda data_dir: None, False),
+    "a suppressed row": (
+        lambda data_dir: withdraw_at(data_dir, digest_of_body("bayview-semis-neg"), BAYVIEW_PATH),
+        True,
+    ),
+    "a held row": (the_removal_holds_the_path, True),
+    "a held skipped row": (hold_the_link, True),
+}
+
+
+class TestStatusHintsTheRemovalForAManifestThePublisherWithholds:
+    """`v1-e30-t12`'s Follow-up 3: the publish hint for a manifest the publisher will not upload.
+
+    Since `v1-e30-t22` the publisher withholds a manifest for a suppressed row or a held row, and
+    since `v1-e30-t23` for a held skipped row too. Status asks the publisher's own rule, so these
+    tests hold the hint to what the publish then does.
+    """
+
+    @pytest.fixture(autouse=True)
+    def a_home_of_its_own(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+        """Nothing here may reach the operator's `~/.debate-research` or `~/.aws`."""
+        monkeypatch.setenv("HOME", str(tmp_path / "home"))
+
+    def test_a_manifest_mismatch_with_a_suppressed_row_gets_the_removal_hint_and_not_the_publish_hint(
+        self, buckets: S3Client, imported: Path
+    ) -> None:
+        publish()
+        withdraw_at(imported, digest_of_body("bayview-semis-neg"), BAYVIEW_PATH)
+        rewrite_local_manifest(imported, SYNTHETIC_CASELIST, "2026-09-15")
+
+        error = status_error()
+
+        assert error["message"] == (
+            "1 snapshot(s) differ between this machine and the bucket: "
+            f"{SYNTHETIC_CASELIST} 2026-09-15 (manifest mismatch, 1 suppressed row(s))"
+        )
+        assert "caselist publish --caselist" not in error["hint"]
+        assert withheld_hint_for(f"{SYNTHETIC_CASELIST} 2026-09-15") in error["hint"]
+        assert FINISH_THE_REMOVAL in error["hint"]
+        assert "caselist-removal.md" in error["hint"]
+
+    def test_a_mismatch_the_publisher_would_upload_beside_one_it_withholds_gets_both_hints(
+        self, buckets: S3Client, imported: Path
+    ) -> None:
+        """The publish clears the first week, and the removal is what the third one waits on."""
+        publish()
+        withdraw_at(imported, digest_of_body("bayview-semis-neg"), BAYVIEW_PATH)
+        rewrite_local_manifest(imported, SYNTHETIC_CASELIST, "2026-09-01")
+        rewrite_local_manifest(imported, SYNTHETIC_CASELIST, "2026-09-15")
+
+        hint = status_error()["hint"]
+
+        assert PUBLISH_HINT.format(SYNTHETIC_CASELIST) in hint
+        assert withheld_hint_for(f"{SYNTHETIC_CASELIST} 2026-09-15") in hint
+        assert FINISH_THE_REMOVAL in hint
+
+    @pytest.mark.parametrize("beside", list(BESIDE_THE_REWRITE))
+    def test_the_hint_is_the_removals_exactly_when_the_publish_withholds_the_manifest(
+        self, buckets: S3Client, imported: Path, beside: str
+    ) -> None:
+        """Whatever the rule becomes: status asks it, so the two cannot part ways."""
+        set_up, withheld_by_this_build = BESIDE_THE_REWRITE[beside]
+        publish()
+        set_up(imported)
+        rewrite_local_manifest(imported, SYNTHETIC_CASELIST, "2026-09-15")
+
+        hint = status_error()["hint"]
+        published = envelope_of(publish())
+        snapshots = (published.get("data") or published["error"]["details"])["snapshots"]
+        (third_week,) = [one for one in snapshots if one["snapshot"] == "2026-09-15"]
+        withheld = third_week["manifest"] == "withheld"
+
+        assert withheld is withheld_by_this_build
+        assert (FINISH_THE_REMOVAL in hint) is withheld
+        assert (PUBLISH_HINT.format(SYNTHETIC_CASELIST) in hint) is not withheld
 
 
 # ------------------------------------------------------------------------------------------------

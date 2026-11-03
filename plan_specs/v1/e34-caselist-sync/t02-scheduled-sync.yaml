@@ -65,6 +65,9 @@ spec:
     - kind: TaskRef
       name: v1-e30-t04-openev-importer
       relation: dependsOn
+    - kind: TaskRef
+      name: v1-e31-t06-parse-pipeline
+      relation: dependsOn
   acceptanceCriteria:
     - id: ac1
       description: >-

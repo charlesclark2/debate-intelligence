@@ -1,0 +1,111 @@
+# TASK v1-e40-t05-run-alerts - A failed or late cloud run emails the coach
+# Epic: E40 — Weekly Caselist Run in the Cloud | Release: v1.8 (Weekly caselist run in the cloud) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e40-t05-run-alerts
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.8
+    debate/epic: v1-e40-cloud-caselist-run
+  annotations:
+    debate/title: "A failed or late cloud run emails the coach"
+spec:
+  # Filed by the PM, 2026-10-22, from ADR-0020 and E34's staleness rule.
+  description: >-
+    The Mac-side checks (launchd's record, `doctor`, the staleness banner) do not reach a cloud
+    run. A failed run, a run that did not start on schedule, and a login that failed each email
+    the coach through the account's existing mail path, naming the run id and the stage, and
+    nothing about a school, team or file. ADR-0020 may amend this task.
+    (PM amendment 2026-10-23 (ADR-0020).) The mail path is one SNS topic per environment,
+    `debate-<env>-caselist-run-alerts`, with the coach's address as its one email
+    subscription: the account has no general mail path. The run publishes through a new `sns`
+    kind of `caselist.notifier`, sending what the Mac's banners say; an EventBridge rule on ECS
+    task state changes catches a run or login that stopped non-zero; a CloudWatch alarm on a
+    `RunsRecorded` metric (one-day period, 7 of 7, missing data breaching, actions enabled after
+    the first recorded run) catches a late run; an alarm on the schedules' dead-letter queue
+    catches a task that never started. EventBridge rules on the CloudTrail events ADR-0020 (2)
+    names email the coach when who may read the password changes (state `ENABLED`), and on any
+    `GetSecretValue` of the password by a principal other than the login role, refused attempts
+    included (state `ENABLED_WITH_ALL_CLOUDTRAIL_MANAGEMENT_EVENTS`).
+    (PM ruling 2026-10-24, from v1-e40-t02's question 2.) This task builds the SNS adapter behind
+    the `sns` kind, in `debate_core.integrations`, beside t02's Secrets Manager client and under
+    the same rules: one small boto3 client, no endpoint override, nothing about the message body in
+    a log. t02's scheduled login already sends its failures to `caselist.notifier`, and its role
+    may already `sns:Publish` to `debate-<env>-caselist-run-alerts`, so the topic keeps exactly that
+    name. The login schedule, which never retries, gains a dead-letter queue, and the dead-letter
+    alarm covers it as well as the run's schedule.
+    (PM amendment 2026-10-24, from v1-e40-t03's follow-up work.) The run's side needs four things
+    t03 left out on purpose:
+    * `caselist.notifier = sns` and the topic in the run task's environment;
+    * `sns:Publish` on `debate-<env>-caselist-run-alerts` for the run role. It is the one grant the
+      module's tests now refuse ("nothing more"), so update them, in a run-role inline policy under
+      `aws_iam_role_policies_exclusive.run`, never in the EvidenceOperator document the run role
+      shares;
+    * a dead-letter queue on the run's schedule, as on the login's;
+    * the late-run metric filter reads the run's log group, `debate-<env>-caselist-run`, where the
+      `--json` summary lands.
+
+    A `RUN_TERMINATED` or `RUN_LOCK_LOST` run (v1-e40-t04) is a failed run for the alert, with its
+    code.
+  priority: 2
+  constraints:
+    # PM ruling 2026-10-24 (v1-e40-t02's question 2): debate_core.integrations added for the SNS adapter.
+    # PM amendment 2026-10-25, from the PM's review (question 2): the CLI's test-alert command, its
+    # tests, and pyproject.toml's dependency on the SNS adapter.
+    packages: [infrastructure, debate_core.application, debate_core.integrations, packages/debate_core/tests, docs/runbooks, debate_cli, packages/debate_cli/tests, pyproject.toml]
+    forbidden:
+      - A school, team code, file name or card text in an alert
+      - Network or AWS access in any test
+  context:
+    - kind: TaskRef
+      name: v1-e40-t03-run-image-and-schedule
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        A failed run, a missed schedule and a failed login each produce an alert, by
+        Terraform tests and a stubbed run; the operator triggers one in dev and receives it
+        (operator).
+    # PM amendment 2026-10-23 (ADR-0020)
+    - id: ac2
+      description: >-
+        Terraform's tests show the CloudTrail rules match a change to the credentials' key or
+        resource policies, the login role or its task definition, and a read or refused read
+        of the password by any principal but the login role, each with the topic as target.
+status:
+  phase: Succeeded
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e40-t05-run-alerts-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.8
+    debate/epic: v1-e40-cloud-caselist-run
+spec:
+  description: >-
+    Alert the coach on a failed, missed or unauthenticated run.
+  goalRef:
+    name: v1-e40-t05-run-alerts
+  graph:
+    nodes:
+      - id: alerts
+        kind: Task
+        name: Run alerts
+        description: >-
+          Alert the coach on a failed, missed or unauthenticated run.
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Terraform checks pass
+            command: bash
+            args: [scripts/terraform_checks.sh]
+status:
+  phase: Pending

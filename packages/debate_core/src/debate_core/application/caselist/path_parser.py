@@ -103,10 +103,13 @@ SIDE_SPELLINGS: dict[str, Side] = {
 }
 
 #: Extension to stored format. Everything else is OTHER and is stored unparsed like `.doc`.
+#: `.cmir` is CardMirror's native format, recorded under its own name since `v1-e30-t26`; the
+#: parser names one uploaded under a `.docx` name from its bytes (`v1-e31-t15`).
 _FORMATS_BY_EXTENSION: dict[str, SourceFormat] = {
     ".docx": SourceFormat.DOCX,
     ".doc": SourceFormat.DOC,
     ".pdf": SourceFormat.PDF,
+    ".cmir": SourceFormat.CMIR,
 }
 
 #: Dashes teams type instead of a hyphen. Flattened before the name is split into tokens.

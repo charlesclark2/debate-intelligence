@@ -388,3 +388,9 @@ The phase stays `InProgress` for one more paste: ac2 asks for the file to be gon
 agent's state directories, and follow-up 1d's `find` over `~/.debate-research` is what shows no
 other copy, the prod directory included. The PM sets `Succeeded` when it is in.
 
+### Other copies, recorded (PM, 2026-10-16)
+
+Operator follow-up 1d: `find ~/.debate-research -maxdepth 2 -name caselist-sync-downloads.json`
+printed nothing, so no copy is left in any of the agent's state directories, the prod directory
+included. ac2 is met, and the phase is set `Succeeded`.
+

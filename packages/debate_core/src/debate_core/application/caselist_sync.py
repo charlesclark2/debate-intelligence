@@ -24,10 +24,10 @@ otherwise *skipped with a recorded reason*. Parse is wired in unless a setting t
 (`v1-e34-t17`; see "The parse stage" below); landscape does not exist yet. Neither a missing stage
 nor a failing one can fail a run whose bytes are already safe.
 
-The order is download, import, publish, parse, landscape, report, retention. Goal criterion ac1 lists parsing
-before publishing; the spec's own description ("the run still completes download, import and
-publish before anything optional") is what is implemented, and the session report records the
-difference.
+The order is download, import, publish, parse, search index, landscape, report, retention. Goal
+criterion ac1 lists parsing before publishing; the spec's own description ("the run still completes
+download, import and publish before anything optional") is what is implemented, and the session
+report records the difference.
 
 ## The daily download budget
 
@@ -151,6 +151,16 @@ removes nothing. A file goes only when all of these hold:
   what lets the next run recognise a camp release as imported or removed (`v1-e34-t07`); without
   it the next run would download the file again.
 
+**A weekly whose every member was removed or held** goes before retention, at the end of the import
+that met the hold (`v1-e30-t21`). Every member was refused, by the suppression list or because a
+removal holds its path, at least one by the hold, and its skipped members are junk withheld with
+them. Its import stored nothing, and nothing in it can be imported again, so no publish has to be
+confirmed before it goes. A complete archive holds the whole caselist, so it never holds removed or
+held files alone, and retention judges it as before. It goes only as the bytes imported, and the import
+stage's reason counts it. An archive that also holds anything else stays for retention, like every
+imported archive: the rest is other teams' disclosures, which wait for their publish to be
+confirmed, and a copy rewritten without the held upload would match no manifest and never leave.
+
 **A camp release of junk alone** goes on a condition of its own (`v1-e34-t15`). Its import keeps
 nothing, so no manifest row comes from its bytes and there is no snapshot to confirm: by the rules
 above it stayed as `not_imported` for good, although no run imports it again (`v1-e34-t08`), and
@@ -263,14 +273,28 @@ becomes a download; after `caselist unsuppress` it is one.
 
 ## The parse stage
 
-After the publish stage, the run parses what it imported (`v1-e34-t17`), through
-:class:`CaselistParseStage`, which
+After the publish stage, the run parses what it imported (`v1-e34-t17`) and what earlier runs owe
+(`v1-e40-t08`), through :class:`CaselistParseStage`, which
 :class:`~debate_core.application.caselist_pull_parse.PullParseStage` implements over the parse
-pipeline `caselist parse` runs. A run that imported nothing parses nothing and rebuilds nothing.
+pipeline `caselist parse` runs. A run that imported nothing and owes nothing parses nothing and
+rebuilds nothing.
 
-**Which caselists.** Each caselist a weekly archive or a camp release was imported into, once
-(:func:`caselists_to_parse`). A complete archive names none: its sources are outside the namespaces
-the pipeline enumerates, so a run that imported only one parses nothing.
+**Which caselists.** First each caselist the parse-owed file names that the run follows, in the
+order owed; then each the run finds with no directory of the running parser version; then each a
+weekly archive or a camp release was imported into, once (:func:`caselists_to_parse`). A complete
+archive names none: its sources are outside the namespaces the pipeline enumerates, so a run that
+imported only one parses nothing.
+
+**What is owed** (`v1-e40-t08`, :class:`ParseOwed`). A run killed after its publish stage and before
+its parse left that week published and not parsed, and the next run, finding nothing new, parsed
+nothing. So the publish stage records a parse owed for each snapshot the bucket confirmed, before the
+pending-work file lets the snapshot go, and every later run's parse stage parses the caselists owed,
+whether or not it imports anything. A caselist the run follows, `openev` included, whose parsed store
+has no directory of the running parser version, though it has sources, owes a full parse, recorded
+before it starts. An entry is cleared only when its caselist's parsed store is published complete:
+never at the parse, so a parse whose publish failed is owed still. A caselist owed that the run does
+not follow is left owed, and said. A removal that reaches a snapshot clears its entry. Only an
+environment that publishes owes anything: one with no bucket has nothing to clear an entry by.
 
 **The whole caselist is planned, and its skip key finds what is new.** The stage hands the pipeline
 a caselist, never a snapshot. Every source already parsed under the running parser and profile
@@ -281,17 +305,18 @@ sources and aggregates built from them alone, published as the current store. So
 
 * A caselist whose current version directory holds nothing — never parsed, or the first run after a
   parser or profile version changed — is parsed **in full**, minutes rather than seconds. The
-  summary counts it (`full_parses`), so a full parse is never mistaken for a large week. The runbook
-  has the operator run `caselist parse` by hand after a release that bumps the parser version, so
-  that this does not happen unattended.
+  summary counts it (`full_parses`), so a full parse is never mistaken for a large week. Since
+  `v1-e40-t08` the first run on a new parser version does this for every caselist it follows, before
+  its index stage, so the index it builds is of the new version.
 * A directory a killed run left partly filled is completed: what it recorded is skipped, the rest
   is parsed, and the aggregates are rebuilt from all of it.
-* A caselist the run did not import into is not touched, whatever its directory holds.
+* A caselist the run did not import into and owes nothing is not touched, whatever its directory
+  holds.
 
 **Published where the pull publishes.** With a bucket, each caselist's version directory is then
 copied to it by the publisher `caselist parse --publish` uses, which uploads whatever the bucket
 lacks of the whole directory, so a caselist a previous run could not publish is caught up by the
-next run that imports into it. It is not attempted once a login is known to be missing: the publish
+next run, which still owes its parse. It is not attempted once a login is known to be missing: the publish
 stage pended on one, or the aggregates were just rebuilt from this machine's copy of the suppression
 list alone, which must never be what is published.
 
@@ -301,27 +326,80 @@ pending-work file. Every way it can go wrong is a line in the summary:
 
 * *Failed*, with the code of each failure (`error_codes`): a caselist whose failure rate is over the
   threshold in a run large enough for the rate to be judged
-  (:data:`~debate_core.application.caselist_parse.PARSE_FAILURE_RATE_EXCEEDED`), a store that did
-  not answer or refused, an object the bucket did not confirm (the code `caselist publish` reports
-  it under), and anything the pipeline raised, a bug included, which is recorded by its class alone.
-  The other caselists are still parsed.
-* *Pending*, when the only thing missing is a login for the parsed store's publish. Unlike the
-  publish stage's, this is in no file: the pending-work file holds snapshots, a parsed store is a
-  version directory, and what is owed is whatever the bucket lacks of the directory on this machine,
-  which the publisher works out again each time. `caselist parse --caselist <slug> --publish`
-  finishes it, as does the next pull that imports into that caselist with a session;
-  `caselist pull --publish-pending` does not.
+  (:data:`~debate_core.application.caselist_parse.PARSE_FAILURE_RATE_EXCEEDED`), an occurrence
+  table, here or in the bucket, stamped with a newer fingerprint version than this build's, which is
+  left as it was (`NEWER_FINGERPRINT_TABLE`, `v1-e34-t29`), a store that did not answer or
+  refused, an object the bucket did not confirm (the code `caselist publish` reports it under),
+  and anything the pipeline raised, a bug included, which is recorded by its class alone.
+  The other caselists are still parsed. A store that did not answer, a refusal and a profile the
+  AWS config does not define are true of every caselist still to publish, so the first caselist to
+  meet one is the last offered to the bucket (`v1-e29-t09`).
+* *Pending*, when the only thing missing is a login for the parsed store's publish. The pending-work
+  file holds snapshots, a parsed store is a version directory, and what is owed of it is whatever
+  the bucket lacks of the directory on this machine, which the publisher works out again each time;
+  the parse-owed file keeps the caselist owed (`v1-e40-t08`). The command the stage names finishes
+  it (below), as does the next pull with a session; `caselist pull --publish-pending` does not.
+
+**Which command finishes each caselist** (`v1-e34-t31`). Every caselist whose parsed store the
+stage did not publish complete is a :class:`ParsedStoreOwed` in the summary
+(`parsed_stores_owed`) and in the run's details, and the stage's fix, its reason when pending and
+the banners name each one's own command:
+
+* `caselist parse --caselist <slug> --publish-only` (`v1-e31-t30`) when only the publish is owed:
+  the stage rebuilt the caselist's aggregates, the list did not fall back to the run's own copy
+  while it did, and the run's working copy is still there afterwards
+  (`working_copy_outlives_the_run`, local mode).
+* `caselist parse --caselist <slug> --publish`, which rebuilds first, for every other: aggregates
+  rebuilt from the run's own copy of the list alone, which must never be what is published; a
+  rebuild that raised; and every caselist of a run whose working copy goes with it, so that the
+  directory `--publish-only` would publish, wherever it is run, is not the one the stage rebuilt.
+
+Each caselist is decided by what the stage saw of it, never by the machine or the environment, and
+what cannot be told is named `--publish`: details an earlier build wrote name no caselist, and their
+banner gives :data:`~debate_core.application.sync_runs.PARSE_COMMAND`.
+
+**A bucket-mode run names no command** (`v1-e40-t18`). Its working copy is on the cloud task's
+ephemeral storage and the parsed store is the cloud run's, so either command, run on the operator's
+Mac, would rebuild the Mac's own working copy and publish it over the cloud run's. The stage's fix,
+its reason when pending and the banners name the cloud cure instead
+(:func:`cloud_parse_cure`): the next cloud run, weekly or started by hand, whether or not it imports
+into the caselist, restores the bucket's parsed store, parses what it lacks and publishes it
+(`caselist-cloud-run.md`, "A failed parse stage"). The pull is told it is in bucket mode by the
+composition root (`bucket_mode`); the banners read it from the run's details (`bucket_run`).
+
+**Nor does a bucket-mode run point at the Mac otherwise** (`v1-e40-t22`). A stage over its failure
+rate names the failures file the cloud run publishes with the parsed store, not `caselist parse
+--failures`, which lists the Mac's own store (`caselist-cloud-run.md`, "A parse stage over its
+failure rate"). A table a newer build stamped names a new image for the cloud run, not a build for
+the weekly agent (:attr:`NewerFingerprintTable.cloud_fix
+<debate_core.application.caselist.occurrence_table_guard.NewerFingerprintTable.cloud_fix>`).
 
 The stage is not in :data:`REQUIRED_STAGES`, so by `v1-e34-t13`'s rule none of this changes the
 command's exit status: the run captured everything.
+
+## The search index stage
+
+After parse, the student search pilot's index (`v1-e39-t09`): rebuilt from the parsed store when
+its digests changed since the newest local index, and published to this environment's bucket when
+`current.json` is behind it and there is a session.
+:class:`~debate_core.application.search_index_refresh.SearchIndexRefresh` decides each step; this
+module runs it, for the run's configured caselists plus `openev`, and records what it reports. It
+runs whether or not the run imported anything, because a parse by hand or a removal changes the
+store too. It is skipped when this run's parse stage failed, since an index of what a failed parse
+left is not one to publish; and it is told the run has no session when the publish or the parse
+stage pended for want of one, so that it builds and does not try the bucket. Like parse it is not in
+:data:`REQUIRED_STAGES`: it can fail, and its publish can pend, without touching the exit status.
+A pending index publish is in no file: what is owed is `current.json` naming another index than
+the newest local one, which the next run with a session works out again.
 
 ## Credentials, and stages that come back later
 
 The local stages need no AWS session. If the operator's SSO session has expired, the S3 adapter
 raises :class:`~debate_core.application.errors.StoreCredentialsExpired`; the publish and report
-stages are then recorded as **pending** in a small local file, and the next run — or
-`caselist pull --publish-pending` — completes them. Nothing that was captured is lost by a login
-that timed out overnight.
+stages are then recorded as **pending**, and the next run — or `caselist pull --publish-pending` —
+completes them. What the publish owes is in a small local file, the pending-work file; what the
+report stage did not compare is in the run's details (`v1-e34-t28`). Nothing that was captured is
+lost by a login that timed out overnight.
 
 **Only an expired session is pending** (`v1-e34-t13`). A refusal is not a login that timed out, and
 logging in again fixes neither kind: a :class:`~debate_core.application.errors.LocalStoreAccessDenied`
@@ -354,10 +432,26 @@ on a code and the session then expires, the stage is pending and carries no erro
 The code is kept on the stage as an *earlier finding* (:attr:`StageRecord.earlier_findings`),
 which the exit status never reads, so that the run can say a login alone will not finish the job.
 
+**A check cut short is made again** (`v1-e34-t28`, the PM's ruling of 2026-10-22). The report stage
+compares what the publish confirmed, snapshot by snapshot, and the pending-work file holds only
+publishes. So when the session expired part-way through the comparison, or before it, because the
+publish itself pended, what was published and not compared was owed by nothing: the next run
+compared only what it published. The stage now names those snapshots
+(:attr:`StageRecord.not_compared`), the run's details keep them, and the next `caselist pull`,
+scheduled or by hand, or `caselist pull --publish-pending` hands the newest run's list back to the
+report stage. It compares them after what that run publishes, by the same code and the same rules,
+and a run cut short again owes what it did not reach. Slugs and snapshot names, nothing else.
+Details an older build wrote have no list and owe nothing; only the newest run's list is read
+(:func:`~debate_core.application.sync_runs.comparisons_owed_by_the_newest_run`), and a dry run
+compares nothing. The run's record outcome is `publish_pending` for a report stage pending alone,
+as for any stage waiting on the login.
+
 ## What the pending-work file holds
 
 Every snapshot this machine has imported and the bucket has not confirmed complete: nothing more
-is promised of it, and nothing less (`v1-e34-t18`). One function says what that is,
+is promised of it, and nothing less (`v1-e34-t18`). And, since the PM's ruling of 2026-10-16
+(`v1-e34-t26`), every snapshot the report stage found with the bucket's manifest differing from
+this machine's and nothing else, once (below). One function says what the publish stage owes,
 :func:`snapshots_still_owed`, and the publish stage writes its answer down however the stage ends:
 completed, failed on a code, stopped by a refusal or an outage, or pending on an expired session.
 No ending keeps a rule of its own. Before this, the expired-session ending wrote only the snapshots
@@ -377,13 +471,24 @@ owed from before that the stage had just published stayed in the file.
   (:class:`~debate_core.application.caselist.publish_service.NothingToPublish`). No run here can
   ever publish it, so owing it would fail every run from then on. The stage reports it, with its
   code, in the run that finds it, and it leaves the file.
+* **A drifted manifest is owed again, once** (`v1-e34-t26`). This machine's manifest is the
+  record and the bucket's copy follows it. The report stage compares what the publisher just
+  confirmed; a snapshot it finds with a manifest mismatch alone goes back into the file, behind
+  what is there, so the next run publishes it again and the mismatch is retried by itself. Any other
+  drift, a manifest the bucket lacks or a source with other bytes, alone or beside it, is a
+  person's and is owed nothing. Never a third time: a snapshot an earlier run owed again for this,
+  and every run since still owed, that drifts again after its republish is reported for a person
+  instead. The run log says which is which
+  (:func:`~debate_core.application.sync_runs.snapshots_owed_again_for_drift`); :func:`run_pull`
+  reads it and hands it to the run. The entries are the shape every other entry has, so a build
+  from before this reads and publishes them.
 * **A file that cannot be read is never written over** (:class:`PendingWorkUnreadable`). It may
   name snapshots nothing else remembers, and a run that took it for empty would replace it. The
   publish stage fails on it, with a hint naming the file by what it is for, and leaves it for a
   person. What the run itself imported needs nothing from the file and is published all the same;
   anything of that the bucket did not confirm is named in the stage's reason, because it could be
   written nowhere. Every state file here is written to a second file in the same directory, put on
-  the disk, and renamed into place (:func:`_write_json`), so neither a run that dies while writing
+  the disk, and renamed into place (:func:`write_state_file`), so neither a run that dies while writing
   nor a power cut just after it can be what cut it short.
 
 ## What a failed stage records
@@ -438,17 +543,42 @@ serialised; a failed fetch or import whose error quotes it has it taken out of t
 A failed stage's reason, error codes and hint name no path on this machine either (`v1-e34-t13`): a
 refused directory is named by its role, and an error that quotes a file under the data directory
 or the inbox has that directory replaced by its name.
+
+## When each stage ran, and how full the data volume got (`v1-e40-t03`)
+
+ADR-0020 could not time a run's stages from what a run left behind, so the summary now says when
+each stage that ran started and ended (:attr:`RunSummary.stage_times`), and the run's details keep
+the same (:mod:`debate_core.application.sync_runs`). A stage a dry run only planned has no times.
+
+The cloud run works on a restored copy in a fixed ephemeral volume of 100 GiB, which the season's
+corpus grows into. With `storage.volume_warning_percent` set, as the cloud task sets it to 70, the
+run reads how full the data directory's volume is after every stage it times and keeps the fullest
+reading (:attr:`RunSummary.data_volume`); past the threshold, the summary says so, so the volume is
+resized before a run fills it. Unset, the default and the Mac's case, nothing is read: a laptop's
+disk is not the run's to judge. A reading that fails costs the run its reading, never a stage.
+
+## How much memory each stage had used (`v1-e40-t31`)
+
+The parse's measurement (`docs/data/caselist-parse-memory.md`) found the run's main process is what
+grows, so the cloud task's size has to come from what real runs used. Each stage the run times also
+records, as it ended, the container's memory high-water mark (its cgroup's peak) and the main
+process's own, read by `v1-e40-t32`'s
+:func:`~debate_core.application.caselist.memory_high_water.read_memory_high_water`
+(:attr:`StageTime.memory`). Both are read on every machine; a figure that cannot be read, as the
+container's on the Mac, is left out of the summary, never written as zero.
 """
 
 from __future__ import annotations
 
+import asyncio
 import contextlib
 import hashlib
 import json
 import logging
 import os
 import re
-from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
+import shutil
+from collections.abc import Awaitable, Callable, Collection, Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from datetime import UTC, date, datetime, timedelta
 from enum import StrEnum
@@ -456,19 +586,24 @@ from pathlib import Path
 from types import TracebackType
 from typing import TYPE_CHECKING, Final, Protocol, Self, cast
 
+from debate_core.application.caselist.backfiles import refuse_backfiles
 from debate_core.application.caselist.evidence_listing import (
     LocalEvidence,
-    read_local_snapshots,
+    local_file,
     snapshots_before_full_archive,
 )
 from debate_core.application.caselist.import_service import CaselistImportService, ImportReport
+from debate_core.application.caselist.later_manifests import CompleteArchiveRecount, LaterManifests
 from debate_core.application.caselist.manifest import (
     full_archive_manifest_key,
     manifest_key,
+    read_manifest_file,
     read_manifest_lines,
     write_manifest,
     write_manifest_lines,
 )
+from debate_core.application.caselist.memory_high_water import MemoryHighWater, read_memory_high_water
+from debate_core.application.caselist.occurrence_table_guard import NewerFingerprintTable
 from debate_core.application.caselist.openev_import_service import (
     OpenEvImportReport,
     OpenEvImportService,
@@ -489,6 +624,7 @@ from debate_core.application.caselist.publish_plan import (
 )
 from debate_core.application.caselist.publish_service import (
     CaselistPublishService,
+    ManifestOutcome,
     NothingToPublish,
     SourceResult,
 )
@@ -496,6 +632,7 @@ from debate_core.application.caselist.status_service import (
     CASELIST_DRIFT,
     CaselistStatusService,
     NoCaselistEvidence,
+    SnapshotStatus,
 )
 from debate_core.application.caselist.suppression import LocalFallbackSuppressionList, load_suppression_state
 from debate_core.application.caselist_parse import PARSE_FAILURE_RATE_EXCEEDED
@@ -511,18 +648,23 @@ from debate_core.application.errors import (
     StoreUnavailable,
     UnreadableArchive,
     reported_error_code,
+    reported_error_message,
 )
 from debate_core.application.ports.archive import ArchiveEntry, ArchiveMember
+from debate_core.application.ports.caselist_session import KeychainFailure
 from debate_core.application.ports.caselist_source import (
     OPENEV_INBOX_PREFIX,
     ArchiveKind,
     ArchiveListing,
     CaselistArchiveSource,
+    CaselistAuthExpired,
+    CaselistTokenMissing,
     DownloadedFile,
     OpenEvFile,
     openev_id_of_inbox_name,
     openev_inbox_name,
 )
+from debate_core.application.ports.parsed_store import OPENEV_STORE
 from debate_core.application.ports.suppression import (
     SuppressionAction,
     SuppressionList,
@@ -532,15 +674,24 @@ from debate_core.application.ports.suppression import (
 from debate_core.domain.caselist import CASELIST_SLUG_PATTERN, Acquisition, Event
 
 if TYPE_CHECKING:  # pragma: no cover - sync_runs imports this module, so its types are named only
-    from debate_core.application.sync_runs import SyncRunDetails, SyncRunMonitor, SyncRunRecord
+    from debate_core.application.sync_runs import (
+        BucketRunDetails,
+        SyncRunDetails,
+        SyncRunMonitor,
+        SyncRunRecord,
+    )
 
 __all__ = [
+    "archive_entries",
     "BULK_DOWNLOAD_WINDOW",
+    "CLOUD_FAILURE_RATE_RUNBOOK",
+    "CLOUD_PARSE_STAGE_RUNBOOK",
     "DEFAULT_BULK_DOWNLOADS_PER_DAY",
     "DEFAULT_FULL_ARCHIVE_INTERVAL_DAYS",
     "INBOX_PARTIAL_DIRECTORY",
     "LOCK_FILENAME",
     "OPENEV_DELIVERIES_FILENAME",
+    "PARSE_OWED_FILENAME",
     "PENDING_WORK_FILENAME",
     "RUN_SUMMARY_SCHEMA_VERSION",
     "SKIP_TODAY_SECONDS",
@@ -549,7 +700,9 @@ __all__ = [
     "CaselistParseStage",
     "CaselistSyncService",
     "DailyDownloadLimitReached",
+    "DataVolumeUsage",
     "DownloadLedger",
+    "DriftKind",
     "FullArchiveImport",
     "FullArchivePlan",
     "FullArchiveRefused",
@@ -558,6 +711,9 @@ __all__ = [
     "InboxFileVerdict",
     "InboxRetention",
     "LandscapeStage",
+    "SearchIndexStage",
+    "SearchIndexStageCounts",
+    "SearchIndexStageReport",
     "LandscapeStageResult",
     "NoCaselistsConfigured",
     "OpenEvDeliveries",
@@ -565,32 +721,52 @@ __all__ = [
     "OpenEvSelection",
     "ParseStageCounts",
     "ParsedCaselist",
+    "FullParseOwed",
+    "ParseOwed",
+    "ParseOwedUnreadable",
+    "ParsedStoreOwed",
+    "ParsesOwed",
     "PendingSnapshot",
     "PendingWork",
     "PendingWorkUnreadable",
     "PublishedParsedStore",
+    "PullBracket",
     "PulledRun",
     "RetentionDecision",
     "RunSummary",
     "SelectionDecision",
+    "SnapshotDrift",
     "StageOutcome",
     "StageRecord",
+    "StageTime",
     "SyncPlan",
     "SyncRunInProgress",
     "SyncStage",
     "UndatedArchive",
     "UnknownSyncEvent",
+    "VolumeReading",
+    "append_state_line",
     "camp_path_of_manifest_row",
     "caselists_to_parse",
+    "cloud_parse_cure",
     "decide_full_archives",
     "fix_for",
     "full_archive_of_inbox_name",
     "inbox_files",
+    "message_for",
+    "next_cloud_run",
     "openev_id_of_inbox_name",
+    "parse_command",
+    "parses_owed_sentence",
+    "read_volume",
+    "remove_state_file",
     "run_pull",
+    "search_index_stores",
     "snapshots_still_owed",
     "weekly_archive_of_inbox_name",
+    "why_no_search_index_stage",
     "within_daily_budget",
+    "write_state_file",
 ]
 
 logger = logging.getLogger(__name__)
@@ -614,6 +790,9 @@ INBOX_PARTIAL_DIRECTORY: Final = ".partial"
 
 LOCK_FILENAME: Final = "caselist-sync.lock"
 PENDING_WORK_FILENAME: Final = "caselist-sync-pending.json"
+PARSE_OWED_FILENAME: Final = "caselist-sync-parse-owed.json"
+"""The parses this machine's runs owe (`v1-e40-t08`). See :class:`ParseOwed`."""
+
 DOWNLOAD_LEDGER_FILENAME: Final = "caselist-sync-download-starts.json"
 """When each bulk download started, for the rolling window. See :class:`DownloadLedger`."""
 
@@ -640,6 +819,8 @@ nothing reads a summary back. Under version 2 these were `note`, `openev_skipped
 (`v1-e34-t07`), `inbox_retention` (`v1-e34-t11`) and an OpenEv selection's `revision_of`
 (`v1-e34-t08`). Under version 5 it is `earlier_findings` on every entry of `stages` (`v1-e34-t19`):
 unlike `error_codes`, nothing is decided from it, so the rule applies and the version stays. So are
+`drift` on every entry of `stages` and the top-level `held_by_request` (`v1-e34-t23`): the report
+stage's findings with their kind, and the uploads a removal's hold refused, by request. So are
 `openev_id` and `reason` on an `inbox_retention` entry removed as a camp release of junk alone
 (`v1-e34-t15`): a removed entry carried no `reason` before, and its one value, `junk_only`, is one
 no `kept` entry carries, so a filter on `kept[].reason` reads what it read before.
@@ -660,7 +841,12 @@ Version 5 (`v1-e34-t17`) replaces `cards_parsed` and `parse_failures` with one o
 parse stage's counts (:class:`ParseStageCounts`), or `null` when the stage parsed nothing. Two keys
 removed, so the version moves; no stage ever filled them, and both were `0` in every summary
 written. The run log's record schema is untouched again: the stage's counts reach `caselist runs`
-in the parse stage's `reason`, which every build reads.
+in the parse stage's `reason`, which every build reads. Under version 5, `search_index` (`v1-e39-t09`)
+is added: the search index stage's index id, sizes and warnings (:class:`SearchIndexStageCounts`),
+or `null` when the stage did not run. A key added, so the version stays. So are `stage_times` and
+`data_volume` (`v1-e40-t03`): when each stage started and ended, and how full the data directory's
+volume got, or `null` when the run read no volume. So is each stage time's `memory` (`v1-e40-t31`):
+the memory high-water marks that could be read as the stage ended, left out when none could.
 """
 RUN_SUMMARY_DIRECTORY: Final = "caselist-sync-runs"
 
@@ -686,6 +872,10 @@ class SyncStage(StrEnum):
 
     PARSE = "parse"
     """Optional (`v1-e31-t06`, wired by `v1-e34-t17`). Skipped with a reason when it is turned off."""
+
+    SEARCH_INDEX = "search_index"
+    """Optional (`v1-e39-t09`). Rebuilds the search pilot's index when the parsed store changed, and
+    publishes it; its publish needs an AWS session and pends without one."""
 
     LANDSCAPE = "landscape"
     """Optional (`v1-e32-t05`). Skipped with a reason when no landscape service was wired in."""
@@ -731,6 +921,67 @@ class StageOutcome(StrEnum):
     """
 
 
+class DriftKind(StrEnum):
+    """What differs in a snapshot the report stage found not in sync (`v1-e34-t23`).
+
+    The first two are `v1-e30-t12`'s :class:`~debate_core.application.caselist.status_service.
+    MismatchKind`; the other two are the rest of what makes a snapshot drift.
+    """
+
+    MANIFEST = "manifest"
+    """The bucket holds the snapshot's manifest with other bytes: this machine rewrote it after it
+    was published, and `caselist publish` uploads it again."""
+
+    SOURCE = "source"
+    """The bucket holds a source with other bytes than its key names, which needs a person."""
+
+    MISSING = "missing"
+    """A manifest or a source is missing on one side."""
+
+    SUPPRESSED_ROWS = "suppressed_rows"
+    """This machine's manifest has a stored row the suppression list stops: a removal unfinished."""
+
+
+_DRIFT_KIND_WORDS: Final = {
+    DriftKind.MANIFEST: "manifest mismatch",
+    DriftKind.SOURCE: "source mismatch",
+    DriftKind.MISSING: "something missing",
+    DriftKind.SUPPRESSED_ROWS: "suppressed rows",
+}
+
+
+@dataclass(frozen=True, slots=True)
+class SnapshotDrift:
+    """One snapshot the report stage found not in sync, and what differs. A slug, a name and kinds."""
+
+    caselist: str
+    snapshot: str
+    kinds: tuple[DriftKind, ...]
+
+    @classmethod
+    def of(cls, status: SnapshotStatus) -> SnapshotDrift:
+        kinds = (
+            (DriftKind.MANIFEST,) * status.manifest_mismatched
+            + (DriftKind.SOURCE,) * bool(status.source_mismatches)
+            + (DriftKind.MISSING,) * status.incomplete
+            + (DriftKind.SUPPRESSED_ROWS,) * bool(status.suppressed_rows)
+        )
+        return cls(caselist=status.caselist, snapshot=status.snapshot, kinds=kinds)
+
+    @property
+    def sentence(self) -> str:
+        """`<caselist> <snapshot> (<what differs>)`, as the stage's reason names it."""
+        named = f"{self.caselist} {self.snapshot}"
+        return f"{named} ({', '.join(_DRIFT_KIND_WORDS[one] for one in self.kinds)})" if self.kinds else named
+
+    def as_json(self) -> dict[str, object]:
+        return {
+            "caselist": self.caselist,
+            "snapshot": self.snapshot,
+            "kinds": [str(one) for one in self.kinds],
+        }
+
+
 @dataclass(frozen=True, slots=True)
 class StageRecord:
     """One stage's outcome, and the one sentence that says why it was that."""
@@ -766,6 +1017,17 @@ class StageRecord:
     failed stage's codes are its :attr:`error_codes`.
     """
 
+    drift: tuple[SnapshotDrift, ...] = ()
+    """The report stage's findings: each snapshot it found not in sync, and what differs
+    (`v1-e34-t23`). On a failed stage, and on one pending on an expired session for what it found
+    before the session expired. Empty for every other stage."""
+
+    not_compared: tuple[PendingSnapshot, ...] = ()
+    """What a pending report stage was to compare and did not, because the session had expired
+    (`v1-e34-t28`): what the run published, and what an earlier run's check owed, that it never
+    reached. The run's details keep it, and the next pull or `caselist pull --publish-pending`
+    compares exactly these. Empty for every other stage and outcome."""
+
     def as_json(self) -> dict[str, object]:
         return {
             "stage": str(self.stage),
@@ -774,6 +1036,96 @@ class StageRecord:
             "error_codes": list(self.error_codes),
             "hint": self.hint,
             "earlier_findings": list(self.earlier_findings),
+            "drift": [one.as_json() for one in self.drift],
+            # Additive (`v1-e34-t28`): the version stays.
+            "not_compared": [one.as_json() for one in self.not_compared],
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class StageTime:
+    """When one stage of a run started and ended, by the run's own clock (`v1-e40-t03`)."""
+
+    stage: SyncStage
+    started_at: datetime
+    finished_at: datetime
+    memory: MemoryHighWater | None = None
+    """The memory high-water marks read as the stage ended (`v1-e40-t31`), or `None` when none was read."""
+
+    @property
+    def duration_seconds(self) -> float:
+        return (self.finished_at - self.started_at).total_seconds()
+
+    def as_json(self) -> dict[str, object]:
+        body: dict[str, object] = {
+            "stage": str(self.stage),
+            "started_at": self.started_at.isoformat(),
+            "finished_at": self.finished_at.isoformat(),
+            "duration_seconds": round(self.duration_seconds, 3),
+        }
+        figures = self.memory.as_json() if self.memory is not None else {}
+        if figures:
+            # Additive (`v1-e40-t31`): the version stays, and a figure that was not read is left out.
+            body["memory"] = figures
+        return body
+
+
+@dataclass(frozen=True, slots=True)
+class VolumeReading:
+    """How big the volume a directory is on is, and how much of it is used, in bytes."""
+
+    total_bytes: int
+    used_bytes: int
+
+
+def read_volume(directory: Path) -> VolumeReading:
+    """The volume `directory` is on, as :func:`shutil.disk_usage` reads it."""
+    usage = shutil.disk_usage(directory)
+    return VolumeReading(total_bytes=usage.total, used_bytes=usage.used)
+
+
+@dataclass(frozen=True, slots=True)
+class DataVolumeUsage:
+    """The fullest the data directory's volume was after any stage of a run (`v1-e40-t03`).
+
+    Bytes, a percentage and a stage name, never a path. ADR-0020 (1) 2: the cloud run's ephemeral
+    volume is enlarged once a run passes `warning_percent`, before a run fills it.
+    """
+
+    total_bytes: int
+    peak_used_bytes: int
+    peak_after: SyncStage
+    """The stage after which the volume was fullest."""
+
+    warning_percent: int
+
+    @property
+    def peak_percent(self) -> float:
+        return 100.0 * self.peak_used_bytes / self.total_bytes if self.total_bytes else 0.0
+
+    @property
+    def passed_warning(self) -> bool:
+        """Strictly past the threshold, compared in whole bytes: exactly 70% has not passed 70%."""
+        return self.peak_used_bytes * 100 > self.warning_percent * self.total_bytes
+
+    @property
+    def warning(self) -> str | None:
+        """The sentence the summary carries when the volume passed the threshold, else `None`."""
+        if not self.passed_warning:
+            return None
+        return (
+            f"the data volume was {self.peak_percent:.1f}% used after the {self.peak_after} stage, "
+            f"past the {self.warning_percent}% warning: enlarge it before a run fills it"
+        )
+
+    def as_json(self) -> dict[str, object]:
+        return {
+            "total_bytes": self.total_bytes,
+            "peak_used_bytes": self.peak_used_bytes,
+            "peak_percent": round(self.peak_percent, 1),
+            "peak_after": str(self.peak_after),
+            "warning_percent": self.warning_percent,
+            "warning": self.warning,
         }
 
 
@@ -1334,6 +1686,78 @@ class PublishedParsedStore:
     there (:attr:`~debate_core.application.caselist.parsed_publish.ParsedPublishReport.failure_codes`)."""
 
 
+PARSE_PUBLISH_ONLY: Final = "--publish-only"
+PARSE_PUBLISH: Final = "--publish"
+
+
+def parse_command(caselist: str, *, publish_only: bool) -> str:
+    """The command that finishes one caselist's parsed store, as the run names it (`v1-e34-t31`)."""
+    flag = PARSE_PUBLISH_ONLY if publish_only else PARSE_PUBLISH
+    return f"debate-research caselist parse --caselist {caselist} {flag}"
+
+
+CLOUD_PARSE_STAGE_RUNBOOK: Final = 'caselist-cloud-run.md, "A failed parse stage"'
+"""The runbook section a bucket-mode run's parse stage points to (`v1-e40-t18`): what the cloud cure
+is, how to start a run by hand, and why nothing is published from the operator's Mac."""
+
+CLOUD_FAILURE_RATE_RUNBOOK: Final = 'caselist-cloud-run.md, "A parse stage over its failure rate"'
+"""The runbook section a bucket-mode parse stage over its failure rate points to (`v1-e40-t22`): where
+the cloud run's failures are, and that why they failed is the PM's."""
+
+
+def next_cloud_run(does: str, *, runbook: str) -> str:
+    """A bucket-mode cure, in the words every one of them shares (`v1-e40-t28`): what the next cloud run
+    `does`, that it is the weekly run or one started by hand, the `runbook` section that says more, and
+    that nothing is published from the operator's Mac.
+
+    One sentence for every banner and hint that names the cloud run instead of a command on this
+    machine: the parse stage's (:func:`cloud_parse_cure`, `v1-e40-t18`), the publish's and a manifest's
+    owed again (`v1-e40-t25`), and a failed or stopped run's and a growing backlog's (`v1-e40-t28`).
+    """
+    return (
+        f"the next cloud run {does}: the weekly run, or one started by hand ({runbook}); never a publish "
+        "from the operator's Mac"
+    )
+
+
+def cloud_parse_cure(caselists: Sequence[str]) -> str:
+    """What finishes a bucket-mode run's unpublished parsed stores, as its banner names it (`v1-e40-t18`).
+
+    No command: the cloud run owns the parsed store, and a command run on the operator's Mac would
+    rebuild the Mac's own working copy and publish it over the cloud run's. The caselist's parse
+    stays owed until its parsed store is published complete, and every run parses what is owed
+    whether or not it imports into the caselist (`v1-e40-t08`), so the cure is the next cloud run,
+    weekly or started by hand. Until `v1-e40-t08` it was the next cloud run that imported into the
+    caselist. `caselists` empty, as in details a build before `v1-e34-t31` wrote, names the caselist
+    by the stage.
+    """
+    named = _and_listed(caselists) if caselists else "each caselist the parse stage names"
+    return next_cloud_run(f"publishes the parsed store of {named}", runbook=CLOUD_PARSE_STAGE_RUNBOOK)
+
+
+@dataclass(frozen=True, slots=True)
+class ParsedStoreOwed:
+    """A caselist whose parsed store the parse stage did not publish complete, and what finishes it.
+
+    `v1-e34-t31`. Caselist slugs and a flag: nothing a run record may not hold.
+    """
+
+    caselist: str
+    publish_only: bool = False
+    """`caselist parse --publish-only` finishes it: the stage rebuilt the caselist's aggregates from
+    every copy of the suppression list, and the run keeps the working copy they are in, so only the
+    publish is owed. Otherwise `--publish`, which rebuilds first: the aggregates may come from the
+    run's own copy of the list alone, which must never be what is published, or the stage did not
+    rebuild them, or the directory they are in went with the run."""
+
+    @property
+    def command(self) -> str:
+        return parse_command(self.caselist, publish_only=self.publish_only)
+
+    def as_json(self) -> dict[str, object]:
+        return {"caselist": self.caselist, "publish_only": self.publish_only}
+
+
 @dataclass(frozen=True, slots=True)
 class ParseStageCounts:
     """What the parse stage did, over every caselist it parsed. Integers and nothing else.
@@ -1372,6 +1796,113 @@ class ParseStageCounts:
             "uploaded": self.uploaded,
             "not_published": self.not_published,
         }
+
+
+@dataclass(frozen=True, slots=True)
+class SearchIndexStageCounts:
+    """The index the search index stage left current, and its size (`v1-e39-t09`). No store, no path.
+
+    The sizes are the PM's amendment of 2026-10-20 (`v1-e39-t02` second review): every build reports
+    its SQLite bytes and bytes per document, and a warning past ADR-0019's lines.
+    """
+
+    index_id: str
+    """The newest index on this machine once the stage ran: the one it built, or the one it kept."""
+
+    built: bool
+    """The stage built it in this run; otherwise it was already there, built from the same digests."""
+
+    published: bool
+    """The stage published it in this run, so `current.json` names it."""
+
+    documents: int
+    sqlite_bytes: int
+    gzip_bytes: int
+    bytes_per_document: int | None
+    """SQLite bytes over documents, rounded down; `None` for an index of no document."""
+
+    warnings: tuple[str, ...] = ()
+    """A sentence for each of ADR-0019's size lines the index has passed."""
+
+    removed: int = 0
+    """Superseded index directories the stage removed from this machine after it built this one."""
+
+    bytes_freed: int = 0
+    """What removing them freed."""
+
+    previous_index_id: str | None = None
+    """The index `current.json` named when the stage read it, when that was another index: what the
+    growth below is measured against (`v1-e39-t14`). `None` when the stage did not read it, nothing
+    was published yet, or it already named this index."""
+
+    documents_growth: int | None = None
+    """Documents in this index less those in the previous one; negative for a shrink."""
+
+    sqlite_bytes_growth: int | None = None
+    """SQLite bytes, likewise."""
+
+    gzip_bytes_growth: int | None = None
+    """Gzip object bytes, likewise."""
+
+    not_cards_by_store: Mapping[str, Mapping[str, int]] | None = None
+    """Documents the build left out as no card, by store and then by why (`cite_only`,
+    `no_cite_few_words`), when the stage built this index (`v1-e39-t12`). `None` when it kept one
+    already built: the count is in the build's result, not in the manifest (PM ruling 2026-10-22)."""
+
+    def as_json(self) -> dict[str, object]:
+        return {
+            "index_id": self.index_id,
+            "built": self.built,
+            "published": self.published,
+            "documents": self.documents,
+            "sqlite_bytes": self.sqlite_bytes,
+            "gzip_bytes": self.gzip_bytes,
+            "bytes_per_document": self.bytes_per_document,
+            "warnings": list(self.warnings),
+            "removed": self.removed,
+            "bytes_freed": self.bytes_freed,
+            "previous_index_id": self.previous_index_id,
+            "documents_growth": self.documents_growth,
+            "sqlite_bytes_growth": self.sqlite_bytes_growth,
+            "gzip_bytes_growth": self.gzip_bytes_growth,
+            "not_cards_by_store": None
+            if self.not_cards_by_store is None
+            else {store: dict(counts) for store, counts in self.not_cards_by_store.items()},
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class SearchIndexStageReport:
+    """What the search index stage did, as the run records it."""
+
+    outcome: StageOutcome
+    reason: str
+    """The stage's sentence. On a failure, what the stage did and the index still current; the
+    failure's own sentence is added by the run."""
+
+    counts: SearchIndexStageCounts | None = None
+    """The index the stage left current, or `None` when it reached none."""
+
+    failure: Exception | None = None
+    """What failed the stage, for a :attr:`StageOutcome.FAILED` report; the run records its code."""
+
+    hint: str | None = None
+    """The fix for a failure, when it has one beyond the error's own."""
+
+    local_copy_only: str | None = None
+    """Why the build read this machine's copy of the suppression list alone, or `None`."""
+
+
+class SearchIndexStage(Protocol):
+    """The search index stage, as this run needs it (`v1-e39-t09`).
+
+    Implemented by :class:`~debate_core.application.search_index_refresh.SearchIndexRefresh`. It
+    reports every outcome, failures included, rather than raising one.
+    """
+
+    async def refresh(self, stores: Sequence[str], *, no_session: str | None) -> SearchIndexStageReport:
+        """Keep the index of `stores` current. `no_session` is why the run knows it has no login."""
+        ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -1421,13 +1952,19 @@ installation's size ceilings and passes the result; the application layer names 
 
 
 class SyncRunInProgress(DomainError):
-    """Another `caselist pull` holds the run lock. This one did nothing at all."""
+    """Another `caselist pull` holds the run lock. This one did nothing at all.
+
+    The message names the lock by its file name in the data directory and never by its path, which
+    is under the home directory: the command prints it, and the agent's stdout log keeps it
+    (`v1-e34-t16`). :attr:`lock_path` is where it is.
+    """
 
     def __init__(self, lock_path: Path) -> None:
         self.lock_path = lock_path
         super().__init__(
-            f"another caselist sync is already running (lock held at {lock_path}); this run did "
-            "nothing. Wait for it to finish, or remove the lock file if no process holds it."
+            f"another caselist sync is already running (it holds the run lock, {lock_path.name} in "
+            "the data directory); this run did nothing. Wait for it to finish, or remove the lock "
+            "file if no process holds it."
         )
 
 
@@ -1575,10 +2112,14 @@ class PendingWork:
     target `caselist publish` would accept: a week (`2026-09-01`), a complete archive
     (`full/2026-09-15`) or a camp release (`openev`, `2026-policy`). There is no file when nothing
     is owed.
+
+    `on_written` is called with the path after every write or removal: in bucket mode, the save of
+    the file to the bucket (`v1-e40-t04`).
     """
 
-    def __init__(self, path: Path) -> None:
+    def __init__(self, path: Path, *, on_written: Callable[[Path], None] | None = None) -> None:
         self.path = Path(path)
+        self._on_written = on_written
 
     def read(self) -> tuple[PendingSnapshot, ...]:
         """What is owed, in the order it was recorded; nothing when there is no file.
@@ -1622,10 +2163,12 @@ class PendingWork:
         the file: one that cannot be read is not this method's to replace.
         """
         if not owed:
-            self.path.unlink(missing_ok=True)
-            return
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        _write_json(self.path, {"publish": [one.as_json() for one in owed]})
+            remove_state_file(self.path)
+        else:
+            self.path.parent.mkdir(parents=True, exist_ok=True)
+            write_state_file(self.path, {"publish": [one.as_json() for one in owed]})
+        if self._on_written is not None:
+            self._on_written(self.path)
 
 
 def snapshots_still_owed(
@@ -1653,6 +2196,226 @@ def snapshots_still_owed(
     """
     settled = {*confirmed, *without_local_manifest}
     return tuple(dict.fromkeys(one for one in (*previously_owed, *targets) if one not in settled))
+
+
+def _snapshots_named(snapshots: Iterable[PendingSnapshot]) -> str:
+    """`<caselist> <snapshot>, …`, as a stage's reason names snapshots."""
+    return ", ".join(f"{one.caselist} {one.snapshot}" for one in snapshots)
+
+
+_PARSER_VERSION: Final = re.compile(r"[0-9]{4}\.[0-9]{2}\.[0-9]{2}-[a-z]+-[0-9]+")
+"""A parser version as the parsers name themselves: `2026.10.27-docx-7`."""
+
+
+@dataclass(frozen=True, slots=True)
+class FullParseOwed:
+    """A caselist whose parsed store has no directory of the running parser version (`v1-e40-t08`)."""
+
+    caselist: str
+    parser_version: str
+
+    def as_json(self) -> dict[str, str]:
+        return {"caselist": self.caselist, "parser_version": self.parser_version}
+
+
+@dataclass(frozen=True, slots=True)
+class ParsesOwed:
+    """What the parse-owed file holds: snapshots published and not yet parsed, and full parses owed."""
+
+    snapshots: tuple[PendingSnapshot, ...] = ()
+    full_parses: tuple[FullParseOwed, ...] = ()
+
+    @property
+    def caselists(self) -> tuple[str, ...]:
+        """Each caselist owed, once, in the order owed: the snapshots' first, then the full parses'."""
+        return tuple(dict.fromkeys(one.caselist for one in (*self.snapshots, *self.full_parses)))
+
+    def __bool__(self) -> bool:
+        return bool(self.snapshots or self.full_parses)
+
+    def as_json(self) -> dict[str, object]:
+        return {
+            "full_parses": [one.as_json() for one in self.full_parses],
+            "snapshots": [one.as_json() for one in self.snapshots],
+        }
+
+
+class ParseOwedUnreadable(DomainError):
+    """The parse-owed file is there, and is not what this module writes.
+
+    Never read as nothing owed and never written over, as the pending-work file is not
+    (:class:`PendingWorkUnreadable`): it may name a week nothing else remembers is unparsed. Named by
+    what it is for, never by where it is.
+    """
+
+    def __init__(self, problem: str) -> None:
+        self.problem = problem
+        """What is wrong with it, in words that quote nothing the file holds."""
+        super().__init__(
+            f"the parse-owed file under storage.data_dir could not be read ({problem}), "
+            "so it was left as it is"
+        )
+
+
+class ParseOwed:
+    """The parses this machine's runs owe: published here, not yet parsed and published (`v1-e40-t08`).
+
+    A run killed after its publish stage and before its parse left that week published and not
+    parsed, and the next run, finding nothing new to import, parsed nothing: the parse stage parsed
+    only what its own run imported. So the publish stage records a parse owed for each snapshot the
+    bucket confirms, and the parse stage of every later run parses the caselists owed, whether or not
+    it imports anything. An entry is cleared only when its caselist's parsed store is published
+    complete: a parse that completes and whose publish fails is still owed. A parser version the
+    store has no directory of owes a full parse of the caselist, recorded before it starts, so that
+    a run stopped part-way through it leaves it owed rather than a directory that looks held.
+
+    The file is `{"full_parses": [{"caselist": "<slug>", "parser_version": "<version>"}, ...],
+    "snapshots": [{"caselist": "<slug>", "snapshot": "<name>"}, ...]}`, each snapshot a target
+    `caselist publish` would accept. Caselist slugs, snapshot names and a parser version: never a
+    school, a team code or a path, and :meth:`owe` refuses anything else before it writes. There is
+    no file when nothing is owed. It is a file of its own, not a key of the pending-work file, so
+    that a build before `v1-e40-t08`, which rewrites the pending-work file with the one key it knows,
+    never drops an entry, and never reads one either.
+
+    `on_written` is called with the path after every write or removal: in bucket mode, the save of
+    the file to the bucket (`v1-e40-t04`).
+    """
+
+    def __init__(self, path: Path, *, on_written: Callable[[Path], None] | None = None) -> None:
+        self.path = Path(path)
+        self._on_written = on_written
+
+    def read(self) -> ParsesOwed:
+        """What is owed, in the order it was recorded; nothing when there is no file.
+
+        Raises :class:`ParseOwedUnreadable` for a file that is there and is not, in every entry,
+        what :meth:`owe` writes.
+        """
+        try:
+            text = self.path.read_text(encoding="utf-8")
+        except FileNotFoundError:
+            return ParsesOwed()
+        except (OSError, UnicodeDecodeError) as failed:
+            raise ParseOwedUnreadable(type(failed).__name__) from failed
+        try:
+            body: object = json.loads(text)
+        except ValueError:
+            raise ParseOwedUnreadable("it is not JSON") from None
+        fields = cast("dict[str, object]", body) if isinstance(body, dict) else {}
+        snapshots, full_parses = fields.get("snapshots"), fields.get("full_parses")
+        if not isinstance(snapshots, list) or not isinstance(full_parses, list):
+            raise ParseOwedUnreadable('it has no "snapshots" and "full_parses" lists')
+        try:
+            return ParsesOwed(
+                snapshots=tuple(
+                    _owed_snapshot(cast("dict[str, object]", one) if isinstance(one, dict) else {})
+                    for one in cast("list[object]", snapshots)
+                ),
+                full_parses=tuple(
+                    _owed_full_parse(cast("dict[str, object]", one) if isinstance(one, dict) else {})
+                    for one in cast("list[object]", full_parses)
+                ),
+            )
+        except ValueError:
+            raise ParseOwedUnreadable(
+                "an entry names a caselist, a snapshot or a parser version that has no place in the store"
+            ) from None
+
+    def owe(
+        self, *, snapshots: Iterable[PendingSnapshot] = (), full_parses: Iterable[FullParseOwed] = ()
+    ) -> None:
+        """Add what is not owed already, after what is. Raises `ValueError`, writing nothing, for an
+        entry that is not a caselist slug with a snapshot name or a parser version."""
+        snapshots, full_parses = tuple(snapshots), tuple(full_parses)
+        for snapshot in snapshots:
+            _owed_snapshot(snapshot.as_json())
+        for full_parse in full_parses:
+            _owed_full_parse(full_parse.as_json())
+        owed = self.read()
+        more = ParsesOwed(
+            snapshots=tuple(dict.fromkeys((*owed.snapshots, *snapshots))),
+            full_parses=tuple(dict.fromkeys((*owed.full_parses, *full_parses))),
+        )
+        if more != owed:
+            self._write(more)
+
+    def clear_caselist(self, caselist: str) -> None:
+        """Clear every entry of `caselist`: its parsed store was just published complete."""
+        owed = self.read()
+        self._clear(owed, lambda one: one.caselist == caselist)
+
+    def clear_snapshots(self, snapshots: Iterable[PendingSnapshot]) -> None:
+        """Clear the entries of `snapshots`: a removal reached them. Full parses owed stay owed."""
+        reached = frozenset(snapshots)
+        owed = self.read()
+        self._clear(owed, lambda one: isinstance(one, PendingSnapshot) and one in reached)
+
+    def _clear(self, owed: ParsesOwed, cleared: Callable[[PendingSnapshot | FullParseOwed], bool]) -> None:
+        left = ParsesOwed(
+            snapshots=tuple(one for one in owed.snapshots if not cleared(one)),
+            full_parses=tuple(one for one in owed.full_parses if not cleared(one)),
+        )
+        if left != owed:
+            self._write(left)
+
+    def _write(self, owed: ParsesOwed) -> None:
+        if not owed:
+            remove_state_file(self.path)
+        else:
+            write_state_file(self.path, owed.as_json())
+        if self._on_written is not None:
+            self._on_written(self.path)
+
+
+def _owed_snapshot(fields: Mapping[str, object]) -> PendingSnapshot:
+    """One snapshot entry, checked: exactly a caselist and a snapshot `caselist publish` accepts."""
+    caselist, snapshot = fields.get("caselist"), fields.get("snapshot")
+    if (
+        set(fields) != {"caselist", "snapshot"}
+        or not isinstance(caselist, str)
+        or not isinstance(snapshot, str)
+    ):
+        raise ValueError("a parse owed names a caselist and a snapshot, and nothing else")
+    try:
+        validate_publish_target(caselist, snapshot)
+    except InvalidPublishTarget as invalid:
+        raise ValueError(str(invalid)) from None
+    return PendingSnapshot(caselist=caselist, snapshot=snapshot)
+
+
+def _owed_full_parse(fields: Mapping[str, object]) -> FullParseOwed:
+    """One full-parse entry, checked: exactly a caselist and a parser version."""
+    caselist, version = fields.get("caselist"), fields.get("parser_version")
+    if (
+        set(fields) != {"caselist", "parser_version"}
+        or not isinstance(caselist, str)
+        or not isinstance(version, str)
+        or _PARSER_VERSION.fullmatch(version) is None
+    ):
+        raise ValueError("a full parse owed names a caselist and a parser version, and nothing else")
+    try:
+        validate_publish_target(caselist, None)
+    except InvalidPublishTarget as invalid:
+        raise ValueError(str(invalid)) from None
+    return FullParseOwed(caselist=caselist, parser_version=version)
+
+
+def parses_owed_sentence(owed: ParsesOwed) -> str | None:
+    """What `caselist runs` and `caselist status` say of the parses owed; `None` when none is."""
+    sentences: list[str] = []
+    if owed.snapshots:
+        sentences.append(
+            f"Parse owed: {_snapshots_named(owed.snapshots)}. The next caselist pull parses and publishes "
+            f"{'them' if len(owed.snapshots) > 1 else 'it'}, whether or not it imports anything."
+        )
+    versions = tuple(dict.fromkeys(one.parser_version for one in owed.full_parses))
+    for version in versions:
+        named = ", ".join(one.caselist for one in owed.full_parses if one.parser_version == version)
+        sentences.append(
+            f"Full parse owed under parser version {version}: {named}. The next caselist pull parses "
+            "and publishes it before it builds the search index."
+        )
+    return " ".join(sentences) or None
 
 
 class DownloadLedger:
@@ -1684,9 +2447,11 @@ class DownloadLedger:
         path: Path,
         *,
         limit: int = DEFAULT_BULK_DOWNLOADS_PER_DAY,
+        on_written: Callable[[Path], None] | None = None,
     ) -> None:
         self.path = Path(path)
         self.limit = limit
+        self._on_written = on_written
 
     @staticmethod
     def window_start(now: datetime) -> datetime:
@@ -1711,13 +2476,15 @@ class DownloadLedger:
         since = self.window_start(started_at)
         kept = [started for started in self._own_starts() if started > since]
         kept.append(started_at)
-        _write_json(
+        write_state_file(
             self.path,
             {
                 "schema_version": DOWNLOAD_LEDGER_SCHEMA_VERSION,
                 "bulk_download_starts": [started.astimezone(UTC).isoformat() for started in sorted(kept)],
             },
         )
+        if self._on_written is not None:
+            self._on_written(self.path)
 
     def _own_starts(self) -> tuple[datetime, ...]:
         if not self.path.is_file():
@@ -1811,8 +2578,9 @@ class OpenEvDeliveries:
     since the importer refuses a removed file on its own.
     """
 
-    def __init__(self, path: Path) -> None:
+    def __init__(self, path: Path, *, on_written: Callable[[Path], None] | None = None) -> None:
         self.path = Path(path)
+        self._on_written = on_written
 
     def read(self) -> dict[int, OpenEvDelivery]:
         """Every id this machine has imported, and what it delivered."""
@@ -1855,13 +2623,15 @@ class OpenEvDeliveries:
         """Remember what `openev_id` delivered, replacing anything remembered for it before."""
         deliveries = self.read()
         deliveries[openev_id] = delivery
-        _write_json(
+        write_state_file(
             self.path,
             {
                 "schema_version": OPENEV_DELIVERIES_SCHEMA_VERSION,
                 "deliveries": {str(one): deliveries[one].as_json() for one in sorted(deliveries)},
             },
         )
+        if self._on_written is not None:
+            self._on_written(self.path)
 
 
 _SHA256_HEX: Final = re.compile(r"^[0-9a-f]{64}$")
@@ -1921,7 +2691,7 @@ def _read_json_object(path: Path) -> dict[str, object] | None:
     return cast("dict[str, object]", body) if isinstance(body, dict) else None
 
 
-def _write_json(path: Path, body: Mapping[str, object]) -> None:
+def write_state_file(path: Path, body: Mapping[str, object]) -> None:
     """Write `body` to `path` atomically and durably, so no run leaves half a state file.
 
     To a second file in the same directory, renamed over `path` once it is complete: a rename
@@ -1934,7 +2704,8 @@ def _write_json(path: Path, body: Mapping[str, object]) -> None:
     left the page cache, which is a state file cut short by the very write meant to prevent one.
     So the second file is flushed and fsynced before the rename, and the directory is fsynced after
     it. This is every state file this module writes: the pending-work file, the download ledger,
-    the OpenEv delivery record and each run's summary.
+    the OpenEv delivery record and each run's summary; and, since `v1-e34-t23`, the run monitor's
+    list of records still owed to the bucket (:mod:`debate_core.application.sync_runs`).
 
     An `fsync` that fails is a write that failed: the `OSError` is raised as it is, as a failed
     write always was here. Before the rename, `path` still holds what it held.
@@ -1947,6 +2718,36 @@ def _write_json(path: Path, body: Mapping[str, object]) -> None:
         os.fsync(stream.fileno())
     os.replace(temporary, path)
     _fsync_directory(path.parent)
+
+
+def append_state_line(path: Path, line: bytes) -> None:
+    """Append `line` to the log at `path` in one write, and put it on the disk before returning.
+
+    The run log and the run details (`v1-e34-t23`): an append has no second file to rename, so the
+    rule of :func:`write_state_file` is the part of it that applies. The line goes in a single
+    `O_APPEND` write, so two writers cannot interleave; the file is fsynced holding it; and the
+    directory is fsynced after, because the first append is the one that gave the file its name.
+    A failed `fsync` is a failed append, raised as the operating system's own `OSError`.
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    descriptor = os.open(path, os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o600)
+    try:
+        os.write(descriptor, line)
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
+    _fsync_directory(path.parent)
+
+
+def remove_state_file(path: Path) -> None:
+    """Remove the state file at `path`, when there is one, and put its going on the disk.
+
+    What a state file that owes nothing any more becomes (`v1-e34-t23`): a name the disk still held
+    after a power cut would bring back a file that owes what was since published.
+    """
+    path.unlink(missing_ok=True)
+    if path.parent.is_dir():
+        _fsync_directory(path.parent)
 
 
 def _fsync_directory(directory: Path) -> None:
@@ -1996,7 +2797,19 @@ class RunSummary:
     parse: ParseStageCounts | None = None
     """The parse stage's counts, or `None` when it parsed nothing: turned off, or nothing imported."""
 
+    parsed_stores_owed: tuple[ParsedStoreOwed, ...] = ()
+    """Each caselist whose parsed store the parse stage did not publish complete, with the command
+    that finishes it, in the order the stage met them (`v1-e34-t31`). Empty when nothing is owed."""
+
+    search_index: SearchIndexStageCounts | None = None
+    """The index the search index stage left current, or `None` when the stage reached none."""
+
     objects_published: int = 0
+    """Objects the publish stage uploaded from the raw store: sources and manifests (`v1-e34-t28`)."""
+
+    manifests_published: int = 0
+    """Of those, the manifests (`v1-e34-t28`): every one of a republish that uploaded a manifest alone."""
+
     reports_written: int = 0
     snapshots_imported: tuple[str, ...] = ()
     pending_publish: tuple[str, ...] = ()
@@ -2024,6 +2837,22 @@ class RunSummary:
 
     full_archive_imports: tuple[FullArchiveImport, ...] = ()
     """The complete archives this run imported, each with its withdrawal counts (`v1-e34-t04`)."""
+
+    full_archive_recounts: tuple[CompleteArchiveRecount, ...] = ()
+    """Complete archives imported before, counted again after a weekly dated before them (`v1-e30-t18`)."""
+
+    held_by_request: Mapping[str, int] = field(default_factory=lambda: dict[str, int]())
+    """Uploads the imports refused because a removal holds their path, by that removal's request id
+    (`v1-e30-t13`'s :attr:`~debate_core.application.caselist.import_service.ImportReport.held_by_request`,
+    summed over the run's imports, `v1-e34-t23`). Request ids and counts: never a path."""
+
+    stage_times: tuple[StageTime, ...] = ()
+    """When each stage the run carried out started and ended, in the run's order (`v1-e40-t03`). A
+    stage a dry run only planned has none."""
+
+    data_volume: DataVolumeUsage | None = None
+    """The fullest the data directory's volume was after a stage, or `None` when the run read none:
+    `storage.volume_warning_percent` unset, or every reading failed (`v1-e40-t03`)."""
 
     @property
     def archives_seen(self) -> int:
@@ -2127,7 +2956,13 @@ class RunSummary:
             "files_skipped": self.files_skipped,
             "blobs_stored": self.blobs_stored,
             "parse": self.parse.as_json() if self.parse is not None else None,
+            # Additive (`v1-e34-t31`): the version stays.
+            "parsed_stores_owed": [one.as_json() for one in self.parsed_stores_owed],
+            # Additive (`v1-e39-t09`): the version stays.
+            "search_index": self.search_index.as_json() if self.search_index is not None else None,
             "objects_published": self.objects_published,
+            # Additive (`v1-e34-t28`): the version stays.
+            "manifests_published": self.manifests_published,
             "reports_written": self.reports_written,
             "snapshots_imported": list(self.snapshots_imported),
             "pending_publish": list(self.pending_publish),
@@ -2148,6 +2983,14 @@ class RunSummary:
                 if self.full_archive is not None
                 else None
             ),
+            # Additive, like `full_archive` (`v1-e30-t18`): a complete archive imported by an earlier
+            # run and counted again by this one, which a run that planned no refresh has as well.
+            "full_archive_recounted": [one.as_json() for one in self.full_archive_recounts],
+            # Additive (`v1-e34-t23`): uploads a removal's hold refused, by request id.
+            "held_by_request": dict(sorted(self.held_by_request.items())),
+            # Additive (`v1-e40-t03`): when each stage ran, and how full the data volume got.
+            "stage_times": [one.as_json() for one in self.stage_times],
+            "data_volume": self.data_volume.as_json() if self.data_volume is not None else None,
             "selections": [one.as_json() for one in self.archives],
             "openev_selections": [one.as_json() for one in self.openev],
         }
@@ -2185,7 +3028,10 @@ class _RunTally:
     files_skipped: int = 0
     blobs_stored: int = 0
     parse: ParseStageCounts | None = None
+    parsed_stores_owed: tuple[ParsedStoreOwed, ...] = ()
+    search_index: SearchIndexStageCounts | None = None
     objects_published: int = 0
+    manifests_published: int = 0
     reports_written: int = 0
     snapshots_imported: list[str] = field(default_factory=lambda: list[str]())
     publish_targets: list[PendingSnapshot] = field(default_factory=lambda: list[PendingSnapshot]())
@@ -2200,15 +3046,47 @@ class _RunTally:
     inbox_retention: InboxRetention | None = None
     full_archive: FullArchivePlan | None = None
     full_archive_imports: list[FullArchiveImport] = field(default_factory=lambda: list[FullArchiveImport]())
+    full_archive_recounts: dict[tuple[str, str], CompleteArchiveRecount] = field(
+        default_factory=lambda: dict[tuple[str, str], CompleteArchiveRecount]()
+    )
+    """Each caselist's newest complete archive, counted again after an earlier-dated weekly; the last wins."""
+    held_copies_taken_out: int = 0
+    """Archives that held nothing but removed or held files, taken out of the inbox once imported."""
+    held_by_request: dict[str, int] = field(default_factory=lambda: dict[str, int]())
+    """Uploads the imports refused at a held path, by request id (`v1-e34-t23`)."""
+    owed_for_drift: frozenset[PendingSnapshot] = frozenset()
+    """What an earlier run owed again because its manifest drifted, and every run since has still
+    owed (`v1-e34-t26`): the report stage owes none of these a third time. From the caller, which
+    reads the run log (:func:`~debate_core.application.sync_runs.snapshots_owed_again_for_drift`)."""
+    comparisons_owed: tuple[PendingSnapshot, ...] = ()
+    """What the newest run's report stage was cut short before comparing, for this run's report stage
+    to compare (`v1-e34-t28`). From the caller, which reads the run's details
+    (:func:`~debate_core.application.sync_runs.comparisons_owed_by_the_newest_run`)."""
+    stage_times: list[StageTime] = field(default_factory=lambda: list[StageTime]())
+    data_volume: DataVolumeUsage | None = None
+    """The fullest reading so far, when the run reads its volume (`v1-e40-t03`)."""
+
+    def count_held(self, held_by_request: Mapping[str, int]) -> None:
+        for request_id, count in held_by_request.items():
+            self.held_by_request[request_id] = self.held_by_request.get(request_id, 0) + count
 
     def record(self, stage: SyncStage, outcome: StageOutcome, reason: str | None = None) -> None:
         self.stages.append(StageRecord(stage=stage, outcome=outcome, reason=reason))
 
-    def pend(self, stage: SyncStage, reason: str, found_first: Sequence[_StageFailure] = ()) -> None:
+    def pend(
+        self,
+        stage: SyncStage,
+        reason: str,
+        found_first: Sequence[_StageFailure] = (),
+        *,
+        drift: Sequence[SnapshotDrift] = (),
+        not_compared: Sequence[PendingSnapshot] = (),
+    ) -> None:
         """Record `stage` as pending on a login, with what it had already found as earlier findings.
 
         Their codes go to :attr:`StageRecord.earlier_findings` and never to its `error_codes`: a
-        pending stage decides nothing about the exit (`v1-e34-t13`).
+        pending stage decides nothing about the exit (`v1-e34-t13`). The report stage's `drift`
+        goes with them (`v1-e34-t23`), and what it did not reach (`not_compared`, `v1-e34-t28`).
         """
         self.stages.append(
             StageRecord(
@@ -2216,11 +3094,19 @@ class _RunTally:
                 outcome=StageOutcome.PENDING,
                 reason=reason,
                 earlier_findings=tuple(dict.fromkeys(code for one in found_first for code in one.codes)),
+                drift=tuple(drift),
+                not_compared=tuple(not_compared),
             )
         )
 
     def fail(
-        self, stage: SyncStage, reason: str, failures: Sequence[_StageFailure], *, fix: str | None = None
+        self,
+        stage: SyncStage,
+        reason: str,
+        failures: Sequence[_StageFailure],
+        *,
+        fix: str | None = None,
+        drift: Sequence[SnapshotDrift] = (),
     ) -> None:
         """Record `stage` as failed on `failures`: every code once, and each distinct fix.
 
@@ -2234,6 +3120,7 @@ class _RunTally:
                 reason=reason,
                 error_codes=tuple(dict.fromkeys(code for one in failures for code in one.codes)),
                 hint=" ".join(hints) or None,
+                drift=tuple(drift),
             )
         )
 
@@ -2242,11 +3129,15 @@ class _RunTally:
         return next((record.outcome for record in reversed(self.stages) if record.stage is stage), None)
 
     def add_to_reason(self, stage: SyncStage, sentence: str) -> None:
-        """Append `sentence` to the reason the latest record of `stage` gives."""
+        """Append `sentence` to the reason the latest record of `stage` gives.
+
+        A reason that ends a sentence loses its full stop to the semicolon (`v1-e40-t22`): a pending
+        parse stage's reason ends with its fix, and read `…stage").; this machine's copy…` before.
+        """
         for index in range(len(self.stages) - 1, -1, -1):
             record = self.stages[index]
             if record.stage is stage:
-                reason = f"{record.reason}; {sentence}" if record.reason else sentence
+                reason = f"{record.reason.removesuffix('.')}; {sentence}" if record.reason else sentence
                 self.stages[index] = replace(record, reason=reason)
                 return
 
@@ -2319,6 +3210,9 @@ class CaselistSyncService:
         status: The local-against-bucket comparison used by the report stage, or `None`.
         parse: The parse stage (`v1-e34-t17`), built over this same `suppression`, or `None` when
             `caselist.parse_imported_sources` turns it off.
+        search_index: The search index stage (`v1-e39-t09`), or `None` where none is wired in.
+        search_index_turned_off: `caselist.refresh_search_index` is off. The stage is then skipped
+            with that setting's name as the reason, and never left out of the run.
         landscape: Landscape regeneration (`v1-e32-t05`), or `None` — the normal case today.
         openev_event: The event to file OpenEv files under when their own tags do not say.
         openev_year: The OpenEv release year to list, or `None` for the API's current year.
@@ -2330,6 +3224,33 @@ class CaselistSyncService:
             and `caselist.full_archive_interval_days`. Off, `--full-archive` still fetches one.
         read_full_archive: Reads a downloaded complete archive, within the complete archive's own
             size ceilings (`caselist.max_full_archive_bytes`). Defaults to `read_archive`.
+        volume_warning_percent: `storage.volume_warning_percent`: past this share of the data
+            directory's volume used after a stage, the summary warns (`v1-e40-t03`). `None`, the
+            default, reads no volume.
+        read_volume: How the data directory's volume is read; :func:`read_volume` unless a test
+            stubs it.
+        read_memory: How the memory high-water marks are read as each stage ends (`v1-e40-t31`):
+            `v1-e40-t32`'s
+            :func:`~debate_core.application.caselist.memory_high_water.read_memory_high_water`
+            unless a test stubs it.
+        backfile_caselists: `caselist.backfile_caselists`. A run asked for one of them, by
+            `--caselist` or `--full-archive`, is refused with :class:`BackfileIsNotPulled` before
+            anything is listed (`v1-e34-t34`).
+        working_copy_outlives_the_run: The data directory the run works in is still there after
+            it, so `caselist parse --publish-only` can publish a version directory the parse stage
+            rebuilt and did not publish (`v1-e34-t31`). True in local mode. Not in bucket mode: the
+            cloud run's working copy is on the task's ephemeral storage, and the parsed store a
+            later run restores is the bucket's. Off, the default, every parsed store owed is named
+            with `--publish`.
+        bucket_mode: The run is a bucket-mode run, the cloud run's (`v1-e40-t18`): the parsed store
+            is the cloud run's, so a parsed store the stage did not publish is named with the cloud
+            cure (:func:`cloud_parse_cure`), never a command that publishes from the operator's
+            working copy. The composition root's `_in_bucket_mode`. Off, the default, is local mode.
+        full_parse_owed: Whether a caselist's parsed store has no directory of the running parser
+            version though the caselist has sources, and which version that is (`v1-e40-t08`):
+            :meth:`~debate_core.application.caselist_pull_parse.PullParseStage.full_parse_owed`.
+            The parse stage asks it of every caselist the run follows, `openev` included, and parses
+            each it names in full before the index stage. `None`, the default, asks nothing.
     """
 
     def __init__(
@@ -2347,6 +3268,8 @@ class CaselistSyncService:
         publisher: CaselistPublishService | None = None,
         status: CaselistStatusService | None = None,
         parse: CaselistParseStage | None = None,
+        search_index: SearchIndexStage | None = None,
+        search_index_turned_off: bool = False,
         landscape: LandscapeStage | None = None,
         openev_event: Event | None = None,
         openev_year: int | None = None,
@@ -2354,9 +3277,36 @@ class CaselistSyncService:
         clock: Callable[[], datetime] = lambda: datetime.now(UTC),
         full_archive_rotation: FullArchiveRotation | None = None,
         read_full_archive: ArchiveReader | None = None,
+        later_manifests: LaterManifests | None = None,
+        volume_warning_percent: int | None = None,
+        read_volume: Callable[[Path], VolumeReading] = read_volume,
+        read_memory: Callable[[], MemoryHighWater] = read_memory_high_water,
+        state_written: Callable[[Path], None] | None = None,
+        after_publish: Callable[[], Awaitable[object]] | None = None,
+        backfile_caselists: Sequence[str] = (),
+        working_copy_outlives_the_run: bool = False,
+        bucket_mode: bool = False,
+        full_parse_owed: Callable[[str], Awaitable[str | None]] | None = None,
     ) -> None:
         self._source = source
+        self._full_parse_owed = full_parse_owed
+        self._working_copy_outlives_the_run = working_copy_outlives_the_run
+        self._bucket_mode = bucket_mode
+        # A backfile (`v1-e34-t34`) is never pulled, by the weekly run or by hand: refused in `plan`.
+        self._backfiles = tuple(backfile_caselists)
+        # Bucket mode (`v1-e40-t04`): each state file is saved as it is written, a download's start
+        # before the download, and the run-state bundle after a publish that confirmed everything.
+        self._state_written = state_written
+        self._after_publish = after_publish
+        self._volume_warning_percent = volume_warning_percent
+        self._read_volume = read_volume
+        self._read_memory = read_memory
         self._archives = archive_importer
+        # The importer's own repository, local store and suppression list unless told otherwise, so
+        # that no pull imports a weekly without measuring the later manifests again (`v1-e30-t18`).
+        self._later_manifests = later_manifests or LaterManifests(
+            caselists=archive_importer.caselists, local=local, suppression=suppression
+        )
         self._openev_importer = openev_importer
         self._local = local
         self._read_archive = read_archive
@@ -2368,6 +3318,8 @@ class CaselistSyncService:
         self._publisher = publisher
         self._status = status
         self._parse = parse
+        self._search_index = search_index
+        self._no_search_index = _SEARCH_INDEX_TURNED_OFF if search_index_turned_off else _NO_SEARCH_INDEX
         self._landscape = landscape
         self._openev_event = openev_event
         self._openev_year = openev_year
@@ -2375,10 +3327,14 @@ class CaselistSyncService:
         self._ledger = DownloadLedger(
             self._state_dir / DOWNLOAD_LEDGER_FILENAME,
             limit=min(bulk_downloads_per_day, DEFAULT_BULK_DOWNLOADS_PER_DAY),
+            on_written=state_written,
         )
-        self._pending = PendingWork(self._state_dir / PENDING_WORK_FILENAME)
+        self._pending = PendingWork(self._state_dir / PENDING_WORK_FILENAME, on_written=state_written)
+        self._parse_owed = ParseOwed(self._state_dir / PARSE_OWED_FILENAME, on_written=state_written)
         self._suppression = suppression
-        self._deliveries = OpenEvDeliveries(self._state_dir / OPENEV_DELIVERIES_FILENAME)
+        self._deliveries = OpenEvDeliveries(
+            self._state_dir / OPENEV_DELIVERIES_FILENAME, on_written=state_written
+        )
         self._local_directories = _named_directories(
             (self._inbox, "the inbox"), (self._state_dir, "the data directory")
         )
@@ -2392,6 +3348,11 @@ class CaselistSyncService:
         """The publishes this machine still owes, so a command can report them without a run."""
         return self._pending
 
+    @property
+    def parse_owed(self) -> ParseOwed:
+        """The parses this machine's runs still owe (`v1-e40-t08`)."""
+        return self._parse_owed
+
     async def plan(self, caselists: Sequence[str], *, full_archive: str | None = None) -> SyncPlan:
         """Decide what a run would fetch, using listing calls only and writing nothing.
 
@@ -2403,6 +3364,7 @@ class CaselistSyncService:
         caselist's newest complete archive takes the run's one slot, still after the weeklies, and
         the caselist is pulled too when it is not among `caselists`.
         """
+        refuse_backfiles([*caselists, full_archive], self._backfiles)
         caselists = _with_requested(caselists, full_archive)
         if not caselists:
             raise NoCaselistsConfigured
@@ -2443,9 +3405,23 @@ class CaselistSyncService:
         )
 
     async def run(
-        self, caselists: Sequence[str], *, dry_run: bool = False, full_archive: str | None = None
+        self,
+        caselists: Sequence[str],
+        *,
+        dry_run: bool = False,
+        full_archive: str | None = None,
+        owed_for_drift: Collection[PendingSnapshot] = (),
+        comparisons_owed: Sequence[PendingSnapshot] = (),
     ) -> RunSummary:
         """One whole pull. Holds the run lock for its duration.
+
+        `owed_for_drift` is what earlier runs owed again because the bucket's manifest drifted from
+        this machine's, and every run since has still owed; see "What the pending-work file holds"
+        in the module docstring (`v1-e34-t26`). :func:`run_pull` reads it from the run log.
+
+        `comparisons_owed` is what the newest run published and its report stage did not compare,
+        as for :meth:`publish_pending`: the report stage compares them after what this run
+        publishes (`v1-e34-t28`, the PM's condition of 2026-10-22). A dry run is handed none.
 
         Raises :class:`SyncRunInProgress` at once if another run holds the lock, and
         :class:`NoCaselistsConfigured` if asked to pull nothing. Everything else is an outcome in
@@ -2465,47 +3441,73 @@ class CaselistSyncService:
             raise NoCaselistsConfigured
         started = self._clock()
         with RunLock(self._state_dir / LOCK_FILENAME):
-            tally = _RunTally()
+            tally = _RunTally(
+                owed_for_drift=frozenset(owed_for_drift), comparisons_owed=tuple(comparisons_owed)
+            )
             fallbacks = self._suppression_fallbacks()
-            plan = await self._selection_stage(caselists, tally, full_archive=full_archive)
+            plan = await self._timed(
+                SyncStage.SELECT,
+                tally,
+                lambda: self._selection_stage(caselists, tally, full_archive=full_archive),
+            )
             self._note_local_copy_only(tally, SyncStage.SELECT, since=fallbacks)
+            if tally.comparisons_owed:
+                tally.add_to_reason(SyncStage.SELECT, _check_owed(tally.comparisons_owed))
             if full_archive is not None and not dry_run:
                 _refuse_unless_fetchable(plan, full_archive)
             if dry_run:
                 self._plan_remaining_stages(plan, tally)
             else:
                 await self._execute(plan, tally)
-            await self._retention_stage(tally, plan=plan, dry_run=dry_run)
+            await self._timed(
+                SyncStage.RETENTION, tally, lambda: self._retention_stage(tally, plan=plan, dry_run=dry_run)
+            )
             summary = self._summarise(started, caselists, tally, dry_run=dry_run)
         if not dry_run:
             self._write_summary(summary)
         _log_summary(summary)
         return summary
 
-    async def publish_pending(self) -> RunSummary:
-        """Complete the publishes an earlier run deferred, and nothing else.
+    async def publish_pending(
+        self,
+        *,
+        owed_for_drift: Collection[PendingSnapshot] = (),
+        comparisons_owed: Sequence[PendingSnapshot] = (),
+    ) -> RunSummary:
+        """Complete the publishes an earlier run deferred, and the check it was cut short on.
 
         What `caselist pull --publish-pending` runs after `aws sso login`. It takes the same lock,
         so it cannot overlap a scheduled run, and it drains the pending-work file: each snapshot
         the bucket confirms complete is removed from it, and everything else stays owed, whatever
         ended the stage (:func:`snapshots_still_owed`). A file that cannot be read is left as it
-        is, and the publish stage fails on it (:class:`PendingWorkUnreadable`).
+        is, and the publish stage fails on it (:class:`PendingWorkUnreadable`). `owed_for_drift` is
+        :meth:`run`'s.
+
+        `comparisons_owed` is what the newest run published and its report stage did not compare,
+        because the session expired first (`v1-e34-t28`, the PM's ruling of 2026-10-22). The report
+        stage compares exactly those, after what this run publishes, as it compares anything:
+        :func:`run_pull` reads them from that run's details, for :meth:`run` as for this. Nothing
+        else is compared again.
         """
         started = self._clock()
         with RunLock(self._state_dir / LOCK_FILENAME):
-            tally = _RunTally()
+            tally = _RunTally(
+                owed_for_drift=frozenset(owed_for_drift), comparisons_owed=tuple(comparisons_owed)
+            )
             try:
                 selected = f"{len(self._pending.read())} snapshot(s) owed"
             except PendingWorkUnreadable:
                 # The publish stage reads it again and is the one that fails on it, with the fix.
                 selected = "what is owed could not be read"
+            if tally.comparisons_owed:
+                selected += f"; {_check_owed(tally.comparisons_owed)}"
             tally.record(SyncStage.SELECT, StageOutcome.COMPLETED, selected)
             for stage in (SyncStage.DOWNLOAD, SyncStage.IMPORT):
                 tally.record(stage, StageOutcome.SKIPPED, "publish-pending does no fetching or importing")
-            await self._publish_stage(tally)
-            for stage in (SyncStage.PARSE, SyncStage.LANDSCAPE):
+            await self._timed(SyncStage.PUBLISH, tally, lambda: self._publish_stage(tally))
+            for stage in (SyncStage.PARSE, SyncStage.SEARCH_INDEX, SyncStage.LANDSCAPE):
                 tally.record(stage, StageOutcome.SKIPPED, "publish-pending runs no derived stages")
-            await self._report_stage(tally)
+            await self._timed(SyncStage.REPORT, tally, lambda: self._report_stage(tally))
             tally.record(
                 SyncStage.RETENTION,
                 StageOutcome.SKIPPED,
@@ -2607,12 +3609,28 @@ class CaselistSyncService:
 
         **The weekly series only.** A complete archive (`manifests/<slug>/full/<date>.jsonl`) is
         dated with the newest weekly, so counting it would mark every older weekly not yet imported
-        `ALREADY_IMPORTED` and strand the back-catalogue (`v1-e34-t04` ac0). `read_local_snapshots`
-        leaves it out unless asked; this does not ask.
+        `ALREADY_IMPORTED` and strand the back-catalogue (`v1-e34-t04` ac0). Its key is
+        `manifests/<slug>/full/<date>.jsonl`, which `snapshot_of_manifest_key` names only when asked;
+        this does not ask.
+
+        **By the manifest's name, not its rows** (`v1-e34-t23`). The date is in the key. This used to
+        read every row of every manifest, through `read_local_snapshots`, so a manifest with a line
+        nobody can read stopped the run here, before any stage, although nothing here needed the
+        line. The stage that does need it fails on it: the publish of that week, or the import of a
+        week after it. Each manifest is still opened, through the reader that says a file this user
+        may not open is :class:`~debate_core.application.errors.LocalStoreAccessDenied`: a manifest
+        nobody can open is one whose week cannot be known to be held, and that still stops the run
+        before anything is fetched (`v1-e34-t19`).
         """
-        snapshots = await read_local_snapshots(self._local, caselist)
-        dates = [_parsed_date(one.snapshot) for one in snapshots]
-        found = [one for one in dates if one is not None]
+        found: list[date] = []
+        for info in await self._local.objects.list_objects(manifest_prefix(caselist)):
+            named = snapshot_of_manifest_key(caselist, info.key, full_archives=False)
+            held = _parsed_date(named) if named is not None else None
+            if held is None:
+                continue
+            async with local_file(self._local.objects, self._local.object_path_for, info.key) as path:
+                read_manifest_file(path)
+            found.append(held)
         return max(found) if found else None
 
     async def _newest_full_archive(self, caselist: str) -> date | None:
@@ -2925,7 +3943,8 @@ class CaselistSyncService:
         tally.record(
             SyncStage.DOWNLOAD,
             StageOutcome.PLANNED,
-            f"would download {fetch} file(s) into {self._inbox}",
+            # The inbox by its role, never its path, which is under the home directory (`v1-e34-t16`).
+            f"would download {fetch} file(s) into the inbox",
         )
         tally.record(
             SyncStage.IMPORT,
@@ -2951,6 +3970,14 @@ class CaselistSyncService:
             else _PARSE_TURNED_OFF,
         )
         tally.record(
+            SyncStage.SEARCH_INDEX,
+            StageOutcome.PLANNED if self._search_index is not None else StageOutcome.SKIPPED,
+            "would rebuild the search index if the parsed store changed since the newest one, and "
+            "publish it if current.json is behind it"
+            if self._search_index is not None
+            else self._no_search_index,
+        )
+        tally.record(
             SyncStage.LANDSCAPE,
             StageOutcome.PLANNED if self._landscape is not None else StageOutcome.SKIPPED,
             "would regenerate the landscape reports" if self._landscape is not None else _NO_LANDSCAPE,
@@ -2968,14 +3995,56 @@ class CaselistSyncService:
     # --------------------------------------------------------------------------------------
 
     async def _execute(self, plan: SyncPlan, tally: _RunTally) -> None:
-        await self._download_stage(plan, tally)
+        await self._timed(SyncStage.DOWNLOAD, tally, lambda: self._download_stage(plan, tally))
         fallbacks = self._suppression_fallbacks()
-        await self._import_stage(tally)
+        await self._timed(SyncStage.IMPORT, tally, lambda: self._import_stage(tally))
         self._note_local_copy_only(tally, SyncStage.IMPORT, since=fallbacks)
-        await self._publish_stage(tally)
-        await self._parse_stage(tally)
-        await self._landscape_stage(plan, tally)
-        await self._report_stage(tally)
+        await self._timed(SyncStage.PUBLISH, tally, lambda: self._publish_stage(tally))
+        if self._after_publish is not None:
+            await self._after_publish()
+        await self._timed(SyncStage.PARSE, tally, lambda: self._parse_stage(plan, tally))
+        await self._timed(SyncStage.SEARCH_INDEX, tally, lambda: self._search_index_stage(plan, tally))
+        await self._timed(SyncStage.LANDSCAPE, tally, lambda: self._landscape_stage(plan, tally))
+        await self._timed(SyncStage.REPORT, tally, lambda: self._report_stage(tally))
+
+    async def _timed[T](self, stage: SyncStage, tally: _RunTally, work: Callable[[], Awaitable[T]]) -> T:
+        """Carry out one stage, recording when it started and ended and the memory high-water marks
+        as it ended (`v1-e40-t31`), then read the volume (`v1-e40-t03`).
+
+        By the run's clock, which gives the summary its own start and finish, so a stage's times
+        always lie within the run's.
+        """
+        started = self._clock()
+        try:
+            return await work()
+        finally:
+            tally.stage_times.append(
+                StageTime(
+                    stage=stage, started_at=started, finished_at=self._clock(), memory=self._read_memory()
+                )
+            )
+            self._read_volume_after(stage, tally)
+
+    def _read_volume_after(self, stage: SyncStage, tally: _RunTally) -> None:
+        """Keep the fullest reading of the data directory's volume, when the run reads it at all."""
+        if self._volume_warning_percent is None:
+            return
+        try:
+            reading = self._read_volume(self._state_dir)
+        except OSError as error:
+            # The error's class and no message: a message would quote the data directory's path.
+            logger.warning(
+                "Could not read the data volume after the %s stage (%s)", stage, type(error).__name__
+            )
+            return
+        peak = tally.data_volume
+        if peak is None or reading.used_bytes > peak.peak_used_bytes:
+            tally.data_volume = DataVolumeUsage(
+                total_bytes=reading.total_bytes,
+                peak_used_bytes=reading.used_bytes,
+                peak_after=stage,
+                warning_percent=self._volume_warning_percent,
+            )
 
     async def _download_stage(self, plan: SyncPlan, tally: _RunTally) -> None:
         """Fetch the selected archives oldest-first, then the OpenEv files.
@@ -3010,6 +4079,10 @@ class CaselistSyncService:
             if listing is None:  # pragma: no cover - a selection to download always carries one
                 continue
             started = self._clock()
+            if self._state_written is not None:
+                # Bucket mode: the start is in the bucket's ledger before the download starts, so no
+                # task that dies mid-download can lose it from the count of five a day (ADR-0020 (3)).
+                self._ledger.record(started)
             try:
                 downloaded = await self._source.download_archive(listing, self._inbox)
             except ProviderRateLimited as limited:
@@ -3025,7 +4098,8 @@ class CaselistSyncService:
             tally.downloaded_archives.append((selection, downloaded))
             # Recorded even when the bytes were `already_present`: the client streamed the whole
             # archive before it could tell, and the server counted the download.
-            self._ledger.record(started)
+            if self._state_written is None:
+                self._ledger.record(started)
 
         if deferred_from is not None:
             tally.archives = _mark_deferred(tally.archives, wanted[deferred_from:])
@@ -3115,10 +4189,28 @@ class CaselistSyncService:
                 )
             except (DomainError, OSError) as refused:
                 failures.append(self._failure(refused, about=full_selection.name))
-        withdrawals = "".join(f"; {one.sentence()}" for one in tally.full_archive_imports)
+        withdrawals = "".join(
+            f"; {one.sentence()}"
+            for one in (*tally.full_archive_imports, *tally.full_archive_recounts.values())
+        )
         waiting = (
             f"; {held_back} archive(s) in the inbox held back for a later run, behind an older week"
             if held_back
+            else ""
+        )
+        held = (
+            f"; {sum(tally.held_by_request.values())} upload(s) refused at a path a removal holds ("
+            + ", ".join(
+                f"{request_id}: {count}" for request_id, count in sorted(tally.held_by_request.items())
+            )
+            + ")"
+            if tally.held_by_request
+            else ""
+        )
+        taken_out = held + (
+            f"; {tally.held_copies_taken_out} archive(s) taken out of the inbox, which held only files "
+            "removed or held at a removed path"
+            if tally.held_copies_taken_out
             else ""
         )
         if failures:
@@ -3126,6 +4218,7 @@ class CaselistSyncService:
                 SyncStage.IMPORT,
                 f"{len(tally.snapshots_imported)} imported{withdrawals}; {len(failures)} refused: "
                 + "; ".join(one.sentence for one in failures)
+                + taken_out
                 + waiting,
                 failures,
             )
@@ -3135,6 +4228,7 @@ class CaselistSyncService:
             StageOutcome.COMPLETED,
             f"{len(tally.snapshots_imported)} snapshot(s) imported, {tally.blobs_stored} new file(s) stored"
             + withdrawals
+            + taken_out
             + waiting,
         )
 
@@ -3214,6 +4308,7 @@ class CaselistSyncService:
             report, self._manifest_path(full_archive_manifest_key(selection.caselist, selection.archive_date))
         )
         self._count_archive(report, tally)
+        tally.count_held(report.held_by_request)
         snapshot = full_archive_snapshot(selection.archive_date)
         tally.snapshots_imported.append(f"{report.caselist} {snapshot}")
         tally.publish_targets.append(PendingSnapshot(caselist=report.caselist, snapshot=snapshot))
@@ -3266,11 +4361,23 @@ class CaselistSyncService:
             acquisition=Acquisition.API,
         )
         write_manifest(report, self._manifest_path(manifest_key(selection.caselist, selection.archive_date)))
+        # Before the snapshot is counted as imported: a failure here is this archive's, so it is not
+        # published, its inbox copy is kept, and importing it again measures them all again.
+        remeasured = await self._later_manifests.after_weekly_import(report)
+        self._take_out_if_removed_or_held_alone(report, downloaded, tally)
         self._count_archive(report, tally)
+        tally.count_held(report.held_by_request)
         tally.snapshots_imported.append(f"{report.caselist} {report.snapshot.isoformat()}")
         tally.publish_targets.append(
             PendingSnapshot(caselist=report.caselist, snapshot=report.snapshot.isoformat())
         )
+        for snapshot in remeasured.rewritten:
+            rewritten = PendingSnapshot(caselist=report.caselist, snapshot=snapshot)
+            if rewritten not in tally.publish_targets:
+                tally.publish_targets.append(rewritten)
+        if remeasured.complete_archive is not None:
+            recount = remeasured.complete_archive
+            tally.full_archive_recounts[(recount.caselist, recount.snapshot)] = recount
 
     async def _import_openev(
         self, selection: OpenEvSelection, downloaded: DownloadedFile, tally: _RunTally
@@ -3287,8 +4394,13 @@ class CaselistSyncService:
             imported_on=self._clock().date(),
             archive_sha256=downloaded.sha256,
             recorded_manifest=read_manifest_lines(path),
-            # Every row of it carries which upstream file it was (v1-e30-t14): digests and an id.
-            upstream=OpenEvUpstream(openev_id=selection.openev_id, path_sha256=path_sha256),
+            # Every row of it carries which upstream file it was (v1-e30-t14): digests and an id, and
+            # OpenEv's own camp word from the listing when it is one address word (v1-e30-t31).
+            upstream=OpenEvUpstream(
+                openev_id=selection.openev_id,
+                path_sha256=path_sha256,
+                camp=selection.file.camp if selection.file is not None else None,
+            ),
         )
         write_manifest_lines(report.manifest_lines, path)
         # Which bytes this id delivered, so that a later run can ask the suppression list about
@@ -3320,15 +4432,24 @@ class CaselistSyncService:
         single document becomes one member named as it sits in the inbox, which is the name the
         camp-metadata parser already knows to take the `openev-<id>-` prefix off
         (`debate_core.application.caselist.camp_metadata`).
+
+        A download the operating system will not let be read, when it is opened or part-way
+        through, is :class:`~debate_core.application.errors.UnreadableArchive`, as a weekly is
+        (:func:`_entries_of`). Until `v1-e34-t23` the `OSError` reached the import stage as itself
+        and was recorded as an error nobody modelled.
         """
         if downloaded.path.suffix.lower() == ".zip":
-            return self._read_archive(downloaded.path)
+            return _entries_of(self._read_archive, downloaded.path)
+        try:
+            data = downloaded.path.read_bytes()
+        except OSError as unreadable:
+            raise _unreadable_in_the_inbox(downloaded.path, unreadable) from unreadable
         return [
             ArchiveMember(
                 path=downloaded.path.name,
                 sha256=downloaded.sha256,
                 byte_size=downloaded.byte_size,
-                data=downloaded.path.read_bytes(),
+                data=data,
             )
         ]
 
@@ -3393,7 +4514,7 @@ class CaselistSyncService:
         # Owed before it is attempted: a run killed part-way never reaches the line that follows
         # the loop, and what it imported would otherwise be written down nowhere.
         record_what_is_owed()
-        published = 0
+        sources = manifests = 0
         incomplete: list[_StageFailure] = []
         stopped: _StageFailure | None = None
         expired: StoreCredentialsExpired | None = None
@@ -3423,14 +4544,21 @@ class CaselistSyncService:
                 # stays owed, and the ones after it are still published.
                 incomplete.append(self._failure(failed, about=named))
                 continue
-            published += report.count(SourceResult.UPLOADED)
+            # A manifest is an object it uploads too (`v1-e34-t28`): a republish of a manifest alone
+            # used to say `0 object(s) uploaded`.
+            sources += report.count(SourceResult.UPLOADED)
+            manifests += sum(one.manifest is ManifestOutcome.UPLOADED for one in report.snapshots)
             if report.succeeded:
                 tally.published.append(target)
                 continue
             incomplete.append(
                 _StageFailure(f"{named}: " + ", ".join(report.failed_sha256), report.failure_codes)
             )
-        tally.objects_published = published
+        published = sources + manifests
+        tally.objects_published, tally.manifests_published = published, manifests
+        # A parse owed for each snapshot confirmed, before the pending-work file lets it go
+        # (`v1-e40-t08`): a run killed between the two writes owes the parse, never neither.
+        self._owe_parses(tally.published)
         owed = record_what_is_owed()
 
         reason = f"{published} object(s) published"
@@ -3470,30 +4598,99 @@ class CaselistSyncService:
         tally.record(
             SyncStage.PUBLISH,
             StageOutcome.COMPLETED,
-            f"{published} object(s) uploaded across {len(targets)} snapshot(s)",
+            f"{published} object(s) uploaded across {len(targets)} snapshot(s): {sources} source(s) and "
+            f"{manifests} manifest(s)",
         )
 
-    async def _parse_stage(self, tally: _RunTally) -> None:
-        """Parse what this run imported, and publish the parsed store where the run publishes.
+    def _owe_parses(self, confirmed: Sequence[PendingSnapshot]) -> None:
+        """A parse owed for each snapshot the bucket confirmed, where a parse stage parses (`v1-e40-t08`).
+
+        A complete archive owes none, as it names no caselist to parse (:func:`caselists_to_parse`).
+        A parse-owed file that cannot be read is left as it is: the parse stage reads it again and
+        is the one that fails on it.
+        """
+        if self._parse is None:
+            return
+        owed = [one for one in confirmed if full_archive_date(one.snapshot) is None]
+        if not owed:
+            return
+        with contextlib.suppress(ParseOwedUnreadable):
+            self._parse_owed.owe(snapshots=owed)
+
+    async def _full_parses_owed(
+        self, plan: SyncPlan, failures: list[_StageFailure], *, parsed_anyway: Collection[str]
+    ) -> tuple[FullParseOwed, ...]:
+        """Each caselist the run follows, `openev` included, whose parsed store has no directory of
+        the running parser version (`v1-e40-t08`). A check that raised is that caselist's failure.
+
+        `parsed_anyway` is not asked: what the run imported into or owes already is parsed, in full if
+        its directory holds nothing, and its entries keep it owed until its store is published.
+        """
+        if self._full_parse_owed is None:
+            return ()
+        found: list[FullParseOwed] = []
+        for store in search_index_stores(plan.caselists):
+            if store in parsed_anyway:
+                continue
+            try:
+                version = await self._full_parse_owed(store)
+            except Exception as failed:
+                failures.append(self._failure(failed, about=store))
+                continue
+            if version is not None:
+                found.append(FullParseOwed(caselist=store, parser_version=version))
+        return tuple(found)
+
+    async def _parse_stage(self, plan: SyncPlan, tally: _RunTally) -> None:
+        """Parse what this run imported and what earlier runs owe, and publish the parsed store.
 
         See "The parse stage" in this module's docstring. Nothing here can undo or withhold what the
         stages before it did (`v1-e34-t17`): they are finished and written down, this stage writes
         nothing to the pending-work file, and whatever the pipeline raises is caught, a bug
         included, and recorded as a failure of this stage. One caselist's failure does not stop the
         others from being parsed.
+
+        **What is owed comes first** (`v1-e40-t08`): the caselists the parse-owed file names that
+        this run follows, in the order owed, then each the run finds with no directory of the
+        running parser version, then those it imported into. An entry is cleared when its
+        caselist's parsed store is published complete, and at no other point of the stage.
         """
         if self._parse is None:
             tally.record(SyncStage.PARSE, StageOutcome.SKIPPED, _PARSE_TURNED_OFF)
             return
-        caselists = caselists_to_parse(tally.publish_targets)
-        if not caselists:
-            tally.record(
-                SyncStage.PARSE,
-                StageOutcome.SKIPPED,
-                _ONLY_COMPLETE_ARCHIVES if tally.publish_targets else "nothing new was imported",
-            )
-            return
         publishing = self._publisher is not None
+        failures: list[_StageFailure] = []
+        unreadable = False
+        try:
+            parses_owed = self._parse_owed.read()
+        except ParseOwedUnreadable as cannot_read:
+            parses_owed, unreadable = ParsesOwed(), True
+            failures.append(self._failure(cannot_read))
+        followed = search_index_stores(plan.caselists)
+        imported = caselists_to_parse(tally.publish_targets)
+        bumped = await self._full_parses_owed(
+            plan, failures, parsed_anyway={*imported, *parses_owed.caselists}
+        )
+        if bumped and publishing and not unreadable:
+            # Before the parse starts, so that a run stopped part-way leaves the rest owed.
+            try:
+                self._parse_owed.owe(full_parses=bumped)
+            except (DomainError, OSError) as unrecorded:
+                failures.append(self._failure(unrecorded))
+        owed_followed = tuple(one for one in parses_owed.caselists if one in followed)
+        caselists = tuple(dict.fromkeys((*owed_followed, *(one.caselist for one in bumped), *imported)))
+        not_followed = tuple(one for one in parses_owed.caselists if one not in followed)
+        if not caselists:
+            reason = _ONLY_COMPLETE_ARCHIVES if tally.publish_targets else "nothing new was imported"
+            if not_followed:
+                reason += f"; {_left_owed(not_followed)}"
+            if failures:
+                tally.fail(
+                    SyncStage.PARSE, f"{reason}; " + "; ".join(one.sentence for one in failures), failures
+                )
+            else:
+                tally.record(SyncStage.PARSE, StageOutcome.SKIPPED, reason)
+            return
         # Why no login is to be had, once that is known: nothing more is sent to the bucket then.
         no_session = (
             "the publish stage found no AWS session"
@@ -3501,19 +4698,30 @@ class CaselistSyncService:
             else None
         )
         stopped: _StageFailure | None = None
-        failures: list[_StageFailure] = []
         not_published: list[str] = []
+        # What finishes each of them, decided from what the stage saw of that caselist (`v1-e34-t31`):
+        # `--publish-only` only for a rebuild that read every copy of the list, in a working copy
+        # that is still there after the run. Everything else rebuilds first.
+        owed: list[ParsedStoreOwed] = []
         parsed_caselists: list[ParsedCaselist] = []
         uploaded = 0
         before_the_stage = self._suppression_fallbacks()
+
+        def unpublished(caselist: str, *, rebuilt_from_every_copy: bool) -> None:
+            not_published.append(caselist)
+            publish_only = rebuilt_from_every_copy and self._working_copy_outlives_the_run
+            owed.append(ParsedStoreOwed(caselist=caselist, publish_only=publish_only))
+
         for caselist in caselists:
             fallbacks = self._suppression_fallbacks()
             try:
                 parsed = await self._parse.parse_new_sources(caselist)
             except Exception as failed:
                 failures.append(self._failure(failed, about=caselist))
-                not_published += [caselist] if publishing else []
+                if publishing:
+                    unpublished(caselist, rebuilt_from_every_copy=False)
                 continue
+            every_copy = self._suppression_fallbacks() == fallbacks
             parsed_caselists.append(parsed)
             if parsed.failure_rate_exceeded:
                 failures.append(
@@ -3521,32 +4729,32 @@ class CaselistSyncService:
                         f"{caselist}: {parsed.failed} of the {parsed.tried} source(s) tried failed, "
                         "over the failure-rate threshold",
                         (PARSE_FAILURE_RATE_EXCEEDED,),
-                        _FAILURE_RATE_FIX,
+                        _CLOUD_FAILURE_RATE_FIX if self._bucket_mode else _FAILURE_RATE_FIX,
                     )
                 )
             if not publishing:
                 continue
-            if self._suppression_fallbacks() != fallbacks:
-                # These aggregates were rebuilt from this machine's copy of the list alone. They
-                # stay on this machine until a run that read every copy rebuilds them.
+            if not every_copy:
+                # These aggregates were rebuilt from the run's own copy of the list alone. They
+                # stay in its working copy until a run that read every copy rebuilds them.
                 no_session = no_session or "the suppression list's bucket copy needed an AWS login"
             if no_session is not None or stopped is not None:
-                not_published.append(caselist)
+                unpublished(caselist, rebuilt_from_every_copy=every_copy)
                 continue
             try:
                 published = await self._parse.publish(caselist, parsed.version)
             except StoreCredentialsExpired as expired:
                 no_session = str(expired)
-                not_published.append(caselist)
+                unpublished(caselist, rebuilt_from_every_copy=every_copy)
                 continue
-            except (StoreAccessDenied, StoreUnavailable) as refused:
+            except (StoreAccessDenied, StoreProfileNotConfigured, StoreUnavailable) as refused:
                 # True of every caselist still to publish, so none of them is tried.
                 stopped = self._failure(refused)
-                not_published.append(caselist)
+                unpublished(caselist, rebuilt_from_every_copy=every_copy)
                 continue
             except Exception as failed:
                 failures.append(self._failure(failed, about=caselist))
-                not_published.append(caselist)
+                unpublished(caselist, rebuilt_from_every_copy=every_copy)
                 continue
             uploaded += published.uploaded
             if published.failure_codes:
@@ -3557,7 +4765,13 @@ class CaselistSyncService:
                         tuple(dict.fromkeys(published.failure_codes)),
                     )
                 )
-                not_published.append(caselist)
+                unpublished(caselist, rebuilt_from_every_copy=every_copy)
+            elif not unreadable:
+                # Published complete: the one point at which what it owed is cleared (`v1-e40-t08`).
+                try:
+                    self._parse_owed.clear_caselist(caselist)
+                except (DomainError, OSError) as uncleared:
+                    failures.append(self._failure(uncleared, about=caselist))
 
         tally.parse = ParseStageCounts(
             caselists=len(parsed_caselists),
@@ -3570,7 +4784,9 @@ class CaselistSyncService:
             uploaded=uploaded,
             not_published=len(not_published),
         )
+        tally.parsed_stores_owed = tuple(owed)
         reason = _parse_stage_sentence(tally.parse, publishing=publishing)
+        reason += _what_was_owed(owed_followed, bumped, imported=imported, not_followed=not_followed)
         named = ", ".join(not_published)
         if stopped is not None:
             failures.append(stopped)
@@ -3583,18 +4799,58 @@ class CaselistSyncService:
                 SyncStage.PARSE,
                 reason,
                 failures,
-                fix=_UNPUBLISHED_PARSED_STORE_FIX if not_published else None,
+                fix=_unpublished_parsed_store_fix(owed, bucket_mode=self._bucket_mode) if owed else None,
             )
         elif not_published:
             tally.record(
                 SyncStage.PARSE,
                 StageOutcome.PENDING,
                 f"{reason}; the parsed store of {named} is not published, for want of an AWS login "
-                f"({no_session}): {_UNPUBLISHED_PARSED_STORE_FIX}",
+                f"({no_session}): {_unpublished_parsed_store_fix(owed, bucket_mode=self._bucket_mode)}",
             )
         else:
             tally.record(SyncStage.PARSE, StageOutcome.COMPLETED, reason)
         self._note_local_copy_only(tally, SyncStage.PARSE, since=before_the_stage)
+
+    async def _search_index_stage(self, plan: SyncPlan, tally: _RunTally) -> None:
+        """Keep the search pilot's index current: rebuild it when the store changed, publish it when behind.
+
+        See "The search index stage" in this module's docstring. Every decision is the stage's
+        (:class:`~debate_core.application.search_index_refresh.SearchIndexRefresh`); this records
+        it. Nothing here can touch what an earlier stage did, and a bug in the stage is caught and
+        recorded as its failure.
+        """
+        if self._search_index is None:
+            tally.record(SyncStage.SEARCH_INDEX, StageOutcome.SKIPPED, self._no_search_index)
+            return
+        if tally.outcome_of(SyncStage.PARSE) is StageOutcome.FAILED:
+            tally.record(SyncStage.SEARCH_INDEX, StageOutcome.SKIPPED, _PARSE_FAILED_SO_NO_INDEX)
+            return
+        no_session = next(
+            (
+                f"the {stage} stage found no AWS session"
+                for stage in (SyncStage.PUBLISH, SyncStage.PARSE)
+                if tally.outcome_of(stage) is StageOutcome.PENDING
+            ),
+            None,
+        )
+        stores = search_index_stores(plan.caselists)
+        try:
+            report = await self._search_index.refresh(stores, no_session=no_session)
+        except Exception as failed:
+            failure = self._failure(failed)
+            tally.fail(SyncStage.SEARCH_INDEX, failure.sentence, [failure])
+            return
+        tally.search_index = report.counts
+        if report.local_copy_only is not None and tally.suppression_list_local_copy_only is None:
+            tally.suppression_list_local_copy_only = report.local_copy_only
+        if report.failure is not None:
+            failure = self._failure(report.failure)
+            tally.fail(
+                SyncStage.SEARCH_INDEX, f"{report.reason}; {failure.sentence}", [failure], fix=report.hint
+            )
+            return
+        tally.record(SyncStage.SEARCH_INDEX, report.outcome, report.reason)
 
     async def _landscape_stage(self, plan: SyncPlan, tally: _RunTally) -> None:
         """Regenerate the landscape reports, when that service exists. It does not yet."""
@@ -3622,14 +4878,26 @@ class CaselistSyncService:
         rather than claiming a confirmation nobody made. It pends for that and nothing else
         (`v1-e34-t13`): after a publish that failed it confirms what did publish, and a bucket that
         refuses the comparison fails this stage, with the fix that applies.
+
+        A snapshot it finds with a manifest mismatch and nothing else is owed again, however the
+        stage ends, unless it was owed again for that already (:meth:`_owe_drifted_manifests_again`,
+        `v1-e34-t26`).
+
+        **What it compares**: what this run published, and then what the newest run's check was
+        cut short before comparing (:attr:`_RunTally.comparisons_owed`, which every pull and
+        `--publish-pending` is handed). **When the session expires** first, what it had not compared
+        yet is :attr:`StageRecord.not_compared`, and the run's details keep it for the next pull or
+        `--publish-pending` (`v1-e34-t28`). A snapshot it did compare is not in it, whatever the
+        comparison found: that finding is the stage's drift and earlier findings, as before.
         """
         if self._status is None:
             tally.record(SyncStage.REPORT, StageOutcome.SKIPPED, _NO_BUCKET)
             return
+        to_compare = list(dict.fromkeys((*tally.published, *tally.comparisons_owed)))
         if tally.outcome_of(SyncStage.PUBLISH) is StageOutcome.PENDING:
-            tally.record(SyncStage.REPORT, StageOutcome.PENDING, "the publish it would confirm is pending")
+            tally.pend(SyncStage.REPORT, "the publish it would confirm is pending", not_compared=to_compare)
             return
-        if not tally.published:
+        if not to_compare:
             tally.record(
                 SyncStage.REPORT,
                 StageOutcome.SKIPPED,
@@ -3640,23 +4908,41 @@ class CaselistSyncService:
             return
         confirmed = 0
         drifted: list[_StageFailure] = []
-        # Snapshot by snapshot, and only the ones this run published. A caselist-wide check would
-        # report an older snapshot somebody imported by hand and never published as drift of this
-        # run, which it is not: completing that one is `caselist publish`'s job.
-        for target in tally.published:
+        found: list[SnapshotDrift] = []
+        # Snapshot by snapshot, and only the ones this run published or a cut-short check owed. A
+        # caselist-wide check would report an older snapshot somebody imported by hand and never
+        # published as drift of this run, which it is not: completing that one is `caselist publish`'s.
+        for index, target in enumerate(to_compare):
             named = f"{target.caselist} {target.snapshot}"
             try:
                 report = await self._status.status(target.caselist, target.snapshot)
             except StoreCredentialsExpired as expired:
-                tally.record(SyncStage.REPORT, StageOutcome.PENDING, str(expired))
+                # What was found before the expiry is kept (`v1-e34-t23`), and what was not reached
+                # is named, for the next pull or `--publish-pending` to compare (`v1-e34-t28`).
+                not_compared = to_compare[index:]
+                if not drifted:
+                    tally.pend(SyncStage.REPORT, str(expired), not_compared=not_compared)
+                    return
+                tally.pend(
+                    SyncStage.REPORT,
+                    f"{confirmed} snapshot(s) confirmed; not in sync before the session expired: "
+                    + ", ".join(one.sentence for one in drifted)
+                    + self._owe_drifted_manifests_again(tally, found)
+                    + f"; {expired}",
+                    found_first=drifted,
+                    drift=found,
+                    not_compared=not_compared,
+                )
                 return
             except StoreAccessDenied as refused:
                 # True of every snapshot still to compare, and not a login: the stage fails here.
                 failure = self._failure(refused, about=named)
                 tally.fail(
                     SyncStage.REPORT,
-                    f"{confirmed} snapshot(s) confirmed; the comparison was refused: {failure.sentence}",
+                    f"{confirmed} snapshot(s) confirmed; the comparison was refused: {failure.sentence}"
+                    + self._owe_drifted_manifests_again(tally, found),
                     [*drifted, failure],
+                    drift=found,
                 )
                 return
             except (NoCaselistEvidence, DomainError) as failed:
@@ -3665,20 +4951,67 @@ class CaselistSyncService:
             in_sync = [snapshot for snapshot in report.snapshots if snapshot.in_sync]
             confirmed += len(in_sync)
             tally.confirmed.update(PendingSnapshot(one.caselist, one.snapshot) for one in in_sync)
-            drifted.extend(
-                _StageFailure(f"{one.caselist} {one.snapshot}", (CASELIST_DRIFT,)) for one in report.drifted
-            )
+            for one in report.drifted:
+                drift = SnapshotDrift.of(one)
+                found.append(drift)
+                drifted.append(_StageFailure(drift.sentence, (CASELIST_DRIFT,)))
         if drifted:
             tally.fail(
                 SyncStage.REPORT,
                 f"{confirmed} snapshot(s) confirmed; not in sync: "
-                + ", ".join(one.sentence for one in drifted),
+                + ", ".join(one.sentence for one in drifted)
+                + self._owe_drifted_manifests_again(tally, found),
                 drifted,
+                drift=found,
             )
             return
         tally.record(
             SyncStage.REPORT, StageOutcome.COMPLETED, f"{confirmed} snapshot(s) confirmed in the bucket"
         )
+
+    def _owe_drifted_manifests_again(self, tally: _RunTally, found: Sequence[SnapshotDrift]) -> str:
+        """Owe again each snapshot in `found` whose manifest alone drifted, once; say so for the reason.
+
+        The PM's ruling of 2026-10-16, amending `v1-e34-t18`'s rule (see "What the pending-work file
+        holds" in the module docstring). This machine's manifest is the record and the bucket's copy
+        follows it, so a manifest mismatch with nothing else beside it goes back into the
+        pending-work file, behind what is there, and the next run publishes it again. Any other
+        drift, a source with other bytes or something missing, alone or beside it, is a person's.
+
+        Never a third time: a snapshot an earlier run owed again for this, and every run since still
+        owed (:attr:`_RunTally.owed_for_drift`), was published again and confirmed, and drifted
+        again. Owing it again would loop silently, so the reason says a person should look. A file
+        that cannot be read is not written over (:class:`PendingWorkUnreadable`), and the reason
+        says what it could not record.
+
+        :attr:`_RunTally.pending_publish` becomes what the file then holds, so the run's record lists
+        what is owed again, and the notification can tell it from what is not.
+        """
+        drifted = [
+            PendingSnapshot(one.caselist, one.snapshot) for one in found if one.kinds == (DriftKind.MANIFEST,)
+        ]
+        again = [one for one in drifted if one in tally.owed_for_drift]
+        owe = [one for one in drifted if one not in tally.owed_for_drift]
+        said = ""
+        if owe:
+            try:
+                owed_before = self._pending.read()
+            except PendingWorkUnreadable:
+                said += (
+                    "; not recorded as owed, because the pending-work file could not be read: "
+                    + _snapshots_named(owe)
+                )
+            else:
+                owed = tuple(dict.fromkeys((*owed_before, *owe)))
+                self._pending.write(owed)
+                tally.pending_publish = list(owed)
+                said += "; owed again, for the next run to publish: " + _snapshots_named(owe)
+        if again:
+            said += (
+                "; drifted again after it was owed again and published, so not owed a third time; "
+                "a person should look: " + _snapshots_named(again)
+            )
+        return said
 
     async def _retention_stage(self, tally: _RunTally, *, plan: SyncPlan, dry_run: bool) -> None:
         """Remove what nothing can need again from the inbox; a dry run lists it and removes nothing.
@@ -3913,6 +5246,28 @@ class CaselistSyncService:
     # Counting, summarising, writing
     # --------------------------------------------------------------------------------------
 
+    def _take_out_if_removed_or_held_alone(
+        self, report: ImportReport, downloaded: DownloadedFile, tally: _RunTally
+    ) -> None:
+        """Remove the inbox copy of an archive that held only removed or held files, once imported.
+
+        See "What leaves the inbox". Only the bytes imported: a copy that changed since, or cannot be
+        read, is left for retention to judge, and so is one the file system refuses to remove.
+        """
+        if not report.removed_or_held_alone or _digest_of(downloaded.path) != downloaded.sha256:
+            return
+        try:
+            downloaded.path.unlink()
+        except OSError as refused:
+            logger.warning(
+                "caselist sync: an imported archive of %s held only removed or held files and could not "
+                "be taken out of the inbox (%s); retention judges it",
+                report.caselist,
+                type(refused).__name__,
+            )
+            return
+        tally.held_copies_taken_out += 1
+
     def _count_archive(self, report: ImportReport, tally: _RunTally) -> None:
         tally.files_imported += sum(
             report.count(name)
@@ -3961,22 +5316,28 @@ class CaselistSyncService:
         """One failure as a stage records it: a sentence, the error's code, and its fix if it has one.
 
         The sentence is the error's own message when this project wrote it, and its class alone
-        when it did not, as the run log gives any such error: an `OSError` quotes the path it
-        failed on. `about` names what failed, an archive or a snapshot, in front of it. A directory
-        of this machine that a message quotes is replaced by its name.
+        when it did not, with an `OSError`'s errno: its text quotes the path it failed on. It is
+        :func:`~debate_core.application.errors.reported_error_message`, so that one `OSError` reads
+        the same in a stage's reason as everywhere else (`v1-e29-t09`, `v1-e34-t23`). `about` names
+        what failed, an archive or a snapshot, in front of it. A directory of this machine that a
+        message quotes is replaced by its name.
         """
-        message = str(error) if isinstance(error, DomainError) else type(error).__name__
+        message = message_for(error, bucket_mode=self._bucket_mode)
         sentence = f"{about}: {message}" if about else message
         return _StageFailure(
-            self._naming_no_local_directory(sentence), (reported_error_code(error),), fix_for(error)
+            self._naming_no_local_directory(sentence),
+            (reported_error_code(error),),
+            fix_for(error, bucket_mode=self._bucket_mode),
         )
 
     def _camp_failure(self, selection: OpenEvSelection, error: DomainError | OSError) -> _StageFailure:
         """:meth:`_failure` for a camp download: named by id and digest, never by its file name."""
         return _StageFailure(
-            self._naming_no_local_directory(_camp_download_refused(selection, error)),
+            self._naming_no_local_directory(
+                _camp_download_refused(selection, error, bucket_mode=self._bucket_mode)
+            ),
             (reported_error_code(error),),
-            fix_for(error),
+            fix_for(error, bucket_mode=self._bucket_mode),
         )
 
     def _naming_no_local_directory(self, text: str) -> str:
@@ -4011,7 +5372,10 @@ class CaselistSyncService:
             files_skipped=tally.files_skipped,
             blobs_stored=tally.blobs_stored,
             parse=tally.parse,
+            parsed_stores_owed=tally.parsed_stores_owed,
+            search_index=tally.search_index,
             objects_published=tally.objects_published,
+            manifests_published=tally.manifests_published,
             reports_written=tally.reports_written,
             snapshots_imported=tuple(tally.snapshots_imported),
             pending_publish=tuple(f"{one.caselist} {one.snapshot}" for one in tally.pending_publish),
@@ -4022,12 +5386,16 @@ class CaselistSyncService:
             inbox_retention=tally.inbox_retention,
             full_archive=tally.full_archive,
             full_archive_imports=tuple(tally.full_archive_imports),
+            full_archive_recounts=tuple(tally.full_archive_recounts.values()),
+            held_by_request=dict(tally.held_by_request),
+            stage_times=tuple(tally.stage_times),
+            data_volume=tally.data_volume,
         )
 
     def _write_summary(self, summary: RunSummary) -> Path:
         """Write the run's JSON summary under `<state_dir>/caselist-sync-runs/`, and return it."""
         destination = self._state_dir / RUN_SUMMARY_DIRECTORY / f"{summary.run_id}.json"
-        _write_json(destination, summary.as_json())
+        write_state_file(destination, summary.as_json())
         return destination
 
     def summary_path(self, summary: RunSummary) -> Path:
@@ -4038,6 +5406,31 @@ class CaselistSyncService:
 # ------------------------------------------------------------------------------------------------
 # Run modes
 # ------------------------------------------------------------------------------------------------
+
+
+class PullBracket(Protocol):
+    """What a pull does around its run for the bucket's run lock and state (`v1-e40-t04`).
+
+    :class:`~debate_core.application.caselist.bucket_run.BucketRun`, named here by its shape because
+    it is built over this module. See that module for what each step does and in which mode.
+    """
+
+    @property
+    def bucket_mode(self) -> bool: ...
+
+    def watching(self, task: asyncio.Task[object]) -> None: ...
+
+    async def start(
+        self, caselists: Sequence[str], *, dry_run: bool, restore_parsed: bool = True
+    ) -> None: ...
+
+    async def after_run(self) -> None: ...
+
+    async def finish(self) -> None: ...
+
+    def details(self) -> BucketRunDetails | None: ...
+
+    def as_terminated(self, cancelled: asyncio.CancelledError) -> BaseException: ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -4063,6 +5456,7 @@ async def run_pull(
     monitor: Callable[[], SyncRunMonitor],
     progress: Callable[[str], None],
     full_archive: str | None = None,
+    bracket: PullBracket | None = None,
 ) -> PulledRun:
     """Run one `caselist pull`: a dry run, a whole run, or `--publish-pending`.
 
@@ -4077,6 +5471,9 @@ async def run_pull(
         progress: Where a one-line account of what is starting goes (the CLI's `--verbose`).
         full_archive: `--full-archive <slug>`: that caselist's complete archive takes the run's one
             slot (`v1-e34-t04`), and the caselist is pulled too. Never with `publish_pending`.
+        bracket: The bucket's run lock and state around the run (:class:`PullBracket`, `v1-e40-t04`).
+            It starts inside the monitor, so that a refusal is recorded, and ends after the monitor
+            has recorded the run. `None` is local mode without the lock check, as before it.
 
     Raises :class:`NoCaselistsConfigured` when asked to pull no caselist, and whatever the service
     or the monitor raise; the monitor has recorded and announced it first.
@@ -4084,28 +5481,70 @@ async def run_pull(
     record: SyncRunRecord | None = None
     details: SyncRunDetails | None = None
     caselists = _with_requested(caselists, full_archive)
+    task = asyncio.current_task()
+    if bracket is not None and task is not None:
+        bracket.watching(task)
     if dry_run:
         # A dry run writes nothing (v1-e34-t02 ac2), so it leaves no run record either.
         if not caselists:
             raise NoCaselistsConfigured
+        if bracket is not None:
+            await bracket.start(caselists, dry_run=True)
         progress(f"pulling {', '.join(caselists)} (dry run)")
         summary = await sync_service().run(caselists, dry_run=True, full_archive=full_archive)
     else:
+        watching = monitor()
 
         async def one_run() -> RunSummary:
             # Inside the monitor, so that a refusal — no caselist, the API not turned on, an
             # expired token, another run holding the lock — is recorded and announced too.
+            try:
+                if not publish_pending and not caselists:
+                    raise NoCaselistsConfigured
+                if bracket is not None:
+                    # The lock and the restore first: the run log read next is the restored one.
+                    await bracket.start(caselists, dry_run=False, restore_parsed=not publish_pending)
+                summary = await pulled(
+                    # What earlier runs owed again for drift is read from their records (`v1-e34-t26`).
+                    watching.snapshots_owed_again_for_drift(),
+                    # And the check the newest run's report stage was cut short on, which a pull makes
+                    # as a drain does (`v1-e34-t28`).
+                    watching.comparisons_owed(),
+                )
+                if bracket is not None:
+                    await bracket.after_run()
+                return summary
+            except asyncio.CancelledError as cancelled:
+                if bracket is None:
+                    raise
+                raise bracket.as_terminated(cancelled) from None
+
+        async def pulled(
+            owed_for_drift: frozenset[PendingSnapshot], comparisons_owed: tuple[PendingSnapshot, ...]
+        ) -> RunSummary:
             if publish_pending:
                 progress("completing the publishes an earlier run deferred")
-                return await sync_service().publish_pending()
-            if not caselists:
-                raise NoCaselistsConfigured
+                return await sync_service().publish_pending(
+                    owed_for_drift=owed_for_drift, comparisons_owed=comparisons_owed
+                )
             progress(f"pulling {', '.join(caselists)}")
-            return await sync_service().run(caselists, full_archive=full_archive)
+            return await sync_service().run(
+                caselists,
+                full_archive=full_archive,
+                owed_for_drift=owed_for_drift,
+                comparisons_owed=comparisons_owed,
+            )
 
-        monitored = await monitor().watch(
-            one_run, caselists=caselists, mode="publish_pending" if publish_pending else "run"
-        )
+        try:
+            monitored = await watching.watch(
+                one_run,
+                caselists=caselists,
+                mode="publish_pending" if publish_pending else "run",
+                bucket_run=bracket.details if bracket is not None else lambda: None,
+            )
+        finally:
+            if bracket is not None:
+                await bracket.finish()
         summary, record, details = monitored.summary, monitored.record, monitored.details
 
     written_to = sync_service().summary_path(summary) if not summary.dry_run else None
@@ -4142,13 +5581,86 @@ _FAILURE_RATE_FIX: Final = (
     "`debate-research caselist parse --caselist <slug> --failures` lists the sources that failed, "
     "with their reasons."
 )
-_UNPUBLISHED_PARSED_STORE_FIX: Final = (
-    "`debate-research caselist parse --caselist <slug> --publish` publishes a caselist's parsed "
-    "store: it parses nothing already parsed, rebuilds the aggregates and uploads what the bucket "
-    "lacks. The next pull that imports into that caselist does the same; "
-    "`caselist pull --publish-pending` does not."
+_CLOUD_FAILURE_RATE_FIX: Final = (
+    "The cloud run's failed sources are listed in failures.jsonl of the caselist's parsed store in the "
+    "bucket, once the run has published it, never in the operator's Mac's own store; why they failed is "
+    f"the PM's to look into ({CLOUD_FAILURE_RATE_RUNBOOK})."
 )
+""":data:`_FAILURE_RATE_FIX` in bucket mode (`v1-e40-t22`): `--failures` reads the parsed store of the
+machine it runs on, and the cloud run's is the one in the bucket."""
+
+
+def _unpublished_parsed_store_fix(owed: Sequence[ParsedStoreOwed], *, bucket_mode: bool) -> str:
+    """The parse stage's fix for the parsed stores it did not publish: each caselist's own command.
+
+    `v1-e34-t31`. Before it, one sentence named `caselist parse --caselist <slug> --publish` for
+    every caselist, and a stage whose rebuild was done and whose publish alone failed was rebuilt
+    again by hand. In bucket mode, no command (`v1-e40-t18`): the cloud run publishes the parsed
+    store it owns, and a command run on the operator's Mac would publish the Mac's working copy over it.
+    """
+    if bucket_mode:
+        return (
+            f"The cloud run publishes the parsed store of {_and_listed([one.caselist for one in owed])}, "
+            "never the operator's Mac, whose working copy is not the one the cloud run owns: the next "
+            "weekly run rebuilds it and publishes it, whether or not it imports into the caselist, and "
+            f"so does a run started by hand ({CLOUD_PARSE_STAGE_RUNBOOK})."
+        )
+    publish_only = [one.command for one in owed if one.publish_only]
+    rebuild = [one.command for one in owed if not one.publish_only]
+    sentences: list[str] = []
+    if len(publish_only) == 1:
+        sentences.append(
+            f"{_commands_named(publish_only)} publishes the parsed store as this run rebuilt it from "
+            "every copy of the suppression list, and rebuilds nothing."
+        )
+    elif publish_only:
+        sentences.append(
+            f"{_commands_named(publish_only)} each publish the parsed store as this run rebuilt it "
+            "from every copy of the suppression list, and rebuild nothing."
+        )
+    if len(rebuild) == 1:
+        sentences.append(
+            f"{_commands_named(rebuild)} publishes a caselist's parsed store: it parses nothing already "
+            "parsed, rebuilds the aggregates and uploads what the bucket lacks."
+        )
+    elif rebuild:
+        sentences.append(
+            f"{_commands_named(rebuild)} each publish a caselist's parsed store: each parses nothing "
+            "already parsed, rebuilds the aggregates and uploads what the bucket lacks."
+        )
+    # Whatever the next pull imports: since `v1-e40-t08` it parses what is owed (`v1-e40-t25`).
+    sentences.append("The next pull does the same; `caselist pull --publish-pending` does not.")
+    return " ".join(sentences)
+
+
+def _commands_named(commands: Sequence[str]) -> str:
+    return _and_listed([f"`{one}`" for one in commands])
+
+
+def _and_listed(names: Sequence[str]) -> str:
+    return names[0] if len(names) == 1 else f"{', '.join(names[:-1])} and {names[-1]}"
+
+
 _NO_LANDSCAPE: Final = "no landscape service is installed (v1-e32-t05 has not shipped)"
+_NO_SEARCH_INDEX: Final = (
+    "no search index stage is wired in: an environment that names no evidence bucket has none"
+)
+_SEARCH_INDEX_TURNED_OFF: Final = (
+    "turned off by setting (caselist.refresh_search_index); `tub index build` and "
+    "`tub index publish` do it by hand"
+)
+_PARSE_FAILED_SO_NO_INDEX: Final = (
+    "the parse stage failed in this run, so the index is not rebuilt from what it left; "
+    "the previous index stays current"
+)
+
+
+def _check_owed(comparisons_owed: Sequence[PendingSnapshot]) -> str:
+    """What the select stage says of the comparisons this run owes (`v1-e34-t28`)."""
+    return (
+        f"the report stage's check of {len(comparisons_owed)} snapshot(s) an earlier run published "
+        "was cut short, and is owed to this run"
+    )
 
 
 def caselists_to_parse(imported: Iterable[PendingSnapshot]) -> tuple[str, ...]:
@@ -4161,6 +5673,57 @@ def caselists_to_parse(imported: Iterable[PendingSnapshot]) -> tuple[str, ...]:
     rebuild every aggregate to change none.
     """
     return tuple(dict.fromkeys(one.caselist for one in imported if full_archive_date(one.snapshot) is None))
+
+
+def search_index_stores(caselists: Sequence[str]) -> tuple[str, ...]:
+    """The stores the search index stage indexes for a run of `caselists`: each once, then `openev`.
+
+    The one list of them. The stage hands it to the refresh, and `doctor --search-index`
+    (`v1-e34-t30`) checks the same stores before a run meets them.
+    """
+    return (*dict.fromkeys(caselists), OPENEV_STORE)
+
+
+def why_no_search_index_stage(*, bucket_named: bool, refresh_search_index: bool) -> str | None:
+    """Why a run has no search index stage, in the words its summary records; `None` when it has one.
+
+    The stage is wired in only where the environment names a bucket and
+    `caselist.refresh_search_index` is on. The setting is said first, as the run says it. The
+    composition root wires the stage by this rule, and `doctor --search-index` says by it whether
+    its check applies.
+    """
+    if not refresh_search_index:
+        return _SEARCH_INDEX_TURNED_OFF
+    if not bucket_named:
+        return _NO_SEARCH_INDEX
+    return None
+
+
+def _left_owed(caselists: Sequence[str]) -> str:
+    """Why a parse owed was not made: the run does not follow the caselist (`v1-e40-t08`)."""
+    return f"the parse owed for {', '.join(caselists)} is left owed, as this run does not follow it"
+
+
+def _what_was_owed(
+    owed: Sequence[str],
+    bumped: Sequence[FullParseOwed],
+    *,
+    imported: Sequence[str],
+    not_followed: Sequence[str],
+) -> str:
+    """What the parse stage's sentence adds of what it parsed because it was owed (`v1-e40-t08`)."""
+    said: list[str] = []
+    as_owed = [one for one in owed if one not in imported and one not in {b.caselist for b in bumped}]
+    if as_owed:
+        said.append(f"parsed as owed, with nothing new imported into it: {', '.join(as_owed)}")
+    for version in dict.fromkeys(one.parser_version for one in bumped):
+        named = ", ".join(one.caselist for one in bumped if one.parser_version == version)
+        said.append(
+            f"parsed in full, as the parsed store held no directory of parser version {version}: {named}"
+        )
+    if not_followed:
+        said.append(_left_owed(not_followed))
+    return "".join(f"; {one}" for one in said)
 
 
 def _parse_stage_sentence(counts: ParseStageCounts, *, publishing: bool) -> str:
@@ -4468,21 +6031,25 @@ def _revision_sentence(openev: Sequence[OpenEvSelection]) -> str:
     return f"; {len(revised)} taken as a revision of an id no longer listed ({listed})"
 
 
-def _camp_download_refused(selection: OpenEvSelection, refused: DomainError | OSError) -> str:
+def _camp_download_refused(
+    selection: OpenEvSelection, refused: DomainError | OSError, *, bucket_mode: bool = False
+) -> str:
     """A camp download's failed fetch or import, for a stage's reason: by id and digest, never by name.
 
     The error's own message can name the file: the archive reader says which file it could not read,
     by its inbox name (`openev-<id>-<file name>`), and a camp file's name is its title. Every name the
     file goes by, here and upstream, is replaced by "the download" (`v1-e34-t12`).
 
-    An `OSError` — the inbox refusing the write, or the file the read — is given by its class alone,
-    as the run log gives any error this project did not write: its message quotes the path it failed
-    on. It used to end the run, and `caselist pull --json` printed that message as the command's
-    error; it is now the fetch or import failing, like any other refusal of that file.
+    An `OSError` — the inbox refusing the write — is given by its class and errno alone
+    (:func:`~debate_core.application.errors.reported_error_message`): its message quotes the path it
+    failed on. It used to end the run, and `caselist pull --json` printed that message as the
+    command's error; it is now the fetch failing, like any other refusal of that file. A file the
+    import cannot read is :class:`~debate_core.application.errors.UnreadableArchive` by then
+    (`v1-e34-t23`).
     """
     if not isinstance(refused, DomainError):
-        return f"{selection.label}: {type(refused).__name__}"
-    message = str(refused)
+        return f"{selection.label}: {reported_error_message(refused)}"
+    message = message_for(refused, bucket_mode=bucket_mode)
     file = selection.file
     names = {selection.inbox_name}
     if file is not None:
@@ -4501,8 +6068,41 @@ _UNREADABLE_PENDING_WORK_FIX: Final = (
     "when it cannot be repaired. It is not the AWS session."
 )
 
+_TOKEN_MISSING_ON_THIS_MACHINE_FIX: Final = (
+    "No caselist_token is stored on this machine for the environment: log in again with "
+    "`debate-research caselist auth login`."
+)
+"""A run outside bucket mode that found no caselist_token (`v1-e34-t35`), in `v1-e34-t33`'s words."""
 
-def fix_for(error: BaseException) -> str | None:
+_TOKEN_UNREADABLE_CODE: Final = "CASELIST_TOKEN_UNREADABLE"
+"""The code of the token store's `CaselistTokenUnreadable`, which is an adapter's error this layer
+may not import: told apart by its code, as `caselist runs` tells an expired login by its class name."""
+
+_TOKEN_UNREADABLE_ON_THIS_MACHINE_FIX: Final = (
+    "The caselist_token stored on this machine for the environment cannot be read: log out with "
+    "`debate-research caselist auth logout`, then log in again with `debate-research caselist auth login`."
+)
+"""A run outside bucket mode whose caselist_token could not be read (`v1-e34-t36`): the error's own
+fix, in `v1-e34-t35`'s words. The logout deletes the record without reading it."""
+
+
+def message_for(error: BaseException, *, bucket_mode: bool = False) -> str:
+    """What `error` says of itself where a stage's reason, a run's record or the command's output quotes it.
+
+    :func:`~debate_core.application.errors.reported_error_message`, except for an expired login in bucket
+    mode (`v1-e40-t35`): there it is what was refused alone (:attr:`CaselistAuthExpired.refusal`), without
+    the Mac's "Run `debate-research caselist auth login` again". The cloud run's caselist_token is the one
+    the Wednesday 03:00 login renews, and a login by hand would be a second login that week
+    (`caselist-cloud-run.md`, "A run refused for an expired login"); the cure is the notice's
+    (:data:`~debate_core.application.sync_runs.CLOUD_AUTH_EXPIRED_CURE`) and the command's hint. On the Mac
+    the message is the error's own, word for word.
+    """
+    if bucket_mode and isinstance(error, CaselistAuthExpired):
+        return error.refusal
+    return reported_error_message(error)
+
+
+def fix_for(error: BaseException, *, bucket_mode: bool = False) -> str | None:
     """The fix a refused store calls for, or `None` for a failure with no fix a sentence can state.
 
     Told apart by the error's type and never by its message (`v1-e34-t13`): the filesystem adapters
@@ -4510,7 +6110,15 @@ def fix_for(error: BaseException) -> str | None:
     directory's role, and any other :class:`~debate_core.application.errors.StoreAccessDenied`
     came from the bucket. Neither is fixed by a login, and neither sentence offers one. The
     bucket's refusal, and a profile the AWS config does not define, carry the fix the store's
-    adapter wrote, and that is the one given (`v1-e29-t07`).
+    adapter wrote, and that is the one given (`v1-e29-t07`). An occurrence table a newer build
+    stamped carries its own, which names both versions and the store (`v1-e34-t29`); in bucket mode,
+    the one that names a new image for the cloud run rather than the weekly agent (`v1-e40-t22`). A
+    keychain that refused the token store carries the fix for its cause (`v1-e34-t33`): the cloud
+    run's token is in Secrets Manager, so only a run on this Mac meets one. A missing caselist_token
+    carries the login outside bucket mode and nothing in it (`v1-e34-t35`): the cloud run's token is
+    the secret the Wednesday login renews, which no login on this machine puts right, so its notice
+    stays as it was. An unreadable caselist_token carries the logout and then the login outside bucket
+    mode, and nothing in it, for the same reason (`v1-e34-t36`).
 
     Public because the run monitor asks the same question of an error that ended a run before any
     stage could record it (`v1-e34-t19`): that run's notification carries the same fix.
@@ -4527,6 +6135,14 @@ def fix_for(error: BaseException) -> str | None:
         return f"The bucket was never reached: {error.hint}."
     if isinstance(error, PendingWorkUnreadable):
         return _UNREADABLE_PENDING_WORK_FIX
+    if isinstance(error, NewerFingerprintTable):
+        return error.cloud_fix if bucket_mode else error.fix
+    if isinstance(error, KeychainFailure):
+        return error.hint
+    if isinstance(error, CaselistTokenMissing) and not bucket_mode:
+        return _TOKEN_MISSING_ON_THIS_MACHINE_FIX
+    if reported_error_code(error) == _TOKEN_UNREADABLE_CODE and not bucket_mode:
+        return _TOKEN_UNREADABLE_ON_THIS_MACHINE_FIX
     return None
 
 
@@ -4875,6 +6491,11 @@ def _entries_of(read: ArchiveReader, archive: Path) -> Iterable[ArchiveEntry]:
     return _reading(entries, archive)
 
 
+def archive_entries(read: ArchiveReader, archive: Path) -> Iterable[ArchiveEntry]:
+    """A weekly or complete archive's entries, read as a pull reads them: `caselist backfile-import`'s too."""
+    return _entries_of(read, archive)
+
+
 def _reading(entries: Iterable[ArchiveEntry], archive: Path) -> Iterator[ArchiveEntry]:
     try:
         yield from entries
@@ -4883,8 +6504,10 @@ def _reading(entries: Iterable[ArchiveEntry], archive: Path) -> Iterator[Archive
 
 
 def _unreadable_in_the_inbox(archive: Path, unreadable: OSError) -> UnreadableArchive:
+    """By the error's class and errno (:func:`~debate_core.application.errors.reported_error_message`),
+    never its text, which quotes the path; a camp download's name is replaced by its stage."""
     return UnreadableArchive(
-        archive.name, f"the file in the inbox could not be read ({type(unreadable).__name__})"
+        archive.name, f"the file in the inbox could not be read ({reported_error_message(unreadable)})"
     )
 
 
@@ -4906,7 +6529,7 @@ class UnknownSyncEvent(DomainError):
         self.caselist = caselist
         super().__init__(
             f"this build does not know which event {caselist!r} debates, so `caselist pull` cannot "
-            "import its archive; add the slug prefix to the table in debate_cli.commands.caselist"
+            "import its archive; add the slug prefix to the table in debate_cli.caselist_events"
         )
 
 

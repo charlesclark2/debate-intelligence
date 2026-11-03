@@ -21,6 +21,13 @@ removal's entries are appended, stops it:
   rows (:func:`~debate_core.application.caselist.pipeline.withheld_skipped_paths`). A Word lock
   file holds the name of whoever had the document open, so leaving it would leave the very name.
 
+In a weekly or complete archive that is waiting to be imported, a skipped member at a path a removal
+holds is taken out too, when the archive is dated after the removed file first appeared there
+(`v1-e30-t21`). The importer never stores one, so the list cannot name it (`v1-e30-t13`), but a
+symbolic link named as the removed file carries the removed file's path, and its body is often its
+name. An archive already imported is not deleted for one alone, because everything else in it is
+someone's disclosure: retention removes it once its snapshot is confirmed in the bucket.
+
 Every other entry is kept byte for byte — another team's disclosure in the same archive, another
 holder's copy of a withdrawn file, a camp file the list does not stop. An earlier removal's
 leftovers are taken out too, because the list stops them; that is how running a removal again
@@ -30,6 +37,10 @@ A revision of a removed file that is waiting in an archive here, at the removed 
 stopped by the list like any other: the removal plan reads these archives as snapshots
 (:func:`read_inbox`), finds it as a later upload, and appends its entry before this step runs
 (`v1-e30-t13`).
+
+`caselist status` asks the inbox which uploads a hold covers (:meth:`CaselistInbox.held_uploads`,
+`v1-e30-t21`), to say that the removal is owed again. That reads only, and names an upload by its
+caselist, snapshot, digest and request.
 
 ## Imported or waiting: what happens to each file
 
@@ -103,8 +114,12 @@ download into the inbox while it changes. Each file's digest is checked against 
 anything is done to it; a file that changed is not touched and the run stops `INCOMPLETE`. A
 rewrite is written beside the original under a dot name the sync skips, read back and compared
 entry by entry with the original less the dropped entries, and then renamed over it, so a run cut
-short leaves each file either as it was or rewritten, never half written. Re-running the same
-command plans again from the list and finishes the rest.
+short leaves each file either as it was or rewritten, never half written. After each delete, and
+after each rewrite's rename and the removal of its staging directory, the inbox directory is
+fsynced (`v1-e30-t26`, `v1-e30-t30`), so a power cut cannot bring back an archive or the entries a
+removal took out; a fsync that fails stops the run. Re-running the same command plans again from
+the list and finishes the rest, and every run, one with nothing left to plan included, ends with a
+fsync of the inbox, so a re-run also puts down the change whose fsync failed.
 
 ## Not checked
 
@@ -131,7 +146,9 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Final
 
-from debate_core.application.caselist.pipeline import withheld_skipped_paths
+from debate_core.application.caselist.pipeline import hold_on_skipped_member, withheld_skipped_paths
+from debate_core.application.caselist.publish_plan import full_archive_snapshot
+from debate_core.application.caselist.status_service import HeldInboxUpload
 from debate_core.application.caselist_sync import (
     LOCK_FILENAME,
     OPENEV_DELIVERIES_FILENAME,
@@ -144,11 +161,13 @@ from debate_core.application.caselist_sync import (
     openev_id_of_inbox_name,
     weekly_archive_of_inbox_name,
 )
+from debate_core.application.durable_files import fsync_directory
 from debate_core.application.errors import ArchiveTooLarge, DomainError, UnreadableArchive
 from debate_core.application.ports.archive import ArchiveRewriter, InventoriedEntry
 from debate_core.application.ports.suppression import SuppressionState, disclosure_digest
 
 __all__ = [
+    "INBOX_SETTING",
     "CaselistInbox",
     "InboxAction",
     "InboxFile",
@@ -162,6 +181,7 @@ __all__ = [
     "InboxRewrite",
     "InboxRewriteFailed",
     "InboxTeamFilesLeft",
+    "inbox_directory_named",
     "plan_inbox",
     "purge_inbox",
     "read_inbox",
@@ -206,6 +226,60 @@ class CaselistInbox:
     @property
     def deliveries(self) -> OpenEvDeliveries:
         return OpenEvDeliveries(self.state_dir / OPENEV_DELIVERIES_FILENAME)
+
+    def held_uploads(self, suppression: SuppressionState) -> tuple[HeldInboxUpload, ...]:
+        """Every upload at a held path in a weekly or complete archive here, sorted (`v1-e30-t21`).
+
+        A real member at a path a removal holds, in an archive dated after the removed file first
+        appeared there, that the list does not already stop: what the importer refuses, or refused,
+        because of the hold. Reads only, and reads nothing when no path is held. An archive that
+        cannot be read, or is gone by the time it is read, is passed over.
+        """
+        if not suppression.held_paths:
+            return ()
+        found: set[HeldInboxUpload] = set()
+        for path in inbox_files(self.directory):
+            kind, caselist, snapshot, _ = _kind_of(path.relative_to(self.directory).as_posix())
+            if kind not in (InboxFileKind.WEEKLY_ARCHIVE, InboxFileKind.FULL_ARCHIVE):
+                continue
+            if caselist is None or snapshot is None:  # pragma: no cover - both kinds are named with both
+                continue
+            try:
+                entries = self.archives_for(kind).inventory(path)
+            except (UnreadableArchive, ArchiveTooLarge, OSError):
+                continue
+            named = (
+                full_archive_snapshot(snapshot)
+                if kind is InboxFileKind.FULL_ARCHIVE
+                else snapshot.isoformat()
+            )
+            for entry in entries:
+                if entry.skip_reason is not None or entry.sha256 is None:
+                    continue
+                if suppression.suppresses(entry.sha256, disclosure=disclosure_digest(caselist, entry.path)):
+                    continue
+                hold = suppression.path_hold(caselist=caselist, path=entry.path, snapshot=snapshot)
+                if hold is not None:
+                    found.add(HeldInboxUpload(caselist, named, entry.sha256, hold.request_id))
+        return tuple(sorted(found))
+
+
+INBOX_SETTING: Final = "caselist.inbox_dir"
+"""How a removal's output names an inbox a profile puts outside the data directory: by the setting
+that puts it there, since no path inside the data directory leads to it (`v1-e30-t20`)."""
+
+
+def inbox_directory_named(inbox: CaselistInbox) -> str:
+    """The inbox as a removal's plan names it: its path relative to the data directory, `inbox`
+    unless `caselist.inbox_dir` says otherwise, or :data:`INBOX_SETTING` when that is elsewhere.
+
+    Never its absolute path, which is under the home directory: the removal runbook asks the
+    operator to read the plan and keep it (`v1-e30-t20`, as `v1-e34-t16` ruled for the pull's
+    `summary_written_to`).
+    """
+    if inbox.directory.is_relative_to(inbox.state_dir):
+        return inbox.directory.relative_to(inbox.state_dir).as_posix()
+    return INBOX_SETTING
 
 
 class InboxFileKind(StrEnum):
@@ -336,13 +410,19 @@ class InboxPurge:
 
 
 class InboxInUse(DomainError):
-    """A `caselist pull` holds the sync's run lock, so the inbox cannot be changed under it."""
+    """A `caselist pull` holds the sync's run lock, so the inbox cannot be changed under it.
+
+    The message names the lock by its file name in the data directory and never by its path, which
+    is under the home directory, as :class:`~debate_core.application.caselist_sync.SyncRunInProgress`
+    does (`v1-e30-t20`). :attr:`lock_path` is where it is.
+    """
 
     def __init__(self, lock_path: Path) -> None:
         self.lock_path = lock_path
         super().__init__(
-            f"a caselist pull is running (it holds {lock_path}), so the inbox was left as it was; "
-            "run the same command again when the pull has finished"
+            f"a caselist pull is running (it holds the run lock, {lock_path.name} in the data "
+            "directory), so the inbox was left as it was; run the same command again when the pull "
+            "has finished"
         )
 
 
@@ -512,10 +592,12 @@ def _plan_file(
 
     archive = kind in (InboxFileKind.WEEKLY_ARCHIVE, InboxFileKind.FULL_ARCHIVE)
     scope = caselist if archive else None
-    dropped, removed = entries_to_drop(entries, suppression=suppression, disclosure_scope=scope)
-    real = [entry for entry in entries if entry.skip_reason is None and entry.sha256 is not None]
     imported = imported_full_archives if kind is InboxFileKind.FULL_ARCHIVE else imported_weeks
     waiting = archive and (caselist, snapshot) not in imported
+    dropped, removed = entries_to_drop(
+        entries, suppression=suppression, disclosure_scope=scope, snapshot=snapshot if waiting else None
+    )
+    real = [entry for entry in entries if entry.skip_reason is None and entry.sha256 is not None]
     team_files = (
         _team_files_left(entries, dropped, team)
         if team is not None and waiting and caselist == team[0]
@@ -567,13 +649,19 @@ def _plan_file(
 
 
 def entries_to_drop(
-    entries: Sequence[InventoriedEntry], *, suppression: SuppressionState, disclosure_scope: str | None
+    entries: Sequence[InventoriedEntry],
+    *,
+    suppression: SuppressionState,
+    disclosure_scope: str | None,
+    snapshot: date | None = None,
 ) -> tuple[frozenset[str], frozenset[str]]:
     """The names of the entries the list stops, and the suppressed digests among them.
 
     `disclosure_scope` is the caselist of a weekly archive, whose members are disclosures, or `None`
     for anything else, which only a whole-source entry stops (as the OpenEv importer reads the list).
-    See the module docstring for the junk rule and for directory entries.
+    `snapshot`, given for an archive waiting to be imported, is its date: a skipped member at a path a
+    removal holds for that date is dropped too (`v1-e30-t21`). See the module docstring for the junk
+    rule and for directory entries.
     """
     stopped: set[str] = set()
     removed: set[str] = set()
@@ -590,6 +678,15 @@ def entries_to_drop(
         if hit:
             stopped.add(entry.name)
             removed.add(entry.sha256)
+        elif (
+            entry.skip_reason is not None
+            and hold_on_skipped_member(
+                suppression, caselist=disclosure_scope, path=entry.path, snapshot=snapshot
+            )
+            is not None
+        ):
+            # Named as the removed file: the list cannot name it, and its digest is not a removed file's.
+            stopped.add(entry.name)
         if entry.skip_reason is None:
             real[entry.path] = hit or real.get(entry.path, False)
     shadowing = withheld_skipped_paths(
@@ -654,14 +751,21 @@ def purge_inbox(
 
     Raises a :class:`~debate_core.application.errors.DomainError` — :class:`InboxInUse`,
     :class:`InboxFileChanged`, :class:`InboxFileUnreadable`, :class:`InboxRewriteFailed` — or an
-    `OSError` at the first file it cannot finish, having left that file as it was.
+    `OSError` at the first file it cannot finish, having left that file as it was. The exception
+    is the inbox directory's fsync, the step after a rewrite's rename (`v1-e30-t26`) or a delete
+    (`v1-e30-t30`): when it fails, the file is rewritten or gone but not yet durably, and is not
+    counted. A re-run plans nothing for that file, so every purge ends with one more fsync of the
+    inbox, under the lock, even with nothing planned: that is what makes the earlier change durable.
+    With nothing planned and no inbox (prod does not pull) there is nothing to put down, and the
+    step does nothing at all, not even make the lock file (`v1-e30-t09`).
     """
-    if not planned:
+    if not planned and not inbox.directory.is_dir():
         return
     try:
         with RunLock(inbox.state_dir / LOCK_FILENAME):
             for one in planned:
                 _carry_out(inbox, one, request_id=request_id, done=done)
+            fsync_directory(inbox.directory)
     except SyncRunInProgress as busy:
         raise InboxInUse(busy.lock_path) from None
 
@@ -685,6 +789,7 @@ def _carry_out(inbox: CaselistInbox, one: InboxFilePlan, *, request_id: str, don
             )
         )
     path.unlink()
+    fsync_directory(path.parent)  # a delete is an entry too: until this, a power cut can undo it
     done.deleted += 1
 
 
@@ -693,7 +798,12 @@ def _rewrite(inbox: CaselistInbox, path: Path, one: InboxFilePlan, *, request_id
 
     It is staged under the same name in a dot directory beside the original — which the sync skips —
     because the reader's wrapper rule reads the archive's own name: a staged copy named otherwise
-    could read back with different paths.
+    could read back with different paths. The staged file is fsynced, renamed over the original,
+    the emptied staging directory removed, and then the inbox directory is fsynced, so a power cut
+    can bring back neither the entries it took out nor the staging directory
+    (:mod:`debate_core.application.durable_files`, `v1-e30-t30`). On the way out of a failed
+    rewrite, the cleanup in `finally` is not fsynced: the original is still in place, unchanged, and
+    the removal has stopped `INCOMPLETE`.
     """
     staging = path.parent / f".{uuid.uuid4().hex}{_REWRITE_SUFFIX}"
     staged = staging / path.name
@@ -720,6 +830,8 @@ def _rewrite(inbox: CaselistInbox, path: Path, one: InboxFilePlan, *, request_id
         with staged.open("rb") as written:
             os.fsync(written.fileno())
         os.replace(staged, path)
+        staging.rmdir()
+        fsync_directory(path.parent)
     except (UnreadableArchive, ArchiveTooLarge) as broken:
         raise InboxRewriteFailed(one.label, type(broken).__name__) from broken
     finally:

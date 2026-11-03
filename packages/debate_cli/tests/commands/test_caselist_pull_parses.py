@@ -238,6 +238,8 @@ def test_a_pull_that_imports_nothing_parses_nothing(
         "error_codes": [],
         "hint": None,
         "earlier_findings": [],
+        "drift": [],
+        "not_compared": [],
     }
     assert again["data"]["parse"] is None
     assert parsed_tree(installation) == before
@@ -261,7 +263,7 @@ def test_the_summary_carries_the_stages_counts_and_nothing_else_under_schema_ver
     assert {"attempted", "skipped", "unsupported", "failed", "cards", "uploaded"} <= set(data["parse"])
     # The two keys the object replaces, which no stage ever filled, are gone.
     assert "cards_parsed" not in data and "parse_failures" not in data
-    written = json.loads(Path(data["summary_written_to"]).read_text(encoding="utf-8"))
+    written = json.loads((installation / data["summary_written_to"]).read_text(encoding="utf-8"))
     assert written["parse"] == data["parse"]
 
 

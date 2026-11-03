@@ -7,6 +7,8 @@ the hierarchy is part of the contract, not an implementation detail of the messa
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
+
 import pytest
 
 from debate_core.application.errors import (
@@ -16,9 +18,14 @@ from debate_core.application.errors import (
     DomainError,
     InvalidCursor,
     InvalidModelOutput,
+    ModelAccessDenied,
+    ModelRequestRejected,
+    ModelUnavailableError,
     NotFound,
+    ProviderCircuitOpen,
     ProviderError,
     ProviderRateLimited,
+    ProviderTimedOut,
     ProviderUnavailable,
     RevisionMismatch,
     SnapshotIntegrityCheck,
@@ -27,6 +34,7 @@ from debate_core.application.errors import (
     StoreError,
     StoreProfileNotConfigured,
     error_code_of,
+    reported_error_message,
 )
 
 EVERY_ERROR = (
@@ -40,7 +48,12 @@ EVERY_ERROR = (
     InvalidModelOutput("select-passage", "1.0.0", "missing field"),
     ProviderError("openalex", "broke"),
     ProviderUnavailable("openalex"),
+    ModelUnavailableError("bedrock", "a-model"),
     ProviderRateLimited("openalex"),
+    ProviderTimedOut("openalex", 10.0),
+    ProviderCircuitOpen("openalex", None),
+    ModelAccessDenied("bedrock", "a-model", "not allowed"),
+    ModelRequestRejected("bedrock", "a-model", "ValidationException", "bad parameter"),
 )
 
 
@@ -62,6 +75,24 @@ def test_provider_failures_share_a_base_and_name_the_provider() -> None:
     assert ProviderUnavailable("openalex", "timed out").provider == "openalex"
 
 
+def test_a_timeout_and_an_open_breaker_are_the_provider_being_unavailable_to_a_program() -> None:
+    """Both keep `PROVIDER_UNAVAILABLE`, so a run that records them exits as one a retry may cure."""
+    timed_out = ProviderTimedOut("openalex", 2.5)
+    benched = ProviderCircuitOpen("openalex", datetime(2026, 10, 21, 12, 1, tzinfo=UTC))
+    assert isinstance(timed_out, ProviderUnavailable)
+    assert isinstance(benched, ProviderUnavailable)
+    assert error_code_of(timed_out) == error_code_of(benched) == "PROVIDER_UNAVAILABLE"
+    assert timed_out.timeout_seconds == 2.5
+    assert str(timed_out) == "openalex: no answer within 2.5s"
+    assert benched.retry_at == datetime(2026, 10, 21, 12, 1, tzinfo=UTC)
+    assert str(benched) == (
+        "openalex: circuit breaker open after repeated failures; skipped until 2026-10-21T12:01:00+00:00"
+    )
+    assert str(ProviderCircuitOpen("openalex", None)) == (
+        "openalex: circuit breaker open after repeated failures; another call is already probing it"
+    )
+
+
 def test_a_revision_mismatch_carries_both_revisions() -> None:
     error = RevisionMismatch("Card", "01J", 3, 4)
     assert (error.expected_revision, error.actual_revision) == (3, 4)
@@ -77,6 +108,15 @@ def test_rate_limiting_carries_the_wait_the_provider_asked_for() -> None:
     error = ProviderRateLimited("crossref", retry_after_seconds=30.0)
     assert error.retry_after_seconds == 30.0
     assert "retry after 30.0s" in str(error)
+
+
+def test_an_unreachable_model_is_a_provider_outage_that_names_the_model() -> None:
+    """It keeps PROVIDER_UNAVAILABLE, the code the CLI and `caselist pull` treat as retryable."""
+    error = ModelUnavailableError("bedrock", "a-model", "model not ready")
+    assert isinstance(error, ProviderUnavailable)
+    assert error.model_id == "a-model"
+    assert "a-model: model not ready" in str(error)
+    assert error_code_of(error) == error_code_of(ProviderUnavailable("bedrock")) == "PROVIDER_UNAVAILABLE"
 
 
 def test_invalid_model_output_identifies_the_prompt_version_that_produced_it() -> None:
@@ -135,3 +175,51 @@ def test_a_profile_that_is_not_configured_invents_no_name_and_no_setting() -> No
     assert str(StoreProfileNotConfigured("debate-dev-evidence")) == (
         "AWS profile 'debate-dev-evidence' is not defined in this machine's AWS config"
     )
+
+
+@pytest.mark.parametrize(
+    ("error", "reported"),
+    [
+        pytest.param(NotFound("Card", "01J"), "Card not found: 01J", id="this project's own sentence"),
+        pytest.param(
+            PermissionError(13, "Permission denied", "/Users/someone/inbox/A Camp Release.docx"),
+            "PermissionError (errno 13)",
+            id="an OSError, by its class and errno",
+        ),
+        pytest.param(
+            FileNotFoundError(2, "No such file or directory", "/Users/someone/data/x"),
+            "FileNotFoundError (errno 2)",
+            id="a subclass, by its own class",
+        ),
+        pytest.param(OSError("no errno, a path: /Users/someone"), "OSError", id="an OSError with no errno"),
+        pytest.param(RuntimeError("a bug quoting /Users/someone"), "RuntimeError", id="anything else"),
+    ],
+)
+def test_a_recorded_failure_quotes_only_what_this_project_wrote(error: BaseException, reported: str) -> None:
+    """`v1-e29-t09` ac7: what a result or a message of its own says of a failure that did not end the
+    command. An error this project did not write is named, never quoted."""
+    assert reported_error_message(error) == reported
+
+
+@pytest.mark.parametrize("kind", [ModelAccessDenied, ModelRequestRejected])
+def test_a_refused_model_call_is_a_provider_failure_no_retry_cures(kind: type[ProviderError]) -> None:
+    """Neither is unavailability or rate: retrying the same call gets the same refusal."""
+    assert issubclass(kind, ProviderError)
+    assert not issubclass(kind, (ProviderUnavailable, ProviderRateLimited))
+
+
+def test_a_rejected_request_keeps_the_providers_code_and_names_the_model() -> None:
+    error = ModelRequestRejected(
+        "bedrock", "geo.a-model", "ValidationException", "temperature is not supported"
+    )
+
+    assert error.provider_code == "ValidationException"
+    assert error.model_id == "geo.a-model"
+    assert str(error) == "bedrock: geo.a-model: ValidationException: temperature is not supported"
+
+
+def test_a_denied_model_call_gives_its_hint() -> None:
+    error = ModelAccessDenied("bedrock", "geo.a-model", "no usable credentials", hint="log in again")
+
+    assert error.hint == "log in again"
+    assert str(error) == "bedrock: geo.a-model: no usable credentials (log in again)"

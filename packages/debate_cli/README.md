@@ -26,7 +26,8 @@ That is why the envelope below is a contract rather than a convenience.
 | Module | What it is |
 |---|---|
 | `app.py` | The root Typer app: global options, the callback that builds the run's context, and `DebateResearchGroup`, which turns any failure into a reported error and an exit code. |
-| `commands/` | One module per command, all registered in `commands/__init__.py`. |
+| `commands/` | One module per command. A command module imports no other command module; what two share lives in `options/` or beside it. |
+| `command_registry.py` | Attaches every command to the root app. Only `app.py` imports it, so a test of one command does not import the rest. |
 | `container.py` | The composition root: the only place a command obtains a service. |
 | `context.py` | `CliContext` — the run's output and services — and how a command gets it. |
 | `output.py` | Rich tables and error panels, the `--json` envelope, and the stdout/stderr split. |
@@ -46,7 +47,7 @@ def verify(ctx: typer.Context, path: Path) -> None:
     )
 ```
 
-Then register it in `commands/__init__.py`, which also shows how to register a group with
+Then register it in `command_registry.py`, which also shows how to register a group with
 subcommands (`debate-research store sync`).
 
 Three things a command never does: catch a `DomainError` (the root group reports it and picks the
@@ -75,15 +76,40 @@ $ debate-research --version --json | jq .data
  "environment": "dev", "environment_source": "build-channel:dev"}
 ```
 
+A stable release `vX.Y.Z` is the build the team uses. It is published by
+`.github/workflows/release.yml` when its tag is pushed on `main`, and only for the merge commit of
+a validated dev → main promotion (v1-e09-t06). Install it the same way, by its tag:
+
+```console
+$ scripts/install_channel.sh v1.1.0
+$ debate-research --version
+```
+
+`--version` names the tag's version, channel `stable` and environment `prod`. The script is the
+one-line install. It verifies the release's `SHA256SUMS` before installing anything, installs both
+wheels by their file URLs, so no package index can supply either name, and holds uv to the Python
+`debate_core` declares. Plain `uv tool install` of the two downloaded wheels also works, from a
+checkout of the tag, but checks none of that; it reads the Python from `debate_core`'s pyproject,
+because uv ignores the upper bound of a wheel's `Requires-Python`:
+
+```console
+$ gh release download v1.1.0 --repo charlesclark2/debate-intelligence --pattern '*.whl' --dir debate-research-v1.1.0
+$ uv tool install --managed-python --python "$(sed -n 's/^requires-python = "\(.*\)"$/\1/p' packages/debate_core/pyproject.toml)" "debate-cli @ file://$PWD/debate-research-v1.1.0/debate_cli-1.1.0-py3-none-any.whl" --with "debate-core @ file://$PWD/debate-research-v1.1.0/debate_core-1.1.0-py3-none-any.whl"
+```
+
+No extra is optional at install time. The CLI's own requirement names every `debate-core` extra
+its commands wire, Bedrock's boto3 (`aws`) among them, so either command installs all of them.
+
 | Where it came from | `channel` | `DEBATE_ENV` unset means | Configuration read from |
 |---|---|---|---|
 | A source checkout (`uv run`) | `local` | `dev` | the checkout's `config/` |
 | A dev pre-release | `dev` | `dev` | the `config/` bundled in the wheel |
 | A stable release (v1-e09-t06) | `stable` | `prod` | the `config/` bundled in the wheel |
 
-**What an installed build contains.** This package requires `debate-core[aws,docx,opencaselist]`:
-the extras behind the adapters `debate_cli.container` wires, so a channel install has boto3, lxml,
-httpx and keyring without anything added by hand. `scripts/install_channel.sh` proves it after every
+**What an installed build contains.** This package requires
+`debate-core[aws,docx,extraction,feeds,http,opencaselist,tub]`: the extras behind the adapters
+`debate_cli.container` wires, so a channel install has boto3, lxml, trafilatura, readability-lxml,
+pypdf, httpx, defusedxml, keyring and cryptography without anything added by hand. `scripts/install_channel.sh` proves it after every
 install with `python -m debate_cli.installation`. That check reads the list of
 `debate_core.integrations` modules from the installed container's own import statements, imports
 each one, and fails unless it tried and imported them all. It also confirms that every distribution
@@ -117,18 +143,24 @@ rather than writing an integer.
 | Code | Name | Means |
 |---|---|---|
 | 0 | `OK` | The command did what it was asked to do. |
-| 1 | `DOMAIN_FAILURE` | The command ran and the answer is a failure: a card is `UNVERIFIED`, a record was not found, a write lost its revision check, a profile setting names a profile the AWS config does not define, `DEBATE_REMOVAL_PROFILE` names a profile that is not signed in as the takedown role, `doctor` found a failed check (the interpreter's Unicode database is not the normalizer's pin, a wired integration does not import, or with `--evidence-profiles` a configured evidence profile is not defined). Running it again gives the same answer. |
+| 1 | `DOMAIN_FAILURE` | The command ran and the answer is a failure: `verify` found a card `UNVERIFIED`, a record was not found, a write lost its revision check, a profile setting names a profile the AWS config does not define, `DEBATE_REMOVAL_PROFILE` names a profile that is not signed in as the takedown role, `doctor` found a failed check (the interpreter's Unicode database is not the normalizer's pin, a wired integration does not import, or with `--evidence-profiles` a configured evidence profile is not defined). Running it again gives the same answer. |
 | 2 | `USAGE_ERROR` | The command line was wrong: unknown command or option, missing argument, no command given. Nothing was executed. |
 | 3 | `RETRIEVAL_FAILURE` | Something the command depends on did not answer, so there is no answer yet. An external provider — search, fetch, a model — failed or rate-limited the call, or a store could not be read or written: it was unavailable, the SSO session for it expired, or it refused access (the operating system refusing a data directory included). The same command may well succeed later. |
+| 4 | `CARD_UNVERIFIED` | `cut` made a card and the evidence verifier did not pass it: the card was saved and written `UNVERIFIED`, with its banner, and each reason was printed. Never `0`, and not `1`, so a script can tell a card that needs a person's look from a cut that could not run (`v1-e06-t06`). |
+| 6 | `SEARCH_PARTIAL` | `search` returned what it found while at least one provider it asked did not answer in full: it failed, timed out, was rate-limited, had its breaker open, was not configured or answered only partly. The footer names each one. A partial search with no rows is a `6` too (`v1-e08-t05`). |
+| 7 | `NO_RESULTS` | `search` asked every provider, every one answered in full, and nothing matched. |
 | 70 | `INTERNAL_ERROR` | A bug: an exception the CLI does not model. It is reported by its class, never its message (below). 70 is `EX_SOFTWARE` from `sysexits.h`. |
 
 Exceptions are mapped by `exit_code_for`: `ProviderError` → 3; `StoreUnavailable`,
 `StoreCredentialsExpired` and `StoreAccessDenied` (`RETRYABLE_STORE_FAILURES`) → 3 in every
 command, and so are `caselist remove`'s `TakedownPreflightFailed` and `RemovalIncomplete` when one
 of those three is what stopped them (`v1-e01-t20`); any other `DomainError` → 1, including
-`NotFound`; a usage error → 2; anything else → 70. A failure that is an *outcome* rather than an
+`NotFound`; a usage error → 2, and so is `search`'s `UnknownExpansionChoice` (`v1-e08-t05`);
+anything else → 70. `search` takes its code from `exit_code_for_search`: 6 and 7 above, 3 when no
+provider answered, 1 when none it selected is enabled. A failure that is an *outcome* rather than an
 exception — `verify` finding an unverifiable card — is reported with `output.failure(...)` and then
-`raise typer.Exit(code=ExitCode.DOMAIN_FAILURE)`.
+`raise typer.Exit(code=ExitCode.DOMAIN_FAILURE)`; `cut` exporting an `UNVERIFIED` card does the same
+with `ExitCode.CARD_UNVERIFIED`.
 
 **Exit 70 names the exception's class, never its message** (`v1-e01-t25`). An exception the CLI
 does not model did not get its message from this project: an `OSError` quotes the path it failed
@@ -232,7 +264,8 @@ the evidence bucket with, `storage.s3.aws_profile` and `DEBATE_REMOVAL_PROFILE` 
 whether this machine's AWS config defines it, and which permission set it is signed in as
 (`v1-e34-t22`). It fails on a profile that is not defined, with `STORE_PROFILE_NOT_CONFIGURED`,
 naming the profile and its setting; an expired session is reported as expired, with the login, and
-does not fail it. The option reads the AWS config and asks AWS who each defined profile is. Plain
+does not fail it. The profile Bedrock calls are signed with, `models.aws_profile`, is reported beside
+them in the same words, on a `Model profile` row, and never fails the check (`v1-e05-t08`). The option reads the AWS config and asks AWS who each defined profile is. Plain
 `doctor` does neither, which is why the installer and `validate-dev` can run it on a machine with
 no AWS config. `ops/launchd/install.sh --check-launchd` runs it under launchd, as the weekly agent
 will run. It names a permission set and never an account, a role's full identifier or the AWS
@@ -306,7 +339,8 @@ metadata, which is the same rule the rest of the platform follows (architecture 
 ## `debate-research verify`
 
 `debate-research verify <manifest.json>` (`v1-e03-t06-verify-command`) checks that every card in a
-card manifest is reproducible from its stored snapshot. Each card's evidence is cut again from the
+card manifest is reproducible from its stored snapshot, and `debate-research verify evidence.docx`
+(`v1-e06-t07`) does the same for a .docx debate-research exported, then checks its body. Each card's evidence is cut again from the
 snapshot and compared exactly; snapshots are read from this environment's data directory
 (`storage.data_dir`, from `DEBATE_ENV` or `DEBATE_STORAGE__DATA_DIR`) and never fetched. The work is
 `VerifyManifest`'s, in `debate_core.application.verify_manifest`; the command only reads the file,
@@ -316,12 +350,13 @@ renders the report and chooses the exit code.
 $ uv run debate-research verify cards.json
 $ uv run debate-research --json verify cards.json | jq '.data // .error.details | .cards[] | [.card_id, .status]'
 $ DEBATE_ENV=test DEBATE_STORAGE__DATA_DIR=/tmp/verify-data uv run debate-research verify tests/fixtures/verify/mixed.json
+$ uv run debate-research verify evidence.docx
 ```
 
 The manifest is `{"manifest_version": 1, "generated_at": ..., "cards": [<Card>, ...]}`, published as
 `packages/debate_core/schemas/card_manifest.v1.json`; each card is the domain `Card` and refers to
-`card.schema.json`. A person sees a table of card id, tag, status and reason codes (`--verbose` adds
-each reason's detail on stderr). `--json` prints one envelope, published as
+`card.schema.json`. A person sees a table of card id (with its snapshot id beneath), tag, status and
+reason codes (`--verbose` adds each reason's detail on stderr). `--json` prints one envelope, published as
 `packages/debate_core/schemas/verify_result.v1.json`: the report under `data` on exit 0, under
 `error.details` on exit 1.
 
@@ -329,7 +364,9 @@ each reason's detail on stderr). `--json` prints one envelope, published as
 |---|---|
 | `0` | Every card is VERIFIED. |
 | `1` | The manifest was read and at least one card is UNVERIFIED. Every card is still listed. |
-| `2` | A usage error, or a file that is not a card manifest: not JSON, or not valid against `card_manifest.v1.json`. The failing JSON path is reported and nothing is verified. |
+| `1` (`BODY_CARD_NOT_IN_MANIFEST`) | A .docx's body holds a card its manifest does not list, such as one pasted in by hand. It is listed as UNVERIFIED, by its place in the body. |
+| `2` | A usage error, or a file that is not a card manifest this build reads: not JSON, not valid against `card_manifest.v1.json`, or written by a newer build of debate-research. The failing JSON path is reported and nothing is verified. |
+| `2` (`NO_MANIFEST`) | A .docx with no embedded manifest, such as a hand-cut team file. verify reads only files debate-research exported; nothing is verified. |
 | `3` | Verification could not run, for example because a store could not be read. No card has a verdict. |
 
 Three rules worth knowing:
@@ -341,6 +378,32 @@ Three rules worth knowing:
   UNVERIFIED row with `CARD_INVALID`. The other cards are still verified; the run is not a `2`.
 * Exit `3` uses the CLI-wide `RETRIEVAL_FAILURE` number: the same command may succeed once the store
   can be read. It is never reported as `0` or `1`, because no card was judged.
+* A version-2 manifest's snapshot references (`sha256`, normalized text hash, normalizer and
+  extractor versions, `retrieved_at`, `canonical_url`) are checked against the stored snapshot
+  record. One that differs is `SNAPSHOT_REFERENCE_MISMATCH` on every card cut from that snapshot, in
+  a JSON manifest and an embedded one alike.
+
+### A .docx
+
+A document `debate-research cut` wrote carries its manifest, so verify needs nothing beside it. The
+cards in the manifest are verified as above, then the body is read in the format profile the cards
+name and each card's evidence paragraph is compared with its `evidence_text` under the edit policy:
+
+* deleting whole words or sentences, with or without the profile's ` … ` marker, and changing
+  underlining, highlighting or sizes leave the card VERIFIED;
+* a bracketed interpolation, `[like this]`, leaves it VERIFIED with the warning
+  `INTERPOLATION_PRESENT` and the offset it is read before;
+* any other change to the quoted words (a word changed or added, letters taken out of a word, two
+  words joined, a paragraph added under the evidence) makes it UNVERIFIED with `MANUAL_EDIT`, the
+  `evidence_text` range it replaced and the body range that replaced it, and the run exits `1`;
+* a card whose tag is no longer in the body is UNVERIFIED with `BODY_CARD_MISSING`;
+* a card in the body that the manifest does not list, such as one pasted in by hand, is a row of its
+  own, named by its place in the body ("body card 2"), UNVERIFIED with `BODY_CARD_NOT_IN_MANIFEST`,
+  and the run exits `1`. In `--json` it is an entry of `document.unclaimed_body_card_verdicts`, beside
+  the positions in `document.unclaimed_body_cards`, and it counts in `total` and `unverified`.
+
+The body is read as Word shows it: tracked insertions count, tracked deletions and hidden text do
+not. Neither output quotes the evidence or an interpolation's words, and the file is only read.
 
 ## Not here yet
 
@@ -357,3 +420,138 @@ uv run pytest packages/debate_cli/tests
 `tests/test_output.py` covers the output contract in isolation; `tests/test_app.py` runs the real
 command line through Typer's `CliRunner`, including commands that stand in for the ones later
 tasks add, so the skeleton's promises are checked rather than described.
+
+## `debate-research fetch`
+
+`debate-research fetch <URL>` (`v1-e04-t06-fetch-command`) retrieves an article or open-access PDF
+into a hashed snapshot in this environment's data directory, or says exactly why it cannot. The work
+is `ArticleService`'s (`debate_core.application.article_service`), asked through `ArticleFetch`
+(`debate_core.application.article_fetch`): the polite fetcher reads robots.txt and waits between
+requests to one host, the access classifier decides the status, and a snapshot is stored only for an
+ACCESSIBLE page. Paywalls are never bypassed.
+
+```console
+$ uv run debate-research fetch https://www.example.org/news/2026/10/some-story
+$ uv run debate-research fetch https://www.example.org/news/2026/10/some-story --refresh
+$ uv run debate-research --json fetch https://www.example.org/report.pdf | jq '.data.snapshot // .error.details.reason'
+$ uv run debate-research fetch --paste my-copy.txt --source-url https://www.example.org/paywalled-story
+$ uv run debate-research fetch --paste my-copy.txt --source-url https://www.example.org/paywalled-story --title "The story's title" --author "First Author" --author "Second Author" --date 2026-09-14 --publication "The Example Review"
+```
+
+A person sees the canonical URL, title, identifiers, access status and reason, provenance, and the
+snapshot's id, both SHA-256 hashes, paragraph count, extractor and normalizer versions; a refusal is
+a panel with the status, reason, status code, marker and rules version. `--json` prints one envelope,
+published as `packages/debate_core/schemas/fetch_result.v1.json`. Neither ever holds page text.
+
+`--refresh` asks the publisher again even when a snapshot younger than `articles.refetch_after_hours`
+is stored. `--paste FILE` (or `-` for stdin) with `--source-url` stores text the user lawfully has,
+such as a subscriber's copy, as USER_SUPPLIED, and fetches nothing. It is stored only after the user
+attests lawful access, at a prompt in a terminal or with `--i-have-lawful-access` where no prompt can
+be shown (`--json`, text on stdin, no terminal).
+
+With `--paste`, `--title`, `--author` (once per author, in order), `--date` and `--publication` state
+the copy's cite (`v1-e06-t12`), because a pasted copy has no markup to read one from. They are stored
+with the copy, never as verified, and `cut URL --from-paste` cites the card with them. The card stays
+UNVERIFIED for its cite (`CITATION_UNVERIFIED`), as a card cut from text a user supplied always is,
+and the cite marks each field `[… unverified]`. The date is a full date, `YYYY-MM-DD`; a year alone or a
+year and month is refused. A person sees the stored fields as `Stated …` rows, and `--json` as the
+snapshot's `stated_cite`. Storing the same text again with none of these options, or with the same
+ones, reuses the stored copy and its fields. With other options it stores a new copy holding exactly
+the fields that command states, nothing carried over, so restate `--title` when you add `--author`.
+A copy stored with stated cite fields needs this build or later: an older build cannot read its
+record.
+
+| Exit | Means |
+|---|---|
+| `0` | ACCESSIBLE and stored (or answered by a recent stored snapshot), or pasted text stored as USER_SUPPLIED. |
+| `1` | Refused, nothing stored: not a source URL, pasted text not attested, or pasted text rejected (blank, too short, too large). |
+| `2` | A usage error, for example `--paste` without `--source-url`, a URL and `--paste` together, a cite option without `--paste` or with an empty value, or a `--date` that is not `YYYY-MM-DD`. |
+| `3` | PAYWALLED, BLOCKED, ROBOTS_DISALLOWED, NOT_FOUND, UNSUPPORTED_TYPE or ERROR (`SOURCE_NOT_ACCESSIBLE`), or the fetcher could not run. No snapshot is stored. |
+
+## `debate-research cut`
+
+`debate-research cut <URL> --need "<research need>" --output evidence.docx` (`v1-e06-t06-cut-command`)
+turns one article into one card. `ArticleFetch` retrieves the page, or uses a snapshot stored within
+`articles.refetch_after_hours`; `CardService` asks the model (`card.select`, `card.markup`) where the
+evidence for the need is and what to underline, cuts that passage from the stored text, cites it
+(`CitationService`, with Crossref for a DOI) and verifies it; `ExportService` writes it in the
+`--format` profile (`team-default`, `flow` or `plain`, from `config/format_profiles/`) with its
+manifest embedded. The command only parses options, runs the three in order and reports what came
+back; the words are `debate_cli.presenters.cut_presenter`'s.
+
+```console
+$ uv run debate-research cut https://www.example.org/news/2026/10/some-story --need "revival diverts conservation money" --argument "Conservation DA" --output evidence.docx
+$ uv run debate-research --json cut https://www.example.org/report.pdf --need "habitat protection is cheaper" --output card.docx | jq '.data // .error.details | [.card_id, .status]'
+$ DEBATE_MODEL_MODE=live uv run debate-research cut https://www.example.org/news/2026/10/some-story --need "revival diverts conservation money" --output evidence.docx
+```
+
+The model is called only in `live` or `record` mode (`DEBATE_MODEL_MODE`); otherwise its answers are
+replayed from `<data dir>/cards/model-cassettes/`, and the `test` profile's fixture fake answers from
+`tests/fixtures/model_outputs/`. Cassettes hold the articles' numbered text, so they stay on this machine.
+Progress is one line per stage on stderr: `fetch`, `extract`, `select`, `verify`, `export`, as event
+objects under `--json`. A person then sees a table of the card id, status, file, source, snapshot,
+model calls and the manifest's SHA-256. `--json` prints one envelope: the card id and status, the file,
+the source, each failure reason, each model call's provenance and the embedded manifest's identity,
+under `data` on exit 0 and under `error.details` on exit 4. Neither holds evidence text; the manifest,
+evidence included, is the one in the .docx. Cards belong to one fixed local owner id until V2's accounts.
+
+| Exit | Means |
+|---|---|
+| `0` | The card is VERIFIED and was written to `--output`. |
+| `1` | The cut could not run, and nothing was saved or written: the model provider refused the call (`MODEL_ACCESS_DENIED`, `MODEL_REQUEST_REJECTED`), the snapshot is missing or damaged, a prompt is not registered, no answer was recorded for a replayed call, or the URL names no source. |
+| `2` | A usage error: no `--need`, a `--format` no profile has, an `--output` in a directory that does not exist. Nothing is fetched. |
+| `3` | The source is PAYWALLED, BLOCKED, ROBOTS_DISALLOWED, NOT_FOUND, UNSUPPORTED_TYPE or ERROR (`SOURCE_NOT_ACCESSIBLE`, with the status and the canonical URL), or the model provider did not answer or throttled the call. No card is saved and nothing is written. |
+| `4` | The card is UNVERIFIED (`CARD_UNVERIFIED`): saved, written with its banner, and each reason printed. |
+
+## `debate-research search`
+
+`debate-research search "<query>"` (`v1-e08-t05-search-command`) asks every enabled discovery provider
+at once and ranks what they find. `FederatedSearchService` in `debate_core` does the work: with
+`--argument` and `--need` it expands the query into the taxonomy's queries for that pair
+(`config/argument_taxonomy.yaml`, `v1-e08-t04`), asks each provider each query under
+`providers.search_deadline_seconds`, merges what comes back into distinct sources (`v1-e08-t02`), ranks
+them by seven explainable features (`config/federated_ranking.yaml`, `v1-e08-t03`), matches each to an
+Article without fetching it, and stores the search. The providers are the ones `providers.enabled`
+names that this build has adapters for: `openalex`, `crossref`, `rss` (the publisher feeds in
+`config/feeds/`), `google_news`, and the government sources `federal_register` and `govinfo`. The words
+are `debate_cli.presenters.search_presenter`'s.
+
+**Government sources** (`v1-e07-t07`) are asked only by a search on a topic that lists them:
+`--topic policy-2026-27-nhi` asks the Federal Register's rules, proposed rules and notices and GovInfo's
+bills, committee reports, hearings and committee prints, because `config/feeds/health-insurance.yaml`
+lists both for that topic. A search with no `--topic` never asks them, and neither does one where
+`providers.enabled` does not list them. The Federal Register takes no key. GovInfo needs a free
+api.data.gov key in `DEBATE_PROVIDERS__API_DATA_GOV_KEY`, from https://api.data.gov/signup/. Without one,
+a search on the topic reports `govinfo: not configured: govinfo: no api.data.gov key
+(DEBATE_PROVIDERS__API_DATA_GOV_KEY)` and exits `6`. api.data.gov allows a key 1,000 requests an hour,
+which is about 90 searches an hour expanded to eleven queries, and then answers `429` for the rest of
+the hour; the footer says so.
+
+```console
+$ uv run debate-research search "midterm elections" --since 2026-09-14 --max-results 20
+$ uv run debate-research search "national health insurance" --argument politics-da --need link --topic policy-2026-27-nhi
+$ uv run debate-research search "de-extinction" --format json | jq '.data // .error.details | .results[] | [.rank, .title, .explanation]'
+$ uv run debate-research search "health insurance" --argument ptx --need uq --var bill=reconciliation --expand-llm
+$ uv run debate-research search "marketplace enrollment" --topic policy-2026-27-nhi --since 2025-01-01
+```
+
+A person sees a table of rank, title, publisher or venue, date, source type, access and the ranking's
+explanation, then the expansion's line and a footer with one line per provider: `openalex: ok, 12
+results`, `rss: partial, 4 results: 1 of 6 feeds failed: …`, `openalex: timeout: no answer within 10s`.
+`--format json` (or `--json`) prints one envelope whose search object carries, for each result, its
+rank, score, seven features and their contributions, explanation, identifiers, the providers that found
+it and its Article id and access status. Neither surface prints a snippet or an abstract: search
+returns sources, not cards, and access stays `UNKNOWN` until `fetch` or `cut` reads the page.
+`--save PATH` writes the same search object to a file. `--expand-llm` also asks a model for up to three
+extra queries, replayed from `<data dir>/search/model-cassettes/` unless `DEBATE_MODEL_MODE` is `live`
+or `record`; it is off unless given, and a model that cannot be asked leaves a warning on stderr and the
+template queries alone.
+
+| Exit | Means |
+|---|---|
+| `0` | Every provider answered in full, with results. |
+| `1` | No provider was asked: none of those selected is enabled (`NO_PROVIDER_ENABLED`). |
+| `2` | A usage error: an unknown `--argument`, `--need`, `--topic` or `--var` (the valid ones are listed), `--since` after `--until`, a provider this build does not have. Nothing is searched. |
+| `3` | No provider answered (`SEARCH_FAILED`). |
+| `6` | Partial (`SEARCH_PARTIAL`): results from the providers that answered, and the footer names each one that did not. |
+| `7` | Every provider answered, and nothing matched (`NO_RESULTS`). |

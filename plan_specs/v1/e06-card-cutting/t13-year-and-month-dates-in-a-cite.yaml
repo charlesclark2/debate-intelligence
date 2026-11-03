@@ -1,0 +1,76 @@
+# TASK v1-e06-t13-year-and-month-dates-in-a-cite - A cite can carry a year-only or year-and-month date without inventing a day
+# Epic: E06 Card Cutting, Citation & Export | Release: v1.3 (URL → verified card) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e06-t13-year-and-month-dates-in-a-cite
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.3
+    debate/epic: v1-e06-card-cutting
+  annotations:
+    debate/title: "A cite can carry a year-only or year-and-month date without inventing a day"
+spec:
+  # Filed by the PM, 2026-11-02, from v1-e06-t12's follow-up 1 and v1-e07-t03's date precision (the PM's reviews, 2026-11-02).
+  description: >-
+    Citation.published_at is a datetime and format_cite prints a whole day, so a source that
+    states only a year or a month can't be cited with its date: `fetch --paste --date` takes
+    YYYY-MM-DD only (v1-e06-t12), and a discovery-only Article stores no date at all for a year
+    or month precision (v1-e07-t03's guard, already on dev; not a prerequisite, since it ships
+    in a later release). Give the citation a date precision (day, month, year), print each at
+    its precision in every format profile, let `fetch --paste --date` take YYYY and YYYY-MM, and
+    let a discovery candidate's year or month date reach the Article and the cite at its
+    precision. No precision is ever raised: a year stays a year.
+  priority: 3
+  constraints:
+    packages: [debate_core.domain, debate_core.application, debate_core.evidence, debate_cli, packages/debate_core/schemas, packages/debate_core/tests, packages/debate_cli/tests, tests/smoke]
+    forbidden:
+      - Inventing a day or a month
+      - A stored row an older build can't read without saying so in the report
+      - Network or live model calls in tests
+  context:
+    - kind: TaskRef
+      name: v1-e06-t12-pasted-copy-cite-stated-by-the-user
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        A year or a year-and-month date is stored, printed and exported at its precision
+        from `fetch --paste` and from a discovery candidate, and a day date prints as today,
+        by tests shown failing first.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e06-t13-year-and-month-dates-in-a-cite-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.3
+    debate/epic: v1-e06-card-cutting
+spec:
+  description: >-
+    A cite can carry a year-only or year-and-month date without inventing a day.
+  goalRef:
+    name: v1-e06-t13-year-and-month-dates-in-a-cite
+  graph:
+    nodes:
+      - id: year-and-month-dates-in-a-cite
+        kind: Task
+        name: Partial dates
+        description: >-
+          A cite can carry a year-only or year-and-month date without inventing a day.
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Partial dates tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests, packages/debate_cli/tests, -k, date or cite]
+status:
+  phase: Pending

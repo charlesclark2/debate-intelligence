@@ -123,14 +123,6 @@ spec:
       inputs:
         goalRef: v1-e31-t06-parse-pipeline
         specRef: plan_specs/v1/e31-debate-file-parsing/t06-parse-pipeline.yaml
-    - id: ext-v1-e32-t05-landscape-cli
-      kind: External
-      name: 'Prerequisite from E32: `debate-research landscape` command'
-      description: >-
-        Cross-epic prerequisite owned by v1-e32-argument-landscape (release v1.2).
-      inputs:
-        goalRef: v1-e32-t05-landscape-cli
-        specRef: plan_specs/v1/e32-argument-landscape/t05-landscape-cli.yaml
     - id: ext-v1-e01-t09-dev-prerelease-channel
       kind: External
       name: 'Prerequisite from E01: installable dev pre-release channel'
@@ -164,6 +156,14 @@ spec:
       inputs:
         goalRef: v1-e29-t07-missing-profile-not-retryable
         specRef: plan_specs/v1/e29-cloud-evidence-store/t07-missing-profile-not-retryable.yaml
+    - id: ext-v1-e29-t09-store-error-loose-ends
+      kind: External
+      name: 'Prerequisite from E29: Loose ends in how store errors are classified, worded and wrapped'
+      description: >-
+        Cross-epic prerequisite owned by v1-e29-cloud-evidence-store (release v1.1).
+      inputs:
+        goalRef: v1-e29-t09-store-error-loose-ends
+        specRef: plan_specs/v1/e29-cloud-evidence-store/t09-store-error-loose-ends.yaml
     - id: t01
       kind: Task
       name: OpenCaselist API client
@@ -199,7 +199,6 @@ spec:
       - t01
       - ext-v1-e31-t06-parse-pipeline
       - ext-v1-e30-t05-caselist-publish
-      - ext-v1-e32-t05-landscape-cli
       - ext-v1-e30-t04-openev-importer
       acceptanceCriteria:
       - type: command_succeeds
@@ -252,6 +251,14 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e34-t04-full-archive-refresh
+    - id: ext-v1-e30-t07-source-removal
+      kind: External
+      name: 'Prerequisite from E30: Source removal and suppression list'
+      description: >-
+        Cross-epic prerequisite owned by v1-e30-caselist-ingestion (release v1.1).
+      inputs:
+        goalRef: v1-e30-t07-source-removal
+        specRef: plan_specs/v1/e30-caselist-ingestion/t07-source-removal.yaml
     - id: t05
       kind: Task
       name: Install and enable the weekly agent
@@ -267,6 +274,7 @@ spec:
       - t07
       - ext-v1-e01-t09-dev-prerelease-channel
       - t10
+      - ext-v1-e30-t07-source-removal
       acceptanceCriteria:
       - type: command_succeeds
         name: Task spec v1-e34-t05-enable-schedule reports phase Succeeded
@@ -309,6 +317,7 @@ spec:
         goalRef: v1-e34-t07-suppressed-downloads
       dependsOn:
       - t06
+      - ext-v1-e30-t07-source-removal
       acceptanceCriteria:
       - type: command_succeeds
         name: Task spec v1-e34-t07-suppressed-downloads reports phase Succeeded
@@ -663,5 +672,276 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e34-t24-agent-install-loose-ends
+    - id: t25
+      kind: Task
+      name: 'A reinstall keeps the agent''s schedule and options, and doctor names a takedown profile''s environment'
+      description: >-
+        A reinstall keeps the agent's schedule and options, and doctor names a takedown
+        profile's environment.
+      inputs:
+        specRef: plan_specs/v1/e34-caselist-sync/t25-reinstall-keeps-every-setting.yaml
+        goalRef: v1-e34-t25-reinstall-keeps-every-setting
+      dependsOn:
+      - t24
+      - ext-v1-e29-t09-store-error-loose-ends
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e34-t25-reinstall-keeps-every-setting reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e34-t25-reinstall-keeps-every-setting
+    - id: t26
+      kind: Task
+      name: 'A drifted snapshot is owed again, and the banner and run list say what is pending'
+      description: >-
+        A drifted snapshot is owed again, and the banner and run list say what is pending.
+      inputs:
+        specRef: plan_specs/v1/e34-caselist-sync/t26-pending-work-and-banner-words.yaml
+        goalRef: v1-e34-t26-pending-work-and-banner-words
+      dependsOn:
+      - t23
+      - ext-v1-e29-t09-store-error-loose-ends
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e34-t26-pending-work-and-banner-words reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e34-t26-pending-work-and-banner-words
+    - id: t27
+      kind: Task
+      name: 'The wrapper exports no AWS_PROFILE, and --check-launchd refuses options it ignores'
+      description: >-
+        The wrapper exports no AWS_PROFILE, and --check-launchd refuses options it ignores.
+      inputs:
+        specRef: plan_specs/v1/e34-caselist-sync/t27-wrapper-and-check-launchd-options.yaml
+        goalRef: v1-e34-t27-wrapper-and-check-launchd-options
+      dependsOn:
+      - t25
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e34-t27-wrapper-and-check-launchd-options reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e34-t27-wrapper-and-check-launchd-options
+    - id: t28
+      kind: Task
+      name: 'Publish-stage loose ends: a cut-short report check, the manifest count, and a report-only outcome'
+      description: >-
+        Publish-stage loose ends: a cut-short report check, the manifest count, and a
+        report-only outcome.
+      inputs:
+        specRef: plan_specs/v1/e34-caselist-sync/t28-publish-stage-loose-ends.yaml
+        goalRef: v1-e34-t28-publish-stage-loose-ends
+      dependsOn:
+      - t26
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e34-t28-publish-stage-loose-ends reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e34-t28-publish-stage-loose-ends
+    - id: ext-v1-e31-t20-long-cuts-and-limits
+      kind: External
+      name: 'Prerequisite from E31: Long cuts join the one cluster that holds them, and the matching limits are set from samples'
+      description: >-
+        Cross-epic prerequisite owned by v1-e31-debate-file-parsing (release v1.1).
+      inputs:
+        goalRef: v1-e31-t20-long-cuts-and-limits
+        specRef: plan_specs/v1/e31-debate-file-parsing/t20-long-cuts-and-limits.yaml
+    - id: t29
+      kind: Task
+      name: 'An older build never rewrites or publishes an occurrence table stamped with a newer fingerprint version'
+      description: >-
+        An older build never rewrites or publishes an occurrence table stamped with a newer
+        fingerprint version.
+      inputs:
+        specRef: plan_specs/v1/e34-caselist-sync/t29-newer-fingerprint-table-guard.yaml
+        goalRef: v1-e34-t29-newer-fingerprint-table-guard
+      dependsOn:
+      - ext-v1-e31-t20-long-cuts-and-limits
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e34-t29-newer-fingerprint-table-guard reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e34-t29-newer-fingerprint-table-guard
+    - id: t30
+      kind: Task
+      name: 'doctor says when a store the weekly run will index has never been parsed'
+      description: >-
+        doctor says when a store the weekly run will index has never been parsed.
+      inputs:
+        specRef: plan_specs/v1/e34-caselist-sync/t30-doctor-unparsed-store.yaml
+        goalRef: v1-e34-t30-doctor-unparsed-store
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e34-t30-doctor-unparsed-store reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e34-t30-doctor-unparsed-store
+    - id: ext-v1-e31-t30-parsed-store-publish-only
+      kind: External
+      name: 'Prerequisite from E31: Publish the parsed store without rebuilding it'
+      description: >-
+        Cross-epic prerequisite owned by v1-e31-debate-file-parsing (release v1.1).
+      inputs:
+        goalRef: v1-e31-t30-parsed-store-publish-only
+        specRef: plan_specs/v1/e31-debate-file-parsing/t30-parsed-store-publish-only.yaml
+    - id: t31
+      kind: Task
+      name: 'The weekly run names caselist parse --publish-only where a publish-only finishes the stage'
+      description: >-
+        The weekly run names caselist parse --publish-only where a publish-only finishes the
+        stage.
+      inputs:
+        specRef: plan_specs/v1/e34-caselist-sync/t31-pull-fix-text-publish-only.yaml
+        goalRef: v1-e34-t31-pull-fix-text-publish-only
+      dependsOn:
+      - t28
+      - ext-v1-e31-t30-parsed-store-publish-only
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e34-t31-pull-fix-text-publish-only reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e34-t31-pull-fix-text-publish-only
+    - id: t32
+      kind: Task
+      name: 'The staleness hook reports a caselist stale when its latest run failed'
+      description: >-
+        The staleness hook reports a caselist stale when its latest run failed.
+      inputs:
+        specRef: plan_specs/v1/e34-caselist-sync/t32-failed-run-reads-stale.yaml
+        goalRef: v1-e34-t32-failed-run-reads-stale
+      dependsOn:
+      - t03
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e34-t32-failed-run-reads-stale reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e34-t32-failed-run-reads-stale
+    - id: t33
+      kind: Task
+      name: 'A keychain failure under launchd names its cause, and clearing a token already gone is no error'
+      description: >-
+        A keychain failure under launchd names its cause, and clearing a token already gone
+        is no error.
+      inputs:
+        specRef: plan_specs/v1/e34-caselist-sync/t33-keychain-errors-named.yaml
+        goalRef: v1-e34-t33-keychain-errors-named
+      dependsOn:
+      - t01
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e34-t33-keychain-errors-named reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e34-t33-keychain-errors-named
+    - id: t34
+      kind: Task
+      name: 'Earlier seasons'' complete archives, from 2021-22 on, imported and parsed as backfiles'
+      description: >-
+        Earlier seasons' complete archives, from 2021-22 on, imported and parsed as
+        backfiles.
+      inputs:
+        specRef: plan_specs/v1/e34-caselist-sync/t34-backfile-seasons-import.yaml
+        goalRef: v1-e34-t34-backfile-seasons-import
+      dependsOn:
+      - t04
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e34-t34-backfile-seasons-import reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e34-t34-backfile-seasons-import
+    - id: t35
+      kind: Task
+      name: 'A Mac run stopped for a missing token says to log in again'
+      description: >-
+        A Mac run stopped for a missing token says to log in again.
+      inputs:
+        specRef: plan_specs/v1/e34-caselist-sync/t35-token-missing-hint-on-the-mac.yaml
+        goalRef: v1-e34-t35-token-missing-hint-on-the-mac
+      dependsOn:
+      - t33
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e34-t35-token-missing-hint-on-the-mac reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e34-t35-token-missing-hint-on-the-mac
+    - id: t36
+      kind: Task
+      name: 'A Mac run stopped for an unreadable token says to log out and log in again'
+      description: >-
+        A Mac run stopped for an unreadable token says to log out and log in again.
+      inputs:
+        specRef: plan_specs/v1/e34-caselist-sync/t36-token-unreadable-hint-on-the-mac.yaml
+        goalRef: v1-e34-t36-token-unreadable-hint-on-the-mac
+      dependsOn:
+      - t35
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e34-t36-token-unreadable-hint-on-the-mac reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e34-t36-token-unreadable-hint-on-the-mac
+    - id: t37
+      kind: Task
+      name: 'A listed camp file is not taken as already imported because a file of another camp shares its name'
+      description: >-
+        A listed camp file is not taken as already imported because a file of another camp
+        shares its name.
+      inputs:
+        specRef: plan_specs/v1/e34-caselist-sync/t37-listed-camp-file-with-a-hand-imported-name.yaml
+        goalRef: v1-e34-t37-listed-camp-file-with-a-hand-imported-name
+      dependsOn:
+      - t02
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e34-t37-listed-camp-file-with-a-hand-imported-name reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e34-t37-listed-camp-file-with-a-hand-imported-name
 status:
   phase: Pending

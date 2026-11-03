@@ -1,0 +1,68 @@
+{
+  "call": "generate_structured",
+  "cassette_format": 1,
+  "key": "fa0e5944c1d24293d85b016be5607801e01414327373717aab9a4e0db7b70555",
+  "request": {
+    "output_schema": "debate_core.evidence.selection_contract.CardSelection",
+    "params": {
+      "effort": null,
+      "max_tokens": null,
+      "temperature": null,
+      "timeout_seconds": null
+    },
+    "prompt": {
+      "prompt_id": "card.select",
+      "prompt_version": "1.0.0",
+      "variables": {
+        "numbered_snapshot": "[P1] The Senate’s “clean grid” bill—passed 52–48 on Tuesday—spends political capital the majority will need later.\n\n[P2] Analysts at the Café Économique institute warn that the fight leaves no room for a budget deal this spring 🌍 before the recess.\n\n[P3] If the budget deal fails—and “fails” is the word staff use—a shutdown follows within weeks 😬 and the grid program stalls.\n\n[P4] Violet harbor engines quietly folded seven paper lanterns beneath the northern quarry wall.",
+        "research_need": "Politics DA link: an energy fight costs the majority the budget"
+      }
+    },
+    "task_class": "complex_reasoning"
+  },
+  "response": {
+    "invoked_at": "2026-01-01T00:00:00Z",
+    "output": {
+      "confidence": 0.75,
+      "passages": [
+        {
+          "end_offset": null,
+          "first_paragraph": 2,
+          "last_paragraph": 2,
+          "start_offset": 52
+        },
+        {
+          "end_offset": 120,
+          "first_paragraph": 3,
+          "last_paragraph": 3,
+          "start_offset": 59
+        }
+      ],
+      "rationale": "Paragraph 2 says the fight crowds out the budget; paragraph 3 says a failed deal brings a shutdown.",
+      "tag": {
+        "argument_role": "link",
+        "confidence": 0.8,
+        "need_alignment": "direct",
+        "text": "An energy fight leaves no time for a budget, so a shutdown follows"
+      }
+    },
+    "prompt_id": "card.select",
+    "prompt_version": "1.0.0",
+    "provider_request_id": "example-request-0601",
+    "route": {
+      "inference_profile": null,
+      "max_tokens": 4096,
+      "model_id": "example-recorded-model",
+      "provider": "bedrock",
+      "region": "example-region-1",
+      "task_class": "complex_reasoning",
+      "temperature": null,
+      "timeout_seconds": 60.0
+    },
+    "usage": {
+      "input_tokens": 900,
+      "latency_ms": 2400.0,
+      "output_tokens": 140
+    }
+  }
+}

@@ -17,28 +17,62 @@ regenerates it on `dev` ([`v1-e01-t16`](../plan_specs/v1/e01-repo-foundation/t16
 | [architecture/ports-and-adapters.md](architecture/ports-and-adapters.md) | The ten ports, the constructor-injection pattern, and how to add an adapter |
 | [data/2026-27-tournament-schedule.md](data/2026-27-tournament-schedule.md) | The 2026-27 season's tournaments as given on 2026-09-30: the seed for `site/content/tournaments.yaml`, which is now the source of record |
 | [data/academic-case-sources.md](data/academic-case-sources.md) | Candidate claims and sources for the website home page's academic case, and why some kinds of finding are not used |
+| [data/built-file-metadata.md](data/built-file-metadata.md) | Published built files under the evidence bucket's files/ prefix: the key layout, the metadata.json contract the V2 debate tub indexes, and the lookups by source, school or team for takedowns |
+| [data/caselist-backfile-seasons.md](data/caselist-backfile-seasons.md) | Earlier seasons' caselists as backfiles (`v1-e34-t34`): what the API serves from 2021-22 on, complete-archive sizes, and each import's counts; aggregates only |
 | [data/caselist-backfill-2026-09.md](data/caselist-backfill-2026-09.md) | Counts from the one-off caselist and camp-file backfill (`v1-e30-t06`), recorded by the operator; aggregates only |
+| [data/caselist-cloud-run-comparison.md](data/caselist-cloud-run-comparison.md) | The cutover's comparison of a dev cloud run with the Mac's offline reproduction of its parse and index: counts only (v1-e40-t06) |
+| [data/caselist-parse-memory.md](data/caselist-parse-memory.md) | How much memory a caselist parse uses: each worker against its source's size, and the main process over the aggregate rebuild |
 | [data/caselist-parse-report.md](data/caselist-parse-report.md) | Counts from the operator-run full-corpus caselist parse, per caselist and environment |
+| [data/caselist-rebuild-memory.md](data/caselist-rebuild-memory.md) | The aggregate rebuild's main-process memory before and after it read cards source by source, and what its peak grows with |
 | [data/caselist-removal-requests.md](data/caselist-removal-requests.md) | The register of caselist and OpenEv removal requests, one row per request id; no school, team code, filename or name |
 | [data/caselist-sync-runs.md](data/caselist-sync-runs.md) | Counts from each weekly `caselist pull`, recorded by the operator; aggregates only |
 | [data/debate-file-style-survey.md](data/debate-file-style-survey.md) | Which Word styles real team, caselist and camp `.docx` files use, and the share of files per template family |
+| [data/evidence-search-pilot.md](data/evidence-search-pilot.md) | The student search pilot's evidence: early sessions, the promotion checklist, the beta and the go or no-go |
+| [data/file-publish-log.md](data/file-publish-log.md) | Every operator publish of built files to the evidence buckets: keys, counts and statuses, no team codes (v1-e33-t05) |
+| [data/landscape-model-evaluation.md](data/landscape-model-evaluation.md) | The landscape model stage's evaluations against the coach's labels, broken down: counts and taxonomy ids only |
+| [data/landscape/first-run-policy.md](data/landscape/first-run-policy.md) | Counts from the first Policy argument landscape reports on hspolicy26 (`v1-e32-t05`): classification coverage, review queue and scan; aggregates only |
+| [data/openev-release-manifest.md](data/openev-release-manifest.md) | The camp release manifest's member-row fields, including OpenEv's own camp word from the pull's listing |
 | [data/parsed-card-store.md](data/parsed-card-store.md) | Layout and record shapes of the parsed card store that caselist parse writes |
+| [data/parser-corpus-health.md](data/parser-corpus-health.md) | The parser over the real corpus in place: parse success rate, failures by reason, cards and timing; counts only (v1-e31-t05 ac5) |
+| [data/parser-eval-2026-10.md](data/parser-eval-2026-10.md) | Parser evaluation baseline on 2026.10.18-docx-5: per-unit scores for the labelled tiers |
+| [data/parser-eval-gaps-2026-10.md](data/parser-eval-gaps-2026-10.md) | Where the labelled parser evaluation's missed cites, tags and highlights go: the docx-6 re-measure beside 2026-10-20's baseline, and tallies before any rule |
+| [data/search-index.md](data/search-index.md) | The student search pilot's SQLite FTS5 index: its schema, manifest and pointer, and the record of each full-store build |
+| [data/team-format-survey.md](data/team-format-survey.md) | How the team formats its cards (sizes, highlight colours, cite layout), measured from its own files without reading their text |
 | [evidence/normalization.md](evidence/normalization.md) | Evidence text normalization policy: the frozen, versioned rules every snapshot offset, hash and verification depends on |
 | [evidence/snapshot-text-format.md](evidence/snapshot-text-format.md) | `debate-snapshot-text/1`: how a snapshot's normalized text and paragraph map are stored, the canonical encoding, the key check every read makes, and what `SnapshotService.load` verifies |
 | [guides/coach-website-editing.md](guides/coach-website-editing.md) | For coaches: adding, changing and removing events and announcements on the team website, with no code |
+| [guides/evidence-search-accounts.md](guides/evidence-search-accounts.md) | For the coach and students: accounts for the team evidence search, first sign-in, the authenticator app, the backup email, resets and lost phones |
 | [guides/evidence-store-cli.md](guides/evidence-store-cli.md) | Using `debate-research store sync\|ls\|get`: environments, the dry-run default, the production guard, verification and resume |
+| [guides/file-recipes.md](guides/file-recipes.md) | For coaches: writing a file recipe, the YAML that names the cards and headings of an evidence file to build |
+| [guides/landscape-taxonomy.md](guides/landscape-taxonomy.md) | For coaches: editing the position taxonomies a landscape report counts against, and seeding a new one |
 | [guides/parent-email-updates.md](guides/parent-email-updates.md) | Parent email updates: the channel chosen and why, how a parent's address travels, who owns the list, how a coach sends an update and what may not go in one about students |
+| [guides/parsed-store-publish-only.md](guides/parsed-store-publish-only.md) | Publishing the parsed card store without rebuilding it: `caselist parse --publish-only`, when to use it and when to rebuild instead |
+| [guides/search-index.md](guides/search-index.md) | Building and publishing the student search pilot's index with `debate-research tub index build\|publish` |
 | [policies/caselist-data-use.md](policies/caselist-data-use.md) | Data-use policy for OpenCaselist disclosures and OpenEv camp files |
 | [policies/website-publishing.md](policies/website-publishing.md) | What may be published on the public team website: student names and photos, results, branding, accessibility, third parties, donations, removal on request |
 | [process/branching-and-environments.md](process/branching-and-environments.md) | `main` = prod, `dev` = development; promotion rules |
+| [process/ci-test-part-costs.md](process/ci-test-part-costs.md) | What one ci.yml test part costs besides its tests (measured 2026-11-01), how many parts a selection gets, how whole files are dealt to parts by recorded durations (2026-11-02), and the options for making parts cheaper |
 | [process/session-report-template.md](process/session-report-template.md) | Template for session reports |
 | [process/task-workflow.md](process/task-workflow.md) | `scripts/task`: start → session → PM review → PR → finish |
 | [process/working-agreements.md](process/working-agreements.md) | Project rules: light CI, operator hand-off for long commands, doc locations, naming |
+| [runbooks/annual-purge.md](runbooks/annual-purge.md) | The annual purge each September: what ages out under the data-use policy's retention table, store by store, in dev and prod and on this Mac; each step's listing, delete and check; and the gaps no command covers yet |
 | [runbooks/aws-account-baseline.md](runbooks/aws-account-baseline.md) | Building and verifying the AWS account baseline: identity, audit, budgets |
+| [runbooks/bedrock-access.md](runbooks/bedrock-access.md) | Calling the routed Bedrock models: the BedrockInvoker permission set's plan and apply, its SSO profile, the account's one-time model access, the data-use checks, the first real call and zero-retention mode |
+| [runbooks/caselist-backfiles.md](runbooks/caselist-backfiles.md) | Importing earlier seasons' complete archives as backfiles (`caselist backfile-import`): when imports may run, the dry run and the import, the order, what each refusal means, and the rebuild a removal adds |
 | [runbooks/caselist-backfill.md](runbooks/caselist-backfill.md) | The one-off caselist and camp-file backfill: what `pull` fetches, what is imported by hand, and the day-by-day download plan |
+| [runbooks/caselist-cloud-credentials.md](runbooks/caselist-cloud-credentials.md) | The weekly cloud run's credentials: applying the key, the two secrets, the roles and the writer, writing the Tabroom password, the scheduled login, and logging in by hand |
+| [runbooks/caselist-cloud-run.md](runbooks/caselist-cloud-run.md) | The weekly cloud run's container: applying its network, cluster, repository and deployer, checking whether a new login ends the Mac's token, pushing its image, the login and run tasks with their schedules, a dry-run rehearsal, one run by hand, and the backfile imports started by hand on the run's task definition |
+| [runbooks/caselist-cutover.md](runbooks/caselist-cutover.md) | The cutover of the weekly caselist run from the Mac to the cloud in dev: the Mac's last run, unloading its agent, the seed, the run's image, one run by hand, the comparison, the schedule and the late-run alarm; the fallback week on the Mac; and prod at the pilot's promotion |
 | [runbooks/caselist-removal.md](runbooks/caselist-removal.md) | Removing a caselist or OpenEv source on request |
+| [runbooks/caselist-run-alerts.md](runbooks/caselist-run-alerts.md) | The cloud run's alerts: applying the alert topic, rules and alarms in dev, confirming the coach's email subscription, one test alert, turning the late-run alarm on at the cutover, and what to do when each alert arrives |
 | [runbooks/caselist-scheduled-sync.md](runbooks/caselist-scheduled-sync.md) | Installing, enabling, watching and disabling the weekly `caselist pull` launchd agent |
+| [runbooks/evidence-search.md](runbooks/evidence-search.md) | Standing up the student evidence search pilot in dev and prod: applies, deploys, cookie keys, CLI-only settings, SES access and the school IT request |
 | [runbooks/evidence-store.md](runbooks/evidence-store.md) | Applying the dev and prod evidence buckets and checking the operator and takedown credentials |
+| [runbooks/landscape-model-evaluation-record.md](runbooks/landscape-model-evaluation-record.md) | Re-recording the landscape model evaluation under a new prompt version, then breaking it down as JSON |
+| [runbooks/landscape-model-evaluation-replay.md](runbooks/landscape-model-evaluation-replay.md) | Replaying a recorded landscape model evaluation, broken down card by card, with no model call |
+| [runbooks/landscape-report-from-the-cloud-run.md](runbooks/landscape-report-from-the-cloud-run.md) | Publishing a caselist's landscape report from the weeks the cloud run pulled: restore a copy, parse it, dry run, publish, delete the copy |
+| [runbooks/parsed-store-retention.md](runbooks/parsed-store-retention.md) | Retiring superseded parsed-store version directories in both buckets and on this machine, and undoing it |
+| [runbooks/run-lock-conditional-writes.md](runbooks/run-lock-conditional-writes.md) | Applying the evidence bucket's deny of an unconditional write of the run lock, and proving it without disturbing the lock |
 | [runbooks/team-website.md](runbooks/team-website.md) | Standing up the team website's hosting, domains and publisher credentials, and deploying, rolling back or taking down the site |
 | [runbooks/terraform-bootstrap.md](runbooks/terraform-bootstrap.md) | Creating the Terraform state buckets and the dev/prod environment roots |
 | [runbooks/website-content-accounts.md](runbooks/website-content-accounts.md) | The team Google account that owns the website's calendar and announcements sheet: owners, coach access, recovery, secrets |

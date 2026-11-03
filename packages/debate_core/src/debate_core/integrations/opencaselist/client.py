@@ -44,6 +44,7 @@ from debate_core.application.ports.caselist_source import (
     DownloadedFile,
     OpenEvFile,
 )
+from debate_core.application.ports.providers import Clock
 from debate_core.application.settings import ConfigurationError, Settings
 from debate_core.integrations.opencaselist.auth import IssuedToken, LoginResource
 from debate_core.integrations.opencaselist.caselists import CaselistsResource
@@ -84,6 +85,7 @@ class OpenCaselistClient:
         *,
         token_store: CaselistTokenStore,
         user_agent_version: str,
+        wall_clock: Clock,
         http_client: httpx.AsyncClient | None = None,
         clock: Callable[[], float] = time.monotonic,
         sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
@@ -91,7 +93,8 @@ class OpenCaselistClient:
         """Build the client this installation is configured for, or refuse to.
 
         Raises :class:`CaselistApiDisabled` unless `caselist.api_enabled`, and
-        :class:`NetworkDisallowed` when `allow_network` is false.
+        :class:`NetworkDisallowed` when `allow_network` is false. `wall_clock` is what a
+        `Retry-After` date is measured from; `clock` is the monotonic one the pacing reads.
         """
         caselist = settings.caselist
         if not caselist.api_enabled:
@@ -129,6 +132,7 @@ class OpenCaselistClient:
             timeout=httpx.Timeout(
                 settings.http.request_timeout_seconds, connect=settings.http.connect_timeout_seconds
             ),
+            wall_clock=wall_clock,
             on_authenticated_success=on_authenticated_success,
             http_client=http_client,
             clock=clock,
@@ -166,6 +170,9 @@ class OpenCaselistClient:
 
     async def download_archive(self, archive: ArchiveListing, inbox: Path) -> DownloadedFile:
         return await self.archives.download(archive, inbox)
+
+    async def archive_size(self, archive: ArchiveListing) -> int | None:
+        return await self.archives.declared_size(archive)
 
     async def download_openev(self, file: OpenEvFile, inbox: Path) -> DownloadedFile:
         return await self.openev.download(file, inbox)

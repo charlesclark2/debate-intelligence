@@ -63,17 +63,57 @@ def envelope_of(result: Result) -> dict[str, Any]:
 
 # Read by hand from debate_cli/container.py, as tests/test_installation.py does.
 WIRED_INTEGRATIONS = [
+    "debate_core.integrations.bedrock",
+    "debate_core.integrations.cloudwatch_audit",
+    "debate_core.integrations.cognito",
+    "debate_core.integrations.crossref_doi",
+    "debate_core.integrations.discovery.crossref",
+    "debate_core.integrations.discovery.federal_register",
+    "debate_core.integrations.discovery.feed_cache",
+    "debate_core.integrations.discovery.feed_config",
+    "debate_core.integrations.discovery.feeds",
+    "debate_core.integrations.discovery.google_news_rss",
+    "debate_core.integrations.discovery.govinfo",
+    "debate_core.integrations.discovery.openalex",
+    "debate_core.integrations.discovery.registry",
+    "debate_core.integrations.docx_file_writer.writer",
     "debate_core.integrations.docx_parser",
+    "debate_core.integrations.html_extractor",
+    "debate_core.integrations.http_fetcher",
+    "debate_core.integrations.landscape.analytic_text_store",
+    "debate_core.integrations.landscape.classification_store",
+    "debate_core.integrations.landscape.plan_text_store",
+    "debate_core.integrations.landscape.yaml_taxonomy_repository",
     "debate_core.integrations.local",
     "debate_core.integrations.local.fs_version_store",
     "debate_core.integrations.local.macos_notifier",
     "debate_core.integrations.local.parsed_store",
+    "debate_core.integrations.local.run_state_files",
+    "debate_core.integrations.local.search_index",
     "debate_core.integrations.local.sqlite_caselist_repository",
     "debate_core.integrations.local.suppression_list",
+    "debate_core.integrations.local.version_directories",
+    "debate_core.integrations.models.factory",
+    "debate_core.integrations.models.model_mode",
+    "debate_core.integrations.models.prompt_registry",
+    "debate_core.integrations.models.record_replay",
+    "debate_core.integrations.models.routing_policy",
+    "debate_core.integrations.models.usage",
     "debate_core.integrations.opencaselist",
+    "debate_core.integrations.pdf_extractor",
     "debate_core.integrations.s3",
+    "debate_core.integrations.s3.fencing",
+    "debate_core.integrations.s3.run_lock_object",
+    "debate_core.integrations.s3.version_directories",
+    "debate_core.integrations.secrets_manager",
+    "debate_core.integrations.sns",
 ]
 S3 = "debate_core.integrations.s3"
+S3_VERSION_DIRECTORIES = "debate_core.integrations.s3.version_directories"
+"""Inside the `s3` package, so it does not import when `s3` does not (`v1-e31-t16`)."""
+S3_FENCING = "debate_core.integrations.s3.fencing"
+S3_RUN_LOCK_OBJECT = "debate_core.integrations.s3.run_lock_object"
+"""The bucket's run lock and its fence (`v1-e40-t04`): inside `s3` too."""
 OPENCASELIST = "debate_core.integrations.opencaselist"
 
 
@@ -91,8 +131,10 @@ def make_unimportable(monkeypatch: pytest.MonkeyPatch, *modules: str) -> None:
 
 @pytest.fixture
 def s3_and_opencaselist_do_not_import(monkeypatch: pytest.MonkeyPatch) -> tuple[str, ...]:
-    make_unimportable(monkeypatch, S3, OPENCASELIST)
-    return (S3, OPENCASELIST)
+    # The submodule too: one an earlier test imported is cached, and would import here while `s3`
+    # does not, which no installation without boto3 can do.
+    make_unimportable(monkeypatch, S3, S3_VERSION_DIRECTORIES, S3_FENCING, S3_RUN_LOCK_OBJECT, OPENCASELIST)
+    return (S3, S3_VERSION_DIRECTORIES, S3_FENCING, S3_RUN_LOCK_OBJECT, OPENCASELIST)
 
 
 # ---------------------------------------------------------------------------------------------
@@ -185,11 +227,14 @@ def test_an_integration_that_does_not_import_fails_doctor_naming_each_one(
     assert error["exit_code"] == ExitCode.DOMAIN_FAILURE
     for module in s3_and_opencaselist_do_not_import:
         assert module in error["message"]
-    assert "2 of the 9 integrations" in error["message"]
+    assert "5 of the 44 integrations" in error["message"]
     assert error["details"]["integrations_import"] is False
     assert error["details"]["integrations_failed"] == {
         OPENCASELIST: f"ModuleNotFoundError: no module named {OPENCASELIST!r}",
         S3: f"ModuleNotFoundError: no module named {S3!r}",
+        S3_VERSION_DIRECTORIES: f"ModuleNotFoundError: no module named {S3_VERSION_DIRECTORIES!r}",
+        S3_FENCING: f"ModuleNotFoundError: no module named {S3_FENCING!r}",
+        S3_RUN_LOCK_OBJECT: f"ModuleNotFoundError: no module named {S3_RUN_LOCK_OBJECT!r}",
     }
     assert error["details"]["integrations_wired"] == WIRED_INTEGRATIONS
     # The Unicode check passed, and is still reported.

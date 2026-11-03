@@ -50,6 +50,21 @@ REPORT_DIRECTORY = REPO_ROOT / "build" / "eval-reports"
 DOCS_DATA = REPO_ROOT / "docs" / "data"
 
 
+def baseline_report_text(full_markdown: str, pr_subset_markdown: str, parser_version: str) -> str:
+    """The baseline report under docs/data, whose first line is the docs index's description.
+
+    Every Markdown file under docs/ must start with `<!-- docs-index: ... -->`
+    (`scripts/docs_index.py`), so a report written without it fails `spec-validate`.
+    """
+    return (
+        f"<!-- docs-index: Parser evaluation baseline on {parser_version}: "
+        "per-unit scores for the labelled tiers -->\n"
+        + full_markdown
+        + "\n## PR subset\n\n"
+        + pr_subset_markdown.split("\n", 1)[1].replace("\n## ", "\n### ")
+    )
+
+
 def _baseline_tier(report: dict[str, Any]) -> dict[str, dict[str, float]]:
     """The gated groups' unit F1, as the baseline stores them."""
     tier: dict[str, dict[str, float]] = {}
@@ -164,9 +179,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     BASELINE_PATH.write_text(json.dumps(new_baseline, indent=2) + "\n", encoding="utf-8")
     report_path.parent.mkdir(parents=True, exist_ok=True)
     report_path.write_text(
-        render_markdown(full)
-        + "\n## PR subset\n\n"
-        + render_markdown(reports["pr-subset"]).split("\n", 1)[1].replace("\n## ", "\n### "),
+        baseline_report_text(
+            render_markdown(full), render_markdown(reports["pr-subset"]), full["parser_version"]
+        ),
         encoding="utf-8",
     )
     print(

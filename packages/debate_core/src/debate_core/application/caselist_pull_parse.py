@@ -72,6 +72,10 @@ class PullParseStage:
             failure_rate_exceeded=report.exceeds_threshold,
         )
 
+    async def full_parse_owed(self, caselist: str) -> str | None:
+        """The running parser version when `caselist`'s store has no directory of it (`v1-e40-t08`)."""
+        return await self._parse.full_parse_owed(caselist)
+
     async def publish(self, caselist: str, version: str) -> PublishedParsedStore:
         """Copy `caselist`'s version directory to the bucket: what it lacks, or holds differently."""
         if self._publisher is None:

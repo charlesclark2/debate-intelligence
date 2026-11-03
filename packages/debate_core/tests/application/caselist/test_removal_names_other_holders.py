@@ -85,7 +85,7 @@ from debate_core.application.ports.suppression import (
 from debate_core.domain.caselist import Event
 from debate_core.integrations.local import FsEvidenceObjectStore, FsSnapshotStore
 from debate_core.integrations.local.archive_reader import archive_digest, read_archive
-from debate_core.testing.fakes import empty_suppression_list
+from debate_core.testing.fakes.suppression import empty_suppression_list
 
 from .conftest import TEAM, RemovalWorld
 from .test_removal_covers_later_uploads import LIMITS

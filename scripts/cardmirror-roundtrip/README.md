@@ -34,8 +34,17 @@ contain local paths, so it stays on the operator's machine with the files.
 Node 20 or newer. From this directory:
 
 ```bash
-npm install
+npm install --ignore-scripts
+npm rebuild esbuild
 ```
+
+`--ignore-scripts` is needed because CardMirror's own `postinstall` runs `patch-package`, which is
+one of its dev dependencies and so is not installed when CardMirror is a dependency, and a plain
+`npm install` stops with `sh: patch-package: command not found` (found in `v1-e33-t02`). At the
+pinned commit that `postinstall` applies one patch, to `loro-prosemirror`, CardMirror's
+collaborative-editing sync layer (CRDT sync, cursors, undo); it touches nothing `fromDocx` or
+`toDocx` uses, so skipping it changes nothing this harness measures. `npm rebuild esbuild` then runs
+the one install script the harness does need, esbuild's, which `tsx` runs on.
 
 That installs CardMirror straight from GitHub at the commit pinned in `package.json`
 (`bc92e6bd99cb9b3ce97ddacfa2362100db96360e`, CardMirror 1.11.0) plus `tsx`, which is what lets a

@@ -1,0 +1,78 @@
+# TASK v1-e32-t44-scan-marked-hits-leave-a-text-clean - A scan hit already marked as a JSON key's name or a taxonomy word does not make a text unclean
+# Epic: E32 Argument Landscape Reports | Release: v1.2 (Argument landscape & file building) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e32-t44-scan-marked-hits-leave-a-text-clean
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e32-argument-landscape
+  annotations:
+    debate/title: "A scan hit already marked as a JSON key's name or a taxonomy word does not make a text unclean"
+spec:
+  # Filed by the PM, 2026-11-02, from v1-e32-t40's re-record (2026-11-02): the operator judged all 27 cassette hits ordinary words.
+  description: >-
+    The re-record's cassette scan reported 27 hits (schools 22, team-code words 3, tournaments
+    2) and `clean: false`, so the evaluation could not meet the bar. The breakdown's own marks
+    accounted for every one: 22 were a JSON key's name in the model's rationale and 5 a taxonomy
+    word; none named a team (team_name 0) and none was copied from a card (in_input 0). The
+    operator read them in the terminal and judged all 27 ordinary words. Make a hit marked as a
+    JSON key's name or a taxonomy word count toward `clean` no longer, while still listing it
+    and counting it by mark. A hit with no mark, or marked as naming a team, still makes the
+    text unclean. The scan's lists and the terminal listing are unchanged.
+  priority: 3
+  constraints:
+    packages: [debate_core.application, debate_core.arguments, packages/debate_core/tests, packages/debate_cli/tests, docs/runbooks]
+    forbidden:
+      - A school, team code or debater name in a fixture
+      - Hiding a hit from the counts or the terminal listing
+      - A hit that names a team or was copied from a card treated as clean
+  context:
+    - kind: TaskRef
+      name: v1-e32-t40-model-stage-reads-the-argument-not-the-subject
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        A text whose hits are all marked as a JSON key's name or a taxonomy word is clean,
+        one with any unmarked or team-naming hit is not, and every hit is still counted by
+        mark, by tests on invented words shown failing first.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e32-t44-scan-marked-hits-leave-a-text-clean-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e32-argument-landscape
+spec:
+  description: >-
+    A scan hit already marked as a JSON key's name or a taxonomy word does not make a text
+    unclean.
+  goalRef:
+    name: v1-e32-t44-scan-marked-hits-leave-a-text-clean
+  graph:
+    nodes:
+      - id: scan-marked-hits-leave-a-text-clean
+        kind: Task
+        name: Marked hits clean
+        description: >-
+          A scan hit already marked as a JSON key's name or a taxonomy word does not make
+          a text unclean.
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Marked hits clean tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests, -k, scan]
+status:
+  phase: Pending

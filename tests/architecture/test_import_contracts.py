@@ -34,17 +34,27 @@ LINT_IMPORTS = Path(sys.executable).parent / "lint-imports"
 BROKEN_VERDICT = re.compile(r"^(?P<name>.+) BROKEN(?: \(\d+ ignored imports?\))?$", re.MULTILINE)
 
 AWS_SDK = "The AWS SDK never reaches the domain, the application layer or the other adapters"
-HTTP_CLIENT = "The HTTP client and the keychain library stay inside debate_core.integrations.opencaselist"
-CLI_HTTP_CLIENT = "The CLI reaches httpx and keyring only through debate_core.integrations.opencaselist"
-CLI_AWS_SDK = "The CLI reaches the AWS SDK only through debate_core.integrations.s3"
+HTTP_CLIENT = "The HTTP client stays inside the adapters that talk HTTP"
+KEYCHAIN = "The keychain library stays inside debate_core.integrations.opencaselist"
+CLI_HTTP_CLIENT = "The CLI reaches httpx and keyring only through debate_core.integrations"
+DELIVERY_AWS_SDK = "The CLI and the API reach the AWS SDK only through debate_core.integrations"
 DOCUMENT_LIBRARIES = "Document libraries stay inside debate_core.integrations.docx_parser"
 CLI_DOCUMENT_LIBRARIES = "The CLI reaches lxml only through debate_core.integrations.docx_parser"
-CORE_LAYERS = "debate_core layers: integrations and testing above application above evidence above domain"
+API_DOCUMENT_LIBRARIES = "The API reaches lxml only through debate_core.integrations"
+TEMPLATE_ENGINE = "The template engine never reaches the domain or the application layer"
+SAFE_XML_PARSER = "The safe XML parser stays inside debate_core.integrations.discovery"
+CLI_SAFE_XML_PARSER = "The CLI reaches defusedxml only through debate_core.integrations.discovery"
+EXTRACTION_LIBRARIES = "The extraction libraries stay inside the HTML and PDF extractors"
+CLI_EXTRACTION_LIBRARIES = "The CLI reaches the extraction libraries only through debate_core.integrations"
+CORE_LAYERS = (
+    "debate_core layers: integrations and testing above application above evidence and retrieval above domain"
+)
 DELIVERY_FRAMEWORKS = "The domain and application layers never import a delivery framework"
 CORE_NEVER_IMPORTS_DELIVERY = "debate_core never imports a delivery package"
 DELIVERY_INDEPENDENCE = "The delivery packages are independent of one another"
 COMPOSITION_ROOT = "Delivery packages reach debate_core.integrations only through their composition root"
 DELIVERY_NEVER_IMPORTS_TESTING = "Delivery packages never import debate_core.testing"
+API_CONTAINER_ONE_WAY = "No debate_api module but the composition root imports debate_api.container"
 
 
 @dataclass(frozen=True)
@@ -64,17 +74,62 @@ VIOLATIONS = [
     # The AWS SDK, httpx and document libraries outside their adapters.
     Violation("debate_core.application.boundary_probe", "import boto3", AWS_SDK),
     Violation("debate_core.domain.boundary_probe", "import botocore", AWS_SDK),
-    Violation("debate_api.boundary_probe", "import boto3", AWS_SDK),
+    # debate_api builds AWS adapters in its composition root since v1-e39-t05, so it is held to the
+    # direct form of the rule: a route or page importing the SDK itself.
+    Violation("debate_api.boundary_probe", "import boto3", DELIVERY_AWS_SDK),
+    Violation("debate_api.routes_probe", "from botocore.exceptions import ClientError", DELIVERY_AWS_SDK),
     Violation("debate_core.domain.boundary_probe", "import httpx", HTTP_CLIENT),
-    Violation("debate_core.testing.boundary_probe", "import keyring", HTTP_CLIENT),
+    Violation("debate_core.testing.boundary_probe", "import keyring", KEYCHAIN),
+    # httpx and keyring are separate extras since v1-e04-t02 (PM ruling 2026-10-21): an HTTP adapter
+    # other than OpenCaselist's may use httpx but not the keychain.
+    Violation("debate_core.integrations.discovery.boundary_probe", "import keyring", KEYCHAIN),
     Violation("debate_cli.commands.boundary_probe", "import httpx", CLI_HTTP_CLIENT),
-    Violation("debate_cli.commands.boundary_probe", "import boto3", CLI_AWS_SDK),
+    Violation("debate_cli.commands.boundary_probe", "import boto3", DELIVERY_AWS_SDK),
     Violation("debate_core.application.boundary_probe", "import lxml", DOCUMENT_LIBRARIES),
     Violation("debate_cli.commands.boundary_probe", "import lxml", CLI_DOCUMENT_LIBRARIES),
+    # The API's composition root builds the download's writer since v1-e39-t08; nothing else may.
+    Violation("debate_api.boundary_probe", "import lxml", API_DOCUMENT_LIBRARIES),
+    Violation("debate_api.routes_probe", "from docx import Document", API_DOCUMENT_LIBRARIES),
+    # The feed providers parse with defusedxml, and only they do (PM ruling 2026-10-22, v1-e07-t05).
+    Violation("debate_core.integrations.discovery.boundary_probe", "import lxml", DOCUMENT_LIBRARIES),
+    # Prompt templates render in debate_core.integrations.models only (v1-e05-t09).
+    Violation("debate_core.application.boundary_probe", "import jinja2", TEMPLATE_ENGINE),
+    Violation(
+        "debate_core.domain.boundary_probe",
+        "from jinja2.sandbox import SandboxedEnvironment",
+        TEMPLATE_ENGINE,
+    ),
+    Violation("debate_core.application.boundary_probe", "import defusedxml", SAFE_XML_PARSER),
+    Violation(
+        "debate_core.integrations.opencaselist.boundary_probe",
+        "from defusedxml.ElementTree import fromstring",
+        SAFE_XML_PARSER,
+    ),
+    Violation("debate_cli.commands.boundary_probe", "import defusedxml", CLI_SAFE_XML_PARSER),
+    # Only the two extractors read pages and PDFs (v1-e04-t04): not the layout rules in retrieval,
+    # not a use case, not another adapter, not a CLI command.
+    Violation("debate_core.retrieval.boundary_probe", "import pypdf", EXTRACTION_LIBRARIES),
+    Violation("debate_core.application.boundary_probe", "import trafilatura", EXTRACTION_LIBRARIES),
+    Violation(
+        "debate_core.integrations.discovery.boundary_probe",
+        "from readability import Document",
+        EXTRACTION_LIBRARIES,
+    ),
+    Violation("debate_cli.commands.boundary_probe", "from pypdf import PdfReader", CLI_EXTRACTION_LIBRARIES),
+    # Retrieval is the pure layer of E04: fetching and parsing are adapters (PM ruling, v1-e04-t01).
+    Violation("debate_core.retrieval.boundary_probe", "import boto3", AWS_SDK),
+    Violation("debate_core.retrieval.boundary_probe", "import httpx", HTTP_CLIENT),
+    Violation("debate_core.retrieval.boundary_probe", "from lxml import html", DOCUMENT_LIBRARIES),
     # The layers inside debate_core, in each direction a dependency can point the wrong way.
     Violation("debate_core.domain.boundary_probe", "import debate_core.application", CORE_LAYERS),
     Violation("debate_core.domain.boundary_probe", "import debate_core.evidence", CORE_LAYERS),
     Violation("debate_core.evidence.boundary_probe", "import debate_core.application.settings", CORE_LAYERS),
+    # Retrieval beside evidence (v1-e04-t01): below the application layer, above the domain, and
+    # independent of evidence in both directions.
+    Violation("debate_core.retrieval.boundary_probe", "import debate_core.application.settings", CORE_LAYERS),
+    Violation("debate_core.domain.boundary_probe", "import debate_core.retrieval", CORE_LAYERS),
+    Violation("debate_core.retrieval.boundary_probe", "import debate_core.evidence", CORE_LAYERS),
+    Violation("debate_core.evidence.boundary_probe", "import debate_core.retrieval", CORE_LAYERS),
     Violation("debate_core.application.boundary_probe", "import debate_core.integrations.local", CORE_LAYERS),
     Violation("debate_core.application.boundary_probe", "import debate_core.testing.fakes", CORE_LAYERS),
     Violation("debate_core.integrations.boundary_probe", "import debate_core.testing.fakes", CORE_LAYERS),
@@ -84,6 +139,7 @@ VIOLATIONS = [
     Violation("debate_core.application.boundary_probe", "import typer", DELIVERY_FRAMEWORKS),
     Violation("debate_core.domain.boundary_probe", "from rich.console import Console", DELIVERY_FRAMEWORKS),
     Violation("debate_core.evidence.boundary_probe", "import click", DELIVERY_FRAMEWORKS),
+    Violation("debate_core.retrieval.boundary_probe", "import typer", DELIVERY_FRAMEWORKS),
     Violation("debate_core.application.boundary_probe", "from fastapi import APIRouter", DELIVERY_FRAMEWORKS),
     # The core pointing back at a front end, and front ends importing each other.
     Violation(
@@ -118,6 +174,14 @@ VIOLATIONS = [
         "debate_workers.boundary_probe",
         "from debate_core.testing import fakes",
         DELIVERY_NEVER_IMPORTS_TESTING,
+    ),
+    # The API's composition root imported by a route or a page, at any depth (v1-e41-t11).
+    Violation("debate_api.routes_probe", "from debate_api import container", API_CONTAINER_ONE_WAY),
+    Violation(
+        "debate_api.pages_probe",
+        "def build():\n    import debate_api.container",
+        API_CONTAINER_ONE_WAY,
+        as_package=True,
     ),
 ]
 
@@ -198,6 +262,19 @@ def test_a_violating_import_breaks_its_contract_by_name(package_copy: Path, viol
 
     assert result.returncode != 0, result.output
     assert violation.broken_contract in result.broken, result.output
+
+
+def test_the_api_packages_own_init_importing_its_container_breaks_the_one_way_contract(
+    package_copy: Path,
+) -> None:
+    """`debate_api` is a module of its own here, not the package that holds the container (v1-e41-t11)."""
+    init = package_copy / "debate_api" / "__init__.py"
+    init.write_text(init.read_text() + "\nfrom debate_api import container\n")
+
+    result = lint_imports(package_copy)
+
+    assert result.returncode != 0, result.output
+    assert API_CONTAINER_ONE_WAY in result.broken, result.output
 
 
 def test_an_exception_that_no_longer_matches_an_import_fails(package_copy: Path, tmp_path: Path) -> None:

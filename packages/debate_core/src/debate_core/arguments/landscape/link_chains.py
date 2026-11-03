@@ -1,0 +1,407 @@
+"""Which chain role a team labelled a card with, and which scenario it filed it under (`v1-e32-t14`).
+
+The coach asked, of each DA's and advantage's impact cards, what the impact runs through, and for a
+first deterministic link chain per position: its uniqueness, link, internal link and impact, and for
+an advantage its inherency and solvency. The rules are the PM's rulings of 2026-10-25 on counts over
+hspolicy26. Only what a team wrote down counts, and a role or scenario no heading or label
+gives is counted, never guessed.
+
+## Where a card's labels are read
+
+* **Its sub-headings**: the normalized headings below the one that placed it (the matcher's nearest
+  alias or override, `v1-e32-t02`), each with its answer flag. A heading above the placing one belongs
+  to something larger than the position and labels nothing here.
+* **Its tag's opening**, past one leading enumerator, as `v1-e32-t10` reads a tag.
+
+## Chain roles (:func:`heading_roles`, :func:`tag_role`, :func:`card_roles`)
+
+A sub-heading labels a role when it holds the role's words, as whole words:
+
+* **uniqueness:** `uniqueness`, `uq`, or `u` as its first word (never `u s`, which is U.S.);
+* **link:** `link`, `links`, or `l` as its first word; not `link turn(s)`, `no link(s)`, `link defense`,
+  `lt`, `l t`, `non unique`, `nonunique` or `not unique`, which name answers (`v1-e32-t27`), and not the
+  `link` of `internal link`;
+* **internal link:** `internal link(s)`, `internal`, `internals`, `il`, `i l`;
+* **impact:** `v1-e32-t10`'s impact heading, reused, not rewritten, and for an advantage `harms` or
+  `harm` (:data:`HARMS_WORDS`, `v1-e32-t29`);
+* **advantages only:** inherency `inherency`, `inh`; solvency `solvency`, `solv`.
+
+**Harms is an advantage's impact** (`v1-e32-t29`, the PM's ruling of 2026-10-27). The coach: Policy
+debate no longer says "Harms"; debaters call that part of an advantage its impact. So a harms heading
+labels an advantage's impact, read where the Harms role read it until then (a sub-heading, not an
+answer, naming no other role), and there is no Harms role. A DA's `harms` heading labels nothing.
+
+A tag labels uniqueness when it opens `uniqueness` or `uq`, a link when it opens `link`, `links` or
+`the link` and names no answer, and an internal link when it opens `internal link`, `internal`, `il` or
+`i l`. A link tag names an answer when, past a leading `the`, it opens with one of the heading's answers
+(`link turn`, `no link`, …), or the words after `link` or `links` call it non-unique (`non unique`, `is
+not unique`, …): `The link turns`, `Links are non-unique` (`v1-e32-t27`). `u` never labels in a tag:
+on hspolicy26, 105 of the 106 counted tags opening `u` open `U.S.`.
+
+An answer sub-heading (`AT: No Link`, the team's own frontline) fills no role, and a heading holding
+two roles' labels fills neither. A card's impact role is `v1-e32-t10`'s impact card, whatever else
+its heading holds, or for an advantage a sub-heading labelling only its impact: a harms heading. The
+report reads an advantage's or a DA's impact cards from these roles, so the chain's impact is the impact
+section's first row. A heading the coach ruled
+names no position still labels a role: `link`, `u` and `solvency` are such rulings. Whether a card
+counts at all (READS, on the position's side) is the report's, so an answering or other-side card
+never reaches these functions as a reading.
+
+## Scenarios (:func:`card_scenario`)
+
+A sub-heading is a **scenario heading** when it is numbered (`scenario`, `scenarios`, `scen`, `sc`,
+`advantage` or `adv`, then a number, as its first words) or named: any other sub-heading that is no
+role label, no answer, no heading the coach ruled names no position, and none of
+:data:`NOT_A_SCENARIO`. A card's **scenario name** is the first of:
+
+1. a numbered heading's words after `scenario N (is)`;
+2. a named heading's words;
+3. the words beside an impact or internal-link label (`Dome impact`, `Dome internal`, and for an
+   advantage `Dome harms`), when what is left is not on the list either.
+
+The innermost heading of each kind wins. Whether a name is shown (two or more teams of the position
+use it) and whether it is withheld (:func:`is_withheld`) is the report's.
+
+## The coach's scenario list (:func:`scenario_name`, `v1-e32-t22`)
+
+A DA or advantage may list its scenarios in the taxonomy, each a name and its forms, and the forms
+that name no scenario. A form is matched as the words above are, whole: it is what this module reads
+from a heading. A form ruled no scenario is skipped as :data:`NOT_A_SCENARIO` is, so a named heading
+of one is no scenario heading and a heading further in may still name the card; a numbered heading
+stays a scenario heading, since the team wrote `Scenario 1`, and names nothing. A position with a list
+shows its scenario's name for any of its forms and nothing for other words; merged forms are one name,
+whose teams are every form's. A position with no list shows the words.
+
+## What names an impact row (:func:`rank_name`, `v1-e32-t25`)
+
+An impact row under "What each impact runs through" is named by the first of these it has, in
+:data:`~debate_core.domain.landscape_report.LEAD_IN_ORDER`, and report.md marks which:
+
+1. its scenario, the name above, shown by the report's rules;
+2. its labelled internal link's tag;
+3. its labelled link's tag (`v1-e32-t27`): the nearest card above it under its position heading that
+   is counted and labelled a link, read as the internal link is. The internal link comes first, as the
+   step nearest the impact;
+4. the impact card's own tag;
+5. the tag of the card above it in its block, when that card is no impact card.
+
+A text holding a word of a caselist school or team code (:func:`is_withheld`) is passed over and
+counted, and the next names the row. A row none of them names is left out and counted, never
+shown empty. A tag is quoted whole, as parsed, as every tag in the report is.
+
+Pure and deterministic: no model, no I/O.
+"""
+
+from __future__ import annotations
+
+import re
+from collections.abc import Iterable, Mapping, Sequence
+from typing import Final, NamedTuple
+
+from debate_core.arguments.landscape.impacts import is_impact_card, is_impact_heading, tag_opening
+from debate_core.domain.caselist import Disclosure
+from debate_core.domain.landscape import Position, PositionKind
+from debate_core.domain.landscape_report import CHAIN_ROLES, LEAD_IN_ORDER, ChainRole, LeadInSource
+
+__all__ = [
+    "HARMS_WORDS",
+    "LINK_TAG_OPENINGS",
+    "MINIMUM_WITHHELD_WORD",
+    "NOT_A_LINK",
+    "NOT_A_SCENARIO",
+    "CardScenario",
+    "RankName",
+    "SubHeading",
+    "caselist_words",
+    "card_roles",
+    "card_scenario",
+    "heading_roles",
+    "is_withheld",
+    "rank_name",
+    "scenario_name",
+    "tag_role",
+]
+
+NOT_A_LINK: Final = (
+    "link turn",
+    "link turns",
+    "no link",
+    "no links",
+    "link defense",
+    "lt",
+    "l t",
+    "non unique",
+    "nonunique",
+    "not unique",
+)
+"""Answers and turns filed with a link word: a heading holding one, or a tag opening one, labels no link."""
+
+_LINK_ANSWERS: Final = (
+    "non unique",
+    "nonunique",
+    "not unique",
+    "is non unique",
+    "is nonunique",
+    "is not unique",
+    "are non unique",
+    "are nonunique",
+    "are not unique",
+)
+"""What the words after a tag's `link` or `links` open with when they call it non-unique (`v1-e32-t27`)."""
+
+_INTERNAL_LINK_WORDS: Final = ("internal link", "internal links", "internal", "internals", "il", "i l")
+HARMS_WORDS: Final = ("harms", "harm")
+"""An advantage's harms heading labels its impact: debaters call that part of an advantage its impact (the
+coach, 2026-10-27, `v1-e32-t29`). A DA's labels nothing."""
+_ADVANTAGE_WORDS: Final = {
+    ChainRole.INHERENCY: ("inherency", "inh"),
+    ChainRole.SOLVENCY: ("solvency", "solv"),
+}
+"""The labels only an advantage's cards carry."""
+
+UNIQUENESS_TAG_OPENINGS: Final = ("uniqueness", "uq")
+LINK_TAG_OPENINGS: Final = ("link", "links", "the link")
+INTERNAL_LINK_TAG_OPENINGS: Final = ("internal link", "internal", "il", "i l")
+
+_LABEL_WORDS: Final = frozenset(
+    {"impact", "impacts", "internal", "internals", "link", "links", "il", "i", "l", "and"}
+)
+"""What is taken off an impact or internal-link heading to leave the words beside the label."""
+
+_NUMBERED: Final = re.compile(
+    r"^(?:scenario|scenarios|scen|sc|advantage|adv) "
+    r"(?:\d{1,2}|one|two|three|four|five|i{1,3}|iv|v)(?: is)?(?: |$)"
+)
+NOT_A_SCENARIO: Final = re.compile(
+    r"(?:^| )(?:overview|ov|o v|kick|extra|extras|defense|turn|turns|framing|solves case|da|disad|new|t c|tc"
+    r"|k|cp|t|theory|counterplan|kritik|no link|link defense|lt|l t|no impact)(?: |$)"
+    r"|^[12](?:ac|nc|ar|nr)\d*$|^[12](?:ac|nc|ar|nr)\d+ "
+)
+"""Structure, answers and other kinds of argument, which name no scenario: overviews, `kick`, `turns`,
+`T/C`, a kind word (`da`, `k`, `cp`), a numbered speech answer (`2ac1`), and the role rules' own
+answers (`no link`, `no impact`)."""
+
+MINIMUM_WITHHELD_WORD: Final = 4
+"""A school's word is looked for when it is over three characters, as the scan before sharing looks for
+a whole name: a shorter one is a word in every line. A team code is looked for at any length."""
+
+
+class SubHeading(NamedTuple):
+    """One heading below the one that placed a card, normalized, with its answer flag."""
+
+    text: str
+    answer: bool
+
+
+class CardScenario(NamedTuple):
+    """Whether a card sits under a scenario heading, and the scenario name it is filed under."""
+
+    heading: bool
+    """Under a numbered or named scenario heading (`v1-e32-t14` ac3)."""
+    name: str | None
+    """The name, or None when no heading or label gives one."""
+
+
+def _holds(words: str, phrase: str) -> bool:
+    return f" {phrase} " in f" {words} "
+
+
+def _opens(words: str, phrase: str) -> bool:
+    return words == phrase or words.startswith(f"{phrase} ")
+
+
+def heading_roles(heading: str, kind: PositionKind) -> frozenset[ChainRole]:
+    """Every role whose label `heading`, normalized, holds; more than one means it labels none."""
+    first = heading.split(" ", 1)[0]
+    found: set[ChainRole] = set()
+    if (
+        _holds(heading, "uniqueness")
+        or _holds(heading, "uq")
+        or (first == "u" and not _opens(heading, "u s"))
+    ):
+        found.add(ChainRole.UNIQUENESS)
+    outside_internal = re.sub(r"(?:^| )internal links?(?= |$)", " ", heading)
+    if (
+        _holds(outside_internal, "link")
+        or _holds(outside_internal, "links")
+        or (first == "l" and not _opens(heading, "l t"))
+    ) and not any(_holds(heading, phrase) for phrase in NOT_A_LINK):
+        found.add(ChainRole.LINK)
+    if any(_holds(heading, phrase) for phrase in _INTERNAL_LINK_WORDS):
+        found.add(ChainRole.INTERNAL_LINK)
+    if is_impact_heading(heading) or (
+        kind is PositionKind.ADVANTAGE and any(_holds(heading, one) for one in HARMS_WORDS)
+    ):
+        found.add(ChainRole.IMPACT)
+    if kind is PositionKind.ADVANTAGE:
+        found |= {
+            role for role, words in _ADVANTAGE_WORDS.items() if any(_holds(heading, one) for one in words)
+        }
+    return frozenset(found)
+
+
+def tag_role(tag: str | None) -> ChainRole | None:
+    """The role the tag's opening labels, past one enumerator; never by `u` alone."""
+    if not tag:
+        return None
+    words = tag_opening(tag)
+    if any(_opens(words, one) for one in UNIQUENESS_TAG_OPENINGS):
+        return ChainRole.UNIQUENESS
+    if any(_opens(words, one) for one in INTERNAL_LINK_TAG_OPENINGS):
+        return ChainRole.INTERNAL_LINK
+    if any(_opens(words, one) for one in LINK_TAG_OPENINGS) and not _answers_a_link(words):
+        return ChainRole.LINK
+    return None
+
+
+def _answers_a_link(words: str) -> bool:
+    """A tag opening with a link word names an answer: `The link turns`, `Links are non-unique`."""
+    plain = words.removeprefix("the ")
+    if any(_opens(plain, one) for one in NOT_A_LINK):
+        return True
+    for opening in ("links", "link"):
+        if _opens(plain, opening):
+            after = plain[len(opening) :].strip()
+            return any(_opens(after, one) for one in _LINK_ANSWERS)
+    return False
+
+
+def card_roles(
+    sub_headings: Sequence[SubHeading], headings: Sequence[str], tag: str | None, kind: PositionKind
+) -> frozenset[ChainRole]:
+    """The roles a counted card of a `kind` position fills: its sub-headings', its tag's, and impact.
+
+    `headings` are all the card's normalized headings, which `v1-e32-t10`'s impact rule reads. A
+    sub-heading labelling only an impact adds one only for an advantage's harms heading: an impact word
+    there is `v1-e32-t10`'s already.
+    """
+    found: set[ChainRole] = set()
+    for sub in sub_headings:
+        if sub.answer:
+            continue
+        labels = heading_roles(sub.text, kind)
+        if len(labels) == 1:
+            found |= labels
+    opening = tag_role(tag)
+    if opening is not None:
+        found.add(opening)
+    if is_impact_card(headings, tag):
+        found.add(ChainRole.IMPACT)
+    return frozenset(found) & frozenset(CHAIN_ROLES[kind])
+
+
+def card_scenario(
+    sub_headings: Sequence[SubHeading],
+    kind: PositionKind,
+    no_position: Iterable[str] = (),
+    not_scenarios: Iterable[str] = (),
+) -> CardScenario:
+    """Whether the card sits under a scenario heading, and its scenario name, from its sub-headings.
+
+    `not_scenarios` are the forms the coach ruled name no scenario for the card's position: a named
+    heading of one is no scenario heading, and words of one name nothing (`v1-e32-t22`).
+    """
+    decided = frozenset(no_position)
+    dropped = frozenset(not_scenarios)
+    label_words = _LABEL_WORDS | frozenset(HARMS_WORDS) if kind is PositionKind.ADVANTAGE else _LABEL_WORDS
+    heading = False
+    numbered: str | None = None
+    named: str | None = None
+    beside: str | None = None
+    for sub in sub_headings:
+        if sub.answer:
+            continue
+        labels = heading_roles(sub.text, kind)
+        if len(labels) > 1:
+            continue
+        if labels:
+            if labels <= {ChainRole.IMPACT, ChainRole.INTERNAL_LINK}:
+                words = " ".join(word for word in sub.text.split() if word not in label_words)
+                if words and words not in dropped and not NOT_A_SCENARIO.search(words):
+                    beside = words
+            continue
+        if sub.text in decided:
+            continue
+        found = _NUMBERED.match(sub.text)
+        if found is not None:
+            heading = True
+            words = sub.text[found.end() :].strip()
+            numbered = words if words and words not in dropped else None
+        elif sub.text not in dropped and not NOT_A_SCENARIO.search(sub.text):
+            heading = True
+            named = sub.text
+    return CardScenario(heading=heading, name=numbered or named or beside)
+
+
+def scenario_name(position: Position, words: str | None) -> str | None:
+    """The name `position` shows for :func:`card_scenario`'s words (`v1-e32-t22`).
+
+    A position without a scenario list shows the words, `v1-e32-t14`'s rule. One with a list shows the
+    coach's name of the scenario whose forms hold the words, and nothing for words its list does not
+    hold, so every name it shows is the coach's.
+    """
+    if words is None or not position.has_scenario_list:
+        return words
+    for scenario in position.scenarios:
+        if words in scenario.forms:
+            return scenario.name
+    return None
+
+
+class RankName(NamedTuple):
+    """What names an impact row, and how many withheld texts were passed over to reach it."""
+
+    source: LeadInSource | None
+    """The first source that names it, or None: the row is left out."""
+    withheld: int
+    """Texts before it that hold a caselist word."""
+
+
+def rank_name(texts: Mapping[LeadInSource, str | None], words: frozenset[str]) -> RankName:
+    """The first of :data:`LEAD_IN_ORDER` with a text in `texts` that is not withheld (`v1-e32-t25`).
+
+    A source with no text, or only whitespace, is not there. One whose text holds a caselist word
+    (:func:`is_withheld`) is passed over and counted, and the next names the row instead.
+    """
+    withheld = 0
+    for source in LEAD_IN_ORDER:
+        text = texts.get(source)
+        if text is None or not text.strip():
+            continue
+        if is_withheld(text, words):
+            withheld += 1
+            continue
+        return RankName(source=source, withheld=withheld)
+    return RankName(source=None, withheld=withheld)
+
+
+def caselist_words(disclosures: Iterable[Disclosure]) -> frozenset[str]:
+    """The words the report withholds a text for: every word of a caselist school over three
+    characters, and every word of a team code.
+
+    The rule of the PM's ruling (b) of 2026-10-27 (`v1-e32-t28`): school words and team codes, and no
+    tournament's word. A tournament's words are as often the topic's own (on hspolicy26, 93 of the 105
+    top_cards.csv tags a tournament word would have withheld), and the data-use policy counts a
+    tournament label as personal only beside a team code, which the circuit-wide report never carries.
+    Every text the report withholds is held to these words: scenario names, the lead-ins under each
+    impact (`v1-e32-t25`) and the tags of every table (`v1-e32-t28`).
+    """
+    words: set[str] = set()
+    for one in disclosures:
+        words |= {word for word in _plain_words(one.school) if len(word) >= MINIMUM_WITHHELD_WORD}
+        words |= set(_plain_words(one.team_code))
+    return frozenset(words)
+
+
+def is_withheld(name: str, words: frozenset[str]) -> bool:
+    """`name` holds a word of a caselist school or team code (:func:`caselist_words`), so the report never
+    shows it.
+
+    A name is read as the caselist's words are, by its letters and digits without case, so the coach's
+    `Golden dome` is read as `golden dome` is.
+    """
+    return any(word in words for word in _plain_words(name))
+
+
+def _plain_words(text: str) -> list[str]:
+    return re.findall(r"[0-9a-z]+", text.casefold())

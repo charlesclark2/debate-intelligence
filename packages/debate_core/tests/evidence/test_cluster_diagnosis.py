@@ -16,6 +16,7 @@ from dataclasses import replace
 import pytest
 
 from debate_core.evidence.cluster_diagnosis import (
+    EARLIER_MIN_CUT_SHARE,
     SHARE_BANDS,
     ClusterShape,
     CopiesRead,
@@ -27,12 +28,16 @@ from debate_core.evidence.cluster_diagnosis import (
     diagnose_cuts,
     explain_divided_part,
     tally_cuts,
+    witness_refusals,
 )
-from debate_core.evidence.near_duplicates import MIN_CUT_SHARE, cluster_near_duplicates
+from debate_core.evidence.near_duplicates import MIN_CUT_SHARE, CutIndex, cluster_near_duplicates
 
 from .test_near_duplicates import (
+    BOTH_PASSAGES,
     CUT_OF_THE_COPY,
+    FIRST_PASSAGE,
     LONG_COPY,
+    SECOND_PASSAGE,
     WHOLE,
     numbered,
     replaced,
@@ -55,7 +60,8 @@ def diagnosed(bodies: dict[str, list[str]], clusters: dict[str, str] | None = No
 
 
 NESTED = {"whole": WHOLE, "copy": LONG_COPY, "cut": CUT_OF_THE_COPY}
-"""326, 86 and 26 shingles: a short cut of a long copy of a long card."""
+"""996, 86 and 26 shingles: a short cut of a long copy of a long card, the copy under a tenth of
+the card."""
 
 
 # ------------------------------------------------------------------------------------------------
@@ -113,12 +119,12 @@ def test_a_cut_inside_two_different_cards_has_witnesses_in_two_clusters() -> Non
     assert finding.smallest_container == "second"
 
 
-def test_a_cut_under_a_quarter_of_its_only_container_is_under_the_minimum_share() -> None:
+def test_a_cut_under_a_tenth_of_its_only_container_is_under_the_minimum_share() -> None:
     body = numbered("word", 64)  # 60 shingles
-    finding = diagnosed({"body": body, "cut": body[:18]})["cut"]  # 14 shingles
+    finding = diagnosed({"body": body, "cut": body[:9]})["cut"]  # 5 shingles
     assert finding.outcome is CutOutcome.UNDER_MIN_CUT_SHARE
-    assert finding.share_of_smallest_container == pytest.approx(14 / 60)
-    assert MIN_CUT_SHARE > 14 / 60
+    assert finding.share_of_smallest_container == pytest.approx(5 / 60)
+    assert MIN_CUT_SHARE > 5 / 60
 
 
 def test_a_cut_whose_ends_nine_other_clusters_hold_is_left_alone() -> None:
@@ -138,17 +144,116 @@ def test_a_cut_whose_ends_nine_other_clusters_hold_is_left_alone() -> None:
     assert diagnosed(fewer)["copy"].outcome is CutOutcome.WITHIN_THE_RULE
 
 
-def test_a_short_body_nine_tenths_inside_a_body_that_lacks_one_of_its_ends() -> None:
+def test_a_short_body_nine_tenths_inside_a_body_that_lacks_one_of_its_ends_is_held() -> None:
     """Forty words, and a longer body that starts at the third of them: it has 34 of the 36
-    shingles and not the first, so it is never looked up as a container."""
+    shingles and not the first. Since item (4) was decided it holds the short body, found from its
+    last shingle, and the two apart are within the rule."""
     short = numbered("word", 40)
     bodies = {"short": short, "longer": [*short[2:], *numbered("more", 60)]}
-    findings = diagnosed(bodies)
-    assert set(findings) == {"short"}
-    finding = findings["short"]
-    assert finding.outcome is CutOutcome.ENDS_NOT_BOTH_INSIDE
-    assert (finding.container_clusters, finding.containers) == ((), frozenset({"longer"}))
+    finding = diagnosed(bodies)["short"]
+    assert finding.outcome is CutOutcome.WITHIN_THE_RULE
+    assert (finding.container_clusters, finding.smallest_container) == (("longer",), "longer")
+
+
+@pytest.mark.parametrize(
+    ("body", "holder"),
+    [
+        # Sixty words, 56 shingles, and a body holding its words 2 to 57: 52 of them, neither end.
+        (numbered("word", 60), [*numbered("word", 58)[2:], *numbered("more", 60)]),
+        # A long one: a hundred words of a card with a word changed at each end, 94 of 96 inside.
+        (["changed", *numbered("word", 199)[101:], "stray"], numbered("word", 300)),
+    ],
+    ids=["short", "long"],
+)
+def test_a_body_nine_tenths_inside_one_that_holds_neither_of_its_ends(
+    body: list[str], holder: list[str]
+) -> None:
+    """The shape behind the divided pairs no cut explained (the PM, 2026-10-18): nothing finds the
+    holder from the body's ends, so the clusterer never compares them, and `card-fingerprint-v3`
+    joined them when its banding paired them. Found from the body's interior shingles."""
+    finding = diagnosed({"body": body, "holder": holder})["body"]
+    assert finding.outcome is CutOutcome.ENDS_NOT_INSIDE
+    assert (finding.container_clusters, finding.containers) == ((), frozenset({"holder"}))
     assert (finding.smallest_container, finding.share_of_smallest_container) == (None, 0.0)
+
+
+# ------------------------------------------------------------------------------------------------
+# The limits `card-fingerprint-v4` added (`v1-e31-t20`)
+# ------------------------------------------------------------------------------------------------
+
+
+def test_a_cut_held_only_by_a_body_that_holds_another_passage_has_no_witness() -> None:
+    """`v1-e31-t11`'s false join: each passage is inside the body holding both, and that body
+    holds the other passage, which shares nothing with it."""
+    findings = diagnosed({"first": FIRST_PASSAGE, "second": SECOND_PASSAGE, "both": BOTH_PASSAGES})
+    assert set(findings) == {"first", "second"}
+    for finding in findings.values():
+        assert finding.outcome is CutOutcome.HELD_WITH_ANOTHER_PASSAGE
+        assert (finding.container_clusters, finding.smallest_container) == (("both",), "both")
+    assert findings["first"].share_of_smallest_container == pytest.approx(55 / 146)
+
+
+def test_a_cut_with_a_copy_beside_it_and_outside_only_bodies_holding_another_passage() -> None:
+    """The first passage with a copy of it two words longer at each end in its own cluster (59
+    shingles, a short body, which the body outside does not hold, having neither of its ends), and
+    outside only the body holding both passages: its own cluster is its one witness, and what keeps
+    it from the body outside is that body's other passage."""
+    longer = [*numbered("before", 2), *FIRST_PASSAGE, *numbered("more", 2)]
+    bodies = {"first": FIRST_PASSAGE, "longer": longer, "second": SECOND_PASSAGE, "both": BOTH_PASSAGES}
+    clusters = {"first": "own", "longer": "own", "second": "second", "both": "both"}
+    finding = diagnosed(bodies, clusters)["first"]
+    assert finding.outcome is CutOutcome.HELD_WITH_ANOTHER_PASSAGE
+    assert finding.container_clusters == ("both",)
+
+
+def test_a_cut_its_own_cluster_holds_and_another_does_too() -> None:
+    """A 40-word passage with its copy five words longer, one cluster, and a card elsewhere that
+    holds the passage and not the copy: two witnesses, one of them its own cluster."""
+    passage = numbered("passage", 40)
+    bodies = {
+        "passage": passage,
+        "longer": [*passage, *numbered("more", 5)],
+        "card": [*numbered("before", 20), *passage, *numbered("after", 20)],
+    }
+    finding = diagnosed(bodies, {"passage": "own", "longer": "own", "card": "card"})["passage"]
+    assert finding.outcome is CutOutcome.OWN_CLUSTER_AND_ANOTHER
+    assert finding.container_clusters == ("card",)
+
+
+def test_a_cut_whose_join_would_put_two_texts_sharing_nothing_together() -> None:
+    """A 50-word cut of a 100-word card, and in the card's cluster, put there by other rules, a
+    body sharing nothing with the cut: joining the cut there would put the two in one cluster."""
+    card = numbered("word", 100)
+    bodies = {"card": card, "cut": card[10:60], "unrelated": numbered("other", 80)}
+    finding = diagnosed(bodies, {"card": "card", "unrelated": "card", "cut": "cut"})["cut"]
+    assert finding.outcome is CutOutcome.UNRELATED_TEXTS
+    assert (finding.witness_cluster_texts, finding.witness_cluster_texts_sharing_nothing) == (2, 1)
+
+
+def test_a_cut_whose_cluster_holds_a_body_with_a_witness_elsewhere_is_within_the_rule() -> None:
+    """Two cuts of two different cards in one cluster, put there by other rules: each has one
+    witness, and the other body of its cluster points elsewhere."""
+    first_card, second_card = numbered("first", 100), numbered("second", 100)
+    bodies = {"a": first_card, "a-cut": first_card[10:60], "b": second_card, "b-cut": second_card[10:60]}
+    clusters = {"a": "a", "b": "b", "a-cut": "cuts", "b-cut": "cuts"}
+    findings = diagnosed(bodies, clusters)
+    for name in ("a-cut", "b-cut"):
+        assert findings[name].outcome is CutOutcome.WITHIN_THE_RULE
+        assert findings[name].another_body_points_elsewhere is True
+    alone = diagnosed(bodies)["a-cut"]
+    assert (alone.outcome, alone.another_body_points_elsewhere) == (CutOutcome.WITHIN_THE_RULE, False)
+
+
+def test_a_copy_kept_apart_from_its_card_is_counted_as_holding_it() -> None:
+    """Two short bodies of one size a word apart, each holding the other: copies, which the
+    clusterer joins by their own step. Apart, each is a finding, within the rule."""
+    findings = diagnosed(
+        {"original": numbered("word", 30), "typo": replaced(numbered("word", 30), 15, "changed")}
+    )
+    assert {name: finding.outcome for name, finding in findings.items()} == {
+        "original": CutOutcome.WITHIN_THE_RULE,
+        "typo": CutOutcome.WITHIN_THE_RULE,
+    }
 
 
 # ------------------------------------------------------------------------------------------------
@@ -159,7 +264,7 @@ def test_a_short_body_nine_tenths_inside_a_body_that_lacks_one_of_its_ends() -> 
 def test_a_cut_of_nested_copies_left_alone_is_within_the_rule_and_apart() -> None:
     """The placement `card-fingerprint-v2` made of these three: each alone. The cut's containers
     are two clusters, the larger holds the smaller, and the cut is 26 of the smaller's 86 shingles.
-    The two long copies pass the containment threshold and were never paired."""
+    The two long copies pass the containment threshold, which a long cut is joined by."""
     findings = diagnosed(NESTED)
     assert set(findings) == {"cut", "copy"}
     cut = findings["cut"]
@@ -170,18 +275,29 @@ def test_a_cut_of_nested_copies_left_alone_is_within_the_rule_and_apart() -> Non
         True,
         False,
     )
-    assert (cut.copies_read, cut.kept_apart_by) == (CopiesRead.ONE_CARD_SPLIT, (KeptApartBy.BANDING,))
+    assert (cut.copies_read, cut.kept_apart_by) == (CopiesRead.ONE_CARD_SPLIT, (KeptApartBy.CUT_STEP,))
     assert cut.smallest_container == "copy"
     assert cut.share_of_smallest_container == pytest.approx(26 / 86)
     assert (cut.witness_cluster_texts, cut.witness_cluster_texts_sharing_nothing) == (1, 0)
 
 
-def test_a_long_cut_the_banding_never_paired_with_its_card() -> None:
+def test_a_long_cut_is_held_to_the_minimum_share_as_a_short_one_is() -> None:
+    """Since `card-fingerprint-v4` a long cut has the short one's step and limits: the copy is 86 of
+    the card's 996 shingles, under a tenth."""
     copy = diagnosed(NESTED)["copy"]
-    assert copy.outcome is CutOutcome.LONG_NEVER_PAIRED
+    assert copy.outcome is CutOutcome.UNDER_MIN_CUT_SHARE
     assert (copy.is_short, copy.container_clusters, copy.smallest_container) == (False, ("whole",), "whole")
-    assert copy.share_of_smallest_container == pytest.approx(86 / 326)
+    assert copy.share_of_smallest_container == pytest.approx(86 / 996)
     assert copy.banded_with_a_container is False  # only a short cut's pairing is looked up
+
+
+def test_a_long_cut_over_a_quarter_of_its_card_and_apart_is_within_the_rule() -> None:
+    """The same copy cut from the 330-word card it was cut from before `v1-e31-t20`: 86 of 326
+    shingles, which the rule now joins. Apart, it is what the earlier rules got wrong."""
+    copy = diagnosed({"whole": numbered("word", 330), "copy": LONG_COPY})["copy"]
+    assert copy.outcome is CutOutcome.WITHIN_THE_RULE
+    assert copy.share_of_smallest_container == pytest.approx(86 / 326)
+    assert (copy.has_one_witness, copy.another_body_points_elsewhere) == (True, False)
 
 
 def test_once_the_cut_has_joined_the_smallest_copy_only_the_long_split_is_left() -> None:
@@ -194,7 +310,7 @@ def test_once_the_cut_has_joined_the_smallest_copy_only_the_long_split_is_left()
 
 def test_a_cut_with_a_copy_that_the_outside_body_holds_is_set_aside_not_lost() -> None:
     """The same placement. The cut is kept, apart from the findings, described as it would be were
-    the copy not there: its one container outside is the whole card, of which it is 26 of 326
+    the copy not there: its one container outside is the whole card, of which it is 26 of 396
     shingles. The earlier rules may have joined the card to this cluster through it."""
     clusters = cluster_near_duplicates(joined(NESTED))
     census = diagnose_cuts(joined(NESTED), clusters)
@@ -215,35 +331,40 @@ def test_a_cut_with_a_copy_that_the_outside_body_holds_is_set_aside_not_lost() -
     }
 
     # An earlier cluster of all three, now the card on one side and the copy and cut on the other.
+    # The long copy is a cut of the card under the share, and explains it; without its finding, the
+    # short cut set aside does.
     findings = {finding.fingerprint: finding for finding in census.findings}
-    assert explain_divided_part({"copy", "cut"}, {"whole"}, findings) == DividedPart(DividedPart.UNEXPLAINED)
-    explained = explain_divided_part({"copy", "cut"}, {"whole"}, findings, {"cut": cut})
+    by_the_copy = explain_divided_part({"copy", "cut"}, {"whole"}, findings)
+    assert (by_the_copy.kind, by_the_copy.outcome) == (DividedPart.LEFT_OUT, CutOutcome.UNDER_MIN_CUT_SHARE)
+    assert explain_divided_part({"copy", "cut"}, {"whole"}, {}) == DividedPart(DividedPart.UNEXPLAINED)
+    explained = explain_divided_part({"copy", "cut"}, {"whole"}, {}, {"cut": cut})
     assert (explained.kind, explained.outcome, explained.with_a_copy) == (
         DividedPart.LEFT_OUT,
         CutOutcome.UNDER_MIN_CUT_SHARE,
         True,
     )
-    through = explain_divided_part({"whole"}, {"copy", "cut"}, findings, {"cut": cut})
+    through = explain_divided_part({"whole"}, {"copy", "cut"}, {}, {"cut": cut})
     assert (through.kind, through.with_a_copy) == (DividedPart.THROUGH_A_CUT, True)
 
 
-def test_a_short_copy_under_a_quarter_of_its_card_and_the_cut_inside_it() -> None:
+def test_a_short_copy_under_a_tenth_of_its_card_and_the_cut_inside_it() -> None:
     """The longer copies are split by the short-body step itself here: the 41-shingle copy is
-    under a quarter of the 196-shingle card."""
-    whole = numbered("word", 200)
+    under a tenth of the 496-shingle card."""
+    whole = numbered("word", 500)
     copy = whole[60:105]
     findings = diagnosed({"whole": whole, "copy": copy, "cut": copy[10:30]})
     assert findings["copy"].outcome is CutOutcome.UNDER_MIN_CUT_SHARE
-    assert findings["copy"].share_of_smallest_container == pytest.approx(41 / 196)
+    assert findings["copy"].share_of_smallest_container == pytest.approx(41 / 496)
     cut = findings["cut"]
     assert (cut.outcome, cut.containers_nested) == (CutOutcome.WITHIN_THE_RULE, True)
-    assert cut.kept_apart_by == (KeptApartBy.SHORT_BODY_STEP,)
+    assert cut.kept_apart_by == (KeptApartBy.CUT_STEP,)
 
 
 def test_a_cut_inside_two_overlapping_copies_has_two_witnesses_that_read_as_one_card() -> None:
     """Two 86-shingle copies sharing 56 shingles, neither holding the other, and the card that
     holds both. Not nested, so the cut is inside several clusters; and they read as one card, split
-    by the thresholds between the two copies and by the banding between each and the card."""
+    by the thresholds between the two copies and by the cut step between each and the card, of which
+    each is under a quarter."""
     bodies = {
         "whole": WHOLE,
         "first": WHOLE[100:190],
@@ -256,16 +377,16 @@ def test_a_cut_inside_two_overlapping_copies_has_two_witnesses_that_read_as_one_
     assert cut.container_clusters == ("first", "second", "whole")
     assert (cut.containers_nested, cut.has_one_witness) == (False, False)
     assert cut.copies_read is CopiesRead.ONE_CARD_SPLIT
-    assert cut.kept_apart_by == (KeptApartBy.BANDING, KeptApartBy.BANDING, KeptApartBy.THRESHOLDS)
-    assert findings["first"].outcome is findings["second"].outcome is CutOutcome.LONG_NEVER_PAIRED
+    assert cut.kept_apart_by == (KeptApartBy.CUT_STEP, KeptApartBy.CUT_STEP, KeptApartBy.THRESHOLDS)
+    assert findings["first"].outcome is findings["second"].outcome is CutOutcome.UNDER_MIN_CUT_SHARE
 
 
 def test_the_container_first_by_fingerprint_being_over_the_share_is_flagged() -> None:
     """What `card-fingerprint-v2` measured the share against. Two copies in one cluster, 60 and 80
-    shingles, and a 15-shingle cut: a quarter of the smaller, under a quarter of the larger."""
+    shingles, and a 6-shingle cut: a tenth of the smaller, under a tenth of the larger."""
     smaller = numbered("word", 64)
     larger = [*smaller, *numbered("more", 20)]
-    cut = smaller[:19]
+    cut = smaller[:10]
     larger_first = diagnosed({"a": larger, "b": smaller, "c": cut}, {"a": "a", "b": "a", "c": "c"})["c"]
     assert larger_first.outcome is CutOutcome.WITHIN_THE_RULE
     assert (larger_first.smallest_container, larger_first.first_container_over_the_share) == ("b", True)
@@ -275,7 +396,8 @@ def test_the_container_first_by_fingerprint_being_over_the_share_is_flagged() ->
 
 def test_a_long_cut_inside_two_cards_that_share_only_it() -> None:
     """Seventy words two long cards both open with, as a body of its own: the long fragment that
-    can still merge two cards through the banding. 66 of each card's 166 shingles are shared."""
+    could merge two cards through the banding before `card-fingerprint-v4`. 66 of each card's 166
+    shingles are shared; it has a witness in each."""
     fragment = numbered("shared", 70)
     bodies = {
         "fragment": fragment,
@@ -283,7 +405,7 @@ def test_a_long_cut_inside_two_cards_that_share_only_it() -> None:
         "second": [*fragment, *numbered("second", 100)],
     }
     finding = diagnosed(bodies)["fragment"]
-    assert finding.outcome is CutOutcome.LONG_SEVERAL_CLUSTERS
+    assert finding.outcome is CutOutcome.SEVERAL_CLUSTERS
     assert (finding.copies_read, finding.containers_nested) == (CopiesRead.DIFFERENT_CARDS, False)
 
 
@@ -317,45 +439,46 @@ def test_the_texts_of_the_witness_cluster_a_cut_shares_nothing_with_are_counted(
 
 
 def test_the_tally_of_the_nested_copies_left_alone() -> None:
-    """Two findings: the cut (within the rule, nested, split by the banding) and the long copy
-    (never paired, 86 of 326 shingles: a quarter to a half, one witness cluster of one text). The
-    banding flag is set by hand so the figures do not rest on which pairs the seed makes."""
+    """Two findings: the cut (within the rule, nested, its copies kept apart by the cut step) and
+    the long copy (under the share, 86 of 996 shingles: under a tenth). The banding flag is
+    set by hand so the figures do not rest on which pairs the seed makes."""
     findings = diagnosed(NESTED)
     cut = replace(findings["cut"], banded_with_a_container=True)
-    several = {
+    several: dict[str, object] = {
         "cuts": 1,
         "of which the containers are nested": 1,
         "as one card, split": 1,
         "as different cards": 0,
-        "one card split, by what kept the copies apart": {KeptApartBy.BANDING.value: 1},
+        "one card split, by what kept the copies apart": {KeptApartBy.CUT_STEP.value: 1},
+    }
+    none_several: dict[str, object] = {
+        **dict.fromkeys(several, 0),
+        "one card split, by what kept the copies apart": {},
     }
     within = {
         "cuts": 1,
         "its containers are nested copies in several clusters": 1,
         "the container first by fingerprint is over the share": 0,
-        "neither: another short body of its cluster points elsewhere": 0,
+        "another body of its cluster points elsewhere": 0,
+        "none of these: refused beside another join, or placed by other rules": 0,
     }
+    none_within = dict.fromkeys(within, 0)
     no_shares = {name: 0 for _, name in SHARE_BANDS}
+
+    def outcomes(*present: CutOutcome) -> dict[str, int]:
+        return {outcome.value: int(outcome in present) for outcome in CutOutcome}
+
     assert tally_cuts([findings["copy"], cut]) == {
         "bodies_with_a_container_outside_their_cluster": 2,
-        "by_outcome": {
-            outcome.value: int(outcome in (CutOutcome.WITHIN_THE_RULE, CutOutcome.LONG_NEVER_PAIRED))
-            for outcome in CutOutcome
-        },
+        "by_outcome": outcomes(CutOutcome.WITHIN_THE_RULE, CutOutcome.UNDER_MIN_CUT_SHARE),
+        "short_by_outcome": outcomes(CutOutcome.WITHIN_THE_RULE),
+        "long_by_outcome": outcomes(CutOutcome.UNDER_MIN_CUT_SHARE),
         "short_with_containers_in_several_clusters": several,
-        "long_with_containers_in_several_clusters": {
-            **dict.fromkeys(several, 0),
-            "one card split, by what kept the copies apart": {},
-        },
+        "long_with_containers_in_several_clusters": none_several,
         "short_within_the_rule_and_apart": within,
+        "long_within_the_rule_and_apart": none_within,
         "short_under_the_minimum_share_by_share": no_shares,
-        "long_never_paired_by_share": {**no_shares, "a quarter to a half": 1},
-        "long_with_one_witness_within_the_share": {
-            "cuts": 1,
-            "sharing text with every text of the witness's cluster": 1,
-            "of which that cluster is one text": 1,
-            "sharing nothing with at least one text of it": 0,
-        },
+        "long_under_the_minimum_share_by_share": {**no_shares, "under a tenth": 1},
         "short_the_banding_pairs_with_a_container": {
             "cuts": 1,
             "by_outcome": {CutOutcome.WITHIN_THE_RULE.value: 1},
@@ -373,8 +496,30 @@ def test_the_tally_of_the_nested_copies_left_alone() -> None:
     }
 
 
-def test_the_share_bands_end_at_the_minimum_cut_share() -> None:
-    assert [limit for limit, _ in SHARE_BANDS][1] == MIN_CUT_SHARE
+def test_the_share_bands_end_at_the_minimum_cut_share_and_the_share_before_it() -> None:
+    """The first band is what the share keeps out; the second is what the PM's ruling of
+    2026-10-18 let in, so the figures before and after it compare band for band."""
+    assert [limit for limit, _ in SHARE_BANDS][:2] == [MIN_CUT_SHARE, EARLIER_MIN_CUT_SHARE]
+    assert (MIN_CUT_SHARE, EARLIER_MIN_CUT_SHARE) == (0.1, 0.25)
+
+
+def test_witnesses_refused_by_a_passage_are_counted_and_the_lower_shares_apart() -> None:
+    """A 300-word card holding a 40-word opening (36 of its 296 shingles, an eighth) and a 100-word
+    middle (96, a third), which share nothing. Each makes the card no witness for the other. The
+    opening is a passage of the card only since the share came down to a tenth, so the middle's
+    refusal is the one the lower share added; the opening's would have happened at a quarter."""
+    card = numbered("word", 300)
+    index = CutIndex(joined({"card": card, "opening": card[:40], "middle": card[100:200]}))
+    assert witness_refusals(index) == {
+        "containers_refused_as_witnesses": 2,
+        "of_them_only_by_a_passage_a_tenth_to_a_quarter_of_the_container": 1,
+        "bodies_with_a_container_refused": 2,
+        "containers_refusing": 1,
+    }
+    both = CutIndex(joined({"first": FIRST_PASSAGE, "second": SECOND_PASSAGE, "both": BOTH_PASSAGES}))
+    assert witness_refusals(both)["of_them_only_by_a_passage_a_tenth_to_a_quarter_of_the_container"] == 0
+    census = diagnose_cuts(joined({"card": card, "opening": card[:40]}), {"card": "a", "opening": "b"})
+    assert census.witness_refusals["containers_refused_as_witnesses"] == 0
 
 
 # ------------------------------------------------------------------------------------------------
@@ -382,22 +527,48 @@ def test_the_share_bands_end_at_the_minimum_cut_share() -> None:
 # ------------------------------------------------------------------------------------------------
 
 
-def test_a_divided_part_is_explained_by_the_short_cut_that_used_to_join_it() -> None:
+def test_a_divided_part_is_explained_by_the_cut_that_used_to_join_it() -> None:
     """An earlier cluster of all three nested bodies, now three clusters. The cut's part left
-    because the cut was left out; the whole card's part was joined to the rest only through it."""
+    because the cut was left out; the whole card's part was joined to the rest only through it, the
+    smallest of the two cuts in the rest (the long copy, under a quarter of the card, is the other)."""
     findings = diagnosed(NESTED)
     left_out = explain_divided_part({"cut"}, {"whole", "copy"}, findings)
     assert left_out.kind == DividedPart.LEFT_OUT
     assert (left_out.outcome, left_out.containers_nested) == (CutOutcome.WITHIN_THE_RULE, True)
     assert (left_out.copies_read, left_out.kept_apart_by) == (
         CopiesRead.ONE_CARD_SPLIT,
-        (KeptApartBy.BANDING,),
+        (KeptApartBy.CUT_STEP,),
     )
 
     through = explain_divided_part({"whole"}, {"copy", "cut"}, findings)
     assert (through.kind, through.outcome) == (DividedPart.THROUGH_A_CUT, CutOutcome.WITHIN_THE_RULE)
+    by_the_copy = explain_divided_part({"whole"}, {"copy"}, findings)
+    assert (by_the_copy.kind, by_the_copy.outcome) == (
+        DividedPart.THROUGH_A_CUT,
+        CutOutcome.UNDER_MIN_CUT_SHARE,
+    )
 
-    assert explain_divided_part({"whole"}, {"copy"}, findings) == DividedPart(DividedPart.UNEXPLAINED)
+
+def test_a_divided_part_whose_text_holds_neither_end_of_the_rest_is_named() -> None:
+    """Two copies with a different first and last word, once one cluster and now two: neither
+    holds either end of the other, so no cut joins them. Each is nine-tenths inside the other, and
+    the part is named by that outcome: the 9 divided pairs of the preview the diagnosis left
+    unexplained before the PM's ruling of 2026-10-18 had this shape."""
+    first = numbered("word", 100)
+    bodies = {"first": first, "second": ["opening", *first[1:99], "closing"]}
+    findings = diagnosed(bodies)
+    assert explain_divided_part({"first"}, {"second"}, findings) == DividedPart(
+        DividedPart.LEFT_OUT, CutOutcome.ENDS_NOT_INSIDE
+    )
+
+
+def test_a_divided_part_no_cut_links_is_explained_by_a_copy_or_not_at_all() -> None:
+    """With no finding linking the two sides, whether they are copies is what is left to say."""
+    copies = explain_divided_part({"first"}, {"second"}, {}, are_copies=lambda one, other: True)
+    assert copies == DividedPart(DividedPart.COPIES_APART)
+    unrelated = explain_divided_part({"first"}, {"second"}, {}, are_copies=lambda one, other: False)
+    assert unrelated == DividedPart(DividedPart.UNEXPLAINED)
+    assert explain_divided_part({"first"}, {"second"}, {}) == DividedPart(DividedPart.UNEXPLAINED)
 
 
 # ------------------------------------------------------------------------------------------------

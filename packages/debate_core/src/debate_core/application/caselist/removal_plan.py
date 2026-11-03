@@ -111,6 +111,24 @@ selector names, a row or an inbox member at the held path stands in for the remo
 one this build refused at import, which is still in its archive in the inbox, and one an older
 build imported, which is in the store.
 
+**An upload refused at import whose archive has gone** (`v1-e30-t23`). Once retention or the
+take-out removes the archive, neither the inbox nor the store holds anything at the held path, and
+the hold keeps the path only as a digest. The import wrote the upload's sha256 to the held-digest
+record beside the path holds (:class:`~debate_core.application.ports.suppression.HeldDigestEntry`),
+with the hold's path digest and request. A re-run of that request reads it for the holds of the
+files the selector names (:func:`_refused_at_import`), and plans each such digest
+(:attr:`Inclusion.HELD_AT_IMPORT`) by the rule a later upload follows: held at no other path, it is
+`REMOVE`d and suppressed whole; held at another live path too, it is `WITHDRAW`n from the held path
+only, by the path's digest (:attr:`PlannedSource.held_at_import`). A digest the list already stops
+at that path is not planned again, and one the inbox or a manifest still shows there is planned as
+the later upload it is, with the record's path among those it is taken from.
+
+**A skipped member's row at a held path** goes in every rewrite, the first run's included, for a
+snapshot the hold covers (`v1-e30-t22`): a symbolic link named as the removed file, to which every
+build before `v1-e30-t22` gave a row. This build's importer withholds it by the same rule
+(:func:`~debate_core.application.caselist.pipeline.hold_on_skipped_member`), so a manifest the removal
+rewrote and the same archive imported again afterwards leave out the same rows.
+
 ## The complete archive
 
 A caselist's complete archive (`v1-e34-t04`) is its own snapshot, with its manifest at
@@ -131,6 +149,20 @@ caselist the removal removes or withdraws anything from, is planned for deletion
 here and in the bucket (:attr:`ObjectKind.PARSED_AGGREGATE`). They hold nothing that cannot be
 rebuilt, and the next `caselist parse` rebuilds the current directory's without what was removed.
 
+## The landscape bundles' school views (`v1-e32-t13`)
+
+Each landscape bundle, `reports/landscape/<caselist>/<snapshot>/`, holds a per-school view
+(`schools.csv`, `schools.md`) naming schools and team codes as disclosed. The plan lists every one of
+every caselist it touches (:attr:`RemovalPlan.touched_caselists`), on this machine and in the bucket
+(:attr:`RemovalPlan.school_views`), and, for a re-run, those of each caselist an earlier completed run
+of the request touched that were written before that run completed
+(:attr:`RemovalPlan.school_view_reach`). Never a circuit-wide file, never another caselist's bundle:
+:mod:`~debate_core.application.caselist.removal_school_views` says how, and `caselist status` counts
+what a removal left by the same selection. The everyday profile may list `reports/` but not its
+versions, so in dev and prod the bucket's are not counted here; the execution lists them with the
+removal profile. The plan names the newest bundle to republish (:attr:`RemovalPlan.republish`) and
+republishes nothing.
+
 ## The sync's inbox
 
 The plan also lists every file in the download inbox (`caselist pull`'s, `v1-e30-t09`) that holds
@@ -147,6 +179,25 @@ is forgotten. For `--source` that is a later upload this request suppressed, onc
 that showed it at the removed path have been rewritten: it is planned again while this machine
 still holds a record or the blob of it (:attr:`Inclusion.UNFINISHED`), with or without `--only-named`.
 
+A re-run also reads two records its first run left beside the list and the log (`v1-e30-t19`):
+
+* **The withdrawal record** (`withdrawals.jsonl`, `v1-e30-t16`). A first run that withdrew a shared
+  file deleted the records and rows that named the team's paths, and no record anywhere holds a
+  path, so the re-run cannot find them. What it needs from them is where each copy was taken from,
+  and the record says that by caselist (:attr:`PlannedSource.withdrawn_earlier_from`): that
+  caselist's aggregates are planned again, and its copy when no other holder there keeps it, as the
+  first run planned them. A `--source` re-run plans a withdrawn later upload again only for a copy
+  still in such a caselist, and never removes it whole on the record's account. A withdrawal an
+  earlier build made has no record, and nothing of it is planned again.
+* **The scopes beside the log** (`v1-e30-t15`): the manifests each earlier run of the request
+  rewrote, with the version of the rewrite, and from the log whether that run completed
+  (:attr:`RemovalPlan.earlier_rewrites`). The sweep takes the versions of each that the run's purge
+  should have taken: for a run that completed, by the rule `caselist status` counts them by
+  (`v1-e30-t24`), and for one that stopped, those older than its rewrite
+  (:mod:`~debate_core.application.caselist.manifest_sweep`). The dry run counts what the sweep will
+  delete (:attr:`RemovalPlan.superseded_versions`), so a plan with a version to sweep is never
+  "nothing to do".
+
 ## What it never puts in a log or an error
 
 The selector's school and team code. They appear in the plan (the operator's own terminal, which
@@ -159,7 +210,7 @@ import json
 import re
 import tempfile
 from collections.abc import Collection, Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import date, datetime
 from enum import StrEnum
 from pathlib import Path
@@ -172,10 +223,16 @@ from debate_core.application.caselist.inbox_purge import (
     InboxFileKind,
     InboxFilePlan,
     InboxTeamFilesLeft,
+    inbox_directory_named,
     plan_inbox,
     read_inbox,
 )
 from debate_core.application.caselist.manifest import MANIFEST_DIRECTORY, read_manifest_file, render_rows
+from debate_core.application.caselist.manifest_sweep import (
+    EarlierRewrite,
+    earlier_rewrites,
+    swept_manifest_versions,
+)
 from debate_core.application.caselist.openev_manifest import (
     openev_release_name,
     row_upstream_identity,
@@ -184,6 +241,7 @@ from debate_core.application.caselist.openev_manifest import (
 from debate_core.application.caselist.pipeline import (
     STORED_CLASSIFICATIONS,
     Classification,
+    hold_on_skipped_member,
     withheld_skipped_paths,
 )
 from debate_core.application.caselist.publish_plan import (
@@ -203,19 +261,30 @@ from debate_core.application.caselist.removal_path_versions import (
     path_identity,
     snapshot_date,
 )
-from debate_core.application.caselist.suppression import read_path_holds
+from debate_core.application.caselist.removal_school_views import (
+    LANDSCAPE_PREFIX,
+    SchoolViewReach,
+    bundle_of,
+    reached,
+    school_view_cutoffs,
+)
+from debate_core.application.caselist.suppression import read_held_digests, read_path_holds, read_withdrawals
 from debate_core.application.errors import DomainError, StoreAccessDenied
 from debate_core.application.ports.caselist import CaselistRepository
 from debate_core.application.ports.caselist_source import openev_id_of_inbox_name
 from debate_core.application.ports.evidence_store import EvidenceObjectStore, ObjectKey
 from debate_core.application.ports.evidence_versions import EvidenceVersionStore, ObjectVersion
-from debate_core.application.ports.parsed_store import AGGREGATE_NAMES
+from debate_core.application.ports.parsed_store import REBUILT_NAMES
 from debate_core.application.ports.providers import Clock
 from debate_core.application.ports.suppression import (
     REMOVAL_REASONS,
     REQUEST_ID_PATTERN,
+    HeldDigestEntry,
     PathHoldEntry,
     ReasonCode,
+    RemovalLogEntry,
+    RemovalLogWithScopes,
+    RemovalScopeEntry,
     RemovalSelectorKind,
     SuppressionAction,
     SuppressionEntry,
@@ -241,6 +310,7 @@ __all__ = [
     "RemovalPlan",
     "RemovalPlanner",
     "RemovalSelector",
+    "SchoolViewRemoval",
     "Side",
     "SourceSelector",
     "TeamSelector",
@@ -347,6 +417,9 @@ class Inclusion(StrEnum):
     """Held at a path the removal takes a named file from, in a later snapshot (`v1-e30-t11`)."""
     UNFINISHED = "unfinished"
     """Suppressed by an earlier run of this request, with something of it still on this machine."""
+    HELD_AT_IMPORT = "held_at_import"
+    """Refused at import at a path this request holds, and known only from the held-digest record:
+    its archive has left the inbox, and the store never took it in (`v1-e30-t23`)."""
 
 
 class LaterUploadOutcome(StrEnum):
@@ -449,6 +522,16 @@ class PlannedSource:
     already_suppressed: bool = False
     """The list already carries this removal's suppression of it: a re-run finishing the job."""
     inclusion: Inclusion = Inclusion.NAMED
+    withdrawn_earlier_from: tuple[str, ...] = ()
+    """For a file withdrawn, the caselists an earlier run of this request withdrew it from, as the
+    withdrawal record says (`v1-e30-t19`). Its first run deleted the records and rows that named the
+    paths, so a re-run finds none of them; this is what still says where the copies were taken
+    from, and the re-run plans those caselists' copies and aggregates again as the first run did."""
+
+    held_at_import: tuple[tuple[str, Sha256Hex], ...] = ()
+    """`(caselist, disclosure digest)` of each held path an import refused these bytes at, as the
+    held-digest record says (`v1-e30-t23`), where no row or inbox member gives the path's text. A
+    withdrawal takes the file from each of them, by the digest alone."""
 
     @property
     def shared(self) -> bool:
@@ -482,6 +565,22 @@ class ObjectRemoval:
 
 
 @dataclass(frozen=True, slots=True)
+class SchoolViewRemoval:
+    """One landscape school-view file a removal deletes (`v1-e32-t13`).
+
+    Its key is a caselist, a snapshot and a file's name, so the plan prints it; nothing else is kept.
+    """
+
+    key: ObjectKey
+    side: Side
+    versions: tuple[ObjectVersion, ...] | None
+    """The versions the plan saw it delete. On this machine, the file. In the bucket, every version
+    the removal reaches, or `None` where the everyday profile may not list versions under
+    `reports/`, which is the rule in dev and prod: the plan then saw the current object, and
+    `--execute` lists every version under the removal profile and deletes those the rule reaches."""
+
+
+@dataclass(frozen=True, slots=True)
 class RemovalPlan:
     """Everything a removal would do, in the order the executor does it."""
 
@@ -505,6 +604,9 @@ class RemovalPlan:
     inbox_team_files_left: tuple[InboxTeamFilesLeft, ...] = ()
     """Archives waiting to be imported that hold files of the team the store has never seen."""
     inbox_directory: str = ""
+    """The inbox's path relative to the data directory, or the setting that puts it elsewhere
+    (:func:`~debate_core.application.caselist.inbox_purge.inbox_directory_named`): never a path
+    on this machine, since the plan is read and kept (`v1-e30-t20`)."""
     inbox_exists: bool = False
     """Whether that directory exists. Prod, which does not pull, has none; nothing is then created."""
     only_named: bool = False
@@ -519,6 +621,27 @@ class RemovalPlan:
     """The path entries this removal appends: one for each caselist path a `--source` removal takes
     a file from whole (`v1-e30-t13`). None with `--only-named`, none for a file withdrawn or
     skipped, and none that is already in force."""
+    earlier_rewrites: tuple[EarlierRewrite, ...] = ()
+    """Each manifest an earlier run of this request rewrote in the bucket, with the version its
+    rewrite is, from the scopes beside the removal log (`v1-e30-t15`), and the run's completion
+    where it completed. The sweep takes the versions of each key the run's purge should have taken
+    (`v1-e30-t19`, `v1-e30-t24`; :mod:`~debate_core.application.caselist.manifest_sweep`)."""
+    superseded_versions: tuple[ObjectVersion, ...] | None = ()
+    """The noncurrent manifest versions the execution's sweep would delete, as the dry run's
+    credential lists and reads them (`v1-e30-t19`); `None` where it may not, so they were not
+    counted. The execution works them out again with the takedown credential."""
+    school_view_reach: tuple[SchoolViewReach, ...] = ()
+    """The caselists whose landscape school views the removal deletes, and which of them
+    (`v1-e32-t13`, :mod:`~debate_core.application.caselist.removal_school_views`): every view of a
+    caselist it touches now, and of one an earlier completed run of the request touched, the views
+    written before that run completed. The execution deletes by this, as the removal profile lists them."""
+    school_views: tuple[SchoolViewRemoval, ...] = ()
+    """The school-view files :attr:`school_view_reach` takes, on this machine and in the bucket, as the
+    dry run's credential sees them."""
+    school_view_versions_counted: bool = True
+    """Whether the bucket's school-view versions were listed. The everyday profile may list
+    `reports/` but not its versions, so in dev and prod they are not: kept apart from
+    :attr:`versions_counted`, which says the same of the evidence prefixes."""
 
     def of(self, disposition: Disposition) -> tuple[PlannedSource, ...]:
         return tuple(source for source in self.sources if source.disposition is disposition)
@@ -572,10 +695,11 @@ class RemovalPlan:
         """
         entries: list[WithdrawalEntry] = []
         for source in self.sources:
-            # Every entry of one disclosure is planned for a path it is withdrawn from.
+            # Every entry of one disclosure is planned for a path it is withdrawn from: by its text,
+            # or by its digest alone where an import refused it there (v1-e30-t23).
             caselist_of = {
                 disclosure_digest(caselist, path): caselist for caselist, path in source.requester_paths
-            }
+            } | {disclosure: caselist for caselist, disclosure in source.held_at_import}
             entries += [
                 WithdrawalEntry(
                     sha256=entry.sha256,
@@ -621,6 +745,7 @@ class RemovalPlan:
                 continue
             touched.update(ref.caselist for ref in source.disclosures)
             touched.update(caselist for caselist, _ in source.requester_paths)
+            touched.update(source.withdrawn_earlier_from)
             if source.camp_files:
                 touched.add(OPENEV)
         return tuple(sorted(touched))
@@ -635,7 +760,67 @@ class RemovalPlan:
             and not self.path_holds
             and not any(source.local_blob for source in self.sources)
             and not self.inbox
+            and self.superseded_versions == ()
+            and not self.school_views
         )
+
+    def school_views_on(self, side: Side) -> tuple[SchoolViewRemoval, ...]:
+        return tuple(planned for planned in self.school_views if planned.side is side)
+
+    @property
+    def republish(self) -> tuple[tuple[str, date], ...]:
+        """For each caselist the removal deletes school views of, its newest snapshot among them.
+
+        That bundle is to be republished without the removed rounds once the removal is done
+        (`landscape report --publish`). The removal never republishes: the PM coordinates it.
+        """
+        newest: dict[str, date] = {}
+        for planned in self.school_views:
+            caselist, snapshot = bundle_of(planned.key)
+            newest[caselist] = max(snapshot, newest.get(caselist, snapshot))
+        return tuple(sorted(newest.items()))
+
+    async def swept_from(self, versions: EvidenceVersionStore) -> tuple[ObjectVersion, ...]:
+        """The noncurrent manifest versions this plan's sweep deletes, as `versions` lists them.
+
+        The dry run asks with the everyday credential, the execution with the takedown's: see
+        :mod:`~debate_core.application.caselist.manifest_sweep`. Lists and reads only.
+        """
+        return await swept_manifest_versions(
+            versions,
+            caselists=self.affected_caselists,
+            rewritten_now={rewrite.key for rewrite in self.manifests_on(Side.BUCKET)},
+            earlier_rewrites=self.earlier_rewrites,
+            names_removed=self.names_removed,
+        )
+
+    def names_removed(self, caselist: str, line: str, key: ObjectKey) -> bool:
+        """Whether one manifest line names something this removal took out: what the sweep looks for.
+
+        `key` is the manifest's: a camp release's rows are asked about at their camp path in the
+        release the key names (`v1-e30-t14`), as a caselist's are at their caselist path.
+        """
+        try:
+            row: object = json.loads(line)
+        except json.JSONDecodeError:
+            return False
+        if not isinstance(row, dict) or row.get("kind") != "member":  # pyright: ignore[reportUnknownMemberType]
+            return False
+        fields: dict[str, object] = row  # pyright: ignore[reportUnknownVariableType]
+        path, digest = fields.get("path"), fields.get("sha256")
+        if (
+            isinstance(self.selector, TeamSelector)
+            and isinstance(path, str)
+            and self.selector.holds(caselist, path)
+        ):
+            return True
+        if isinstance(digest, str):
+            release = key.rsplit("/", 1)[-1].removesuffix(".jsonl")
+            scope = camp_path_scope(release) if caselist == OPENEV else caselist
+            return self.suppression_after.suppresses(
+                digest, disclosure=disclosure_digest(scope, path) if isinstance(path, str) else None
+            )
+        return False
 
 
 # ------------------------------------------------------------------------------------------------
@@ -720,12 +905,21 @@ class RemovalPlanner:
         local: This machine's manifests (and blobs, as named objects).
         local_blobs: This machine's blob tree, as the takedown sees it (one version per file).
         local_parsed: This machine's parsed-card tree (E31), likewise. Empty until E31 writes one.
+        local_reports: The data directory as the takedown sees it, keyed as the bucket is, for the
+            landscape bundles under `reports/landscape/` (`v1-e32-t13`). Required, like the inbox.
         remote: The environment's bucket through the everyday profile: listings, heads, manifests.
         remote_versions: The bucket's versions through whichever credential the composition root
             gives it; a denial means "not counted", not failure.
         inbox: The sync's download inbox in this environment. Required, with no default, so that no
             removal can be built that forgets it.
-        suppression: The suppression list (local and bucket copies).
+        suppression: The suppression list (local and bucket copies), with the withdrawal record
+            beside it, which a re-run reads for the caselists a copy was withdrawn from (`v1-e30-t19`),
+            and the held-digest record, which it reads for the uploads an import refused at a held
+            path (`v1-e30-t23`).
+        removal_log: The removal log, both copies, with the scopes beside it: the manifests earlier
+            runs of the same request rewrote, and whether each run completed, by which the sweep
+            takes their older versions (`v1-e30-t19`, `v1-e30-t24`). Required, with no default,
+            like the inbox.
         clock: The time entries are recorded at.
         environment: `dev` or `prod`, for the plan and the log.
         bucket: The bucket's name, for the plan.
@@ -738,10 +932,12 @@ class RemovalPlanner:
         local: LocalEvidence,
         local_blobs: EvidenceVersionStore,
         local_parsed: EvidenceVersionStore,
+        local_reports: EvidenceVersionStore,
         remote: EvidenceObjectStore,
         remote_versions: EvidenceVersionStore,
         inbox: CaselistInbox,
         suppression: SuppressionList,
+        removal_log: RemovalLogWithScopes,
         clock: Clock,
         environment: str,
         bucket: str,
@@ -750,10 +946,12 @@ class RemovalPlanner:
         self._local = local
         self._local_blobs = local_blobs
         self._local_parsed = local_parsed
+        self._local_reports = local_reports
         self._remote = remote
         self._remote_versions = remote_versions
         self._inbox = inbox
         self._suppression = suppression
+        self._removal_log = removal_log
         self._clock = clock
         self._environment = environment
         self._bucket = bucket
@@ -782,6 +980,10 @@ class RemovalPlanner:
         existing = await self._suppression.entries()
         existing_holds = await read_path_holds(self._suppression)
         state = SuppressionState.from_entries(existing, existing_holds)
+        # Where this request's earlier runs withdrew a copy from, and what they rewrote (v1-e30-t19).
+        recorded = _withdrawn_by_the_request(await read_withdrawals(self._suppression), request_id)
+        log_entries, scopes = await self._removal_log.entries(), await self._removal_log.scopes()
+        earlier_rewrites = self._earlier_rewrites(log_entries, scopes, request_id)
         caselists = await self._known_caselists()
         copies = [copy for caselist in caselists for copy in await self._manifest_copies(caselist)]
 
@@ -819,6 +1021,10 @@ class RemovalPlanner:
             upstream_path_digests={**self._inbox.deliveries.upstream_paths(), **_row_upstream_paths(copies)},
         )
         later = tuple(one for one in versions if one.relation is VersionRelation.LATER)
+        # What an import refused at a held path, which nothing else may name any more (v1-e30-t23).
+        refused = _refused_at_import(
+            await read_held_digests(self._suppression), state, named=selected, request_id=request_id
+        )
         added: list[PlannedSource] = []
         if not only_named:
             for digest in sorted({one.sha256 for one in later}):
@@ -832,10 +1038,28 @@ class RemovalPlanner:
                         request_id=request_id,
                         reason=reason,
                         recorded_at=recorded_at,
+                        refused_at=refused.get(digest, ()),
+                    )
+                )
+            for digest in sorted(set(refused) - selected - {one.sha256 for one in later}):
+                if all(state.suppresses(digest, disclosure=disclosure) for _, disclosure in refused[digest]):
+                    continue  # listed already: whatever is left of it is an unfinished run's
+                added.append(
+                    await self._plan_other_source(
+                        digest,
+                        [],
+                        holdings,
+                        Inclusion.HELD_AT_IMPORT,
+                        state=state,
+                        request_id=request_id,
+                        reason=reason,
+                        recorded_at=recorded_at,
+                        refused_at=refused[digest],
                     )
                 )
 
         # A re-run after a partial failure: whatever this request already suppressed is still its.
+        index = _BucketIndex(self._remote, self._remote_versions)
         unfinished: list[PlannedSource] = []
         planned = selected | {source.sha256 for source in added}
         for digest in sorted(_suppressed_by(state, request_id) - planned):
@@ -863,23 +1087,40 @@ class RemovalPlanner:
                         request_id=request_id,
                         reason=reason,
                         recorded_at=recorded_at,
+                        withdrawn_earlier_from=recorded.get(digest, ()),
                     )
                 )
-        sources = [*sorted([*named, *unfinished], key=lambda source: source.sha256), *added]
+            elif digest in recorded:
+                # Withdrawn by an earlier run, with nothing of it left on this machine: planned again
+                # only to take a copy still in a caselist that keeps no holder of it (v1-e30-t19),
+                # and never removed whole on the record's account.
+                again = await self._plan_other_source(
+                    digest,
+                    [],
+                    holdings,
+                    Inclusion.UNFINISHED,
+                    state=state,
+                    request_id=request_id,
+                    reason=reason,
+                    recorded_at=recorded_at,
+                    withdrawn_earlier_from=recorded[digest],
+                )
+                unkept = sorted(set(recorded[digest]) - set(again.kept_in))
+                if again.disposition is Disposition.WITHDRAW and await _left_in_the_bucket(
+                    digest, unkept, index
+                ):
+                    unfinished.append(again)
+        sources = [
+            _with_its_recorded_withdrawals(source, recorded)
+            for source in [*sorted([*named, *unfinished], key=lambda source: source.sha256), *added]
+        ]
 
         after = SuppressionState.from_entries(
             [*existing, *(entry for source in sources for entry in source.suppression)],
             [*existing_holds, *path_holds],
         )
         removed = {source.sha256 for source in sources if source.disposition is Disposition.REMOVE}
-        withdrawn = {
-            (caselist, path, source.sha256)
-            for source in sources
-            if source.disposition is Disposition.WITHDRAW
-            for caselist, path in source.requester_paths
-        }
-        index = _BucketIndex(self._remote, self._remote_versions)
-        rewrites = await self._manifest_rewrites(copies, selector, removed, withdrawn, after, index)
+        rewrites = await self._manifest_rewrites(copies, selector, removed, after, index)
         objects, counted = await self._objects(sources, caselists, copies, index)
         inbox, team_files_left = plan_inbox(
             self._inbox,
@@ -893,7 +1134,7 @@ class RemovalPlanner:
             files=inbox_files,
             withdrawn_camp_documents=_withdrawn_camp_documents(sources),
         )
-        return RemovalPlan(
+        plan = RemovalPlan(
             selector=selector,
             request_id=request_id,
             reason=reason,
@@ -910,13 +1151,89 @@ class RemovalPlanner:
             suppression_after=after,
             inbox=inbox,
             inbox_team_files_left=team_files_left,
-            inbox_directory=str(self._inbox.directory),
+            inbox_directory=inbox_directory_named(self._inbox),
             inbox_exists=self._inbox.directory.is_dir(),
             only_named=only_named,
             later_uploads=later,
             earlier_versions=tuple(one for one in versions if one.relation is not VersionRelation.LATER),
             path_holds=path_holds,
+            earlier_rewrites=earlier_rewrites,
         )
+        reach = self._school_view_reach(plan, log_entries, scopes)
+        school_views, school_versions_counted = await self._school_views(reach)
+        return replace(
+            plan,
+            superseded_versions=await self._swept(plan),
+            school_view_reach=reach,
+            school_views=school_views,
+            school_view_versions_counted=school_versions_counted,
+        )
+
+    def _earlier_rewrites(
+        self, entries: Sequence[RemovalLogEntry], scopes: Sequence[RemovalScopeEntry], request_id: str
+    ) -> tuple[EarlierRewrite, ...]:
+        """The manifests this request's earlier runs in this environment rewrote, from their scopes,
+        each with its run's completion where the log says it completed (:func:`~debate_core.
+        application.caselist.manifest_sweep.earlier_rewrites`)."""
+        return earlier_rewrites(entries, scopes, request_id=request_id, environment=self._environment)
+
+    def _school_view_reach(
+        self, plan: RemovalPlan, entries: Sequence[RemovalLogEntry], scopes: Sequence[RemovalScopeEntry]
+    ) -> tuple[SchoolViewReach, ...]:
+        """Every caselist the plan touches, whole; and each an earlier completed run of the request
+        touched, up to that run's completion (`v1-e32-t13`). OpenEv has no landscape bundle."""
+        now = sorted(caselist for caselist in plan.touched_caselists if caselist != OPENEV)
+        earlier = school_view_cutoffs(entries, scopes, self._environment, request_id=plan.request_id)
+        return (
+            *(SchoolViewReach(caselist) for caselist in now),
+            *(
+                SchoolViewReach(caselist, older_than=completion)
+                for caselist, completion in sorted(earlier.items())
+                if caselist not in now and caselist != OPENEV
+            ),
+        )
+
+    async def _school_views(
+        self, reach: Sequence[SchoolViewReach]
+    ) -> tuple[tuple[SchoolViewRemoval, ...], bool]:
+        """The school-view files `reach` takes, here and in the bucket, and whether the bucket's
+        versions could be listed. One listing of every bundle on each side, read through
+        :func:`~debate_core.application.caselist.removal_school_views.reached`, which is the
+        selection the execution and `caselist status` use too."""
+        if not reach:
+            return (), True
+        found = [
+            SchoolViewRemoval(key=version.key, side=Side.LOCAL, versions=(version,))
+            for version in await self._local_reports.list_versions(LANDSCAPE_PREFIX)
+            if reached(version.key, version.last_modified, reach)
+        ]
+        try:
+            listed = await self._remote_versions.list_versions(LANDSCAPE_PREFIX)
+        except StoreAccessDenied:
+            # The everyday profile may list reports/ but not its versions: the current objects, dated.
+            found += [
+                SchoolViewRemoval(key=info.key, side=Side.BUCKET, versions=None)
+                for info in await self._remote.list_objects(LANDSCAPE_PREFIX)
+                if reached(info.key, info.last_modified, reach)
+            ]
+            return tuple(found), False
+        by_key: dict[str, list[ObjectVersion]] = {}
+        for version in listed:
+            if reached(version.key, version.last_modified, reach):
+                by_key.setdefault(version.key, []).append(version)
+        found += [
+            SchoolViewRemoval(key=key, side=Side.BUCKET, versions=tuple(versions))
+            for key, versions in sorted(by_key.items())
+        ]
+        return tuple(found), True
+
+    async def _swept(self, plan: RemovalPlan) -> tuple[ObjectVersion, ...] | None:
+        """What the execution's sweep would delete, as the everyday credential sees it; `None` where
+        it may not list or read noncurrent manifest versions, so they are not counted."""
+        try:
+            return await plan.swept_from(self._remote_versions)
+        except StoreAccessDenied:
+            return None
 
     # --------------------------------------------------------------------------------------
     # Reading
@@ -1191,6 +1508,8 @@ class RemovalPlanner:
         request_id: str,
         reason: ReasonCode,
         recorded_at: datetime,
+        withdrawn_earlier_from: tuple[str, ...] = (),
+        refused_at: Sequence[tuple[str, Sha256Hex]] = (),
     ) -> PlannedSource:
         """Plan a file the selector does not name: a later upload, or one a stopped run left.
 
@@ -1199,6 +1518,14 @@ class RemovalPlanner:
         the bytes stay for that path and only the taken paths' rows and records go; with none, the
         file goes everywhere, exactly as a named file does. `--include-shared` plays no part: it
         is the operator's decision about the files the request names.
+
+        `withdrawn_earlier_from` is where the withdrawal record says an earlier run of this request
+        withdrew the file from (`v1-e30-t19`): a copy there that is still in the bucket is withdrawn
+        again, though no row or record shows its path any more.
+
+        `refused_at` is where the held-digest record says an import refused the file
+        (`v1-e30-t23`): `(caselist, disclosure digest)` of each held path. Each is a taken path
+        known by its digest alone, never a live one.
         """
         source = await self._caselists.find_source(digest)
         disclosures = [
@@ -1246,9 +1573,15 @@ class RemovalPlanner:
         taken_releases = {path.split("/", 1)[0] for caselist, path in taken if caselist == OPENEV} | orphaned
         shared = bool(live_paths or live_releases)
 
+        # A held path the record names and no row or inbox member shows (v1-e30-t23).
+        taken_by_digest = {
+            disclosure_digest(caselist, path) for caselist, path in taken if caselist != OPENEV
+        }
+        refused_only = tuple(sorted({one for one in refused_at if one[1] not in taken_by_digest}))
+
         if (state.suppresses_source(digest) and finishing) or not shared:
             disposition = Disposition.REMOVE
-        elif taken or orphaned:
+        elif taken or orphaned or withdrawn_earlier_from or refused_only:
             disposition = Disposition.WITHDRAW
         else:
             # Another holder has it, and nothing here says which path of it to take.
@@ -1282,6 +1615,9 @@ class RemovalPlanner:
                 digest_of_path = disclosure_digest(caselist, path)
                 if not state.suppresses(digest, disclosure=digest_of_path):
                     entries.append(_suppression(digest, digest_of_path, recorded_at, reason, request_id))
+            for _, digest_of_path in refused_only:
+                if not state.suppresses(digest, disclosure=digest_of_path):
+                    entries.append(_suppression(digest, digest_of_path, recorded_at, reason, request_id))
 
         return PlannedSource(
             sha256=digest,
@@ -1303,6 +1639,7 @@ class RemovalPlanner:
             suppression=tuple(entries),
             already_suppressed=finishing,
             inclusion=inclusion,
+            held_at_import=refused_only,
         )
 
     # --------------------------------------------------------------------------------------
@@ -1314,7 +1651,6 @@ class RemovalPlanner:
         copies: Sequence[_ManifestCopy],
         selector: RemovalSelector,
         removed: set[str],
-        withdrawn: set[tuple[str, str, str]],
         after: SuppressionState,
         index: _BucketIndex,
     ) -> list[ManifestRewrite]:
@@ -1330,9 +1666,7 @@ class RemovalPlanner:
         for copy in copies:
             if copy.summary is None:
                 continue
-            dropped = _rows_to_drop(
-                copy, selector, removed, withdrawn, held_removed.get(copy.caselist, set()), after
-            )
+            dropped = _rows_to_drop(copy, selector, removed, held_removed.get(copy.caselist, set()), after)
             if not dropped:
                 continue
             versions: int | None = None
@@ -1390,13 +1724,20 @@ class RemovalPlanner:
                 # Withdrawn: a caselist's own copy goes only when no other team there still holds it,
                 # by this machine's records or by any manifest on either side. A camp path's release
                 # year's copy goes only when no other release of that year holds it (v1-e30-t14).
-                parsed_caselists = sorted({name for name, _ in source.requester_paths} - set(source.kept_in))
+                # A re-run also takes the caselists the withdrawal record names, whose paths the
+                # first run's deletions left nothing to show (v1-e30-t19).
+                withdrawn_from = {name for name, _ in source.requester_paths} | set(
+                    source.withdrawn_earlier_from
+                )
+                parsed_caselists = sorted(withdrawn_from - set(source.kept_in))
                 raw_prefixes = [
                     f"{CASELIST_SOURCE_PREFIX}/{name}/" for name in parsed_caselists if name != OPENEV
                 ]
-                raw_prefixes += [
-                    f"{OPENEV_SOURCE_PREFIX}/{year}/" for year in _camp_years_withdrawn(source, copies)
-                ]
+                years = set(_camp_years_withdrawn(source, copies))
+                if OPENEV in source.withdrawn_earlier_from and OPENEV not in source.kept_in:
+                    # No release holds it any more, so no year's copy is any release's.
+                    years |= set(openev_years)
+                raw_prefixes += [f"{OPENEV_SOURCE_PREFIX}/{year}/" for year in sorted(years)]
 
             for prefix in raw_prefixes:
                 key = f"{prefix}{local_blob_key(digest)}"
@@ -1438,7 +1779,11 @@ class RemovalPlanner:
                 )
             # Every caselist with a row derived from this source or one of the withdrawn disclosures,
             # including one where another team keeps the file: its occurrence rows still go.
-            touched = {*parsed_caselists, *(name for name, _ in source.requester_paths)}
+            touched = {
+                *parsed_caselists,
+                *(name for name, _ in source.requester_paths),
+                *source.withdrawn_earlier_from,
+            }
             for caselist in sorted(touched):
                 prefix = f"parsed/{caselist}/"
                 listed = await index.versions(prefix)
@@ -1501,7 +1846,6 @@ def _rows_to_drop(
     copy: _ManifestCopy,
     selector: RemovalSelector,
     removed: set[str],
-    withdrawn: set[tuple[str, str, str]],
     held_removed: set[str],
     after: SuppressionState,
 ) -> set[int]:
@@ -1509,7 +1853,7 @@ def _rows_to_drop(
     dropped = {
         index
         for index, (_, row) in enumerate(copy.rows)
-        if _dropped(row, copy, selector, removed, withdrawn, held_removed, after)
+        if _dropped(row, copy, selector, removed, held_removed, after)
     }
     real = {
         str(row["path"]): index in dropped
@@ -1525,6 +1869,15 @@ def _rows_to_drop(
     ]
     shadowing = withheld_skipped_paths(real, skipped)
     dropped |= {index for index, (_, row) in enumerate(copy.rows) if row.get("path") in shadowing}
+    caselist = None if copy.caselist == OPENEV else copy.caselist
+    snapshot = snapshot_date(copy.snapshot)
+    dropped |= {
+        index
+        for index, (_, row) in enumerate(copy.rows)
+        if row.get("skip_reason") is not None
+        and isinstance(path := row.get("path"), str)
+        and hold_on_skipped_member(after, caselist=caselist, path=path, snapshot=snapshot) is not None
+    }
     return dropped
 
 
@@ -1533,15 +1886,17 @@ def _dropped(
     copy: _ManifestCopy,
     selector: RemovalSelector,
     removed: set[str],
-    withdrawn: set[tuple[str, str, str]],
     held_removed: set[str],
     after: SuppressionState,
 ) -> bool:
     """Whether one member row goes, before the junk that shadows dropped files is added.
 
-    `withdrawn` is `(caselist, path, sha256)` with the path as :func:`taken_path` gives it: a
-    withdrawal takes one file from one path, and an earlier version of another file at that path
-    keeps its row (`v1-e30-t11`). A camp path is one row of one release (`v1-e30-t14`).
+    A withdrawn copy's row goes because the list as it will read stops its file at its path: the
+    plan appends `(sha256, disclosure)` for every path a withdrawal takes, unless the list already
+    holds it, so that one rule decides for a caselist row and a camp row alike (`v1-e30-t20`; the
+    withdrawn set it was checked against first decided nothing, `v1-e30-t14` mutant W8). It stops
+    one file at one path, so an earlier version of another file there keeps its row
+    (`v1-e30-t11`); a camp path is one row of one release (`v1-e30-t14`).
     """
     path, digest = row.get("path"), row.get("sha256")
     if not isinstance(path, str):
@@ -1549,11 +1904,12 @@ def _dropped(
     caselist = copy.caselist
     if isinstance(selector, TeamSelector) and selector.holds(caselist, path):
         return True  # every row of the requesting team's, junk and REMOVED rows included
-    if digest in removed or (*taken_path(caselist, copy.release, path), digest) in withdrawn:
+    if digest in removed:
         return True
     if row.get("classification") == str(Classification.REMOVED) and path in held_removed:
         return True  # "this path's file was taken down", where the file was the removed one
-    # Anything else the list already stops: a row an earlier removal never reached.
+    # What the list as it will read stops: a copy this plan withdraws, or a row an earlier removal
+    # never reached.
     return isinstance(digest, str) and after.suppresses(
         digest, disclosure=disclosure_digest(_scope(copy), path)
     )
@@ -1763,6 +2119,25 @@ def _recorded_paths(
     return tuple(sorted(stand_ins, key=lambda one: (one.caselist, one.snapshot, one.path, one.sha256)))
 
 
+def _refused_at_import(
+    held: Sequence[HeldDigestEntry], state: SuppressionState, *, named: Collection[str], request_id: str
+) -> dict[Sha256Hex, tuple[tuple[str, Sha256Hex], ...]]:
+    """For each upload an import refused under this request, the held paths it was refused at (`v1-e30-t23`).
+
+    `(caselist, disclosure digest)`, from a hold in force at the entry's path on a file the selector
+    names, as :func:`_recorded_paths` asks of a row. A hold an un-suppress lifted refuses nothing
+    any more, and its uploads are not planned. A named file is planned as named.
+    """
+    found: dict[Sha256Hex, set[tuple[str, Sha256Hex]]] = {}
+    for entry in held:
+        if entry.request_id != request_id or entry.sha256 in named:
+            continue
+        for hold in state.held_paths.get(entry.disclosure, ()):
+            if hold.sha256 in named:
+                found.setdefault(entry.sha256, set()).add((hold.caselist, hold.disclosure))
+    return {digest: tuple(sorted(paths)) for digest, paths in sorted(found.items())}
+
+
 def taken_path(caselist: str, snapshot: str, path: str) -> tuple[str, str]:
     """`(caselist, path)` as a withdrawal names a copy it takes (:attr:`PlannedSource.requester_paths`).
 
@@ -1867,6 +2242,52 @@ def _suppressed_by(state: SuppressionState, request_id: str) -> set[str]:
     }
 
 
+def _withdrawn_by_the_request(
+    withdrawals: Sequence[WithdrawalEntry], request_id: str
+) -> dict[str, tuple[str, ...]]:
+    """For each file this request withdrew a copy of, the caselists it withdrew them from (`v1-e30-t19`).
+
+    From the withdrawal record (`v1-e30-t16`), which a removal appends just before the suppression
+    entries it attributes, so every copy a build since then withdrew is in it. This request's
+    alone: another request's withdrawal of the same file reached another caselist, not this one's.
+    An earlier build's withdrawal is not in it, and that file has no caselist here. Whether the list
+    still suppresses one is not asked: a caselist here only joins a file this plan withdraws again
+    under the same request, which reached it either way.
+    """
+    found: dict[str, set[str]] = {}
+    for one in withdrawals:
+        if one.request_id == request_id:
+            found.setdefault(one.sha256, set()).add(one.caselist)
+    return {digest: tuple(sorted(caselists)) for digest, caselists in found.items()}
+
+
+def _with_its_recorded_withdrawals(
+    source: PlannedSource, recorded: Mapping[str, tuple[str, ...]]
+) -> PlannedSource:
+    """A withdrawn file, with the caselists the request's earlier runs withdrew it from (`v1-e30-t19`)."""
+    if source.disposition is not Disposition.WITHDRAW or source.sha256 not in recorded:
+        return source
+    return replace(source, withdrawn_earlier_from=recorded[source.sha256])
+
+
+async def _left_in_the_bucket(digest: str, caselists: Sequence[str], index: _BucketIndex) -> bool:
+    """Whether any version of `digest`'s copy, or of a parsed file of it, is in a caselist it was
+    withdrawn from (`v1-e30-t19`): what a `--source` re-run plans a withdrawn later upload again for.
+
+    A listing this credential may not make is read as maybe: the plan then includes the file, and
+    says its versions were not counted.
+    """
+    for caselist in caselists:
+        source_prefix = (
+            f"{OPENEV_SOURCE_PREFIX}/" if caselist == OPENEV else f"{CASELIST_SOURCE_PREFIX}/{caselist}/"
+        )
+        for prefix in (source_prefix, f"parsed/{caselist}/"):
+            listed = await index.versions(prefix)
+            if listed is None or any(_names_digest(key, digest) for key in listed):
+                return True
+    return False
+
+
 def _affected_caselists(sources: Sequence[PlannedSource], caselists: Sequence[str]) -> tuple[str, ...]:
     """Caselists whose superseded manifest versions the executor sweeps: every one, if anything goes.
 
@@ -1927,7 +2348,7 @@ def _is_parsed_aggregate(key: str, caselist_prefix: str) -> bool:
     if not key.startswith(caselist_prefix):
         return False
     rest = key[len(caselist_prefix) :].split("/")
-    return len(rest) == 2 and rest[1] in AGGREGATE_NAMES
+    return len(rest) == 2 and rest[1] in REBUILT_NAMES
 
 
 def _names_digest(key: str, digest: str) -> bool:

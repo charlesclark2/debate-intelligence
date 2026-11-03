@@ -1,0 +1,20 @@
+[
+  {
+    "provider": "google_news",
+    "provider_record_id": "CBMiPGh0dHBzOi8vd3d3LmV4YW1wbGUubmV0L25ld3MvMjAyNi8xMC8xOS9tYXJrZXRwbGFjZS1wcmVtaXVtc9IBAA",
+    "title": "Marketplace premiums climb for 2027",
+    "url": "https://www.example.net/news/2026/10/19/marketplace-premiums",
+    "source_type": "news",
+    "publication": "Example Gazette",
+    "published_at": "2026-10-19T16:00:00Z"
+  },
+  {
+    "provider": "google_news",
+    "provider_record_id": "CBMiOGh0dHBzOi8vd3d3LmV4YW1wbGUub3JnL2hlYWx0aC8yMDI2LzEwLzEyL21lZGljYWlkLXJvbGxz0gEA",
+    "title": "Medicaid rolls shrink again",
+    "url": "https://www.example.org/health/2026/10/12/medicaid-rolls",
+    "source_type": "news",
+    "publication": "Example Tribune",
+    "published_at": "2026-10-12T11:00:00Z"
+  }
+]

@@ -1,0 +1,93 @@
+[
+  {
+    "openev_id": 7101,
+    "title": "Orchard Kritik",
+    "path": "/openev/2026/Tamarack/Orchard Kritik.docx",
+    "name": "Orchard Kritik.docx",
+    "filename": "Orchard Kritik.docx",
+    "year": 2026,
+    "camp": "Tamarack",
+    "lab": "ZZ",
+    "tags": {"policy": true}
+  },
+  {
+    "openev_id": 7102,
+    "path": "/openev/2026/QDI7/Tidewater Impact Turns.docx",
+    "name": "Tidewater Impact Turns.docx",
+    "year": 2026,
+    "camp": "QDI7",
+    "tags": "{\"policy\":true}"
+  },
+  {
+    "openev_id": 7103,
+    "path": "/openev/2026/Quill Feather/Harbor Tariffs Aff.docx",
+    "name": "Harbor Tariffs Aff.docx",
+    "year": 2026,
+    "camp": "Quill Feather",
+    "tags": {"policy": true}
+  },
+  {
+    "openev_id": 7104,
+    "path": "/openev/2026/Brightwater/Juniors/Harbor Tariffs Neg.docx",
+    "name": "Harbor Tariffs Neg.docx",
+    "year": 2026,
+    "camp": "Brightwater/Juniors",
+    "tags": {"policy": true}
+  },
+  {
+    "openev_id": 7105,
+    "path": "/openev/2026/Zephyr/Lighthouse Elections DA.docx",
+    "name": "Lighthouse Elections DA.docx",
+    "year": 2026,
+    "camp": "Zephyr\n",
+    "tags": {"policy": true}
+  },
+  {
+    "openev_id": 7106,
+    "path": "/openev/2026/Canal Subsidies Counterplan.docx",
+    "name": "Canal Subsidies Counterplan.docx",
+    "year": 2026,
+    "camp": "",
+    "tags": {"policy": true}
+  },
+  {
+    "openev_id": 7107,
+    "path": "/openev/2026/Glacier Case Neg.docx",
+    "name": "Glacier Case Neg.docx",
+    "year": 2026,
+    "camp": null,
+    "tags": {"policy": true}
+  },
+  {
+    "openev_id": 7108,
+    "path": "/openev/2026/UNKNOWN/Spillway Advantage.docx",
+    "name": "Spillway Advantage.docx",
+    "year": 2026,
+    "camp": "UNKNOWN",
+    "tags": {"policy": true}
+  },
+  {
+    "openev_id": 7109,
+    "path": "/openev/2026/Juniper-Lab/Estuary Solvency Advocate.docx",
+    "name": "Estuary Solvency Advocate.docx",
+    "year": 2026,
+    "camp": "Juniper-Lab",
+    "tags": {"policy": true}
+  },
+  {
+    "openev_id": 7110,
+    "path": "/openev/2026/Lindgård/Canal Counterplan Revised.docx",
+    "name": "Canal Counterplan Revised.docx",
+    "year": 2026,
+    "tags": {"policy": true},
+    "field_added_by_a_later_api_version": null
+  },
+  {
+    "openev_id": 7111,
+    "path": "/openev/2026/Lindgård/Borrowed Grove Aff.docx",
+    "name": "Borrowed Grove Aff.docx",
+    "year": 2026,
+    "camp": "Lindgård",
+    "tags": {"policy": true}
+  }
+]

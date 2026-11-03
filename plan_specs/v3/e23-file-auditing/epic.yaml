@@ -139,6 +139,14 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v3-e23-t03-card-comparison
+    - id: ext-v1-e08-t04-argument-need-expansion
+      kind: External
+      name: 'Prerequisite from E08: Argument/need query expansion'
+      description: >-
+        Cross-epic prerequisite owned by v1-e08-research-workflows (release v1.4).
+      inputs:
+        goalRef: v1-e08-t04-argument-need-expansion
+        specRef: plan_specs/v1/e08-research-workflows/t04-argument-need-expansion.yaml
     - id: t04
       kind: Task
       name: Newer external evidence suggestions
@@ -151,6 +159,7 @@ spec:
       - t03
       - ext-v2-e16-t01-search-api
       - t05
+      - ext-v1-e08-t04-argument-need-expansion
       acceptanceCriteria:
       - type: command_succeeds
         name: Task spec v3-e23-t04-newer-evidence reports phase Succeeded

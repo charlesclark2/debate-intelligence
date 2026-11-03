@@ -15,6 +15,7 @@ writes is one an installed build reads, and the reverse.
 | `written_by_the_installed_build/` | The source of `v0.1.0-dev.60` | `local/`: every file under `<data_dir>/suppression/`. `bucket/`: every object under `manifests/_suppression/` |
 | `written_by_the_start_commit/` | The source of `v0.1.0-dev.119` | The same |
 | `written_by_this_build/` | This task's source | The same. It holds three more files in each place: `path-holds.jsonl` beside the list (`v1-e30-t13`), `removal-scopes.jsonl` beside the log (`v1-e30-t15`), and `withdrawals.jsonl` beside both, the caselist each withdrawn copy was taken from (`v1-e30-t16`). The scopes hold the version ids the bucket gave each rewritten manifest, which moto picks at random, so the test compares that file with those ids masked and every other byte as written |
+| `held_digests_written_by_this_build/` | This build's source (`v1-e30-t23`) | `local/held-digests.jsonl` and `bucket/held-digests.jsonl`: the held-digest record after the history below and one more step, an upload held at the removed path and the removal run again (`held_digest_scenario.py`). One line in each place. The history alone writes no such record, which is why it is not in `written_by_this_build/`. `test_removal_held_digest_files_are_this_builds.py` holds it to what this build writes |
 
 The history is `suppression_list_scenario.py`, which uses nothing a build from before `v1-e30-t11`
 lacks, so the same file runs against all three sources: a `--team` removal, a `--source` removal of
@@ -111,6 +112,32 @@ added to one is read`. The fourth puts this build's files in place and runs the 
 `caselist status` with the residue check, its only reader of the removal log and the scopes. The
 start commit printed `status with the residue check: completed; caselists checked: openev,
 testcl26` and `removals not checked: 0`; `v0.1.0-dev.122` reads no removal log.
+
+## The held-digest record beside them (`v1-e30-t23`)
+
+`held_digests_written_by_this_build/` is written by this build alone, since no earlier build writes
+the record, with no `PYTHONPATH`:
+
+```bash
+WRITE_HELD_DIGEST_FILES=this-build uv run --frozen pytest packages/debate_core/tests/application/caselist/write_held_digest_files.py -p no:cacheprovider --no-cov -n 0
+```
+
+From `v1-e30-t23` the check above places these two files as well, in every check, and its last check
+runs the removal again beside them: the `--source` removal under `RM-2026-02` is planned without the
+record, then with it in place, and executed. Run on 2026-10-18 against `v1.1.0-dev.18` (`0268cf7`,
+the build the weekly agent runs), its first check placed twelve files, `held-digests.jsonl` in both
+places among them, and printed the four lines above with `knows of path holds: True`. The second,
+third and fourth printed what they print above. The last printed:
+
+```text
+reader: the debate_core source at dev18
+placed: suppression/held-digests.jsonl, s3://<bucket>/manifests/_suppression/held-digests.jsonl
+removal of RM-2026-02 run again beside the record: 1 source(s) planned; the same plan as without it: True
+executed: completed True; the record as placed, both copies: True
+```
+
+`v1-e30-t23`'s start commit (`3ebeaab`) printed the same. This build prints `2 source(s) planned` and
+`the same plan as without it: False`: it lists the held upload.
 
 ## When these may change
 

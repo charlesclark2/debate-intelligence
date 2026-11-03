@@ -1,0 +1,70 @@
+# TASK v1-e40-t38-landscape-staleness-ignores-lock-refusals - A lock refusal is not reported as a run that stopped before its stages
+# Epic: E40 — Weekly Caselist Run in the Cloud | Release: v1.8 (Weekly caselist run in the cloud) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e40-t38-landscape-staleness-ignores-lock-refusals
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.8
+    debate/epic: v1-e40-cloud-caselist-run
+  annotations:
+    debate/title: "A lock refusal is not reported as a run that stopped before its stages"
+spec:
+  # Filed by the PM, 2026-10-31, from v1-e40-t29's follow-up 2 (the PM's review, 2026-11-01).
+  description: >-
+    `landscape_staleness.py` exempts only `SyncRunInProgress`, so a `RunLockHeld` or
+    `RunHomeMoved` record naming a caselist makes the landscape read "stopped before its
+    stages". A refused pull did nothing: treat a lock refusal (held, moved, wrong home) as no
+    run at all for staleness, so the landscape's freshness comes from the last run that ran, and
+    say what dev's landscape reads after the move.
+  priority: 3
+  constraints:
+    packages: [debate_core.application, packages/debate_core/tests]
+    forbidden:
+      - Network or AWS access in a test
+  context:
+    - kind: TaskRef
+      name: v1-e40-t29-pull-refused-by-the-move-is-skipped
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        A lock refusal leaves the landscape's staleness as the last real run made it, while
+        a run that failed after starting still reads stopped, by tests shown failing first.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e40-t38-landscape-staleness-ignores-lock-refusals-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.8
+    debate/epic: v1-e40-cloud-caselist-run
+spec:
+  description: >-
+    A lock refusal is not reported as a run that stopped before its stages.
+  goalRef:
+    name: v1-e40-t38-landscape-staleness-ignores-lock-refusals
+  graph:
+    nodes:
+      - id: landscape-staleness-ignores-lock-refusal
+        kind: Task
+        name: Staleness ignores refusals
+        description: >-
+          A lock refusal is not reported as a run that stopped before its stages.
+        estimatedEffort: 45m
+        acceptanceCriteria:
+          - type: test_passes
+            name: Staleness ignores refusals tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests, -k, staleness]
+status:
+  phase: Pending

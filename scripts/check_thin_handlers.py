@@ -17,7 +17,7 @@ script reads the handlers' source with `ast`, imports nothing, and reports two t
 
 What counts as a handler:
   * a CLI command: a function registered with `<group>.command(...)(function)` or
-    `<group>.callback(...)(function)` (the way `debate_cli.commands.register_commands` does it),
+    `<group>.callback(...)(function)` (the way `debate_cli.command_registry.register_commands` does it),
     or decorated with `@<group>.command(...)` / `@<group>.callback(...)`, anywhere in debate_cli
   * an API route: a function decorated with `@<router>.get(...)`, `.post`, `.put`, `.patch`,
     `.delete`, `.head`, `.options`, `.api_route` or `.websocket`, or passed as the endpoint of

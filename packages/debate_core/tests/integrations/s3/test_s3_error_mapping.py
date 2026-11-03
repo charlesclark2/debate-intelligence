@@ -105,7 +105,7 @@ class TestARefusedRequest:
         assert refused.operation == "GetObject"
         assert refused.resource == f"s3://{BUCKET}/{S3_KEY}"
 
-    @pytest.mark.parametrize("code", ["AccessDenied", "403", "AllAccessDisabled", "InvalidAccessKeyId"])
+    @pytest.mark.parametrize("code", ["AccessDenied", "403", "AllAccessDisabled"])
     def test_a_denial_says_the_profile_lacks_a_grant_and_where_the_grants_are_listed(
         self, code: str, call: S3Call
     ) -> None:
@@ -157,6 +157,64 @@ class TestARefusedRequest:
         assert "per prefix" in refused.hint
         assert RUNBOOK in refused.hint
         assert_offers_no_login(refused)
+
+    @pytest.mark.parametrize("code", ["InvalidAccessKeyId", "SignatureDoesNotMatch"])
+    def test_a_credential_fault_gets_a_sentence_of_its_own_and_not_a_missing_grant(
+        self, code: str, call: S3Call
+    ) -> None:
+        """AWS did not accept the credential itself: no grant is missing (`v1-e29-t09` ac2).
+
+        Still a refusal to a program, with the same code and exit, which this task does not change.
+        """
+        refused = translate_s3_error(client_error(code, status=403), call)
+
+        assert isinstance(refused, StoreAccessDenied)
+        assert error_code_of(refused) == "STORE_ACCESS_DENIED"
+        assert refused.hint is not None
+        assert refused.hint == (
+            f"AWS did not accept the credentials of the AWS profile {PROFILE}: it does not know their "
+            "access key, or their secret does not match it. That is the credential itself, not a "
+            "missing grant: renew or replace the credentials the profile supplies. "
+            f"{RUNBOOK} lists what each profile is granted"
+        )
+        assert "lack" not in refused.hint and "per prefix" not in refused.hint
+
+    def test_a_credential_fault_with_no_profile_names_none(self) -> None:
+        no_profile = S3Call(
+            operation="GetObject", bucket=BUCKET, entity="snapshot blob", key=BLOB_KEY, s3_key=S3_KEY
+        )
+
+        refused = translate_s3_error(client_error("SignatureDoesNotMatch", status=403), no_profile)
+
+        assert isinstance(refused, StoreAccessDenied)
+        assert refused.hint is not None
+        assert refused.hint.startswith("AWS did not accept the credentials: it does not know")
+        assert "None" not in refused.hint
+
+    @pytest.mark.parametrize("operation", ["GetCallerIdentity", "CreateSession", "GetObject"])
+    def test_a_keyless_denial_of_a_call_that_is_not_a_listing_gets_no_listing_hint(
+        self, operation: str
+    ) -> None:
+        """Since `v1-e29-t08` the caller-identity question goes through here with no key
+        (`v1-e29-t09` ac2). It is not a listing, so it is told what any refusal is told."""
+        keyless = S3Call(operation=operation, bucket=BUCKET, entity="AWS session", key="", profile=PROFILE)
+
+        refused = translate_s3_error(client_error("AccessDenied", status=403), keyless)
+
+        assert isinstance(refused, StoreAccessDenied)
+        assert refused.hint is not None
+        assert "per prefix" not in refused.hint
+        assert "lacks a grant" in refused.hint
+        assert RUNBOOK in refused.hint
+
+    def test_a_denied_listing_of_the_bucket_root_by_either_listing_gets_the_listing_hint(self) -> None:
+        listing = S3Call(operation="ListObjectVersions", bucket=BUCKET, entity="evidence object", key="")
+
+        refused = translate_s3_error(client_error("AccessDenied", status=403), listing)
+
+        assert isinstance(refused, StoreAccessDenied)
+        assert refused.hint is not None
+        assert "per prefix" in refused.hint
 
 
 class TestASessionThatIsNoLongerUsable:

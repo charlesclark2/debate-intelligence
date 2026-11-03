@@ -1,0 +1,74 @@
+# TASK v1-e07-t09-google-news-title-match - A Google News item resolved by its headline in a configured publisher's own feed
+# Epic: E07 Discovery Provider Adapters | Release: v1.4 (Federated research from the CLI) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e07-t09-google-news-title-match
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.4
+    debate/epic: v1-e07-discovery-adapters
+  annotations:
+    debate/title: "A Google News item resolved by its headline in a configured publisher's own feed"
+spec:
+  # Filed by the PM, 2026-10-22, from v1-e07-t05's Follow-up work and its PM review.
+  description: >-
+    The Google News provider drops every item whose publisher URL cannot be decoded offline,
+    which is most current items. When an item's `<source url>` host is a configured publisher
+    and that publisher's own feed, already fetched for the same search, carries the same
+    headline (normalized as dedupe normalizes titles), the item takes that entry's URL. No
+    request to Google beyond the search feed, as the forbidden entry of v1-e07-t05 requires; a
+    headline found in no configured feed is still dropped and counted.
+  priority: 3
+  constraints:
+    packages: [debate_core.integrations, packages/debate_core/tests]
+    forbidden:
+      - Any request to Google beyond the RSS search feed
+      - A `<source url>` as a candidate URL
+      - Network or AWS access in any test
+  context:
+    - kind: TaskRef
+      name: v1-e07-t05-rss-news-adapter
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        An item whose headline is in a configured publisher's fetched feed takes that
+        entry's URL, and one in no feed is dropped and counted, by recorded fixtures shown
+        failing first.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e07-t09-google-news-title-match-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.4
+    debate/epic: v1-e07-discovery-adapters
+spec:
+  description: >-
+    Match undecodable Google News items to configured publisher feeds by headline.
+  goalRef:
+    name: v1-e07-t09-google-news-title-match
+  graph:
+    nodes:
+      - id: title-match
+        kind: Task
+        name: Title match
+        description: >-
+          Match undecodable Google News items to configured publisher feeds by headline.
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Feed tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/integrations/discovery/test_feeds.py]
+status:
+  phase: Pending

@@ -1,0 +1,75 @@
+# TASK v1-e08-t10-search-asks-each-provider-once - One search asks each provider once, however many queries the expansion gives
+# Epic: E08 Federated Research Workflows | Release: v1.4 (Federated research from the CLI) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e08-t10-search-asks-each-provider-once
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.4
+    debate/epic: v1-e08-research-workflows
+  annotations:
+    debate/title: "One search asks each provider once, however many queries the expansion gives"
+spec:
+  # Filed by the PM, 2026-11-02, from v1-e08-t05's follow-up 2 (the PM's review, 2026-11-02).
+  description: >-
+    An expanded search asks every provider once per query. The politics DA's link need has 7
+    templates, so one search makes 7 OpenAlex requests and 7 reads of every feed (the feed cache
+    turns the repeats into conditional requests), and OpenAlex's daily limit without a key is
+    spent quickly. Ask each provider once per search: OpenAlex with the queries joined as its
+    query syntax allows (OR), keeping which query each result answered where its result says so;
+    each feed read once and every query matched against it. The ranked results, the explanation
+    and the stored expansion stay as today for the same answers. Count the requests before and
+    after on the recorded fixtures.
+  priority: 3
+  constraints:
+    packages: [debate_core.application, debate_core.integrations.discovery, packages/debate_core/tests, packages/debate_cli/tests]
+    forbidden:
+      - A change to ranking or dedupe
+      - Live provider calls in tests
+  context:
+    - kind: TaskRef
+      name: v1-e08-t05-search-command
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        A search with several expanded queries makes one request per provider (per page),
+        the feed read once, with the same ranked results on the recorded fixtures, by tests
+        counting requests and shown failing first.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e08-t10-search-asks-each-provider-once-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.4
+    debate/epic: v1-e08-research-workflows
+spec:
+  description: >-
+    One search asks each provider once, however many queries the expansion gives.
+  goalRef:
+    name: v1-e08-t10-search-asks-each-provider-once
+  graph:
+    nodes:
+      - id: search-asks-each-provider-once
+        kind: Task
+        name: One request each
+        description: >-
+          One search asks each provider once, however many queries the expansion gives.
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: One request each tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests, -k, federated or openalex or feed]
+status:
+  phase: Pending

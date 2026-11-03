@@ -1,0 +1,28 @@
+{
+  "final_url": "https://www.fosw.example.gov/news/2026/06/agency-announces-grants",
+  "paragraphs": [
+    "WASHINGTON — The Federal Office of Synthetic Wildlife today announced grants to state and tribal wildlife agencies for the protection of habitat used by threatened species.",
+    "The grants will fund land acquisition, conservation easements and the restoration of degraded wetlands. Priority will go to projects that protect habitat for species listed as threatened or endangered within the last ten years.",
+    "“Protecting the places where species live is the most reliable way to keep them from disappearing,” the Director said. “These grants put that principle into practice.”",
+    "Applications are due September 30, 2026. Eligible agencies may apply through the grants portal."
+  ],
+  "excluded": [
+    "A fictional agency page",
+    "About Us",
+    "Newsroom",
+    "Media Contacts",
+    "Media Contact",
+    "press@fosw.example.gov",
+    "For Immediate Release",
+    "Last updated",
+    "FOIA",
+    "1 Example Plaza"
+  ],
+  "metadata_hints": {
+    "title": "Agency Announces Grants for Habitat Protection | Federal Office of Synthetic Wildlife",
+    "authors": [],
+    "published_at": "2026-06-02",
+    "site_name": "Federal Office of Synthetic Wildlife",
+    "canonical_url": "https://www.fosw.example.gov/news/2026/06/agency-announces-grants"
+  }
+}

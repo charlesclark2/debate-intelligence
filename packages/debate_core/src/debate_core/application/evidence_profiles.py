@@ -12,6 +12,13 @@ profile is defined and which permission set it is signed in as, through the
 already asks (`v1-e29-t08`). `debate-research doctor --evidence-profiles` runs it, and so does
 `ops/launchd/install.sh --check-launchd`, under launchd with the agent's own environment.
 
+## The model profile
+
+`models.aws_profile`, the profile every Bedrock call is signed with (`v1-e05-t08`), is asked about
+in the same way and reported in the same words, under its own setting
+(:data:`MODEL_PROFILE_SETTING`), so one check says whether each AWS profile this installation names
+is defined and who it is. It reaches no bucket; its permission set is `Debate<Env>BedrockInvoker`.
+
 ## What fails a check, and what does not
 
 Only a profile that is **not defined** (:attr:`ProfileFinding.defined`). That is the one finding
@@ -23,7 +30,12 @@ nothing but an edit cures, and the one that makes a scheduled run refuse to star
 * **A profile signed in as an unexpected permission set** is said, in the sentence. The takedown
   profile is compared with the permission set a takedown runs as
   (:func:`~debate_core.application.caselist.removal_service.takedown_permission_set`), which is
-  the comparison the takedown's own preflight refuses on; here it is advice, given early.
+  the comparison the takedown's own preflight refuses on; here it is advice, given early. An
+  everyday profile signed in as the **other environment's** permission set is said to be, since
+  this environment's bucket grants that set nothing (`v1-e29-t09`): most likely a profile copied
+  from the other environment's block of the AWS config. A takedown profile signed in as the other
+  environment's set is told whose set it is in the same words, before it is told what a takedown
+  runs as (`v1-e34-t25`).
 
 ## What a finding may hold
 
@@ -36,6 +48,7 @@ one, and not named.
 
 from __future__ import annotations
 
+import re
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from enum import StrEnum
@@ -46,6 +59,7 @@ from debate_core.application.errors import StoreCredentialsExpired, StoreError, 
 from debate_core.application.ports.caller_identity import CallerIdentity
 
 __all__ = [
+    "MODEL_PROFILE_SETTING",
     "ConfiguredProfile",
     "EvidenceProfileCheck",
     "ProfileFinding",
@@ -53,6 +67,14 @@ __all__ = [
 ]
 
 _ASK_AGAIN: Final = "Run the check again when this machine can reach AWS."
+
+MODEL_PROFILE_SETTING: Final = "models.aws_profile"
+"""The setting naming the profile Bedrock calls are signed with, as a finding names it (`v1-e05-t08`)."""
+
+#: The two permission sets each environment's bucket module defines, `Debate<Env>EvidenceOperator`
+#: and `Debate<Env>EvidenceRemoval` (`infrastructure/modules/evidence_bucket/operator_access.tf`):
+#: which environment a set is for, read from its name.
+_ENVIRONMENTS_SET: Final = re.compile(r"Debate(?P<environment>[A-Z][a-z]+)Evidence(?:Operator|Removal)")
 
 
 @dataclass(frozen=True, slots=True)
@@ -206,9 +228,24 @@ class EvidenceProfileCheck:
         else:
             who = "defined, and signed in, but not as a role"
         takedown = takedown_permission_set(self._environment)
-        if profile.for_takedowns and permission_set != takedown:
+        other = _environment_of(permission_set)
+        if not profile.for_takedowns and other is not None and other != self._environment:
+            this = self._environment
             return (
-                f"{who}; a takedown runs only as {takedown}, so `caselist remove --execute` will "
+                f"{who}, which is {other}'s permission set and not {this}'s: {this}'s bucket grants it "
+                "nothing, so every command that reaches the bucket will be refused"
+            )
+        if profile.for_takedowns and permission_set != takedown:
+            whose = ""
+            if other is not None and other != self._environment:
+                kind = (
+                    "takedown permission set"
+                    if permission_set == takedown_permission_set(other)
+                    else "permission set"
+                )
+                whose = f", which is {other}'s {kind} and not {self._environment}'s"
+            return (
+                f"{who}{whose}; a takedown runs only as {takedown}, so `caselist remove --execute` will "
                 "refuse this profile"
             )
         if not profile.for_takedowns and permission_set == takedown:
@@ -216,3 +253,9 @@ class EvidenceProfileCheck:
                 f"{who}, which is the takedown's permission set; the everyday profile is not meant to hold it"
             )
         return who
+
+
+def _environment_of(permission_set: str | None) -> str | None:
+    """The environment an evidence permission set is for, `dev` or `prod`; `None` for any other set."""
+    named = _ENVIRONMENTS_SET.fullmatch(permission_set or "")
+    return named.group("environment").lower() if named is not None else None

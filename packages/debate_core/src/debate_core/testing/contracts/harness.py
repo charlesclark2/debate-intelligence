@@ -36,7 +36,7 @@ from collections.abc import Awaitable, Callable
 
 import pytest
 
-from debate_core.application.ports import (
+from debate_core.application.ports.persistence import (
     ArticleRepository,
     BlobKey,
     CardRepository,

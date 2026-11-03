@@ -1,17 +1,18 @@
 # Budgets, billing alerts and cost anomaly detection.
 #
-# The account also carries unrelated personal projects, so every budget here filters on the
-# Project cost allocation tag: without that filter these numbers would report someone else's
-# spend. Those tags must be activated in Billing, which can only happen after this applies (a tag
-# key is activatable only once AWS has seen a resource carrying it) - see the runbook. Until they
-# are, these budgets report zero, which is the failure mode the test alert in the runbook catches.
+# The account also carries unrelated personal projects, so the environment budgets and the anomaly
+# monitor filter on a cost allocation tag: without that filter these numbers would report someone
+# else's spend. Those tags report spend only while they are Active as cost allocation tags, which
+# modules/cost_allocation_tags below keeps them (v1-e05-t18). Were they inactive, these budgets would
+# report zero, which is the failure mode the test alert in the runbook catches.
+#
+# The model spend budget is the exception: model charges carry no cost allocation tag, so it filters
+# on the services and usage types they are billed under instead (modules/model_spend_budget).
 #
 # AWS Budgets notifies; it never stops spend. Hard model quotas arrive with E19.
 
 locals {
   budget_notification_emails = var.budget_notification_emails
-
-  budget_project_filter = format("user:Project$%s", var.project)
 }
 
 resource "aws_budgets_budget" "environment_monthly" {
@@ -67,51 +68,40 @@ resource "aws_budgets_budget" "environment_monthly" {
 }
 
 # Model spend is the line item most likely to move suddenly - a loop in a research workflow costs
-# far more per hour than storage does. It gets its own budget so Bedrock does not hide inside the
-# environment totals.
-resource "aws_budgets_budget" "bedrock_monthly" {
-  name         = "${var.name_prefix}-shared-bedrock-monthly"
-  budget_type  = "COST"
-  limit_amount = tostring(var.bedrock_monthly_budget_usd)
-  limit_unit   = "USD"
-  time_unit    = "MONTHLY"
+# far more per hour than storage does. It gets its own budget so model calls do not hide inside the
+# environment totals. The budget, its limit, its notices and its filter live in the module, where its
+# tests can read them (v1-e05-t16-bedrock-budget-alarm).
+module "model_spend_budget" {
+  source = "../../modules/model_spend_budget"
 
-  # Service and TagKeyValue are different filter keys, and different keys are AND'd, so this one
-  # really does mean "Bedrock spend belonging to this project".
-  cost_filter {
-    name   = "Service"
-    values = ["Amazon Bedrock"]
-  }
+  name_prefix         = var.name_prefix
+  notification_emails = var.model_budget_notification_emails
+}
 
-  cost_filter {
-    name   = "TagKeyValue"
-    values = [local.budget_project_filter]
-  }
+# The budget v1-e29-t01 created here, debate-shared-bedrock-monthly, is the one the module now
+# holds: same name, updated in place, never destroyed and created again.
+moved {
+  from = aws_budgets_budget.bedrock_monthly
+  to   = module.model_spend_budget.aws_budgets_budget.model_spend
+}
 
-  dynamic "notification" {
-    for_each = [50, 80, 100]
+# The Project and Environment cost allocation tags the budgets and the anomaly monitor filter on, kept
+# Active. The operator activated both by hand on 2026-10-30, before this module existed.
+module "cost_allocation_tags" {
+  source = "../../modules/cost_allocation_tags"
+}
 
-    content {
-      comparison_operator        = "GREATER_THAN"
-      threshold                  = notification.value
-      threshold_type             = "PERCENTAGE"
-      notification_type          = "ACTUAL"
-      subscriber_email_addresses = local.budget_notification_emails
-    }
-  }
+# Both tags were already Active when this module arrived, so two import blocks adopted them into
+# state, applied on 2026-10-31 (v1-e05-t18). They were removed once both tags were in state
+# (v1-e05-t19): here they did nothing more, and in a new account they would fail the whole root's
+# plan until AWS has seen both keys. A new account creates the tags instead (the runbook's step 5).
 
-  notification {
-    comparison_operator        = "GREATER_THAN"
-    threshold                  = 80
-    threshold_type             = "PERCENTAGE"
-    notification_type          = "FORECASTED"
-    subscriber_email_addresses = local.budget_notification_emails
-  }
-
-  tags = {
-    Name        = "${var.name_prefix}-shared-bedrock-monthly"
-    Environment = "shared"
-    Purpose     = "model-spend-budget"
+# The monitor's tag key is a variable; the module's keys are fixed. If they ever differ, the monitor
+# filters on a key nothing keeps Active and reads $0.
+check "anomaly_monitor_tag_is_kept_active" {
+  assert {
+    condition     = contains(module.cost_allocation_tags.tag_keys, var.project_tag_key)
+    error_message = "The cost anomaly monitor filters on user:${var.project_tag_key}, which modules/cost_allocation_tags does not keep Active, so the monitor reads $0."
   }
 }
 

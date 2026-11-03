@@ -53,8 +53,9 @@ from debate_core.evidence.edits import (
 from debate_core.evidence.manifest import CardManifest
 from debate_core.evidence.markup import EvidenceMarkupSpan
 from debate_core.evidence.verification_types import ReasonCode
-from debate_core.testing import InMemoryCardEditLog, InMemoryCardRepository
 from debate_core.testing.builders import DEFAULT_OWNER_ID, build_card_span
+from debate_core.testing.fakes.card_edit_log import InMemoryCardEditLog
+from debate_core.testing.fakes.persistence import InMemoryCardRepository
 
 SOURCE = (
     "The council will not approve the new reservoir before 2030.\n\n"
@@ -478,7 +479,11 @@ def test_the_verify_manifest_carries_interpolations_untouched(world: EditWorld) 
     ).encode()
 
     assert CardManifest.model_validate_json(document).cards[0].interpolations == saved.interpolations
-    report = run(VerifyManifest(verifier=world.verification.verifier).verify(document))
+    report = run(
+        VerifyManifest(verifier=world.verification.verifier, articles=world.verification.articles).verify(
+            document
+        )
+    )
     assert report.all_verified
 
 

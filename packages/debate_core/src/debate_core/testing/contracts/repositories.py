@@ -33,14 +33,17 @@ from debate_core.application.errors import (
     NotFound,
     RevisionMismatch,
 )
-from debate_core.application.ports import ArticleRepository, CardRepository, SearchRepository
+from debate_core.application.ports.persistence import ArticleRepository, CardRepository, SearchRepository
 from debate_core.domain import Article, Card, Search, SearchStatus, Ulid
+from debate_core.domain.discovery import ProviderOutcome, ProviderStatus
 from debate_core.testing.builders import (
     DEFAULT_ARTICLE_ID,
     DEFAULT_CANONICAL_URL,
     DEFAULT_OWNER_ID,
     build_article,
+    build_candidate_result,
     build_card,
+    build_provider_status,
     build_search,
     build_search_result,
     build_source_snapshot,
@@ -53,7 +56,7 @@ from debate_core.testing.contracts.harness import (
     SearchRepositoryFactory,
     walk_all_pages,
 )
-from debate_core.testing.fakes import FAKE_EPOCH
+from debate_core.testing.fakes.clock_and_ids import FAKE_EPOCH
 
 __all__ = [
     "ArticleRepositoryContract",
@@ -744,7 +747,8 @@ class SearchRepositoryContract(AdapterContract):
 
     A ranking is stored and replaced as a whole. An order is only meaningful complete, so there is
     no "add one result" on this port, and re-running a search cannot leave half an old order
-    behind.
+    behind. The per-provider record (v1-e08-t01-federated-search-service) is stored the same way:
+    one set per search, in the order the search made its calls.
     """
 
     @pytest.fixture
@@ -834,6 +838,21 @@ class SearchRepositoryContract(AdapterContract):
 
         assert await repository.list_results(search.search_id) == tuple(replacement)
 
+    async def test_an_unknown_feature_comes_back_as_none_not_zero_or_missing(
+        self, repository: SearchRepository
+    ) -> None:
+        """Unknown is not 0: a result whose peer review nobody reported must not come back as unreviewed."""
+        search = await repository.save(build_search())
+        result = build_search_result(
+            search_id=search.search_id,
+            source_quality_features={"bm25": 0.5, "recency": None, "peer_reviewed": None},
+        )
+
+        await repository.save_results(search.search_id, [result])
+
+        (stored,) = await repository.list_results(search.search_id)
+        assert stored.source_quality_features == {"bm25": 0.5, "recency": None, "peer_reviewed": None}
+
     async def test_saving_an_empty_ranking_clears_the_stored_one(self, repository: SearchRepository) -> None:
         search = await repository.save(build_search())
         await repository.save_results(
@@ -919,6 +938,94 @@ class SearchRepositoryContract(AdapterContract):
             )
 
         assert await repository.list_results(search.search_id) == tuple(accepted)
+
+    # ----------------------------------------------------------------------------------------
+    # The per-provider record
+    # ----------------------------------------------------------------------------------------
+
+    @staticmethod
+    def _one_of_each_kind_of_call() -> tuple[ProviderStatus, ...]:
+        """An answer with two results, a timeout and a skip, in that order: what a PARTIAL search keeps."""
+        return (
+            build_provider_status(
+                provider="openalex",
+                results=(
+                    build_candidate_result(provider="openalex"),
+                    build_candidate_result(
+                        provider="openalex",
+                        title="Permafrost carbon feedback in a warming Arctic",
+                        url="https://example.org/permafrost-carbon",
+                        published_at=None,
+                        authors=(),
+                    ),
+                ),
+            ),
+            build_provider_status(provider="crossref", outcome=ProviderOutcome.TIMEOUT, elapsed_ms=10_000.0),
+            build_provider_status(provider="rss", outcome=ProviderOutcome.BREAKER_OPEN, elapsed_ms=0.0),
+        )
+
+    async def test_a_stored_provider_record_comes_back_field_for_field_in_call_order(
+        self, repository: SearchRepository
+    ) -> None:
+        """Every candidate as the provider returned it, and every failure with its reason."""
+        search = await repository.save(build_search(status=SearchStatus.PARTIAL))
+        statuses = self._one_of_each_kind_of_call()
+
+        await repository.save_provider_statuses(search.search_id, statuses)
+
+        assert await repository.list_provider_statuses(search.search_id) == statuses
+
+    async def test_a_second_handle_reads_the_provider_record_the_first_stored(
+        self, repository: SearchRepository, make_adapter: SearchRepositoryFactory
+    ) -> None:
+        search = await repository.save(build_search(status=SearchStatus.PARTIAL))
+        statuses = self._one_of_each_kind_of_call()
+        await repository.save_provider_statuses(search.search_id, statuses)
+
+        assert await make_adapter().list_provider_statuses(search.search_id) == statuses
+
+    async def test_saving_a_provider_record_replaces_the_previous_one(
+        self, repository: SearchRepository
+    ) -> None:
+        search = await repository.save(build_search())
+        await repository.save_provider_statuses(search.search_id, self._one_of_each_kind_of_call())
+
+        replacement = (build_provider_status(provider="crossref"),)
+        await repository.save_provider_statuses(search.search_id, replacement)
+
+        assert await repository.list_provider_statuses(search.search_id) == replacement
+
+    async def test_list_provider_statuses_is_empty_for_a_search_that_stored_none(
+        self, repository: SearchRepository
+    ) -> None:
+        search = await repository.save(build_search())
+
+        assert await repository.list_provider_statuses(search.search_id) == ()
+
+    async def test_provider_records_of_two_searches_stay_apart(self, repository: SearchRepository) -> None:
+        first = await repository.save(build_search())
+        second = await repository.save(build_search(search_id=readable_id("SRCH", 2)))
+        await repository.save_provider_statuses(first.search_id, self._one_of_each_kind_of_call())
+        await repository.save_provider_statuses(second.search_id, (build_provider_status(provider="rss"),))
+
+        assert await repository.list_provider_statuses(first.search_id) == self._one_of_each_kind_of_call()
+        assert await repository.list_provider_statuses(second.search_id) == (
+            build_provider_status(provider="rss"),
+        )
+
+    async def test_list_provider_statuses_for_an_unknown_search_raises_not_found(
+        self, repository: SearchRepository
+    ) -> None:
+        with pytest.raises(NotFound):
+            await repository.list_provider_statuses(readable_id("SRCH", 99))
+
+    async def test_saving_a_provider_record_for_an_unknown_search_raises_not_found(
+        self, repository: SearchRepository
+    ) -> None:
+        unknown = readable_id("SRCH", 99)
+
+        with pytest.raises(NotFound):
+            await repository.save_provider_statuses(unknown, self._one_of_each_kind_of_call())
 
     # ----------------------------------------------------------------------------------------
     # Listing one owner's searches

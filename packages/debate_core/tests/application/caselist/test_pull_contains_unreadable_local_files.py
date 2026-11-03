@@ -54,7 +54,7 @@ from debate_core.application.ports.caselist_source import (
 from debate_core.application.ports.suppression import ReasonCode
 from debate_core.domain.caselist import Event
 from debate_core.integrations.s3 import S3EvidenceObjectStore
-from debate_core.testing.fakes import empty_suppression_list
+from debate_core.testing.fakes.suppression import empty_suppression_list
 
 from .conftest import REQUEST, RemovalWorld
 from .test_inbox_retention import (
@@ -579,7 +579,9 @@ async def test_an_operating_system_error_that_is_not_the_archives_fails_its_impo
 
     imported = stage(summary, SyncStage.IMPORT)
     assert imported["outcome"] == "failed"
-    assert imported["reason"] == "1 imported; 1 refused: testcl26-weekly-2026-09-01.zip: OSError"
+    assert imported["reason"] == (
+        f"1 imported; 1 refused: testcl26-weekly-2026-09-01.zip: OSError (errno {errno.ENOSPC})"
+    )
     assert imported.get("error_codes") == ["INTERNAL_ERROR"]
     assert summary.snapshots_imported == ("othercl26 2026-09-01",)
     assert summary.failure_codes == ("INTERNAL_ERROR",)
@@ -616,10 +618,10 @@ def test_only_an_operating_system_error_from_the_reader_itself_is_the_archive_be
 
     assert str(at_the_call.value) == (
         "testcl26-weekly-2026-09-01.zip cannot be read as an archive: the file in the inbox could "
-        "not be read (PermissionError)"
+        "not be read (PermissionError (errno 13))"
     )
     assert read == ["one entry"]
-    assert str(part_way.value).endswith("the file in the inbox could not be read (OSError)")
+    assert str(part_way.value).endswith("the file in the inbox could not be read (OSError (errno 5))")
     assert str(tmp_path) not in str(at_the_call.value) + str(part_way.value)
     assert list(entries_of(lambda _: iter(["a", "b"]), archive)) == ["a", "b"]  # pyright: ignore[reportArgumentType]
 
@@ -644,7 +646,10 @@ async def test_an_operating_system_error_that_is_not_a_complete_archives_fails_i
 
     imported = stage(summary, SyncStage.IMPORT)
     assert imported["outcome"] == "failed"
-    assert imported["reason"] == "1 imported; 1 refused: testcl26-all-2026-09-01.zip: OSError"
+    assert (
+        imported["reason"]
+        == f"1 imported; 1 refused: testcl26-all-2026-09-01.zip: OSError (errno {errno.ENOSPC})"
+    )
     assert imported.get("error_codes") == ["INTERNAL_ERROR"]
     assert summary.snapshots_imported == ("testcl26 2026-09-01",)
     assert stage(summary, SyncStage.PUBLISH)["outcome"] == "completed"
@@ -729,6 +734,7 @@ async def test_a_release_manifest_the_publisher_cannot_read_fails_publish_in_a_w
         "import",
         "publish",
         "parse",
+        "search_index",
         "landscape",
         "report",
         "retention",

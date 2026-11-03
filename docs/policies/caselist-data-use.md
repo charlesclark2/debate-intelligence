@@ -3,12 +3,12 @@
 
 | | |
 |---|---|
-| Policy version | 1.9 |
-| Status | **Approved**, version 1.9, on the merge of its pull request (2026-10-15). See [Approval](#approval). |
+| Policy version | 1.22 |
+| Status | **Approved**, version 1.22, on the merge of its pull request (approved by Charlie 2026-11-02). See [Approval](#approval). |
 | Owner | Charlie Clark (product owner and head coach) |
 | Written by | v1-e30-t01-caselist-data-use-policy implementation session, 2026-09-19 |
 | Applies to | Everything the platform collects from OpenCaselist and OpenEv, and everything derived from it, in every environment |
-| Approved by | Charlie Clark, product owner and head coach, 2026-09-19 (versions 1.0 and 1.1), 2026-10-01 (versions 1.3 and 1.4), 2026-10-10 (versions 1.5 and 1.6), 2026-10-11 (version 1.7), 2026-10-13 (version 1.8) and 2026-10-15 (version 1.9) |
+| Approved by | Charlie Clark, product owner and head coach, 2026-09-19 (versions 1.0 and 1.1), 2026-10-01 (versions 1.3 and 1.4), 2026-10-10 (versions 1.5 and 1.6), 2026-10-11 (version 1.7), 2026-10-13 (version 1.8), 2026-10-15 (version 1.9), 2026-10-19 (version 1.10), 2026-10-22 (versions 1.11 and 1.12) and 2026-10-24 (versions 1.13, 1.14 and 1.15) and 2026-10-25 (versions 1.16, 1.17 and 1.18) and 2026-10-30 (version 1.19) and 2026-11-01 (versions 1.20 and 1.21) and 2026-11-02 (version 1.22) |
 | Next review | Start of the 2027-28 season, or sooner if a source's terms change |
 
 This is the policy that governs how the Debate Intelligence Platform collects, stores, uses and
@@ -37,7 +37,9 @@ a rule here, this policy is revised and re-approved before the affected work con
   and fingerprints, position classifications, argument landscape reports, and team files built
   from disclosed or camp cards.
 - Every place that data lives: the operator's laptop, the dev evidence bucket, the prod evidence
-  bucket, the V1 CLI, and the V2 debate tub.
+  bucket, the weekly run's working copy in the team's AWS account while it runs (ADR-0020), a
+  one-off backfile import's working copy there while it runs, a working copy restored on the
+  operator's machine from a bucket for one step (version 1.18), the V1 CLI, and the V2 debate tub.
 - Everyone with access: the operator, coaches, and (from V2) the team's debaters.
 
 **Out of scope**
@@ -85,7 +87,7 @@ Clauses are paraphrased; phrases in quotation marks are the site's own wording.
 | 9 | Acceptable Use — others' rights | No violating others' privacy or rights | The written backing for [Personal data](#personal-data). Team codes are treated as personal data about people who may be minors |
 | 10 | Termination | Access may be suspended at the site's discretion | Access is a privilege, not an entitlement. A `401`/`403` stops the run and is escalated to Charlie, never worked around ([E34 gate](#e34--automated-caselist-download-v12) 5) |
 | 11 | Modifications | The terms may change, and continued use means acceptance | The terms are re-read at the start of each season and whenever the site announces a change — see [Review and change control](#review-and-change-control) |
-| 12 | Maintainer confirmation (not part of the published terms) | Asked by Charlie through the site's Contact channel; the maintainer replied on 2026-09-19 that scheduled downloads of the archives through the API are acceptable, with a rate limit of **10 file downloads per minute** as the only limit. Charlie re-read the reply on 2026-10-10 against the complete archive (`<caselist>-all-<date>.zip`, `v1-e34-t04`): it is about programmatic retrieval of the archives through the API, not one kind of archive, so it covers the weekly and the complete archives alike | Resolves [open question 2](#open-questions) and satisfies [E34 gate](#e34--automated-caselist-download-v12) item 2. The client's default stays below the limit (8 per minute) and cannot be configured above 10. Charlie keeps the maintainer's reply on file; it is not committed |
+| 12 | Maintainer confirmation (not part of the published terms) | Asked by Charlie through the site's Contact channel; the maintainer replied on 2026-09-19 that scheduled downloads of the archives through the API are acceptable, with a rate limit of **10 file downloads per minute** as the only limit. Charlie re-read the reply on 2026-10-10 against the complete archive (`<caselist>-all-<date>.zip`, `v1-e34-t04`): it is about programmatic retrieval of the archives through the API, not one kind of archive, so it covers the weekly and the complete archives alike. On 2026-10-23 Charlie told the maintainer that the downloads are likely to move to a scheduled job in the cloud, and the maintainer is fine with it (version 1.12) | Resolves [open question 2](#open-questions) and satisfies [E34 gate](#e34--automated-caselist-download-v12) item 2. The client's default stays below the limit (8 per minute) and cannot be configured above 10. Charlie keeps the maintainer's reply on file; it is not committed |
 
 **Assessment.** No term read on 2026-09-19 is stricter than a rule in this policy; the
 [Prohibited uses](#prohibited-uses) already cover every relevant Acceptable Use item. The two
@@ -146,12 +148,13 @@ The corpus may be used for the following, and only these:
 | # | Use | Conditions |
 |---|---|---|
 | 1 | **Team-internal research and scouting** — reading what an opponent has disclosed, before or during a tournament | Team members only. Nothing leaves the team. |
-| 2 | **Argument landscape reports** — aggregating the corpus into what positions are being read on the topic, by side, over time (E32) | Circuit-wide reports carry no team codes at all; per-school views are limited by [Personal data](#personal-data). |
-| 3 | **Building and "plussing up" team files** — assembling disclosed and camp cards into the team's own files, extending them with new evidence (E33) | Cite kept verbatim, provenance line attached, card marked `FILE_IMPORT`/unverified. Files stay inside the team. |
+| 2 | **Argument landscape reports** — aggregating the corpus into what positions are being read on the topic, by side, over time (E32) | Circuit-wide reports carry no team codes at all; per-school views are limited by [Personal data](#personal-data). A report may quote a team's own analytic text word for word (plan texts, counterplan texts, kritik alternatives and roles of the ballot), including a text only one team reads, never beside a school or team code. Such a report stays on the operator's machine and in the private buckets' `reports/` prefix, never the public site or the repository (version 1.13). Since version 1.16, a published report and its per-school view are also shown to the team's signed-in members on the student search pilot's landscape pages, under [the E39 gate](#e39--student-evidence-search-pilot-v17). |
+| 3 | **Building and "plussing up" team files** — assembling disclosed and camp cards into the team's own files, extending them with new evidence (E33) | Cite kept verbatim, provenance in the file's sidecar (no line in the file's text since version 1.11), card marked `FILE_IMPORT`/unverified. Files stay inside the team. |
 | 4 | **Parsing, hashing, fingerprinting, deduplication and indexing** of the corpus (E30, E31) | Derived artefacts inherit every rule in this policy, including removal. |
 | 5 | **Parser and classifier evaluation** — measuring how well the platform reads real debate documents | Evaluation runs against the corpus in place; evaluation *fixtures* committed to the repository are synthetic (see [Personal data](#personal-data)). |
 | 6 | **Operator reporting** — recording import, dedupe and publish results (e.g. `docs/data/caselist-backfill-2026-09.md`) | Aggregate counts only; no school, team code, filename or name in anything committed. |
 | 7 | **Model-assisted classification** of disclosed text | Only under [Model provider use](#model-provider-use). |
+| 8 | **Backfiles** — earlier seasons' disclosures, from 2021-22 on, kept as a reservoir of evidence for research (1) and team files (3) on later topics and events (version 1.17) | Imported from OpenCaselist's complete archives under the same terms, rate limit and removal rules as the current season. Parsed, fingerprinted and indexed (4), and searchable on the student search pilot with the same provenance line as any disclosed card. Never classified into positions (2, 7) or given a per-school view. See [Retention](#retention). |
 
 ## Prohibited uses
 
@@ -182,8 +185,10 @@ it would be:
    real school names, team codes, debater names or real disclosure paths in fixtures, tests,
    cassettes, logs, session reports or documentation.
 10. **Keeping copies outside the sanctioned stores.** The corpus lives in the operator's local
-    evidence store and the dev and prod evidence buckets. Not in email, not in a personal Drive,
-    not on a USB stick, not in a chat thread.
+    evidence store and the dev and prod evidence buckets, and, while the weekly cloud run or a one-off
+    backfile import runs, in its task's ephemeral storage, which is deleted when the task stops
+    (ADR-0020, versions 1.18 and 1.19). Not in email, not in a personal Drive, not on a USB stick, not
+    in a chat thread, not in a container image.
 
 ## Model provider use
 
@@ -195,14 +200,36 @@ Conditions, all required:
 
 1. **Only through the ModelRouter** (E05, ADR-0005), to the provider configured for the
    environment (AWS Bedrock). No other provider, no direct SDK call, and — explicitly — no pasting
-   disclosed text into a consumer chat interface.
-2. **No-training, no-retention terms confirmed in writing for the account before the first
-   full-corpus run.** Until that confirmation is recorded here, model classification runs against
-   synthetic fixtures only. This is [open question 4](#open-questions) and a
-   [gate on E32](#e32--model-classification-of-the-corpus).
+   disclosed text into a consumer chat interface. A development or PM session with a model (a task
+   session, a PM chat) is not the ModelRouter either. Card text, excerpts, and any listing that
+   prints names from the caselist (the model evaluation's terminal hit listing prints schools, team
+   codes and tournaments with words of card text around them) are read in the operator's terminal
+   and never pasted into such a session. What goes to a session is counts (version 1.21). The
+   exception (version 1.22): a tag, a plan text or a counterplan text, each a summary of an argument,
+   may go to such a session. Evidence bodies, cites, and school names, team codes and debater names
+   never do.
+2. **No retention of our inputs, and no invocation logging, recorded for the account before the
+   first full-corpus run** ([open question 4](#open-questions), resolved by the coach on 2026-11-01,
+   version 1.20). What is recorded: AWS's
+   [data retention page](https://docs.aws.amazon.com/bedrock/latest/userguide/data-retention.html),
+   read 2026-11-01, says mode `none` writes no request or response data to durable storage and shares
+   nothing with the model provider; the
+   [data protection page](https://docs.aws.amazon.com/bedrock/latest/userguide/data-protection.html),
+   read the same day, says model providers have no access to prompts or completions; and the
+   operator's check of 2026-11-01 found no model-invocation logging configured in us-east-1,
+   us-east-2 or us-west-2. **A written no-training term was not found:** neither page states one
+   any longer, and the operator found none in the Amazon Bedrock section of the
+   [AWS Service Terms](https://aws.amazon.com/service-terms/), read 2026-11-01. The coach decided
+   that zero retention with no logging is sufficient, since inputs that are never stored cannot be
+   trained on later; if AWS publishes such a term, it is recorded here. Bedrock's account data
+   retention mode is `none` (zero retention) in us-east-1, us-east-2 and us-west-2, the regions the
+   inference profiles can run a call in, set by the operator on 2026-10-30 (version 1.19). Every model
+   the routing files name that the account can call accepted calls under it. The setting is
+   account-wide, and the AWS account is shared with the operator's other project, whose model also
+   accepted calls under it.
 3. **Bounded excerpts, never whole documents.** Only items the deterministic stage could not match
    are sent, and each carries a heading path, tag, short cite and a bounded excerpt
-   (v1-e32-t02).
+   (v1-e32-t07, the model stage split from v1-e32-t02).
 4. **No identifiers in the prompt.** School names, team codes, debater names or initials,
    tournament and round labels and file paths are never part of a prompt, a cassette or a cached
    key that a prompt is built from.
@@ -249,28 +276,46 @@ personal data about a minor (architecture proposal §14).
    sha256 values, dates, reason codes and request ids (v1-e30-t07). The records beside them carry
    the same, plus the digest of a held path (v1-e30-t13), the keys a removal reached (v1-e30-t15)
    and the caselist a withdrawn copy was taken from, by its slug, `openev` for a camp path
-   (v1-e30-t16, v1-e30-t14).
+   (v1-e30-t16, v1-e30-t14); and the sha256 of each upload an import refused at a held path,
+   beside that path's digest and the request holding it (v1-e30-t23).
 7. **Never in a model prompt.** See [Model provider use](#model-provider-use).
 8. **Names in document bodies are not extracted.** They are never parsed into a field, indexed as
    a name, or surfaced in a report. They remain where they are, inside a private source document
    visible only to team members.
 
 **Where personal data is allowed to live** — and only here: the local evidence store on the
-operator's machine, the `manifests/` prefix of the private dev and prod evidence buckets, the
-provenance sidecar of a built file, and the per-school landscape view.
+operator's machine, the weekly cloud run's working copy of that store on its task's ephemeral
+storage while the run runs (ADR-0020), a one-off backfile import's working copy on its task's
+ephemeral storage while that task runs (version 1.18), a working copy restored on the operator's
+machine from a bucket for a comparison, a hand publish or a landscape report, for the length of
+that step (versions 1.18 and 1.19), the `manifests/` prefix of the private dev and prod evidence
+buckets (which holds the cloud run's run-state bundle, `manifests/_run-state/`), the
+provenance sidecar of a built file, a file recipe under the data directory's `files/` (version
+1.15), the per-school landscape view, and the student search pilot's
+index (`reports/tub/search/` in the private buckets, and the copy its function holds while it runs),
+in stored provenance columns that are never searchable (v1-e39-t02).
 
 **What a report may show**
 
 | Report | Maximum identity shown |
 |---|---|
-| Circuit-wide argument landscape (v1-e32-t03) | Nothing. No school, no team code. |
-| Per-school and trend views (v1-e32-t04) | **School plus team code, as disclosed. Never more.** |
+| Circuit-wide argument landscape (v1-e32-t03) | Nothing. No school, no team code. It may quote team-written plan, counterplan and alternative texts word for word, never beside either (version 1.13). Shown to the team's signed-in members on the pilot's landscape pages (version 1.16). |
+| Per-school and trend views (v1-e32-t04) | **School plus team code, as disclosed. Never more**, except a link to the team's public OpenCaselist page built from the caselist, the school and the team code alone (version 1.14). No tournament, round, debater or document path. Shown to the team's signed-in members on the pilot's landscape pages (version 1.16). |
 | Operator import/publish summaries (`docs/data/`) | Aggregate counts only. |
-| Built-file provenance line and sidecar (E33) | School, team code, side, tournament, round — inside the team only. |
-| Removal log and suppression list (v1-e30-t07), and the records beside them (v1-e30-t13, t14, t15, t16) | sha256, date, reason code, request id; a held path's digest, the keys a removal reached, and a caselist slug. |
+| Built-file sidecar (E33) | School, team code, side, tournament, round — inside the team only. A built file's text carries none of them (version 1.11). |
+| File recipe under the data directory's `files/` (E33) | A pin's side, tournament, round, and school and team code, each only when needed to tell two disclosures of the same bytes apart — inside the team only, on the operator's machine. A recipe is never written inside a git working tree, and a published recipe carries none of them (version 1.15). |
+| Student search pilot (E39): result rows and card pages | School, team code, side, tournament, round in a card's provenance line — to signed-in team members only. Never searchable, and no search by debater. A copied or downloaded card carries none of them (version 1.11). |
+| Removal log and suppression list (v1-e30-t07), and the records beside them (v1-e30-t13, t14, t15, t16, t23) | sha256, date, reason code, request id; a held path's digest, the keys a removal reached, and a caselist slug. |
 
-**Access.** In V1, the operator only. In V2, authenticated members of the team's organization
-only, audited — see [the debate tub gate](#v2-e35--debate-tub-v21).
+**Access.** In V1, the operator only, with two exceptions, both on the student search pilot (E39,
+v1.7), for the team's own debaters and coach signed in to accounts the coach creates, audited,
+under [the E39 gate](#e39--student-evidence-search-pilot-v17): the provenance line shown above on a
+card's page, and, since version 1.16, the newest published landscape report and its per-school
+view on the pilot's landscape pages.
+The weekly cloud run (ADR-0020) acts for the operator under the
+[E34 gate](#e34--automated-caselist-download-v12) and gives no person access. In V2,
+authenticated members of the team's organization only, audited — see
+[the debate tub gate](#v2-e35--debate-tub-v21).
 
 ## Retention
 
@@ -278,12 +323,19 @@ A **season** runs 1 August to 31 July and is labelled like `2026-27`.
 
 | Data | Kept for | Deleted by |
 |---|---|---|
-| Weekly caselist snapshots (source blobs and manifests) | The season they belong to, plus the following season | 31 August after the following season ends — 2026-27 data by **31 August 2028** |
+| Weekly caselist snapshots (source blobs and manifests) | The season they belong to, plus the following season; then, for seasons from 2021-22 on, as backfiles (next row) | Seasons before 2021-22: 31 August after the following season ends. From 2021-22 on, they become backfiles instead (version 1.17) |
+| Backfiles: the disclosures of seasons from 2021-22 on, once outside the two-season window, and complete archives imported for those seasons (version 1.17) | Indefinitely, reviewed each September at the annual purge | By removal, or by a later policy version |
 | Parsed cards, fingerprints and classifications derived from them | Same clock as their sources | With their sources |
-| OpenEv camp files | The topic year they were cut for, plus the following season | Same rule |
-| Per-school landscape views | Same clock as their sources | With their sources |
+| OpenEv camp files | The topic year they were cut for, plus the following season; then, for topic years from 2021 on, as backfiles (version 1.19) | Topic years before 2021: the same rule as the weekly snapshots. From 2021 on they are kept as backfiles instead (version 1.19) |
+| Per-school landscape views | Same clock as their sources, never as backfiles | With their sources, or when their season leaves the two-season window (version 1.17) |
 | Circuit-wide landscape reports (no personal data) | Indefinitely | — |
 | Team files built from disclosed cards | Indefinitely (team work product), but subject to [Removal](#removal) flagging | — |
+| The student search pilot's index (E39) | Until the next build replaces it | Superseded index versions, noncurrent versions included, deleted within 30 days, and at once after a removal (v1-e39-t07) |
+| The student search pilot's access audit (E39) | 400 days | Log retention, automatically |
+| The weekly cloud run's working copy (ADR-0020) | The length of one run | Fargate, when the task stops |
+| A one-off backfile import's working copy in the cloud (version 1.18) | The length of that task | Fargate, when the task stops |
+| A working copy restored on the operator's machine from a bucket, for a comparison, a hand publish or a landscape report (versions 1.18 and 1.19) | The length of that step | The operator, at the end of the step, as the runbook that restores it says |
+| The weekly cloud run's run-state bundle (`manifests/_run-state/`, ADR-0020) | Same clock as the manifests it holds | With them; a removal rewrites it and purges its noncurrent versions at once |
 | Removal log and suppression list | Indefinitely — the suppression list must outlive the data it suppresses | — |
 | S3 noncurrent object versions | Lifecycle from v1-e29-t03: Standard-IA after 30 days, expire after 365 days in prod and 30 days in dev | Automatically |
 
@@ -293,8 +345,15 @@ A **season** runs 1 August to 31 July and is labelled like `2026-27`.
   out, in dev and prod, with the resulting counts recorded in `docs/data/`.
 - **Local copies follow the same clock.** The operator's local evidence store is purged in the
   same run as the buckets.
-- Keeping a season longer for year-over-year trend analysis is
-  [open question 7](#open-questions) and needs a policy revision, not an exception.
+- **Backfiles** (version 1.17). Seasons from 2021-22 on are kept indefinitely once they leave the
+  two-season window, and earlier seasons' complete archives from 2021-22 on may be imported, as a
+  reservoir of evidence ([Permitted uses](#permitted-uses) 8). Backfiles are never classified into
+  positions or reported per school, so they are not a route to year-over-year trend analysis, which
+  [open question 7](#open-questions) still answers no. Each September's annual purge reviews them
+  and deletes per-school views of the season leaving the window. Seasons before 2021-22 are not
+  imported. A season that becomes a backfile also loses what its classification made while it was
+  current: its classification cache, review queue, plan and analytic texts, scan acceptances, local
+  classifier files and model cassette entries, deleted with its per-school views (version 1.19).
 
 ## Attribution
 
@@ -305,7 +364,11 @@ evidence-ethics rule first and a traceability rule second: it is what makes
 1. **The original cite is kept verbatim.** It is copied from the source document's own runs,
    byte-for-byte, never retyped, re-flowed or re-cased (v1-e33-t02). Correcting someone else's
    cite is not permitted; if it is wrong, the card is re-cut from the original article instead.
-2. **A provenance line is added below the cite**, as the only new text:
+   The one exception is a character XML 1.0 forbids, which the parser replaces one for one with
+   U+FFFD (Decision, PM with Charlie, 2026-10-18, v1-e31-t15).
+2. **The provenance line is shown, not written into the card** (version 1.11). Wherever the team
+   reads a card inside the platform (the student search pilot's card page, the V1 CLI's listings),
+   its provenance line is shown below the cite:
 
    ```
    [Disclosed: hsld26 2026-09-15 — Maple Grove QX, Aff vs. Riverbend Invitational Round 4]
@@ -313,7 +376,11 @@ evidence-ethics rule first and a traceability rule second: it is what makes
    ```
 
    Disclosed cards name caselist slug, snapshot date, school, team code, side, tournament and
-   round. Camp cards name camp, year, event and file title.
+   round. Camp cards name camp, year, event and file title. A built file, a copied card and a
+   downloaded card carry **no** provenance line: the team's own files are themselves disclosed on
+   the caselist, and republishing other schools' names and team codes in them adds nothing the
+   team needs (Charlie, 2026-10-22). The provenance travels in the sidecar (rule 3) and, for a
+   copy or download from the pilot, in its audit record.
 3. **A machine-readable sidecar** accompanies every built file with the same provenance plus card
    fingerprint, source sha256 and element index, at `provenance_mode: FILE_IMPORT` (v1-e33-t02).
    The sidecar is what a removal request is matched against.
@@ -322,9 +389,11 @@ evidence-ethics rule first and a traceability rule second: it is what makes
    (ADR-0006). If the team wants a verified card, it re-cuts it from the original article, and the
    card then carries *article* provenance instead, with a note that it was found through the
    caselist.
-5. **Attribution survives every move.** Copying a card into another file, exporting it, or opening
-   it in the V2 debate tub carries the provenance line and sidecar entry with it. A card without
-   provenance may not be added to a built file.
+5. **Attribution survives every move, in the record rather than the text.** Copying a card into
+   another built file or exporting it carries its sidecar entry with it; copying or downloading it
+   from the student search pilot (E39) writes an audit record naming its card cluster; opening it
+   in the V2 debate tub shows its provenance. A card without provenance on record may not be added
+   to a built file.
 6. This is internal credit, not publication credit. Nothing built from the corpus is published, so
    attribution here exists for the team's own ethics, for rebuttal ("this is their card"), and for
    removal.
@@ -373,6 +442,9 @@ weighed.
 - Deletes the parsed cards derived from it.
 - Deletes or rewrites the downloaded archives and camp files in the sync's download inbox that
   hold it, so no downloaded copy keeps the removed bytes.
+- Rewrites the weekly cloud run's run-state bundle (`manifests/_run-state/`, ADR-0020), which holds
+  the run's copy of the manifests and of the records named above, without them, and purges the
+  bundle's noncurrent versions.
 - **Appends the sha256 to the suppression list**, which the importers and the publisher consult, so
   no later archive, weekly or complete, can bring the file back.
 - Flags every built file whose provenance sidecar cites that source, for rebuild or withdrawal.
@@ -380,6 +452,10 @@ weighed.
   school, team code or name. Beside the suppression list and the removal log it keeps, in the same
   way and with no school, team code or name, the paths a removal holds, what each removal reached,
   and the caselist each withdrawn copy was taken from, by its slug (`openev` for a camp path).
+  An import that refuses an upload at a held path records its sha256 in the same way, beside that
+  path's digest and under the request holding it (`v1-e30-t23`). The same removal run again then
+  stops those bytes after the archive they came in has gone: whole when no other path holds them,
+  and withdrawn from the held path alone when one does.
 
 **What removal does not do**
 
@@ -438,10 +514,18 @@ published to prod.
 **Limits — all of them binding**
 
 1. **Corpus only.** Caselist archives and OpenEv files. No student account data, no Cognito or
-   user-pool data, no team-private files.
-2. **Operators only.** No student or general team access to dev, in V1 or V2.
-3. **Two locations.** The dev evidence bucket and the operator's local store. No exports, no email
-   attachments, no other buckets, no CI artefacts, no third-party tools.
+   user-pool data, no team-private files, except the pilot validation accounts of limit 2.
+2. **Operators only.** No student or general team access to dev, in V1 or V2, with one exception
+   that ends at the student search pilot's promotion to prod (version 1.18): **at most two pilot
+   validation students** may hold accounts in the dev pilot's user pool, created by the coach with
+   `tub users add`, to validate the pilot before prod. Their accounts hold what a prod account
+   holds and no more (E39 gate item 9), every item of the [E39 gate](#gates) holds on dev for them as
+   it would on prod, and their names are in no committed file. At the promotion the coach removes
+   both dev accounts (`tub users remove`), and the students move to prod accounts.
+3. **Three locations.** The dev evidence bucket, the operator's local store, and, while a dev cloud
+   run or a one-off backfile import runs, its task's ephemeral storage, deleted when the task stops
+   (ADR-0020, version 1.18). No exports, no email attachments, no other buckets, no CI artefacts,
+   no container images, no third-party tools.
 4. **Never CI data.** CI keeps synthetic fixtures only; the real corpus never reaches a CI runner
    (working agreements §1).
 5. **Same retention clock as prod**, with dev noncurrent versions expiring after 30 days.
@@ -471,9 +555,25 @@ first automated pull:
    refuses a configuration above 10, and counts every file download (archives and OpenEv files)
    against the same limit. If the maintainer later withdraws or changes this, E34 stops until the
    policy is revised.
-3. Access uses the **operator's own** Tabroom account and `caselist_token`. The token is stored in
-   the macOS keychain, or a `0600` gitignored file; it is a `SecretStr`, redacted from logs,
-   exceptions and event hooks; the password is never stored; the token is never shared.
+3. Access uses the **operator's own** Tabroom account and `caselist_token`, and nothing else.
+   - **On the operator's Mac** the token is stored in the macOS keychain, or a `0600` gitignored
+     file, and the password is never stored.
+   - **For the weekly cloud run** (ADR-0020), the Tabroom username and password are stored in one
+     AWS Secrets Manager secret and the token in another, in the team's account, both encrypted
+     under a KMS key of their own that encrypts nothing else. They are stored nowhere else: never in
+     a container image, a task's environment, a log, a file, Terraform state or the repository.
+   - **Who can read them.** Only the scheduled login job's role can read the password, and it sends
+     it only to OpenCaselist's login. The coach writes or replaces the password and never reads it
+     back. Only the run's role reads the token, and it cannot read the password. The key policy and
+     each secret's own policy both enforce this.
+   - **Every read is logged.** The organization CloudTrail records every read of either secret
+     (`GetSecretValue` and the KMS `Decrypt` it causes) and every change to who may read them, and
+     keeps them at least a year. A change to who may read the password, and any attempt to read it
+     by anyone but the login job, is emailed to the coach. An administrator of the account can
+     reach the password only by first making such a change, which CloudTrail records and which
+     emails the coach; moving prod into a separate AWS account would end that.
+   - The token is a `SecretStr`, redacted from logs, exceptions and event hooks, wherever it is
+     held; the token is never shared.
 4. **Politeness is enforced in code**: a configurable minimum interval between requests, one
    download at a time, bounded backoff on 429/502/503/504 honouring `Retry-After`, and no HTML
    scraping. Weekly cadence at most — no polling faster than archives are published.
@@ -481,19 +581,64 @@ first automated pull:
 6. Every downloaded file goes through the importer, so the **suppression list is honoured** and a
    removed file can never be re-downloaded into the store.
 7. A **run log and a stale-data warning** (v1-e34-t03) make silent failure visible.
-8. The scheduled job runs on the operator's own machine, and the operator remains the accountable
-   human for it.
+8. The scheduled job runs on the operator's own machine or, from version 1.12, as one scheduled
+   task in the team's AWS account (ADR-0020), and the operator remains the accountable human for it
+   wherever it runs. Exactly one runner at a time can publish, and a failed or late run reaches the
+   coach by email.
 
 ### E32 — model classification of the corpus
 
 1. This policy is approved.
-2. The provider's **no-training / no-retention terms are confirmed in writing** and recorded in
-   [Sources and terms](#sources-and-terms) ([open question 4](#open-questions)). Until then,
-   classification runs against synthetic fixtures only.
+2. The provider's **zero retention and the absence of invocation logging are recorded** for the
+   account ([Model provider use](#model-provider-use) condition 2; [open question 4](#open-questions),
+   resolved 2026-11-01, version 1.20). Met: classification over real disclosed text may run,
+   under the other conditions here.
 3. A scan of the prompt inputs and cassettes for a sample run shows **no school name, team code or
-   debater name** (v1-e32-t02 acceptance criterion).
+   debater name** (v1-e32-t07 acceptance criterion ac4).
 4. The circuit-wide report is verified to contain **no team codes** before it is shared with the
    team.
+
+### E39 — student evidence search pilot (v1.7)
+
+The pilot shows the team's own debaters other teams' disclosed cards, so it meets the same
+conditions the V2 tub must, adapted to a pilot, before any student is given an account. Each item is
+proven by a named test or operator record (v1-e39-t07, v1-e39-t10).
+
+1. This policy (version 1.10 or later) is approved **and the removal runbook's pilot steps have
+   been exercised end to end once** in dev and prod: after a removal, the card is gone from search,
+   card pages and downloads within five minutes, and the rebuilt index no longer holds it.
+2. **Team-only access is proven**: an authorization matrix over every route for student and coach,
+   signed in, expired, tampered and absent sessions. Accounts exist only because the coach created
+   them: no self sign-up, and no Google or school account (ADR-0019). Every account has a password
+   and a second factor.
+3. **No public reachability**: the evidence buckets keep all four block-public-access flags; there
+   is no public or CloudFront access to a bucket; only the pilot's function reads `raw/`, and it
+   writes nothing there; signed-in responses are private and never cached.
+4. **Every access is audited.** A card page view, copy, download and account change each write an
+   append-only record holding the time, the account's identifier, its role, the action and card
+   cluster ids: no query text, URL, token, name, team code, evidence text or IP address. Records are
+   kept **400 days** and then expire.
+5. **The suppression list governs the pilot**: a suppressed occurrence never enters the index and is
+   hidden by the running function within five minutes of its removal.
+6. **No sharing surface leaves the team**: no public links and no share-by-link. A student may copy
+   or download a card for their own preparation; since version 1.11 it carries no provenance line,
+   and its audit record names the card.
+7. **Attribution survives into the pilot**: the provenance line is shown on every disclosed or camp
+   card's page, and the label "Disclosed evidence, not platform-verified" with every card page
+   (ADR-0006).
+8. **Nothing beyond school plus team code** is shown about any debater; school, team code,
+   tournament and round are never searchable, and there is no search by debater.
+9. **Accounts hold the least personal data that works**: a username chosen by the coach, a role, and
+   an email address only when a student adds one as a backup second factor. No real name, phone
+   number or other attribute is collected. Removing a student who leaves deletes their account.
+10. **School review**: answered — see [open question 6](#open-questions).
+11. **The landscape pages** (version 1.16) show the newest published bundle's `report.md` and
+    per-school view to signed-in members only. They are read from the private bucket's `reports/`
+    prefix and held no longer than five minutes, so a removal (`v1-e32-t13`) or a republish reaches
+    them within five minutes. Each page view writes an audit record under item 4, naming the
+    caselist, the snapshot and the page, and no school or team code. The pages offer no search, no
+    download and no share link, and their only links out are the per-school view's OpenCaselist
+    team pages (version 1.14).
 
 ### v2-e35 — debate tub (v2.1)
 
@@ -529,10 +674,10 @@ before the thing it gates.
 | 1 | What the OpenCaselist **privacy page** says about minors, about what the site itself publishes (school names, team codes, round reports), and about a withdrawal channel. The Terms & Conditions were read on 2026-09-19; the privacy page was not | **Accepted as a known gap**, 2026-09-19 | Charlie, when he next reads it | Nothing. Recorded in [Sources and terms](#sources-and-terms) when read |
 | 2 | Two points the Terms & Conditions leave unstated: **(a)** the download rate limit, which is binding "manual or automated" but is never given as a number; **(b)** whether the documented API at `api.opencaselist.com` is a "publicly supported interface" for *scheduled* downloads | **Resolved** 2026-09-19 — the maintainer confirmed scheduled archive downloads through the API are acceptable, rate limit 10 file downloads per minute (clause 12) | Charlie | — |
 | 3 | **OpenEv's distribution terms** and the per-camp licensing notes carried in the files | **Accepted as a known gap**, 2026-09-19 | Charlie, from the files and the camp sites | Nothing today — we redistribute nothing, so the risk is low. Revisit if camp files are ever handled differently from disclosures |
-| 4 | Confirmation that the model provider does not retain or train on our inputs: the **AWS Bedrock data-protection documentation** (Bedrock does not store prompts or completions and does not use them to train models), recorded here by URL and date read, **plus** a check that no model-invocation logging to a third-party destination is enabled in the account | **Open** | Operator, from the AWS documentation and the account's Bedrock settings | [E32 gate](#e32--model-classification-of-the-corpus). Not a blocker for this approval; it blocks the first full-corpus classification run |
+| 4 | Confirmation that the model provider does not retain or train on our inputs: the **AWS Bedrock data-protection documentation** (Bedrock does not store prompts or completions and does not use them to train models), recorded here by URL and date read, **plus** a check that no model-invocation logging to a third-party destination is enabled in the account | **Resolved** 2026-11-01 (version 1.20), by the coach's decision: zero retention (mode `none`, set 2026-10-30) and no invocation logging (checked 2026-11-01) are recorded; a written no-training term was not found in the docs or the AWS Service Terms read 2026-11-01, and the coach judged it unnecessary while nothing is retained ([Model provider use](#model-provider-use) condition 2) | Operator, from the AWS documentation and the account's Bedrock settings | [E32 gate](#e32--model-classification-of-the-corpus). Not a blocker for this approval; it blocks the first full-corpus classification run |
 | 5 | The removal contact address to publish in [Removal](#removal) | **Resolved** 2026-09-19 — `ctcb57@gmail.com` | Charlie | — |
-| 6 | Whether school or district review is needed before students (who may be minors) get accounts on the V2 tub. This policy does not answer it and is not legal advice | **Open until V2** | Charlie, with the school | [v2-e35 gate](#v2-e35--debate-tub-v21) item 9 |
-| 7 | Whether a season's corpus may be kept beyond two seasons for year-over-year trend analysis | **Resolved** 2026-09-19 — no; the two-season clock in [Retention](#retention) stands | Charlie | — |
+| 6 | Whether school or district review is needed before students (who may be minors) get accounts on the V2 tub. This policy does not answer it and is not legal advice | **Resolved for the E39 pilot** 2026-10-19 — Charlie reports that the school's activities director and IT approved the tool for students; IT's one condition is allowing the pilot's hostname through the school web filter, since students' Chromebooks can run little else. No district review is needed for the pilot. Asked again before the V2 tub, if its scope goes beyond the pilot's (uploads, sharing, other organizations) | Charlie, with the school | [E39 gate](#e39--student-evidence-search-pilot-v17) item 10; [v2-e35 gate](#v2-e35--debate-tub-v21) item 9 |
+| 7 | Whether a season's corpus may be kept beyond two seasons for year-over-year trend analysis | **Resolved** 2026-09-19 — no, for trend analysis. **Revised** 2026-10-25 (version 1.17): seasons from 2021-22 on are kept as backfiles for research and team files, never classified or reported, so trend analysis over them is still not a permitted use | Charlie | — |
 | 8 | Whether the `EvidenceOperator` permission set needs scoped delete rights for `caselist remove`, or whether removal runs under a separate elevated role | **Resolved by a spec change to v1-e29-t03 / v1-e30-t07 (PM)** | PM, in a separate specs pull request | Executing a real removal — see the [runbook](../runbooks/caselist-removal.md#manual-procedure-until-v1-e30-t07-ships) |
 
 ## Review and change control
@@ -547,7 +692,7 @@ before the thing it gates.
 
 ## Approval
 
-**Version 1.9 of this policy is approved.** Publishing caselist and OpenEv imports, loading the
+**Version 1.22 of this policy is approved.** Publishing caselist and OpenEv imports, loading the
 real corpus into dev, model classification over real disclosed text, and automated download (E34)
 are unblocked, each still subject to its own conditions in [Gates](#gates). Version 1.1 recorded
 the maintainer's confirmation of scheduled API downloads and the 10-per-minute rate limit.
@@ -613,19 +758,185 @@ Version 1.9 makes three corrections and one addition, and loosens nothing:
 The last tightens the policy, so under [Review and change control](#review-and-change-control)
 version 1.9 takes effect on merge, and merging its pull request records the approval below.
 
+Version 1.10 lets the team's own debaters see disclosed and camp cards for the first time, through
+the student search pilot (E39, v1.7). It adds the [E39 gate](#e39--student-evidence-search-pilot-v17),
+the pilot's place in [Personal data](#personal-data) (where personal data may live, what it may show,
+and who has access), two rows in [Retention](#retention), the pilot in Attribution rule 5, and the
+answer to [open question 6](#open-questions): the school's activities director and IT approved the
+tool for students. It loosens the policy, since V1 access was the operator's alone, so under
+[Review and change control](#review-and-change-control) it needs the coach's approval: Charlie
+directed the pilot on 2026-10-19, and merging its pull request records the approval below. No
+student is given an account until every item of the E39 gate is met.
+
+Version 1.11 takes the provenance line out of the text of built files, copied cards and downloaded
+cards (Attribution rules 2 and 5, the E39 gate's items 6 and 7, Permitted use 3 and the report
+table). The line is still shown on the pilot's card page, and the provenance is still on record, in
+a built file's sidecar and in the pilot's audit record, so removal is unchanged. Charlie decided it
+on 2026-10-22: the team's own files are disclosed on the caselist, and republishing other schools'
+names and team codes in them is clutter. It shows less identity outside the platform and changes
+what attribution looks like, so it is recorded as approved by the coach, and merging its pull
+request records the approval below.
+
+Version 1.12 lets the weekly run move off the coach's Mac into the team's AWS account
+([ADR-0020](../adr/0020-weekly-caselist-run-in-the-cloud.md), epic E40), so that an unplugged laptop
+never stops the debaters seeing updated evidence. Charlie decided it on 2026-10-22. It changes the
+[E34 gate](#e34--automated-caselist-download-v12)'s access rule, item 3: for the cloud run the
+Tabroom password and the `caselist_token` are stored in Secrets Manager under a KMS key of their
+own, only the scheduled login job's role can read the password, only the run's role reads the token,
+and every read is in CloudTrail. It changes item 8: the job may run as one scheduled task in the
+account, one runner at a time, with the operator still accountable. Because the run holds a working
+copy of the store while it runs, it also adds that copy, deleted when the run's task stops, to
+[Scope](#scope), to the places personal data may live, to
+[Prohibited uses](#prohibited-uses) 10 and to the [dev exception](#dev-environment-exception)'s
+locations, and adds the run's run-state bundle to [Retention](#retention) and to what a
+[removal](#removal) rewrites. [Clause 12](#clause-register) records that the maintainer was told
+of the move on 2026-10-23 and is fine with it. It loosens the policy, since the password was never stored before and
+the job ran only on the operator's machine, so under
+[Review and change control](#review-and-change-control) it needs the coach's approval, and merging
+its pull request records the approval below. Nothing else changes: the rate limit, the weekly cadence,
+the `401`/`403` rule, the suppression list and every rule on personal data stand as they were.
+
+Version 1.13 lets an argument landscape report (E32) quote a team's own analytic text word for
+word: plan texts, counterplan texts, kritik alternatives and roles of the ballot. Charlie decided
+it on 2026-10-24, from the coach's review of the first Policy report, choosing that a text only one
+team reads may be quoted too, since disclosure already publishes it on OpenCaselist. It changes
+[Permitted uses](#permitted-uses) 2 and the circuit-wide row of "What a report may show". Such a
+quote never stands beside a school or team code. The report that carries it stays on the
+operator's machine and in the private buckets' `reports/` prefix, never on the public site or in
+the repository, and fixtures committed to the repository stay synthetic. A quoted text is derived
+from its source like any other artefact (Permitted uses 4), so a [removal](#removal) of the source
+removes it from the next report built. It loosens the policy, since no report quoted a team's
+own words before, so under [Review and change control](#review-and-change-control) it needs the
+coach's approval, and merging its pull request records the approval below. Nothing else changes.
+
+Version 1.14 lets the per-school landscape view (E32) link each team to its public OpenCaselist
+team page, `https://opencaselist.com/<caselist>/<school>/<team code>`, the form the student search
+pilot already uses (`debate_core.domain.search_source_links`). Charlie decided it on 2026-10-24, so
+the team can find where each DA, CP and K is read and open that team's disclosures before a
+tournament. The link is built from the caselist, the school and the team code alone, which the view
+already shows, so it discloses nothing new: no tournament, round, debater or document path. It
+changes the per-school row of "What a report may show". The view stays on the operator's machine and
+in the private buckets' `reports/` prefix. It loosens the policy, since that row allowed nothing
+beyond school and team code before, so under [Review and change control](#review-and-change-control)
+it needs the coach's approval, and merging its pull request records the approval below. Nothing
+else changes.
+
+Version 1.15 lets a file recipe that `files suggest` drafts (E33, `v1-e33-t03`) name a pin's school
+and team code, as a built file's sidecar already may. A pin narrows only as far as it must, least
+personal first: side, then tournament, then round, and a school and team code only where two teams
+disclosed the same bytes. Charlie decided it on 2026-10-24, from the PM's ruling on `v1-e33-t03`'s
+question. A recipe lives under the data directory's `files/` on the operator's machine, is never
+written inside a git working tree, and loses every such field when published (`v1-e33-t05`). It
+changes "Where personal data is allowed to live" and adds a row to "What a report may show". It
+loosens the policy, since no recipe named a team before, so under
+[Review and change control](#review-and-change-control) it needs the coach's approval, and merging
+its pull request records the approval below. Nothing else changes.
+
+Version 1.16 lets the student search pilot (E39) show the newest published argument landscape
+report and its per-school view to the team's signed-in debaters and coach, on landscape pages of
+its own (`v1-e39-t17`). Charlie decided it on 2026-10-25, so the team can read the reports in the
+tool it already uses rather than as files on the operator's machine, choosing that every signed-in
+member sees both. The pages carry nothing a report or view does not already hold under versions
+1.13 and 1.14, and they meet the pilot's gate, with item 11 added. It changes
+[Permitted uses](#permitted-uses) 2, both landscape rows of "What a report may show", the access
+paragraph, and the E39 gate. It loosens the policy, since the reports were the operator's alone
+before, so under [Review and change control](#review-and-change-control) it needs the coach's
+approval, and merging its pull request records the approval below. Nothing else changes.
+
+Version 1.17 keeps earlier seasons' disclosures, from 2021-22 on, as backfiles: a reservoir of
+evidence the team can search and build files from on later topics and events. Charlie decided it on
+2026-10-25: cards from earlier topics are used on current ones and on future LD and PF topics, and
+OpenCaselist still publishes those seasons. The two-season window was this policy's own choice, not
+a term of the source (the clause register holds no term on retention). Backfiles keep every other
+rule: the terms, the rate limit, removal at once and in full, the suppression list, and the same
+provenance line on the pilot. They are never classified into positions or reported per school, and
+per-school views still end with their season's window. Seasons before 2021-22 are not imported. It
+changes [Permitted uses](#permitted-uses) (a new use 8), [Retention](#retention) and
+[open question 7](#open-questions). It loosens the policy, since nothing was kept past two seasons
+before, so under [Review and change control](#review-and-change-control) it needs the coach's
+approval, and merging its pull request records the approval below. Nothing else changes.
+
+Version 1.18 names two working copies that the cloud cutover and the backfile imports make, and
+keeps each for one step only. A **working copy restored on the operator's machine** from a bucket,
+for the cutover's comparison or a hand publish to prod (`caselist restore-run-state`,
+`v1-e40-t06`), is kept for the length of that step and then deleted, as the runbook that restores it
+already does. A **one-off backfile import's working copy** on a cloud task's ephemeral storage
+(version 1.17's backfiles, imported in the cloud because the operator's machine lacks the space) is
+kept for the length of that task, as the weekly run's is. Both hold the same data as the stores they
+were restored from or import into, under the same rules. Charlie decided the cloud import on
+2026-10-25, and the PM adopted the restored copy's sentence from `v1-e40-t06`'s review. It changes
+[Scope](#scope), "Where personal data is allowed to live", [Retention](#retention) and the
+[Dev environment exception](#dev-environment-exception)'s limit 3. It names places data may live
+that the policy did not name before. Version 1.18 also lets at most two pilot
+validation students hold dev pilot accounts until the pilot's promotion to prod ([Dev environment
+exception](#dev-environment-exception) limits 1 and 2): Charlie decided it on 2026-10-25, after
+the PM found that two students he had given dev accounts to validate the pilot were outside limit 2
+as written. Every E39 gate item holds for them on dev, and their dev accounts are removed at the
+promotion. Both changes loosen the policy, so under
+[Review and change control](#review-and-change-control) it needs the coach's approval, and merging
+its pull request records the approval below. Nothing else changes.
+
+Version 1.19 records four decisions of 2026-10-30. **Zero retention:** Bedrock's account data
+retention mode is `none` in the three regions a call can run in, set by the operator after the
+coach's decision of 2026-10-27, with every model the account can call checked under it, the
+operator's other project's included ([Model provider use](#model-provider-use) condition 2; open
+question 4, the written terms, stays open). **OpenEv camp files:** topic years from 2021 on are kept
+as backfiles once they age out, as the caselists' seasons are, and earlier topic years are purged
+([Retention](#retention)). **Backfile classifications:** a season that becomes a backfile loses its
+classification state with its per-school views, since backfiles are never classified
+([Retention](#retention), "Backfiles"). **Restored copies:** a working copy restored on the
+operator's machine may also serve a landscape report (`v1-e40-t17`), for the length of that step
+("Where personal data is allowed to live", [Retention](#retention)). It also adds a one-off backfile
+import's working copy to [Prohibited uses](#prohibited-uses) 10, the one place version 1.18 missed
+(`v1-e40-t09`). Keeping camp files longer and a third purpose for a restored copy loosen the policy;
+the others tighten it or record a fact. Charlie approved version 1.19 on 2026-10-30, and merging its
+pull request records the approval below. Nothing else changes.
+
+Version 1.20 resolves [open question 4](#open-questions), the gate on model classification of the
+real corpus ([E32](#e32--model-classification-of-the-corpus) item 2). It records AWS's data
+retention and data protection pages, read 2026-11-01, Bedrock's zero-retention mode set on
+2026-10-30, and the operator's check of 2026-11-01 that no model-invocation logging is configured in
+any of the three regions a call can run in. A written no-training term was looked for in those pages
+and in the Amazon Bedrock section of the AWS Service Terms and not found; the coach decided that zero
+retention with no logging suffices ([Model provider use](#model-provider-use) condition 2, reworded
+to say what is recorded). It loosens the policy, so it needs the coach's approval: Charlie approved
+version 1.20 on 2026-11-01, and merging its pull request records the approval below. Nothing else
+changes.
+
+Version 1.21 records an incident and tightens [Model provider use](#model-provider-use) condition 1.
+On 2026-11-01, during `v1-e32-t39` (the model evaluation's diagnosis), the operator pasted the
+evaluation's terminal hit listing into the task session, against the runbook's instruction. The
+listing named other teams' tournaments and team codes found in heading paths and cassettes, each
+with up to four words of surrounding text. Nothing from it was written to any file, commit,
+document, test or memory; the counts recorded came from the command's JSON alone. The safeguards:
+the runbook's warning is now in bold before the command; the JSON carries marks that answer what the
+listing was needed for; `v1-e32-t40`'s scrub and scan fixes reduce the listing to the names the
+scrub misses; and condition 1 now says that a development or PM session is not the ModelRouter.
+It tightens a rule, so it takes effect on merge, and merging its pull request records Charlie's
+approval below. Nothing else changes.
+
+Version 1.22 loosens [Model provider use](#model-provider-use) condition 1, by the coach's decision
+of 2026-11-02: a tag, a plan text or a counterplan text may go to a development or PM session,
+because each is a summary of an argument. Evidence bodies, cites, and school names, team codes and
+debater names still never do. It also records the close of version 1.21's incident's follow-up: on
+2026-11-02 hspolicy26's four model cassettes recorded under prompt 1.0.0, which held the 9 names the
+scrub had missed (condition 4), were deleted with `landscape cassettes --delete` after their last
+use. It loosens a rule, so it needs the coach's approval: Charlie approved version 1.22 on
+2026-11-02, and merging its pull request records the approval below.
+
 The standing rule for every future version: until this table records an approval of that version,
 nothing this policy governs may happen under it.
 
 | Field | Value |
 |---|---|
-| Policy version | 1.9 (2026-10-15); 1.8 (2026-10-13); 1.7 (2026-10-11); 1.6 and 1.5 (2026-10-10); 1.4 and 1.3 approved 2026-10-01, 1.3 including version 1.2's correction to rule 3; 1.0 and 1.1 approved 2026-09-19 |
+| Policy version | 1.22 (2026-11-02); 1.21 and 1.20 (2026-11-01); 1.19 (2026-10-30); 1.18, 1.17 and 1.16 (2026-10-25); 1.15, 1.14 and 1.13 (2026-10-24); 1.12 and 1.11 (2026-10-22); 1.10 (2026-10-19); 1.9 (2026-10-15); 1.8 (2026-10-13); 1.7 (2026-10-11); 1.6 and 1.5 (2026-10-10); 1.4 and 1.3 approved 2026-10-01, 1.3 including version 1.2's correction to rule 3; 1.0 and 1.1 approved 2026-09-19 |
 | Approved by | Charlie Clark |
 | Role | Product owner and head coach |
-| Approval date | 2026-10-15 (version 1.9; 1.8: 2026-10-13; 1.7: 2026-10-11; 1.5 and 1.6: 2026-10-10; 1.3 and 1.4: 2026-10-01; 1.0 and 1.1: 2026-09-19) |
-| Scope of approval | Sections [Scope](#scope) through [Review and change control](#review-and-change-control) of version 1.9, including the [clause register](#clause-register) read 2026-09-19 and the [community disclosure norms](#community-disclosure-norms), both confirmed by Charlie |
-| Open questions resolved at approval | **5** — removal contact address is `ctcb57@gmail.com`. **7** — two-season retention stands. **8** — resolved by a PM spec change to v1-e29-t03 / v1-e30-t07. **2** (version 1.1) — maintainer confirmed scheduled API downloads at 10 file downloads per minute |
+| Approval date | 2026-11-02 (version 1.22); 2026-11-01 (versions 1.20 and 1.21); 2026-10-30 (version 1.19); 2026-10-25 (versions 1.18, 1.17 and 1.16; 1.15, 1.14 and 1.13: 2026-10-24; 1.12 and 1.11: 2026-10-22; 1.10: 2026-10-19; 1.9: 2026-10-15; 1.8: 2026-10-13; 1.7: 2026-10-11; 1.5 and 1.6: 2026-10-10; 1.3 and 1.4: 2026-10-01; 1.0 and 1.1: 2026-09-19) |
+| Scope of approval | Sections [Scope](#scope) through [Review and change control](#review-and-change-control) of version 1.22, including the [clause register](#clause-register) read 2026-09-19 and the [community disclosure norms](#community-disclosure-norms), both confirmed by Charlie |
+| Open questions resolved at approval | **5** — removal contact address is `ctcb57@gmail.com`. **7** — two-season retention stands. **8** — resolved by a PM spec change to v1-e29-t03 / v1-e30-t07. **2** (version 1.1) — maintainer confirmed scheduled API downloads at 10 file downloads per minute. **6** (version 1.10) — the school's activities director and IT approved the tool for students; no district review for the E39 pilot. **4** (version 1.20) — zero retention and no invocation logging recorded, by the coach's decision without a written no-training term |
 | Open questions accepted as known gaps | **1** — OpenCaselist privacy page unread. **3** — OpenEv distribution and per-camp terms unread |
-| Open questions left open | **4** — Bedrock data-protection terms, an E32 gate. **6** — school or district review, before V2 student accounts |
+| Open questions left open | **6** — for the V2 tub only, if its scope goes beyond the pilot's |
 
 A later version is approved by editing this table in a pull request, with the version bumped in
 the header and in [Review and change control](#review-and-change-control).
@@ -640,6 +951,8 @@ the header and in [Review and change control](#review-and-change-control).
 - [ADR-0005: Bedrock behind a model router](../adr/0005-bedrock-behind-model-router.md) — the only
   path by which disclosed text may reach a model.
 - [ADR-0003: S3 as source of truth for raw artifacts](../adr/0003-s3-source-of-truth-for-raw-artifacts.md).
+- [ADR-0020: The weekly caselist run in the cloud](../adr/0020-weekly-caselist-run-in-the-cloud.md)
+  — where the cloud run's credentials and state live, and who can read them (version 1.12).
 - Architecture proposal
   [§9 Search and Retrieval](../architecture/architecture_proposal.md#9-search-and-retrieval-architecture)
   (opponent data),
@@ -651,4 +964,5 @@ the header and in [Review and change control](#review-and-change-control).
   publish, t06 backfill, t07 removal), `plan_specs/v1/e32-argument-landscape/t02-position-classification.yaml`,
   `plan_specs/v1/e33-file-builder/t02-lossless-card-writer.yaml`,
   `plan_specs/v1/e34-caselist-sync/t01-caselist-api-client.yaml`,
+  `plan_specs/v1/e40-cloud-caselist-run/` (the weekly run in the cloud),
   `plan_specs/v2/e35-debate-tub/t05-tub-access-and-removal.yaml`.

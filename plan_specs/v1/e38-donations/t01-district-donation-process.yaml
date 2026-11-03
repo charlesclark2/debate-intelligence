@@ -42,6 +42,11 @@ spec:
       - Accepting money, card data or donor personal data anywhere in the platform or repository
       - Recording a payment URL or wording the district has not confirmed in writing
       - Committing district emails, donor names or account numbers to the repository
+  # PM sweep 2026-11-01: the policy cites the website publishing policy rather than copying it.
+  context:
+    - kind: TaskRef
+      name: v1-e36-t01-publishing-policy
+      relation: dependsOn
   acceptanceCriteria:
     - id: ac1
       description: >-

@@ -1,20 +1,26 @@
-# Example model-routing file: which model answers each task class.
+# Example model-routing file: which model answers each task class. It is the default routing and
+# the template every environment file is copied from (config/model_routing.dev.yaml and
+# config/model_routing.prod.yaml, written by v1-e01-t09-dev-prerelease-channel). The test profile
+# reads it directly, because nothing in the test environment ever calls a model.
 #
-# Copy this to the file your environment's profile names (config/model_routing.dev.yaml or
-# config/model_routing.prod.yaml — both written by v1-e01-t09-dev-prerelease-channel) and edit the
-# model ids. The test profile reads this example file directly, because nothing in the test
-# environment ever calls a model.
-#
-# The schema is debate_core.application.routing_config.RoutingConfig. A key under `routes` that is
-# not one of the five task classes below is rejected by name at startup, as is a missing model_id
-# or a temperature outside 0.0-2.0.
+# The schema is debate_core.integrations.models.routing_policy.RoutingPolicy. It is validated when
+# the file is loaded: a key under `routes` that is not one of the five task classes below, a missing
+# model_id, a temperature outside 0.0-1.0, an inference profile that belongs to another model or a
+# bedrock route with no region is refused, naming the key.
 #
 # Task classes are the platform's vocabulary for *what kind of work a call is*, never for a model
-# (architecture proposal §10, ADR-005). Application code asks for `high_volume`; only this file
-# decides what that means, which is what makes a model upgrade a one-file change.
+# (architecture proposal §10, ADR-0005). Application code asks for `high_volume`; only these files
+# decide what that means, which is what makes a model upgrade a change to configuration alone.
+# Model ids, regions and inference profiles appear nowhere else in the repository.
 #
-# Model ids here are Amazon Bedrock ids, which carry an `anthropic.` prefix for Claude models.
-# They are examples: the ids an environment actually uses are chosen when E05 lands the router.
+# Identifiers are Amazon Bedrock's, checked against the AWS Bedrock model cards on 2026-10-16
+# (v1-e05-t01-model-router-port). The Claude models have no in-region on-demand access in
+# us-east-1, so they are called through the `us.` geographic inference profiles, which keep
+# requests in US regions (us-east-1, us-east-2, us-west-2; ADR-0010 pins the platform to
+# us-east-1). Titan and Cohere are called in-region and have no profile.
+#
+# No Claude route sets a temperature: the current Claude models reject any temperature but their
+# default. A temperature set here is validated (0.0-1.0) and sent; unset sends none.
 
 version: 1
 
@@ -22,30 +28,45 @@ routes:
   # Argument analysis, card tagging, coverage analysis, judge reasoning. The quality of a cut card
   # is decided here, so this is the class that gets the capable model.
   complex_reasoning:
-    model_id: anthropic.claude-sonnet-5
+    provider: bedrock
+    model_id: anthropic.claude-sonnet-5-5
+    inference_profile: us.anthropic.claude-sonnet-5-5
+    region: us-east-1
     max_tokens: 8192
-    temperature: 0.2
+    timeout_seconds: 300
 
   # Cheap, frequent classification and extraction: citation metadata cleanup, relevance
   # classification, card structure detection. High volume is the whole point, so it routes to the
   # cheapest model whose benchmark quality is sufficient.
   high_volume:
-    model_id: anthropic.claude-haiku-4-5
+    provider: bedrock
+    model_id: anthropic.claude-haiku-5-5
+    inference_profile: us.anthropic.claude-haiku-5-5
+    region: us-east-1
     max_tokens: 2048
-    temperature: 0.0
+    timeout_seconds: 60
 
   # Expensive, low-frequency file and strategy audits. Not on the path of a normal request; run
   # deliberately, and counted against the daily budget like everything else.
   deep_audit:
-    model_id: anthropic.claude-opus-5
+    provider: bedrock
+    model_id: anthropic.claude-opus-5-5
+    inference_profile: us.anthropic.claude-opus-5-5
+    region: us-east-1
     max_tokens: 16384
-    temperature: 0.1
+    timeout_seconds: 600
 
   # Vector embeddings for semantic search over article chunks, cards and file sections. No
   # temperature and no output cap: an embedding call has neither.
   embeddings:
+    provider: bedrock
     model_id: amazon.titan-embed-text-v2:0
+    region: us-east-1
+    timeout_seconds: 30
 
   # Cross-encoder reranking of retrieved candidates before they are returned or used as context.
   rerank:
+    provider: bedrock
     model_id: cohere.rerank-v3-5:0
+    region: us-east-1
+    timeout_seconds: 30

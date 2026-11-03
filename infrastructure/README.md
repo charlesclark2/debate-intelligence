@@ -21,6 +21,10 @@ that keeps binding.
 | [`modules/static_site/`](modules/static_site/) | One environment's public website: private bucket, CloudFront with OAC, security headers, the SitePublisher permission set | `v1-e36-t02-site-hosting` |
 | [`modules/domain_redirect/`](modules/domain_redirect/) | The `.com` names, which 301 to the canonical `.org` site and hold no content | `v1-e36-t02-site-hosting` |
 | [`modules/evidence_bucket/`](modules/evidence_bucket/) | One environment's evidence store: private versioned KMS-encrypted bucket, its key, and the EvidenceOperator and EvidenceRemoval permission sets | `v1-e29-t03-evidence-buckets` |
+| [`modules/evidence_search/`](modules/evidence_search/) | One environment's student evidence search pilot: the function behind CloudFront, the Cognito user pool, the audit log, the TubDeployer and TubAccounts permission sets | `v1-e39-t04-pilot-infrastructure` |
+| [`modules/caselist_run/`](modules/caselist_run/) | One environment's weekly caselist run in the cloud: the credentials key, the Tabroom password and caselist token secrets, the login and run roles, the CaselistSecretWriter permission set, and the scheduled login; the run's VPC, cluster, image repository, task definition and schedule, and the CaselistRunDeployer permission set | `v1-e40-t02-secrets-token-store-and-login`, `v1-e40-t03-run-image-and-schedule` (E40) |
+| [`modules/bedrock_access/`](modules/bedrock_access/) | One environment's BedrockInvoker permission set: `bedrock:InvokeModel` on the inference profiles and models the routing files name, and its assignment | `v1-e05-t08-bedrock-invoke-access` |
+| [`modules/model_spend_budget/`](modules/model_spend_budget/) | The account's model spend budget, `debate-shared-bedrock-monthly`: $100 a month on the services and usage types model calls are billed under, notices at $50, $80 and $100 actual and $100 forecast. Called from `bootstrap/organization` | `v1-e05-t16-bedrock-budget-alarm` |
 | [`envs/dev/`](envs/dev/), [`envs/prod/`](envs/prod/) | The two environment roots | `v1-e29-t02-terraform-bootstrap` |
 
 There is no `envs/stage`, and adding one means changing ADR-0013 first.
@@ -56,6 +60,12 @@ the moment one of them is fixed, and there is no account boundary here to make t
    directory without its own copy is silently linted with tflint's defaults; the checks script
    fails when a copy is missing or has drifted.
 5. Call it from `envs/dev` and `envs/prod` and run `scripts/terraform_checks.sh`.
+6. **In a module test, name each `for_each` instance by its literal key** in an assertion, rather
+   than iterating the whole map, when the resource has a deprecated attribute (an
+   `aws_cloudwatch_event_rule`'s `is_enabled`, for one). On Terraform 1.16 a failing assertion over
+   the whole map panics while rendering its message (`value has marks, so it cannot be serialized
+   as JSON`) instead of printing it, and under working agreement 8 a crash is not a clean catch
+   (`v1-e40-t05`, commit `ffa220a`).
 
 ## The public team website
 
@@ -104,6 +114,41 @@ The two permission sets are separate on purpose. `EvidenceOperator` — what the
 `EvidenceRemoval` is the only credential that can delete evidence, is scoped to the five prefixes
 that hold disclosed material, and is assigned to one person, because a takedown purges noncurrent
 versions and leaves nothing to restore from.
+
+## The student evidence search pilot
+
+Both roots call [`modules/evidence_search`](modules/evidence_search/) from `evidence_search.tf`,
+which is identical in the two roots; only the host in `terraform.tfvars` differs, and the module
+derives the rest from the environment. The decision is
+[ADR-0019](../docs/adr/0019-student-search-pilot-stack-sign-in-and-hosting.md) and the operator
+steps, including the targeted first apply and the CLI-only settings, are
+[docs/runbooks/evidence-search.md](../docs/runbooks/evidence-search.md).
+
+| | dev | prod |
+|---|---|---|
+| Pilot host | `https://tub.dev.wfbdebate.com/` | `https://tub.wfbdebate.com/` |
+| Login host | `auth.tub.dev.wfbdebate.com` | `auth.tub.wfbdebate.com` |
+| Function, repository, user pool | `debate-dev-tub` | `debate-prod-tub` |
+| Deploy profile | `debate-dev-tub-deployer` | `debate-prod-tub-deployer` |
+| Accounts profile | `debate-dev-tub-accounts` | `debate-prod-tub-accounts` |
+
+The function reads the evidence bucket through its own role and nothing else: the bucket's Block
+Public Access settings and policy are untouched, and CloudFront's only origin is the function URL.
+
+## Calling the routed models
+
+Both roots call [`modules/bedrock_access`](modules/bedrock_access/) from `bedrock_access.tf`, which
+is identical in the two roots, and both pass it both routing files in `config/`, so the grant is
+read from the routes themselves. The operator steps, with the account's one-time model access, are
+[docs/runbooks/bedrock-access.md](../docs/runbooks/bedrock-access.md).
+
+| | dev | prod |
+|---|---|---|
+| Permission set | `DebateDevBedrockInvoker` | `DebateProdBedrockInvoker` |
+| Its profile, `models.aws_profile` | `debate-dev-bedrock` | `debate-prod-bedrock` |
+
+The set holds `bedrock:InvokeModel` and nothing else. The Claude models behind the `us.` profiles are
+granted only through those profiles (`bedrock:InferenceProfileArn`).
 
 ## Tagging
 

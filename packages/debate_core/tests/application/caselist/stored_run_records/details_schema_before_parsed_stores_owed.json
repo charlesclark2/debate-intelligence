@@ -1,0 +1,640 @@
+{
+  "$defs": {
+    "BucketRunDetails": {
+      "description": "What a bucket-mode run (`caselist.run_state = \"bucket\"`) did with the bucket's run lock and state.\n\n`v1-e40-t04`, ADR-0020 (3) and (4). The record's shape is frozen, so all of it is here.",
+      "properties": {
+        "bundle": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Bundle"
+        },
+        "held_by": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Held By"
+        },
+        "held_until": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Held Until"
+        },
+        "lock_lost": {
+          "default": false,
+          "title": "Lock Lost",
+          "type": "boolean"
+        },
+        "restore": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RestoreDetails"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "took_over": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Took Over"
+        }
+      },
+      "title": "BucketRunDetails",
+      "type": "object"
+    },
+    "DataVolume": {
+      "description": "The fullest the data directory's volume got, in bytes and as a share: a summary's\n:class:`~debate_core.application.caselist_sync.DataVolumeUsage` (`v1-e40-t03`). No path.",
+      "properties": {
+        "peak_after": {
+          "title": "Peak After",
+          "type": "string"
+        },
+        "peak_percent": {
+          "minimum": 0,
+          "title": "Peak Percent",
+          "type": "number"
+        },
+        "peak_used_bytes": {
+          "minimum": 0,
+          "title": "Peak Used Bytes",
+          "type": "integer"
+        },
+        "total_bytes": {
+          "minimum": 0,
+          "title": "Total Bytes",
+          "type": "integer"
+        },
+        "warning": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Warning"
+        },
+        "warning_percent": {
+          "title": "Warning Percent",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "total_bytes",
+        "peak_used_bytes",
+        "peak_percent",
+        "peak_after",
+        "warning_percent"
+      ],
+      "title": "DataVolume",
+      "type": "object"
+    },
+    "DriftFinding": {
+      "description": "One snapshot the report stage found not in sync, and what differs (`v1-e34-t23`).\n\n`kinds` are :class:`~debate_core.application.caselist_sync.DriftKind` values: `manifest`,\n`source`, `missing`, `suppressed_rows`. A caselist slug, a snapshot name and words: nothing a\nrecord may not hold.",
+      "properties": {
+        "caselist": {
+          "title": "Caselist",
+          "type": "string"
+        },
+        "kinds": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Kinds",
+          "type": "array"
+        },
+        "snapshot": {
+          "title": "Snapshot",
+          "type": "string"
+        }
+      },
+      "required": [
+        "caselist",
+        "snapshot"
+      ],
+      "title": "DriftFinding",
+      "type": "object"
+    },
+    "ParseCounts": {
+      "description": "The parse stage's counts: the nine integers of a run summary's `parse`, and nothing else\n(:class:`~debate_core.application.caselist_sync.ParseStageCounts`).",
+      "properties": {
+        "attempted": {
+          "minimum": 0,
+          "title": "Attempted",
+          "type": "integer"
+        },
+        "cards": {
+          "minimum": 0,
+          "title": "Cards",
+          "type": "integer"
+        },
+        "caselists": {
+          "minimum": 0,
+          "title": "Caselists",
+          "type": "integer"
+        },
+        "failed": {
+          "minimum": 0,
+          "title": "Failed",
+          "type": "integer"
+        },
+        "full_parses": {
+          "minimum": 0,
+          "title": "Full Parses",
+          "type": "integer"
+        },
+        "not_published": {
+          "minimum": 0,
+          "title": "Not Published",
+          "type": "integer"
+        },
+        "skipped": {
+          "minimum": 0,
+          "title": "Skipped",
+          "type": "integer"
+        },
+        "unsupported": {
+          "minimum": 0,
+          "title": "Unsupported",
+          "type": "integer"
+        },
+        "uploaded": {
+          "minimum": 0,
+          "title": "Uploaded",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "caselists",
+        "full_parses",
+        "attempted",
+        "skipped",
+        "unsupported",
+        "failed",
+        "cards",
+        "uploaded",
+        "not_published"
+      ],
+      "title": "ParseCounts",
+      "type": "object"
+    },
+    "PublishedSnapshot": {
+      "description": "A snapshot a run published, by caselist slug and snapshot name: nothing a record may not hold.",
+      "properties": {
+        "caselist": {
+          "title": "Caselist",
+          "type": "string"
+        },
+        "snapshot": {
+          "title": "Snapshot",
+          "type": "string"
+        }
+      },
+      "required": [
+        "caselist",
+        "snapshot"
+      ],
+      "title": "PublishedSnapshot",
+      "type": "object"
+    },
+    "RestoreDetails": {
+      "description": "What a bucket-mode run restored before it started (`v1-e40-t04`): counts and ids, no path.",
+      "properties": {
+        "finished_at": {
+          "format": "date-time",
+          "title": "Finished At",
+          "type": "string"
+        },
+        "index_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Index Id"
+        },
+        "parsed_bytes": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Parsed Bytes",
+          "type": "integer"
+        },
+        "parsed_kept": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Parsed Kept",
+          "type": "integer"
+        },
+        "parsed_objects": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Parsed Objects",
+          "type": "integer"
+        },
+        "parsed_version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Parsed Version"
+        },
+        "started_at": {
+          "format": "date-time",
+          "title": "Started At",
+          "type": "string"
+        },
+        "state_files": {
+          "default": 0,
+          "minimum": 0,
+          "title": "State Files",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "started_at",
+        "finished_at"
+      ],
+      "title": "RestoreDetails",
+      "type": "object"
+    },
+    "SearchIndexCounts": {
+      "description": "The search index stage's index and its size: a run summary's `search_index`, and nothing else\n(:class:`~debate_core.application.caselist_sync.SearchIndexStageCounts`, `v1-e39-t09`).",
+      "properties": {
+        "built": {
+          "title": "Built",
+          "type": "boolean"
+        },
+        "bytes_freed": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Bytes Freed",
+          "type": "integer"
+        },
+        "bytes_per_document": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Bytes Per Document"
+        },
+        "documents": {
+          "minimum": 0,
+          "title": "Documents",
+          "type": "integer"
+        },
+        "documents_growth": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Documents Growth"
+        },
+        "gzip_bytes": {
+          "minimum": 0,
+          "title": "Gzip Bytes",
+          "type": "integer"
+        },
+        "gzip_bytes_growth": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Gzip Bytes Growth"
+        },
+        "index_id": {
+          "title": "Index Id",
+          "type": "string"
+        },
+        "not_cards_by_store": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "additionalProperties": {
+                  "type": "integer"
+                },
+                "type": "object"
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Not Cards By Store"
+        },
+        "previous_index_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Previous Index Id"
+        },
+        "published": {
+          "title": "Published",
+          "type": "boolean"
+        },
+        "removed": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Removed",
+          "type": "integer"
+        },
+        "sqlite_bytes": {
+          "minimum": 0,
+          "title": "Sqlite Bytes",
+          "type": "integer"
+        },
+        "sqlite_bytes_growth": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Sqlite Bytes Growth"
+        },
+        "warnings": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Warnings",
+          "type": "array"
+        }
+      },
+      "required": [
+        "index_id",
+        "built",
+        "published",
+        "documents",
+        "sqlite_bytes",
+        "gzip_bytes"
+      ],
+      "title": "SearchIndexCounts",
+      "type": "object"
+    },
+    "StageDetails": {
+      "description": "What one stage has to say that its :class:`StageEntry` has no field for.",
+      "properties": {
+        "drift": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/DriftFinding"
+          },
+          "title": "Drift",
+          "type": "array"
+        },
+        "earlier_findings": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Earlier Findings",
+          "type": "array"
+        },
+        "error_codes": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Error Codes",
+          "type": "array"
+        },
+        "hint": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Hint"
+        },
+        "not_compared": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/PublishedSnapshot"
+          },
+          "title": "Not Compared",
+          "type": "array"
+        },
+        "stage": {
+          "title": "Stage",
+          "type": "string"
+        }
+      },
+      "required": [
+        "stage"
+      ],
+      "title": "StageDetails",
+      "type": "object"
+    },
+    "StageTiming": {
+      "description": "When one stage started and ended: a summary's\n:class:`~debate_core.application.caselist_sync.StageTime` (`v1-e40-t03`).",
+      "properties": {
+        "finished_at": {
+          "format": "date-time",
+          "title": "Finished At",
+          "type": "string"
+        },
+        "stage": {
+          "title": "Stage",
+          "type": "string"
+        },
+        "started_at": {
+          "format": "date-time",
+          "title": "Started At",
+          "type": "string"
+        }
+      },
+      "required": [
+        "stage",
+        "started_at",
+        "finished_at"
+      ],
+      "title": "StageTiming",
+      "type": "object"
+    }
+  },
+  "description": "What one run has to say that its :class:`SyncRunRecord` cannot hold, keyed by its run id.\n\nSee \"What the record cannot hold\" in the module docstring. Codes, counts and hints: the same\nrule as the record about what may never be in one.\n\n`extra=\"ignore\"` is the point of the class. A key this build does not know is one a later build\nadded, and is passed over, so adding to the details never needs another file.",
+  "properties": {
+    "bucket_run": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/BucketRunDetails"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "data_volume": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/DataVolume"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "failure_codes": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "title": "Failure Codes",
+      "type": "array"
+    },
+    "held_by_request": {
+      "additionalProperties": {
+        "type": "integer"
+      },
+      "title": "Held By Request",
+      "type": "object"
+    },
+    "hint": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Hint"
+    },
+    "manifests_published": {
+      "default": 0,
+      "minimum": 0,
+      "title": "Manifests Published",
+      "type": "integer"
+    },
+    "parse": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ParseCounts"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "run_id": {
+      "pattern": "^\\d{8}T\\d{6}Z$",
+      "title": "Run Id",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": 1,
+      "default": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    },
+    "search_index": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/SearchIndexCounts"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "stage_times": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/StageTiming"
+      },
+      "title": "Stage Times",
+      "type": "array"
+    },
+    "stages": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/StageDetails"
+      },
+      "title": "Stages",
+      "type": "array"
+    }
+  },
+  "required": [
+    "run_id"
+  ],
+  "title": "SyncRunDetails",
+  "type": "object"
+}

@@ -226,7 +226,9 @@ def test_an_installed_dev_build_run_from_home_gets_the_dev_profile_and_the_casel
     )
 
 
-@pytest.mark.parametrize(("environment", "budget"), [("dev", 2.0), ("prod", 20.0)])
+# Dev's $2 a day is the capped sample's allowance; prod's $1.50 is the coach's $50 a month over thirty
+# days (v1-e05-t15). Different values, so a build that read the other environment's profile shows.
+@pytest.mark.parametrize(("environment", "budget"), [("dev", 2.0), ("prod", 1.5)])
 def test_config_show_differs_between_dev_and_prod_in_an_installed_build(
     environment: str, budget: float, bundled: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -238,6 +240,7 @@ def test_config_show_differs_between_dev_and_prod_in_an_installed_build(
     assert data["storage.data_dir"] == str(Path(f"~/.debate-research/{environment}").expanduser())
     assert data["models.routing_file"] == str(bundled / "config" / f"model_routing.{environment}.yaml")
     assert data["models.budget_usd_daily"] == budget
+    assert data["models.budget_usd_monthly"] == 50.0
 
 
 def test_the_environment_turns_the_bundled_caselist_gate_off(

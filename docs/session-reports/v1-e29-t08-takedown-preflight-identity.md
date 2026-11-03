@@ -569,3 +569,15 @@ waits.
 **After the merge:** the dev `terraform plan` (your follow-up 3), the probe counts (1, and 2 if a
 count is not zero), and optionally the refusal seen in dev (5). The prod plan follows the next
 promotion. I record the results at close-out.
+
+## Operator records (recorded by the PM, 2026-10-21)
+
+Added by the PM. Nothing above is changed, and this section is not a review.
+
+| Criterion | Was | Now | Record |
+|---|---|---|---|
+| ac3, counts | NOT RUN | PASS | The operator's listing of preflight probes (Operator follow-up 1), 2026-10-20: `0` in dev and `0` in prod. No probe needs deleting |
+| ac4, plan | NOT RUN | Dev: PASS. Prod: open | `terraform -chdir=infrastructure/envs/dev plan`, 2026-10-20, from the dev-preview worktree with its `owner.auto.tfvars` complete: `No changes.` The first plan, before the pilot's lines were in that file, proposed destroying the pilot's permission-set assignments and was not applied (see `docs/runbooks/evidence-search.md`, "Every later apply needs the same lines"). The prod plan runs from the `main` worktree at the promotion |
+
+The Goal stays `InProgress` until the prod plan is recorded.
+

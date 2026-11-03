@@ -1,0 +1,124 @@
+# TASK v1-e32-t06-ld-de-extinction-taxonomy - LD de-extinction position taxonomy
+# Epic: E32 Argument Landscape Reports | Release: v1.2 (Argument landscape & file building) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e32-t06-ld-de-extinction-taxonomy
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e32-argument-landscape
+  annotations:
+    debate/title: "LD de-extinction position taxonomy"
+spec:
+  # Filed by the PM, 2026-10-22, from the coach's priorities of 2026-10-22 (LD moves to the de-extinction topic after its last two space colonization tournaments).
+  description: >-
+    The LD position taxonomy for the November-December 2026 de-extinction topic, built with
+    v1-e32-t01's seeding script and file format: values and criteria/standards, affirmative
+    contention types and plans where teams read them, and the negative's DAs, CPs, Ks and
+    theory, with generic.yaml reused for format-level positions (LD tricks, phil frameworks).
+    The coach supplies the resolution's wording and its date range for
+    `config/landscape/topics.yaml`; the session never writes a resolution from memory. Seeding
+    first counts how many disclosed hsld26 files the store holds on the new topic, and seeds
+    only from headings it holds; with too few files the task stops and says so in its report,
+    and the coach decides when to run it again. The space colonization topic keeps its date
+    range with no taxonomy, so earlier snapshots resolve. No code changes are expected beyond
+    what t01 built; if t01's seeding or loader needs a change for LD, it is made here and named
+    in the report.
+    (PM amendment 2026-10-30, the coach's word of 2026-10-30.) The resolution, as the coach gave
+    it: "Resolved: De-extinction is unethical". Its range for hsld26: 2026-11-01 to 2026-12-31.
+    The task starts after the weekly run of 2026-11-04 has pulled the first weekend of
+    tournaments on it, and seeds from that run's state through v1-e40-t17's restored copy
+    (the operator's data directory stopped at the cutover).
+    (PM amendment 2026-11-01, the coach's word of 2026-11-01, superseding the hsld26 range above.)
+    For hsld26 the topic follows the tournament, not the snapshot alone. De-extinction covers the
+    Florida Blue Key Speech and Debate Tournament (October 30 to November 1, 2026) and every tournament
+    starting on or after Friday 2026-11-06. Every other tournament starting before 2026-11-06 is space
+    colonization. So the weekly snapshot of 2026-11-03 (the run of 2026-11-04) holds both topics, and
+    a later snapshot can hold a late disclosure from an earlier tournament. Tournament names are
+    public and may be written in `config/landscape/topics.yaml`. Count first, before any rule, in
+    counts only: what the stored rounds carry to decide by (a tournament name, a round or tournament
+    date); how many of the 2026-11-03 snapshot's hsld26 disclosures are Florida Blue Key's; and how
+    many disclosures in snapshots from 2026-11-10 name a tournament from before 2026-11-06. Then send
+    the PM the rule's form before building it: for example, a per-tournament entry beside the date
+    ranges, and what a disclosure naming no tournament resolves to. The loader change it needs is this
+    task's, and every earlier snapshot still resolves as it does today.
+    (PM amendment 2026-11-01, from v1-e08-t04's question 5.) Once the de-extinction resolution is
+    committed in `topics.yaml`, add its topic preset to `config/argument_taxonomy.yaml` (the topic value
+    taken word for word from the committed resolution, as the NHI preset's is, with the same test) and
+    propose the topic's own LD arguments there for the coach's review. The generic LD framing (util,
+    deontology, structural violence, theory) stays as v1-e08-t04 wrote it.
+  priority: 2
+  constraints:
+    packages: [config/landscape, scripts, debate_core.arguments, debate_core.application, debate_core.integrations, packages/debate_core/tests, tests/config, docs/guides, config/argument_taxonomy.yaml]
+    forbidden:
+      - Debater names, team codes or initials anywhere in taxonomy YAML or seeding fixtures
+      - Hardcoding caselist slugs or topic wording in Python code (config only)
+      - Writing a resolution's wording from memory; the coach supplies it
+      - Model calls in the taxonomy loader or seeding step (seeding is deterministic)
+      - Committing the real parsed corpus or heading dumps that include source paths with team codes
+  context:
+    - kind: TaskRef
+      name: v1-e32-t01-position-taxonomy
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        `config/landscape/topics.yaml` maps hsld26 for the de-extinction date range the
+        coach gave to a new taxonomy file, and keeps the space colonization range with no
+        taxonomy.
+    - id: ac2
+      description: >-
+        The de-extinction taxonomy has at least 12 active positions seeded from hsld26
+        headings, each with a stable id, label, kind, side and at least one heading alias,
+        and passes t01's loader and config tests.
+    - id: ac3
+      description: >-
+        The report records how many disclosed hsld26 files on the new topic the seeding
+        counted, the candidate count, and how many candidates the coach kept, merged or
+        dropped, as counts only.
+    - id: ac4
+      description: >-
+        The coach has reviewed the seeded file, and a `landscape report --caselist hsld26`
+        dry run on the newest snapshot resolves the new topic.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e32-t06-ld-de-extinction-taxonomy-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e32-argument-landscape
+spec:
+  description: >-
+    Once the coach gives the wording and date range and the store holds enough de-extinction
+    files: count the files, run t01's seeding over hsld26, curate the candidates with the coach,
+    write the taxonomy file and its topics.yaml range, and run t01's config tests.
+  goalRef:
+    name: v1-e32-t06-ld-de-extinction-taxonomy
+  graph:
+    nodes:
+      - id: seed-and-curate
+        kind: Task
+        name: Seed and curate the de-extinction taxonomy
+        description: >-
+          Once the coach gives the wording and date range and the store holds enough
+          de-extinction files: count the files, run t01's seeding over hsld26, curate the
+          candidates with the coach, write the taxonomy file and its topics.yaml range,
+          and run t01's config tests.
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Taxonomy config tests pass
+            command: uv
+            args: [run, pytest, tests/config/test_landscape_taxonomies.py]
+status:
+  phase: Pending

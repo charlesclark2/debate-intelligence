@@ -6,7 +6,7 @@
 | Spec | [`plan_specs/v1/e32-argument-landscape/t43-model-evaluation-system-score-refusals-and-a-second-route.yaml`](../../plan_specs/v1/e32-argument-landscape/t43-model-evaluation-system-score-refusals-and-a-second-route.yaml) |
 | Epic / release | `v1-e32-argument-landscape` / `v1.2` |
 | Branch | `task/v1-e32-t43-model-evaluation-system-score-refusals-and-a-second-route` |
-| Session status | PARTIAL: rulings 1 and 2 done; ruling 3 waits on the PM's choice of route and of how the second recording is kept apart |
+| Session status | COMPLETE for the session: ac1 and ac2 pass; ac3 is the operator's recording on dev's `deep_audit` route and the PM's record of it |
 
 ## Summary
 
@@ -17,19 +17,22 @@ counted, correct, refused, below-threshold, accuracy and coverage (counted over 
 (`pipeline`, `model_alone`, `bar_reads`) and the display; the bar reads the pipeline's accuracy, the PM's
 ruling. The replay of the 1.1.0 cassettes gives the pipeline **21 of 33, 0.636** (the PM's estimate),
 beside the model alone's 19 of 32, 0.594. The 10 refusals of labelled cards are explained from counts
-below, with a proposed prompt change for the PM to rule on; the refusals cost coverage, and even all 10
+below, with a proposed prompt change, which the PM files as its own task after ac3's result; the refusals cost coverage, and even all 10
 answered rightly would make the pipeline 0.721, so the wrong answers are what keep it under the bar.
-**The PM's decision is needed** on ruling 3 (the [relay](#the-pm-relay-route-mechanism-and-the-refusal-proposal)):
-the cassette key does not separate routes or models, so a second recording on any route would overwrite
-the three 1.1.0 cassettes; the session recommends dev's `deep_audit` route (Claude Sonnet 4.6, $0.175 at
-this evaluation's tokens) and a small router change to keep its cassettes apart. The Goal stays
-`InProgress`: ac3 is the operator's recording, recorded by the PM.
+**Ruling 3, after the PM's rulings of 2026-11-03**: dev's `deep_audit` route (Claude Sonnet 4.6, about
+$0.17) and mechanism (A). `landscape evaluate --route <task class>` makes the named route stand in for
+`high_volume` in `build_model_router`, for the real router and the budget guard alike, and records to,
+replays and scans `<data dir>/landscape/model-cassettes-<route>/`, never the default directory (a test
+records on `deep_audit` and finds the default directory untouched); `landscape cassettes --route` lists
+and deletes them. The operator's one block is under [Operator follow-ups](#operator-follow-ups). The
+Goal stays `InProgress`: ac3 is that recording and the PM's record of it in docs/data. A test that
+fails on this Mac at the task's start commit too is noted under [Checks](#checks-run-before-this-report).
 
 ## Plan nodes
 
 | Node | Status | Notes |
 |---|---|---|
-| `model-evaluation-system-score-refusals-a` (System score) | IN PROGRESS | Rulings 1 and 2 done and committed; ruling 3's code and recording block wait on the PM |
+| `model-evaluation-system-score-refusals-a` (System score) | IN PROGRESS | Rulings 1, 2 and 3's code and block done and committed; ac3 is the operator's recording and the PM's record |
 
 ## Acceptance criteria
 
@@ -37,8 +40,8 @@ this evaluation's tokens) and a small router change to keep its cassettes apart.
 |---|---|---|
 | ac1: the pipeline's score beside the model's own, in the JSON and the breakdown, by tests shown failing first, with the PM's ruling on which the bar reads | PASS | Red run against a skeleton: 14 failed at their assertions, 1 passed ([below](#ruling-1-the-pipelines-score)). Green: `.venv/bin/python scripts/hard_stop.py 115 .venv/bin/python -m pytest -n 4 <the 5 evaluation test files>` → 200 passed in 19.03s. Replay `landscape evaluate --breakdown --json` → pipeline 21 of 33 (0.636), model alone 19 of 32 (0.594), `bar_reads` `pipeline`, exit 1 `EVALUATION_BELOW_BAR`. The ruling (the bar reads the pipeline) is the PM's of 2026-11-02, in `TARGET_ACCURACY`'s docstring, `BAR_READS`, the CLI help and both runbooks |
 | ac2: the 10 refusals of labelled cards explained from ids and counts, with a proposed change and its evidence | PASS | [Ruling 2](#ruling-2-the-10-refusals-of-labelled-cards) below and `docs/data/landscape-model-evaluation.md`; the proposal is the PM's to rule on and is not built |
-| ac3: the operator's recording on the second route the PM approved, and the side-by-side counts and cost, in docs/data | NOT RUN | Waits on the PM's choice of route and mechanism ([relay](#the-pm-relay-route-mechanism-and-the-refusal-proposal)), then the operator's recording, then the PM's record |
-| Node: `uv run pytest packages/debate_core/tests packages/debate_cli/tests -k evaluat` | PASS | Run as `.venv/bin/python scripts/hard_stop.py 115 .venv/bin/python -m pytest packages/debate_core/tests packages/debate_cli/tests -k evaluat -q --tb=short -n 4` → 97 passed in 46.58s |
+| ac3: the operator's recording on the second route the PM approved, and the side-by-side counts and cost, in docs/data | NOT RUN | The PM approved dev `deep_audit` and mechanism (A) on 2026-11-03; the `--route` option is built and tested; the recording is the operator's ([the block](#operator-follow-ups)), and the side-by-side table is the PM's to record in docs/data. No session can close it |
+| Node: `uv run pytest packages/debate_core/tests packages/debate_cli/tests -k evaluat` | PASS | Run as `.venv/bin/python scripts/hard_stop.py 115 .venv/bin/python -m pytest packages/debate_core/tests packages/debate_cli/tests -k evaluat -q --tb=short -n 4` → 97 passed in 46.58s after rulings 1 and 2; 103 passed in 12.20s after ruling 3 (the route tests are named `test_evaluate_…`) |
 
 ### Checks run before this report
 
@@ -55,6 +58,26 @@ this evaluation's tokens) and a small router change to keep its cassettes apart.
   passed twice since; CI's run will name it if it fails again.
 * The test files changed, and the always-run CLI wiring tests among the first 45 files, passed in those
   runs; the evaluation tests passed as recorded above.
+
+**After ruling 3** (the route): `ruff format --check .`, `ruff check .` → all checks passed (after one
+commit, `73f6516`, went in with a line one character over the limit: its check was piped to `tail`,
+which hid the exit code; fixed in the next commit); `pyright packages/debate_core packages/debate_cli`
+→ 0 errors; `lint-imports` → 20 kept; `check_thin_handlers.py` → OK; `check_command_blocks.py` → OK;
+`validate_specs.py` → OK. The affected set is now 455 of 672 test files (the router package reaches
+most of the suite): CI's. Within two minutes the session ran the always-run list, both changed
+packages' router and evaluation tests, the Bedrock adapter's, the budget's, the routing-file checks and
+the two runbook tests: `.venv/bin/python scripts/hard_stop.py 115 .venv/bin/python -m pytest -n auto -m
+"not slow and not live" tests/architecture tests/specs packages/debate_cli/tests/test_app.py … ` →
+**1 failed, 1387 passed in 48.53s**.
+
+**The one failure, noted as the PM asked**:
+`packages/debate_cli/tests/test_container_factories.py::test_every_factory_builds_and_between_them_they_import_every_wired_integration`,
+on its planted break: `debate_core.integrations.discovery.feed_config: discovery_providers() under the
+test profile built without it`. It is not this branch's: with `packages/` checked out at the task's start
+commit (`807ab22`) it fails the same way, alone (`-n 0`) and under `-n 4`. It passed at 21:40 inside the
+first 20 affected files' run, and has failed on every run since about 21:45 (2026-11-02, this Mac), so it
+looks like this machine's state rather than code; it may be the 11% failure above. It is on the
+always-run list, so CI's run will say whether it fails there too.
 
 ## Ruling 1: the pipeline's score
 
@@ -201,6 +224,46 @@ and parameters stand in for `high_volume`'s, and its cassettes go under a direct
 deletion of cassettes must reach them). The options are in the relay. The recording block follows the
 PM's answer.
 
+### What was built, after the PM's rulings (2026-11-03)
+
+* **`RoutingPolicy.standing_in(route, for_class=…)`** and **`build_model_router(…, stand_ins=…)`**: the
+  policy is changed once, before the real router and the budget guard's `RoutePricing` are given it, so
+  the calls go to the named route's model and the guard prices that model's ceiling. Only a generative
+  route stands in for a generative class (`RoutingConfigError` otherwise). The prompt keeps the task class
+  it declares; replay and the fake read no route.
+* **The container**: `landscape_evaluation(…, route=…)`, `landscape_model_stage(…, route=…)` and
+  `landscape_cassettes(route)`; the directory is `cassette_directory_name(route)`,
+  `model-cassettes-<route>` beside `model-cassettes`.
+* **`landscape evaluate --route <task class>`**: record, replay and `--breakdown` all read the route's
+  directory, and so does the cassette scan; `data.route` names the route that answered (`high_volume`
+  without the option). `embeddings` and `rerank` are refused, exit 2 `ROUTE_NOT_GENERATIVE`, before
+  anything is built; `--check-sample` takes no `--route`.
+* **`landscape cassettes --route <task class>`** counts and deletes that directory's cassettes, naming it
+  as `<data dir>/landscape/model-cassettes-<route>/`.
+* **Docs**: the record runbook's section "Recording on another route" holds the block; the purge and
+  removal runbooks say where a route's cassettes are and to tell the PM before closing (see Deviations).
+
+**Red first.** The new tests at HEAD against the five source files at the commit before the route
+(`8125592`): **11 failed, 21 passed in 2.58s**. The reasons show the interface absent rather than a
+behaviour wrong: the CLI tests got a usage error (no `--route` option) or a `KeyError: 'route'`, and the
+factory tests a `TypeError` (no `stand_ins` parameter). The mutants below are what test the behaviour.
+
+**Mutants of the route**, each against the committed code, the four route test files run, restored from
+HEAD; all ten caught:
+
+| Mutant | Caught by |
+|---|---|
+| The factory ignores the stand-ins | 5 tests |
+| The budget guard prices the file's own route (the stand-in reaches the router only) | `test_the_budget_guard_prices_the_stand_in_routes_ceiling` |
+| A route that answers no prompt stands in | 2 tests |
+| A route records to the default directory | 3 tests, among them the PM's: `test_evaluate_record_on_a_route_writes_only_that_routes_directory` |
+| The container passes no stand-in (the directory changes, the model does not) | `test_evaluate_record_on_a_route_writes_only_that_routes_directory` |
+| The evaluation scans the default directory | the same test's scan assertion, added for it before the run |
+| `evaluate` drops `--route` | 3 tests |
+| `evaluate` takes any route | 2 tests (the factory's own refusal stands behind it, with another code) |
+| `--check-sample` takes `--route` | 1 test |
+| `landscape cassettes` ignores `--route` | 1 test |
+
 ### The PM relay: route, mechanism and the refusal proposal
 
 > **v1-e32-t43 asks the PM three things** (2026-11-02).
@@ -241,6 +304,11 @@ PM's answer.
 >
 > Answer 1 and 2 and the session builds the option, then writes the operator's one recording block.
 
+**The PM's answer (2026-11-03)**: 1, dev `deep_audit`; 2, (A), with the spec amended (packages gain
+`debate_core.integrations.models`) and a test that a `--route` recording never writes the default
+directory; 3, not built here: the PM files prompt 1.2.0 as its own task after ac3's result, carrying (a),
+(b) and the labelling convention (the first item under Follow-up work), if the coach confirms it.
+
 ## Files changed
 
 * `packages/debate_core/src/debate_core/arguments/landscape/evaluation_breakdown.py`: `LabelledScore`,
@@ -260,6 +328,17 @@ PM's answer.
   (the pipeline's counts, by hand: 4 of 4, 2 by the headings).
 * Docs: `docs/data/landscape-model-evaluation.md` (the replay's two scores and the refusal counts), both
   evaluation runbooks (what the bar reads).
+* Ruling 3: `debate_core/integrations/models/routing_policy.py` (`standing_in`) and `factory.py`
+  (`stand_ins`); `debate_cli/container.py` (the route through the evaluation, the stage and the
+  cassettes; `cassette_directory_name`); `commands/landscape.py` (`--route`, `data.route`,
+  `ROUTE_NOT_GENERATIVE`); `commands/landscape_cassettes.py` (`--route`). Tests: `test_factory.py`
+  (the stand-in reaches the real router and the guard's pricing; generative only),
+  `packages/debate_cli/tests/test_landscape_evaluate_route.py` (new: record, replay, the default
+  directory untouched and finding nothing, `landscape cassettes --route`, refusals),
+  `test_container_factories.py` (values for `route`), `test_landscape_command.py` (the stubs take
+  `route`; `data.route`). Docs: the record runbook's route section; a paragraph each in
+  `annual-purge.md` and `caselist-removal.md`. Spec: the packages amendment, the ruling as a comment
+  above it.
 
 ## Deviations from the spec
 
@@ -271,8 +350,16 @@ PM's answer.
 * **The replay and the two counting scripts were run by the session**, not the operator: read-only,
   offline, over this Mac's store and cassettes, 113 s, 33 s and 32 s (agreement 2). The replay runbook
   calls the replay the operator's.
-* **Ruling 3 needs code the spec's packages may not hold** (the router factory is in
-  `debate_core.integrations.models`); the relay asks.
+* **Ruling 3 needed code outside the spec's packages** (the router factory); the PM amended the spec on
+  2026-11-03, and this branch carries the amendment.
+* **The purge and removal runbooks get a paragraph, not blocks.** Their cassette blocks are pinned by
+  `tests/docs/test_annual_purge_runbook.py` and `tests/docs/test_removal_runbook_cassettes.py` (one
+  listing and one delete; a dry run and a delete), outside the spec's packages, and a block for each route
+  directory needs its own code per directory. So each says where a route's cassettes are, that
+  `landscape cassettes --route` reaches them, and to tell the PM before closing if a `model-cassettes-`
+  directory exists. Blocks for them are under Follow-up work.
+* **The recording runs from this task's worktree** (the block's `cd`), since `--route` is not on `dev`
+  until this branch merges; the runbook's copy says to run it from a checkout that has the option.
 
 ## Decisions and assumptions
 
@@ -290,7 +377,44 @@ PM's answer.
 
 ## Operator follow-ups
 
-None yet. The recording block for ac3 follows the PM's answer to the relay.
+### 1. The second route's recording (ac3)
+
+**Operator command** (expected runtime 3 to 5 minutes; about $0.17 on Bedrock)
+Where: your Mac, in this task's worktree, which has `--route` before it reaches `dev`. In order: the
+sample check, the Bedrock login check, the recording on `deep_audit`, then the breakdown replaying it. A
+`STOP:` line stops it before any model call. It is the record runbook's "Recording on another route"
+block, with the `cd` first.
+
+```bash
+cd /Users/charlesclark/Documents/debate/debate-intelligence-tool/debate-intelligence-worktrees/v1-e32-t43-model-evaluation-system-score-refusals-and-a-second-route
+SAMPLE=~/Documents/debate/landscape-review/policy-2026-27-nhi-coach-sample-labelled.csv
+ROWS=~/.debate-research/dev/landscape/local-classifier/hspolicy26/policy-2026-27-nhi-coach-sample.jsonl
+if env | grep -q '^DEBATE_'; then echo "STOP: a DEBATE_ variable is set; unset it and paste again"; elif pgrep -f "caselist pull" >/dev/null; then echo "STOP: a caselist pull is running; wait for it to finish"; elif ! uv run debate-research --json landscape evaluate --caselist hspolicy26 --snapshot 2026-10-20 --sample "$SAMPLE" --sample-rows "$ROWS" --check-sample; then echo "STOP: the sample check failed; paste its JSON and record nothing"; elif ! aws sts get-caller-identity --profile debate-dev-bedrock >/dev/null; then echo "STOP: the Bedrock profile is not logged in; log in and paste again"; else uv run debate-research --json landscape evaluate --caselist hspolicy26 --snapshot 2026-10-20 --sample "$SAMPLE" --sample-rows "$ROWS" --model-mode record --route deep_audit; uv run debate-research --json landscape evaluate --caselist hspolicy26 --snapshot 2026-10-20 --sample "$SAMPLE" --sample-rows "$ROWS" --breakdown --route deep_audit; fi
+```
+
+Success looks like three JSON objects: the sample check with `labelled` 47; the recording with `route`
+`deep_audit`, `prompt_version` `1.1.0`, `labelled`, `found` and `asked` 47 and `calls` 3 or 4 (exit 0
+when the pipeline meets the bar and every scan is clean, otherwise exit 1 `EVALUATION_BELOW_BAR` with the
+counts in `error.details`); and the breakdown with the same counts and `breakdown.outcomes` summing to
+47. **Paste the three JSON objects back, and nothing else.** A stop before any answer
+(`MODEL_ACCESS_DENIED`, a budget refusal) recorded nothing: paste it and do not run it again before the
+PM has read it. Nothing under `~/.debate-research/dev/landscape/model-cassettes/` changes; the recording
+lands in `model-cassettes-deep_audit/`.
+
+### 2. Only if a scan count in the recording is above zero: the hits, in the terminal
+
+**Do not paste or copy this output anywhere**, a Claude session included. Give each hit's number and
+whether its words name a team, a school or a tournament, or are an ordinary word that shares them.
+
+```bash
+cd /Users/charlesclark/Documents/debate/debate-intelligence-tool/debate-intelligence-worktrees/v1-e32-t43-model-evaluation-system-score-refusals-and-a-second-route
+SAMPLE=~/Documents/debate/landscape-review/policy-2026-27-nhi-coach-sample-labelled.csv
+ROWS=~/.debate-research/dev/landscape/local-classifier/hspolicy26/policy-2026-27-nhi-coach-sample.jsonl
+if env | grep -q '^DEBATE_'; then echo "STOP: a DEBATE_ variable is set; unset it and paste again"; else uv run debate-research landscape evaluate --caselist hspolicy26 --snapshot 2026-10-20 --sample "$SAMPLE" --sample-rows "$ROWS" --breakdown --route deep_audit; fi
+```
+
+Then the PM records the side-by-side table in `docs/data/landscape-model-evaluation.md`: accuracy for
+the model alone and the pipeline, refusals and cost, `high_volume` (Haiku 4.5) beside `deep_audit`.
 
 ## Follow-up work
 
@@ -298,6 +422,10 @@ None yet. The recording block for ac3 follows the PM's answer to the relay.
   kind, 1 placed though labelled none). 4 of the 5 other-kind answers are of cards in a file read by the
   side opposite the label's, where the coach labels the position the card answers: a labelling convention
   the prompt's "the argument the card is read as" does not state. E32, the PM's to file.
+* **Purge and removal blocks for a route's cassettes**: the two runbooks' cassette steps run the default
+  directory only, and say in a paragraph to tell the PM when a `model-cassettes-<route>` directory exists.
+  A block per route directory (with its own confirmation code) and its runbook tests belong in E32, the
+  PM's to file; `landscape cassettes --route` already does the work.
 * **A null answer's confidence** carries no steady meaning (0.15 to 0.3 in one batch, 0.5 to 0.7 in the
   next); the stage discards it. Nothing to change unless a later rule reads it.
 

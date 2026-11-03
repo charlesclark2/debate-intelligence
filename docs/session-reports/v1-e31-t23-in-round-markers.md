@@ -198,9 +198,51 @@ and 2026-11-03 tables.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-11-03
 
 **Notes:**
+
+Counted before any rule, sampled before the larger one, stopped at the gate when it moved by a single
+reading, and finished by a blind check rather than an argument. That is the order this work should
+always take.
+
+1. **ac1 passes.** 96 marker lines of the three clear forms in 287,545 cards, one cluster split, and the
+   third reading (`Marked 10:42` read as a cite that cut its card) found by the count, not assumed.
+2. **ac2 passes.** M3 red first at `c782278` (9 failed by assertion), green at `5720a62`. The bold-marker
+   expectation corrected after the red run is the "reads as it would otherwise" the ruling meant;
+   accepted, as said on 2026-11-03.
+3. **ac4 passes, and the PM checked the arithmetic.** Full tier: 930/958 = 0.9708 with N1 off, 955/984 =
+   0.9705 with N1 on and the old label, 956/984 = 0.9715 on `docx-9` after #814. N1-off reads paragraph
+   16 as nothing, so its precision is unchanged by the label and the comparison is like for like. Recall
+   0.8824 to 0.9062, the PR subset up, no group below its N1-off figure, no card boundary moved.
+4. **The label change was done the right way.** The coach answered **s** blind, with no label, reading
+   or rule shown. The pre-label was restored from git (`7a9c4ff`), so the count landed at 75 of 255, the
+   coach's 74 and this one, one of the two values the PM said would prove the right version; the file
+   stays in the blind comparison. It went in as its own pull request (#814), holding the label file and
+   its pre-label only, and the baseline did not change.
+5. **Deviations accepted.** (1) The cite-shape guard (t21's `is_cite_shaped`), confirmed on 2026-11-03:
+   197 lines kept as today, counted apart from the ruled guard's 595. (2) The gate's fall and the label
+   change, recorded in full; Option B, the PM's acceptance of the fall, was not needed and is void. (3)
+   Every recorded figure is `docx-9`'s, equal to `docx-8`'s but for t32's 5 cards.
+6. **The store:** 13,905 lines made body (10,692 sentences, 3,213 long lines) in 5,831 cards, 0 other
+   cards changed. These are the author's words coming back into cards, at about 1 foreign line in 26 by
+   the labelled check.
+7. **Planted breaks:** every one caught by assertion, the form guard's survivor closed with the two
+   lines only it keeps out, and the crashed break replaced rather than counted (agreement 8).
+8. **ac3, the re-parse, is re-timed by the PM.** It rides the same image as v1-e31-t32's step 4, so one
+   full re-parse carries `docx-9`, and one restored copy after that run serves both tasks' "after"
+   counts (t32's step 5 and this task's block, with `--expect-version 2026.11.03-docx-9`). The before
+   figures are the parse report's (the Mac's store, which lacks the cloud's weeks); the record says the
+   two populations differ. The copy is deleted after both counts (data-use policy 1.18), which the block
+   above leaves out.
+9. **Follow-ups the PM files in the next batch:** a larger sample of the two strata N1 leaves (15,611 and
+   7,803 lines); the bold marker that reads as a tag; and a refreshed parser-evaluation baseline (still
+   `docx-5`'s), through a coach-reviewed report.
+10. **Closing checks:** the affected set (293 files) is left to `ci` (agreement 10); the bounded run of
+    the changed directories, the always-run list and the script tests (3,827 passed), ruff, pyright,
+    lint-imports, thin handlers, command blocks and the specs are clean, after syncing onto #814.
+11. **Merge:** `scripts/task pr --partial` once `ci` is green. The Goal stays `InProgress` until the
+    re-parse's counts are recorded.

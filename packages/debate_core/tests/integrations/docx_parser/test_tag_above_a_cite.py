@@ -381,7 +381,7 @@ class TestWhatTheRuleLeaves:
 class TestTheParserVersion:
     def test_it_is_the_version_this_task_bumped_to_or_a_later_one(self) -> None:
         """`2026.10.20-docx-6`, or one a later task bumped to (`v1-e31-t31`: `2026.10.27-docx-7`;
-        `v1-e31-t32`: `2026.11.03-docx-8`)."""
+        `v1-e31-t32`: `2026.11.03-docx-8`; `v1-e31-t23`: `2026.11.03-docx-9`)."""
         assert parse_version_directory(DOCX_PARSER_VERSION) >= parse_version_directory("2026.10.20-docx-6")
 
     def test_its_directory_sorts_after_the_store_it_replaces(self) -> None:

@@ -2195,3 +2195,282 @@ Not run yet. The cloud run's first run on an image carrying `2026.11.03-docx-8` 
 in full (`v1-e40-t08`). Its counts, from a copy of the dev bucket restored before that run and one
 restored after it (`scripts/count_tags_by_rule.py`), are recorded here by whoever closes the task;
 the steps are in `docs/session-reports/v1-e31-t32-bold-in-part-tags.md`, Operator follow-ups.
+
+## In-round markers and the short lines between body paragraphs (`v1-e31-t23`)
+
+A debater who stops reading a card in a round marks the place (`Marked 10:42`), and later copies
+carry the mark. `v1-e31-t19`'s item (5) left a second population for the same ruling: short plain
+lines read as nothing between two body paragraphs of one card. Both are counted here by **form**, a
+pattern id from
+[`in_round_markers.py`](../../packages/debate_core/src/debate_core/evidence/in_round_markers.py),
+never by their text.
+
+**Status: counted (operator-run, 2026-11-02) and ruled (the PM, 2026-11-03).** Markers are left as
+they are (M1). An in-round marker is never read as a cite (M3), and N1 reads two strata of the lines
+between body paragraphs as body, from parser `2026.11.03-docx-9`. N1's labelled evaluation first
+showed EVIDENCE precision falling by one reading. The coach, asked blind, called that paragraph the
+source's own text, and its label was corrected (#814). On `docx-9` precision then rises, 0.9708 →
+0.9715. The store has not been re-parsed with `docx-9`.
+
+**Versions.** The measurements below were taken on this task's branch while it carried
+`2026.11.03-docx-8`: M3 and N1 on `v1-e31-t31`'s `docx-7`. `v1-e31-t32` then merged first with its
+own `2026.11.03-docx-8`, so this task's rules ship as `2026.11.03-docx-9`, which is t32's rule, M3 and
+N1 together (the PM, 2026-11-03). Where a table below says `docx-8`, it means the branch's reading
+before t32 merged.
+
+`scripts/count_in_round_markers.py`, run by the operator on 2026-11-02 in 661 seconds over the dev
+data directory on the operator's Mac. That store holds hspolicy26 at `2026.10.27-docx-7` and hsld26,
+hspf26 and openev at `2026.10.20-docx-6`. Every one of its 13,518 parsed sources was parsed again by
+`2026.10.27-docx-7`, and every line below is counted on that parse: 0 without a blob, 0 not parsed,
+287,545 cards. 331 sources of the three `docx-6` caselists give cards other than the stored ones
+(`v1-e31-t31`'s rules). The cluster join uses each caselist's stored occurrence table
+(`card-fingerprint-v4`), which held every exact fingerprint the counts asked about.
+
+### The forms
+
+| Form id | What it takes |
+|---|---|
+| `marker-word-and-clock-time` | A line of 60 characters or fewer that opens with a marker word (`mark`, `marked`, `marking`, `stop`, `stopped`) or a time, and holds both |
+| `clock-time-alone` | A time and punctuation |
+| `marker-word-alone` | A marker word, with `here`, `card` or `reading` at most |
+| `marker-word-opens-a-short-line` | Any other line of 60 characters or fewer that opens with a marker word |
+| `marker-word-and-clock-time-inside-a-line` | A marker word followed by a time inside a line none of the above takes |
+| `number-alone`, `no-letter-or-digit`, `omission-note` | A page or footnote number; punctuation alone; `[Table omitted]` and the like |
+| `no-marker-form` | Anything else |
+
+The first four are the **marker forms**: whole lines a ruling could record as markers. The forms are
+shapes, not judgements. A verse reference such as `Mark 10:45` has the first form's shape, and
+`Marked increases` the fourth's. Nobody has checked any of these lines by eye.
+
+### How a marker is read today
+
+The synthetic fixtures found three readings, and the counts find all three:
+
+* **as body** when it is typed into the small print or marked-up text and takes its formatting;
+* **as nothing** when it is plain at reading size;
+* **as a cite** when it opens with a capital and its hour is two digits: `heuristic-cite-line-author-year`
+  takes `Marked 10` for a name and a two-digit year. The card ends at the marker, and the rest of its
+  body is a card with no tag whose cite is the marker.
+
+Whole lines of a marker form:
+
+| Caselist | Read as body | Read as nothing | Read as a cite |
+|---|---|---|---|
+| hsld26 | 23 | 44 | 3 |
+| hspf26 | 15 | 9 | 0 |
+| hspolicy26 | 68 | 7 | 3 |
+| openev | 1 | 0 | 0 |
+| **Total** | **107** | **60** | **6** |
+
+By form and place, all caselists:
+
+| Form | Read as body | Read as nothing | Read as a cite |
+|---|---|---|---|
+| `marker-word-and-clock-time` | 10: inside the body 8, the end 2 | 3: after a body 2, elsewhere 1 | 4: below a body opening a card with no tag 1, below a body as a card on its own (`CITE_ONLY`) 1, elsewhere 2 |
+| `clock-time-alone` | 21: inside 17, first line 2, the end 2 | 43: between two body paragraphs 7, after a body 9, elsewhere 27 | 0 |
+| `marker-word-alone` | 3: inside 3 | 12: between two body paragraphs 11, after a body 1 | 0 |
+| `marker-word-opens-a-short-line` | 73: inside 67, first line 5, the end 1 | 2: between two body paragraphs 1, after a body 1 | 2: elsewhere 2 |
+
+By the rule that read them: of the 107 read as body, 87 were small print (`heuristic-shrunk-body-text`),
+17 marked up, 2 in a body style by its name and 1 a cite guess an open body took. All 60 read as nothing are `heuristic-unclassified-paragraph`. 4 of the 6 read as a
+cite are `heuristic-cite-line-author-year`, and 2 carry the cite character style.
+
+`marker-word-and-clock-time-inside-a-line`, a marker word and a time inside a longer line: 846 lines
+read as body in 564 files (hsld26 490, hspf26 25, hspolicy26 330, openev 1), 807 of them in
+marked-up text. Debaters mark up a source's words, not their own notes, so this shape is probably
+mostly the source's prose. It is counted, but no ruling could record it as a whole line.
+
+### The clusters the markers split today
+
+Each set of marker forms is left out of matching (the lines left out, and the halves a marker read
+as a cite divides joined again), and the bodies that changes are set against today's clusters:
+
+| Forms left out | Bodies changed | Of them joined across a marker read as a cite | Marker-free fingerprints | Another card already has it | Spanning two clusters or more |
+|---|---|---|---|---|---|
+| `marker-word-and-clock-time` | 11 | 1 | 7 | 3 | 1 |
+| `clock-time-alone` | 11 | 0 | 10 | 3 | 0 |
+| `marker-word-alone` | 3 | 0 | 3 | 2 | 0 |
+| `marker-word-opens-a-short-line` | 65 | 0 | 22 | 0 | 0 |
+| The first three | 25 | 1 | 20 | 8 | 1 |
+| All four | 90 | 1 | 42 | 8 | 1 |
+
+**One marker-free body spans two of today's clusters, in hspolicy26.** It comes from
+`marker-word-and-clock-time`, the form whose set also holds the one body a marker read as a cite
+divides. The counts don't say whether it is that body. Every other marker-free body that another
+card already has sits in that card's cluster today: the near-duplicate rules
+(`card-fingerprint-v4`) already join copies that differ by a short line. The body counts are per
+parsed source, so one file stored under two digests counts twice.
+
+### The lines read as nothing between two body paragraphs
+
+`v1-e31-t19` counted 43,488 lines in 15,796 cards over 11,148 sources under `2026.10.18-docx-5`. On
+this store under `docx-7` there are **53,207 lines in 19,121 cards** (6.6% of 287,545):
+
+| Caselist | Lines | Cards | A marker form | `omission-note` | `number-alone` | `no-letter-or-digit` | `no-marker-form` |
+|---|---|---|---|---|---|---|---|
+| hsld26 | 16,177 | 5,773 | 14 | 331 | 152 | 26 | 15,654 |
+| hspf26 | 9,095 | 3,408 | 1 | 407 | 2 | 44 | 8,641 |
+| hspolicy26 | 25,528 | 9,148 | 4 | 1,169 | 19 | 116 | 24,219 |
+| openev | 2,407 | 792 | 0 | 65 | 2 | 1 | 2,339 |
+| **Total** | **53,207** | **19,121** | **19** | **1,972** | **175** | **187** | **50,853** |
+
+hspolicy26's line also holds 1 `marker-word-and-clock-time-inside-a-line`. By `v1-e31-t19`'s bands:
+
+| Length | Lines | No sentence end | Ends a sentence | In capitals |
+|---|---|---|---|---|
+| 40 characters or fewer | 30,706 | 29,250 | 1,456 | 13,841 |
+| 41 to 100 | 10,242 | 6,116 | 4,126 | 142 |
+| 101 to 200 | 8,425 | 1,688 | 6,737 | 4 |
+| 201 to 400 | 1,459 | 1,459 | 0 | 0 |
+| 401 to 1,000 | 1,904 | 1,904 | 0 | 0 |
+| 1,001 to 4,000 | 461 | 461 | 0 | 0 |
+| Over 4,000 | 10 | 10 | 0 | 0 |
+| **All** | **53,207** | **40,888** | **12,319** | **13,987** |
+
+The other places, for comparison: before a body, under a tag or a cite, 17,333 lines; after a body,
+before something else, 5,080; elsewhere, 17,357.
+
+Of the lines between two body paragraphs, **19 are a marker form**. Reading every such line as body
+would bring 19 markers into the evidence, and with them 1,972 omission notes, 175 page or footnote
+numbers and 187 lines of punctuation. It would change the evidence text, and so the exact
+fingerprint, of up to 19,121 cards.
+
+### Before and after M3, over the same sources (operator-run, 2026-11-03)
+
+`scripts/count_in_round_markers.py` again, from the task branch after M3 was built, over the same
+13,518 sources of the same store (902 seconds). Every line is counted on `2026.11.03-docx-8`'s parse
+this time. The store and its occurrence tables are unchanged.
+
+| | `docx-7` (2026-11-02) | `docx-8` (2026-11-03) |
+|---|---|---|
+| Cards | 287,545 | 287,543 |
+| Lines of the three marker forms read as a cite | 4 | 0 |
+| ... read as nothing | 58 | 62 |
+| ... read as body | 34 | 34 |
+| Lines read as nothing between two body paragraphs, in cards | 53,207 in 19,121 | 53,208 in 19,122 |
+| Bodies joined across a marker read as a cite (the three forms left out of matching) | 1 | 0 |
+| Marker-free bodies spanning two of today's clusters | 1 | 0 |
+| Sources whose cards differ from the stored ones | 331 | 333 |
+
+The four lines read as a cite are read as nothing now: 2 before a body, under a tag or a cite; 1
+between two body paragraphs; 1 after a body. Two cards are gone, one in each of two caselists: in
+hspolicy26 the card a marker divided is whole again, and in hsld26 the `CITE_ONLY` card a marker
+made on its own is gone. hsld26's other two were cite lines under a tag, so its cards keep their
+number there. The one marker-free body that spanned two clusters was that divided card: under `docx-8` none
+does. The two lines read as a cite that remain are `marker-word-opens-a-short-line`, in the cite
+character style, which M3 leaves to the file's author.
+
+### The coach's sample of the lines between body paragraphs (L-D, operator-run, 2026-11-03)
+
+`scripts/sample_cite_shapes.py --plan short-lines --seed 20261103`, answered by the coach in his
+terminal by item number: 66 items from 13,518 parsed sources (`docx-8`), 480 seconds answering. The
+question was "the source's own text, a note by whoever cut the card, or something else?" The coach
+was told before answering that a citation line, page furniture or anything he could not tell is
+"something else", and an in-round marker or an omission note is a note by whoever cut the card. He
+kept no count of how many of his "something else" answers were citation lines, so the 7
+"something else" answers below are not split further.
+
+| Stratum | In the store | Asked | The source's own text | A note by whoever cut the card | Something else |
+|---|---|---|---|---|---|
+| 40 characters or fewer, in capitals | 12,744 | 8 | 1 | 7 | 0 |
+| 40 characters or fewer, not in capitals | 15,611 | 8 | 6 | 2 | 0 |
+| 41 to 200 characters, ending a sentence | 10,863 | 8 | 7 | 0 | 1 |
+| 41 to 200 characters, not ending a sentence | 7,803 | 8 | 5 | 1 | 2 |
+| Over 200 characters | 3,834 | 8 | 8 | 0 | 0 |
+| An omission note | 1,972 | 8 | 0 | 8 | 0 |
+| A number or punctuation alone | 362 | 8 | 3 | 1 | 4 |
+| An in-round marker, a line of the three forms, however read | 156 | 10 | 0 | 10 | 0 |
+
+The seven strata of lines between body paragraphs hold 53,189 lines; with the 19 of a marker form,
+they are the 53,208 of the `docx-8` count. The marker stratum counts every paragraph holding a line
+of the three forms, whatever it was read as, headings included, so it holds more than the 96 lines
+the count reads as body, nothing or a cite. Eight items a stratum tell "mostly" from "often wrong" and
+no finer: 8 of 8 is a share of at least 0.68 at 95% (Wilson), and 7 of 8 at least 0.53.
+
+### The PM's ruling on the lines between body paragraphs (2026-11-03)
+
+**N1**, folded into `2026.11.03-docx-8`, one parser version for M3 and N1. A line read as nothing
+between two body paragraphs of one card is body when it is over 200 characters, or 41 to 200
+characters and ends a sentence: the two strata the sample found 15 of 16 the source's own text, and
+none a cutter's note. It stays nothing when it is an omission note, a number or punctuation alone,
+or one of the three marker forms. A **cite guard** holds such a line as nothing when it contains a
+URL, a DOI or the word "accessed" in any case. The 40-or-fewer uncapitalised stratum (6 of 8) and the
+41-to-200 stratum that ends no sentence (5 of 8) are left as nothing, for a larger sample before any
+rule. The sample's table is above.
+
+### N1, before and after over the same sources (operator-run, 2026-11-03)
+
+`scripts/diff_lines_between_body_paragraphs.py`: every one of the 13,518 sources read twice by the
+branch's `docx-8`, N1 off and on, 768 seconds. 0 without a blob, 0 not parsed; 287,543 cards either
+way.
+
+| Caselist | Made body: a sentence of 41 to 200 | Made body: a line over 200 | Held back: a link, a web address, a DOI or "accessed" | Held back: names its source at its head | Cards whose evidence text changed | In files | Other cards changed |
+|---|---|---|---|---|---|---|---|
+| hsld26 | 2,846 | 1,208 | 104 (8 + 96) | 31 (22 + 9) | 1,423 | 832 | 0 |
+| hspf26 | 1,840 | 423 | 449 (26 + 423) | 40 (24 + 16) | 1,126 | 574 | 0 |
+| hspolicy26 | 5,377 | 1,385 | 37 (4 + 33) | 111 (77 + 34) | 2,929 | 1,089 | 0 |
+| openev | 629 | 197 | 5 (0 + 5) | 15 (10 + 5) | 353 | 59 | 0 |
+| **Total** | **10,692** | **3,213** | **595 (38 + 557)** | **197 (133 + 64)** | **5,831** | **2,554** | **0** |
+
+In the held-back columns, the first figure in brackets is the sentence stratum and the second the
+long-line stratum. Made body and held back add up to the sample's two populations exactly:
+10,692 + 38 + 133 = 10,863 sentences, and 3,213 + 557 + 64 = 3,834 long lines. The second guard is
+the session's addition, beyond the ruling. No card gained or lost a paragraph range, and no field
+changed but the body, its spans and the rules and confidence it records.
+
+### N1, the labelled evaluation (operator-run, 2026-11-03)
+
+`scripts/run_parser_eval.py --tier both` with N1 off (a scratch runner) and on, both gates passed.
+
+| Tier | EVIDENCE precision, N1 off → on | EVIDENCE recall | Right / wrong EVIDENCE readings | OTHER precision |
+|---|---|---|---|---|
+| Full, 30 files | 0.9708 → **0.9705** | 0.8824 → 0.9061 | 930 / 28 → 955 / 29 | 0.5413 → 0.5815 |
+| PR subset, 6 files | 0.9433 → 0.9442 | 0.9683 → 0.9841 | 183 / 11 → 186 / 11 | 0.7701 → 0.7976 |
+
+**EVIDENCE precision falls on the full tier**, by one reading: in one verbatim PF team file, a
+paragraph labelled OTHER is read as body. The same file gains 18 right body readings. Every card's
+boundaries are unchanged in all 30 files. Under the PM's gate the task stops here and reports.
+
+Every paragraph N1 reads as body in the 30 labelled files, against its label (a scratch run by the
+operator, ids only): 25 labelled EVIDENCE, 1 labelled OTHER, 58 outside the labelled blocks. The one
+labelled something other than EVIDENCE:
+
+| File (keyed digest) | Paragraph | Label | N1's rule |
+|---|---|---|---|
+| `a8afd234413032f4723e0dc5b38ea90f332f738e3c8e21fcd84189664fd382dc` | 16 | OTHER | `assembly-sentence-between-body-paragraphs` |
+
+On the shipped `2026.11.03-docx-9` (t32's rule, M3 and N1 together), the operator's
+`uv run pytest tests/evals/parser -m "eval and slow"` and `run_parser_eval.py --tier both`, 2026-11-03,
+both gates PASSED. **The two reports equal the `docx-8` N1-on reports in every group, file and target
+on both tiers**: EVIDENCE 955 right and 29 wrong on the full tier (precision 0.9705, recall 0.9061),
+186 and 11 on the PR subset (0.9442, 0.9841), card boundaries 123 of 135 and 36 of 38, as before. t32's
+rule changes no labelled reading.
+
+**The coach's blind answer on paragraph 16** of `a8afd234…fd382dc` (Option A, the PM, 2026-11-03),
+shown in the terminal with the paragraph above and below and nothing else: **s**, the source's own
+text. Its label goes from OTHER to EVIDENCE in card 1 through the guide's label change, as its own
+pull request from `dev`, counted against the file's pre-label restored from git (`7a9c4ff`): **#814**,
+branch `labels/a8afd234413032f4`, commit `e13b7e0`, two files (the label file, and the pre-label kept
+under `labels/prelabels/`). Its import recorded **75 of 255 labelled rows changed from the
+pre-label**, the coach's 74 and paragraph 16, and only paragraph 16 moved; the label tests passed (125).
+The evaluation baseline is unchanged. The `docx-9` gate pytest run: `1 passed in 4.71s`.
+
+**N1's before and after on the shipped `docx-9`** (`scripts/diff_lines_between_body_paragraphs.py`, the
+operator, 2026-11-03, 841 seconds): every N1 figure equals the `docx-8` table above in every caselist.
+That is 10,692 sentences and 3,213 long lines made body, 595 and 197 held back, 5,831 cards whose
+evidence text changed, in 2,554 files, and 0 other cards changed. The cards number 287,538, 5 fewer
+than on `docx-8`: t32's rule's cards above that vanish, 2 in hsld26 and 3 in hspolicy26, as its own
+table above records.
+
+**The gate after #814, on `docx-9`** (the operator, 2026-11-03: `uv run pytest tests/evals/parser -m
+"eval and slow"`, `1 passed in 4.19s`, and `run_parser_eval.py --tier both`, both gates PASSED):
+
+| Tier | EVIDENCE precision: `docx-8`, N1 off | `docx-9`, label before #814 | `docx-9`, after #814 | Right / wrong EVIDENCE readings after | Recall after |
+|---|---|---|---|---|---|
+| Full, 30 files | 0.9708 | 0.9705 | **0.9715** | 956 / 28 | 0.9062 |
+| PR subset, 6 files | 0.9433 | 0.9442 | 0.9442 | 186 / 11 | 0.9841 |
+
+No group's EVIDENCE precision is below its N1-off figure on either tier, and no file's card figures
+moved (123 of 135 boundaries on the full tier, 36 of 38 on the subset). With the coach's answer on
+paragraph 16 (s, by id) taken into its label, **N1 does not lower EVIDENCE precision**, and the PM's
+Option B, accepting a fall, was not needed.

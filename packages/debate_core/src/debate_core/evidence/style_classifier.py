@@ -31,6 +31,7 @@ source, no model call, and rules are tried in a fixed order with the first match
 from __future__ import annotations
 
 import re
+from collections.abc import Callable
 from functools import lru_cache
 
 from pydantic import Field
@@ -44,6 +45,7 @@ from debate_core.domain.style_profile import (
     StyleMatchSource,
     StyleProfile,
 )
+from debate_core.evidence.marker_lines import is_an_in_round_marker
 
 __all__ = [
     "COLOURS_NOT_READ_AS_HIGHLIGHT",
@@ -860,6 +862,23 @@ def _evidence_match(paragraph: ParagraphDescription, profile: StyleProfile) -> P
     return None
 
 
+#: The heuristics that read a cite from a paragraph's shape. None of them reads one from an in-round
+#: marker: `Marked 10:42` opens with what the cite-line pattern takes for a name and a two-digit year,
+#: and was read as a cite that ended its card (`v1-e31-t23`, the PM's ruling M3 of 2026-11-03). A cite
+#: *style* on a marker is still the file's author saying "cite", and is taken at its word.
+_CITE_HEURISTICS = (_wiki_cite_entry_match, _cite_line_match, _long_cite_line_match)
+
+
+_Rule = Callable[["ParagraphDescription", StyleProfile], ParagraphStyleMatch | None]
+
+
+def _rules_for(paragraph: ParagraphDescription, rules: tuple[_Rule, ...]) -> tuple[_Rule, ...]:
+    """`rules`, less the cite heuristics when the paragraph is an in-round marker."""
+    if not is_an_in_round_marker(paragraph.text):
+        return rules
+    return tuple(rule for rule in rules if rule not in _CITE_HEURISTICS)
+
+
 def _through_an_unmapped_style(
     paragraph: ParagraphDescription, profile: StyleProfile, style_match: ParagraphStyleMatch
 ) -> ParagraphStyleMatch:
@@ -875,12 +894,15 @@ def _through_an_unmapped_style(
     """
     if paragraph.in_table or paragraph.is_empty:
         return style_match
-    for rule in (
-        _cite_run_style_match,
-        _wiki_cite_entry_match,
-        _cite_line_match,
-        _long_cite_line_match,
-        _evidence_match,
+    for rule in _rules_for(
+        paragraph,
+        (
+            _cite_run_style_match,
+            _wiki_cite_entry_match,
+            _cite_line_match,
+            _long_cite_line_match,
+            _evidence_match,
+        ),
     ):
         match = rule(paragraph, profile)
         if match is not None:
@@ -936,13 +958,16 @@ def classify_paragraph(paragraph: ParagraphDescription, profile: StyleProfile) -
             confidence=1.0,
         )
 
-    for rule in (
-        _outline_level_match,
-        _wiki_cite_entry_match,
-        _cite_line_match,
-        _long_cite_line_match,
-        _direct_formatted_heading_match,
-        _evidence_match,
+    for rule in _rules_for(
+        paragraph,
+        (
+            _outline_level_match,
+            _wiki_cite_entry_match,
+            _cite_line_match,
+            _long_cite_line_match,
+            _direct_formatted_heading_match,
+            _evidence_match,
+        ),
     ):
         match = rule(paragraph, profile)
         if match is not None:

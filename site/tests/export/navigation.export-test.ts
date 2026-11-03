@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest'
 
 import { loadPages, loadSiteSettings } from '@/lib/content'
 
-import { exportedPagePath } from './built-export'
+import { exportedFiles, exportedPagePath, readExported } from './built-export'
 
 /**
  * Navigation and footer placement in the built files, which is what a visitor actually gets
@@ -34,6 +34,21 @@ describe('the exported navigation', () => {
     expect(section(html, 'footer')).toContain('href="/accessibility/"')
     expect(section(html, 'header')).not.toContain('href="/accessibility/"')
   })
+
+  // v1-e37-t15: News is in the header and stays in the footer, on every page the export writes,
+  // the announcement pages and the 404 page included.
+  it.each(exportedFiles().filter((path) => path.endsWith('.html')))(
+    '%s links News from the header and the footer',
+    (path) => {
+      const html = readExported(path)
+      expect(section(html, 'header'), `${path} has no News link in its header`).toContain(
+        'href="/news/"',
+      )
+      expect(section(html, 'footer'), `${path} has no News link in its footer`).toContain(
+        'href="/news/"',
+      )
+    },
+  )
 
   it('marks nothing current on a page outside the navigation', () => {
     expect(section(read('accessibility'), 'header')).not.toContain('aria-current')

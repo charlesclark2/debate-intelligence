@@ -1,0 +1,24 @@
+name: Fixture Site
+shortName: Fixture
+tagline: A fixture.
+footerNote: A fixture footer.
+logoAlternativeText: Fixture logo
+navigationLabel: Main
+footerNavigationLabel: About this site
+skipLinkLabel: Skip to main content
+contactEmails:
+  - address: fixture.coach@example.invalid
+    name: Fixture Coach
+    role: Head Coach
+instagram:
+  address: https://www.instagram.com/fixture.team/
+  label: "@fixture.team on Instagram"
+  externalLinkNote: opens Instagram's site
+  contactHeading: Follow the team
+debaterLoginLabel: Debater login
+# Alpha is in the header and kept in the footer, where it sorts before Zulu by navOrder.
+primaryNavigation:
+  - home
+  - alpha
+alwaysInFooter:
+  - alpha

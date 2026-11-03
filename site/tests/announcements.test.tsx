@@ -500,10 +500,22 @@ describe('the /news/ page', () => {
     expect(screen.getByText(loadNewsLabels().empty)).toBeDefined()
   })
 
-  it('is not in the main navigation, and is linked from the footer of every page', () => {
+  // v1-e37-t03 put it in the footer only; the coach decided on 2026-11-02 it belongs in both
+  // (v1-e37-t15).
+  it('is in the main navigation, and is linked from the footer of every page as well', () => {
     const navigation = buildNavigation()
-    expect(navigation.primary.map((link) => link.href)).not.toContain('/news/')
+    expect(navigation.primary.map((link) => link.href)).toContain('/news/')
     expect(navigation.utility.map((link) => link.href)).toContain('/news/')
+  })
+
+  it('is in the header and the footer of the rendered frame', () => {
+    const settings = loadSiteSettings()
+    renderInFrame(<h1>Page heading</h1>)
+    for (const label of [settings.navigationLabel, settings.footerNavigationLabel]) {
+      const nav = screen.getByRole('navigation', { name: label })
+      const news = within(nav).getByRole('link', { name: loadPage(NEWS_SLUG).navLabel })
+      expect(news.getAttribute('href')?.replace(/\/$/, ''), `${label} links News elsewhere`).toBe('/news')
+    }
   })
 
   it('is composed by its own route module, so the Markdown page route never generates it', () => {

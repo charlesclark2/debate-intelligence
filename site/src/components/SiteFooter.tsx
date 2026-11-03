@@ -22,7 +22,8 @@ import type { NavigationItem } from './SiteNav'
  * is a file. It belongs here: a parent deciding whether their child joins is not looking for it,
  * and someone who needs it knows to look in a footer. Anything published and not named in
  * content/site.yaml's primaryNavigation arrives here, so leaving a page out of the nav moves it
- * rather than hiding it.
+ * rather than hiding it. The pages site.yaml's alwaysInFooter names stay here as well when the
+ * header carries them too: News, since v1-e37-t15.
  *
  * Under the note sits the link to the team's Instagram account (v1-e37-t07). It is outside the
  * utility navigation on purpose: that list is the published pages of this site, and the Instagram

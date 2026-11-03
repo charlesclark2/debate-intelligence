@@ -473,5 +473,45 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e41-t17-ci-parts-dealt-by-recorded-durations
+    - id: t18
+      kind: Task
+      name: 'Each CI part collects only its own test files, after measuring what module fixtures cost'
+      description: >-
+        Each CI part collects only its own test files, after measuring what module fixtures
+        cost.
+      inputs:
+        specRef: plan_specs/v1/e41-delivery-tooling-upkeep/t18-each-part-collects-only-its-own-files.yaml
+        goalRef: v1-e41-t18-each-part-collects-only-its-own-files
+      dependsOn:
+      - t17
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e41-t18-each-part-collects-only-its-own-files reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e41-t18-each-part-collects-only-its-own-files
+    - id: t19
+      kind: Task
+      name: 'Test selection does not follow an edge through a fixture that only names a guide''s path'
+      description: >-
+        Test selection does not follow an edge through a fixture that only names a guide's
+        path.
+      inputs:
+        specRef: plan_specs/v1/e41-delivery-tooling-upkeep/t19-affected-tests-ignores-a-path-named-only-as-data.yaml
+        goalRef: v1-e41-t19-affected-tests-ignores-a-path-named-only-as-data
+      dependsOn:
+      - t11
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e41-t19-affected-tests-ignores-a-path-named-only-as-data reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e41-t19-affected-tests-ignores-a-path-named-only-as-data
 status:
   phase: Pending

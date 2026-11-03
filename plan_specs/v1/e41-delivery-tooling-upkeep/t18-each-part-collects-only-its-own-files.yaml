@@ -1,0 +1,83 @@
+# TASK v1-e41-t18-each-part-collects-only-its-own-files - Each CI part collects only its own test files, after measuring what module fixtures cost
+# Epic: E41 — Delivery Tooling Upkeep | Release: v1.8 (Weekly caselist run in the cloud) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e41-t18-each-part-collects-only-its-own-files
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.8
+    debate/epic: v1-e41-delivery-tooling-upkeep
+  annotations:
+    debate/title: "Each CI part collects only its own test files, after measuring what module fixtures cost"
+spec:
+  # Filed by the PM, 2026-11-03, from v1-e41-t17's follow-ups and ac2 (2026-11-03).
+  description: >-
+    Since v1-e41-t17 whole files are dealt to parts by recorded durations, and the slowest part
+    fell on three task pull requests (230, 88 and 203 s against 255, 189 and 280 s). Each part
+    still collects the whole selection and keeps its share, about 8 s of collection a part.
+    First measure the module-fixture share: from the push parts' `--durations=25`, how much of a
+    part is setup that whole-file dealing now builds once. Then let `test-selection` hand each
+    part only its own files (the costs page's option 1), which the deal now covers (662 of 662
+    collected files), so collection falls to about 1 s a part. A file the deal does not name
+    falls back to today's collection. The partition proof still holds at every size.
+  priority: 2
+  constraints:
+    packages: [.github/workflows, scripts, tests/scripts, tests/pytest_plugins, docs/process]
+    forbidden:
+      - Paid or larger runners
+      - A selected test in no part, or in two
+      - A pull-request run that fails because the deal is missing
+      - Network access in a test
+  context:
+    - kind: TaskRef
+      name: v1-e41-t17-ci-parts-dealt-by-recorded-durations
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        The module-fixture share is measured from the push parts' durations and recorded in
+        docs/process/ci-test-part-costs.md before the change.
+    - id: ac2
+      description: >-
+        Each part collects only its dealt files, every selected test in exactly one part at
+        every size and a missing deal falling back to today's collection, by workflow and
+        plugin tests shown failing first; the PM reads three task pull requests' slowest
+        parts after the merge.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e41-t18-each-part-collects-only-its-own-files-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.8
+    debate/epic: v1-e41-delivery-tooling-upkeep
+spec:
+  description: >-
+    Each CI part collects only its own test files, after measuring what module fixtures cost.
+  goalRef:
+    name: v1-e41-t18-each-part-collects-only-its-own-files
+  graph:
+    nodes:
+      - id: each-part-collects-only-its-own-files
+        kind: Task
+        name: Own files only
+        description: >-
+          Each CI part collects only its own test files, after measuring what module
+          fixtures cost.
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Own files only tests pass
+            command: uv
+            args: [run, pytest, tests/scripts, -k, ci_workflow or test_selection or parts]
+status:
+  phase: Pending

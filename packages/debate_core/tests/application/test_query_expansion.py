@@ -249,14 +249,14 @@ ADDED_KRITIKS = {
 """generic.yaml's named kritiks; generic-k, its catch-all for a card that fits none, is not an argument."""
 
 COACH_REVIEWED_FILE = (
-    REPOSITORY / "packages/debate_core/tests/fixtures/argument_taxonomy/coach_reviewed_1_1_0.yaml"
+    REPOSITORY / "packages/debate_core/tests/fixtures/argument_taxonomy/coach_reviewed_1_2_1.yaml"
 )
 
 
 def test_the_committed_taxonomy_validates_and_every_argument_has_a_template_for_each_need_of_its_family(
     committed: ArgumentTaxonomy,
 ) -> None:
-    assert committed.taxonomy_version == "1.2.0"
+    assert committed.taxonomy_version == "1.2.1"
     assert {family.id: [need.id for need in family.needs] for family in committed.families} == FAMILY_NEEDS
     for argument in committed.arguments:
         family = committed.family_of(argument)
@@ -323,13 +323,14 @@ def test_the_committed_taxonomy_adds_the_landscapes_generic_counterplans_and_kri
 def test_the_committed_taxonomy_keeps_every_coach_reviewed_entry_as_he_reviewed_it(
     committed: ArgumentTaxonomy,
 ) -> None:
-    """The coach's 1.1.0 entries and the DA and advantage needs' windows are unchanged; every other
-    entry, added or reshaped, waits for his review."""
+    """The coach's reviewed entries (1.1.0's nine, and the three he approved on 2026-11-02) and the DA
+    and advantage needs' windows are unchanged; every other entry, added or reshaped, waits for his
+    review."""
     reviewed_file = yaml.safe_load(COACH_REVIEWED_FILE.read_text(encoding="utf-8"))
     reviewed = {
         entry["id"]: entry for entry in reviewed_file["arguments"] if entry["review"] == "coach_reviewed"
     }
-    assert len(reviewed) == 9
+    assert len(reviewed) == 12
     for argument in committed.arguments:
         entry = reviewed.get(argument.id)
         if entry is None:
@@ -340,7 +341,10 @@ def test_the_committed_taxonomy_keeps_every_coach_reviewed_entry_as_he_reviewed_
     assert {argument.id for argument in committed.arguments} >= set(reviewed)
     scenario = next(family for family in committed.families if family.id == "da-and-advantage")
     assert [need.model_dump(mode="json", exclude_defaults=True) for need in scenario.needs] == [
-        {key: value for key, value in need.items() if value != []} for need in reviewed_file["needs"]
+        {key: value for key, value in need.items() if value != []}
+        for need in next(
+            family for family in reviewed_file["families"] if family["id"] == "da-and-advantage"
+        )["needs"]
     ]
 
 
@@ -722,7 +726,7 @@ def test_template_expansion_of_politics_da_link_on_health_insurance(committed: A
     expansion = expand(request_for("health insurance", argument="politics-da", need="link"), committed)
     since = NOW - timedelta(days=1826)
     assert expansion == SearchExpansion(
-        taxonomy_version="1.2.0",
+        taxonomy_version="1.2.1",
         argument="politics-da",
         need="link",
         variables={"query": "health insurance", "topic": "health insurance"},

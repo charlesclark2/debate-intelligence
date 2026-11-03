@@ -345,3 +345,13 @@ two gaps from v1-e36-t08 are closed, and three more holes found on the way are c
    specs are clean.
 8. **Merge:** `scripts/task pr --partial` once `ci` is green. The Goal stays `InProgress` until the PM
    records ac5.
+
+## Operator records (recorded by the PM, 2026-11-03)
+
+Added by the PM. Nothing above is changed, and this section is not a review.
+
+| Criterion | Was | Now | Record |
+|---|---|---|---|
+| ac5 (part): the pages through dev and prod | NOT RUN (operator) | live in both; the real announcement still to come | 2026-11-03: the dev preview at `e83c607b`, 41 of 41 smoke checks passed and read on a phone; prod from `main` at `3f827613` (promotion #810), 41 of 41 passed, pages indexable and `robots.txt` allowing crawling. No announcement is published yet |
+
+The Goal stays `InProgress` for the real announcement: published on one day and expired on another, neither a Wednesday, through dev and then prod.

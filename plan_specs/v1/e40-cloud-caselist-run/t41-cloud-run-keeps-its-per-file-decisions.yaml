@@ -1,0 +1,75 @@
+# TASK v1-e40-t41-cloud-run-keeps-its-per-file-decisions - A cloud run's decision about each listed file is kept past the log's 90 days
+# Epic: E40 — Weekly Caselist Run in the Cloud | Release: v1.8 (Weekly caselist run in the cloud) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e40-t41-cloud-run-keeps-its-per-file-decisions
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.8
+    debate/epic: v1-e40-cloud-caselist-run
+  annotations:
+    debate/title: "A cloud run's decision about each listed file is kept past the log's 90 days"
+spec:
+  # Filed by the PM, 2026-11-03, from v1-e34-t37's follow-up 2 (the PM's review, 2026-11-03).
+  description: >-
+    A cloud run's decision about each listed OpenEv and caselist file (download,
+    already_imported, no_event_configured and the rest) is only in its log, kept 90 days: the
+    summary file stays in the task's working copy and is not among the saved state files.
+    v1-e34-t37's count read 20 runs' decisions from the log in time; after 90 days nothing
+    could. Save the per-file decisions with the run's state in the bucket (counts and ids, never
+    a path, a name or a school), read them with `caselist runs --remote`, and keep them as long
+    as the run records. Say what it adds per run in bytes.
+  priority: 3
+  constraints:
+    packages: [debate_core.application, debate_core.integrations, debate_cli, packages/debate_core/tests, packages/debate_cli/tests, docs/runbooks]
+    forbidden:
+      - A school, team code, disclosure path or debater name in what is saved
+      - Network or AWS access in a test
+      - A change to what a run downloads or imports
+  context:
+    - kind: TaskRef
+      name: v1-e40-t04-run-state-on-s3
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        A cloud run saves its per-file decisions with its state, and `caselist runs
+        --remote` reads them back, by tests on a fake bucket shown failing first, with the
+        bytes per run stated.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e40-t41-cloud-run-keeps-its-per-file-decisions-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.8
+    debate/epic: v1-e40-cloud-caselist-run
+spec:
+  description: >-
+    A cloud run's decision about each listed file is kept past the log's 90 days.
+  goalRef:
+    name: v1-e40-t41-cloud-run-keeps-its-per-file-decisions
+  graph:
+    nodes:
+      - id: cloud-run-keeps-its-per-file-decisions
+        kind: Task
+        name: Decisions kept
+        description: >-
+          A cloud run's decision about each listed file is kept past the log's 90 days.
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Decisions kept tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests, packages/debate_cli/tests, -k, run_state or runs]
+status:
+  phase: Pending

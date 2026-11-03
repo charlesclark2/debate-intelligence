@@ -1,0 +1,77 @@
+# TASK v1-e08-t15-ld-research-starts-broad-and-narrows-from-the-first-page - LD research starts broad and narrows from what the first page turns up
+# Epic: E08 Federated Research Workflows | Release: v1.4 (Federated research from the CLI) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e08-t15-ld-research-starts-broad-and-narrows-from-the-first-page
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.4
+    debate/epic: v1-e08-research-workflows
+  annotations:
+    debate/title: "LD research starts broad and narrows from what the first page turns up"
+spec:
+  # Filed by the PM, 2026-11-03, from v1-e08-t05's ac6 and the coach's feedback (2026-11-02).
+  description: >-
+    The coach on LD research: start high level, then hone in on what the surface research finds.
+    v1-e08-t05's LD search (de-extinction) gave 10 relevant of 16 labelled rows, and the useful
+    directions were in the first page's own subjects (ethics, ecology, mourning, the animal
+    subject). Propose the shape before building anything: for example, `search` suggesting
+    narrower follow-up queries from the first page's subjects or concepts (OpenAlex's own
+    fields, never a model), and a way to search within a saved search. Say what each costs in
+    provider requests and what a student types. The PM rules on the proposal before any code.
+  priority: 3
+  constraints:
+    packages: [debate_core.application, debate_core.domain, debate_cli, packages/debate_core/tests, packages/debate_cli/tests, docs/guides]
+    forbidden:
+      - A model call to suggest a query
+      - A live provider call in a test
+      - A school, team code or debater name anywhere
+  context:
+    - kind: TaskRef
+      name: v1-e08-t05-search-command
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        The proposal is sent to the PM and ruled on before any code.
+    - id: ac2
+      description: >-
+        What the ruling asks for is built with tests on recorded fixtures shown failing
+        first, and the search guide says how a student narrows a search.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e08-t15-ld-research-starts-broad-and-narrows-from-the-first-page-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.4
+    debate/epic: v1-e08-research-workflows
+spec:
+  description: >-
+    LD research starts broad and narrows from what the first page turns up.
+  goalRef:
+    name: v1-e08-t15-ld-research-starts-broad-and-narrows-from-the-first-page
+  graph:
+    nodes:
+      - id: ld-research-starts-broad-and-narrows-fro
+        kind: Task
+        name: Narrowing
+        description: >-
+          LD research starts broad and narrows from what the first page turns up.
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Narrowing tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application, packages/debate_cli/tests, -k, search]
+status:
+  phase: Pending

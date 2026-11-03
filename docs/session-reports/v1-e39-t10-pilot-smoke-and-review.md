@@ -332,3 +332,14 @@ adjustable) was requested at 1,250 Mbps on 2026-10-31, before the promotion as t
 `57c67e70…`, `PENDING`, then `CASE_OPENED`. One request covers dev and prod, which share one account.
 The gzip object was 318,115,067 bytes that day, 1.3% above 2026-10-22's, so the growth the item feared
 has not come.
+
+## Operator records (recorded by the PM, 2026-11-03)
+
+Added by the PM. Nothing above is changed, and this section is not a review.
+
+| Criterion | Was | Now | Record |
+|---|---|---|---|
+| ac7 (part): the promotion checklist | open | items 1 to 5 and 12 yes; 6 to 11 open | 2026-11-03, recorded in `docs/data/evidence-search-pilot.md`: promotion #810; prod's `owner.auto.tfvars`; step 11 in full; v1-e29-t08's prod plan; prod's suppression list created; the quota case sent on 2026-10-31 and still open. Items 6, 7 and 9 wait for the cloud run's full re-parse of 2026-11-04 |
+| ac4 (part): the signed-in journey on dev | NOT RUN (operator) | stopped at J2, to resume on 2026-11-05 | 2026-11-03: the dev deploy (`e9769533`) and step 8's checks passed; J1 wrote the seed (sha256 `494c3359…`, the names check 0). J2's restore under `docx-7` held 0 parsed objects, because the dev bucket had no `docx-7` parsed store before the 2026-11-04 re-parse, so the journey was stopped before anything was written beyond the lock, and the copy was deleted (policy 1.18). J2 to J10 run on Thursday 2026-11-05, before any newer dev build is installed |
+
+The Goal stays `InProgress`. The runbook's promotion items 6, 7 and 9 now say they wait for the bucket to hold the installed build's parser version.

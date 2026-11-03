@@ -792,5 +792,25 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e31-t33-reference-pointers-are-not-cites
+    - id: t34
+      kind: Task
+      name: 'What the bold tag rules leave above a cite: the lines not bold, sampled, and the inline card, counted'
+      description: >-
+        What the bold tag rules leave above a cite: the lines not bold, sampled, and the
+        inline card, counted.
+      inputs:
+        specRef: plan_specs/v1/e31-debate-file-parsing/t34-what-the-bold-tag-rules-leave-above-a-cite.yaml
+        goalRef: v1-e31-t34-what-the-bold-tag-rules-leave-above-a-cite
+      dependsOn:
+      - t32
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e31-t34-what-the-bold-tag-rules-leave-above-a-cite reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e31-t34-what-the-bold-tag-rules-leave-above-a-cite
 status:
   phase: Pending

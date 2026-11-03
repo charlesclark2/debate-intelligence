@@ -24,6 +24,15 @@ spec:
     each feed read once and every query matched against it. The ranked results, the explanation
     and the stored expansion stay as today for the same answers. Count the requests before and
     after on the recorded fixtures.
+    (PM amendment 2026-11-03, from v1-e08-t05's ac6 searches.) Two more findings belong here. (1) Every
+    feed that answered matched nothing across the politics DA link's 7 queries: a templated query such as
+    "national health insurance ... popularity" is too strict against headlines. With each feed read once,
+    match every query's words against it and report, per feed, how many entries any query matched; say in
+    the report what a looser match (any query's key terms, not its whole phrase) would add on the recorded
+    feeds, and build it only if it keeps the ranked results' precision on the fixtures. (2) One OpenAlex
+    work appeared twice in a ranked list, once as `https://dx.doi.org/...` and once as
+    `https://doi.org/...`. Find whether the dedupe compares DOIs as written; if so, normalise the host
+    (and case) before comparing, by a test with both forms.
   priority: 3
   constraints:
     packages: [debate_core.application, debate_core.integrations.discovery, packages/debate_core/tests, packages/debate_cli/tests]

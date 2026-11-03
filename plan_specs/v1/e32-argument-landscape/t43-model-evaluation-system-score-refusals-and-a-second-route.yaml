@@ -68,7 +68,7 @@ spec:
         the side-by-side counts and cost, are recorded in docs/data (operator, recorded by
         the PM).
 status:
-  phase: InProgress
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

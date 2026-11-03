@@ -67,7 +67,7 @@ spec:
         `caselist remove --execute` and DEBATE_REMOVAL_PROFILE naming a profile the config
         lacks.
 status:
-  phase: InProgress
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

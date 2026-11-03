@@ -1,0 +1,85 @@
+# TASK v1-e31-t34-what-the-bold-tag-rules-leave-above-a-cite - What the bold tag rules leave above a cite: the lines not bold, sampled, and the inline card, counted
+# Epic: E31 Debate File Parsing | Release: v1.1 | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e31-t34-what-the-bold-tag-rules-leave-above-a-cite
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e31-debate-file-parsing
+  annotations:
+    debate/title: "What the bold tag rules leave above a cite: the lines not bold, sampled, and the inline card, counted"
+spec:
+  # Filed by the PM, 2026-11-03, from v1-e31-t32's follow-ups (the PM's review, 2026-11-03).
+  description: >-
+    v1-e31-t24 and v1-e31-t32 read the line above a cite that opens a tagless card as its tag
+    when Word shows it bold, throughout or with an unbolded tail. Two shapes they leave. (1) The
+    2,350 lines not bold as Word shows them, the largest stratum, never sampled on their own
+    (t24's sample of every left line found 1 tag in 6). (2) The inline card: a tag, a bold short
+    cite and a claim on one line (5 lines, 4 texts, in t32's 68), a card written inline that no
+    rule reads. Count each per caselist on the store as the re-parse to t32's version left it,
+    sample (1) through `scripts/sample_cite_shapes.py` (operator-run, formatting terms only, no
+    card text reaching the session), and send the counts and tallies to the PM before any rule.
+    Build only what the PM rules, with t24's guards, fixtures shown failing first, the parser
+    version bumped and the labelled evaluation's precision held.
+  priority: 3
+  constraints:
+    packages: [debate_core.evidence, debate_core.integrations, scripts, packages/debate_core/tests, tests/scripts, docs/data]
+    forbidden:
+      - Card text, a tag or a cite in the report, a commit or the session
+      - A school, team code or debater name anywhere
+      - A rule before the PM's ruling
+      - A fall in tag or cite precision on the labelled evaluation
+  context:
+    - kind: TaskRef
+      name: v1-e31-t32-bold-in-part-tags
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        Counts of both shapes per caselist and a sample of (1) with the operator's tallies
+        in formatting terms are sent to the PM before any rule.
+    - id: ac2
+      description: >-
+        A ruled rule has fixtures shown failing first, tag precision holds on the labelled
+        evaluation (operator), and the parser version is bumped with the operator's re-parse
+        written out.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e31-t34-what-the-bold-tag-rules-leave-above-a-cite-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e31-debate-file-parsing
+spec:
+  description: >-
+    What the bold tag rules leave above a cite: the lines not bold, sampled, and the inline
+    card, counted.
+  goalRef:
+    name: v1-e31-t34-what-the-bold-tag-rules-leave-above-a-cite
+  graph:
+    nodes:
+      - id: what-the-bold-tag-rules-leave-above-a-ci
+        kind: Task
+        name: Left above a cite
+        description: >-
+          What the bold tag rules leave above a cite: the lines not bold, sampled, and the
+          inline card, counted.
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Left above a cite tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/integrations/docx_parser, -k, tag_above]
+status:
+  phase: Pending

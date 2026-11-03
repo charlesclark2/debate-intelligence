@@ -26,7 +26,9 @@ the only path that counts downloads against the daily cap before spending them.
 
 **The manual commands handle what is already on this Mac.** The three HS LD weeklies and the 105
 Policy camp files already downloaded go in with `caselist import` and `caselist import-openev`.
-That also saves three of the scarce downloads. When this backfill ran, `pull` could not take in a
+That also saves three of the scarce downloads. Camp files stay a one-time manual import (Charlie's
+decision, 2026-11-03, `v1-e34-t37`): the weekly sync leaves `caselist.openev_event` unset, so it never
+fetches a camp file. When this backfill ran, `pull` could not take in a
 file you already had: an archive in its inbox was skipped (`already_in_inbox`) and never imported.
 Since `v1-e34-t06` it imports any weekly in the inbox that is newer than the caselist's latest
 manifest. The files on hand here were never in the inbox under the site's names, so the hand

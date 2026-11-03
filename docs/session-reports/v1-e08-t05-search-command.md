@@ -353,3 +353,13 @@ this report.
    --offline`.
 9. **Merge:** after the command-4 edit, `scripts/task pr --partial` once `ci` is green. The PM
    records ac6 in a batch and sets the Goal `Succeeded` when the coach's labels are scored.
+
+## Operator records (recorded by the PM, 2026-11-03)
+
+Added by the PM. Nothing above is changed, and this section is not a review.
+
+| Criterion | Was | Now | Record |
+|---|---|---|---|
+| ac6: the coach's labels on one real query per format, nDCG@10 ranked against provider order | NOT RUN (operator) | PASS | 2026-11-02, `v1.1.0-dev.342`, live searches saved by the operator and labelled blind by the coach (each sheet the top 10 by the ranking and the top 10 by provider order, merged and sorted by title, with no rank shown; the key kept apart until he had answered). Policy, the politics DA's link on national health insurance: 3 relevant of 20 rows, nDCG@10 **0.746** ranked against **0.000** in provider order, 3 relevant in the ranking's top 10 against 0 (the ranking placed them 1st, 9th and 10th; provider order had them 117th, 441st and 257th). LD, de-extinction: 10 relevant of 16 rows, **0.552** against **0.452**, 6 in the top 10 against 5 (three the coach marked relevant at provider positions 2, 3 and 10 were ranked 50th, 48th and 72nd). Both searches `exit 6`, rss `partial` because one feed was unreadable (below) |
+
+Every criterion passes, so the Goal is `Succeeded` in this batch. The ranking beats provider order on both formats, so no weight-tuning ticket is opened; the LD rows ranked down are noted for the next tuning. The coach's two observations are filed in this batch: DA link queries that name the plan's mechanism in the United States (`v1-e08-t14`, p2), and LD research that starts broad and narrows from the first page (`v1-e08-t15`, p3, proposal first). The feed findings go to `v1-e07-t14` and `v1-e08-t10`.

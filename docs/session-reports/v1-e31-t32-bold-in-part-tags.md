@@ -451,3 +451,15 @@ was ruled for, and nothing more.
    them, and the inline "part" card.
 10. **Merge:** `scripts/task pr --partial` once `ci` is green. The Goal stays `InProgress` until the
     re-parse's counts are recorded (steps 4 to 6).
+
+## PM note after the merge (2026-11-03)
+
+Added by the PM in the batch after the merge. Nothing above is changed, and this is not a review.
+
+* **Step 3** (the "before" copy) runs on Thursday 2026-11-05, after the cloud run of Wednesday
+  2026-11-04 records, and on the `v1.1.0-dev.342` build: before that run the dev bucket held no
+  `docx-7` parsed store, so a restore would have held 0 objects, as v1-e39-t10's journey found on
+  2026-11-03. No newer dev build is installed on the Mac until step 3 is done.
+* **Step 4's image** carries this merge and, if v1-e31-t23 has merged by then, `2026.11.03-docx-9` as
+  well, so one full re-parse covers both bumps. Step 5's `parsed_version` is then that image's version.
+* **v1-e31-t23** takes `docx-9` at its sync (the PM's note to that session, 2026-11-03).

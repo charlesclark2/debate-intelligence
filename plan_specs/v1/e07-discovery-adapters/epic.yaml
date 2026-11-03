@@ -341,5 +341,25 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e07-t13-profiles-enable-the-providers-that-passed-their-smoke
+    - id: t14
+      kind: Task
+      name: 'Roll Call''s unreadable feed is fixed or dropped, and one feed that keeps failing no longer marks every search partial'
+      description: >-
+        Roll Call's unreadable feed is fixed or dropped, and one feed that keeps failing no
+        longer marks every search partial.
+      inputs:
+        specRef: plan_specs/v1/e07-discovery-adapters/t14-an-unreadable-feed-found-and-fixed-or-dropped.yaml
+        goalRef: v1-e07-t14-an-unreadable-feed-found-and-fixed-or-dropped
+      dependsOn:
+      - t05
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e07-t14-an-unreadable-feed-found-and-fixed-or-dropped reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e07-t14-an-unreadable-feed-found-and-fixed-or-dropped
 status:
   phase: Pending

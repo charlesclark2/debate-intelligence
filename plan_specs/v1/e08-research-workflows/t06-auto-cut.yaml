@@ -25,7 +25,9 @@ spec:
     grouped under the search as a block heading; any UNVERIFIED cards only in a separate clearly-bannered
     section), a JSON manifest bundle, and a per-result report (rank, URL, access status, card status,
     reasons, cost). Boundaries: reuses cut pipeline and renderer unchanged; digests are t07.
-  priority: 2
+    (PM amendment 2026-11-03, the dependency audit.) Raised from p2 to p1: v1-e09-t05, a p1 task,
+    depends on it.
+  priority: 1
   constraints:
     packages: [debate_core.application, debate_cli]
     forbidden:

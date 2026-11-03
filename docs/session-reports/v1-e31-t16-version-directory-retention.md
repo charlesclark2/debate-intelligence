@@ -450,3 +450,14 @@ recorded at a later close-out and does not hold the Goal.
   The counts are in [Retired so far](../data/parsed-card-store.md#retired-so-far).
 * **Still to come:** the next-day check, the prod apply and retirement after the next promotion,
   and the 32-day check.
+
+## Operator records (recorded by the PM, 2026-11-03)
+
+Added by the PM. Nothing above is changed, and this section is not a review.
+
+| Criterion | Was | Now | Record |
+|---|---|---|---|
+| ac5: prod's plan and apply | after the next promotion | PASS | 2026-11-03, in step 11's prod apply after promotion #810 (the PM read every plan): the lifecycle rule and the two tagging grants on `parsed/` are in prod, and the plan after the apply says `No changes` |
+| ac4: prod's retirements | NOT RUN (operator) | refused as designed; to run after prod holds `docx-7` | 2026-11-03, `caselist retire --bucket` dry run against prod on `v1.1.0-dev.342` (parser `2026.10.27-docx-7`): 20 directories, `docx-1`, `-2`, `-3`, `-5` and `-6` in each of hsld26, hspf26, hspolicy26 and openev, every one `not yet superseded`, because prod holds no `docx-7` directory and a directory is superseded only by the installed build's version. No tag was read or written, so the tagging grant is first exercised by the next dry run |
+
+The Goal stays `InProgress`. Prod's retirement runs after the pilot's promotion item 6 publishes `docx-7` to prod, and then names five directories, `2026.10.20-docx-6` included (12,713 objects, about 7.5 GB). The dev bucket and this machine also retire `docx-6` once the 2026-11-04 cloud run has published `docx-7` for every caselist (steps 1, 2 and 4).

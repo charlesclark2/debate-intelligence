@@ -928,5 +928,24 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e40-t40-token-errors-name-the-cloud-cure
+    - id: t41
+      kind: Task
+      name: 'A cloud run''s decision about each listed file is kept past the log''s 90 days'
+      description: >-
+        A cloud run's decision about each listed file is kept past the log's 90 days.
+      inputs:
+        specRef: plan_specs/v1/e40-cloud-caselist-run/t41-cloud-run-keeps-its-per-file-decisions.yaml
+        goalRef: v1-e40-t41-cloud-run-keeps-its-per-file-decisions
+      dependsOn:
+      - t04
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e40-t41-cloud-run-keeps-its-per-file-decisions reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e40-t41-cloud-run-keeps-its-per-file-decisions
 status:
   phase: Pending

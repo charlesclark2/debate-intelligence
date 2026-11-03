@@ -382,3 +382,13 @@ his DA and advantage review intact.
 7. **After the coach's review:** the PM applies his corrections in a batch, flips the entries to
    `coach_reviewed`, refreshes the frozen fixture, records ac1 and sets the Goal `Succeeded`.
 8. **Merge:** `scripts/task pr --partial` once `ci` is green.
+
+## Operator records (recorded by the PM, 2026-11-03)
+
+Added by the PM. Nothing above is changed, and this section is not a review.
+
+| Criterion | Was | Now | Record |
+|---|---|---|---|
+| ac1 (part): the coach reviews them (operator) | NOT RUN (operator) | PART: 3 of 20 entries reviewed | the coach's answers of 2026-11-02, relayed by Charlie: `antiblackness-k` approved as drafted; `psychoanalysis-k` approved, with no Zizek template added; `cost-benefit` approved as written. The PM marked the three `coach_reviewed`, raised `taxonomy_version` to 1.2.1 (no template changed), and refreshed the guard's fixture as `coach_reviewed_1_2_1.yaml`, which now holds 12 reviewed entries |
+
+The Goal stays `InProgress`. The PM's relay of 2026-11-02 asked about only the three entries the PM had flagged and wrongly called them the last; 17 entries added or reshaped by this task still say `awaiting_coach_review` (util, deontology, structural-violence, theory, the five counterplans, and eight of the kritiks). Their review sheet is above. When the coach has read them, the PM applies his answers the same way and sets the Goal `Succeeded`.

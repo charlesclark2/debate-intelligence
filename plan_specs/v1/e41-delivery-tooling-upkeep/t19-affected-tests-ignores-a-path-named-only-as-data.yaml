@@ -1,0 +1,75 @@
+# TASK v1-e41-t19-affected-tests-ignores-a-path-named-only-as-data - Test selection does not follow an edge through a fixture that only names a guide's path
+# Epic: E41 — Delivery Tooling Upkeep | Release: v1.8 (Weekly caselist run in the cloud) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e41-t19-affected-tests-ignores-a-path-named-only-as-data
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.8
+    debate/epic: v1-e41-delivery-tooling-upkeep
+  annotations:
+    debate/title: "Test selection does not follow an edge through a fixture that only names a guide's path"
+spec:
+  # Filed by the PM, 2026-11-03, from v1-e31-t25's follow-up (the PM's review, 2026-11-03).
+  description: >-
+    v1-e31-t25 changed the labelling guide and its labeller, and `scripts/affected_tests.py`
+    chose 124 of 668 test files: 15 of them bucket-mode files, reached because
+    `build_parse_world.py` and `corpus.py` name the guide's path as a string. A path named as
+    data is not an import, and its file's tests do not depend on the guide. Find how the
+    selector treats a path string, and stop it adding an edge for a documentation file named
+    only as data, while keeping every edge a test truly has (a fixture it reads, a module it
+    imports). Show the 15 leaving that change's selection and nothing that should stay.
+  priority: 3
+  constraints:
+    packages: [scripts, tests/scripts, docs/process]
+    forbidden:
+      - Dropping an edge a test truly has
+      - Network access in a test
+  context:
+    - kind: TaskRef
+      name: v1-e41-t11-selector-ast-walk-and-container-contract
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        A documentation file named only as a string no longer pulls the namer's tests into
+        the selection, every real edge kept, by selector tests on invented trees shown
+        failing first, and v1-e31-t25's change selects 109 or fewer files.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e41-t19-affected-tests-ignores-a-path-named-only-as-data-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.8
+    debate/epic: v1-e41-delivery-tooling-upkeep
+spec:
+  description: >-
+    Test selection does not follow an edge through a fixture that only names a guide's path.
+  goalRef:
+    name: v1-e41-t19-affected-tests-ignores-a-path-named-only-as-data
+  graph:
+    nodes:
+      - id: affected-tests-ignores-a-path-named-only
+        kind: Task
+        name: Path edge
+        description: >-
+          Test selection does not follow an edge through a fixture that only names a
+          guide's path.
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Path edge tests pass
+            command: uv
+            args: [run, pytest, tests/scripts, -k, affected or test_selection]
+status:
+  phase: Pending

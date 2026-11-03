@@ -441,3 +441,13 @@ a healthy provider. Both rulings are in the spec, and the report keeps the evide
    lint-imports, thin handlers, the schemas, the links and the specs are clean, after the sync onto
    v1-e06-t12.
 9. **Merge:** a plain `scripts/task pr` once `ci` is green. The Goal is `Succeeded`.
+
+## Operator records (recorded by the PM, 2026-11-03)
+
+Added by the PM. Nothing above is changed, and this section is not a review.
+
+| Criterion | Was | Now | Record |
+|---|---|---|---|
+| Operator follow-up: the live smoke through the installed build | optional, after the merge | PASS | 2026-11-02, `v1.1.0-dev.342`, Crossref the only provider, from a folder whose `.env` holds the contact email (read masked). Polite pool: 1 query, 20 results, every one with a DOI, 15 dated (Crossref gave no issued date for the other 5), breaker closed. Public pool (email blanked), the expanded heg-answers search: all 7 queries asked and answered, none `not asked`, 140 raw results ranked to 20, all with a DOI and a date, breaker closed. No HTTP 400 (every `select` field accepted) and no 429 |
+
+Crossref has passed its smoke, so `v1-e07-t13` may enable it. Without a contact email a machine uses the public pool and says so. That night Crossref answered fast; on a slow night the last queries of an expanded search come back `not asked`, by design.

@@ -1,0 +1,83 @@
+# TASK v1-e07-t14-an-unreadable-feed-found-and-fixed-or-dropped - Roll Call's unreadable feed is fixed or dropped, and one feed that keeps failing no longer marks every search partial
+# Epic: E07 Discovery Provider Adapters | Release: v1.4 (Federated research from the CLI) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e07-t14-an-unreadable-feed-found-and-fixed-or-dropped
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.4
+    debate/epic: v1-e07-discovery-adapters
+  annotations:
+    debate/title: "Roll Call's unreadable feed is fixed or dropped, and one feed that keeps failing no longer marks every search partial"
+spec:
+  # Filed by the PM, 2026-11-03, from v1-e08-t05's ac6 searches (2026-11-02).
+  description: >-
+    Every search that read the feeds on 2026-11-02 reported rss `partial`: `1 of 8 feeds failed:
+    Roll Call: unreadable feed: not well-formed XML: ParseError`, on all 7 queries, so a search
+    exits 6 however good its results. Roll Call's entry in config/feeds/politics.yaml was
+    already marked worth replacing (its dates carry no time zone, so none can be placed in a
+    date window). (1) Find from the operator's feed check (`feed_check`, operator-run, counts
+    and statuses only) whether the feed is broken at the publisher or our parser refuses
+    something valid; fix the parser if it is ours, otherwise drop the entry or replace it with a
+    feed the coach approves. (2) Propose whether one feed that fails should mark every search
+    partial, or only when no feed answers, or after it has failed for some number of days, and
+    how the footer says which feed failed; the PM rules before it is built.
+  priority: 3
+  constraints:
+    packages: [debate_core.integrations, debate_core.application, config, packages/debate_core/tests, docs/guides]
+    forbidden:
+      - A live network call in a test
+      - Hiding a failed feed from the provider's reasons
+      - A feed added without the coach's approval
+  context:
+    - kind: TaskRef
+      name: v1-e07-t05-rss-news-adapter
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        The cause is found by the operator's feed check, and the feed is fixed, dropped or
+        replaced (the coach approving a replacement), by tests on recorded feeds.
+    - id: ac2
+      description: >-
+        What the PM rules for a failing feed's effect on a search's outcome is built with
+        tests shown failing first.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e07-t14-an-unreadable-feed-found-and-fixed-or-dropped-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.4
+    debate/epic: v1-e07-discovery-adapters
+spec:
+  description: >-
+    Roll Call's unreadable feed is fixed or dropped, and one feed that keeps failing no longer
+    marks every search partial.
+  goalRef:
+    name: v1-e07-t14-an-unreadable-feed-found-and-fixed-or-dropped
+  graph:
+    nodes:
+      - id: an-unreadable-feed-found-and-fixed-or-dr
+        kind: Task
+        name: Feed fixed
+        description: >-
+          Roll Call's unreadable feed is fixed or dropped, and one feed that keeps failing
+          no longer marks every search partial.
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Feed fixed tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/integrations/discovery, -k, feed or rss]
+status:
+  phase: Pending

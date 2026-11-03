@@ -35,6 +35,10 @@ spec:
     `s3:PutObjectTagging` and `s3:GetObjectTagging` on `parsed/` only. Locally the command
     deletes the directory, with confirmation. Out of scope: removal requests, which delete every
     version already.
+    (PM amendment 2026-11-03.) Prod's retirement names `2026.09.20-docx-1`, `2026.10.10-docx-2`,
+    `2026.10.12-docx-3`, `2026.10.18-docx-5` and `2026.10.20-docx-6`, after prod holds the installed
+    build's parser version (`2026.10.27-docx-7`) for every caselist; the dev bucket and this machine retire
+    `2026.10.20-docx-6` after the cloud run's full re-parse of 2026-11-04. ac4 is met by those runs.
   priority: 3
   constraints:
     packages: [debate_core.application, debate_core.integrations.local, debate_core.integrations.s3, debate_cli, packages/debate_core/tests, packages/debate_cli/tests, infrastructure/modules/evidence_bucket, docs/runbooks, docs/data]

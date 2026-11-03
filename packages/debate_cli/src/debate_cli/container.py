@@ -618,8 +618,9 @@ the data directory, never committed, and under its retention and removal. An eva
 
 
 def cassette_directory_name(route: TaskClass | None) -> str:
-    """The landscape model cassettes' directory under `<data dir>/landscape/`: :data:`MODEL_CASSETTES_DIRECTORY`,
-    or `model-cassettes-<route>` for an evaluation on another route (`v1-e32-t43`)."""
+    """The landscape model cassettes' directory under `<data dir>/landscape/`:
+    :data:`MODEL_CASSETTES_DIRECTORY`, or `model-cassettes-<route>` for an evaluation on another route
+    (`v1-e32-t43`)."""
     return MODEL_CASSETTES_DIRECTORY if route is None else f"{MODEL_CASSETTES_DIRECTORY}-{route.value}"
 
 

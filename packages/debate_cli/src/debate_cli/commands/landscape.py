@@ -240,8 +240,8 @@ from debate_core.arguments.landscape.evaluation_breakdown import (
 )
 from debate_core.arguments.landscape.model_stage import NameScan
 from debate_core.arguments.landscape.scan_hits import ScanHit, hit_counts, mark_counts
-from debate_core.domain.model_contracts import TaskClass
 from debate_core.domain.landscape_trends import LandscapeTrends, TrendLabel
+from debate_core.domain.model_contracts import TaskClass
 
 __all__ = [
     "CIRCUIT_WIDE",

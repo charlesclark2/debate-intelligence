@@ -109,3 +109,48 @@ if env | grep -q '^DEBATE_'; then echo "STOP: a DEBATE_ variable is set; unset i
 
 To report on them, give each hit's number and whether its words name a team, a school or a tournament,
 or are an ordinary word that shares them: numbers and judgements, never the words.
+
+## Recording on another route (`v1-e32-t43`)
+
+`landscape evaluate --route <task class>` measures the same cards on another generative route of the
+routing file: that route's model answers the prompt's `high_volume` calls, and the budget guard prices
+that model's ceiling. Its cassettes go to `~/.debate-research/<env>/landscape/model-cassettes-<route>/`,
+never the default directory, so the 1.1.0 `high_volume` cassettes are neither replaced nor served in its
+place; `--route` on a replay or a `--breakdown` reads that directory alone. `landscape cassettes --route
+<route>` lists and deletes them.
+
+The PM approved dev's `deep_audit` route (Claude Sonnet 4.6) for the coach's 47 cards on 2026-11-03.
+Priced from `config/model_pricing.yaml` at the 1.1.0 recording's tokens it costs about $0.17, and the
+guard's ceiling for its three calls is about $1.11 (about $1.49 with a repair), inside dev's $2 a day.
+
+Run it from a checkout that has `--route` (go to it as step 1 says), after the step 1 sample check has
+exited 0 once. One block, in this order: the sample check, the Bedrock login check, the recording, and
+the breakdown replaying what it recorded. Each `STOP:` line stops it before any model call. Expected
+runtime: 3 to 5 minutes.
+
+```bash
+SAMPLE=~/Documents/debate/landscape-review/policy-2026-27-nhi-coach-sample-labelled.csv
+ROWS=~/.debate-research/dev/landscape/local-classifier/hspolicy26/policy-2026-27-nhi-coach-sample.jsonl
+if env | grep -q '^DEBATE_'; then echo "STOP: a DEBATE_ variable is set; unset it and paste again"; elif pgrep -f "caselist pull" >/dev/null; then echo "STOP: a caselist pull is running; wait for it to finish"; elif ! uv run debate-research --json landscape evaluate --caselist hspolicy26 --snapshot 2026-10-20 --sample "$SAMPLE" --sample-rows "$ROWS" --check-sample; then echo "STOP: the sample check failed; paste its JSON and record nothing"; elif ! aws sts get-caller-identity --profile debate-dev-bedrock >/dev/null; then echo "STOP: the Bedrock profile is not logged in; log in and paste again"; else uv run debate-research --json landscape evaluate --caselist hspolicy26 --snapshot 2026-10-20 --sample "$SAMPLE" --sample-rows "$ROWS" --model-mode record --route deep_audit; uv run debate-research --json landscape evaluate --caselist hspolicy26 --snapshot 2026-10-20 --sample "$SAMPLE" --sample-rows "$ROWS" --breakdown --route deep_audit; fi
+```
+
+What to read, and paste back: **the three JSON objects, and nothing else.**
+
+* The sample check: `labelled` 47.
+* The recording: `route` `deep_audit`, `prompt_version` `1.1.0`, `labelled`, `found` and `asked` 47, and
+  `calls` 3 or 4. Exit 0 means the pipeline meets the bar and every scan is clean; exit 1
+  `EVALUATION_BELOW_BAR` puts the same counts in `error.details`. A stop before any answer
+  (`MODEL_ACCESS_DENIED`, or a budget refusal) recorded nothing: paste it, and do not run it again
+  before the PM has read it.
+* The breakdown: the same counts with no call made, and `breakdown.outcomes` summing to 47.
+
+If any `scan` count in the recording is above zero, read the hits as step 5 says, in the terminal only,
+with this block, which is step 5's with `--route deep_audit`. **Never paste or copy its output**; give
+each hit's number and whether its words name a team, a school or a tournament, or are an ordinary word
+that shares them.
+
+```bash
+SAMPLE=~/Documents/debate/landscape-review/policy-2026-27-nhi-coach-sample-labelled.csv
+ROWS=~/.debate-research/dev/landscape/local-classifier/hspolicy26/policy-2026-27-nhi-coach-sample.jsonl
+if env | grep -q '^DEBATE_'; then echo "STOP: a DEBATE_ variable is set; unset it and paste again"; else uv run debate-research landscape evaluate --caselist hspolicy26 --snapshot 2026-10-20 --sample "$SAMPLE" --sample-rows "$ROWS" --breakdown --route deep_audit; fi
+```

@@ -512,6 +512,12 @@ both. `debate-research landscape cassettes` (`v1-e32-t34`) counts them three way
 * **unattributed**: it names no caselist, because it was recorded before `v1-e32-t31`. No caselist's
   delete removes it; the count goes to the PM.
 
+An evaluation recorded on another route (`landscape evaluate --route`, `v1-e32-t43`) keeps its cassettes
+apart, in `<data dir>/landscape/model-cassettes-<route>/`, which the blocks below do not read. The same
+command with `--route <route>` lists and deletes them the same way, behind a code of its own. Until this
+step has blocks for them, check whether `<data dir>/landscape` holds a `model-cassettes-` directory, and
+if it does, tell the PM before the purge is closed.
+
 The command reads the directory the landscape model stage records to, from this environment's
 `storage.data_dir`. It runs from the checkout, as the model stage does, with `uv run`: the window is
 in one, and it must be up to date on `dev`, since the installed build may predate the command. It

@@ -37,7 +37,7 @@ fingerprint rule has changed yet.
 | ac1: operator-run counts of marker lines by form and position per caselist, and the clusters they split | PASS | `uv run python scripts/count_in_round_markers.py` (operator, 2026-11-02, 661 s) → recorded in the parse report's `v1-e31-t23` section |
 | ac2: the PM's ruling written into the spec and built with fixtures shown failing first | NOT RUN | Waiting on the ruling |
 | ac3: version bump and before/after re-parse counts if parser or fingerprint changes | NOT RUN | Depends on the ruling |
-| ac4: the ruling on short plain lines, built, and evidence precision does not fall | NOT RUN | Waiting on the ruling |
+| ac4: the ruling on short plain lines, built, and evidence precision does not fall | NOT RUN | M3's part measured: the operator's `uv run pytest tests/evals/parser -m "eval and slow"` → `1 passed in 4.16s`; `run_parser_eval.py --tier both` on `docx-8` and again with M3 switched off (a scratch runner) → both gates PASSED, and the two reports' groups, files and targets differ in nothing: EVIDENCE precision 0.9708 (930 right, 28 wrong) on the full tier and 0.9433 on the PR subset, both ways. The short-lines ruling waits on the coach's sample |
 
 ## Files changed
 

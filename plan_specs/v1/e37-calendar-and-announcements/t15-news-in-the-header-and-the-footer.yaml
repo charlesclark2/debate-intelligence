@@ -42,7 +42,7 @@ spec:
         tests hold, and `pnpm --dir site lint`, `typecheck`, `test` and `build` pass
         offline.
 status:
-  phase: Pending
+  phase: InProgress
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

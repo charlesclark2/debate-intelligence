@@ -61,14 +61,14 @@ v2.3's extension work.
 | Release | Theme | Epics | Tasks | Done | Est. hours |
 |---|---|---|---|---|---|
 | [v1.0](plan_specs/releases/v1.0.yaml) | Foundation & verified evidence core | 3 | 55 | 55 | 252 |
-| [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 4 | 115 | 95 | 505 |
-| [v1.2](plan_specs/releases/v1.2.yaml) | Argument landscape & file building | 3 | 77 | 68 | 316 |
-| [v1.3](plan_specs/releases/v1.3.yaml) | URL → verified card | 2 | 21 | 15 | 121 |
-| [v1.4](plan_specs/releases/v1.4.yaml) | Federated research from the CLI | 2 | 20 | 11 | 102 |
+| [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 4 | 115 | 96 | 505 |
+| [v1.2](plan_specs/releases/v1.2.yaml) | Argument landscape & file building | 3 | 80 | 70 | 320 |
+| [v1.3](plan_specs/releases/v1.3.yaml) | URL → verified card | 2 | 23 | 15 | 124 |
+| [v1.4](plan_specs/releases/v1.4.yaml) | Federated research from the CLI | 2 | 26 | 11 | 112 |
 | [v1.5](plan_specs/releases/v1.5.yaml) | V1 quality gate & team pilot | 1 | 7 | 0 | 66 |
-| [v1.6](plan_specs/releases/v1.6.yaml) | Public team website | 3 | 29 | 21 | 166 |
+| [v1.6](plan_specs/releases/v1.6.yaml) | Public team website | 3 | 31 | 21 | 169 |
 | [v1.7](plan_specs/releases/v1.7.yaml) | Team evidence search pilot | 1 | 29 | 25 | 94 |
-| [v1.8](plan_specs/releases/v1.8.yaml) | Weekly caselist run in the cloud | 2 | 56 | 35 | 103 |
+| [v1.8](plan_specs/releases/v1.8.yaml) | Weekly caselist run in the cloud | 2 | 57 | 36 | 106 |
 | [v2.0](plan_specs/releases/v2.0.yaml) | Cloud platform foundation | 3 | 17 | 0 | 164 |
 | [v2.1](plan_specs/releases/v2.1.yaml) | Web app, debate tub & async jobs | 3 | 18 | 0 | 198 |
 | [v2.2](plan_specs/releases/v2.2.yaml) | Research workspace | 2 | 12 | 0 | 117 |
@@ -247,7 +247,7 @@ OpenCaselist archives and OpenEv camp files for HS LD, Policy and PF are importe
 | [Bodies too long to be one card, and two cards stored as one](plan_specs/v1/e31-debate-file-parsing/t22-card-boundaries.yaml) `v1-e31-t22-card-boundaries` | Succeeded | 2 | 6.0 |
 | [In-round markers kept in a card's evidence text](plan_specs/v1/e31-debate-file-parsing/t23-in-round-markers.yaml) `v1-e31-t23-in-round-markers` | Pending | 2 | 3.0 |
 | [A bold tag above a cite is read as the card's tag](plan_specs/v1/e31-debate-file-parsing/t24-bold-tag-above-bracketed-cite.yaml) `v1-e31-t24-bold-tag-above-bracketed-cite` | Succeeded | 1 | 3.0 |
-| [The labeller warns before a card is lost, and import refuses a file already corrected](plan_specs/v1/e31-debate-file-parsing/t25-labeller-safeguards.yaml) `v1-e31-t25-labeller-safeguards` | Pending | 1 | 3.0 |
+| [The labeller warns before a card is lost, and import refuses a file already corrected](plan_specs/v1/e31-debate-file-parsing/t25-labeller-safeguards.yaml) `v1-e31-t25-labeller-safeguards` | Succeeded | 1 | 3.0 |
 | [parse --publish sends nothing of a held upload](plan_specs/v1/e31-debate-file-parsing/t26-held-upload-parsed-publish.yaml) `v1-e31-t26-held-upload-parsed-publish` | Succeeded | 1 | 2.0 |
 | [The parse time-limit test does not depend on the machine's load](plan_specs/v1/e31-debate-file-parsing/t27-parse-time-limit-test.yaml) `v1-e31-t27-parse-time-limit-test` | Pending | 1 | 1.0 |
 | [What the cautious cite rules leave, and a short cite behind a first name](plan_specs/v1/e31-debate-file-parsing/t28-cite-rules-leftovers.yaml) `v1-e31-t28-cite-rules-leftovers` | Pending | 1 | 3.0 |
@@ -371,9 +371,12 @@ Weekly argument-landscape reports show which positions are being read and with w
 | [The model-use gate reads open question 4 from the policy's open-questions table, not the first row numbered 4](plan_specs/v1/e32-argument-landscape/t37-model-use-gate-reads-the-open-questions-table.yaml) `v1-e32-t37-model-use-gate-reads-the-open-questions-table` | Succeeded | 1 | 0.5 |
 | [The landscape smoke check reads the review queue's order line and a dry run's scan refusal](plan_specs/v1/e32-argument-landscape/t38-landscape-smoke-checks-order-line-and-dry-run-refusal.yaml) `v1-e32-t38-landscape-smoke-checks-order-line-and-dry-run-refusal` | Pending | 2 | 1.0 |
 | [Why the model stage scored 36.8%: the evaluation broken down, and the scan's hits listed in the operator's terminal](plan_specs/v1/e32-argument-landscape/t39-model-evaluation-diagnosis.yaml) `v1-e32-t39-model-evaluation-diagnosis` | Succeeded | 4 | 3.0 |
-| [The model stage names the argument a card is read as, with each position's side and description, and the scrub and scan fixed](plan_specs/v1/e32-argument-landscape/t40-model-stage-reads-the-argument-not-the-subject.yaml) `v1-e32-t40-model-stage-reads-the-argument-not-the-subject` | InProgress | 1 | 5.0 |
-| [The coach's review applied: three new NHI positions, corrected descriptions, and a second accepted label in the coach sample](plan_specs/v1/e32-argument-landscape/t41-coach-sample-second-label-and-three-new-positions.yaml) `v1-e32-t41-coach-sample-second-label-and-three-new-positions` | InProgress | 2 | 3.0 |
+| [The model stage names the argument a card is read as, with each position's side and description, and the scrub and scan fixed](plan_specs/v1/e32-argument-landscape/t40-model-stage-reads-the-argument-not-the-subject.yaml) `v1-e32-t40-model-stage-reads-the-argument-not-the-subject` | Succeeded | 1 | 5.0 |
+| [The coach's review applied: three new NHI positions, corrected descriptions, and a second accepted label in the coach sample](plan_specs/v1/e32-argument-landscape/t41-coach-sample-second-label-and-three-new-positions.yaml) `v1-e32-t41-coach-sample-second-label-and-three-new-positions` | Succeeded | 2 | 3.0 |
 | [`landscape cassettes --delete` can delete only one prompt version's cassettes](plan_specs/v1/e32-argument-landscape/t42-landscape-cassettes-delete-by-prompt-version.yaml) `v1-e32-t42-landscape-cassettes-delete-by-prompt-version` | Pending | 1 | 1.0 |
+| [The model stage is scored as students meet it, its refusals are explained, and a second model route is measured on the same cards](plan_specs/v1/e32-argument-landscape/t43-model-evaluation-system-score-refusals-and-a-second-route.yaml) `v1-e32-t43-model-evaluation-system-score-refusals-and-a-second-route` | Pending | 2 | 3.0 |
+| [A scan hit already marked as a JSON key's name or a taxonomy word does not make a text unclean](plan_specs/v1/e32-argument-landscape/t44-scan-marked-hits-leave-a-text-clean.yaml) `v1-e32-t44-scan-marked-hits-leave-a-text-clean` | Pending | 1 | 1.0 |
+| [The review queue's order model is trained again at taxonomy 1.5.0](plan_specs/v1/e32-argument-landscape/t45-review-order-model-retrained-at-the-current-taxonomy.yaml) `v1-e32-t45-review-order-model-retrained-at-the-current-taxonomy` | Pending | 2 | 1.0 |
 
 #### [E33 — Evidence File Builder](plan_specs/v1/e33-file-builder/epic.yaml)
 
@@ -431,6 +434,8 @@ A student can run `debate-research cut <URL>` and receive a verified, tagged, ci
 | [`verify` warns when a deletion in a .docx body removes a negation](plan_specs/v1/e06-card-cutting/t10-verify-docx-flags-a-removed-negation.yaml) `v1-e06-t10-verify-docx-flags-a-removed-negation` | Pending | 1 | 1.0 |
 | [Exporting a .docx refuses a card whose format profile is not the one it renders in](plan_specs/v1/e06-card-cutting/t11-export-docx-refuses-a-mismatched-profile.yaml) `v1-e06-t11-export-docx-refuses-a-mismatched-profile` | Pending | 1 | 0.5 |
 | [A pasted copy's cite fields can be stated when it is stored, so a card cut from it has a usable cite](plan_specs/v1/e06-card-cutting/t12-pasted-copy-cite-stated-by-the-user.yaml) `v1-e06-t12-pasted-copy-cite-stated-by-the-user` | Succeeded | 1 | 2.0 |
+| [A cite can carry a year-only or year-and-month date without inventing a day](plan_specs/v1/e06-card-cutting/t13-year-and-month-dates-in-a-cite.yaml) `v1-e06-t13-year-and-month-dates-in-a-cite` | Pending | 1 | 2.0 |
+| [A stated cite the domain refuses is reported as a refusal, not an internal error](plan_specs/v1/e06-card-cutting/t14-refused-stated-cite-is-a-refusal.yaml) `v1-e06-t14-refused-stated-cite-is-a-refusal` | Pending | 1 | 1.0 |
 
 
 ### v1.4 — Federated research from the CLI
@@ -450,6 +455,10 @@ A student can run `debate-research cut <URL>` and receive a verified, tagged, ci
 | [Government and policy source adapters](plan_specs/v1/e07-discovery-adapters/t07-government-adapters.yaml) `v1-e07-t07-government-adapters` | Succeeded | 2 | 6.0 |
 | [One Retry-After reader for every HTTP adapter, on an injected clock](plan_specs/v1/e07-discovery-adapters/t08-shared-retry-after.yaml) `v1-e07-t08-shared-retry-after` | Succeeded | 2 | 1.0 |
 | [A Google News item resolved by its headline in a configured publisher's own feed](plan_specs/v1/e07-discovery-adapters/t09-google-news-title-match.yaml) `v1-e07-t09-google-news-title-match` | Pending | 1 | 2.0 |
+| [The resilience wrapper does not count time a provider spends waiting on its own pace as a failure](plan_specs/v1/e07-discovery-adapters/t10-time-waiting-on-a-pace-is-not-a-failure.yaml) `v1-e07-t10-time-waiting-on-a-pace-is-not-a-failure` | Pending | 1 | 2.0 |
+| [A bill found by search shows its latest action and committees from Congress.gov](plan_specs/v1/e07-discovery-adapters/t11-congress-gov-bill-details.yaml) `v1-e07-t11-congress-gov-bill-details` | Pending | 1 | 2.0 |
+| [GAO reports and CRS reports can be found by search](plan_specs/v1/e07-discovery-adapters/t12-gao-and-crs-reports.yaml) `v1-e07-t12-gao-and-crs-reports` | Pending | 1 | 3.0 |
+| [The dev and prod profiles enable the discovery providers whose live smoke passed](plan_specs/v1/e07-discovery-adapters/t13-profiles-enable-the-providers-that-passed-their-smoke.yaml) `v1-e07-t13-profiles-enable-the-providers-that-passed-their-smoke` | Pending | 2 | 1.0 |
 
 #### [E08 — Federated Research Workflows](plan_specs/v1/e08-research-workflows/epic.yaml)
 
@@ -466,6 +475,8 @@ A student can run `debate-research cut <URL>` and receive a verified, tagged, ci
 | [An installed build carries the configuration `search` reads: the argument taxonomy, the ranking table and the feed lists](plan_specs/v1/e08-research-workflows/t09-installed-build-carries-search-configuration.yaml) `v1-e08-t09-installed-build-carries-search-configuration` | Succeeded | 2 | 1.0 |
 | [One search asks each provider once, however many queries the expansion gives](plan_specs/v1/e08-research-workflows/t10-search-asks-each-provider-once.yaml) `v1-e08-t10-search-asks-each-provider-once` | Pending | 1 | 2.0 |
 | [The search.expand prompt names the argument family's needs, not the DA family's](plan_specs/v1/e08-research-workflows/t11-expand-prompt-sends-the-familys-needs.yaml) `v1-e08-t11-expand-prompt-sends-the-familys-needs` | Pending | 1 | 1.0 |
+| [`search --json` says whether a result's date is a day, a month or a year](plan_specs/v1/e08-research-workflows/t12-search-json-names-a-dates-precision.yaml) `v1-e08-t12-search-json-names-a-dates-precision` | Pending | 2 | 1.0 |
+| [An expansion on a topic only a feed file names falls back cleanly, and a pair's templates are capped](plan_specs/v1/e08-research-workflows/t13-topic-expansion-fallback-and-templates-per-pair.yaml) `v1-e08-t13-topic-expansion-fallback-and-templates-per-pair` | Pending | 2 | 1.0 |
 
 
 ### v1.5 — V1 quality gate & team pilot
@@ -524,6 +535,8 @@ Whitefish Bay Debate has a public, mobile-friendly team website: team informatio
 | [The prod build refuses an image whose consent has lapsed, as it refuses a lapsed name](plan_specs/v1/e37-calendar-and-announcements/t12-stale-image-consent-refused.yaml) `v1-e37-t12-stale-image-consent-refused` | Succeeded | 0 | 1.0 |
 | [A consent entry checked after its season ends is stale to the build, for names and images](plan_specs/v1/e37-calendar-and-announcements/t13-consent-checked-after-the-season-is-stale.yaml) `v1-e37-t13-consent-checked-after-the-season-is-stale` | Succeeded | 1 | 1.0 |
 | [A check dated after the season says so, and the schedule and results use one season end](plan_specs/v1/e37-calendar-and-announcements/t14-season-end-warning-and-one-definition.yaml) `v1-e37-t14-season-end-warning-and-one-definition` | Pending | 1 | 1.0 |
+| [News is in the header navigation and stays in the footer](plan_specs/v1/e37-calendar-and-announcements/t15-news-in-the-header-and-the-footer.yaml) `v1-e37-t15-news-in-the-header-and-the-footer` | Pending | 2 | 1.0 |
+| [Announcement guard follow-ups: a name's published form in free text, an image that exists, and names after the season rolls over](plan_specs/v1/e37-calendar-and-announcements/t16-announcement-guard-follow-ups.yaml) `v1-e37-t16-announcement-guard-follow-ups` | Pending | 2 | 2.0 |
 
 #### [E38 — Team Donations](plan_specs/v1/e38-donations/epic.yaml)
 
@@ -641,7 +654,8 @@ The weekly caselist run (pull, import, publish, parse, search index) runs in the
 | [The image plan check refuses a schedule repointed at a revision registered before the apply](plan_specs/v1/e41-delivery-tooling-upkeep/t13-image-plan-check-known-revision-rule.yaml) `v1-e41-t13-image-plan-check-known-revision-rule` | Pending | 1 | 0.5 |
 | [A bounded run that starts a Docker container stops that container too](plan_specs/v1/e41-delivery-tooling-upkeep/t14-hard-stop-stops-a-named-container.yaml) `v1-e41-t14-hard-stop-stops-a-named-container` | Pending | 1 | 0.8 |
 | [CI chooses the tests once, skips the test parts when none are chosen, cancels superseded pull-request runs, and runs the partition proof only when it can change](plan_specs/v1/e41-delivery-tooling-upkeep/t15-ci-selection-once-and-no-queue.yaml) `v1-e41-t15-ci-selection-once-and-no-queue` | Succeeded | 1 | 4.0 |
-| [CI runs as many test parts as the selection needs, measures work stealing, and the bot's dispatched run runs no Python job](plan_specs/v1/e41-delivery-tooling-upkeep/t16-ci-matrix-sized-to-the-selection.yaml) `v1-e41-t16-ci-matrix-sized-to-the-selection` | InProgress | 1 | 3.0 |
+| [CI runs as many test parts as the selection needs, measures work stealing, and the bot's dispatched run runs no Python job](plan_specs/v1/e41-delivery-tooling-upkeep/t16-ci-matrix-sized-to-the-selection.yaml) `v1-e41-t16-ci-matrix-sized-to-the-selection` | Succeeded | 1 | 3.0 |
+| [CI deals whole test files to its parts by their recorded durations, so an ordinary task pull request's parts finish together](plan_specs/v1/e41-delivery-tooling-upkeep/t17-ci-parts-dealt-by-recorded-durations.yaml) `v1-e41-t17-ci-parts-dealt-by-recorded-durations` | Pending | 1 | 3.0 |
 
 
 ## V2

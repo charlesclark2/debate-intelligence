@@ -6,11 +6,19 @@
 | Spec | [`plan_specs/v1/e31-debate-file-parsing/t23-in-round-markers.yaml`](../../plan_specs/v1/e31-debate-file-parsing/t23-in-round-markers.yaml) |
 | Epic / release | `v1-e31-debate-file-parsing` / `v1.1` |
 | Branch | `task/v1-e31-t23-in-round-markers` |
-| Session status | IN PROGRESS <!-- COMPLETE / PARTIAL / BLOCKED --> |
+| Session status | IN PROGRESS: counts recorded, waiting on the PM's ruling <!-- COMPLETE / PARTIAL / BLOCKED --> |
 
 ## Summary
 
-<!-- 3-6 sentences: what was built, how it fits the epic, anything the PM should look at first. -->
+Step 1 of the PM's flow is done. `scripts/count_in_round_markers.py` (logic in
+`debate_core.evidence.in_round_markers`) counts marker-shaped lines by form id, reading and place,
+the lines read as nothing between body paragraphs by the same form ids, and the clusters each set of
+marker forms splits today. The operator ran it on 2026-11-02 (661 s, 13,518 sources, 287,545 cards),
+and the counts are in
+[docs/data/caselist-parse-report.md](../data/caselist-parse-report.md#in-round-markers-and-the-short-lines-between-body-paragraphs-v1-e31-t23).
+A marker is read three ways today: as body, as nothing, and as a cite (`Marked 10:42` is taken for a
+name and a two-digit year, which divides its card). The proposal has gone to the PM; no parser or
+fingerprint rule has changed yet.
 
 ## Plan nodes
 
@@ -18,7 +26,7 @@
 
 | Node | Status | Notes |
 |---|---|---|
-| | | |
+| `markers`: In-round markers | IN PROGRESS | Counts done and recorded; ruling pending |
 
 ## Acceptance criteria
 
@@ -26,7 +34,10 @@
 
 | Criterion | Status | Evidence (command → result) |
 |---|---|---|
-| | | |
+| ac1: operator-run counts of marker lines by form and position per caselist, and the clusters they split | PASS | `uv run python scripts/count_in_round_markers.py` (operator, 2026-11-02, 661 s) → recorded in the parse report's `v1-e31-t23` section |
+| ac2: the PM's ruling written into the spec and built with fixtures shown failing first | NOT RUN | Waiting on the ruling |
+| ac3: version bump and before/after re-parse counts if parser or fingerprint changes | NOT RUN | Depends on the ruling |
+| ac4: the ruling on short plain lines, built, and evidence precision does not fall | NOT RUN | Waiting on the ruling |
 
 ## Files changed
 

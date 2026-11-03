@@ -130,7 +130,15 @@ version's cassettes on this machine and of its repair cassettes filed under the 
 never a name. The scan reads values, not JSON keys, and leaves out the positions text the prompt sends
 (`v1-e32-t40`). `--model-mode replay` (the default) answers from those cassettes; `record`, once, after
 the data-use policy records its open question 4 as answered, makes the calls and writes them. It caches,
-writes and publishes no report. Exit `0` when the stage ran to the end, the format meets the bar and the
+writes and publishes no report.
+
+The cards are scored two ways (`v1-e32-t43`). `pipeline` is as students meet them: a card the headings
+place surely (a run never sends it) is scored on that placement, a card a coach's override decides argues
+no position is not counted, and every other card on the model's answer. `model_alone` is the model's
+answer for every card; the top-level `counted`, `correct` and `accuracy` are its. Each gives its counted,
+correct, refused and below-threshold cards, its accuracy over the counted and its coverage, the counted
+over the labelled. The bar reads the pipeline's accuracy (`bar_reads`, the PM's ruling of 2026-11-02).
+Exit `0` when the stage ran to the end, the pipeline meets the bar and the
 three scans are clean. A stage the model stopped partway is judged
 as `landscape report`'s is (`v1-e32-t33`): `3` when it was throttled or did not answer, `1` when the call
 was refused, with `error.code` `MODEL_STAGE_INTERRUPTED` and the same `cause_code`, `sent`, `unanswered`
@@ -181,6 +189,7 @@ from debate_cli.output import CliOutput, CommandFailure, JsonValue, OutputMode
 from debate_core.application.analytic_texts import AnalyticTextCounts
 from debate_core.application.errors import error_code_of
 from debate_core.application.landscape_model_evaluation import (
+    BAR_READS,
     TARGET_ACCURACY,
     CoachSampleCheck,
     EvaluationBreakdown,
@@ -210,6 +219,7 @@ from debate_core.application.plan_texts import PlanTextCounts
 from debate_core.application.settings import Environment, Settings, find_repository_root
 from debate_core.arguments.landscape.evaluation_breakdown import (
     CardBreakdown,
+    LabelledScore,
     Score,
     confusion,
     deterministic_counts,
@@ -770,6 +780,13 @@ def evaluation_summary(result: FormatEvaluation) -> dict[str, JsonValue]:
         "input_tokens": result.input_tokens,
         "output_tokens": result.output_tokens,
         "interrupted": result.interrupted,
+        "bar_reads": BAR_READS,
+        "model_alone": _labelled_score_json(result.model_alone),
+        "pipeline": {
+            **_labelled_score_json(result.pipeline),
+            "by_headings": result.pipeline.by_headings,
+            "decided_none": result.pipeline.decided_none,
+        },
         "scan": {
             name: {
                 "texts": scan.texts,
@@ -787,17 +804,40 @@ def evaluation_summary(result: FormatEvaluation) -> dict[str, JsonValue]:
     }
 
 
+def _labelled_score_json(score: LabelledScore) -> dict[str, JsonValue]:
+    return {
+        "labelled": score.labelled,
+        "counted": score.counted,
+        "correct": score.correct,
+        "accuracy": score.accuracy,
+        "refused": score.refused,
+        "below_threshold": score.below_threshold,
+        "coverage": score.coverage,
+    }
+
+
+def _share_of(part: float | None) -> str:
+    return "n/a" if part is None else f"{part:.1%}"
+
+
 def _evaluation_display(result: FormatEvaluation) -> str:
-    accuracy = "n/a" if result.accuracy is None else f"{result.accuracy:.1%}"
+    pipeline, alone = result.pipeline, result.model_alone
     return "\n".join(
         [
             f"{result.caselist} ({result.event}) on {result.topic_id} {result.taxonomy_version}, "
             f"landscape.classify_position {result.prompt_version}.",
             f"Labelled {result.labelled}, found {result.found}; asked about {result.asked} in "
             f"{result.calls} call(s).",
-            f"Counted {result.counted}, correct {result.correct}: {accuracy} (bar {TARGET_ACCURACY:.0%}); "
-            f"{result.placed_below_threshold} placed below the threshold, {result.placed_labelled_none} "
-            "labelled none.",
+            "As students meet it (the headings' sure placements, the model for the rest): "
+            f"counted {pipeline.counted}, correct {pipeline.correct}: {_share_of(pipeline.accuracy)} "
+            f"(bar {TARGET_ACCURACY:.0%}); {pipeline.by_headings} by the headings, {pipeline.decided_none} "
+            f"decided none by an override, {pipeline.refused} refused, {pipeline.below_threshold} below the "
+            f"threshold; coverage {pipeline.counted} of {pipeline.labelled} "
+            f"({_share_of(pipeline.coverage)}).",
+            f"The model alone: counted {alone.counted}, correct {alone.correct}: "
+            f"{_share_of(alone.accuracy)}; {alone.refused} refused, {alone.below_threshold} below the "
+            f"threshold, {result.placed_labelled_none} labelled none; coverage {alone.counted} of "
+            f"{alone.labelled} ({_share_of(alone.coverage)}).",
             f"Scan of the prompt inputs: {_scan_line(result.sent)}. Of the cassettes: "
             f"{_scan_line(result.cassettes)}. Of the repair cassettes: "
             f"{_scan_line(result.repair_cassettes)}.",
@@ -839,7 +879,8 @@ def _evaluation_failure(result: FormatEvaluation, payload: dict[str, JsonValue])
         )
     else:
         message = (
-            f"the model stage's accuracy is under the bar of {TARGET_ACCURACY:.0%}, or nothing was counted"
+            "the pipeline's accuracy (the headings' sure placements, the model for the rest) is under the "
+            f"bar of {TARGET_ACCURACY:.0%}, or nothing was counted"
         )
     return CommandFailure(
         code="EVALUATION_BELOW_BAR", message=message, exit_code=ExitCode.DOMAIN_FAILURE, details=payload

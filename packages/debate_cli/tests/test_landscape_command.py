@@ -69,6 +69,7 @@ from debate_core.arguments.landscape.evaluation_breakdown import (
     CardBreakdown,
     CardOutcome,
     DeterministicPlacement,
+    LabelledScore,
 )
 from debate_core.arguments.landscape.model_stage import DEFAULT_BATCH_SIZE, NameScan
 from debate_core.arguments.landscape.queue_order import QueueOrderModel
@@ -1866,6 +1867,8 @@ def test_a_publishs_scan_refusal_reads_as_before_word_for_word(
 
 
 def _evaluated(**changes: Any) -> FormatEvaluation:
+    """A stub evaluation. Unless `changes` give them, the model's and the pipeline's scores (`v1-e32-t43`)
+    count what its `counted` and `correct` count, so the bar reads the same accuracy as before."""
     base = FormatEvaluation(
         caselist=CASELIST,
         event="POLICY",
@@ -1885,7 +1888,19 @@ def _evaluated(**changes: Any) -> FormatEvaluation:
         cassettes=NameScan(texts=2),
         repair_cassettes=NameScan(texts=1),
     )
-    return dataclasses.replace(base, **changes)
+    changed = dataclasses.replace(base, **changes)
+    alone = LabelledScore(
+        labelled=changed.labelled,
+        counted=changed.counted,
+        correct=changed.correct,
+        refused=3,
+        below_threshold=changed.placed_below_threshold,
+    )
+    scores = {
+        "model_alone": alone,
+        "pipeline": dataclasses.replace(alone, refused=2, by_headings=2, decided_none=1),
+    }
+    return dataclasses.replace(changed, **{name: changes.get(name, score) for name, score in scores.items()})
 
 
 @pytest.fixture
@@ -1972,6 +1987,99 @@ def test_evaluate_displays_the_repair_cassettes_scan(
     shown = " ".join(_plain_display(world, sample_files).split())
 
     assert "Of the repair cassettes: 1 text(s), 0 naming a school, 0 a team code, 0 a tournament." in shown
+
+
+# ------------------------------------------------------------------------------------------------
+# v1-e32-t43: the pipeline's score (stage one's sure placements, the model for the rest) beside the
+# model's own, in the JSON and the display; the bar reads the pipeline's (the PM's ruling, 2026-11-02).
+# ------------------------------------------------------------------------------------------------
+
+#: The model alone 10 of 20 (50%); the pipeline 19 of 21 (90.5%), 4 of them by the headings.
+PIPELINE_MEETS = {
+    "counted": 20,
+    "correct": 10,
+    "model_alone": LabelledScore(labelled=30, counted=20, correct=10, refused=3, below_threshold=6),
+    "pipeline": LabelledScore(
+        labelled=30, counted=21, correct=19, refused=2, below_threshold=6, by_headings=4, decided_none=1
+    ),
+}
+#: The model alone 18 of 20 (90%); the pipeline 16 of 21 (76.2%).
+MODEL_ALONE_MEETS = {
+    "counted": 20,
+    "correct": 18,
+    "model_alone": LabelledScore(labelled=30, counted=20, correct=18, refused=3, below_threshold=6),
+    "pipeline": LabelledScore(
+        labelled=30, counted=21, correct=16, refused=2, below_threshold=6, by_headings=4, decided_none=1
+    ),
+}
+
+
+def test_evaluate_json_reports_the_pipelines_score_beside_the_models_own(
+    world: SyntheticRun, sample_files: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _stub_evaluation(monkeypatch, _evaluated(**PIPELINE_MEETS))
+
+    data = _data(evaluate(world, sample_files))
+
+    assert data["bar_reads"] == "pipeline"
+    assert data["model_alone"] == {
+        "labelled": 30,
+        "counted": 20,
+        "correct": 10,
+        "accuracy": 0.5,
+        "refused": 3,
+        "below_threshold": 6,
+        "coverage": 20 / 30,
+    }
+    assert data["pipeline"] == {
+        "labelled": 30,
+        "counted": 21,
+        "correct": 19,
+        "accuracy": 19 / 21,
+        "refused": 2,
+        "below_threshold": 6,
+        "coverage": 21 / 30,
+        "by_headings": 4,
+        "decided_none": 1,
+    }
+    assert (data["accuracy"], data["meets_target"]) == (0.5, True)
+
+
+def test_evaluate_bar_reads_the_pipeline_and_not_the_model_alone(
+    world: SyntheticRun, sample_files: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _stub_evaluation(monkeypatch, _evaluated(**PIPELINE_MEETS))
+    meeting = evaluate(world, sample_files)
+    _stub_evaluation(monkeypatch, _evaluated(**MODEL_ALONE_MEETS))
+    missing = evaluate(world, sample_files)
+
+    assert meeting.exit_code == ExitCode.OK, meeting.output
+    assert missing.exit_code == ExitCode.DOMAIN_FAILURE, missing.output
+    error = _error(missing)
+    assert (error["code"], error["details"]["meets_target"], error["details"]["accuracy"]) == (
+        "EVALUATION_BELOW_BAR",
+        False,
+        0.9,
+    )
+    assert "the pipeline's accuracy" in error["message"]
+
+
+def test_evaluate_displays_the_pipelines_score_and_the_models_own(
+    world: SyntheticRun, sample_files: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _stub_evaluation(monkeypatch, _evaluated(**PIPELINE_MEETS))
+
+    shown = " ".join(_plain_display(world, sample_files).split())
+
+    assert (
+        "As students meet it (the headings' sure placements, the model for the rest): counted 21, "
+        "correct 19: 90.5% (bar 85%); 4 by the headings, 1 decided none by an override, 2 refused, "
+        "6 below the threshold; coverage 21 of 30 (70.0%)."
+    ) in shown
+    assert (
+        "The model alone: counted 20, correct 10: 50.0%; 3 refused, 6 below the threshold, 1 labelled none; "
+        "coverage 20 of 30 (66.7%)."
+    ) in shown
 
 
 @pytest.mark.parametrize(
@@ -2157,6 +2265,9 @@ EVALUATION_KEYS = {
     "output_tokens",
     "interrupted",
     "scan",
+    "bar_reads",
+    "model_alone",
+    "pipeline",
 }
 
 

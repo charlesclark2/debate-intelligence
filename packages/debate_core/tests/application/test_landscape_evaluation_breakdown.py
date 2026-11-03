@@ -509,6 +509,7 @@ async def test_evaluation_breakdown_scores_as_the_evaluation_does(
         TAXONOMY,
         LABELLED,
         stage_over(recording, prompts),
+        overrides=OVERRIDES,
         cassette_texts=lambda: texts_under(tmp_path / CLASSIFY_POSITION_PROMPT_ID),
         repair_cassette_texts=lambda: texts_under(tmp_path / REPAIR_PROMPT_ID),
     )

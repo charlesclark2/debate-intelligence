@@ -523,6 +523,37 @@ def read_version_source(repository: Path = REPOSITORY_ROOT) -> Release:
     return Release.parse(version)
 
 
+WORKSPACE_PYPROJECTS = (
+    Path("pyproject.toml"),
+    Path("packages/debate_core/pyproject.toml"),
+    Path("packages/debate_api/pyproject.toml"),
+    Path("packages/debate_workers/pyproject.toml"),
+)
+"""Every other pyproject in the workspace, which carries the version source's version."""
+
+
+def workspace_version_mismatches(repository: Path = REPOSITORY_ROOT) -> list[str]:
+    """Every workspace pyproject whose `[project] version` is not the version source's.
+
+    uv_build reads only a static `version`, so the one version is written in each pyproject and
+    bumped in all of them together; this is what refuses a bump that missed one. The dev channel
+    and the stable release workflow both read the version source alone.
+    """
+    source = read_version_source(repository)
+    problems: list[str] = []
+    for relative in WORKSPACE_PYPROJECTS:
+        with (repository / relative).open("rb") as handle:
+            version = tomllib.load(handle).get("project", {}).get("version")
+        if not isinstance(version, str):
+            problems.append(f"{relative.as_posix()} has no [project] version")
+        elif version != str(source):
+            problems.append(
+                f"{relative.as_posix()} has version {version}, but {VERSION_SOURCE.as_posix()} "
+                f"(the version source) has {source}"
+            )
+    return problems
+
+
 def target_for(source: Source, sha: str, store: GitTagStore, repository: Path) -> Release:
     version_source = read_version_source(repository)
     if source is Source.HOTFIX:

@@ -7,9 +7,11 @@ bold) or `v1-e31-t22`'s (`sample_card_boundaries._between`, where A ends and B b
 
 * **neither end** (20): a body nine-tenths inside another that holds neither of its ends, beside
   that body, from `scripts/count_matching_recall.py`'s candidates. Same card, or different?
-* **trims with the same tag and cite** (10 end to end, 10 with words between): two passages of one
-  holder that share no text and whose cards carry the same tag and cite, with the holder, from the
-  same candidates. One card cut twice, or two cards? The end-to-end ones are Brannock's shape.
+* **trims with the same cite** (up to 10 with the same tag as well; 10 under other tags end to end,
+  and 10 with words between): two passages of one holder that share no text and whose cards carry
+  the same cite, with the holder, from the same candidates. One card cut twice, or two cards? The
+  end-to-end ones are Brannock's shape. The store holds 2 pairs with the same tag and cite and 950
+  with the same cite under other tags (2026-11-03), so the cite alone is sampled too.
 * **holders under 300 words** (20): `v1-e31-t22`'s bodies holding two bodies whole that share no
   text, from its count's candidates (`scripts/count_card_boundaries.py --save-candidates`), the
   holder under 300 words. One card cut twice, or two cards? The PM's amendment of 2026-10-20.
@@ -95,19 +97,20 @@ class Stratum:
     planned: int
 
 
-NEITHER_END, TRIMS_END_TO_END, TRIMS_WITH_WORDS_BETWEEN, HOLDERS_UNDER_300 = range(4)
+NEITHER_END, SAME_TAG_AND_CITE, SAME_CITE_END_TO_END, SAME_CITE_WORDS_BETWEEN, HOLDERS_UNDER_300 = range(5)
 STRATA: tuple[Stratum, ...] = (
     Stratum(
         "neither end: nine-tenths inside a body holding neither of its ends", SAME_QUESTION, SAME_ANSWERS, 20
     ),
+    Stratum("trims with the same tag and cite", CUT_TWICE_QUESTION, CUT_TWICE_ANSWERS, 10),
     Stratum(
-        "trims with the same tag and cite, end to end in their holder",
+        "trims with the same cite under other tags, end to end in their holder",
         CUT_TWICE_QUESTION,
         CUT_TWICE_ANSWERS,
         10,
     ),
     Stratum(
-        "trims with the same tag and cite, words of the holder between or around them",
+        "trims with the same cite under other tags, words of the holder between or around them",
         CUT_TWICE_QUESTION,
         CUT_TWICE_ANSWERS,
         10,
@@ -146,8 +149,13 @@ def population_of(
             found[NEITHER_END].append(
                 Drawn(NEITHER_END, caselist, (_key(row["cut"]), _key(row["container"])))
             )
-        elif row["shape"] == "trims" and row["group"] == Beside.SAME_TAG_AND_CITE.value:
-            stratum = TRIMS_END_TO_END if row["words_in_neither"] == "0" else TRIMS_WITH_WORDS_BETWEEN
+        elif row["shape"] == "trims" and row["group"] in (Beside.SAME_TAG_AND_CITE, Beside.SAME_CITE):
+            if row["group"] == Beside.SAME_TAG_AND_CITE:
+                stratum = SAME_TAG_AND_CITE
+            elif row["words_in_neither"] == "0":
+                stratum = SAME_CITE_END_TO_END
+            else:
+                stratum = SAME_CITE_WORDS_BETWEEN
             found[stratum].append(
                 Drawn(stratum, caselist, tuple(_key(p) for p in (row["holder"], *row["pieces"])))
             )

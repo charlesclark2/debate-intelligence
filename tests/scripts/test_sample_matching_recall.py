@@ -70,17 +70,21 @@ def test_the_items_go_to_the_pager_and_the_sheet_holds_counts_alone(
     lines = sheet.read_text(encoding="utf-8").splitlines()
     assert not [word for word in TELLTALE if word in "\n".join(lines)]
     assert lines[0] == "Matching-recall sample (v1-e31-t29), seed 7: 6 items."
-    assert lines[3:8] == [
+    assert lines[3:9] == [
         "In the corpus, and drawn:",
         "  neither end: nine-tenths inside a body holding neither of its ends: 1 (drew 1 of 20)",
-        "  trims with the same tag and cite, end to end in their holder: 1 (drew 1 of 10)",
-        "  trims with the same tag and cite, words of the holder between or around them: 1 (drew 1 of 10)",
+        "  trims with the same tag and cite: 2 (drew 2 of 10)",
+        "  trims with the same cite under other tags, end to end in their holder: 0 (drew 0 of 10)",
+        "  trims with the same cite under other tags, words of the holder between or around them: "
+        "0 (drew 0 of 10)",
         "  holders under 300 words of two bodies sharing no text: 3 (drew 3 of 20)",
     ]
     rows = lines[lines.index("Item | Answer | Notes") + 1 :][:6]
     assert rows == [f"{number:>4} |  |" for number in range(1, 7)]
     strata = lines[lines.index("Strata, by item (read after answering):") + 1 :]
-    numbers = sorted(int(n) for line in strata for n in line.rsplit(": ", 1)[1].split(", "))
+    numbers = sorted(
+        int(n) for line in strata if not line.endswith(": none") for n in line.rsplit(": ", 1)[1].split(", ")
+    )
     assert numbers == [1, 2, 3, 4, 5, 6]
 
 
@@ -126,8 +130,8 @@ def test_the_draw_takes_each_strata_planned_number_at_most() -> None:
         for number in range(len(script.STRATA))
     }
     drawn = script.draw(population, 1)
-    assert [sum(item.stratum == number for item in drawn) for number in range(4)] == [20, 10, 10, 20]
-    assert len(set(drawn)) == 60
+    assert [sum(item.stratum == number for item in drawn) for number in range(5)] == [20, 10, 10, 10, 20]
+    assert len(set(drawn)) == 70
 
 
 def test_a_sheet_that_exists_or_sits_in_the_repository_is_refused(
@@ -157,7 +161,9 @@ def test_the_sample_refuses_output_that_is_not_a_terminal(
 LONG_CITE = " ".join(f"citeword{number}" for number in range(60))
 
 
-@pytest.mark.parametrize("stratum", [script.NEITHER_END, script.TRIMS_END_TO_END, script.HOLDERS_UNDER_300])
+@pytest.mark.parametrize(
+    "stratum", [script.NEITHER_END, script.SAME_CITE_END_TO_END, script.HOLDERS_UNDER_300]
+)
 def test_every_item_shows_each_cards_tag_and_its_whole_cite_on_a_narrow_screen(stratum: int) -> None:
     (template,) = _document("cite", (("Invented 26", CardCompleteness.FULL, "x"),)).cards
     bodies = (" ".join(f"h{n}" for n in range(40)), " ".join(f"h{n}" for n in range(12)))
@@ -178,3 +184,33 @@ def test_every_item_shows_each_cards_tag_and_its_whole_cite_on_a_narrow_screen(s
     for _, index in positions:
         assert shown_whole([*LONG_CITE.split(), f"end{index}"])
     assert max(len(line) for line in shown.splitlines() if "citeword" in line) <= 50
+
+
+def test_trims_are_drawn_by_what_their_cards_carry_and_whether_they_meet_end_to_end() -> None:
+    def trims(group: str, gap: str, source: str) -> dict[str, object]:
+        pieces = [[source, 20], [source, 30]]
+        return {"caselist": CASELIST, "shape": "trims", "group": group, "words_in_neither": gap,
+                "holder": [source, 10], "pieces": pieces}  # fmt: skip
+
+    both, cite = (
+        "a card of each carries the same tag and the same cite",
+        "the same cite, never with the same tag",
+    )
+    rows = [
+        trims(both, "0", "a"),
+        trims(both, "10 to 49", "b"),
+        trims(cite, "0", "c"),
+        trims(cite, "1 to 9", "d"),
+        trims(cite, "50 or more", "e"),
+        trims("the same tag, never with the same cite", "0", "f"),
+        trims("neither the same tag nor the same cite", "0", "g"),
+    ]
+    found = script.population_of(rows, [], lambda caselist, key: 0)
+    sources = {number: [item.positions[0][0] for item in items] for number, items in found.items()}
+    assert sources == {
+        script.NEITHER_END: [],
+        script.SAME_TAG_AND_CITE: ["a", "b"],
+        script.SAME_CITE_END_TO_END: ["c"],
+        script.SAME_CITE_WORDS_BETWEEN: ["d", "e"],
+        script.HOLDERS_UNDER_300: [],
+    }

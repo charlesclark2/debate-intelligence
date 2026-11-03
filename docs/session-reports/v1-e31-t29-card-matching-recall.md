@@ -53,7 +53,13 @@ not to a limit.
 
 ## Deviations from the spec
 
-None.
+1. **The shape (2) sample includes trims with the same cite under other tags.** The spec names "an
+   identical cite and tag" as the kind of evidence a recovery might use. The operator's count
+   (2026-11-03) found 2 such pairs among 17,758 pairs of trims sharing no text, and 950 with the
+   same cite under other tags. A rule needing both would recover at most 2 pairs, and a sample of 2
+   says nothing, so the sample also draws 10 same-cite pairs end to end (Brannock's shape) and 10
+   with words between. The spec says "such as", so this stays within it, but it is the PM's call
+   whether the cite alone is evidence a rule may use.
 
 ## Decisions and assumptions
 
@@ -126,8 +132,17 @@ jq -c '.caselists | to_entries[] | {caselist: .key, version: .value.version_dire
 Expected: `exit 0`; four lines, the same versions as step 2, `tables` `card-fingerprint-v4`, `cards`
 above zero on each.
 
-**Step 4. The sample** (under a minute to draw, then your time: 60 items, about 20 seconds each in
-t22's sample).
+**Step 4 first: clear the blank sheet.** The first run of step 4 (01:52, under the earlier
+display) wrote `~/t29-matching-recall-tally-sheet.txt` before showing anything. The session read
+it: every Answer row is blank, so nothing is lost. The script refuses to overwrite a sheet, so
+remove it first:
+
+```zsh
+rm ~/t29-matching-recall-tally-sheet.txt
+```
+
+**Step 4. The sample** (under a minute to draw, then your time: about 60 items, about 20 seconds each
+in t22's sample).
 
 ```zsh
 cd ~/Documents/debate/debate-intelligence-tool/debate-intelligence-worktrees/v1-e31-t29-card-matching-recall

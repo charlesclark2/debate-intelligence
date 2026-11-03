@@ -6,18 +6,28 @@
 | Spec | [`plan_specs/v1/e07-discovery-adapters/t07-government-adapters.yaml`](../../plan_specs/v1/e07-discovery-adapters/t07-government-adapters.yaml) |
 | Epic / release | `v1-e07-discovery-adapters` / `v1.4` |
 | Branch | `task/v1-e07-t07-government-adapters` |
-| Session status | BLOCKED: stopped before building, awaiting the PM's rulings <!-- COMPLETE / PARTIAL / BLOCKED --> |
+| Session status | COMPLETE <!-- COMPLETE / PARTIAL / BLOCKED --> |
 
 ## Summary
 
-Stopped before building, as the brief asked (items 1 and 2). Nothing is implemented yet. The docs
-show three differences from the spec, and one of them needs a ruling before any adapter is written:
-**Congress.gov API v3 has no keyword search**, so the spec's `CongressGovProvider` "bill search" has
-nothing to search with. GovInfo's GAO Reports collection stops in September 2008, and CRS reports
-are on Congress.gov, not GovInfo. The Federal Register's official API page can't be read from this
-session (the site redirects automated readers to a block page), so its limits aren't confirmed.
-No pacing is needed for an 11-query search on any source whose limits could be read. The
-topic-enablement proposal is below. The relay to the PM bundles these questions.
+Two government discovery providers, each asked only by a search on a topic that lists it.
+`FederalRegisterProvider` searches the Register's rules, proposed rules and notices, and needs no
+key. `GovInfoProvider` searches GovInfo's bills, committee reports, hearings and committee prints,
+with one api.data.gov key; bills come from here because Congress.gov's API has no keyword search.
+Without the key, GovInfo is not built, and a search on its topic reports `govinfo: not configured: no
+api.data.gov key (DEBATE_PROVIDERS__API_DATA_GOV_KEY)` instead of an error. A search names its topic
+with `search --topic`, which now works on its own. A feed file's `search_topics` and
+`government_providers` say which government providers a topic asks, and `health-insurance.yaml`
+enables both for `policy-2026-27-nhi`. A government provider runs only when it is enabled, on the
+search's topic and (GovInfo) keyed. Both adapters pass the contract kit on hand-written fixtures,
+and all 18 mutants were caught. The affected set (468 of 666 files) is left to the pull request's
+`ci`, as the PM's 2026-10-19 ruling says. Look first at the selection rule (`SearchTopics` and
+`selected_providers` in `application/federated_search.py`), then at two consequences under
+Decisions: a keyless GovInfo makes every NHI search PARTIAL (exit 6), and the two new names go last
+in the dedupe precedence table.
+
+The session stopped before building, as the brief asked, and the PM ruled on 2026-11-02. The
+findings from that stop are kept below, as written then.
 
 ### API documentation, read 2026-11-02 (public pages only, no API call)
 
@@ -101,72 +111,262 @@ is unknown until its page is read.
 
 ## Plan nodes
 
-<!-- One row per Plan graph node, in the order they were completed. -->
-
 | Node | Status | Notes |
 |---|---|---|
-| | | |
+| `federal-register` (Federal Register adapter) | Done | `federal_register.py`; fixtures hand-written under `packages/debate_core/tests/fixtures/discovery/federal_register/` (ruling 5). |
+| `data-gov-key` (api.data.gov key handling) | Done | `data_gov.py`; `ProviderNotConfigured` in the registry; `not_configured` on the `DiscoveryProviders` port; the fan-out reports it. |
+| `topic-enablement` (Per-topic enablement) | Done | Moved before GovInfo (ruling 7). `SearchTopics`, `SearchRequest.topic_id`, `search --topic` alone, the feed files' two keys, the container. |
+| `govinfo` (GovInfo adapter) | Done | `govinfo.py`; BILLS, CRPT, CHRG, CPRT (ruling 2); fixtures under `.../fixtures/discovery/govinfo/`. |
+| `congress-gov` | Removed | Ruling 1: Congress.gov has no keyword search. |
 
 ## Acceptance criteria
 
-<!-- Goal criteria (ac1…) and every node criterion. Status: PASS / FAIL / NOT RUN. -->
-
 | Criterion | Status | Evidence (command → result) |
 |---|---|---|
-| | | |
+| ac1: FederalRegisterProvider and GovInfoProvider each pass the contract kit on hand-written fixtures (amended: two providers) | PASS | `TestFederalRegisterProvider`, `TestFederalRegisterProviderOnAnEmptyResult`, `TestGovInfoProvider`, `TestGovInfoProviderOnAnEmptyResult` in `test_government.py`, inside the 184 below. |
+| ac2: source_type government, the issuing agency or committee as publisher, the official identifier as provider_record_id | PASS | `test_federal_register_recorded_documents_map_to_the_hand_written_candidates`, `…_document_number_is_the_record_id_as_the_register_prints_it`, `…_issuing_agencies_are_the_publication` (7 cases), `…_every_document_is_a_free_to_read_government_source`; `test_govinfo_bill_congress_type_and_number_are_read_from_its_package_id` (6), `…_package_id_that_is_not_a_bills_one_gives_no_bill` (8), `…_issuing_committee_is_the_publication` (6), `…_url_is_the_package_details_page_and_no_api_link_is_offered`, and the kit's mapping check on both recordings. |
+| ac3: a missing api.data.gov key leaves GovInfo NOT_CONFIGURED, not an error; the Federal Register works keyless (amended: GovInfo only) | PASS | `test_key_missing_leaves_govinfo_unbuilt_and_recorded_not_configured` (unset, empty, spaces), `test_govinfo_key_missing_builds_no_adapter_and_records_it_not_configured` (3), `test_key_missing_is_reported_not_configured_for_every_query_not_as_an_error`, `test_key_is_never_the_shared_demo_key`, `test_federal_register_is_built_and_answers_with_no_key_configured`; CLI: `test_govinfo_without_an_api_data_gov_key_is_reported_not_configured_on_its_topic`. |
+| ac4: topic config controls which government providers run, verified by a registry test | PASS | Over a real `ProviderRegistry` and `FanOutStage`: `test_topic_that_lists_the_government_providers_asks_them_beside_the_others`, `…_absent_leaves_the_government_providers_neither_asked_nor_reported`, `…_that_lists_only_govinfo_does_not_ask_the_federal_register`, `…_lists_a_provider_settings_do_not_enable_so_it_is_not_asked`, `…_known_with_no_government_providers_asks_none_of_them`, `…_gate_reports_a_government_provider_named_by_providers_as_not_configured` (2), `…_unknown_is_refused_with_the_valid_ones_before_any_provider_is_asked`, `test_topic_committed_feed_files_enable_both_government_providers_for_nhi_only`; CLI: `test_the_federal_register_is_asked_only_by_a_search_on_a_topic_that_lists_it`. |
+| ac5: in `debate_core.integrations.discovery`, passes the kit, secrets never in a log line, passes in one process after the OpenCaselist and discovery suites | PASS | Kit as ac1, with the api.data.gov key and the contact email in `secrets`; `test_govinfo_key_reaches_no_log_line_error_repr_or_snapshot`, `test_federal_register_no_configured_secret_reaches_a_log_line_an_error_or_a_snapshot`, `test_key_is_masked_in_every_protected_log_line_once_govinfo_is_built` (7 loggers, from bare loggers). One process: `.venv/bin/python scripts/hard_stop.py 115 .venv/bin/python -m pytest packages/debate_core/tests/integrations/opencaselist packages/debate_core/tests/integrations/test_http_fetcher.py packages/debate_core/tests/integrations/test_crossref_doi.py packages/debate_core/tests/integrations/discovery/test_redaction.py packages/debate_core/tests/integrations/discovery/test_resilience.py packages/debate_core/tests/integrations/discovery/test_registry.py packages/debate_core/tests/integrations/discovery/test_http_failures.py packages/debate_core/tests/integrations/discovery/test_fake_provider.py packages/debate_core/tests/integrations/discovery/test_openalex.py packages/debate_core/tests/integrations/discovery/test_feeds.py packages/debate_core/tests/integrations/discovery/test_crossref.py packages/debate_core/tests/integrations/discovery/test_government.py -n 0 -p no:randomly -q` → `1116 passed in 2.66s`; `--collect-only` puts `test_government.py` last. |
+| Node `federal-register`: `uv run pytest …/test_government.py -k federal_register` | PASS | `56 passed in 1.57s`. |
+| Node `data-gov-key`: `uv run pytest …/test_government.py -k key` | PASS | `16 passed in 1.54s`. |
+| Node `govinfo`: `uv run pytest …/test_government.py -k govinfo` | PASS | `92 passed in 2.09s`. |
+| Node `topic-enablement`: `uv run pytest …/test_government.py` | PASS | `184 passed in 2.17s`. |
+
+### Red runs, then green
+
+Each set was written first and run against a skeleton with the public names and no behaviour, as the
+PM asks. The runs used `--tb=line`, with the reasons grouped.
+
+* **Settings** (`test_settings.py`, 7 selected): 3 failed: the two names missing, `.env.example`
+  missing the variable, no `api_data_gov_key` attribute. The profile guard passed, as it should with
+  no profile assigning the key.
+* **Dedupe precedence**: 2 failed: the table names 6 providers, not 8, and the two new names are not
+  last. `test_a_government_record_gives_way_to_every_other_provider_in_a_merge` passed red, because
+  a provider outside the table already comes last. It is kept as the behaviour the table must keep.
+* **Federal Register** (55): 46 failed against a do-nothing skeleton (`assert None is not None` ×19,
+  `DID NOT RAISE ProviderUnavailable` ×15, empty lists, `repr`). The 7 refusal cases passed against
+  it, because it refused everything. Against a refuse-nothing mapping all 7 failed. Two stay green
+  against any skeleton: the URL constant, and the zero-count answer with no `results` key.
+* **Key and topic** (29): 22 failed (`DID NOT RAISE FeedConfigError` ×5, `DID NOT RAISE
+  UnknownExpansionChoice`, `DID NOT RAISE ProviderNotConfigured`, wrong selections, `DEMO_KEY`
+  built, the key unmasked, `topic_id` in the JSON). The 7 that passed are cases where asking
+  everything is the right answer: an enabled provider on its topic, a keyed factory, the
+  Federal Register keyless, and an unknown name the enum already refused.
+* **CLI** (`test_search_command.py`): 3 failed: a bare `--topic` was a usage error, an unknown one had
+  no topic list, and the Federal Register was not wired.
+* **GovInfo** (92 under `-k govinfo`): 71 failed against a refuse-nothing skeleton. The 21 that passed
+  were the already-built key and topic tests whose names mention govinfo, the `None`-expecting date
+  and publication cases, the empty-words case, and the kit's name and secrets checks.
+
+### Mutants
+
+All 18 ran against `HEAD` with the files that cover them (`test_government.py`, plus
+`test_search_command.py` for the selection rule). Each was restored with `git checkout HEAD --`. No
+Hypothesis is involved.
+
+| Mutant | Caught by |
+|---|---|
+| PM: the key logged (no `protect_logs` in `require_api_data_gov_key`) | `test_key_is_masked_in_every_protected_log_line_once_govinfo_is_built` |
+| PM: a missing key reported as an error (`ERROR` outcome for an unbuilt provider) | `test_key_missing_is_reported_not_configured_for_every_query_not_as_an_error`, and the CLI footers (7 failed) |
+| PM: a government provider run for a topic that does not list it (`allows` true for any topic) | `test_topic_that_lists_only_govinfo_does_not_ask_the_federal_register`, `…_known_with_no_government_providers_asks_none_of_them`, `…_gate_reports_…[topic-without-it]` |
+| PM: an identifier dropped (GovInfo `provider_record_id`) | the kit's mapping check, `test_govinfo_bill_whose_package_id_names_no_bill_is_not_a_candidate`, the per-package test |
+| PM: an identifier dropped (Federal Register document number) | `…_document_number_is_the_record_id…`, the recorded mapping, `max_results` (6 failed) |
+| PM: a year date given a day (GovInfo) | `…_date_issued_keeps_its_precision…[year]`, the kit's mapping check |
+| A month date given a day | `…[month]`, the kit's mapping check |
+| `DEMO_KEY` used when no key is set | the three missing-key cases and the fan-out test (8 failed) |
+| The key sent as `api_key=` in the URL | `…_request_is_one_post_with_the_key_in_its_header…` and the kit's recorded-request checks (15 failed) |
+| Every granule of a package kept | `…_answer_keeps_one_candidate_per_package…`, the kit's mapping check |
+| A BILLS id that names no bill kept | `…_bill_whose_package_id_names_no_bill…`, the kit's mapping check |
+| Field syntax searched as typed | `…_query_words_that_would_read_as_search_syntax_are_cleared` (2), `…_query_of_nothing_but_search_syntax…` |
+| The Federal Register reads a 3xx | the redirect tests and the `304` test (6 failed) |
+| The Federal Register asks for every document type | the exact-URL and parameter tests, every recorded exchange (22 failed) |
+| A feed file may enable a non-government provider per topic | `test_topic_feed_file_mistake_fails_the_load[a-news-provider]`, `[a-scholarly-provider]` |
+| A keyless GovInfo left out instead of reported | the fan-out test, `test_topic_selection_is_the_providers_the_stored_search_records`, the CLI footer test. First skipped by the harness: after formatting, its target line no longer matched. Rerun alone. |
+| An unknown topic searched | `test_topic_unknown_is_refused…`, `test_an_unknown_topic_alone_exits_2…` |
+| `topic_id` always in a request's JSON | `test_topic_id_is_left_out_of_a_requests_json_when_none` |
+
+### Before the report
+
+* Affected set: `uv run scripts/affected_tests.py` → `468 of 666 test files (70.3%) chosen in 27.4 s
+  from 54 changed files`. The `DiscoveryProviders` port reaches the root conftest, through
+  `fake_router`. That is well past two minutes, so it is left to the pull request's `ci`, as
+  working agreement 10 and the PM's ruling of 2026-10-19 say. Nothing is handed to the operator.
+* The changed areas and the always-run list, in one run: `.venv/bin/python scripts/hard_stop.py 115
+  .venv/bin/python -m pytest packages/debate_core/tests/integrations/discovery
+  packages/debate_core/tests/application/test_settings.py …/test_federated_search.py
+  …/test_federated_dedupe.py …/test_federated_ranking.py …/test_federated_search_articles.py
+  …/test_query_expansion.py packages/debate_cli/tests/test_search_command.py
+  …/test_search_presenter.py …/test_installation.py …/commands/test_doctor.py …/test_app.py
+  …/test_help_rendering.py …/test_container_factories.py tests/architecture tests/specs
+  tests/smoke/test_search_smoke.py tests/scripts/test_stamp_build.py
+  tests/scripts/test_check_command_blocks.py tests/scripts/test_docs_index.py -q -m "not slow and
+  not live"` → `1969 passed in 32.66s`.
+* `uv run --frozen ruff check .` → `All checks passed!`; `uv run --frozen ruff format --check .` →
+  `1874 files already formatted`; `uv run --frozen pyright` (the whole configuration, as CI runs it)
+  → `0 errors, 0 warnings, 0 informations`; `uv run --frozen lint-imports` → `Contracts: 20 kept, 0
+  broken.`; `uv run --frozen python scripts/check_thin_handlers.py` → `OK: 72 … within 25
+  statements`; `scripts/docs_index.py --check-descriptions` → `All 68 indexed documents under docs/
+  have a description`; `scripts/check_links.py` → `OK: 3461 relative links and anchors in 581
+  Markdown files`; `scripts/check_command_blocks.py --base origin/dev` → `OK: no # comments in 661
+  shell code blocks in 241 Markdown files (1 session reports changed since origin/dev)`;
+  `uv run scripts/validate_specs.py` → `OK: 585 files, 41 epics, 522 tasks, 22 releases` (after the
+  phase change).
 
 ## Files changed
 
-<!-- Group by package or directory; one line on why each group changed. -->
+* **`packages/debate_core/src/debate_core/integrations/discovery/`**:
+  * `federal_register.py`, `govinfo.py` and `data_gov.py` (new): the two adapters and the key.
+  * `registry.py`: `ProviderNotConfigured` and `not_configured`.
+  * `feed_config.py`: `search_topics`, `government_providers`, `topic_providers`, `search_topic_ids`.
+  * `http_failures.py`: `redirect_failure`, shared by both adapters.
+  * `__init__.py`: the docstring.
+* **`packages/debate_core/src/debate_core/application/`**:
+  * `settings.py`: two names, `TOPIC_ENABLED_PROVIDERS` and `api_data_gov_key`.
+  * `ports/providers.py`: `DiscoveryProviders.not_configured`.
+  * `federated_search.py`: `SearchTopics`, the selection rule, the fan-out gate and the service's
+    topic check.
+  * `federated_search_types.py`: `SearchRequest.topic_id`.
+  * `federated_dedupe.py`: the two names last in every row.
+* **`packages/debate_cli/`**:
+  * `commands/search.py`: `--topic` alone.
+  * `container.py`: both factories, one shared feed-list load, `SearchTopics`.
+  * `README.md`: the search section's government sources and the key's setup note.
+  * Tests: `test_search_command.py` (new tests), `test_installation.py` and `commands/test_doctor.py`
+    (the pinned lists, 42 → 44), `test_search_presenter.py` (its fake).
+* **`config/feeds/`**: `health-insurance.yaml` (the two keys, for NHI), `README.md`.
+* **Tests**:
+  * `packages/debate_core/tests/integrations/discovery/test_government.py` (new, 184 tests).
+  * Fixtures: `packages/debate_core/tests/fixtures/discovery/federal_register/` and `govinfo/` (new,
+    with READMEs).
+  * `test_settings.py` and `test_federated_dedupe.py` (new tests).
+  * Four application test files' fakes.
+  * `tests/smoke/test_search_smoke.py` (two checks).
+* **Other**: `.env.example` (the variable, commented out), the spec, this report.
 
 ## Deviations from the spec
 
-Open until the PM rules (the session's relay of 2026-11-02 asks each one). Nothing is built yet.
+The PM's rulings of 2026-11-02, written into the spec's description, criteria, packages and nodes:
 
-1. **Congress.gov can't search by keyword** (the docs above). Proposed: bills come from GovInfo's
-   `collection:bills` search, which matches title and text and takes `congress:` and
-   `publishdate:range(...)`. The bill identifier (congress, type, number) is read from the BILLS
-   package id (e.g. `BILLS-119hr1234ih`), and `CONGRESS_GOV` isn't added. ac1 and ac2 would then
-   name two providers. Congress.gov lookups by bill (latest action, committees) become a follow-up.
-   Rejected: filtering the newest-updated bills (at most 250 a page) on their titles. It misses most
-   relevant bills and costs a request a page.
-2. **GovInfo collections**: GAOREPORTS stops in 2008, and CRS reports aren't on GovInfo. Proposed
-   default collections: `crpt`, `chrg`, `cprt`, and `bills` if item 1 is accepted. GAO and CRS
-   reports go to a follow-up.
-3. **Federal Register docs unread.** Either the operator opens the API v1 documentation page in a
-   browser and pastes its rate-limit and `documents` search sections, or the PM rules that the
-   adapter is built on the secondary-source parameter names and the live smoke confirms them. In
-   either case the adapter will treat a 3xx (the block page's 302) as unavailable, naming the host
-   it was redirected to. The shared map reads a 3xx as "read it", which would end as a vague
-   "unreadable response".
-4. **"Health NOT_CONFIGURED"** has no field in `ProviderHealth`. Proposed: a keyless Congress.gov or
-   GovInfo isn't built. The registry records it as enabled but not configured, with the reason, and
-   the fan-out reports each call to it as `not_configured`, "govinfo: no api.data.gov key
-   (DEBATE_PROVIDERS__API_DATA_GOV_KEY)". `health()` is unchanged. This needs `DiscoveryProviders`
-   (`application/ports/providers.py`) and `FanOutStage` (`application/federated_search.py`) in the
-   packages, beyond ruling 3's "settings only".
-5. **Topic enablement** needs a search to name its topic outside `--argument`/`--need`, which is
-   a change to `debate_cli/commands/search.py` and `SearchRequest`. Both are outside the packages.
-   The proposal and its alternative are in the relay. Either way, a government provider runs only
-   when it is in `providers.enabled` **and** the search's topic lists it **and** its key is set.
+1. No Congress.gov adapter and no `CONGRESS_GOV`; bills come from GovInfo's BILLS collection. ac1 and
+   ac2 name two providers, and ac3 GovInfo only. The `congress-gov` node is removed.
+2. GovInfo searches BILLS, CRPT, CHRG and CPRT. GAO and CRS reports are a follow-up the PM files.
+3. The Federal Register is built on the API spec the PM read (`documentation.json`, 2026-11-02). No
+   pacer, and a 3xx is unavailable, naming its host.
+4. A keyless GovInfo is not built, is recorded not configured and is reported `not_configured`;
+   `health()` is unchanged.
+5. `--topic` stands alone; the rule is enabled AND on the topic AND (GovInfo) keyed.
+6. NHI only. The PF topic's file waits for the coach's November-December resolution.
+7. The fixtures are hand-written, under `packages/debate_core/tests/fixtures/discovery/<source>/`.
+   The node order is now Federal Register, then the key and the topic enablement, then GovInfo.
+
+Found while building, added to the spec's packages with a comment on each:
+
+8. **`application/federated_dedupe.py` and its test.** A test pins that every row of the dedupe
+   precedence table names every `SearchProviderName`, so the two names had to go somewhere. They
+   went last in every row, where no existing merge changes.
+9. **Six test fakes of `DiscoveryProviders`** (four application test files, `test_search_presenter.py`,
+   and `test_query_expansion.py`'s, which the first count missed) gained `not_configured`.
+10. **`.env.example` and `test_settings.py`.** A test pins every secret's variable in the example
+    file, and another the provider names.
+11. **`config/feeds/README.md`** documents the two keys. `http_failures.py` gained
+    `redirect_failure`, inside the spec's `debate_core.integrations`.
 
 ## Decisions and assumptions
 
-<!-- Choices the spec left open, with the reasoning. -->
+* **A keyless GovInfo makes every NHI search PARTIAL (exit 6)** until a key is set. That follows
+  from ruling 4: a reported `not_configured` call counts against COMPLETE, as a requested provider
+  that is not enabled already does. A search with no `--topic` is untouched.
+* **Where the topic is stored.** `SearchRequest` is never persisted. The stored `Search` is
+  unchanged, and its `provider_set` already records the government providers a topic chose. So an
+  older build reads every search this build stores exactly as before. `topic_id` is left out of a
+  request's JSON when None (`exclude_if`), as the ruling asks; a request with one would be refused
+  by an older build's `extra="forbid"`, but no request is stored. Storing the topic on `Search`
+  (domain, schema regeneration) is a follow-up if the PM wants it for audit.
+* **Identifiers.**
+  * The Federal Register's `provider_record_id` is the document number as printed. Its shape is
+    not checked, because older and correction numbers differ (`E9-1234`).
+  * GovInfo's is the package id. A bill's Congress, type, number and version are read from it with
+    `bill_number` (`BillNumber`), and a BILLS id that names no bill is skipped. The parsed number
+    is kept as a function, not a field: `CandidateResult` has none, and ruling 4 keeps
+    `ArticleIdentifiers` unchanged.
+  * One candidate per package: a granule is its package.
+* **URLs and access.**
+  * The Federal Register: `html_url`, else `pdf_url`; the PDF is the open copy.
+  * GovInfo: the public details page, `https://www.govinfo.gov/app/details/<id>`, a pattern seen
+    on govinfo.gov's own pages. The `download` links are API URLs that need the key, so they are
+    never stored or handed to the fetcher, and GovInfo results have no `open_access_url`.
+  * Every government document is `open_access: true`.
+* **Publication.** Agencies or authors in the provider's order, each once, joined by `; `
+  (`Health and Human Services Department; Centers for Medicare & Medicaid Services`).
+* **GovInfo's query.**
+  * `(<words>) AND collection:(BILLS OR CRPT OR CHRG OR CPRT) AND publishdate:range(<since>,<until>)`.
+  * The documentation shows `range(2008-05-01, 2008-05-15)` and `lastModified:range(<time>,)`, but
+    no open start. `range(,<until>)` is unconfirmed, and the live smoke will show it.
+  * Brackets, colons and an unpaired quote are cleared from the words, and words that clear to
+    nothing are not sent.
+  * Upper-case collection codes, as the API's sample uses.
+* **The Federal Register's empty answer.** A body with `count: 0` and no `results` key is an empty
+  answer, not an unreadable one. The PM's reading shows only a `200`, so this is defensive.
+* **The gate's place.** `TOPIC_ENABLED_PROVIDERS` lives in `application/settings.py`, beside the
+  names, so that the feed-file check (integrations) and the fan-out (application) share one list.
+* **Feed lists on every search.** The container now reads `config/feeds/` for every search, for the
+  topic list, not only when `rss` or `google_news` is enabled. A broken committed file then fails
+  every search instead of only feed searches. CI loads every file on every pull request.
+* **A requested government provider off its topic** (`--providers federal_register` with no
+  `--topic`) is reported `not_configured` with why, from the proposal the PM accepted with option A.
 
 ## Operator follow-ups
 
-<!-- Commands the operator must run (anything over ~2 minutes), with where to run them, the exact
-command, expected runtime and what success looks like. Also GitHub/AWS settings to change. -->
+Both after the merge, on a machine with network access. They make live calls, so they are the
+operator's, as the brief and the forbidden list say.
 
-None.
+**1. An api.data.gov key** (one time, about 2 minutes). Sign up at https://api.data.gov/signup/ with
+any name and email. The key arrives by email. Open `.env` in the root of the checkout you run
+`debate-research` from (it is git-ignored) and add the line
+`DEBATE_PROVIDERS__API_DATA_GOV_KEY=<the key>`. Don't type it on the command line, where the shell
+history would keep it. The key allows 1,000 requests an hour, which is about 90 searches an hour
+expanded to eleven queries; past that, GovInfo answers `429` for the rest of the hour and the footer
+says `govinfo: rate_limited`. Never use `DEMO_KEY`: the platform refuses to fall back to it.
+
+**2. Optional live smoke** (expected runtime ~10 s). It asks both providers one search, stores it in a
+throwaway data directory, and prints each provider's status and counts only: no titles, no reasons,
+no key.
+
+Where: your Mac, in a checkout of `dev` after the merge (this worktree works until
+`scripts/task finish`).
+
+```bash
+cd /Users/charlesclark/Documents/debate/debate-intelligence-tool/debate-intelligence-worktrees/v1-e07-t07-government-adapters
+```
+
+```bash
+env DEBATE_ENV=dev DEBATE_STORAGE__DATA_DIR="$(mktemp -d)" DEBATE_PROVIDERS__ENABLED='["federal_register","govinfo"]' uv run debate-research search "health insurance marketplace" --topic policy-2026-27-nhi --since 2025-01-01 --format json | jq '(.data // .error.details).providers | map({provider, outcome, queries, failed, results})'
+```
+
+Success looks like two entries, `federal_register` and `govinfo`, each `"outcome": "ok"` with
+`results` above zero. Paste the printed list back. What the other answers would mean:
+
+* `govinfo` `not configured`: the key is not in `.env`.
+* `federal_register` `error`: the Register may be sending its block page. Rerun with `.providers`
+  in place of the `map(...)` to see the reason, which names the redirect host.
+* `govinfo` `error` with `HTTP 400`: GovInfo refused the query syntax, probably the date range.
+  That is a fix for a follow-up session.
 
 ## Follow-up work
 
-<!-- Bugs, gaps or ideas outside this task's scope, each with the task or epic it belongs to.
-The PM decides whether they become spec changes or new tasks. -->
-
-None.
+* **Congress.gov lookups by bill** (latest action, committees) from `BillNumber`. The PM files it
+  (ruling 1).
+* **GAO reports** (GAO's own site) **and CRS reports** (Congress.gov's `/crsreport`, which has no
+  keyword search). The PM files it (ruling 2).
+* **The data-center PF topic's file**, once the coach gives the November-December resolution.
+* **`--topic` with `--argument`** on an id that only a feed file names (not a taxonomy preset):
+  the expansion stage would refuse it as an unknown preset. No such id exists today (NHI is both).
+  A later topic file could need the expansion to fall back to the query for `{topic}`.
+  Belongs with E08.
+* **Storing the topic on `Search`**, if the PM wants the topic itself kept for audit, not only the
+  providers it chose. Belongs with E08.
+* **The shared pacer** stays as filed. Neither provider needed one.
 
 ## PM review
 

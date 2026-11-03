@@ -174,6 +174,12 @@ export const siteSettingsSchema = z.object({
   primaryNavigation: z
     .array(z.string().min(1))
     .min(1, 'the site needs at least one page in its navigation'),
+  /**
+   * Slugs the footer carries even when the header carries them too. See the comment in
+   * content/site.yaml. Optional, so a site whose footer is only "everything not in the header"
+   * says nothing.
+   */
+  alwaysInFooter: z.array(z.string().min(1)).default([]),
   skipLinkLabel: z.string().min(1),
   contactEmails: z.array(contactEmailSchema).min(1),
   instagram: instagramLinkSchema,
@@ -1523,6 +1529,11 @@ export function loadGuardedContent(
  *
  * Nothing published can fall out of both lists, which is the property that makes an explicit nav
  * safe: a page left off primaryNavigation moves to the footer rather than becoming unreachable.
+ *
+ * A page can be in both (v1-e37-t15). content/site.yaml's alwaysInFooter names the pages the
+ * footer keeps when the header carries them as well: News, which the coach wants in the header
+ * and where a visitor looking along the footer already found it. The list only adds pages back to
+ * the footer, in the footer's own order, so it moves no other page.
  * ---------------------------------------------------------------------------------------------
  */
 
@@ -1534,7 +1545,10 @@ export interface NavigationLink {
 export interface SiteNavigation {
   /** The header navigation, in the order content/site.yaml lists it. */
   primary: NavigationLink[]
-  /** Everything else published, for the footer, in navOrder then title order. */
+  /**
+   * Everything else published, plus the header pages content/site.yaml's alwaysInFooter names,
+   * for the footer, in navOrder then title order.
+   */
   utility: NavigationLink[]
 }
 
@@ -1551,6 +1565,8 @@ function toLink(page: ContentPage): NavigationLink {
  *   - the same slug listed twice, which would render the same link twice;
  *   - a page whose front matter opts it out of the nav being listed anyway, because a page and
  *     the site config disagreeing is a question nobody should have to answer by reading code.
+ *
+ * alwaysInFooter fails the same way on a slug that is not a published page or is listed twice.
  */
 export function buildNavigation(
   contentDirectory: string = defaultContentDirectory(),
@@ -1588,8 +1604,29 @@ export function buildNavigation(
     return toLink(page)
   })
 
-  // Everything published that the nav does not carry. Nothing published is left off both lists.
-  const utility = pages.filter((page) => !seen.has(page.slug)).map(toLink)
+  const keptInFooter = new Set<string>()
+  for (const slug of settings.alwaysInFooter) {
+    if (keptInFooter.has(slug)) {
+      throw new ContentValidationError(
+        filePath,
+        `alwaysInFooter lists "${slug}" twice. Each page appears in the footer once.`,
+      )
+    }
+    keptInFooter.add(slug)
+    if (!bySlug.has(slug)) {
+      throw new ContentValidationError(
+        filePath,
+        `alwaysInFooter lists "${slug}", which is not a published page in content/pages/. ` +
+          'Add the page, publish it, or take the slug out of the list.',
+      )
+    }
+  }
+
+  // Everything published that the nav does not carry, and the nav pages the footer keeps.
+  // Nothing published is left off both lists.
+  const utility = pages
+    .filter((page) => !seen.has(page.slug) || keptInFooter.has(page.slug))
+    .map(toLink)
 
   return { primary, utility }
 }

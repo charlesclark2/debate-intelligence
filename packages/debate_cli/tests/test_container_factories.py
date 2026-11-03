@@ -54,7 +54,12 @@ import pytest
 from packaging.utils import canonicalize_name
 
 from debate_cli.container import ServiceContainer, validating_routing
-from debate_cli.installation import INTEGRATIONS_PACKAGE, optional_core_dependencies, wired_integrations
+from debate_cli.installation import (
+    CONTAINER_MODULE,
+    INTEGRATIONS_PACKAGE,
+    optional_core_dependencies,
+    wired_integrations,
+)
 from debate_core.application.caselist.removal_service import TakedownNotConfigured
 from debate_core.application.evidence_profiles import ConfiguredProfile
 from debate_core.application.settings import (
@@ -266,10 +271,19 @@ def build(container: ServiceContainer, factory: str, call: Mapping[str, object])
 
 @contextlib.contextmanager
 def recording_integration_imports() -> Iterator[set[str]]:
-    """The integration modules each import statement run inside the block names, as the wiring check does.
+    """The integration modules each import statement the container runs inside the block names.
 
     `from debate_core.integrations import secrets_manager` names `debate_core.integrations.secrets_manager`,
     as :func:`~debate_cli.installation.wired_integrations` reads it.
+
+    Only the container's own import statements count, because those are what "wired" means: the
+    wiring check reads them from its source, and a factory runs its import again every time it is
+    called. An import statement inside an integration runs only the first time that module loads
+    in the process. Counting those too credited a build with whatever its integrations happened to
+    load first: in a fresh process the test profile's `discovery_providers()` build was credited
+    with `feed_config`, which `feeds` imports, and the planted break then found it building without
+    `feed_config`, because `feeds` was already loaded. That build passed or failed with the order the
+    tests ran in (v1-e37-t15).
     """
     imported: set[str] = set()
     real_import = builtins.__import__
@@ -281,7 +295,12 @@ def recording_integration_imports() -> Iterator[set[str]]:
         fromlist: tuple[str, ...] | None = (),
         level: int = 0,
     ) -> object:
-        if level == 0 and (name == INTEGRATIONS_PACKAGE or name.startswith(f"{INTEGRATIONS_PACKAGE}.")):
+        from_the_container = globals is not None and globals.get("__name__") == CONTAINER_MODULE
+        if (
+            from_the_container
+            and level == 0
+            and (name == INTEGRATIONS_PACKAGE or name.startswith(f"{INTEGRATIONS_PACKAGE}."))
+        ):
             if name == INTEGRATIONS_PACKAGE and fromlist:
                 imported.update(f"{name}.{item}" for item in fromlist)
             else:

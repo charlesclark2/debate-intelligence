@@ -126,14 +126,16 @@
    * Seven items since v1-e37-t02 added Schedule, eight since v1-e37-t06 added Results. Between
    * 48rem and 64rem the bar is only just wide enough for them beside the lockup, so the gap is the
    * link's own padding plus a hairline, and with eight the links' side padding narrows too: with
-   * either at full size "Parent FAQ" broke over two lines at 768px. The links keep their 44px
-   * height, and every one stays wider than 24px.
+   * either at full size "Parent FAQ" broke over two lines at 768px. Nine since v1-e37-t15 added
+   * News, and the gap went to nothing: the links' own padding still keeps their words apart, and
+   * with the hairline "Parent FAQ" broke at 768px again. The links keep their 44px height, and
+   * every one stays wider than 24px.
    */
   .site-nav__list,
   .site-nav__list--open {
     display: flex;
     position: static;
-    gap: var(--space-1);
+    gap: 0;
     border-bottom: none;
     padding: 0;
   }
@@ -144,10 +146,15 @@
   }
 }
 
+/*
+ * From 64rem the header is at its 56rem cap, so the bar is no wider at 1280px than at 1024px. With
+ * nine links a 1rem gap broke "Parent FAQ" over two lines at both (v1-e37-t15), and so did 0.75rem;
+ * 0.5rem holds them on one row with about 14px to spare.
+ */
 @media (min-width: 64rem) {
   .site-nav__list,
   .site-nav__list--open {
-    gap: var(--space-4);
+    gap: var(--space-2);
   }
 
   .site-nav__link {

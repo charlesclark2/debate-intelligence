@@ -2448,4 +2448,8 @@ rule changes no labelled reading.
 **The coach's blind answer on paragraph 16** of `a8afd234…fd382dc` (Option A, the PM, 2026-11-03),
 shown in the terminal with the paragraph above and below and nothing else: **s**, the source's own
 text. Its label goes from OTHER to EVIDENCE in card 1 through the guide's label change, as its own
-pull request from `dev`, counted against the file's pre-label restored from git (`7a9c4ff`).
+pull request from `dev`, counted against the file's pre-label restored from git (`7a9c4ff`): **#814**,
+branch `labels/a8afd234413032f4`, commit `e13b7e0`, two files (the label file, and the pre-label kept
+under `labels/prelabels/`). Its import recorded **75 of 255 labelled rows changed from the
+pre-label**, the coach's 74 and paragraph 16, and only paragraph 16 moved; the label tests passed (125).
+The evaluation baseline is unchanged. The `docx-9` gate pytest run: `1 passed in 4.71s`.

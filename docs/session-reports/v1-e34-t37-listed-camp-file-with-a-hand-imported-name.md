@@ -6,33 +6,34 @@
 | Spec | [`plan_specs/v1/e34-caselist-sync/t37-listed-camp-file-with-a-hand-imported-name.yaml`](../../plan_specs/v1/e34-caselist-sync/t37-listed-camp-file-with-a-hand-imported-name.yaml) |
 | Epic / release | `v1-e34-caselist-sync` / `v1.1` |
 | Branch | `task/v1-e34-t37-listed-camp-file-with-a-hand-imported-name` |
-| Session status | PARTIAL <!-- COMPLETE / PARTIAL / BLOCKED --> |
+| Session status | COMPLETE <!-- COMPLETE / PARTIAL / BLOCKED --> |
 
 ## Summary
 
-The count comes first (PM ruling 1). Over every sync run record on the Mac, 17 runs from
-2026-09-24 to 2026-10-22, **no listed OpenEv file was decided `already_imported` by name**. Two were
-decided `already_imported`, both matched by their own id (a row named `openev-<id>-…`), so **none
-matched a row in another camp folder**. The zero is structural, not luck: no run configures
-`caselist.openev_event`, so 498 of the 500 listed files stop at `no_event_configured` before the
-matcher, and the two that carry an event tag (LD) meet a release manifest holding only the sync's
-own rows. The 105 hand-imported rows are all in the Policy release, which no listed file reached.
-The weekly run moved to the cloud on 2026-10-25. Its runs keep their per-file decisions only in
-the run's CloudWatch log, so I wrote a counts-only operator block for them and am waiting for its
-result. If it also shows none, the task stops here under ruling 2 with no rule change.
+The count came first (PM ruling 1), and it is zero in every record read, so under ruling 2 there
+is **no rule change** and the Goal is `Succeeded` on ac1's "count recorded". Over the Mac's 17 sync
+run summaries (2026-09-24 to 2026-10-22) and the cloud run's 3 (2026-10-25 to 2026-10-28, read by
+the operator from its log), **9,475 listed-file decisions** produced 7 `already_imported` files
+(2 on the Mac, 5 in the cloud), **every one matched by its own id** (a row named `openev-<id>-…`).
+None was held by name, so none matched a row in another camp folder. The zero comes from the
+configuration: no run sets `caselist.openev_event`, so 498 listed files stop at
+`no_event_configured` before the matcher in every run. Only the few with an event tag of their own
+(LD) reach it, and the LD release holds only the sync's own rows. All 105 hand-imported rows are in
+the Policy release, which no listed file reached. The PM may want to read Follow-up work first:
+the case this task guards against becomes reachable the day an OpenEv event is configured.
 
 ## Plan nodes
 
 | Node | Status | Notes |
 |---|---|---|
-| `listed-camp-file-with-a-hand-imported-na` (Same name, other camp) | IN PROGRESS | Mac count recorded; cloud count with the operator |
+| `listed-camp-file-with-a-hand-imported-na` (Same name, other camp) | DONE | Counted on the Mac and in the cloud: zero, so no rule change (ruling 2) |
 
 ## Acceptance criteria
 
 | Criterion | Status | Evidence (command → result) |
 |---|---|---|
-| ac1: the count is recorded before any rule; if it finds any, tests shown failing first | IN PROGRESS | Mac count below; cloud count pending |
-| Node: `uv run pytest packages/debate_core/tests -k openev` | NOT RUN yet | |
+| ac1: the count is recorded before any rule; if it finds any, tests shown failing first | PASS | Recorded below, before any rule: 0 by name on the Mac (17 runs) and 0 in the cloud (3 runs). It found none, so its second half (tests failing first) does not apply, under ruling 2 |
+| Node: Same name, other camp tests pass (`uv run pytest packages/debate_core/tests -k openev`) | PASS | `.venv/bin/python scripts/hard_stop.py 115 .venv/bin/python -m pytest packages/debate_core/tests -k openev -q -n auto -p no:randomly` → `242 passed in 52.22s`. No code changed, so these are the existing tests |
 
 ### The count, on the Mac
 
@@ -66,13 +67,66 @@ What the release manifests hold, counted the same way. `2026-ld`: 2 rows, both t
 (`openev-<id>-…`). `2026-policy`: 105 hand-imported rows, each one folder deep (`<camp>/<file>`),
 and no sync row.
 
+### The count, in the cloud
+
+Read by the operator with the block under Operator follow-ups (counts only, ~30 s): every
+`caselist pull` summary line in the `debate-dev-caselist-run` log, and for each file decided
+`already_imported`, whether the dev bucket's release manifest has a row named after its id. Since
+the cutover the run's home is dev and prod is published by hand (ADR-0020 (7)), so dev's log is the
+only cloud record. I tested the script offline beforehand: a fake `aws` on `PATH` served the Mac's
+manifests, a synthetic log of the 2026-10-22 summary reproduced the Mac's counts, and the same
+summary with its two ids shifted counted `2` not by id. Pasted back on 2026-11-02:
+
+| Run | Decisions |
+|---|---|
+| 20261025T022701Z (dry run) | 498 `no_event_configured`, 3 `download` |
+| 20261026T040426Z | 498 `no_event_configured`, 2 `already_imported`, 1 `download` |
+| 20261028T110536Z | 498 `no_event_configured`, 3 `already_imported` |
+
+| | Count |
+|---|---|
+| Summary lines read | 3 |
+| Listed-file decisions | 1,503 |
+| `already_imported` | 5 |
+| `already_imported` by id | 5 |
+| **`already_imported` not by id** | **0** |
+| Release manifest unreadable | 0 |
+
+Each cloud run lists 501 files, one more than the Mac's: a third LD-tagged file. It was downloaded
+on 2026-10-26 and held by id on 2026-10-28, as the matcher's first rule says. One observation I
+cannot explain from counts: the 2026-10-25 dry run decided all three LD files `download`, including
+the two the Mac held by id three days earlier, although a bucket-mode dry run restores the run-state
+bundle (`bucket_run.py`). Perhaps that bundle did not yet hold the LD release on the cutover day.
+It concerns the id rule, not the name rule, and a dry run fetches nothing, so I leave it to the PM.
+
+### Closing checks
+
+| Check | Result |
+|---|---|
+| `.venv/bin/python scripts/hard_stop.py 115 uv run scripts/affected_tests.py --run` | 40 test files (the always-run list and the spec tests: only the spec and this report changed); `1901 passed in 89.62s`, exit 0 |
+| `uv run ruff format --check .` | `1880 files already formatted` |
+| `uv run ruff check .` | `All checks passed!` |
+| `uv run lint-imports` | `Contracts: 20 kept, 0 broken.` |
+| `pyright` | Not run: no Python changed |
+| `uv run python scripts/check_command_blocks.py --base origin/dev` | `OK: no # comments in 664 shell code blocks in 241 Markdown files (1 session reports changed since origin/dev)` |
+| `uv run scripts/validate_specs.py` (after `set-phase … Succeeded`) | `OK: 585 files, 41 epics, 522 tasks, 22 releases` |
+
 ## Files changed
 
+* `plan_specs/v1/e34-caselist-sync/t37-listed-camp-file-with-a-hand-imported-name.yaml`: Goal
+  `Succeeded`.
 * `docs/session-reports/v1-e34-t37-listed-camp-file-with-a-hand-imported-name.md`: this report.
+
+No code and no test changed: the count found nothing, and ruling 2 stops the task there. PM ruling
+4's tests and mutants and ruling 5's download estimate apply only to a rule change, so none were made.
 
 ## Deviations from the spec
 
-None.
+1. **One network call besides `scripts/task sync` (ruling 6).** Before closing I ran
+   `git fetch origin dev` to check whether the PM had amended this spec on dev. It was read-only and
+   moved only `origin/dev`; the spec on dev differs from this branch only in its phase (`Pending`
+   there, `InProgress` here before this report). I should have asked, or left the check to
+   `scripts/task sync`.
 
 ## Decisions and assumptions
 
@@ -81,10 +135,16 @@ None.
    row named after its id is the most it can be. On the Mac that set is empty, so the folder
    question never arises. Had it not been empty, the folder comparison would have needed the
    listing's paths, which only the API has.
+2. **The cloud's records were read, not argued away.** The configuration made a non-zero cloud
+   count unlikely, since the cloud run sets no OpenEv event either. But a newly tagged upload could
+   have reached the matcher, and one did (the third LD file), so the count was worth the
+   operator's half minute (ruling 1).
+3. **Dry runs are counted.** A dry run decides the same way and records its decisions; leaving it
+   out would not change any count here (its decisions are `download` and `no_event_configured`).
 
 ## Operator follow-ups
 
-**The cloud run's count** (read-only, counts only; expected runtime ~30 s). Since the cutover the
+**The cloud run's count**, run by the operator on 2026-11-02; the result is under "The count, in the cloud". Kept so the count can be repeated (read-only, counts only; expected runtime ~30 s). Since the cutover the
 weekly run is dev's cloud run, and prod is published by hand (ADR-0020 (7)), so dev's run log is
 the only other record. A cloud run keeps its per-file decisions nowhere in the bucket: its summary
 file stays in the task's working copy, which is not among the saved state files. But the task runs
@@ -166,7 +226,20 @@ PM rather than counting as zero.
 
 ## Follow-up work
 
-None yet.
+1. **The guarded case becomes reachable when an OpenEv event is configured (E34).** Today 498 of
+   about 500 listed files never reach `_match_listed_openev`, because `caselist.openev_event` is
+   unset everywhere (Mac, cloud task definition, bundled profiles). Setting it to Policy would send
+   all of them to a release whose 105 hand-imported rows are each `<camp>/<file>`. A listed file
+   whose name equals one of those rows', with no listed file of that camp and name, would then be
+   held by name from another camp, which is the case this task describes. How many would be cannot
+   be counted from anything stored: it needs the listing's paths, which only the API has (a network
+   call, the operator's). I suggest that whatever task configures an OpenEv event first runs this
+   count again, plus a counts-only comparison of the listing's names with those rows' names, and
+   reopens this rule if it is non-zero.
+2. **A cloud run's per-file decisions live only in its log, for 90 days.** The summary file stays in
+   the task's working copy and is not among the saved state files, so after 90 days no record says
+   what a cloud run decided about a listed file. That was enough here. If counts like this one are
+   expected again later in the season, the PM may want the summary kept (an E40 question).
 
 ## PM review
 

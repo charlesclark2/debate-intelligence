@@ -44,6 +44,7 @@ from debate_core.domain.debate_files import (
     ParsedCard,
 )
 from debate_core.domain.style_profile import RunEmphasis, StyleMatchSource
+from debate_core.evidence.cluster_diagnosis import diagnose_cuts
 from debate_core.evidence.fingerprints import card_fingerprint
 from debate_core.evidence.near_duplicates import (
     LSH_BANDS,
@@ -63,8 +64,10 @@ from debate_core.evidence.near_duplicates import (
     matching_words,
     minhash_signature,
     shingles,
+    witnesses,
     word_shingles,
 )
+from debate_core.evidence.recall_shapes import neither_end_pairs, trims_sharing_nothing
 
 VARIANTS_PATH = Path(__file__).resolve().parents[4] / "tests" / "fixtures" / "fingerprints" / "variants.jsonl"
 
@@ -1115,3 +1118,78 @@ def test_a_cut_waiting_on_a_cluster_whose_own_join_is_refused_joins_it() -> None
     card, later = article[:200], article[20:220]
     opening, closing, passage = article[:100], article[165:220], article[:50]
     assert partition(card, later, opening, closing, passage) == [[0, 1], [2, 4], [3]]
+
+
+# ------------------------------------------------------------------------------------------------
+# The shapes the samples kept apart (`v1-e31-t29`)
+# ------------------------------------------------------------------------------------------------
+#
+# The PM's ruling of 2026-11-03: no shape is recovered. The operator's sample found each would join
+# different cards: 8 of 20 bodies nine-tenths inside a body holding neither of their ends, 4 of 20
+# short holders of two bodies sharing no text, and 1 of the 2 pairs of trims with the same tag and
+# cite. These pin that each stays apart, on invented words.
+
+SHORT_CARDS_PATH = VARIANTS_PATH.with_name("short_cards.jsonl")
+
+
+def test_two_articles_quoting_one_passage_stay_apart_though_one_is_nine_tenths_inside_the_other() -> None:
+    """Shape (1): two articles quote one 98-word passage. One card is the quote with a word of its
+    own article at each end; the other is the quote inside 100 words of another article. The first
+    is nine-tenths inside the second, which holds neither of its ends, so the two are never
+    compared: three of the sample's eight different cards were this, different sources."""
+    quote = numbered("quote", 98)
+    first_article = ["firstopens", *quote, "firstcloses"]
+    second_article = [*numbered("second", 50), *quote, *numbered("then", 50)]
+    bodies = {"first": " ".join(first_article), "second": " ".join(second_article)}
+    index = CutIndex(bodies)
+    alone = {key: key for key in bodies}
+    (pair,) = neither_end_pairs(diagnose_cuts(bodies, alone, index=index), index, alone.__getitem__)
+    assert (pair.cut, pair.container, pair.shingles, pair.share) == ("first", "second", 96, 96 / 194)
+    assert partition(first_article, second_article) == [[0], [1]]
+
+
+def test_a_short_holder_of_two_cards_stays_refused_as_a_witness_for_either() -> None:
+    """The amendment's shape: a 120-word body that is a 50-word card and a 70-word card of another
+    article end to end. It holds both, and is a witness for neither: 4 of the 20 short holders
+    sampled were two cards."""
+    first, second = numbered("first", 50), numbered("second", 70)
+    holder = [*first, *second]
+    index = CutIndex({"first": " ".join(first), "second": " ".join(second), "holder": " ".join(holder)})
+    assert index.containers("first") == ["holder"] and index.containers("second") == ["holder"]
+    for cut in ("first", "second"):
+        assert index.holds_a_passage_apart_from("holder", cut)
+        assert witnesses(cut, lambda key: key, index) is None
+    assert partition(first, second, holder) == [[0], [1], [2]]
+
+
+def test_brannocks_rows_stay_apart() -> None:
+    """`v1-e31-t08`'s Brannock card: the original is its trimmed end and its trimmed start, end to
+    end, and its one-word copy holds both too. The original and the copy are one card; each trim
+    is a cluster of its own, though all four carry the same tag and cite."""
+    rows = {
+        row["id"]: row
+        for line in SHORT_CARDS_PATH.read_text(encoding="utf-8").splitlines()
+        if (row := json.loads(line))["card"] == "brannock-ferry-fares"
+    }
+    order = ("s3-original", "s3-trimmed-start", "s3-trimmed-end", "s3-typo")
+    assert len({(rows[name]["tag"], rows[name]["full_cite"]) for name in order}) == 1
+    assert partition(*(rows[name]["evidence_text"].split() for name in order)) == [[0, 3], [1], [2]]
+
+
+def test_t11s_false_join_stays_apart() -> None:
+    """`v1-e31-t11`'s false join, as `v1-e31-t20` fixed it: two bodies sharing no text and the
+    150-word body holding both are three clusters (every order of fingerprints is above)."""
+    assert partition(FIRST_PASSAGE, SECOND_PASSAGE, BOTH_PASSAGES) == [[0], [1], [2]]
+
+
+def test_two_trims_of_one_holder_sharing_no_text_stay_apart() -> None:
+    """Shape (2): a 46-word card, its first 14 words and its last 18, the 14 between in neither, as
+    `v1-e31-t08`'s Kessler card. The trims are two passages of the card sharing no text, and all
+    three stay apart; joining them would need the overlap rule relaxed, which the PM did not."""
+    card = numbered("kessler", 46)
+    start, end = card[:14], card[28:]
+    bodies = {"card": " ".join(card), "start": " ".join(start), "end": " ".join(end)}
+    index = CutIndex(bodies)
+    (pair,) = trims_sharing_nothing(index, lambda key: key, {})
+    assert (pair.holder, pair.first, pair.second, pair.words_in_neither) == ("card", "end", "start", 14)
+    assert partition(card, start, end) == [[0], [1], [2]]

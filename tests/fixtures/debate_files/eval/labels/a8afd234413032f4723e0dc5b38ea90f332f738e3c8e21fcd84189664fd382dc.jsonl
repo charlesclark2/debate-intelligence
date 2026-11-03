@@ -1,4 +1,4 @@
-{"record":"file","digest":"a8afd234413032f4723e0dc5b38ea90f332f738e3c8e21fcd84189664fd382dc","paragraph_count":1020,"blocks":[[0,50],[102,152],[459,560],[918,968]],"plan_id":"06a5e928bf1fc90f","status":"CORRECTED","prelabel_parser_version":"2026.10.12-docx-3","corrected_by":"coach","reviewed_by":null,"rows_changed_from_prelabel":74,"span_sample_fraction":0.2}
+{"record":"file","digest":"a8afd234413032f4723e0dc5b38ea90f332f738e3c8e21fcd84189664fd382dc","paragraph_count":1020,"blocks":[[0,50],[102,152],[459,560],[918,968]],"plan_id":"06a5e928bf1fc90f","status":"CORRECTED","prelabel_parser_version":"2026.10.12-docx-3","corrected_by":"coach","reviewed_by":null,"rows_changed_from_prelabel":75,"span_sample_fraction":0.2}
 {"record":"paragraph","index":0,"length":112,"text_digest":"397323613fc1abd1c6f125982d34284b203b9b41146edde3364216b5f2cad5ff","unit":"ANALYTIC","card":null}
 {"record":"paragraph","index":1,"length":12,"text_digest":"3c04965ace12afdb8ccd09b5d3b7aa7f6b10e1aa4722a918f2a1b3a4dfb03276","unit":"POCKET","card":null}
 {"record":"paragraph","index":2,"length":7,"text_digest":"4b57ef8129b6ac4eeb17613dfe03eb968af9677e8262db31085d6f80637c5777","unit":"BLOCK","card":null}
@@ -15,7 +15,7 @@
 {"record":"paragraph","index":13,"length":440,"text_digest":"daacbcc36f22618e058ad30180a5bf73a977d415295b54327e39882bf3d8b01a","unit":"EVIDENCE","card":1}
 {"record":"paragraph","index":14,"length":262,"text_digest":"b90a467f827bb62bdc5478b55160f706263034b7cb3b9720c3fecf9d2d4303de","unit":"EVIDENCE","card":1}
 {"record":"paragraph","index":15,"length":368,"text_digest":"0a691204676c0684a2f919575165294bb46ff2779ef8025a11075870fc0399ed","unit":"EVIDENCE","card":1}
-{"record":"paragraph","index":16,"length":147,"text_digest":"d5983745a6b5ed8c437250c46c4dede459bfcb7237a72a888fa33a271b1f5e3a","unit":"OTHER","card":null}
+{"record":"paragraph","index":16,"length":147,"text_digest":"d5983745a6b5ed8c437250c46c4dede459bfcb7237a72a888fa33a271b1f5e3a","unit":"EVIDENCE","card":1}
 {"record":"paragraph","index":17,"length":522,"text_digest":"a99df4e31abb85327c24af401f8457c29a09fa01cfd47f808cd8616ac61aefc5","unit":"EVIDENCE","card":1}
 {"record":"paragraph","index":18,"length":469,"text_digest":"b95033c525afd751353b693054b076de616fae2a48b5b5a82958d9ccbb550aca","unit":"EVIDENCE","card":1}
 {"record":"paragraph","index":19,"length":436,"text_digest":"1a3d2e56e863859b8e0f309c41e2cc9e9bb169c6bf1663315e1e712a30f69450","unit":"EVIDENCE","card":1}

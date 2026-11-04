@@ -62,7 +62,7 @@ spec:
       description: >-
         tests/integration/ACCEPTANCE.md maps each §11 V1 acceptance criterion to the test ids covering it.
 status:
-  phase: InProgress
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

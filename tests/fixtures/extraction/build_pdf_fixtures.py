@@ -81,7 +81,7 @@ MASTHEAD: Final = "Journal of Synthetic Conservation Studies \u00b7 Volume 12 (2
 
 JOURNAL_ARTICLE_FILE: Final = Path(__file__).with_name("journal-article.pdf")
 
-GOVERNMENT_HEADER: Final = "Habitat Protection Grants · Fiscal Year 2026"
+GOVERNMENT_HEADER: Final = "Habitat Protection Grants \u00b7 Fiscal Year 2026"
 GOVERNMENT_FOOTER: Final = "Federal Office of Synthetic Wildlife, a synthetic test fixture, not a real agency"
 GOVERNMENT_REPORT_FILE: Final = Path(__file__).with_name("gov-annual-report.pdf")
 

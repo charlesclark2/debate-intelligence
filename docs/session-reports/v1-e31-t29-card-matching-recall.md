@@ -303,9 +303,40 @@ The PM decides whether they become spec changes or new tasks. -->
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-11-03
 
 **Notes:**
+
+A task that recovers nothing and is still worth merging: it shows from counts, samples and the code
+why each recovery would have joined different cards, and pins that they stay apart.
+
+1. **ac1 passes.** Both counts ran on the Mac's store (`exit 0`), and the sample went through t21's
+   sampler with the operator's tallies, before any rule. The old candidates file was checked against the
+   current store (97% resolve) and regenerated as the PM asked, rather than reused.
+2. **The code finding is the most useful result,** and a mutant shows it: lifting the witness refusal
+   alone joins nothing, because two trims that don't overlap are both refused as joiners. So any
+   recovery of shape (2) or the amendment is a change to the card ruling itself, not a limit, and the
+   PM kept it.
+3. **ac2 (amended by the PM, 2026-11-03) passes.** The short-card table is row for row t20's, precision
+   1.000 on all 13 rows. The five pinning tests pass on the code as it stands, and each fails under at
+   least one hand-written mutant.
+4. **ac3 passes.** 20 of 280 short holders tallied before the ruling (4 two cards); the refusal is
+   unchanged, and t11's false join is pinned.
+5. **No fingerprint-version bump and no rebuild,** as ruled: no placement changes.
+6. **Deviations accepted.** (1) The same-cite strata drawn into the sample design are moot: the sheet
+   answered predates them and the PM ruled no sample. (2) ac2's wording is the PM's. (3) The mixed store,
+   and t22's long-body half not used.
+7. **The caveats are recorded** (the truncated cites, the answers given with the other question's keys).
+   Every ruling keeps today's behaviour, so a misread answer can't let a wrong join in.
+8. **The spec check in the criteria table** (599 files, 536 tasks) predates the branch's last sync with
+   `dev`, which has since gained the PM's batch of 2026-11-03 (608 files). `scripts/task pr` runs on the
+   synced branch, and `ci`'s spec check decides.
+9. **Closing checks:** the affected set (61 files) reached 96% under the limit with no failure and is
+   left to `ci` (agreement 10); the changed areas (1,854 passed), the always-run list (406), ruff,
+   pyright, lint-imports, thin handlers, command blocks, the docs index and links are clean.
+10. **Operator:** the files in the home folder hold counts, positions and answers only; delete them now
+    that the PM has read the report.
+11. **Merge:** a plain `scripts/task pr` once `ci` is green. The Goal is `Succeeded`.

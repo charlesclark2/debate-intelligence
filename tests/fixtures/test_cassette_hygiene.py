@@ -9,13 +9,19 @@ from __future__ import annotations
 
 import json
 import re
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit
 
 import pytest
+from tests.fixtures.extraction.build_pdf_fixtures import GOVERNMENT_REPORT_FILE, government_report_pdf
+from tests.fixtures.extraction.expected_output import load_expected, removed_line_rows
 from tests.fixtures.http import build_cassettes
 from tests.fixtures.http.cassettes import CASSETTE_DIRECTORY, FIXTURES_ROOT, cassette_names, load_cassette
+
+from debate_core.integrations.pdf_extractor import PdfExtractor
+from debate_core.retrieval.fetch_types import FetchResult
 
 CREDENTIAL_HEADERS = {
     "authorization",
@@ -39,6 +45,7 @@ REQUIRED_KINDS = {
     "think-tank",
     "government",
     "open-access PDF",
+    "government PDF",
     "paywalled",
     "robots-disallowed",
     "404",
@@ -128,3 +135,27 @@ def test_the_robots_disallowed_cassette_never_records_the_page() -> None:
     assert [interaction.url for interaction in cassette.interactions] == [
         "https://www.closed-stacks.example/robots.txt"
     ]
+
+
+def test_the_government_pdf_is_what_the_builder_writes_and_reads_as_its_hand_written_paragraphs() -> None:
+    """The one sample added for a cassette, not an extractor (`v1-e09-t05`), checked as t04's are."""
+    cassette = load_cassette("government-pdf")
+    page = cassette.page
+    assert page is not None
+    assert page.body == GOVERNMENT_REPORT_FILE.read_bytes() == government_report_pdf()
+
+    extracted = PdfExtractor().extract(
+        FetchResult(
+            requested_url=cassette.url,
+            final_url=cassette.url,
+            elapsed_ms=1.0,
+            fetched_at=datetime(2026, 11, 4, 12, 0, tzinfo=UTC),
+            body=page.body,
+            content_type="application/pdf",
+        )
+    )
+
+    expected = load_expected("gov-annual-report")
+    assert list(extracted.paragraphs) == expected["paragraphs"]
+    assert list(extracted.line_joins) == expected["line_joins"] == []
+    assert removed_line_rows(extracted.removed_lines) == expected["removed_lines"]

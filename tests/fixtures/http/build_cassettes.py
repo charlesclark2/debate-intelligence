@@ -128,6 +128,19 @@ PAGES: Final = (
         ),
     ),
     Page(
+        name="government-pdf",
+        kind="government PDF",
+        url="https://www.fosw.example.gov/files/2026/habitat-grants-annual-report.pdf",
+        status_code=200,
+        content_type=PDF,
+        body_file="extraction/gov-annual-report.pdf",
+        made_from=(
+            "v1-e09-t05's two-page annual report from the Federal Office of Synthetic Wildlife (invented, "
+            "imitating no real agency), written by build_pdf_fixtures.py with no PDF library, served as "
+            "a 200. It names no author and carries no DOI"
+        ),
+    ),
+    Page(
         name="paywalled",
         kind="paywalled",
         url="https://www.harborreview.example/politics/2026/10/inside-the-tariff-talks",

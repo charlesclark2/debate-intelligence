@@ -649,7 +649,8 @@ def numbered_works(first: int, count: int) -> list[dict[str, Any]]:
 
 
 class PagedWorks:
-    """Answers `/works` page by page from `pages` (page number to works), keeping every request."""
+    """Answers `/works` page by page from `pages` (page number to works, or a status), keeping every
+    request; a page not in `pages` is an HTTP 599, so asking for one fails at the test's assertions."""
 
     def __init__(self, pages: dict[int, list[dict[str, Any]] | int]) -> None:
         self._pages = pages
@@ -657,7 +658,7 @@ class PagedWorks:
 
     def handle(self, request: httpx.Request) -> httpx.Response:
         self.requests.append(request)
-        answer = self._pages[int(request.url.params.get("page", "1"))]
+        answer = self._pages.get(int(request.url.params.get("page", "1")), 599)
         if isinstance(answer, int):
             return httpx.Response(answer)
         return httpx.Response(200, json={"results": answer})

@@ -1,0 +1,59 @@
+{
+  "call": "generate_structured",
+  "caselists": [
+    "synthcl26"
+  ],
+  "cassette_format": 1,
+  "key": "87a0ce5aeba9c9834f166bc14c03e74958e4e0c268c3139ea90536b1630a962c",
+  "request": {
+    "output_schema": "debate_core.domain.landscape_classification.ModelPositionAnswers",
+    "params": {
+      "effort": null,
+      "max_tokens": null,
+      "temperature": null,
+      "timeout_seconds": null
+    },
+    "prompt": {
+      "prompt_id": "landscape.classify_position",
+      "prompt_version": "1.1.0",
+      "variables": {
+        "items": "[\n {\n  \"cite\": \"marsh 26\",\n  \"excerpt\": \"under the invented statute a breach of the cap starts automatic cuts within thirty days to every program on the synthetic schedule popular or not\",\n  \"headings\": [\n   \"off case one\"\n  ],\n  \"item\": \"item-1\",\n  \"tag\": \"a breach of the cap triggers automatic cuts to every invented program\",\n  \"under_an_answer_heading\": false\n }\n]",
+        "positions": "[\n {\n  \"id\": \"grid-adv\",\n  \"kind\": \"advantage\",\n  \"label\": \"Grid reliability advantage\",\n  \"side\": \"aff\"\n },\n {\n  \"id\": \"spending-da\",\n  \"kind\": \"da\",\n  \"label\": \"Spending disadvantage\",\n  \"side\": \"neg\"\n }\n]",
+        "taxonomy_version": "1.0.0"
+      }
+    },
+    "task_class": "high_volume"
+  },
+  "response": {
+    "invoked_at": "2024-01-01T00:00:00Z",
+    "output": {
+      "answers": [
+        {
+          "confidence": 0.8,
+          "item": "item-1",
+          "position_id": "spending-da",
+          "rationale": "Automatic cuts after a breach are the impact of the spending argument."
+        }
+      ]
+    },
+    "prompt_id": "landscape.classify_position",
+    "prompt_version": "1.1.0",
+    "provider_request_id": null,
+    "route": {
+      "effort": null,
+      "inference_profile": null,
+      "max_tokens": null,
+      "model_id": "fake-model",
+      "provider": "fake",
+      "region": null,
+      "task_class": "high_volume",
+      "temperature": null,
+      "timeout_seconds": 60.0
+    },
+    "usage": {
+      "input_tokens": 0,
+      "latency_ms": 1.0,
+      "output_tokens": 0
+    }
+  }
+}

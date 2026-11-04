@@ -4,7 +4,11 @@ Cross-package tests. `fixtures/` holds recorded HTTP/model fixtures, `golden_car
 golden DOCX/JSON cards (invented files built by the test builders — no real team, caselist or camp
 file or excerpt is committed anywhere in this repository, scrubbed or otherwise: see v1-e31-t02,
 v1-e31-t03 and v1-e31-t05),
-`integration/` holds end-to-end suites. Package unit tests live in `packages/<pkg>/tests/`.
+`integration/` holds the end-to-end recorded suite (`v1-e09-t05`), every module of it marked `slow`, so
+validate-dev's slow tier and the nightly run take it and pull requests do not; `cli/` holds the
+cross-package command-line tests that run on every pull request: `fetch` over the recorded
+cassettes, the installed `verify` as a process, and the launchd installer. Package unit tests live in
+`packages/<pkg>/tests/`.
 
 `evals/` holds evaluation suites. `evals/parser/` measures the debate `.docx` parser against
 hand-corrected labels of real files that stay on the operator's machine and are never committed;

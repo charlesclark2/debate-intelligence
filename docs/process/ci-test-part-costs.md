@@ -44,7 +44,7 @@ module-scoped fixture is built again in every part and every worker that holds o
 
 Estimated from part 1 times eight, the whole selection is about 2,600 s of worker time locally.
 The heaviest files, by the same rough estimate, are `tests/smoke/test_caselist_remove_smoke.py`
-(about 300 s), `test_bucket_mode_kills.py` (190 s), `tests/integration/test_launchd_install.py`
+(about 300 s), `test_bucket_mode_kills.py` (190 s), `tests/cli/test_launchd_install.py`
 (160 s), `test_backfile_import.py` (160 s) and `test_bucket_mode_lock.py` (140 s).
 
 ## What v1-e41-t15 changed

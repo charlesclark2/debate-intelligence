@@ -43,6 +43,17 @@
     "marker_id": null,
     "reason_starts": "The text was extracted"
   },
+  "government-pdf": {
+    "access_status": "ACCESSIBLE",
+    "exit_code": 0,
+    "canonical_url": "https://www.fosw.example.gov/files/2026/habitat-grants-annual-report.pdf",
+    "title": "https://www.fosw.example.gov/files/2026/habitat-grants-annual-report.pdf",
+    "identifiers": {},
+    "paragraph_count": 6,
+    "extractor": "pypdf",
+    "marker_id": null,
+    "reason_starts": "The text was extracted"
+  },
   "paywalled": {
     "access_status": "PAYWALLED",
     "exit_code": 3,

@@ -13,6 +13,7 @@ publications, people and text are invented for these tests. No saved real articl
 | `think-tank-report.html` | A policy report: donate banner, breadcrumbs, subheadings, a key-findings list, a pull quote, author bios, a related-research sidebar, a JSON-LD list holding a BreadcrumbList and a Report | Written by hand; the Harwell Institute is invented |
 | `gov-press-release.html` | A federal-agency press release: agency banner, primary, breadcrumb and side navigation, a media-contact box, "last updated", no JSON-LD | Written by hand; the Federal Office of Synthetic Wildlife is invented and imitates no real agency. No real .gov page was fetched |
 | `journal-article.pdf` | Three-page open-access journal article: running header and footer, page numbers, thirteen line-end hyphens | Written by `build_pdf_fixtures.py`, with no PDF library; its docstring lists every line and every break |
+| `gov-annual-report.pdf` | Two-page federal-agency annual report (`v1-e09-t05`): running header and footer, page numbers, no line-end hyphen, no author, no DOI. Served by the `government-pdf` cassette to the end-to-end suite | Written by `build_pdf_fixtures.py`, with no PDF library; the Federal Office of Synthetic Wildlife is invented |
 
 ## Expected output is written by hand
 
@@ -22,7 +23,9 @@ saved from an extractor run. Each was committed failing before the extractor was
 ## Rebuilding the PDF
 
 `test_pdf_extractor.py` checks that `journal-article.pdf` is byte for byte what the builder
-produces. After changing the builder, rewrite it:
+produces, and `../test_cassette_hygiene.py` checks the same of `gov-annual-report.pdf`, with its
+hand-written `gov-annual-report.expected.json` paragraphs and removed lines. After changing the
+builder, rewrite both:
 
 ```bash
 uv run python tests/fixtures/extraction/build_pdf_fixtures.py

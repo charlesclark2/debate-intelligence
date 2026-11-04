@@ -49,6 +49,17 @@ were written:
 A refusal fixture is the same writer with `encrypted=True`, which adds a standard security handler
 dictionary to the trailer. The page content is left readable on purpose: the extractor must refuse
 on the marker alone, before it reads a word.
+
+## The government report (`v1-e09-t05`)
+
+Two pages from the Federal Office of Synthetic Wildlife, the invented agency of t04's press release,
+for the end-to-end suite's `cut` of a government PDF. The same layout rules, with no line-end hyphen,
+no DOI and no byline, so the cite has no author to verify. `GOVERNMENT_HEADER` opens both pages and
+`GOVERNMENT_FOOTER` and `Page N of 2` close them, so all three are removed. What is left is six
+paragraphs, written by hand in `gov-annual-report.expected.json`: the title (16 pt), the summary
+(indented, four lines), the `Findings` heading (11 pt), the findings (indented, two lines), and on
+page 2 the outlook (indented, after a sentence end, four lines, so that the page's median line
+spacing is one line step) and the issuing line (after a gap).
 """
 
 from __future__ import annotations
@@ -69,6 +80,10 @@ RUNNING_FOOTER: Final = "Synthetic open-access test fixture, CC BY 4.0, not a re
 MASTHEAD: Final = "Journal of Synthetic Conservation Studies \u00b7 Volume 12 (2026)"
 
 JOURNAL_ARTICLE_FILE: Final = Path(__file__).with_name("journal-article.pdf")
+
+GOVERNMENT_HEADER: Final = "Habitat Protection Grants \u00b7 Fiscal Year 2026"
+GOVERNMENT_FOOTER: Final = "Federal Office of Synthetic Wildlife, a synthetic test fixture, not a real agency"
+GOVERNMENT_REPORT_FILE: Final = Path(__file__).with_name("gov-annual-report.pdf")
 
 
 @dataclass(frozen=True)
@@ -141,6 +156,27 @@ _PAGE_THREE: Final = (
     ("gap", "Received 3 March 2026; accepted 9 June 2026."),
 )
 
+_GOVERNMENT_PAGE_ONE: Final = (
+    ("header", GOVERNMENT_HEADER),
+    ("title", "Habitat Protection Grants: Annual Report to Congress"),
+    ("indent", "This report describes the grants the Office made in fiscal year 2026 to"),
+    ("line", "protect the habitat of species at risk. Forty-one grants went to state"),
+    ("line", "agencies and eleven to tribal governments, and every grant required a"),
+    ("line", "match of at least one dollar for every three the Office provided."),
+    ("heading", "Findings"),
+    ("indent", "Grants that protected habitat before a species declined cost less per"),
+    ("line", "acre than grants made after a listing, in every region the Office serves."),
+)
+
+_GOVERNMENT_PAGE_TWO: Final = (
+    ("header", GOVERNMENT_HEADER),
+    ("indent", "The Office will publish the grant list for fiscal year 2027 in the spring,"),
+    ("line", "with the match each grant requires and the acres it protects. Agencies that"),
+    ("line", "apply before the end of the year will hear from the Office by March, and no"),
+    ("line", "grant will be made for habitat that is already protected by another program."),
+    ("gap", "Issued by the Federal Office of Synthetic Wildlife, September 2026."),
+)
+
 _BODY_SIZE: Final = 10.0
 _LINE_STEP: Final = 14.0
 _GAP: Final = 10.0
@@ -150,7 +186,9 @@ _TOP_Y: Final = 760.0
 _FIRST_BODY_Y: Final = 730.0
 
 
-def lay_out(page: Sequence[tuple[str, str]], page_number: int, page_count: int) -> tuple[DrawnLine, ...]:
+def lay_out(
+    page: Sequence[tuple[str, str]], page_number: int, page_count: int, *, footer: str = RUNNING_FOOTER
+) -> tuple[DrawnLine, ...]:
     """Place one page's lines, adding the running footer and the page number at the bottom."""
     lines: list[DrawnLine] = []
     y = _FIRST_BODY_Y
@@ -171,7 +209,7 @@ def lay_out(page: Sequence[tuple[str, str]], page_number: int, page_count: int) 
         x = PARAGRAPH_INDENT if kind == "indent" else LEFT_MARGIN
         lines.append(DrawnLine(text, x, y, _BODY_SIZE))
         y -= _LINE_STEP
-    lines.append(DrawnLine(RUNNING_FOOTER, LEFT_MARGIN, _FOOTER_Y, 8.0))
+    lines.append(DrawnLine(footer, LEFT_MARGIN, _FOOTER_Y, 8.0))
     lines.append(DrawnLine(f"Page {page_number} of {page_count}", LEFT_MARGIN, _PAGE_NUMBER_Y, 8.0))
     return tuple(lines)
 
@@ -185,6 +223,20 @@ def journal_article_pages() -> tuple[tuple[DrawnLine, ...], ...]:
 def journal_article_pdf(*, encrypted: bool = False) -> bytes:
     """The journal article as PDF bytes."""
     return pdf_bytes(journal_article_pages(), encrypted=encrypted)
+
+
+def government_report_pages() -> tuple[tuple[DrawnLine, ...], ...]:
+    """The two pages of the government report, laid out."""
+    pages = (_GOVERNMENT_PAGE_ONE, _GOVERNMENT_PAGE_TWO)
+    return tuple(
+        lay_out(page, number, len(pages), footer=GOVERNMENT_FOOTER)
+        for number, page in enumerate(pages, start=1)
+    )
+
+
+def government_report_pdf() -> bytes:
+    """The government report as PDF bytes."""
+    return pdf_bytes(government_report_pages())
 
 
 def plain_pages_pdf(page_count: int) -> bytes:
@@ -303,8 +355,12 @@ def pdf_bytes(
 
 
 def main() -> None:
-    JOURNAL_ARTICLE_FILE.write_bytes(journal_article_pdf())
-    print(f"wrote {JOURNAL_ARTICLE_FILE.name} ({JOURNAL_ARTICLE_FILE.stat().st_size} bytes)")
+    for path, body in (
+        (JOURNAL_ARTICLE_FILE, journal_article_pdf()),
+        (GOVERNMENT_REPORT_FILE, government_report_pdf()),
+    ):
+        path.write_bytes(body)
+        print(f"wrote {path.name} ({path.stat().st_size} bytes)")
 
 
 if __name__ == "__main__":

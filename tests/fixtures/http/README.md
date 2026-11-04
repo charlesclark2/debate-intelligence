@@ -1,6 +1,7 @@
 # HTTP cassettes (`v1-e04-t06-fetch-command`)
 
-Recorded responses for `debate-research fetch` and for later end-to-end tests (E06, E08). The
+Recorded responses for `debate-research fetch` and for later end-to-end tests (E06, E08, and
+`tests/integration/`'s recorded suite, `v1-e09-t05`). The
 integration tests hand them to the real `HttpArticleFetcher` through `ReplayTransport`
 ([`cassettes.py`](cassettes.py)), so every gate of the fetcher, both extractors, the access
 classifier and `ArticleService` run as they do for a student. Nothing is sent anywhere: a request no
@@ -21,6 +22,7 @@ is measured in place by `v1-e04-t07` and never committed.
 | `think-tank-report.json` | think-tank | 200, `text/html` | t04's policy report (the Harwell Institute is invented) | ACCESSIBLE |
 | `government-press-release.json` | government | 200, `text/html`, at `www.fosw.example.gov` | t04's federal press release; the Federal Office of Synthetic Wildlife imitates no real agency, and no real .gov page was fetched | ACCESSIBLE |
 | `open-access-pdf.json` | open-access PDF | 200, `application/pdf`, at a URL carrying the test-prefix DOI `10.5555/jscs.2026.0012` | t04's three-page journal article, written by `build_pdf_fixtures.py` with no PDF library | ACCESSIBLE, DOI detected |
+| `government-pdf.json` | government PDF | 200, `application/pdf`, at `www.fosw.example.gov` | `v1-e09-t05`'s two-page annual report from the same invented agency, written by `build_pdf_fixtures.py` with no PDF library: no author, no DOI | ACCESSIBLE, no identifiers |
 | `paywalled.json` | paywalled | 200, `text/html` | t03's hard-paywall teaser (The Harbor Review is invented): one paragraph, `isAccessibleForFree` "False" | PAYWALLED |
 | `robots-disallowed.json` | robots-disallowed | robots.txt only: `Disallow: /archive/` | an invented site; the page is never requested, so no response for it exists | ROBOTS_DISALLOWED |
 | `not-found.json` | 404 | 404, `text/html` | t03's 404 page, which carries the site's metering script | NOT_FOUND |

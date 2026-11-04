@@ -4,7 +4,7 @@ One scenario serves every level of the verify tests:
 
 * the use case's tests verify the committed manifests against a :class:`ManifestWorld` held in
   memory;
-* the CLI's tests and `tests/integration/test_verify_cli.py` verify them against a data directory
+* the CLI's tests and `tests/cli/test_verify_cli.py` verify them against a data directory
   that :func:`build_fixture_data_dir` writes with the real local adapters (SQLite and the
   filesystem blob store), so the command reads snapshots exactly as it does on a student's laptop;
 * `uv run python -m tests.fixtures.verify.manifest_world` writes the committed manifests, and a test

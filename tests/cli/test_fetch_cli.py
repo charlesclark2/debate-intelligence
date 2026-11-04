@@ -113,7 +113,7 @@ REFUSED = [name for name in cassette_names() if EXPECTED[name]["exit_code"] != 0
 
 def test_every_cassette_has_a_hand_written_expectation() -> None:
     assert set(cassette_names()) == set(EXPECTED)
-    assert len(ACCESSIBLE) == 4
+    assert len(ACCESSIBLE) == 5
     assert {EXPECTED[name]["access_status"] for name in REFUSED} >= {
         "PAYWALLED",
         "ROBOTS_DISALLOWED",

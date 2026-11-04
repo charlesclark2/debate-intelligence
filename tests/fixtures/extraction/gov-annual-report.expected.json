@@ -1,0 +1,19 @@
+{
+  "paragraphs": [
+    "Habitat Protection Grants: Annual Report to Congress",
+    "This report describes the grants the Office made in fiscal year 2026 to protect the habitat of species at risk. Forty-one grants went to state agencies and eleven to tribal governments, and every grant required a match of at least one dollar for every three the Office provided.",
+    "Findings",
+    "Grants that protected habitat before a species declined cost less per acre than grants made after a listing, in every region the Office serves.",
+    "The Office will publish the grant list for fiscal year 2027 in the spring, with the match each grant requires and the acres it protects. Agencies that apply before the end of the year will hear from the Office by March, and no grant will be made for habitat that is already protected by another program.",
+    "Issued by the Federal Office of Synthetic Wildlife, September 2026."
+  ],
+  "line_joins": [],
+  "removed_lines": [
+    {"page_number": 1, "edge": "top", "reason": "running_header", "text": "Habitat Protection Grants · Fiscal Year 2026"},
+    {"page_number": 1, "edge": "bottom", "reason": "running_footer", "text": "Federal Office of Synthetic Wildlife, a synthetic test fixture, not a real agency"},
+    {"page_number": 1, "edge": "bottom", "reason": "page_number", "text": "Page 1 of 2"},
+    {"page_number": 2, "edge": "top", "reason": "running_header", "text": "Habitat Protection Grants · Fiscal Year 2026"},
+    {"page_number": 2, "edge": "bottom", "reason": "running_footer", "text": "Federal Office of Synthetic Wildlife, a synthetic test fixture, not a real agency"},
+    {"page_number": 2, "edge": "bottom", "reason": "page_number", "text": "Page 2 of 2"}
+  ]
+}

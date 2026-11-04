@@ -109,7 +109,7 @@ arguments:
       answers:
         - {text: "framework critique"}
 topics:
-  - {id: test-topic, format: POLICY, variables: {topic: preset subject}}
+  - {id: test-topic, format: POLICY, review: awaiting_coach_review, variables: {topic: preset subject}}
 """
 
 
@@ -152,12 +152,71 @@ def need_with(family: int, need: int, **changes: Any) -> dict[str, Any]:
     return document
 
 
+def topic_with(**changes: Any) -> dict[str, Any]:
+    """SMALL_TAXONOMY with `country` declared and its topic preset changed."""
+    document = small_taxonomy()
+    document["variables"]["country"] = "The country."
+    document["topics"][0].update(changes)
+    return document
+
+
+def plan_mechanism(name: str, phrase: str | None = None) -> dict[str, str]:
+    return {"landscape_id": f"{name}-aff", "label": name.capitalize(), "phrase": phrase or f"{name} plan"}
+
+
+def mechanism_taxonomy() -> dict[str, Any]:
+    """SMALL_TAXONOMY with a link need for its DA family, an advantage in that family, a topic naming
+    two plan mechanisms (the second already naming the country) and a topic naming none."""
+    document = topic_with(
+        variables={"topic": "preset subject", "country": "Testland"},
+        mechanisms=[plan_mechanism("alpha"), plan_mechanism("beta", "beta plan in Testland")],
+    )
+    document["topics"].append(
+        {
+            "id": "bare-topic",
+            "format": "POLICY",
+            "review": "awaiting_coach_review",
+            "variables": {"topic": "bare"},
+        }
+    )
+    family = document["families"][0]
+    family["kinds"] = ["da", "advantage"]
+    family["needs"].append(
+        {"id": "link", "label": "Link", "description": "How it starts.", "aliases": ["l"], "recency_days": 30}
+    )
+    document["arguments"][0]["templates"]["link"] = [
+        {"text": "{bill} link"},
+        {"text": "{query} link", "recency_days": 90},
+        {"text": "{topic} second link"},
+    ]
+    document["arguments"].append(
+        {
+            "id": "test-advantage",
+            "label": "Test advantage",
+            "kind": "advantage",
+            "formats": ["POLICY"],
+            "review": "awaiting_coach_review",
+            "templates": {
+                "uniqueness": [{"text": "{query} now"}],
+                "impact": [{"text": "{query} impact"}],
+                "link": [{"text": "{query} link"}],
+            },
+        }
+    )
+    return document
+
+
 TAXONOMY = parse_argument_taxonomy(SMALL_TAXONOMY, source="SMALL_TAXONOMY")
 
 
 @pytest.fixture(scope="module")
 def committed() -> ArgumentTaxonomy:
     return load_argument_taxonomy(REPOSITORY / ARGUMENT_TAXONOMY_PATH)
+
+
+@pytest.fixture(scope="module")
+def mechanisms() -> ArgumentTaxonomy:
+    return parsed(mechanism_taxonomy())
 
 
 @pytest.fixture(scope="module")
@@ -256,7 +315,7 @@ COACH_REVIEWED_FILE = (
 def test_the_committed_taxonomy_validates_and_every_argument_has_a_template_for_each_need_of_its_family(
     committed: ArgumentTaxonomy,
 ) -> None:
-    assert committed.taxonomy_version == "1.2.1"
+    assert committed.taxonomy_version == "1.3.0"
     assert {family.id: [need.id for need in family.needs] for family in committed.families} == FAMILY_NEEDS
     for argument in committed.arguments:
         family = committed.family_of(argument)
@@ -404,6 +463,33 @@ def test_the_committed_taxonomy_takes_topic_presets_word_for_word_from_committed
             assert " ".join(value.casefold().split()) in flat, f"{topic.id}: {value}"
 
 
+def test_the_committed_taxonomy_nhi_topic_names_four_landscape_aff_mechanisms_awaiting_review(
+    committed: ArgumentTaxonomy,
+) -> None:
+    """The PM's ruling on v1-e08-t14: the four mechanisms, in order, each an aff position of the topic's
+    landscape taxonomy under its own label, searched with that label or one of the coach's tag keywords."""
+    [topic] = committed.topics
+    assert topic.review is ReviewStatus.AWAITING_COACH_REVIEW
+    assert topic.variables == {"topic": "national health insurance", "country": "United States"}
+    assert [(mechanism.landscape_id, mechanism.phrase) for mechanism in topic.mechanisms] == [
+        ("single-payer-aff", "single payer"),
+        ("medicare-for-all-aff", "Medicare for All"),
+        ("public-option-aff", "public option"),
+        ("aca-reform-aff", "Affordable Care Act"),
+    ]
+    landscape_file = REPOSITORY / "config" / "landscape" / "taxonomies" / f"{topic.id}.yaml"
+    positions = {
+        position["id"]: position
+        for position in yaml.safe_load(landscape_file.read_text(encoding="utf-8"))["positions"]
+    }
+    for mechanism in topic.mechanisms:
+        position = positions.get(mechanism.landscape_id)
+        assert position is not None, mechanism.landscape_id
+        assert (position["kind"], position["side"], position["label"]) == ("aff", "aff", mechanism.label)
+        words = {position["label"].casefold(), *position.get("tag_keywords", [])}
+        assert mechanism.phrase.casefold() in words, mechanism.landscape_id
+
+
 def test_the_committed_taxonomy_resolves_the_spec_spellings_and_typed_variants(
     committed: ArgumentTaxonomy,
 ) -> None:
@@ -518,7 +604,16 @@ def test_the_committed_taxonomy_resolves_the_spec_spellings_and_typed_variants(
         ),
         pytest.param(small_taxonomy(variables={"query": "q"}), ["topic"], id="topic not declared"),
         pytest.param(
-            small_taxonomy(topics=[{"id": "t", "format": "LD", "variables": {"query": "x"}}]),
+            small_taxonomy(
+                topics=[
+                    {
+                        "id": "t",
+                        "format": "LD",
+                        "review": "awaiting_coach_review",
+                        "variables": {"query": "x"},
+                    }
+                ]
+            ),
             ["query"],
             id="a topic setting query",
         ),
@@ -596,6 +691,53 @@ def test_the_committed_taxonomy_resolves_the_spec_spellings_and_typed_variants(
             need_with(1, 0, aliases=["i"]),
             ["i means impact in test-scenario and framework-good in test-framing"],
             id="one name meaning two needs",
+        ),
+        pytest.param(
+            topic_with(
+                variables={"topic": "preset subject", "country": "Testland"},
+                mechanisms=[plan_mechanism(name) for name in ("alpha", "beta", "gamma", "delta", "epsilon")],
+            ),
+            ["topic test-topic names 5 plan mechanisms; a topic names at most 4"],
+            id="five plan mechanisms",
+        ),
+        pytest.param(
+            topic_with(mechanisms=[plan_mechanism("alpha")]),
+            ["topic test-topic names plan mechanisms, so it sets country"],
+            id="plan mechanisms and no country",
+        ),
+        pytest.param(
+            topic_with(variables={"country": "Testland"}, mechanisms=[plan_mechanism("alpha")]),
+            ["topic test-topic names plan mechanisms, so it sets topic"],
+            id="plan mechanisms and no topic",
+        ),
+        pytest.param(
+            topic_with(
+                variables={"topic": "preset subject", "country": "Testland"},
+                mechanisms=[plan_mechanism("alpha"), plan_mechanism("alpha", "other words")],
+            ),
+            ["two plan mechanisms of topic test-topic share the landscape id alpha-aff"],
+            id="two plan mechanisms with one landscape id",
+        ),
+        pytest.param(
+            topic_with(
+                variables={"topic": "preset subject", "country": "Testland"},
+                mechanisms=[plan_mechanism("alpha"), plan_mechanism("beta", "Alpha  Plan")],
+            ),
+            ["two plan mechanisms of topic test-topic share the phrase alpha plan"],
+            id="two plan mechanisms with one phrase",
+        ),
+        pytest.param(
+            topic_with(
+                variables={"topic": "preset subject", "country": "Testland"},
+                mechanisms=[plan_mechanism("alpha", "alpha plan 3069")],
+            ),
+            ["topic test-topic: the phrase 'alpha plan 3069' has a digit", "names a mechanism in words"],
+            id="a plan mechanism phrase with a digit",
+        ),
+        pytest.param(
+            topic_with(review=None),
+            ["topics.0.review"],
+            id="a topic with no review status",
         ),
     ],
 )
@@ -726,7 +868,7 @@ def test_template_expansion_of_politics_da_link_on_health_insurance(committed: A
     expansion = expand(request_for("health insurance", argument="politics-da", need="link"), committed)
     since = NOW - timedelta(days=1826)
     assert expansion == SearchExpansion(
-        taxonomy_version="1.2.1",
+        taxonomy_version="1.3.0",
         argument="politics-da",
         need="link",
         variables={"query": "health insurance", "topic": "health insurance"},
@@ -861,6 +1003,340 @@ def test_template_stage_leaves_a_search_without_an_argument_unchanged() -> None:
     assert after is state
 
 
+# A DA's link on a topic's plan mechanisms (v1-e08-t14) ---------------------------------------
+
+NHI = "policy-2026-27-nhi"
+RESOLUTION = "national health insurance"
+LINK_SINCE = NOW - timedelta(days=1826)
+
+
+def nhi_link(query: str = RESOLUTION, argument: str = "politics-da", **expansion: Any) -> SearchRequest:
+    return request_for(query, argument=argument, need="link", topic_id=NHI, **expansion)
+
+
+def test_template_expansion_of_politics_da_link_on_the_nhi_topic_adds_its_mechanisms_in_the_united_states(
+    committed: ArgumentTaxonomy,
+) -> None:
+    """The ac6 search: the coach's seven link templates as he reviewed them, then the first of them on the
+    resolution's words and on each of the four mechanisms, each ending with the United States."""
+
+    def link(text: str, template_id: str, template: str) -> ExpandedQuery:
+        return template_query(
+            text, template_id, template, days=1826, window=WindowSource.NEED, since=LINK_SINCE
+        )
+
+    expansion = expand(nhi_link(), committed)
+
+    assert expansion == SearchExpansion(
+        taxonomy_version="1.3.0",
+        argument="politics-da",
+        need="link",
+        topic_id=NHI,
+        variables={"query": RESOLUTION, "topic": RESOLUTION, "country": "United States"},
+        queries=(
+            link(
+                "national health insurance political capital",
+                "politics-da/link/1",
+                "{query} political capital",
+            ),
+            link(
+                "national health insurance partisan fight Congress",
+                "politics-da/link/2",
+                "{query} partisan fight Congress",
+            ),
+            link(
+                "national health insurance unpopular with voters",
+                "politics-da/link/3",
+                "{query} unpopular with voters",
+            ),
+            link(
+                "national health insurance popular with Republicans",
+                "politics-da/link/4",
+                "{query} popular with Republicans",
+            ),
+            link(
+                "national health insurance unpopular with Republicans",
+                "politics-da/link/5",
+                "{query} unpopular with Republicans",
+            ),
+            link(
+                "national health insurance popular with Democrats",
+                "politics-da/link/6",
+                "{query} popular with Democrats",
+            ),
+            link(
+                "national health insurance unpopular with Democrats",
+                "politics-da/link/7",
+                "{query} unpopular with Democrats",
+            ),
+            link(
+                "national health insurance political capital United States",
+                "politics-da/link/1/resolution",
+                "{query} political capital",
+            ),
+            link(
+                "single payer political capital United States",
+                "politics-da/link/1/single-payer-aff",
+                "{query} political capital",
+            ),
+            link(
+                "Medicare for All political capital United States",
+                "politics-da/link/1/medicare-for-all-aff",
+                "{query} political capital",
+            ),
+            link(
+                "public option political capital United States",
+                "politics-da/link/1/public-option-aff",
+                "{query} political capital",
+            ),
+            link(
+                "Affordable Care Act political capital United States",
+                "politics-da/link/1/aca-reform-aff",
+                "{query} political capital",
+            ),
+        ),
+    )
+
+
+@pytest.mark.parametrize(
+    ("argument", "expected"),
+    [
+        (
+            "midterms-da",
+            [
+                ("national health insurance voters election impact", "midterms-da/link/1"),
+                ("national health insurance issue swing voters", "midterms-da/link/2"),
+                (
+                    "national health insurance voters election impact United States",
+                    "midterms-da/link/1/resolution",
+                ),
+                ("single payer voters election impact United States", "midterms-da/link/1/single-payer-aff"),
+                (
+                    "Medicare for All voters election impact United States",
+                    "midterms-da/link/1/medicare-for-all-aff",
+                ),
+                (
+                    "public option voters election impact United States",
+                    "midterms-da/link/1/public-option-aff",
+                ),
+                (
+                    "Affordable Care Act voters election impact United States",
+                    "midterms-da/link/1/aca-reform-aff",
+                ),
+            ],
+        ),
+        (
+            "economy-da",
+            [
+                ("national health insurance cost economy", "economy-da/link/1"),
+                ("national health insurance economic impact", "economy-da/link/2"),
+                ("national health insurance cost economy United States", "economy-da/link/1/resolution"),
+                ("single payer cost economy United States", "economy-da/link/1/single-payer-aff"),
+                ("Medicare for All cost economy United States", "economy-da/link/1/medicare-for-all-aff"),
+                ("public option cost economy United States", "economy-da/link/1/public-option-aff"),
+                ("Affordable Care Act cost economy United States", "economy-da/link/1/aca-reform-aff"),
+            ],
+        ),
+        (
+            "spending-da",
+            [
+                ("national health insurance cost federal budget", "spending-da/link/1"),
+                ("national health insurance CBO cost estimate", "spending-da/link/2"),
+                (
+                    "national health insurance cost federal budget United States",
+                    "spending-da/link/1/resolution",
+                ),
+                ("single payer cost federal budget United States", "spending-da/link/1/single-payer-aff"),
+                (
+                    "Medicare for All cost federal budget United States",
+                    "spending-da/link/1/medicare-for-all-aff",
+                ),
+                ("public option cost federal budget United States", "spending-da/link/1/public-option-aff"),
+                (
+                    "Affordable Care Act cost federal budget United States",
+                    "spending-da/link/1/aca-reform-aff",
+                ),
+            ],
+        ),
+        (
+            "federalism-da",
+            [
+                ("national health insurance federal preemption states", "federalism-da/link/1"),
+                (
+                    "national health insurance federal government overrides state authority",
+                    "federalism-da/link/2",
+                ),
+                (
+                    "national health insurance federal preemption states United States",
+                    "federalism-da/link/1/resolution",
+                ),
+                (
+                    "single payer federal preemption states United States",
+                    "federalism-da/link/1/single-payer-aff",
+                ),
+                (
+                    "Medicare for All federal preemption states United States",
+                    "federalism-da/link/1/medicare-for-all-aff",
+                ),
+                (
+                    "public option federal preemption states United States",
+                    "federalism-da/link/1/public-option-aff",
+                ),
+                (
+                    "Affordable Care Act federal preemption states United States",
+                    "federalism-da/link/1/aca-reform-aff",
+                ),
+            ],
+        ),
+    ],
+)
+def test_template_expansion_of_every_other_da_link_on_the_nhi_topic_adds_its_mechanisms(
+    committed: ArgumentTaxonomy, argument: str, expected: list[tuple[str, str]]
+) -> None:
+    expansion = expand(nhi_link(argument=argument), committed)
+    assert [(query.query, query.template_id) for query in expansion.queries] == expected
+    assert {(query.since, query.window) for query in expansion.queries} == {(LINK_SINCE, WindowSource.NEED)}
+
+
+@pytest.mark.parametrize(
+    "argument", ["politics-da", "midterms-da", "economy-da", "spending-da", "federalism-da"]
+)
+def test_template_mechanism_queries_follow_the_reviewed_ones_which_are_asked_as_without_the_topic(
+    committed: ArgumentTaxonomy, argument: str
+) -> None:
+    """The coach's reviewed queries are asked exactly as today, first, and at most five are added."""
+    today = expand(request_for(RESOLUTION, argument=argument, need="link"), committed).queries
+    on_topic = expand(nhi_link(argument=argument), committed).queries
+    assert on_topic[: len(today)] == today
+    assert len(on_topic) == len(today) + 5
+
+
+def test_template_mechanism_queries_ask_the_resolutions_words_whatever_was_typed(
+    committed: ArgumentTaxonomy,
+) -> None:
+    """Typed as a mechanism, the reviewed queries are on what was typed; the added resolution query is
+    still on the topic's own words, and the typed mechanism's query is asked once."""
+    expansion = expand(nhi_link("Medicare for All"), committed)
+    assert [query.query for query in expansion.queries] == [
+        "Medicare for All political capital",
+        "Medicare for All partisan fight Congress",
+        "Medicare for All unpopular with voters",
+        "Medicare for All popular with Republicans",
+        "Medicare for All unpopular with Republicans",
+        "Medicare for All popular with Democrats",
+        "Medicare for All unpopular with Democrats",
+        "national health insurance political capital United States",
+        "single payer political capital United States",
+        "Medicare for All political capital United States",
+        "public option political capital United States",
+        "Affordable Care Act political capital United States",
+    ]
+
+
+def test_template_mechanism_queries_are_added_only_to_a_das_link_on_a_topic_with_mechanisms(
+    committed: ArgumentTaxonomy, mechanisms: ArgumentTaxonomy
+) -> None:
+    def count(taxonomy: ArgumentTaxonomy, argument: str, need: str, topic: str | None) -> int:
+        request = request_for(RESOLUTION, argument=argument, need=need, topic_id=topic)
+        return len(expand(request, taxonomy).queries)
+
+    assert count(committed, "politics-da", "link", NHI) == 12
+    assert count(committed, "politics-da", "link", None) == 7
+    for argument, need in [
+        ("politics-da", "uniqueness"),
+        ("politics-da", "internal-link"),
+        ("politics-da", "impact"),
+        ("politics-da", "answers"),
+        ("economy-advantage", "link"),
+        ("cap-k", "link"),
+        ("states-cp", "solvency"),
+    ]:
+        assert count(committed, argument, need, NHI) == count(committed, argument, need, None), (
+            argument,
+            need,
+        )
+    assert count(mechanisms, "test-da", "link", "test-topic") == 5
+    assert count(mechanisms, "test-advantage", "link", "test-topic") == 1
+    assert count(mechanisms, "test-da", "link", "bare-topic") == 2
+    assert count(mechanisms, "test-da", "uniqueness", "test-topic") == 2
+
+
+def test_template_mechanism_queries_come_from_the_first_link_template_a_search_always_renders(
+    mechanisms: ArgumentTaxonomy,
+) -> None:
+    """`{bill} link` is skipped for the fan-out even when the request names a bill; the second template
+    sets its own window; a phrase that already names the country does not name it twice."""
+    expansion = expand(
+        request_for("typed words", need="link", topic_id="test-topic", variables={"bill": "the bill"}),
+        mechanisms,
+    )
+    own = NOW - timedelta(days=90)
+    assert expansion.queries == (
+        template_query(
+            "the bill link",
+            "test-da/link/1",
+            "{bill} link",
+            days=30,
+            window=WindowSource.NEED,
+            since=NOW - timedelta(days=30),
+        ),
+        template_query(
+            "typed words link",
+            "test-da/link/2",
+            "{query} link",
+            days=90,
+            window=WindowSource.TEMPLATE,
+            since=own,
+        ),
+        template_query(
+            "preset subject second link",
+            "test-da/link/3",
+            "{topic} second link",
+            days=30,
+            window=WindowSource.NEED,
+            since=NOW - timedelta(days=30),
+        ),
+        template_query(
+            "preset subject link Testland",
+            "test-da/link/2/resolution",
+            "{query} link",
+            days=90,
+            window=WindowSource.TEMPLATE,
+            since=own,
+        ),
+        template_query(
+            "alpha plan link Testland",
+            "test-da/link/2/alpha-aff",
+            "{query} link",
+            days=90,
+            window=WindowSource.TEMPLATE,
+            since=own,
+        ),
+        template_query(
+            "beta plan in Testland link",
+            "test-da/link/2/beta-aff",
+            "{query} link",
+            days=90,
+            window=WindowSource.TEMPLATE,
+            since=own,
+        ),
+    )
+
+
+def test_template_mechanism_queries_keep_the_searchs_own_since(mechanisms: ArgumentTaxonomy) -> None:
+    since = datetime(2026, 1, 1, tzinfo=UTC)
+    expansion = expand(
+        request_for(need="link", topic_id="test-topic", filters=SearchFilters(since=since)), mechanisms
+    )
+    added = [query for query in expansion.queries if query.template_id and query.template_id.count("/") == 3]
+    assert [query.template_id for query in added] == [
+        "test-da/link/2/resolution",
+        "test-da/link/2/alpha-aff",
+        "test-da/link/2/beta-aff",
+    ]
+    assert {(query.since, query.window) for query in added} == {(since, WindowSource.REQUEST)}
+
+
 def service_over(
     provider: FakeSearchProvider, stage: QueryExpansionStage, searches: SearchRepository | None = None
 ) -> FederatedSearchService:
@@ -919,6 +1395,38 @@ def test_template_expansion_is_asked_of_every_provider_and_recorded_on_the_store
     assert stored.expansion == expected
     statuses = asyncio.run(searches.list_provider_statuses(outcome.search.search_id))
     assert [status.query.query for status in statuses] == [query.query for query in expected.queries]
+
+
+def test_template_mechanism_queries_are_asked_of_every_provider_and_recorded_on_the_stored_search(
+    committed: ArgumentTaxonomy, searches: SearchRepository
+) -> None:
+    provider = FakeSearchProvider("openalex")
+    service = service_over(provider, QueryExpansionStage(committed, clock=FixedClock(NOW)), searches)
+    request = nhi_link(filters=SearchFilters(max_results=10))
+
+    outcome = asyncio.run(service.search(request))
+
+    filters = SearchFilters(since=LINK_SINCE, max_results=10)
+    assert [(query.query, query.filters) for query in provider.queries][7:] == [
+        (f"{subject} political capital United States", filters)
+        for subject in (
+            RESOLUTION,
+            "single payer",
+            "Medicare for All",
+            "public option",
+            "Affordable Care Act",
+        )
+    ]
+    assert len(provider.queries) == 12
+    stored = asyncio.run(searches.get(outcome.search.search_id))
+    assert stored.expansion == expand(request, committed)
+    assert [query.template_id for query in stored.expansion.queries][7:] == [
+        "politics-da/link/1/resolution",
+        "politics-da/link/1/single-payer-aff",
+        "politics-da/link/1/medicare-for-all-aff",
+        "politics-da/link/1/public-option-aff",
+        "politics-da/link/1/aca-reform-aff",
+    ]
 
 
 def test_template_free_search_stores_no_expansion_key(searches: SearchRepository) -> None:

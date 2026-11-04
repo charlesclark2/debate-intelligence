@@ -91,6 +91,10 @@ TEMPLATE = LAUNCHD_DIRECTORY / "com.debate-intelligence.caselist-sync.plist.temp
 LABEL = "com.debate-intelligence.caselist-sync"
 SYSTEM_PATH = "/usr/bin:/bin:/usr/sbin:/sbin"
 
+# The end-to-end suite's tier (v1-e09-t05): out of the PR `ci` check, run by validate-dev's slow tier and
+# nightly. tests/integration/conftest.py refuses a module here without it.
+pytestmark = pytest.mark.slow
+
 on_macos = pytest.mark.skipif(
     platform.system() != "Darwin", reason="about macOS's own plutil, which is not on this machine"
 )

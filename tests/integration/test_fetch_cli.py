@@ -39,6 +39,10 @@ from debate_core.application.article_fetch import FETCH_RESULT_SCHEMA_FILENAME
 # socket when it is first imported, which the container would otherwise do inside a test.
 from debate_core.integrations import html_extractor as html_extractor
 
+# The end-to-end suite's tier (v1-e09-t05): out of the PR `ci` check, run by validate-dev's slow tier and
+# nightly. tests/integration/conftest.py refuses a module here without it.
+pytestmark = pytest.mark.slow
+
 EXPECTED: dict[str, dict[str, Any]] = json.loads(
     (Path(__file__).parents[1] / "fixtures" / "http" / "expected_fetches.json").read_text(encoding="utf-8")
 )

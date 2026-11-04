@@ -215,9 +215,51 @@ and `pytest -m slow tests/integration` once more.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** CHANGES_REQUESTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-11-04
 
 **Notes:**
+
+The suite itself is what the spec asked for and better: the real entry point, every boundary recorded,
+sockets off, every guard shown red, four production breaks caught, 168 tests in 48 s. One change is
+needed, and it comes from the PM's own ruling 4, not from the session's work.
+
+**The change: move the three pre-existing files out of `tests/integration/`, unmarked.**
+
+1. Ruling 4 told the session to mark `test_fetch_cli.py`, `test_verify_cli.py` and
+   `test_launchd_install.py` slow if they weren't. That took all three off the pull-request `ci` path,
+   which working agreement 1 forbids ("never mark a test slow just to get it out of the way"), and the
+   session rightly flagged it. The PM's ruling was wrong.
+2. Move the three files to a directory on the default selection (a name consistent with
+   `tests/README.md`, for example `tests/cli/`), with no `slow` mark, so they run on pull requests exactly
+   as before this task. Keep `test_fetch_cli.py`'s count of 5 accessible cassettes. Update every path
+   that names them: `docs/process/ci-test-part-costs.md`, `tests/README.md` and `ACCEPTANCE.md`, if
+   any. `tests/integration/` then holds only this task's slow suite, so the collection guard stays as
+   it is.
+3. Then `scripts/task sync` (dev has v1-e08-t14), the affected set once, the moved files in the
+   default selection, and `pytest -m slow tests/integration` once more. Report the results in a short
+   section after this review, and the PM appends a second review.
+
+**Everything else is accepted:**
+
+4. **ac1 to ac5 pass.** ac1's offsets were worked out by hand from t04's paragraphs, and the evidence
+   is the snapshot's own slice. ac2 asserts codes, never wording (ruling 5). ac4 checks every bucket
+   object's bytes, local file and checksum metadata against each other, and a second plan skips all 7.
+5. **Deviations accepted.** (1) The session's own run of a 48-second suite. (2) EveryPageRouter at the
+   card model boundary: a call-ordered cassette can't answer concurrent cuts, and the evidence still
+   comes from CardService's slice of the snapshot, never from the answer; the landscape stage is a real
+   replay. (3) to (5): the harness raising `MissingFixtureError` (refused in flight, raised at
+   teardown), `tmp_path` as the boundary, and the test's own dev profile against moto.
+6. **The fixtures:** the government PDF redrawn from its intent with its expectation changed by hand
+   first, and the hand-written landscape cassette held to its script by a fixture test. Both are the
+   right way to make a synthetic recording.
+7. **The `git fetch origin dev`:** noted. It is the third session this week; the rule stands that
+   `scripts/task sync` is the only network call a session makes.
+8. **Follow-ups the PM files:** a snapshot's `canonical_url` keeping tracking parameters (E04);
+   `landscape report` gaining a record mode for synthetic cassettes (E32); and pytest-randomly
+   (install it, or stop passing `-p no:randomly` in commands; E41). The launchd follow-up is settled
+   by the change above. A platform `skipif` off macOS is not a missing recording.
+9. **Coordination:** v1-e08-t10 may change how many requests a search makes. Whichever of the two
+   merges second fixes the other's fixtures.

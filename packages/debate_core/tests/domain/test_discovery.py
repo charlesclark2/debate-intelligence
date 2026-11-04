@@ -482,14 +482,26 @@ def test_the_port_names_the_discovery_values_rather_than_restating_them() -> Non
 
 
 def test_search_provider_is_the_only_port_that_answers_a_provider_query() -> None:
-    """ac1: `SearchProvider.search(ProviderQuery) -> ProviderResponse` is the only discovery port."""
+    """ac1: `SearchProvider.search(ProviderQuery) -> ProviderResponse` is the only discovery port.
+
+    v1-e08-t10 added one extension of it, `MultiQuerySearchProvider`, for a provider that answers
+    every query of a search at once. It is a `SearchProvider` (its `search` is the inherited one), so
+    every provider is still reached through `search`, and the fan-out asks `search_each` only of a
+    provider that has it.
+    """
     answering: list[str] = []
     for name, port in port_protocols():
         for method_name, method in inspect.getmembers(port, inspect.isfunction):
             annotations = " ".join(str(value) for value in inspect.get_annotations(method).values())
             if "ProviderQuery" in annotations or "ProviderResponse" in annotations:
                 answering.append(f"{name}.{method_name}")
-    assert answering == ["SearchProvider.search"]
+    assert answering == [
+        "MultiQuerySearchProvider.search",
+        "MultiQuerySearchProvider.search_each",
+        "SearchProvider.search",
+    ]
+    assert providers.MultiQuerySearchProvider.__mro__[1] is providers.SearchProvider
+    assert providers.MultiQuerySearchProvider.search is providers.SearchProvider.search
     signature = inspect.signature(providers.SearchProvider.search)
     assert list(signature.parameters) == ["self", "query"]
     assert inspect.iscoroutinefunction(providers.SearchProvider.search)

@@ -1,9 +1,11 @@
 """Ports for everything outside the platform, plus the two ambient dependencies.
 
-Six ports live here:
+Seven ports live here:
 
 * :class:`SearchProvider` — one discovery source in the federated search (OpenAlex, an RSS feed,
   a government search endpoint).
+* :class:`MultiQuerySearchProvider` — a discovery source that answers every query of an expanded
+  search with one round of requests (v1-e08-t10-search-asks-each-provider-once).
 * :class:`DiscoveryProviders` — the discovery sources settings enable, and how each is faring: what
   a federated search fans out over (v1-e08-t01-federated-search-service).
 * :class:`ArticleFetcher` — retrieves the bytes at a URL, politely and without circumventing any
@@ -35,7 +37,7 @@ would force every caller to await.
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from datetime import datetime
 from typing import Protocol, runtime_checkable
 
@@ -50,6 +52,7 @@ __all__ = [
     "ContentExtractor",
     "DiscoveryProviders",
     "IdGenerator",
+    "MultiQuerySearchProvider",
     "SearchProvider",
 ]
 
@@ -87,6 +90,32 @@ class SearchProvider(Protocol):
 
     async def search(self, query: ProviderQuery) -> ProviderResponse:
         """Run one query against this provider and return its normalized results."""
+        ...
+
+
+@runtime_checkable
+class MultiQuerySearchProvider(SearchProvider, Protocol):
+    """A discovery source that answers several queries with one round of requests.
+
+    An expanded search asks the same providers several queries (a DA's link need has 12 on the NHI
+    topic). Asked one at a time, a provider whose requests are counted against a daily budget spends
+    one request per query, and a feed provider reads every feed once per query. A provider that can
+    answer them all from one round of requests says so by implementing this protocol, and the
+    fan-out then asks it once per search, with every query (v1-e08-t10-search-asks-each-provider-once).
+
+    It still answers each query separately: :meth:`search_each` returns one
+    :class:`ProviderResponse` per query, in the queries' order, holding the results that answered
+    that query. A result that answered several queries is in each of their responses, as it would be
+    had each query been asked on its own. So the search keeps one record per query and provider
+    (:class:`~debate_core.domain.discovery.ProviderStatus`), whichever way the provider was asked.
+
+    One round of requests means one request per source the provider reads (one per feed, one per
+    page of a scholarly index), not one per query. It fails as one call: when the provider has
+    nothing to answer with, every query's record carries the same failure.
+    """
+
+    async def search_each(self, queries: Sequence[ProviderQuery]) -> tuple[ProviderResponse, ...]:
+        """Answer every query in `queries` from one round of requests: one response each, in order."""
         ...
 
 

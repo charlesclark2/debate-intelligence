@@ -333,6 +333,9 @@ class FeedProvider:
             )
         return ProviderResponse(provider=self.name, results=results, elapsed_ms=elapsed_ms)
 
+    async def search_each(self, queries: Sequence[ProviderQuery]) -> tuple[ProviderResponse, ...]:
+        return tuple([await self.search(query) for query in queries])  # SKELETON: reads per query
+
     async def _fetch_all(self) -> list[tuple[FeedSource, FetchedFeed | ProviderError]]:
         gate = asyncio.Semaphore(CONCURRENT_FETCHES)
 

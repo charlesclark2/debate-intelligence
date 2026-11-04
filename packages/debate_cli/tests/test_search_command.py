@@ -445,6 +445,27 @@ def test_presenter_json_items_carry_rank_score_features_explanation_identifiers_
     ]
 
 
+def test_an_expanded_search_reads_each_feed_once_however_many_queries_it_asks(seams: Seams) -> None:
+    """v1-e08-t10: the politics DA's seven link queries read the Courier feed once, not seven times, and
+    each query still has its own record: only the first template's words are all in the one item that
+    matches ("Health insurance fight costs the president political capital")."""
+    result = search("health insurance", "--argument", "politics-da", "--need", "link", "--format", "json")
+
+    assert result.exit_code == ExitCode.OK, result.output
+    assert [str(request.url) for request in seams.providers.requests].count(FEED_URL) == 1
+    data = envelope(result)["data"]
+    rss_calls = [call for call in data["provider_calls"] if call["provider"] == "rss"]
+    assert [(call["query"], call["outcome"], call["results"]) for call in rss_calls] == [
+        (query, "ok", 1 if position == 0 else 0) for position, query in enumerate(POLITICS_LINK_QUERIES)
+    ]
+    assert footer_of(data, "rss") == {"outcome": "ok", "queries": 7, "failed": 0, "results": 1}
+
+
+def footer_of(data: dict[str, Any], provider: str) -> dict[str, Any]:
+    [entry] = [entry for entry in data["providers"] if entry["provider"] == provider]
+    return {key: entry[key] for key in ("outcome", "queries", "failed", "results")}
+
+
 def test_presenter_json_gives_each_result_its_place_in_raw_provider_order(seams: Seams) -> None:
     result = search("midterm elections", "--since", "2026-09-14", "--format", "json")
 

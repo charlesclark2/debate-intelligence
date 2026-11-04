@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from collections.abc import Coroutine
+from collections.abc import Coroutine, Sequence
 from datetime import timedelta
 from typing import Any, Literal
 
@@ -22,13 +22,16 @@ from debate_core.application.errors import (
     ProviderTimedOut,
     ProviderUnavailable,
 )
+from debate_core.application.ports.providers import MultiQuerySearchProvider
 from debate_core.domain.discovery import BreakerState, CandidateResult, ProviderQuery, ProviderResponse
 from debate_core.integrations.discovery.redaction import redact
 from debate_core.integrations.discovery.resilience import (
     BreakerPermit,
     CircuitBreaker,
     ResiliencePolicy,
+    ResilientMultiQueryProvider,
     ResilientProvider,
+    resilient,
 )
 from debate_core.testing.fakes.clock_and_ids import FAKE_EPOCH, FixedClock
 
@@ -643,3 +646,125 @@ def test_the_policy_defaults_match_the_settings_defaults() -> None:
     assert ResiliencePolicy() == ResiliencePolicy(
         timeout_seconds=10.0, failure_threshold=3, cooldown_seconds=60.0, latency_window=50
     )
+
+
+# --------------------------------------------------------------------------------------------
+# ResilientMultiQueryProvider: every query of a search in one guarded call (v1-e08-t10)
+# --------------------------------------------------------------------------------------------
+
+SECOND_QUERY = ProviderQuery(query="permafrost thaw")
+
+type BatchOutcome = tuple[ProviderResponse, ...] | BaseException | Literal["hang"]
+
+
+class ScriptedMultiQueryProvider(ScriptedProvider):
+    """A `MultiQuerySearchProvider` that plays one outcome per `search_each` call; `batches` keeps each."""
+
+    def __init__(self, clock: FixedClock, outcomes: list[BatchOutcome]) -> None:
+        super().__init__(clock, [])
+        self._batch_outcomes = list(outcomes)
+        self.batches: list[tuple[ProviderQuery, ...]] = []
+
+    async def search(self, query: ProviderQuery) -> ProviderResponse:
+        """One query on its own: counted in `calls`, and answered."""
+        self.calls += 1
+        return answer()
+
+    async def search_each(self, queries: Sequence[ProviderQuery]) -> tuple[ProviderResponse, ...]:
+        self.batches.append(tuple(queries))
+        outcome = self._batch_outcomes.pop(0)
+        self._clock.advance(self.latency)
+        if outcome == "hang":
+            try:
+                await asyncio.Event().wait()
+            except asyncio.CancelledError:
+                self.cancelled += 1
+                raise
+        if isinstance(outcome, BaseException):
+            raise outcome
+        assert not isinstance(outcome, str)
+        return outcome
+
+
+def make_multi_query_provider(
+    clock: FixedClock, outcomes: list[BatchOutcome], *, timeout_seconds: float = 5.0
+) -> tuple[ResilientProvider, ScriptedMultiQueryProvider]:
+    inner = ScriptedMultiQueryProvider(clock, outcomes)
+    policy = ResiliencePolicy(timeout_seconds=timeout_seconds, cooldown_seconds=COOLDOWN.total_seconds())
+    return resilient(inner, policy, clock=clock), inner
+
+
+def test_resilient_wraps_an_adapter_that_answers_several_queries_so_that_it_still_can() -> None:
+    clock = FixedClock()
+    several, _ = make_multi_query_provider(clock, [])
+    one = resilient(ScriptedProvider(clock, []), ResiliencePolicy(), clock=clock)
+
+    assert isinstance(several, ResilientMultiQueryProvider)
+    assert isinstance(several, MultiQuerySearchProvider)
+    assert type(one) is ResilientProvider
+    assert not isinstance(one, MultiQuerySearchProvider)
+
+
+def test_every_query_asked_at_once_is_one_call_one_admission_and_one_success() -> None:
+    clock = FixedClock()
+    answers = (answer(), answer())
+    provider, inner = make_multi_query_provider(clock, [answers])
+    assert isinstance(provider, ResilientMultiQueryProvider)
+
+    assert run(provider.search_each([QUERY, SECOND_QUERY])) == answers
+
+    assert inner.batches == [(QUERY, SECOND_QUERY)]
+    assert inner.calls == 0
+    health = provider.health()
+    assert (health.success_count, health.error_count, health.skipped_count) == (1, 0, 0)
+    assert health.p50_latency_ms == 100.0
+
+
+def test_queries_asked_at_once_share_one_timeout_and_fail_as_one_call() -> None:
+    clock = FixedClock()
+    provider, inner = make_multi_query_provider(clock, ["hang"], timeout_seconds=0.01)
+    assert isinstance(provider, ResilientMultiQueryProvider)
+
+    with pytest.raises(ProviderTimedOut, match="openalex: no answer within 0.01s"):
+        run(provider.search_each([QUERY, SECOND_QUERY]))
+
+    assert len(inner.batches) == 1
+    assert inner.cancelled == 1
+    health = provider.health()
+    assert (health.error_count, health.consecutive_failures) == (1, 1)
+
+
+def test_queries_asked_at_once_are_refused_together_while_the_breaker_is_open() -> None:
+    clock = FixedClock()
+    failure = ProviderUnavailable("openalex", "HTTP 502")
+    provider, inner = make_multi_query_provider(clock, [failure, failure, failure])
+    assert isinstance(provider, ResilientMultiQueryProvider)
+    for _ in range(3):
+        with pytest.raises(ProviderUnavailable):
+            run(provider.search_each([QUERY, SECOND_QUERY]))
+
+    with pytest.raises(ProviderCircuitOpen):
+        run(provider.search_each([QUERY, SECOND_QUERY]))
+
+    assert len(inner.batches) == 3
+    assert provider.health().skipped_count == 1
+
+
+def test_an_adapter_answering_a_different_number_of_queries_than_it_was_asked_has_failed() -> None:
+    clock = FixedClock()
+    provider, _ = make_multi_query_provider(clock, [(answer(),)])
+    assert isinstance(provider, ResilientMultiQueryProvider)
+
+    with pytest.raises(ProviderUnavailable, match="openalex: the adapter answered 1 of 2 queries"):
+        run(provider.search_each([QUERY, SECOND_QUERY]))
+
+    assert provider.health().error_count == 1
+
+
+def test_queries_asked_at_once_answered_under_another_name_have_failed() -> None:
+    clock = FixedClock()
+    provider, _ = make_multi_query_provider(clock, [(answer(), answer(provider="crossref"))])
+    assert isinstance(provider, ResilientMultiQueryProvider)
+
+    with pytest.raises(ProviderUnavailable, match="the adapter answered as 'crossref'"):
+        run(provider.search_each([QUERY, SECOND_QUERY]))

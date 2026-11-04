@@ -24,6 +24,7 @@ and the local filesystem while V2 runs the same use cases on DynamoDB, S3 and Be
 | `WriteFence` | `run_lock` | What every bucket write asks first in bucket mode (E40) |
 | `RunStateFiles` | `run_state` | This machine's manifests and database, as the run-state bundle (E40) |
 | `SearchProvider` | `providers` | One discovery source |
+| `MultiQuerySearchProvider` | `providers` | One discovery source asked a search's every query at once (E08) |
 | `DiscoveryProviders` | `providers` | The enabled discovery sources and their health (E08) |
 | `ArticleFetcher` | `providers` | HTTP retrieval |
 | `ContentExtractor` | `providers` | Readable-text extraction |

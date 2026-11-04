@@ -177,6 +177,55 @@ def test_exact_doi_merges_records_that_spell_it_differently_and_disagree_on_ever
     assert merged.matched_on == (MatchRule.DOI,)
 
 
+@pytest.mark.parametrize(
+    "written",
+    ["https://dx.doi.org/10.5555/NHI.2026.017", "http://dx.doi.org/10.5555/nhi.2026.017"],
+)
+def test_exact_doi_merges_a_dx_doi_org_resolver_url_with_a_doi_org_one(written: str) -> None:
+    """v1-e08-t10, the PM's amendment: a DOI given as `dx.doi.org` and as `doi.org` is one DOI.
+
+    Dedupe never compares DOIs as written: `ArticleIdentifiers` reduces both resolver hosts, either
+    scheme and any case to the bare lowercase DOI before any rule reads it.
+    """
+    old_resolver = paper(
+        provider="crossref",
+        url="https://journal.example.org/article/17",
+        identifiers=ArticleIdentifiers(doi=written),
+    )
+    new_resolver = paper(
+        provider="openalex",
+        title="An unrelated title, so that only the DOI can join them",
+        url="https://doi.org/10.5555/nhi.2026.017",
+        authors=("Someone Else",),
+        published_at=at(2020, 6),
+        identifiers=ArticleIdentifiers(doi="https://doi.org/10.5555/nhi.2026.017"),
+    )
+
+    (merged,) = merge_candidates((old_resolver, new_resolver))
+
+    assert merged.matched_on == (MatchRule.DOI,)
+    assert merged.identifiers.doi == "10.5555/nhi.2026.017"
+
+
+def test_exact_doi_does_not_merge_two_openalex_works_that_share_it_under_different_work_ids() -> None:
+    """The duplicate in v1-e08-t05's live NHI search, with invented values: OpenAlex listed one paper
+    as two works, one at a repository PDF and one at its `doi.org` URL, with the same DOI and different
+    work ids. Different values of one identifier keep two records apart whatever else they share, so
+    they stay two results. Changing that is a dedupe rule this task may not change (v1-e08-t10)."""
+    repository_copy = paper(
+        title="How territorial governance complicates vertical relationships",
+        url="https://eprints.example.ac.uk/392/1/392.pdf",
+        identifiers=ArticleIdentifiers(doi="10.5555/faam.0054", openalex_id="W7000000001"),
+    )
+    publisher_copy = paper(
+        title="How Territorial Governance Complicates Vertical Relationships",
+        url="https://doi.org/10.5555/faam.0054",
+        identifiers=ArticleIdentifiers(doi="10.5555/faam.0054", openalex_id="W7000000002"),
+    )
+
+    assert groups((repository_copy, publisher_copy)) == [[0], [1]]
+
+
 def test_exact_canonical_url_merges_a_story_shared_with_utm_parameters_and_an_amp_path() -> None:
     """ac2: one story, from the publisher's feed, a utm-tagged share and its AMP page."""
     published = story(url="https://www.example-news.com/2026/10/14/senate-stopgap", authors=())

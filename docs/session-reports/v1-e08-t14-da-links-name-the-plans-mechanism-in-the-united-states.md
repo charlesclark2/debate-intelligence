@@ -596,9 +596,39 @@ The Goal stays `InProgress`, because ac1's coach review and ac3 are open. No `se
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-11-04
 
 **Notes:**
+
+Built exactly as ruled, and the coach's rule now reaches every DA's link search without one reviewed
+template changing.
+
+1. **ac1's first part passes.** The proposal was committed with no code (`f56bde1`), and the first code
+   commit (`79b86ed`) follows the ruling.
+2. **ac2 passes.** Red first against a skeleton with the fan-out off: 23 failed, all at assertions,
+   with the three checks the red run could not show proven by mutants instead, and said so. 23 mutants
+   all caught, including the forbidden one (the resolution's query dropped: 17 tests) and three on the
+   landscape file itself, so a renamed, retired or re-sided aff position fails a test until the preset
+   matches. The CLI test shows OpenAlex asked exactly the 12 queries.
+3. **No schema change** (`export_schemas.py --check`: 10 up to date), as ruling 5a asked; the template
+   ids carry the mechanism.
+4. **Deviations accepted.** (1) The README's two rows. (2) A required `review` on every topic preset:
+   stricter than the ruling, and right, since a preset should never slip in unreviewed.
+5. **Decisions accepted**, in particular (1): the added queries use the preset's own topic and country,
+   so the resolution query stays the resolution's words whatever is typed.
+6. **ac1's second part, the coach's review:** Charlie is the coach, so the PM asks him the sheet's three
+   questions directly and applies his answers in the next batch (the preset to `coach_reviewed`, the
+   version raised if anything changed, the guard's fixture refreshed). The batch is built after this
+   merge, because it also changes `config/argument_taxonomy.yaml` for v1-e08-t08's 17 entries.
+7. **ac3** runs after Thursday 2026-11-05's v1-e31-t32 copy, on a dev build carrying this merge, with
+   the blocks above; the PM records nDCG@10 and the relevant count against ac6's.
+8. **Follow-ups the PM files after ac3:** advantages' link need, the author-country filter (only if
+   foreign NHI remains), and a per-DA template choice if the coach's answer needs it.
+9. **Closing checks:** the affected set (275 files) is left to `ci` (agreement 10); the changed areas
+   and the always-run list (2,088 passed), ruff, pyright, lint-imports, thin handlers, the schemas, the
+   specs, links, the docs index and command blocks are clean.
+10. **Merge:** `scripts/task pr --partial` once `ci` is green. The Goal stays `InProgress` until the
+    coach's review and ac3 are recorded.

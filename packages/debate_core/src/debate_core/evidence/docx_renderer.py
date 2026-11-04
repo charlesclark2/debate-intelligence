@@ -4,6 +4,15 @@
 in a :class:`~debate_core.evidence.format_profile.ResolvedFormatProfile`, with python-docx. Each card
 is its tag, its cite and its evidence, under an optional pocket, hat and block written once at the top.
 
+## The UNVERIFIED section (`v1-e08-t06`)
+
+An auto-cut bundle files its UNVERIFIED cards apart from its VERIFIED ones. `unverified_from` names
+the first of them: a second block heading, exactly
+:data:`~debate_core.evidence.card_rendering.UNVERIFIED_SECTION_HEADING` and in the banner's colour, is
+written before it, and every card before it must be VERIFIED and every card from it on must not be,
+or nothing is written. Each UNVERIFIED card still carries its own banner. Without `unverified_from`
+the document is byte for byte what it was before the section existed.
+
 ## Where every style comes from
 
 Nothing here names a style or a size. The document starts from a package built from the base style
@@ -65,7 +74,7 @@ from docx.styles.style import CharacterStyle, ParagraphStyle
 from docx.text.paragraph import Paragraph
 from docx.text.run import Run
 
-from debate_core.domain import SpanStyle
+from debate_core.domain import SpanStyle, VerificationStatus
 from debate_core.domain.style_profile import (
     RunEmphasis,
     StructuralUnit,
@@ -74,6 +83,7 @@ from debate_core.domain.style_profile import (
     WriterStyleDefinition,
 )
 from debate_core.evidence.card_rendering import (
+    UNVERIFIED_SECTION_HEADING,
     CardToRender,
     DocumentHeadings,
     RenderRefused,
@@ -168,18 +178,23 @@ def render_cards_docx(
     profile: ResolvedFormatProfile,
     *,
     headings: DocumentHeadings | None = None,
+    unverified_from: int | None = None,
 ) -> bytes:
     """The manifest's cards as a .docx, in its order, in `profile`'s formatting.
 
     `cards` gives each manifest card its cite text and, unless it is VERIFIED, its reasons; they must
     be the manifest's cards exactly, in its order, so the document is what its manifest describes.
-    Raises :class:`~debate_core.evidence.card_rendering.RenderRefused` before writing anything.
+    `unverified_from`, when given, is the index of the first card of the UNVERIFIED section (see the
+    module docstring). Raises :class:`~debate_core.evidence.card_rendering.RenderRefused` before
+    writing anything.
     """
     if tuple(item.card for item in cards) != manifest.cards:
         raise RenderRefused(
             "the cards to render must be the manifest's cards, in its order: the manifest describes the "
             "document it is embedded in"
         )
+    if unverified_from is not None:
+        _check_sections(cards, unverified_from)
     for item in cards:
         _check_card_writable(item)
     manifest_bytes = serialize_manifest(manifest)
@@ -189,7 +204,9 @@ def render_cards_docx(
         raise RenderRefused(str(error)) from error
     writer = _CardDocumentWriter(profile)
     writer.write_headings(headings or DocumentHeadings())
-    for item in cards:
+    for index, item in enumerate(cards):
+        if index == unverified_from:
+            writer.write_unverified_section_heading()
         writer.write_card(item)
     writer.embed_manifest(manifest_part, manifest_properties_xml(manifest_bytes))
     return writer.save(manifest.generated_at)
@@ -254,6 +271,10 @@ class _CardDocumentWriter:
             if text is not None:
                 _check_writable(text, f"the {unit.value.lower()} heading")
                 self._paragraph(unit).add_run(text)
+
+    def write_unverified_section_heading(self) -> None:
+        run = self._paragraph(StructuralUnit.BLOCK).add_run(UNVERIFIED_SECTION_HEADING)
+        run.font.color.rgb = RGBColor.from_string(self._profile.profile.unverified_banner_color)
 
     def write_card(self, item: CardToRender) -> None:
         card = item.card
@@ -338,6 +359,26 @@ class _CardDocumentWriter:
 
 def _size(run: Run, half_points: int) -> None:
     run.font.size = Pt(half_points / 2)
+
+
+def _check_sections(cards: Sequence[CardToRender], unverified_from: int) -> None:
+    """Refuse an UNVERIFIED section that is empty, or a card filed in the wrong section."""
+    if not 0 <= unverified_from < len(cards):
+        raise RenderRefused(
+            f"the UNVERIFIED section starts at card {unverified_from} of {len(cards)}: it is written only "
+            "when it holds at least one card"
+        )
+    for index, item in enumerate(cards):
+        verified = item.card.verification_status is VerificationStatus.VERIFIED
+        if index < unverified_from and not verified:
+            raise RenderRefused(
+                f"card {item.card.card_id} is {item.card.verification_status.value}: it cannot be filed "
+                "among the VERIFIED cards"
+            )
+        if index >= unverified_from and verified:
+            raise RenderRefused(
+                f"card {item.card.card_id} is VERIFIED: it cannot be filed in the UNVERIFIED section"
+            )
 
 
 def _check_card_writable(item: CardToRender) -> None:

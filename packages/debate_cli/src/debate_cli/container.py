@@ -160,6 +160,7 @@ from debate_core.application.aff_assignment import AffAssignmentService
 from debate_core.application.analytic_texts import AnalyticTextService
 from debate_core.application.article_fetch import ArticleFetch, Closeable
 from debate_core.application.article_service import ArticleService
+from debate_core.application.batch_cut_service import BatchCutService, SpendTally
 from debate_core.application.card_selection import CardSelector
 from debate_core.application.card_service import CardService
 from debate_core.application.caselist.bucket_run import BucketRun
@@ -289,6 +290,7 @@ from debate_core.application.sync_runs import (
 from debate_core.application.tub.accounts import AccountAdministration
 from debate_core.application.verify_manifest import VerifyManifest
 from debate_core.domain import new_id
+from debate_core.domain.argument_taxonomy import ArgumentTaxonomy
 from debate_core.domain.caselist import Event
 from debate_core.domain.model_contracts import ModelProvider, TaskClass
 from debate_core.evidence.format_profile import (
@@ -453,6 +455,35 @@ class FederatedSearching:
         traceback: TracebackType | None,
     ) -> None:
         await self._providers.aclose()
+
+
+class BatchCutting:
+    """What `search --auto-cut` runs after the search: the batch over `fetch`'s and `cut`'s services
+    (`v1-e08-t06`), the exporter and the format profiles.
+
+    An async context manager, like :class:`CardCutting`: leaving the block closes the fetcher's HTTP
+    client and the citation service's Crossref client.
+    """
+
+    def __init__(self, *, service: BatchCutService, fetching: ArticleFetch, cutting: CardCutting) -> None:
+        self.service = service
+        self.export = cutting.export
+        self.profiles = cutting.profiles
+        """The format profiles a bundle can be written in, by name."""
+        self._fetching = fetching
+        self._cutting = cutting
+
+    async def __aenter__(self) -> Self:
+        return self
+
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        traceback: TracebackType | None,
+    ) -> None:
+        async with self._fetching, self._cutting:
+            pass
 
 
 class _NoCardEditsYet:
@@ -1013,10 +1044,26 @@ class ServiceContainer:
 
     def usage_log(self) -> UsageLog:
         """This machine's model usage log, `<data dir>/usage/` (`v1-e05-t07`): what `usage` reads, and
-        what every real model call a command makes is recorded in and budgeted against."""
-        from debate_core.integrations.models.usage import UsageLog
+        what every real model call a command makes is recorded in and budgeted against. Each record's
+        cost also goes to :meth:`spend_tally`, which a batch of cuts reads per cut."""
+        from debate_core.integrations.models.usage import UsageLog, UsageRecord
 
-        return UsageLog.for_data_dir(self.settings.storage.data_dir)
+        tally = self.spend_tally()
+
+        class _TallyingUsageLog(UsageLog):
+            """The usage log, which also tells the spend tally what each call it records cost."""
+
+            def append(self, record: UsageRecord) -> Path:
+                written = super().append(record)
+                tally.record(record.estimated_cost_usd)
+                return written
+
+        return _TallyingUsageLog.for_data_dir(self.settings.storage.data_dir)
+
+    def spend_tally(self) -> SpendTally:
+        """What each `search --auto-cut` cut's model calls cost (`v1-e08-t06`), as :meth:`usage_log`
+        records them; a call made outside a cut is counted nowhere."""
+        return self.singleton("spend_tally", SpendTally)
 
     @property
     def files_dir(self) -> Path:
@@ -1434,6 +1481,27 @@ class ServiceContainer:
         export = ExportService(articles=articles, clock=clock, render_docx=render_cards_docx)
         return CardCutting(cards=cards, export=export, profiles=profiles, connection=doi_client)
 
+    def batch_cutting(self) -> BatchCutting:
+        """What `search --auto-cut` runs after the search (`v1-e08-t06`): :class:`BatchCutService` over
+        :meth:`article_fetch` and :meth:`card_cutting`'s CardService, unchanged, with :meth:`spend_tally`
+        for each cut's cost. Every seam a test replaces for `fetch` or `cut` is this one's too."""
+        return self.singleton("batch_cutting", self._build_batch_cutting)
+
+    def _build_batch_cutting(self) -> BatchCutting:
+        fetching = self.article_fetch()
+        cutting = self.card_cutting()
+        service = BatchCutService(fetching=fetching, cutting=cutting.cards, spend=self.spend_tally())
+        return BatchCutting(service=service, fetching=fetching, cutting=cutting)
+
+    def argument_taxonomy(self) -> ArgumentTaxonomy:
+        """The committed `config/argument_taxonomy.yaml`, from an installed build's copy or the checkout."""
+        return self.singleton(
+            "argument_taxonomy",
+            lambda: load_argument_taxonomy(
+                _committed_root(str(ARGUMENT_TAXONOMY_PATH)) / ARGUMENT_TAXONOMY_PATH
+            ),
+        )
+
     def _card_model_router(self, registry: PromptRegistry) -> ModelRouter:
         """The router `cut`'s `card.select` and `card.markup` calls go to, chosen as every model router is.
 
@@ -1586,9 +1654,7 @@ class ServiceContainer:
         settings = self.settings
         clock = _PortClock(self.clock())
         ids = _PortIdGenerator()
-        taxonomy = load_argument_taxonomy(
-            _committed_root(str(ARGUMENT_TAXONOMY_PATH)) / ARGUMENT_TAXONOMY_PATH
-        )
+        taxonomy = self.argument_taxonomy()
         ranking = load_federated_ranking_config(
             _committed_root(str(FEDERATED_RANKING_CONFIG_PATH)) / FEDERATED_RANKING_CONFIG_PATH
         )

@@ -29,10 +29,16 @@ def test_search_is_installed_with_its_options_and_exit_codes(installed_cli: Inst
         "3  no provider answered",
         "6  partial",
         "7  every provider answered, and nothing matched",
+        "8  auto-cut short",
+        "9  budget exceeded",
         "--argument",
         "--need",
         "--expand-llm",
         "--providers",
+        "--auto-cut",
+        "--card-format",
+        "--concurrency",
+        "--max-cost",
     ):
         assert line in run.stdout
 

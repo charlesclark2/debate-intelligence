@@ -29,4 +29,8 @@ class CardDocumentRenderer(Protocol):
         profile: ResolvedFormatProfile,
         *,
         headings: DocumentHeadings | None = None,
-    ) -> bytes: ...
+        unverified_from: int | None = None,
+    ) -> bytes:
+        """`unverified_from` is the first card of the UNVERIFIED section, which only an auto-cut
+        bundle has (`v1-e08-t06`); without it the document has no such section."""
+        ...

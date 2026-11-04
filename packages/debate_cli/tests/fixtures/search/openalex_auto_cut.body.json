@@ -1,0 +1,207 @@
+{
+  "meta": {
+    "count": 6,
+    "page": 1,
+    "per_page": 20
+  },
+  "results": [
+    {
+      "id": "https://openalex.org/W4419000001",
+      "doi": null,
+      "display_name": "Health insurance politics and the cost of a stalled science agenda",
+      "publication_date": "2026-09-14",
+      "type": "article",
+      "cited_by_count": 1,
+      "open_access": {
+        "is_oa": false,
+        "oa_status": "closed",
+        "oa_url": null
+      },
+      "best_oa_location": null,
+      "primary_location": {
+        "is_oa": false,
+        "landing_page_url": "https://www.dailymeridian.example/science/2026/09/14/mammoth-revival-years-away?utm_source=newsletter",
+        "source": {
+          "id": "https://openalex.org/S4219000001",
+          "display_name": "The Daily Meridian",
+          "type": "journal"
+        }
+      },
+      "authorships": [
+        {
+          "author_position": "first",
+          "author": {
+            "id": "https://openalex.org/A5190000001",
+            "display_name": "Invented Author 1"
+          }
+        }
+      ],
+      "abstract_inverted_index": null
+    },
+    {
+      "id": "https://openalex.org/W4419000002",
+      "doi": null,
+      "display_name": "Health insurance and the opportunity cost of political capital",
+      "publication_date": "2026-03-03",
+      "type": "report",
+      "cited_by_count": 2,
+      "open_access": {
+        "is_oa": false,
+        "oa_status": "closed",
+        "oa_url": null
+      },
+      "best_oa_location": null,
+      "primary_location": {
+        "is_oa": false,
+        "landing_page_url": "https://www.harwell-institute.example/research/opportunity-cost-of-de-extinction",
+        "source": {
+          "id": "https://openalex.org/S4219000002",
+          "display_name": "Harwell Institute",
+          "type": "repository"
+        }
+      },
+      "authorships": [
+        {
+          "author_position": "first",
+          "author": {
+            "id": "https://openalex.org/A5190000002",
+            "display_name": "Invented Author 2"
+          }
+        }
+      ],
+      "abstract_inverted_index": null
+    },
+    {
+      "id": "https://openalex.org/W4419000003",
+      "doi": "https://doi.org/10.5555/jscs.2026.0012",
+      "display_name": "Health insurance fights and moral hazard in Congress",
+      "publication_date": "2026-04-20",
+      "type": "article",
+      "cited_by_count": 3,
+      "open_access": {
+        "is_oa": false,
+        "oa_status": "closed",
+        "oa_url": null
+      },
+      "best_oa_location": null,
+      "primary_location": {
+        "is_oa": false,
+        "landing_page_url": "https://journal.synthetic-conservation.example/doi/pdf/10.5555/jscs.2026.0012",
+        "source": {
+          "id": "https://openalex.org/S4219000003",
+          "display_name": "Journal of Synthetic Conservation Studies",
+          "type": "journal"
+        }
+      },
+      "authorships": [
+        {
+          "author_position": "first",
+          "author": {
+            "id": "https://openalex.org/A5190000003",
+            "display_name": "Invented Author 3"
+          }
+        }
+      ],
+      "abstract_inverted_index": null
+    },
+    {
+      "id": "https://openalex.org/W4419000004",
+      "doi": null,
+      "display_name": "Health insurance grants announced as Congress fights",
+      "publication_date": "2026-06-02",
+      "type": "report",
+      "cited_by_count": 4,
+      "open_access": {
+        "is_oa": false,
+        "oa_status": "closed",
+        "oa_url": null
+      },
+      "best_oa_location": null,
+      "primary_location": {
+        "is_oa": false,
+        "landing_page_url": "https://www.fosw.example.gov/news/2026/06/agency-announces-grants",
+        "source": {
+          "id": "https://openalex.org/S4219000004",
+          "display_name": "Federal Office of Synthetic Wildlife",
+          "type": "repository"
+        }
+      },
+      "authorships": [
+        {
+          "author_position": "first",
+          "author": {
+            "id": "https://openalex.org/A5190000004",
+            "display_name": "Invented Author 4"
+          }
+        }
+      ],
+      "abstract_inverted_index": null
+    },
+    {
+      "id": "https://openalex.org/W4419000005",
+      "doi": null,
+      "display_name": "Inside the health insurance talks: political capital spent",
+      "publication_date": "2026-10-05",
+      "type": "article",
+      "cited_by_count": 5,
+      "open_access": {
+        "is_oa": false,
+        "oa_status": "closed",
+        "oa_url": null
+      },
+      "best_oa_location": null,
+      "primary_location": {
+        "is_oa": false,
+        "landing_page_url": "https://www.harborreview.example/politics/2026/10/inside-the-tariff-talks",
+        "source": {
+          "id": "https://openalex.org/S4219000005",
+          "display_name": "Harbor Review",
+          "type": "journal"
+        }
+      },
+      "authorships": [
+        {
+          "author_position": "first",
+          "author": {
+            "id": "https://openalex.org/A5190000005",
+            "display_name": "Invented Author 5"
+          }
+        }
+      ],
+      "abstract_inverted_index": null
+    },
+    {
+      "id": "https://openalex.org/W4419000006",
+      "doi": null,
+      "display_name": "Health insurance ruling tests the partisan fight in Congress",
+      "publication_date": "2026-08-11",
+      "type": "article",
+      "cited_by_count": 6,
+      "open_access": {
+        "is_oa": false,
+        "oa_status": "closed",
+        "oa_url": null
+      },
+      "best_oa_location": null,
+      "primary_location": {
+        "is_oa": false,
+        "landing_page_url": "https://www.closed-stacks.example/archive/2026/water-rights-ruling",
+        "source": {
+          "id": "https://openalex.org/S4219000006",
+          "display_name": "Closed Stacks",
+          "type": "journal"
+        }
+      },
+      "authorships": [
+        {
+          "author_position": "first",
+          "author": {
+            "id": "https://openalex.org/A5190000006",
+            "display_name": "Invented Author 6"
+          }
+        }
+      ],
+      "abstract_inverted_index": null
+    }
+  ]
+}

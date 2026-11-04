@@ -187,7 +187,11 @@ def test_cut_writes_each_kind_of_sources_card_from_its_snapshot_and_verify_agree
     ]
 
 
-@pytest.mark.parametrize(("url", "access_status"), [(PAYWALLED, "PAYWALLED"), (ROBOTS, "ROBOTS_DISALLOWED")])
+@pytest.mark.parametrize(
+    ("url", "access_status"),
+    [(PAYWALLED, "PAYWALLED"), (ROBOTS, "ROBOTS_DISALLOWED")],
+    ids=["paywalled", "robots-disallowed"],
+)
 def test_cut_of_a_paywalled_or_robots_disallowed_url_exits_3_with_its_access_status_and_writes_nothing(
     cli: Cli, boundaries: Boundaries, tmp_path: Path, url: str, access_status: str
 ) -> None:

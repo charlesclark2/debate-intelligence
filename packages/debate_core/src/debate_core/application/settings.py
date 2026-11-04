@@ -1189,9 +1189,8 @@ class ModelSettings(SettingsGroup):
         default=None,
         ge=0,
         description=(
-            "Ceiling on model spend by one run (one command, whatever model routers it builds), in "
-            "USD; unset is no limit. A command's --max-cost option sets it for that command "
-            "(v1-e05-t07, v1-e08-t17)."
+            "Ceiling on model spend by one run (one command), in USD; unset is no limit. A command's "
+            "--max-cost option sets it for that command (v1-e05-t07)."
         ),
     )
     aws_profile: str | None = Field(

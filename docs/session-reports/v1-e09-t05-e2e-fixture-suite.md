@@ -289,7 +289,7 @@ remote. Dev changed no dependency.
 | The slow suite | `hard_stop.py 115 .venv/bin/python -m pytest -m slow tests/integration` | header `tests/integration: sockets disabled for every test …`; **`11 passed in 4.62s`** |
 | Whole-repo checks | `ruff format --check .` / `ruff check .` / `pyright tests/cli tests/integration` and the three edited test modules / `lint-imports` / `validate_specs.py` / `check_links.py` | `1935 files already formatted` / `All checks passed!` / `0 errors` / `20 kept, 0 broken` / `OK: 608 files …` / `OK: 3538 relative links` |
 
-Before the move, `uv run pytest --collect-only tests/integration` on the default options deselected
-all 11 tests there, and `tests/cli` collects 157 tests on them. One note for CI: dev's recorded
+After the move, `pytest --collect-only tests/integration` on the default options deselects all 11
+tests there, and `tests/cli` runs 157 tests on them. One note for CI: dev's recorded
 durations know the three files under their old paths, so for one run `test-selection` counts them as
 the median file until the next push run records them under `tests/cli/`.

@@ -25,7 +25,7 @@ import pytest
 import yaml
 from pydantic import BaseModel, JsonValue
 
-from debate_core.application.budget import CalendarMonth
+from debate_core.application.budget import BudgetRun, CalendarMonth
 from debate_core.application.errors import InvalidModelOutput, ModelUnavailableError
 from debate_core.application.model_errors import ModelOutputError, ValidationPolicy
 from debate_core.application.ports.model_router import ModelRouter
@@ -975,7 +975,7 @@ async def test_record_build_model_router_logs_real_calls_in_live_and_record_mode
         real_router=real_router,
         cassette_dir=tmp_path / "cassettes",
         clock=FixedClock(LATE_EVENING),
-        run_id="run-from-the-factory",
+        run=BudgetRun("run-from-the-factory"),
         pricing_file=pricing_file,
         usage_log=UsageLog.for_data_dir(settings.storage.data_dir, local_zone=CHICAGO),
     )

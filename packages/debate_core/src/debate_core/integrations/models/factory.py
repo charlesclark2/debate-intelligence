@@ -47,13 +47,12 @@ class it declares. Replay and the fake read no route, so they ignore it.
 
 from __future__ import annotations
 
-import uuid
 from collections.abc import Mapping
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Protocol
 
-from debate_core.application.budget import BudgetGuard, BudgetLimits
+from debate_core.application.budget import BudgetGuard, BudgetLimits, BudgetRun
 from debate_core.application.ports.model_router import ModelRouter
 from debate_core.application.ports.providers import Clock
 from debate_core.application.settings import ConfigurationError, Settings, find_repository_root
@@ -95,7 +94,7 @@ def build_model_router(
     fixture_dir: Path | None = None,
     cassette_dir: Path | None = None,
     clock: Clock | None = None,
-    run_id: str | None = None,
+    run: BudgetRun | None = None,
     pricing_file: Path | None = None,
     usage_log: UsageLog | None = None,
     stand_ins: Mapping[TaskClass, TaskClass] | None = None,
@@ -138,14 +137,14 @@ def build_model_router(
             field="models.provider",
         )
     clock = clock or _UtcClock()
-    run_id = run_id or uuid.uuid4().hex
+    run = run or BudgetRun()
     pricing = ModelPricing.load(pricing_file or settings.models.routing_file.parent / PRICING_FILE_NAME)
     log = usage_log or UsageLog.for_data_dir(settings.storage.data_dir)
     real: ModelRouter = UsageRecordingRouter(
         real_router(policy, aws_profile=settings.models.aws_profile),
         log=log,
         pricing=pricing,
-        run_id=run_id,
+        run_id=run.run_id,
         clock=clock,
     )
     limits = budget_limits(settings)
@@ -155,7 +154,7 @@ def build_model_router(
             limits=limits,
             pricer=RoutePricing(policy, pricing),
             ledger=log,
-            run_id=run_id,
+            run=run,
             clock=clock,
             local_zone=log.local_zone,
         )

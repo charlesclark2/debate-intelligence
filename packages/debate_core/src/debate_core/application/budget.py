@@ -34,6 +34,7 @@ Without any limit the guard checks nothing and asks nothing; the composition roo
 from __future__ import annotations
 
 import threading
+import uuid
 from collections.abc import Generator, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -60,6 +61,7 @@ __all__ = [
     "BudgetExceededError",
     "BudgetGuard",
     "BudgetLimits",
+    "BudgetRun",
     "CalendarMonth",
     "CallCeiling",
     "CallPricer",
@@ -266,6 +268,13 @@ class UnreadableUsageLog(DomainError):
         super().__init__(f"the model usage log {location} could not be read: {reason}")
 
 
+class BudgetRun:
+    """SKELETON: one run, by its id alone."""
+
+    def __init__(self, run_id: str | None = None) -> None:
+        self.run_id: Final = run_id or uuid.uuid4().hex
+
+
 class BudgetGuard:
     """A `ModelRouter` that refuses, before it is made, any call that could take a limit past its value."""
 
@@ -276,7 +285,7 @@ class BudgetGuard:
         limits: BudgetLimits,
         pricer: CallPricer,
         ledger: SpendLedger,
-        run_id: str,
+        run: BudgetRun,
         clock: Clock,
         local_zone: tzinfo | None = None,
     ) -> None:
@@ -289,8 +298,9 @@ class BudgetGuard:
         self._delegate = delegate
         self.limits = limits
         """The limits this guard holds calls to."""
-        self.run_id = run_id
+        self.run = run
         """The run whose spend counts against `per_run_usd`."""
+        self.run_id = run.run_id
         self._pricer = pricer
         self._ledger = ledger
         self._clock = clock

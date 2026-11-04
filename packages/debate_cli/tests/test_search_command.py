@@ -1590,3 +1590,11 @@ def test_auto_cut_help_documents_its_options_and_exit_codes() -> None:
         "with --auto-cut, N cards are VERIFIED",
     ):
         assert text in result.stdout
+
+
+def test_max_cost_help_says_it_is_one_limit_for_the_whole_command() -> None:
+    result = runner.invoke(create_app(), ["search", "--help"], env={"COLUMNS": "200"})
+
+    assert result.exit_code == ExitCode.OK
+    help_text = " ".join(result.stdout.replace("│", " ").split())
+    assert "one limit for the whole command, whatever models it asks" in help_text

@@ -12,7 +12,8 @@ command-line surface: which options go together, the files, and the exit code.
 `--auto-cut N` needs `--argument` and `--need`, which say what every card is cut for, and `--output`,
 the .docx bundle. `--card-format PROFILE` is the team format profile of the bundle (`search`'s own
 `--format` is its output's, a table or JSON). `--concurrency` is how many cuts run at once, 1 to 8,
-2 unless given. `--max-cost USD` is the most the command may spend on model calls. Each of them
+2 unless given. `--max-cost USD` is the most the whole command may spend on model calls: with
+`--expand-llm`, the expansion's call and the cuts' calls are held to that one limit. Each of them
 without `--auto-cut` is a usage error, as is an unknown profile; nothing is searched.
 
 ## Files
@@ -112,7 +113,8 @@ def auto_cut_options(
     """The checked options, or None without `--auto-cut`; a usage error for any that do not go together.
 
     With `--max-cost`, the command's settings take it as their per-run limit from here on, so every
-    model router the command builds is guarded by it.
+    model router the command builds is guarded by it, and all of them count against it together: the
+    container gives them the command's one budget run (v1-e08-t17).
     """
     given = [
         flag

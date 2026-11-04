@@ -35,7 +35,12 @@ so every real call is logged to `<data_dir>/usage/YYYY-MM-DD.jsonl`, priced from
 day or the calendar month in America/Chicago past `models.budget_usd_per_run`,
 `models.budget_usd_daily` or `models.budget_usd_monthly` (the month v1-e05-t15). The guard is left
 out when none is set. Replay serves cassettes and the fake answers from fixtures: neither costs anything,
-and neither is wrapped. One call of this function is one run, named by `run_id`.
+and neither is wrapped.
+
+A router's calls count against the :class:`~debate_core.application.budget.BudgetRun` it is given,
+which its usage records name. A command is one run (v1-e08-t17): its composition root gives every
+router it builds the same run, so all their calls are held to one per-run limit. A call of this
+function given no run is a run of its own.
 
 ## A route standing in for another (v1-e32-t43)
 
@@ -107,7 +112,8 @@ def build_model_router(
     `repository_root`, itself the checkout around the working directory by default. `clock` dates
     the fake's responses and the usage records, and says which day the budget is in.
 
-    In record and live mode, `run_id` names the run in the usage log (a new one by default),
+    In record and live mode, `run` is the budget run the router's calls count against and its usage
+    records name (a new one by default; every router built for one command is given the same one),
     `pricing_file` is `model_pricing.yaml` beside the routing file by default, and `usage_log` is
     `<data_dir>/usage` by default. `stand_ins` names, by task class, the route that answers its calls.
 

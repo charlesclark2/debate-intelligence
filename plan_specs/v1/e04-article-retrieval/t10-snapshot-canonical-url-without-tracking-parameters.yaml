@@ -1,0 +1,69 @@
+# TASK v1-e04-t10-snapshot-canonical-url-without-tracking-parameters - A snapshot's canonical URL drops the tracking parameters its article's does
+# Epic: E04 Article Retrieval & Extraction | Release: v1.3 (URL → verified card) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e04-t10-snapshot-canonical-url-without-tracking-parameters
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.3
+    debate/epic: v1-e04-article-retrieval
+  annotations:
+    debate/title: "A snapshot's canonical URL drops the tracking parameters its article's does"
+spec:
+  # Filed by the PM, 2026-11-04, from v1-e09-t05's follow-up (the PM's review, 2026-11-04).
+  description: >-
+    After `search --auto-cut`, a news page's snapshot row records its `canonical_url` as the
+    fetched URL with `?utm_source=newsletter`, while the page's article records the canonical
+    URL. Find whether the field is the retrieved URL under a misleading name or the canonical
+    URL not applied to the snapshot, and fix whichever it is, by a test on a recorded page with
+    tracking parameters. Say what readers of the field depend on.
+  priority: 3
+  constraints:
+    packages: [debate_core.application, debate_core.domain, debate_core.integrations, packages/debate_core/tests]
+    forbidden:
+      - A live network call in a test
+      - A change to a snapshot's stored bytes
+  context: []
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        A snapshot's canonical URL agrees with its article's on a recorded page carrying
+        tracking parameters, by a test shown failing first, or the field is renamed to what
+        it holds, with every reader updated.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e04-t10-snapshot-canonical-url-without-tracking-parameters-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.3
+    debate/epic: v1-e04-article-retrieval
+spec:
+  description: >-
+    A snapshot's canonical URL drops the tracking parameters its article's does.
+  goalRef:
+    name: v1-e04-t10-snapshot-canonical-url-without-tracking-parameters
+  graph:
+    nodes:
+      - id: snapshot-canonical-url-without-tracking
+        kind: Task
+        name: Canonical URL
+        description: >-
+          A snapshot's canonical URL drops the tracking parameters its article's does.
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Canonical URL tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests, -k, snapshot or canonical]
+status:
+  phase: Pending

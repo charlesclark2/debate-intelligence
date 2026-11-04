@@ -1,0 +1,75 @@
+# TASK v1-e08-t17-one-max-cost-across-every-router-a-command-builds - `--max-cost` is one limit for the whole command, whatever routers it builds
+# Epic: E08 Federated Research Workflows | Release: v1.4 (Federated research from the CLI) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e08-t17-one-max-cost-across-every-router-a-command-builds
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.4
+    debate/epic: v1-e08-research-workflows
+  annotations:
+    debate/title: "`--max-cost` is one limit for the whole command, whatever routers it builds"
+spec:
+  # Filed by the PM, 2026-11-04, from v1-e08-t06's follow-up (the PM's review, 2026-11-03).
+  description: >-
+    Each model router the container builds is its own budget run (`build_model_router` makes a
+    new `run_id`), so a command that builds two, such as `search --expand-llm --auto-cut`, gives
+    each router the full `--max-cost` and can spend up to twice what the option's help promises
+    ("The most this command may spend on model calls"). Pass one run id to every router the
+    container builds for one command, so the budget guard counts every call against one limit; a
+    refusal then names the command's total. Show by test that `--expand-llm` and `--auto-cut`
+    together stop at the one limit, and that a single-router command is unchanged.
+  priority: 2
+  constraints:
+    packages: [debate_cli, debate_core.application, packages/debate_cli/tests, packages/debate_core/tests]
+    forbidden:
+      - A real model call in a test
+      - A price written from memory
+      - Business logic in debate_cli
+  context:
+    - kind: TaskRef
+      name: v1-e08-t06-auto-cut
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        Every router one command builds shares one budget run, so `--max-cost` limits the
+        command's total, by tests shown failing first with two routers, and a one-router
+        command's behaviour is unchanged.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e08-t17-one-max-cost-across-every-router-a-command-builds-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.4
+    debate/epic: v1-e08-research-workflows
+spec:
+  description: >-
+    `--max-cost` is one limit for the whole command, whatever routers it builds.
+  goalRef:
+    name: v1-e08-t17-one-max-cost-across-every-router-a-command-builds
+  graph:
+    nodes:
+      - id: one-max-cost-across-every-router-a-comma
+        kind: Task
+        name: One limit
+        description: >-
+          `--max-cost` is one limit for the whole command, whatever routers it builds.
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: One limit tests pass
+            command: uv
+            args: [run, pytest, packages/debate_cli/tests, packages/debate_core/tests, -k, budget or max_cost]
+status:
+  phase: Pending

@@ -1,0 +1,74 @@
+# TASK v1-e32-t48-landscape-report-records-a-synthetic-cassette - A landscape model call can be recorded from a synthetic card with a command
+# Epic: E32 Argument Landscape Reports | Release: v1.2 (Argument landscape & file building) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e32-t48-landscape-report-records-a-synthetic-cassette
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e32-argument-landscape
+  annotations:
+    debate/title: "A landscape model call can be recorded from a synthetic card with a command"
+spec:
+  # Filed by the PM, 2026-11-04, from v1-e09-t05's follow-up (the PM's review, 2026-11-04).
+  description: >-
+    v1-e09-t05 needed a landscape model cassette for its synthetic caselist. `landscape report`
+    has no record mode and the committed record path (`landscape evaluate --model-mode record`)
+    needs a coach's sample, so the session wrote the request and answer by hand through a
+    script, and its first request was refused because the stage lower-cases and strips the text
+    it sends. Give the landscape stage a documented way to record one call from a synthetic card
+    (a record mode on `landscape report` for synthetic data directories, or a script under
+    scripts/ that builds the request the stage sends), so the next synthetic cassette is a
+    command.
+  priority: 3
+  constraints:
+    packages: [debate_core.application, debate_cli, scripts, packages/debate_core/tests, packages/debate_cli/tests, docs/runbooks]
+    forbidden:
+      - A live model call by the session
+      - Card text from the caselist store in a fixture
+  context:
+    - kind: TaskRef
+      name: v1-e32-t43-model-evaluation-system-score-refusals-and-a-second-route
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        A synthetic landscape cassette is recorded by one documented command and replays in
+        the stage, by a test on invented text shown failing first.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e32-t48-landscape-report-records-a-synthetic-cassette-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e32-argument-landscape
+spec:
+  description: >-
+    A landscape model call can be recorded from a synthetic card with a command.
+  goalRef:
+    name: v1-e32-t48-landscape-report-records-a-synthetic-cassette
+  graph:
+    nodes:
+      - id: landscape-report-records-a-synthetic-cas
+        kind: Task
+        name: Record mode
+        description: >-
+          A landscape model call can be recorded from a synthetic card with a command.
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Record mode tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests, packages/debate_cli/tests, -k, landscape and cassette]
+status:
+  phase: Pending

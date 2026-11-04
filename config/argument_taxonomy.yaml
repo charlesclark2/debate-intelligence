@@ -38,7 +38,7 @@
 #
 # Schema 2 (v1-e08-t08): `families`, each with its kinds and needs, replaces the one `needs` list.
 schema_version: 2
-taxonomy_version: 1.3.0
+taxonomy_version: 1.4.0
 
 variables:
   query: What the debater typed as the search query.
@@ -470,7 +470,7 @@ arguments:
     kind: framework
     formats: [LD]
     aliases: [utilitarianism, consequentialism]
-    review: awaiting_coach_review
+    review: coach_reviewed
     note: >-
       The coach's points: whether utilitarianism is good or not as a framework; predictions good or
       not good; predictions accurate or inaccurate; util inevitable.
@@ -481,19 +481,23 @@ arguments:
         - {text: "expert predictions accurate"}
         - {text: "utilitarianism inevitable"}
         - {text: "{topic} utilitarianism"}
+        - {text: "policy making good"}
+        - {text: "critique cedes the political"}
+        - {text: "evaluation extinction first"}
       answers:
         - {text: "utilitarianism bad framework"}
         - {text: "predictions bad policy making"}
         - {text: "expert predictions inaccurate"}
         - {text: "utilitarianism not inevitable"}
         - {text: "{topic} consequences unpredictable"}
+        - {text: "utilitarianism violent"}
 
   - id: deontology
     label: Deontology
     kind: framework
     formats: [LD]
     aliases: [kant, kantianism, deont]
-    review: awaiting_coach_review
+    review: coach_reviewed
     note: >-
       The coach's points: whether deontology is good or bad as a framework; for example, deontology
       allows better policy making.
@@ -503,18 +507,20 @@ arguments:
         - {text: "deontology allows better policy making"}
         - {text: "Kantian ethics justification"}
         - {text: "{topic} rights and duties"}
+        - {text: "deontology first"}
       answers:
         - {text: "deontology bad framework"}
         - {text: "deontology fails policy making"}
         - {text: "deontology ignores consequences"}
         - {text: "{topic} consequences matter more than rights"}
+        - {text: "deontology fails"}
 
   - id: structural-violence
     label: Structural violence
     kind: framework
     formats: [POLICY, LD, PF]
     aliases: [sv]
-    review: awaiting_coach_review
+    review: coach_reviewed
     note: >-
       A framing argument for Policy and LD (the coach, 2026-11-02), kept for PF too. The coach's
       points: whether structural violence should be evaluated above other consequences or not;
@@ -564,7 +570,7 @@ arguments:
     kind: theory
     formats: [LD]
     aliases: [ld-theory]
-    review: awaiting_coach_review
+    review: coach_reviewed
     note: >-
       The Policy landscape's generic-theory is Policy-only and collects theory headings, so it is
       not mapped here.
@@ -601,7 +607,7 @@ arguments:
     formats: [POLICY]
     aliases: [process, cp-process]
     landscape_id: process-cp
-    review: awaiting_coach_review
+    review: coach_reviewed
     templates:
       solvency:
         - {text: "{query} consultation process solves"}
@@ -619,6 +625,8 @@ arguments:
         - {text: "{query} consultation fails"}
         - {text: "{topic} commission recommendations ignored"}
         - {text: "permutation do both {query}"}
+        - {text: "process is normal means"}
+        - {text: "{query} consultation normal means"}
 
   - id: states-cp
     label: States CP
@@ -626,7 +634,7 @@ arguments:
     formats: [POLICY]
     aliases: [states, cp-states, states-counterplan]
     landscape_id: states-cp
-    review: awaiting_coach_review
+    review: coach_reviewed
     templates:
       solvency:
         - {text: "states solve {query}"}
@@ -645,6 +653,8 @@ arguments:
         - {text: "{query} race to the bottom states"}
         - {text: "states lack funding for {query}"}
         - {text: "{query} federal action key"}
+        - {text: "{query} state budget trade-off"}
+        - {text: "{query} federal action key"}
 
   - id: courts-cp
     label: Courts CP
@@ -652,7 +662,7 @@ arguments:
     formats: [POLICY]
     aliases: [courts, cp-courts]
     landscape_id: courts-cp
-    review: awaiting_coach_review
+    review: coach_reviewed
     templates:
       solvency:
         - {text: "{query} Supreme Court ruling"}
@@ -670,6 +680,7 @@ arguments:
         - {text: "{query} court ruling backlash"}
         - {text: "{query} courts lack enforcement"}
         - {text: "court legitimacy low now"}
+        - {text: "no court test case for {topic}"}
 
   - id: delay-cp
     label: Delay CP
@@ -677,7 +688,7 @@ arguments:
     formats: [POLICY]
     aliases: [delay, cp-delay]
     landscape_id: delay-cp
-    review: awaiting_coach_review
+    review: coach_reviewed
     templates:
       solvency:
         - {text: "{query} delay solves"}
@@ -702,12 +713,13 @@ arguments:
     formats: [POLICY]
     aliases: [adv-cp, advantage-counterplan]
     landscape_id: advantage-cp
-    review: awaiting_coach_review
+    review: coach_reviewed
     templates:
       solvency:
         - {text: "{query} alternative policy solves"}
         - {text: "{query} alternative solutions"}
         - {text: "alternatives to {topic}"}
+        - {text: "{query} solves {topic}"}
       net-benefit:
         - {text: "{topic} costs too much"}
         - {text: "{query} cheaper alternative"}
@@ -731,28 +743,34 @@ arguments:
     formats: [POLICY]
     aliases: [cap, capitalism-k, k-cap]
     landscape_id: cap-k
-    review: awaiting_coach_review
+    review: coach_reviewed
     templates:
       link:
         - {text: "{topic} reform props up capitalism"}
         - {text: "{query} capitalism"}
         - {text: "{query} commodification"}
+        - {text: "{topic} preserves markets"}
       impact:
         - {text: "capitalism causes environmental destruction"}
         - {text: "capitalism structural violence"}
         - {text: "capitalism causes war"}
+        - {text: "capitalism causes endless violence"}
       alternative:
         - {text: "reject capitalism alternative"}
         - {text: "socialism alternative to capitalism"}
         - {text: "{query} socialist alternative"}
+        - {text: "dismantle capitalism alternative"}
       framework:
         - {text: "material analysis comes first"}
         - {text: "{query} capitalism framework"}
+        - {text: "evaluating capitalist structures key to dismantling"}
       answers:
         - {text: "capitalism good"}
         - {text: "capitalism sustainable"}
         - {text: "socialism fails"}
         - {text: "permutation reform and socialism"}
+        - {text: "capitalism inevitable"}
+        - {text: "{topic} resolves negative features of capitalism"}
 
   - id: racial-capitalism-k
     label: Racial capitalism K
@@ -760,7 +778,7 @@ arguments:
     formats: [POLICY]
     aliases: [racial-cap-k, racial-cap]
     landscape_id: racial-capitalism-k
-    review: awaiting_coach_review
+    review: coach_reviewed
     templates:
       link:
         - {text: "{topic} racial capitalism"}
@@ -785,7 +803,7 @@ arguments:
     formats: [POLICY]
     aliases: [security, k-security]
     landscape_id: security-k
-    review: awaiting_coach_review
+    review: coach_reviewed
     templates:
       link:
         - {text: "{query} securitization"}
@@ -794,6 +812,7 @@ arguments:
       impact:
         - {text: "securitization justifies violence"}
         - {text: "security logic causes war"}
+        - {text: "security logic causes violence"}
       alternative:
         - {text: "reject security logic"}
         - {text: "{query} desecuritization"}
@@ -804,6 +823,9 @@ arguments:
         - {text: "securitization good"}
         - {text: "{query} threat is real"}
         - {text: "realism true"}
+        - {text: "realism inevitable"}
+        - {text: "securitization inevitable"}
+        - {text: "threat construction good"}
 
   - id: biopolitics-k
     label: Biopolitics K
@@ -811,7 +833,7 @@ arguments:
     formats: [POLICY]
     aliases: [biopolitics, biopower-k, k-biopolitics]
     landscape_id: biopolitics-k
-    review: awaiting_coach_review
+    review: coach_reviewed
     templates:
       link:
         - {text: "{topic} biopolitics"}
@@ -820,6 +842,8 @@ arguments:
       impact:
         - {text: "biopolitics justifies killing"}
         - {text: "biopower control over life"}
+        - {text: "biopower dehumanization"}
+        - {text: "biopower endless violence"}
       alternative:
         - {text: "resist biopolitics"}
         - {text: "{query} refuse biopower"}
@@ -837,7 +861,7 @@ arguments:
     formats: [POLICY]
     aliases: [settler-colonialism, set-col-k, k-set-col]
     landscape_id: settler-colonialism-k
-    review: awaiting_coach_review
+    review: coach_reviewed
     templates:
       link:
         - {text: "{topic} settler colonialism"}
@@ -864,7 +888,7 @@ arguments:
     formats: [POLICY]
     aliases: [colonialism]
     landscape_id: colonialism-k
-    review: awaiting_coach_review
+    review: coach_reviewed
     templates:
       link:
         - {text: "{topic} colonialism"}
@@ -942,7 +966,7 @@ arguments:
     formats: [POLICY]
     aliases: [queer, queer-intelligibility-k]
     landscape_id: queer-k
-    review: awaiting_coach_review
+    review: coach_reviewed
     templates:
       link:
         - {text: "{topic} queer"}
@@ -968,7 +992,7 @@ arguments:
     formats: [POLICY]
     aliases: [buddhism, k-buddhism]
     landscape_id: buddhism-k
-    review: awaiting_coach_review
+    review: coach_reviewed
     templates:
       link:
         - {text: "{query} attachment to outcomes"}
@@ -1003,7 +1027,7 @@ arguments:
 topics:
   - id: policy-2026-27-nhi
     format: POLICY
-    review: awaiting_coach_review
+    review: coach_reviewed
     variables:
       topic: national health insurance
       country: United States

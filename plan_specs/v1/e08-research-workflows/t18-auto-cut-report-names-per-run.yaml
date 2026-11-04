@@ -1,0 +1,70 @@
+# TASK v1-e08-t18-auto-cut-report-names-per-run - An auto-cut run's report does not replace the last run's in the same directory
+# Epic: E08 Federated Research Workflows | Release: v1.4 (Federated research from the CLI) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e08-t18-auto-cut-report-names-per-run
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.4
+    debate/epic: v1-e08-research-workflows
+  annotations:
+    debate/title: "An auto-cut run's report does not replace the last run's in the same directory"
+spec:
+  # Filed by the PM, 2026-11-04, from v1-e08-t06's follow-up (the PM's review, 2026-11-03).
+  description: >-
+    `search --auto-cut` writes report.json beside the bundle under that fixed name, so a second
+    run into the same directory replaces the first run's report. Name the report after the
+    bundle (`<bundle>.report.json`) or add a `--report PATH` option, propose which, and keep the
+    bundle's own manifest beside it as today. Tests on fixtures.
+  priority: 3
+  constraints:
+    packages: [debate_cli, debate_core.application, packages/debate_cli/tests, docs/guides]
+    forbidden:
+      - Business logic in debate_cli
+      - A live network or model call in a test
+  context:
+    - kind: TaskRef
+      name: v1-e08-t06-auto-cut
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        Two auto-cut runs into one directory keep both reports, by a test shown failing
+        first, and the guide names the report's file.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e08-t18-auto-cut-report-names-per-run-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.4
+    debate/epic: v1-e08-research-workflows
+spec:
+  description: >-
+    An auto-cut run's report does not replace the last run's in the same directory.
+  goalRef:
+    name: v1-e08-t18-auto-cut-report-names-per-run
+  graph:
+    nodes:
+      - id: auto-cut-report-names-per-run
+        kind: Task
+        name: Report names
+        description: >-
+          An auto-cut run's report does not replace the last run's in the same directory.
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Report names tests pass
+            command: uv
+            args: [run, pytest, packages/debate_cli/tests/test_search_command.py, -k, auto_cut]
+status:
+  phase: Pending

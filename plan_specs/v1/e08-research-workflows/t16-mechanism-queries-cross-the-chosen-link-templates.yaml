@@ -1,0 +1,98 @@
+# TASK v1-e08-t16-mechanism-queries-cross-the-chosen-link-templates - A DA's mechanism queries cross the link templates the coach chose, and a preset may name more mechanisms
+# Epic: E08 Federated Research Workflows | Release: v1.4 (Federated research from the CLI) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e08-t16-mechanism-queries-cross-the-chosen-link-templates
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.4
+    debate/epic: v1-e08-research-workflows
+  annotations:
+    debate/title: "A DA's mechanism queries cross the link templates the coach chose, and a preset may name more mechanisms"
+spec:
+  # Filed by the PM, 2026-11-04, from the coach's answers to v1-e08-t14's review sheet (2026-11-04).
+  description: >-
+    v1-e08-t14 crosses each mechanism (and the resolution's words) with only a DA's first link
+    template, so the politics DA's mechanism queries are all "political capital". The coach's
+    answer: they must also cross the party-popularity templates (popular and unpopular with
+    Republicans, popular and unpopular with Democrats). He also asked why only four mechanisms:
+    the cap was the request budget, one OpenAlex request per query, which v1-e08-t10 removes.
+    So: the topic preset names, per DA, which of its link templates the mechanism queries cross
+    (by template id, so no coach-reviewed entry changes), with the first template as the default
+    for a DA the preset doesn't name; and the mechanism cap rises to what the coach chooses,
+    bounded by a stated maximum of queries per search that v1-e08-t10's joined request can carry
+    (say the number and why). Propose the NHI preset's choice for the politics DA (political
+    capital plus the four party-popularity templates) and any added mechanisms (single payer's
+    other mechanisms, Medicaid expansion, UCC, tiered NHI) with the queries per search each
+    gives, and stop for the PM's ruling; the coach reviews the preset's changes (operator). Then
+    the operator repeats v1-e08-t05's Policy search and the coach labels it blind, recorded
+    against v1-e08-t14's ac3.
+  priority: 2
+  constraints:
+    packages: [debate_core.application, debate_core.domain, config, packages/debate_core/tests, packages/debate_cli/tests, docs/guides]
+    forbidden:
+      - A change to a coach-reviewed template
+      - A live provider call in a test
+      - A school, team code or debater name anywhere
+      - Dropping the resolution's own words from the queries
+  context:
+    - kind: TaskRef
+      name: v1-e08-t10-search-asks-each-provider-once
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e08-t14-da-links-name-the-plans-mechanism-in-the-united-states
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        The proposal (the per-DA template choice, the mechanism cap and the queries per
+        search) is ruled on by the PM before any code, and the coach reviews the preset's
+        changes (operator).
+    - id: ac2
+      description: >-
+        A preset names the link templates each DA's mechanism queries cross, and more
+        mechanisms up to the stated maximum, by expansion tests on the recorded fixtures
+        shown failing first, with every reviewed template unchanged.
+    - id: ac3
+      description: >-
+        The operator repeats the Policy search and the coach labels it blind; the PM records
+        nDCG@10 and the relevant count against v1-e08-t14's ac3.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e08-t16-mechanism-queries-cross-the-chosen-link-templates-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.4
+    debate/epic: v1-e08-research-workflows
+spec:
+  description: >-
+    A DA's mechanism queries cross the link templates the coach chose, and a preset may name
+    more mechanisms.
+  goalRef:
+    name: v1-e08-t16-mechanism-queries-cross-the-chosen-link-templates
+  graph:
+    nodes:
+      - id: mechanism-queries-cross-the-chosen-link
+        kind: Task
+        name: Chosen templates
+        description: >-
+          A DA's mechanism queries cross the link templates the coach chose, and a preset
+          may name more mechanisms.
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Chosen templates tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application/test_query_expansion.py]
+status:
+  phase: Pending

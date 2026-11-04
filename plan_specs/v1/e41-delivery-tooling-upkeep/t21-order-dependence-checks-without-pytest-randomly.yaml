@@ -1,0 +1,73 @@
+# TASK v1-e41-t21-order-dependence-checks-without-pytest-randomly - Order-dependence checks use a plugin that is installed, or commands stop naming one that isn't
+# Epic: E41 — Delivery Tooling Upkeep | Release: v1.8 (Weekly caselist run in the cloud) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e41-t21-order-dependence-checks-without-pytest-randomly
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.8
+    debate/epic: v1-e41-delivery-tooling-upkeep
+  annotations:
+    debate/title: "Order-dependence checks use a plugin that is installed, or commands stop naming one that isn't"
+spec:
+  # Filed by the PM, 2026-11-04, from v1-e09-t05's follow-up (the PM's review, 2026-11-04).
+  description: >-
+    Session and operator commands pass `-p no:randomly`, but pytest-randomly is not installed,
+    so the flag does nothing and order-dependence is never shuffled. v1-e37-t15's
+    container-factories failure was order-dependent and surfaced only through whole-file
+    dealing. Propose one: add pytest-randomly as a dev dependency (default off in CI unless
+    asked, with the seed printed) or remove the flag from the docs and agreements and use
+    another way to shuffle (`-p randomly` replaced by an explicit order option). The PM rules,
+    then the docs, agreements and runbooks are made consistent.
+  priority: 3
+  constraints:
+    packages: [pyproject.toml, uv.lock, docs/process, docs/runbooks, tests/scripts]
+    forbidden:
+      - A change to which tests CI runs
+      - A new network call in CI
+  context: []
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        The PM's choice is built: either the plugin is installed with CI's behaviour
+        unchanged by default, or no document names a flag for an absent plugin, by a docs
+        test.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e41-t21-order-dependence-checks-without-pytest-randomly-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.8
+    debate/epic: v1-e41-delivery-tooling-upkeep
+spec:
+  description: >-
+    Order-dependence checks use a plugin that is installed, or commands stop naming one that
+    isn't.
+  goalRef:
+    name: v1-e41-t21-order-dependence-checks-without-pytest-randomly
+  graph:
+    nodes:
+      - id: order-dependence-checks-without-pytest-r
+        kind: Task
+        name: Shuffle
+        description: >-
+          Order-dependence checks use a plugin that is installed, or commands stop naming
+          one that isn't.
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Shuffle tests pass
+            command: uv
+            args: [run, pytest, tests/docs, tests/scripts, -k, randomly or agreements]
+status:
+  phase: Pending

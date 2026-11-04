@@ -812,5 +812,62 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e31-t34-what-the-bold-tag-rules-leave-above-a-cite
+    - id: t35
+      kind: Task
+      name: 'The two strata of short lines N1 left, sampled larger before any rule'
+      description: >-
+        The two strata of short lines N1 left, sampled larger before any rule.
+      inputs:
+        specRef: plan_specs/v1/e31-debate-file-parsing/t35-the-two-strata-n1-left-sampled-again.yaml
+        goalRef: v1-e31-t35-the-two-strata-n1-left-sampled-again
+      dependsOn:
+      - t23
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e31-t35-the-two-strata-n1-left-sampled-again reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e31-t35-the-two-strata-n1-left-sampled-again
+    - id: t36
+      kind: Task
+      name: 'A bold in-round marker at reading size is not read as a tag'
+      description: >-
+        A bold in-round marker at reading size is not read as a tag.
+      inputs:
+        specRef: plan_specs/v1/e31-debate-file-parsing/t36-a-bold-marker-reads-as-a-marker-not-a-tag.yaml
+        goalRef: v1-e31-t36-a-bold-marker-reads-as-a-marker-not-a-tag
+      dependsOn:
+      - t23
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e31-t36-a-bold-marker-reads-as-a-marker-not-a-tag reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e31-t36-a-bold-marker-reads-as-a-marker-not-a-tag
+    - id: t37
+      kind: Task
+      name: 'The parser evaluation''s baseline is refreshed from `docx-5` to the current parser'
+      description: >-
+        The parser evaluation's baseline is refreshed from `docx-5` to the current parser.
+      inputs:
+        specRef: plan_specs/v1/e31-debate-file-parsing/t37-parser-evaluation-baseline-refreshed.yaml
+        goalRef: v1-e31-t37-parser-evaluation-baseline-refreshed
+      dependsOn:
+      - t23
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e31-t37-parser-evaluation-baseline-refreshed reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e31-t37-parser-evaluation-baseline-refreshed
 status:
   phase: Pending

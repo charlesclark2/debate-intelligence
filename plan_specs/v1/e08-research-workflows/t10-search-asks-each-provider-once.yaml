@@ -33,7 +33,10 @@ spec:
     work appeared twice in a ranked list, once as `https://dx.doi.org/...` and once as
     `https://doi.org/...`. Find whether the dedupe compares DOIs as written; if so, normalise the host
     (and case) before comparing, by a test with both forms.
-  priority: 3
+    (PM amendment 2026-11-04.) Raised from p3 to p2: v1-e08-t14 made a politics DA link search on NHI
+    12 queries, and the coach's answers ask for more (the party-popularity crossing and more mechanisms,
+    v1-e08-t16), which only make sense once a search asks each provider once.
+  priority: 2
   constraints:
     packages: [debate_core.application, debate_core.integrations.discovery, packages/debate_core/tests, packages/debate_cli/tests]
     forbidden:

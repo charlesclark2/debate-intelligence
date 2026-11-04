@@ -1,0 +1,99 @@
+# TASK v1-e05-t20-prod-routes-on-the-4x-models - Prod's model routes, grant and first calls on the models dev already uses
+# Epic: E05 Model Router & Structured LLM Contracts | Release: v1.2 (Argument landscape & file building) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e05-t20-prod-routes-on-the-4x-models
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e05-model-router
+  annotations:
+    debate/title: "Prod's model routes, grant and first calls on the models dev already uses"
+spec:
+  # Filed by the PM, 2026-11-04, from Charlie's decision of 2026-11-04 (v1.2 ships on the 4.x models) and v1-e05-t17, cancelled.
+  description: >-
+    AWS declined on 2026-11-04 to restore the 5.5 models' cross-region quotas until the account
+    shows sustained usage, so v1.2 ships on the models dev already routes to: Claude Haiku 4.5
+    and Claude Sonnet 4.6 (config/model_routing.dev.yaml; the operator's quota reading of
+    2026-11-04 in docs/runbooks/bedrock-access.md step 5). config/model_routing.prod.yaml still
+    names the 5.5 models (and Opus 5.5), which the account cannot call. Route prod's classes to
+    the same models dev uses, class for class, unless a class needs a model dev doesn't route
+    (say which, and the PM rules); the Bedrock invoker grant names exactly what the routing
+    files route to; prices come from config/model_pricing.yaml, restated from the operator's
+    reading of the pricing page where a model is new to it (never from memory). Then prod's plan
+    and apply (the PM reads the plan) and the first call answered on each prod route (operator,
+    bedrock-access.md step 7). Carried from v1-e05-t17: before prod's first model call, prod
+    reuses dev's classifications (a card dev classified at a prompt version and model is not
+    sent again by prod), by test; each profile keeps its $50 monthly limit; and after prod's
+    first billed calls, re-run the model spend budget's counts block (aws-account-baseline.md)
+    and add any service name or usage type not already in `model_spend_budget`'s lists, as that
+    runbook says.
+  priority: 2
+  constraints:
+    packages: [config, infrastructure/modules/bedrock_access, infrastructure/modules/model_spend_budget, infrastructure/envs, packages/debate_core/tests, tests/docs, docs/runbooks, docs/data]
+    forbidden:
+      - A price written from memory
+      - A wildcard resource in the grant
+      - A real model call in a test
+      - A route to a model the account's quotas hold at zero
+  context:
+    - kind: TaskRef
+      name: v1-e05-t13-dev-routes-to-callable-claude-models
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e05-t08-bedrock-invoke-access
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e32-t07-model-classification-stage
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        Prod's routing names the models dev routes to (or the PM's ruling for a class that
+        differs), the grant names exactly what the routing files route to, the prices are
+        from the pricing file, and the module's tests pin it, shown failing first.
+    - id: ac2
+      description: >-
+        Prod makes no model call for an item dev has classified at the same prompt version
+        and model, by test, before prod's first live call.
+    - id: ac3
+      description: >-
+        Prod's plan and apply, the PM reading the plan, the first call answered on each prod
+        route, and the spend budget's lists checked after the first billed calls (operator).
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e05-t20-prod-routes-on-the-4x-models-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e05-model-router
+spec:
+  description: >-
+    Prod's model routes, grant and first calls on the models dev already uses.
+  goalRef:
+    name: v1-e05-t20-prod-routes-on-the-4x-models
+  graph:
+    nodes:
+      - id: prod-routes-on-the-4x-models
+        kind: Task
+        name: Prod on 4.x
+        description: >-
+          Prod's model routes, grant and first calls on the models dev already uses.
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Prod on 4.x tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests, -k, routing or bedrock or budget]
+status:
+  phase: Pending

@@ -392,3 +392,13 @@ Added by the PM. Nothing above is changed, and this section is not a review.
 | ac1 (part): the coach reviews them (operator) | NOT RUN (operator) | PART: 3 of 20 entries reviewed | the coach's answers of 2026-11-02, relayed by Charlie: `antiblackness-k` approved as drafted; `psychoanalysis-k` approved, with no Zizek template added; `cost-benefit` approved as written. The PM marked the three `coach_reviewed`, raised `taxonomy_version` to 1.2.1 (no template changed), and refreshed the guard's fixture as `coach_reviewed_1_2_1.yaml`, which now holds 12 reviewed entries |
 
 The Goal stays `InProgress`. The PM's relay of 2026-11-02 asked about only the three entries the PM had flagged and wrongly called them the last; 17 entries added or reshaped by this task still say `awaiting_coach_review` (util, deontology, structural-violence, theory, the five counterplans, and eight of the kritiks). Their review sheet is above. When the coach has read them, the PM applies his answers the same way and sets the Goal `Succeeded`.
+
+## Operator records (recorded by the PM, 2026-11-04)
+
+Added by the PM. Nothing above is changed, and this section is not a review.
+
+| Criterion | Was | Now | Record |
+|---|---|---|---|
+| ac1 (part): the coach reviews them (operator) | PART: 3 of 20 entries reviewed | PASS: all 20 reviewed | the coach's review of the last 17 entries on 2026-11-04, on the PM's review page (its saved answers read back by the PM): all 17 approved, none edited or struck, 24 queries added: util 4, deontology 2, process-cp 2, states-cp 2, courts-cp 1, advantage-cp 1, cap-k 6, security-k 4, biopolitics-k 2. The PM marked all 17 `coach_reviewed`, added the queries under their needs, raised `taxonomy_version` to 1.4.0 (with v1-e08-t14's preset, below), and refreshed the guard's fixture as `coach_reviewed_1_4_0.yaml`: every one of the 29 arguments is now guarded |
+
+Every criterion passes, so the Goal is `Succeeded` in this batch.

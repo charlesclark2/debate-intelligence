@@ -1065,5 +1065,24 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e32-t47-route-cassettes-in-the-purge-and-removal-blocks
+    - id: t48
+      kind: Task
+      name: 'A landscape model call can be recorded from a synthetic card with a command'
+      description: >-
+        A landscape model call can be recorded from a synthetic card with a command.
+      inputs:
+        specRef: plan_specs/v1/e32-argument-landscape/t48-landscape-report-records-a-synthetic-cassette.yaml
+        goalRef: v1-e32-t48-landscape-report-records-a-synthetic-cassette
+      dependsOn:
+      - t43
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e32-t48-landscape-report-records-a-synthetic-cassette reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e32-t48-landscape-report-records-a-synthetic-cassette
 status:
   phase: Pending

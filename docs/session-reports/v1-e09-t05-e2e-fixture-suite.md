@@ -263,3 +263,33 @@ needed, and it comes from the PM's own ruling 4, not from the session's work.
    by the change above. A platform `skipif` off macOS is not a missing recording.
 9. **Coordination:** v1-e08-t10 may change how many requests a search makes. Whichever of the two
    merges second fixes the other's fixtures.
+
+## After the PM's review (2026-11-04)
+
+**What moved.** `test_fetch_cli.py`, `test_verify_cli.py` and `test_launchd_install.py` moved from
+`tests/integration/` to `tests/cli/`, with their `slow` marks removed (`b1ecf84`, a rename in git).
+Against the files as they were before this task, the only difference is `test_fetch_cli.py`'s count of
+5 accessible cassettes. They stay at the same depth, so their `parents[1]` and `parents[2]` paths are
+unchanged. `tests/integration/` now holds only the slow end-to-end suite, and its collection guard is
+as it was. The paths were updated in `docs/process/ci-test-part-costs.md` and `tests/README.md`, which
+now describes `cli/` and `integration/`. Four docstrings named the old paths too, and were updated:
+`packages/debate_cli/tests/test_fetch_command.py`, `tests/smoke/README.md`,
+`tests/smoke/test_fetch_smoke.py` and `tests/fixtures/verify/manifest_world.py`. `ACCEPTANCE.md`
+named none of them. The PM's review was committed as written (`76871c5`) before the move.
+
+**The sync.** `scripts/task sync v1-e09-t05-e2e-fixture-suite` rebased the 10 commits onto
+`origin/dev` at `5cbaab2` (v1-e08-t14) with no conflict. Nothing was pushed: the branch is not on the
+remote. Dev changed no dependency.
+
+| Check | Command | Result |
+|---|---|---|
+| The affected set, once | `uv run scripts/affected_tests.py` → `94 of 690 test files (13.6%) chosen in 15.8 s from 33 changed files`; then `hard_stop.py 115 .venv/bin/python -m pytest -q <those 94 files>` | **Stopped at its 115-second limit**, load about 6. The set grew from 81 to 94 files because `tests/cli/` is on the default selection again (`test_launchd_install.py` alone is about 160 s of worker time). Under agreement 10, the whole set is left to the pull request's `ci`, which runs it in parts. Within the limit I ran the always-run list and the changed areas, in the next row. |
+| The always-run list and the changed areas | `hard_stop.py 115 .venv/bin/python -m pytest -q tests/architecture tests/specs …/test_app.py …/test_help_rendering.py …/test_container_factories.py tests/fixtures/test_cassette_hygiene.py tests/fixtures/caselist/test_synthetic_archive.py …/test_fetch_command.py tests/smoke/test_fetch_smoke.py …/test_cut_command.py …/test_search_command.py` | `600 passed in 30.41s` (load about 15) |
+| The moved files, default selection (no `-m`) | `hard_stop.py 115 .venv/bin/python -m pytest tests/cli` | **`157 passed in 38.13s`**: none deselected, none skipped on this Mac |
+| The slow suite | `hard_stop.py 115 .venv/bin/python -m pytest -m slow tests/integration` | header `tests/integration: sockets disabled for every test …`; **`11 passed in 4.62s`** |
+| Whole-repo checks | `ruff format --check .` / `ruff check .` / `pyright tests/cli tests/integration` and the three edited test modules / `lint-imports` / `validate_specs.py` / `check_links.py` | `1935 files already formatted` / `All checks passed!` / `0 errors` / `20 kept, 0 broken` / `OK: 608 files …` / `OK: 3538 relative links` |
+
+Before the move, `uv run pytest --collect-only tests/integration` on the default options deselected
+all 11 tests there, and `tests/cli` collects 157 tests on them. One note for CI: dev's recorded
+durations know the three files under their old paths, so for one run `test-selection` counts them as
+the median file until the next push run records them under `tests/cli/`.

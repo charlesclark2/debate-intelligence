@@ -1419,8 +1419,9 @@ def test_template_mechanism_queries_are_asked_of_every_provider_and_recorded_on_
     ]
     assert len(provider.queries) == 12
     stored = asyncio.run(searches.get(outcome.search.search_id))
-    assert stored.expansion == expand(request, committed)
-    assert [query.template_id for query in stored.expansion.queries][7:] == [
+    expected = expand(request, committed)
+    assert stored.expansion == expected
+    assert [query.template_id for query in expected.queries][7:] == [
         "politics-da/link/1/resolution",
         "politics-da/link/1/single-payer-aff",
         "politics-da/link/1/medicare-for-all-aff",

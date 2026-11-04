@@ -23,6 +23,20 @@ queries in the same order. It
 
 Two templates that render the same query are asked once.
 
+## A DA's link on the topic's plan mechanisms
+
+The coach's rule (2026-11-02): generic resolution links are fine, but links are usually to the
+mechanism of the plan text. So a DA's link search on a topic preset that names plan mechanisms
+(v1-e08-t14) asks the link templates as above, unchanged, and then adds, from the DA's first link
+template that names only `{query}` and `{topic}`:
+
+1. one query on the resolution's words, the preset's `topic`, whatever was typed;
+2. one query per mechanism, on its phrase, in the preset's order (at most four).
+
+Each ends with the preset's `country` unless it already names it, and is recorded under the
+template's id with `/resolution` or the mechanism's landscape id after it
+(`politics-da/link/1/medicare-for-all-aff`). Every other search is unchanged.
+
 ## A model's extra queries (`--expand-llm`)
 
 Off unless the request asks for it (`ExpansionRequest.use_model`), and never needed. When asked, the
@@ -60,10 +74,14 @@ from debate_core.application.ports.providers import Clock
 from debate_core.application.settings import ConfigurationError
 from debate_core.application.structured_output import StructuredOutputGuard
 from debate_core.domain.argument_taxonomy import (
+    ALWAYS_GIVEN_VARIABLES,
     Argument,
+    ArgumentKind,
     ArgumentTaxonomy,
     Need,
+    QueryTemplate,
     RecencyDays,
+    TopicPreset,
 )
 from debate_core.domain.base import DomainModel, NonEmptyText
 from debate_core.domain.discovery import ProviderQuery
@@ -84,6 +102,7 @@ __all__ = [
     "EXPAND_PROMPT_ID",
     "EXPAND_PROMPT_VERSION",
     "MAX_MODEL_QUERY_WORDS",
+    "MECHANISM_NEED",
     "InvalidArgumentTaxonomy",
     "QueryExpansion",
     "QueryExpansionStage",
@@ -119,6 +138,9 @@ DEFAULT_MAX_MODEL_QUERIES: Final = 3
 
 MAX_MODEL_QUERY_WORDS: Final = 12
 """The longest query a model may suggest, in words: a search query, not a sentence of evidence."""
+
+MECHANISM_NEED: Final = "link"
+"""The need of a DA whose search names the topic's plan mechanisms (v1-e08-t14)."""
 
 _MAX_SCHEMA_QUERIES: Final = 5
 """The most suggestions :class:`QueryExpansion` holds, whatever the stage asks for."""
@@ -193,8 +215,8 @@ def load_argument_taxonomy(path: Path) -> ArgumentTaxonomy:
 
 def _resolve(
     taxonomy: ArgumentTaxonomy, wanted: ExpansionRequest, query: str
-) -> tuple[Argument, Need, dict[str, str]]:
-    """The argument and need `wanted` names, and the value of every variable it fills."""
+) -> tuple[Argument, Need, TopicPreset | None, dict[str, str]]:
+    """The argument, need and topic preset `wanted` names, and the value of every variable it fills."""
     argument = taxonomy.find_argument(wanted.argument)
     if argument is None:
         raise UnknownExpansionChoice("argument", wanted.argument, [entry.id for entry in taxonomy.arguments])
@@ -205,6 +227,7 @@ def _resolve(
             "need", wanted.need, [entry.id for entry in family.needs], argument=argument.id
         )
     values: dict[str, str] = {"query": query}
+    topic: TopicPreset | None = None
     if wanted.topic_id is not None:
         topic = taxonomy.find_topic(wanted.topic_id)
         if topic is None:
@@ -216,7 +239,7 @@ def _resolve(
             raise UnknownExpansionChoice("variable", name, settable)
     values.update(wanted.variables)
     values.setdefault("topic", query)
-    return argument, need, values
+    return argument, need, topic, values
 
 
 def _since(days: RecencyDays, filters: SearchFilters, now: datetime) -> tuple[datetime | None, bool]:
@@ -257,6 +280,52 @@ def _same_query(text: str) -> str:
     return " ".join(text.casefold().split())
 
 
+def _template_query(
+    text: str, template: QueryTemplate, template_id: str, need: Need, filters: SearchFilters, now: datetime
+) -> ExpandedQuery:
+    own_window = template.recency_days is not None
+    return _expanded(
+        text,
+        days=template.recency_days if template.recency_days is not None else need.recency_days,
+        source=WindowSource.TEMPLATE if own_window else WindowSource.NEED,
+        filters=filters,
+        now=now,
+        template_id=template_id,
+        template=template.text,
+    )
+
+
+def _naming(text: str, country: str) -> str:
+    """`text` ending with `country`, unless it already names it."""
+    if f" {_same_query(country)} " in f" {_same_query(text)} ":
+        return text
+    return f"{text} {country}"
+
+
+def _mechanism_queries(
+    argument: Argument, need: Need, topic: TopicPreset, filters: SearchFilters, now: datetime
+) -> list[ExpandedQuery]:
+    """A DA's link queries on the resolution's words and on each of the topic's plan mechanisms."""
+    number, template = next(
+        (number, template)
+        for number, template in enumerate(argument.templates[need.id], start=1)
+        if template.variables <= ALWAYS_GIVEN_VARIABLES
+    )
+    subjects = [("resolution", topic.variables["topic"])]
+    subjects += [(mechanism.landscape_id, mechanism.phrase) for mechanism in topic.mechanisms]
+    return [
+        _template_query(
+            _naming(template.render({"query": subject, "topic": subject}), topic.variables["country"]),
+            template,
+            f"{argument.id}/{need.id}/{number}/{suffix}",
+            need,
+            filters,
+            now,
+        )
+        for suffix, subject in subjects
+    ]
+
+
 def expand_with_templates(
     taxonomy: ArgumentTaxonomy, request: SearchRequest, *, now: datetime
 ) -> SearchExpansion:
@@ -268,31 +337,30 @@ def expand_with_templates(
     wanted = request.expansion
     if wanted is None:
         raise ValueError("the request names no argument and need to expand by")
-    argument, need, values = _resolve(taxonomy, wanted, request.query)
-    queries: list[ExpandedQuery] = []
+    argument, need, topic, values = _resolve(taxonomy, wanted, request.query)
+    candidates: list[ExpandedQuery] = []
     skipped: list[str] = []
-    seen: set[str] = set()
     for number, template in enumerate(argument.templates[need.id], start=1):
         template_id = f"{argument.id}/{need.id}/{number}"
         if not template.variables <= values.keys():
             skipped.append(template_id)
             continue
-        text = template.render(values)
-        if _same_query(text) in seen:
-            continue
-        seen.add(_same_query(text))
-        own_window = template.recency_days is not None
-        queries.append(
-            _expanded(
-                text,
-                days=template.recency_days if template.recency_days is not None else need.recency_days,
-                source=WindowSource.TEMPLATE if own_window else WindowSource.NEED,
-                filters=request.filters,
-                now=now,
-                template_id=template_id,
-                template=template.text,
-            )
+        candidates.append(
+            _template_query(template.render(values), template, template_id, need, request.filters, now)
         )
+    if (
+        topic is not None
+        and topic.mechanisms
+        and argument.kind is ArgumentKind.DA
+        and need.id == MECHANISM_NEED
+    ):
+        candidates += _mechanism_queries(argument, need, topic, request.filters, now)
+    queries: list[ExpandedQuery] = []
+    seen: set[str] = set()
+    for candidate in candidates:
+        if _same_query(candidate.query) not in seen:
+            seen.add(_same_query(candidate.query))
+            queries.append(candidate)
     return SearchExpansion(
         taxonomy_version=taxonomy.taxonomy_version,
         argument=argument.id,

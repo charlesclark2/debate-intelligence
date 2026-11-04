@@ -285,6 +285,35 @@ def _repeated(values: Iterable[str]) -> list[str]:
     return sorted(value for value, count in Counter(values).items() if count > 1)
 
 
+def _check_mechanisms(topic: TopicPreset) -> None:
+    """A topic names at most :data:`MAX_TOPIC_MECHANISMS` distinct mechanisms in words, and, when it
+    names any, the topic and the country their queries are built on."""
+    if not topic.mechanisms:
+        return
+    if len(topic.mechanisms) > MAX_TOPIC_MECHANISMS:
+        raise ValueError(
+            f"topic {topic.id} names {len(topic.mechanisms)} plan mechanisms; a topic names at most "
+            f"{MAX_TOPIC_MECHANISMS}"
+        )
+    missing = [name for name in ("topic", "country") if name not in topic.variables]
+    if missing:
+        raise ValueError(f"topic {topic.id} names plan mechanisms, so it sets {' and '.join(missing)}")
+    repeated = _repeated(mechanism.landscape_id for mechanism in topic.mechanisms)
+    if repeated:
+        raise ValueError(
+            f"two plan mechanisms of topic {topic.id} share the landscape id {', '.join(repeated)}"
+        )
+    repeated = _repeated(" ".join(mechanism.phrase.casefold().split()) for mechanism in topic.mechanisms)
+    if repeated:
+        raise ValueError(f"two plan mechanisms of topic {topic.id} share the phrase {', '.join(repeated)}")
+    for mechanism in topic.mechanisms:
+        if any(character.isdigit() for character in mechanism.phrase):
+            raise ValueError(
+                f"topic {topic.id}: the phrase {mechanism.phrase!r} has a digit; a phrase names a "
+                "mechanism in words"
+            )
+
+
 class ArgumentTaxonomy(DomainModel):
     """`config/argument_taxonomy.yaml`, validated whole when it loads."""
 
@@ -315,6 +344,7 @@ class ArgumentTaxonomy(DomainModel):
                     f"topic {topic.id} sets {', '.join(unknown) or 'query'}; a topic sets declared "
                     "variables other than query"
                 )
+            _check_mechanisms(topic)
         return self
 
     def _check_variables(self) -> None:

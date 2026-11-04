@@ -31,7 +31,6 @@ from debate_core.application.batch_cut_service import (
     BatchCandidate,
     BatchCutRequest,
     BatchCutService,
-    BatchEntryStatus,
     BatchNeed,
     BatchReport,
     BatchStopReason,
@@ -217,8 +216,8 @@ PAGES: Final[dict[str, str | AccessStatus]] = {
 }
 
 
-def statuses(report: BatchReport) -> list[tuple[int, BatchEntryStatus]]:
-    return [(entry.rank, entry.status) for entry in report.entries]
+def statuses(report: BatchReport) -> list[tuple[int, str]]:
+    return [(entry.rank, entry.verdict) for entry in report.entries]
 
 
 # ------------------------------------------------------------------------------------------------
@@ -232,9 +231,9 @@ async def test_it_cuts_in_rank_order_and_stops_once_n_cards_are_verified() -> No
     report = await run.cut(["news", "think-tank", "journal", "news-again"], wanted=3)
 
     assert statuses(report) == [
-        (1, BatchEntryStatus.VERIFIED),
-        (2, BatchEntryStatus.VERIFIED),
-        (3, BatchEntryStatus.VERIFIED),
+        (1, "VERIFIED"),
+        (2, "VERIFIED"),
+        (3, "VERIFIED"),
     ]
     assert report.stop_reason is BatchStopReason.COMPLETE
     assert report.complete
@@ -263,10 +262,10 @@ async def test_an_unverified_card_is_kept_apart_and_never_counts_toward_n() -> N
     report = await run.cut(["press-release", "news", "think-tank", "journal"], wanted=3)
 
     assert statuses(report) == [
-        (1, BatchEntryStatus.UNVERIFIED),
-        (2, BatchEntryStatus.VERIFIED),
-        (3, BatchEntryStatus.VERIFIED),
-        (4, BatchEntryStatus.VERIFIED),
+        (1, "UNVERIFIED"),
+        (2, "VERIFIED"),
+        (3, "VERIFIED"),
+        (4, "VERIFIED"),
     ]
     assert report.stop_reason is BatchStopReason.COMPLETE
     assert len(report.verified) == 3
@@ -290,13 +289,13 @@ async def test_paywalled_and_robots_disallowed_results_are_skipped_and_the_batch
         wanted=3,
     )
 
-    assert [(e.rank, e.status, e.access_status, e.fetched, e.reasons) for e in report.entries] == [
-        (1, BatchEntryStatus.SKIPPED, AccessStatus.PAYWALLED, True, ("SOURCE_NOT_ACCESSIBLE",)),
-        (2, BatchEntryStatus.VERIFIED, AccessStatus.ACCESSIBLE, True, ()),
-        (3, BatchEntryStatus.SKIPPED, AccessStatus.ROBOTS_DISALLOWED, True, ("SOURCE_NOT_ACCESSIBLE",)),
-        (4, BatchEntryStatus.SKIPPED, AccessStatus.PAYWALLED, False, ("SOURCE_NOT_ACCESSIBLE",)),
-        (5, BatchEntryStatus.VERIFIED, AccessStatus.ACCESSIBLE, True, ()),
-        (6, BatchEntryStatus.VERIFIED, AccessStatus.ACCESSIBLE, True, ()),
+    assert [(e.rank, e.verdict, e.access_status, e.fetched, e.reasons) for e in report.entries] == [
+        (1, "SKIPPED", AccessStatus.PAYWALLED, True, ("SOURCE_NOT_ACCESSIBLE",)),
+        (2, "VERIFIED", AccessStatus.ACCESSIBLE, True, ()),
+        (3, "SKIPPED", AccessStatus.ROBOTS_DISALLOWED, True, ("SOURCE_NOT_ACCESSIBLE",)),
+        (4, "SKIPPED", AccessStatus.PAYWALLED, False, ("SOURCE_NOT_ACCESSIBLE",)),
+        (5, "VERIFIED", AccessStatus.ACCESSIBLE, True, ()),
+        (6, "VERIFIED", AccessStatus.ACCESSIBLE, True, ()),
     ]
     assert report.entries[0].details == ("the fake classified this page PAYWALLED",)
     assert report.entries[3].details == (
@@ -304,7 +303,7 @@ async def test_paywalled_and_robots_disallowed_results_are_skipped_and_the_batch
     )
     assert url("journal-again") not in run.fetching.asked
     assert report.stop_reason is BatchStopReason.COMPLETE
-    assert [e.card_id for e in report.entries if e.status is BatchEntryStatus.SKIPPED] == [None, None, None]
+    assert [e.card_id for e in report.entries if e.verdict == "SKIPPED"] == [None, None, None]
 
 
 async def test_a_result_recorded_with_a_transient_error_is_fetched_again() -> None:
@@ -312,7 +311,7 @@ async def test_a_result_recorded_with_a_transient_error_is_fetched_again() -> No
 
     report = await run.cut([("news", AccessStatus.ERROR)], wanted=1)
 
-    assert statuses(report) == [(1, BatchEntryStatus.VERIFIED)]
+    assert statuses(report) == [(1, "VERIFIED")]
     assert run.fetching.asked == [url("news")]
 
 
@@ -322,9 +321,9 @@ async def test_fewer_than_n_because_every_other_result_was_inaccessible() -> Non
     report = await run.cut(["news", "paywalled", "robots"], wanted=3)
 
     assert statuses(report) == [
-        (1, BatchEntryStatus.VERIFIED),
-        (2, BatchEntryStatus.SKIPPED),
-        (3, BatchEntryStatus.SKIPPED),
+        (1, "VERIFIED"),
+        (2, "SKIPPED"),
+        (3, "SKIPPED"),
     ]
     assert report.stop_reason is BatchStopReason.ALL_REMAINING_INACCESSIBLE
     assert not report.complete
@@ -354,7 +353,7 @@ async def test_a_cut_that_could_not_run_is_failed_and_the_batch_goes_on() -> Non
 
     report = await run.cut(["news", "think-tank"], wanted=1)
 
-    assert statuses(report) == [(1, BatchEntryStatus.FAILED), (2, BatchEntryStatus.VERIFIED)]
+    assert statuses(report) == [(1, "FAILED"), (2, "VERIFIED")]
     assert report.entries[0].reasons == ("PROVIDER_UNAVAILABLE",)
     assert report.entries[0].card_id is None
     assert report.entries[0].access_status is AccessStatus.ACCESSIBLE
@@ -408,11 +407,11 @@ async def test_a_refused_cut_is_replaced_by_the_next_candidate_under_concurrency
     )
 
     assert statuses(report) == [
-        (1, BatchEntryStatus.VERIFIED),
-        (2, BatchEntryStatus.SKIPPED),
-        (3, BatchEntryStatus.UNVERIFIED),
-        (4, BatchEntryStatus.VERIFIED),
-        (5, BatchEntryStatus.VERIFIED),
+        (1, "VERIFIED"),
+        (2, "SKIPPED"),
+        (3, "UNVERIFIED"),
+        (4, "VERIFIED"),
+        (5, "VERIFIED"),
     ]
     assert run.meter.peak <= 3
 
@@ -428,7 +427,7 @@ async def test_the_budget_guard_stops_the_run_and_the_verified_cards_are_kept() 
 
     report = await run.cut(["news", "think-tank", "journal", "news-again"], wanted=3)
 
-    assert statuses(report) == [(1, BatchEntryStatus.VERIFIED), (2, BatchEntryStatus.BUDGET_EXCEEDED)]
+    assert statuses(report) == [(1, "VERIFIED"), (2, "BUDGET_EXCEEDED")]
     assert report.stop_reason is BatchStopReason.BUDGET_EXCEEDED
     assert report.entries[1].reasons == ("BUDGET_EXCEEDED",)
     assert (
@@ -447,10 +446,10 @@ async def test_after_the_budget_stops_a_run_no_waiting_candidate_starts_and_runn
     )
 
     assert report.stop_reason is BatchStopReason.BUDGET_EXCEEDED
-    assert BatchEntryStatus.BUDGET_EXCEEDED in [entry.status for entry in report.entries]
+    assert "BUDGET_EXCEEDED" in [entry.verdict for entry in report.entries]
     assert url("journal-again") not in run.fetching.asked
     assert run.meter.running == 0
-    assert all(entry.status is not BatchEntryStatus.FAILED for entry in report.entries)
+    assert all(entry.verdict != "FAILED" for entry in report.entries)
 
 
 async def test_a_run_the_budget_stops_short_of_n_is_not_complete() -> None:
@@ -459,8 +458,8 @@ async def test_a_run_the_budget_stops_short_of_n_is_not_complete() -> None:
     report = await run.cut(["news", "think-tank", "journal"], wanted=2)
 
     assert statuses(report) == [
-        (1, BatchEntryStatus.VERIFIED),
-        (2, BatchEntryStatus.BUDGET_EXCEEDED),
+        (1, "VERIFIED"),
+        (2, "BUDGET_EXCEEDED"),
     ]
     assert report.stop_reason is BatchStopReason.BUDGET_EXCEEDED
     assert not report.complete
@@ -472,7 +471,7 @@ async def test_a_call_the_guard_cannot_price_under_a_limit_ends_the_run_before_a
 
     report = await run.cut(["news", "think-tank", "journal"], wanted=2)
 
-    assert statuses(report) == [(1, BatchEntryStatus.BUDGET_EXCEEDED)]
+    assert statuses(report) == [(1, "BUDGET_EXCEEDED")]
     assert report.entries[0].reasons == ("UNPRICED_MODEL_ERROR",)
     assert report.stop_reason is BatchStopReason.BUDGET_EXCEEDED
     assert run.fetching.asked == [url("news")]
@@ -511,11 +510,11 @@ async def test_each_entry_carries_its_own_calls_cost_even_beside_other_cuts() ->
 
     report = await run.cut(["news", "paywalled", "think-tank", "journal"], wanted=3, concurrency=3)
 
-    assert [(entry.status, entry.cost_usd) for entry in report.entries] == [
-        (BatchEntryStatus.VERIFIED, pytest.approx(0.005)),
-        (BatchEntryStatus.SKIPPED, 0.0),
-        (BatchEntryStatus.VERIFIED, pytest.approx(0.005)),
-        (BatchEntryStatus.VERIFIED, pytest.approx(0.005)),
+    assert [(entry.verdict, entry.cost_usd) for entry in report.entries] == [
+        ("VERIFIED", pytest.approx(0.005)),
+        ("SKIPPED", 0.0),
+        ("VERIFIED", pytest.approx(0.005)),
+        ("VERIFIED", pytest.approx(0.005)),
     ]
     assert report.cost_usd == pytest.approx(0.015)
 

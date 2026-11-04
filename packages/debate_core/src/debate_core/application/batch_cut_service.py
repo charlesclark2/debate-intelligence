@@ -68,7 +68,7 @@ from debate_core.application.budget import BudgetExceededError, UnpricedModelErr
 from debate_core.application.card_types import CutRequest, CutResult
 from debate_core.application.errors import DomainError, error_code_of, reported_error_message
 from debate_core.application.federated_search_types import SearchOutcome
-from debate_core.domain import AccessStatus, Ulid
+from debate_core.domain import AccessStatus, Ulid, VerificationStatus
 from debate_core.domain.argument_taxonomy import ArgumentTaxonomy
 from debate_core.domain.card import DEFAULT_FORMAT_PROFILE
 from debate_core.domain.search import SearchExpansion
@@ -108,12 +108,15 @@ BUDGET_EXCEEDED_CODE: Final = "BUDGET_EXCEEDED"
 
 
 class BatchEntryStatus(StrEnum):
-    """What became of one candidate. Values are stable: they are written into report.json."""
+    """What became of one candidate. Values are stable: they are written into report.json.
 
-    VERIFIED = "VERIFIED"
-    """A card was cut and the evidence verifier passed it."""
-    UNVERIFIED = "UNVERIFIED"
-    """A card was cut and saved, and the verifier did not pass it; the reasons say why."""
+    A cut card's verdict is not one of these: it is the card's own
+    :class:`~debate_core.domain.VerificationStatus`, which only the verifier sets, read off the card
+    (:attr:`BatchEntry.card_status`). This module never names a verification status itself.
+    """
+
+    CUT = "CUT"
+    """A card was cut and saved; :attr:`BatchEntry.card_status` is what the verifier made of it."""
     SKIPPED = "SKIPPED"
     """The source is not ACCESSIBLE, as recorded earlier or as the retrieval found: no card was cut."""
     FAILED = "FAILED"
@@ -232,6 +235,8 @@ class BatchEntry:
     url: str
     title: str
     status: BatchEntryStatus
+    card_status: VerificationStatus | None
+    """For a CUT entry, the saved card's status as the verifier set it; None for every other entry."""
     access_status: AccessStatus | None
     """The source's status: as the retrieval found it, as recorded for a source not fetched again, or
     None when the retrieval itself failed."""
@@ -246,7 +251,17 @@ class BatchEntry:
     cost_usd: float | None = 0.0
     """What its model calls cost at the pricing file's prices; None when one of them is not priced."""
     result: CutResult | None = field(default=None, repr=False, compare=False)
-    """The cut, for a VERIFIED or UNVERIFIED entry: what the bundle is rendered from."""
+    """The cut, for a CUT entry: what the bundle is rendered from."""
+
+    @property
+    def verdict(self) -> str:
+        """What a person reads: a CUT entry's card status, else the entry's own status."""
+        return self.card_status.value if self.card_status is not None else self.status.value
+
+    @property
+    def is_verified(self) -> bool:
+        """Whether a card was cut and the verifier passed it."""
+        return self.card_status is VerificationStatus.VERIFIED
 
 
 @dataclass(frozen=True, slots=True)
@@ -260,12 +275,12 @@ class BatchReport:
     @property
     def verified(self) -> tuple[CutResult, ...]:
         """The VERIFIED cards, in rank order: the bundle's block."""
-        return tuple(e.result for e in self.entries if e.status is BatchEntryStatus.VERIFIED and e.result)
+        return tuple(e.result for e in self.entries if e.is_verified and e.result is not None)
 
     @property
     def unverified(self) -> tuple[CutResult, ...]:
         """The UNVERIFIED cards, in rank order: only ever the bundle's bannered section."""
-        return tuple(e.result for e in self.entries if e.status is BatchEntryStatus.UNVERIFIED and e.result)
+        return tuple(e.result for e in self.entries if e.result is not None and not e.is_verified)
 
     @property
     def complete(self) -> bool:
@@ -417,7 +432,7 @@ class BatchCutService:
             )
         return _entry(
             candidate,
-            BatchEntryStatus.VERIFIED if result.is_verified else BatchEntryStatus.UNVERIFIED,
+            BatchEntryStatus.CUT,
             report,
             reading,
             reasons=tuple(code.value for code in result.reason_codes),
@@ -456,7 +471,7 @@ class _Walk:
 
     def add(self, entry: BatchEntry) -> None:
         self._entries.append(entry)
-        if entry.status is BatchEntryStatus.VERIFIED:
+        if entry.is_verified:
             self._verified += 1
         elif entry.status is BatchEntryStatus.BUDGET_EXCEEDED:
             self.stopped = True
@@ -471,18 +486,14 @@ class _Walk:
 
     def report(self) -> BatchReport:
         entries = tuple(sorted(self._entries, key=lambda entry: entry.rank))
-        verified = sum(1 for entry in entries if entry.status is BatchEntryStatus.VERIFIED)
+        verified = sum(1 for entry in entries if entry.is_verified)
         if verified >= self.wanted:
             reason = BatchStopReason.COMPLETE
         elif self.stopped:
             reason = BatchStopReason.BUDGET_EXCEEDED
         elif (
             entries
-            and all(
-                entry.status is BatchEntryStatus.SKIPPED
-                for entry in entries
-                if entry.status is not BatchEntryStatus.VERIFIED
-            )
+            and all(entry.status is BatchEntryStatus.SKIPPED for entry in entries if not entry.is_verified)
             and verified < len(entries)
         ):
             reason = BatchStopReason.ALL_REMAINING_INACCESSIBLE
@@ -497,6 +508,7 @@ def _known_inaccessible(candidate: BatchCandidate) -> BatchEntry:
         url=candidate.url,
         title=candidate.title,
         status=BatchEntryStatus.SKIPPED,
+        card_status=None,
         access_status=candidate.known_access,
         fetched=False,
         reasons=(SOURCE_NOT_ACCESSIBLE_CODE,),
@@ -522,6 +534,7 @@ def _entry(
         url=candidate.url,
         title=candidate.title,
         status=status,
+        card_status=result.card.verification_status if result is not None else None,
         access_status=report.access_status if report is not None else None,
         fetched=report.fetched if report is not None else False,
         reasons=tuple(dict.fromkeys(reasons)),

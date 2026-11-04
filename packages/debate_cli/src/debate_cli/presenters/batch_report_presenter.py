@@ -30,7 +30,6 @@ from debate_cli.output import CommandFailure, JsonValue, TableSpec
 from debate_cli.presenters.search_presenter import footer_lines, provider_summaries
 from debate_core.application.batch_cut_service import (
     BatchEntry,
-    BatchEntryStatus,
     BatchNeed,
     BatchReport,
     BatchStopReason,
@@ -50,8 +49,6 @@ __all__ = [
 
 AUTO_CUT_SHORT_CODE = "AUTO_CUT_SHORT"
 BUDGET_EXCEEDED_CODE = "BUDGET_EXCEEDED"
-
-_SECTIONS = {BatchEntryStatus.VERIFIED: "verified", BatchEntryStatus.UNVERIFIED: "unverified"}
 
 _STOP_WORDS = {
     BatchStopReason.COMPLETE: "every card wanted is VERIFIED",
@@ -101,13 +98,20 @@ def _partial_providers(outcome: SearchOutcome) -> list[str]:
     ]
 
 
+def _section(entry: BatchEntry) -> str | None:
+    """Where the entry's card is in the bundle: the verified block, the UNVERIFIED section, or nowhere."""
+    if entry.result is None:
+        return None
+    return "verified" if entry.is_verified else "unverified"
+
+
 def _entry_json(entry: BatchEntry) -> dict[str, JsonValue]:
     return {
         "rank": entry.rank,
         "url": entry.url,
         "title": entry.title,
-        "status": entry.status.value,
-        "section": _SECTIONS.get(entry.status),
+        "status": entry.verdict,
+        "section": _section(entry),
         "access_status": entry.access_status.value if entry.access_status is not None else None,
         "fetched": entry.fetched,
         "reasons": list(entry.reasons),
@@ -164,7 +168,7 @@ def report_table(
             str(entry.rank),
             entry.url,
             entry.access_status.value if entry.access_status is not None else "",
-            entry.status.value,
+            entry.verdict,
             ", ".join(entry.reasons),
             _cost(entry.cost_usd),
         )

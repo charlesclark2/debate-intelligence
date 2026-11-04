@@ -262,9 +262,45 @@ The bundle and the full report stay on your Desktop.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-11-03
 
 **Notes:**
+
+Built as ruled, with the separation of verified and unverified cards enforced in three places (the
+service, the export and the renderer) rather than by convention.
+
+1. **ac1 to ac4 pass** on recorded fixtures and the fake router, each red first (service 19 failed, CLI
+   15 failed, the smoke help check failed), and the evidence word of an UNVERIFIED article absent from
+   stdout and report.json.
+2. **The Q1 conditions are met.** (1) Byte-identical: the three SHA-256 hashes were committed in
+   `282d90b` before the renderer changed, and pass unchanged after; fixing the span ids first was right,
+   since today's renderer already differed run to run. (2) The export refuses a card in the wrong section
+   in both directions (red first), the renderer refuses on its own, each UNVERIFIED card keeps its
+   banner, and the section is absent when empty. (3) The manifests read back verified first.
+3. **Deviation 2 accepted.** A `section` key would be manifest version 3, which every older `verify`
+   refuses: a format change for E06, not this task. Status and place in the manifests, and `section` in
+   report.json, meet the condition's purpose. Not filed now; it becomes a task only if a reader needs the
+   key.
+4. **FYI checks met.** Exit codes 8 and 9 were unused and are in the public table, the README and the
+   help. An unpriced model under `--max-cost` is refused by the existing guard and now stops the batch,
+   pinned in the service and the CLI.
+5. **Deviations 1, 3, 4 and 5 accepted:** the renderer change (the PM's ruling), `--card-format`, the
+   smoke file and fixtures (agreement 5), and `--auto-cut` requiring the research need.
+6. **The mutant survivor's removal is accepted.** The removed status check could not be told from its
+   absence, because ArticleFetch gives a snapshot only for ACCESSIBLE, and CardService still refuses any
+   other.
+7. **Follow-ups the PM files:** one `--max-cost` for the whole command (E05, p2). Today a command with
+   `--expand-llm` and `--auto-cut` gives each router the full limit, so it can spend up to twice what
+   `--max-cost`'s help promises; at the default caps that is cents, but the help should be true. Also
+   per-run report names (E08, p3). v1-e09-t05 is noted as unblocked, with this task's fixtures named.
+8. **The optional live auto-cut** (about $0.02 to $0.06, the price read from the pricing file) waits
+   until v1-e31-t32's "before" copy on Thursday 2026-11-05 is done, because it needs a dev build
+   carrying this merge and no newer build is installed before that copy. The PM records it if run.
+9. **Closing checks:** the affected set (230 files) is left to `ci` (agreement 10). The bounded run of
+   the changed areas and the always-run list (873 passed, after moving `search_auto_cut.py` out of
+   `commands/`), ruff, pyright, lint-imports, thin handlers (`search` at 22), the specs, links and
+   command blocks are clean.
+10. **Merge:** a plain `scripts/task pr` once `ci` is green. The Goal is `Succeeded`.

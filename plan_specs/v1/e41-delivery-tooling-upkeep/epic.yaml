@@ -513,5 +513,50 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e41-t19-affected-tests-ignores-a-path-named-only-as-data
+    - id: ext-v1-e05-t20-prod-routes-on-the-4x-models
+      kind: External
+      name: 'Prerequisite from E05: Prod''s model routes, grant and first calls on the models dev already uses'
+      description: >-
+        Cross-epic prerequisite owned by v1-e05-model-router (release v1.2).
+      inputs:
+        goalRef: v1-e05-t20-prod-routes-on-the-4x-models
+        specRef: plan_specs/v1/e05-model-router/t20-prod-routes-on-the-4x-models.yaml
+    - id: t20
+      kind: Task
+      name: 'The move to the 5.x models, once the account''s Bedrock quotas allow them'
+      description: >-
+        The move to the 5.x models, once the account's Bedrock quotas allow them.
+      inputs:
+        specRef: plan_specs/v1/e41-delivery-tooling-upkeep/t20-move-to-the-5x-models-after-the-quota-request.yaml
+        goalRef: v1-e41-t20-move-to-the-5x-models-after-the-quota-request
+      dependsOn:
+      - ext-v1-e05-t20-prod-routes-on-the-4x-models
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e41-t20-move-to-the-5x-models-after-the-quota-request reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e41-t20-move-to-the-5x-models-after-the-quota-request
+    - id: t21
+      kind: Task
+      name: 'Order-dependence checks use a plugin that is installed, or commands stop naming one that isn''t'
+      description: >-
+        Order-dependence checks use a plugin that is installed, or commands stop naming one
+        that isn't.
+      inputs:
+        specRef: plan_specs/v1/e41-delivery-tooling-upkeep/t21-order-dependence-checks-without-pytest-randomly.yaml
+        goalRef: v1-e41-t21-order-dependence-checks-without-pytest-randomly
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e41-t21-order-dependence-checks-without-pytest-randomly reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e41-t21-order-dependence-checks-without-pytest-randomly
 status:
   phase: Pending

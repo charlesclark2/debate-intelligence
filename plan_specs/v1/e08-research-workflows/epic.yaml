@@ -445,5 +445,64 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e08-t15-ld-research-starts-broad-and-narrows-from-the-first-page
+    - id: t16
+      kind: Task
+      name: 'A DA''s mechanism queries cross the link templates the coach chose, and a preset may name more mechanisms'
+      description: >-
+        A DA's mechanism queries cross the link templates the coach chose, and a preset may
+        name more mechanisms.
+      inputs:
+        specRef: plan_specs/v1/e08-research-workflows/t16-mechanism-queries-cross-the-chosen-link-templates.yaml
+        goalRef: v1-e08-t16-mechanism-queries-cross-the-chosen-link-templates
+      dependsOn:
+      - t10
+      - t14
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e08-t16-mechanism-queries-cross-the-chosen-link-templates reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e08-t16-mechanism-queries-cross-the-chosen-link-templates
+    - id: t17
+      kind: Task
+      name: '`--max-cost` is one limit for the whole command, whatever routers it builds'
+      description: >-
+        `--max-cost` is one limit for the whole command, whatever routers it builds.
+      inputs:
+        specRef: plan_specs/v1/e08-research-workflows/t17-one-max-cost-across-every-router-a-command-builds.yaml
+        goalRef: v1-e08-t17-one-max-cost-across-every-router-a-command-builds
+      dependsOn:
+      - t06
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e08-t17-one-max-cost-across-every-router-a-command-builds reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e08-t17-one-max-cost-across-every-router-a-command-builds
+    - id: t18
+      kind: Task
+      name: 'An auto-cut run''s report does not replace the last run''s in the same directory'
+      description: >-
+        An auto-cut run's report does not replace the last run's in the same directory.
+      inputs:
+        specRef: plan_specs/v1/e08-research-workflows/t18-auto-cut-report-names-per-run.yaml
+        goalRef: v1-e08-t18-auto-cut-report-names-per-run
+      dependsOn:
+      - t06
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e08-t18-auto-cut-report-names-per-run reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e08-t18-auto-cut-report-names-per-run
 status:
   phase: Pending

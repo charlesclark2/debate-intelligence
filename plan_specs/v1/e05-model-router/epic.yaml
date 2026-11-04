@@ -471,5 +471,26 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e05-t19-cost-allocation-tag-imports-removed
+    - id: t20
+      kind: Task
+      name: 'Prod''s model routes, grant and first calls on the models dev already uses'
+      description: >-
+        Prod's model routes, grant and first calls on the models dev already uses.
+      inputs:
+        specRef: plan_specs/v1/e05-model-router/t20-prod-routes-on-the-4x-models.yaml
+        goalRef: v1-e05-t20-prod-routes-on-the-4x-models
+      dependsOn:
+      - t13
+      - t08
+      - ext-v1-e32-t07-model-classification-stage
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e05-t20-prod-routes-on-the-4x-models reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e05-t20-prod-routes-on-the-4x-models
 status:
   phase: Pending

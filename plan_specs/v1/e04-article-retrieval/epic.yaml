@@ -293,5 +293,22 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e04-t09-reported-status-for-pasted-text
+    - id: t10
+      kind: Task
+      name: 'A snapshot''s canonical URL drops the tracking parameters its article''s does'
+      description: >-
+        A snapshot's canonical URL drops the tracking parameters its article's does.
+      inputs:
+        specRef: plan_specs/v1/e04-article-retrieval/t10-snapshot-canonical-url-without-tracking-parameters.yaml
+        goalRef: v1-e04-t10-snapshot-canonical-url-without-tracking-parameters
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e04-t10-snapshot-canonical-url-without-tracking-parameters reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e04-t10-snapshot-canonical-url-without-tracking-parameters
 status:
   phase: Pending

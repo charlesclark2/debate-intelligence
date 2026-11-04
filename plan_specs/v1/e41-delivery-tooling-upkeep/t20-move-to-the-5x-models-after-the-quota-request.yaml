@@ -1,0 +1,95 @@
+# TASK v1-e41-t20-move-to-the-5x-models-after-the-quota-request - The move to the 5.x models, once the account's Bedrock quotas allow them
+# Epic: E41 — Delivery Tooling Upkeep | Release: v1.8 (Weekly caselist run in the cloud) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e41-t20-move-to-the-5x-models-after-the-quota-request
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.8
+    debate/epic: v1-e41-delivery-tooling-upkeep
+  annotations:
+    debate/title: "The move to the 5.x models, once the account's Bedrock quotas allow them"
+spec:
+  # Filed by the PM, 2026-11-04, from Charlie's decision of 2026-11-04: a future task after 2026-12-01 to move to the updated 5.x models.
+  description: >-
+    v1.2 ships on Claude Haiku 4.5 and Sonnet 4.6 (v1-e05-t20) because the account's
+    cross-region quotas for the 5.5 models read 0.0 and AWS declined on 2026-11-04 to restore
+    them until the account shows sustained usage. Not before 2026-12-01: the operator submits a
+    new quota increase request through the Service Quotas console, as AWS asked, for the current
+    5.x models' cross-region tokens-per-minute quotas in us-east-1 (which models, read from the
+    console's own list then, and the values, chosen with the PM from the account's usage). When
+    the quotas read non-zero (bedrock-access.md step 5): move dev's and prod's routes to the 5.x
+    models, class for class (the PM rules which), the grant naming exactly what the routing
+    files route to, the prices restated from the operator's reading of the pricing page; dev's
+    plan and apply and first calls, then prod's, the PM reading each plan; the spend budget's
+    lists after the first billed calls; and the landscape model evaluation re-recorded on the
+    new routes and recorded beside the 4.x figures (operator), since the bar is measured per
+    route. Blocked until the quotas are granted, a condition outside this repository; the PM
+    sets it to Pending then.
+    (PM, 2026-11-04.) Blocked until the account's Bedrock quotas for the 5.x models read non-zero, and
+    not started before 2026-12-01, when the operator resubmits the request through Service Quotas.
+  priority: 3
+  constraints:
+    packages: [config, infrastructure/modules/bedrock_access, infrastructure/modules/model_spend_budget, infrastructure/envs, packages/debate_core/tests, tests/docs, docs/runbooks, docs/data]
+    forbidden:
+      - Starting before the quotas read non-zero
+      - A price written from memory
+      - A wildcard resource in the grant
+      - A real model call in a test
+  context:
+    - kind: TaskRef
+      name: v1-e05-t20-prod-routes-on-the-4x-models
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        The quota request is submitted through Service Quotas after 2026-12-01 and its
+        answer recorded, and the quotas read non-zero before any change (operator, recorded
+        by the PM).
+    - id: ac2
+      description: >-
+        Dev's and prod's routing name the 5.x models the PM ruled, the grant names exactly
+        what the routing files route to, and the prices are restated, pinned by the modules'
+        tests shown failing first.
+    - id: ac3
+      description: >-
+        Dev's and prod's plans and applies (the PM reading each), the first call on each
+        route, the spend budget's lists, and the landscape evaluation re-recorded on the new
+        routes (operator).
+status:
+  phase: Blocked
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e41-t20-move-to-the-5x-models-after-the-quota-request-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.8
+    debate/epic: v1-e41-delivery-tooling-upkeep
+spec:
+  description: >-
+    The move to the 5.x models, once the account's Bedrock quotas allow them.
+  goalRef:
+    name: v1-e41-t20-move-to-the-5x-models-after-the-quota-request
+  graph:
+    nodes:
+      - id: move-to-the-5x-models-after-the-quota-re
+        kind: Task
+        name: Move to 5.x
+        description: >-
+          The move to the 5.x models, once the account's Bedrock quotas allow them.
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Move to 5.x tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests, -k, routing or bedrock or budget]
+status:
+  phase: Pending

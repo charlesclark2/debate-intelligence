@@ -347,7 +347,11 @@ aws bedrock-runtime invoke-model --profile debate-admin --region us-east-1 --mod
   for the account. That is lifted by a support case (Support Center, Service limit increase, Amazon
   Bedrock), not by a quota request, which refuses any value at or below the default. Dev's 5.5 quotas
   were held at zero on 2026-10-27, and dev routes to Haiku 4.5 and Sonnet 4.6 until they are restored
-  (`v1-e05-t13`).
+  (`v1-e05-t13`). The operator's reading of 2026-11-04: Haiku 5.5, Sonnet 5.5 and Opus 5.5 still
+  `0.0`, Haiku 4.5 5,000,000 and Sonnet 4.6 6,000,000 tokens a minute. The same day AWS declined to
+  restore them until the account shows sustained usage, and asked for a new request through Service
+  Quotas after the next billing cycle. v1.2 ships on the 4.x models (Charlie's decision), prod
+  included (`v1-e05-t20`); the move to the 5.x models is `v1-e41-t20`, not started before 2026-12-01.
 
 **Operator command** (expected runtime ~1 min)
 Where: your Mac, anywhere

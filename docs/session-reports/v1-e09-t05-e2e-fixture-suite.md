@@ -293,3 +293,31 @@ After the move, `pytest --collect-only tests/integration` on the default options
 tests there, and `tests/cli` runs 157 tests on them. One note for CI: dev's recorded
 durations know the three files under their old paths, so for one run `test-selection` counts them as
 the median file until the next push run records them under `tests/cli/`.
+
+## PM review (second)
+
+**Verdict:** ACCEPTED
+<!-- ACCEPTED / CHANGES_REQUESTED -->
+
+**Reviewed by / date:** PM (Claude), 2026-11-04
+
+**Notes:**
+
+The change is made exactly as asked, and nothing else moved.
+
+1. **The three files are back on the pull-request path.** `tests/cli/` holds `test_fetch_cli.py`,
+   `test_verify_cli.py` and `test_launchd_install.py` with no `slow` mark (a git rename, `b1ecf84`); the
+   only difference from before this task is the count of 5 accessible cassettes. `tests/cli` runs 157
+   tests on the default selection, none deselected. `tests/integration/` holds only the 11 slow
+   end-to-end tests, and its collection guard is unchanged.
+2. **Every path that named them is updated**, including four docstrings beyond the PM's list, and
+   `ACCEPTANCE.md` named none.
+3. **Synced onto `5cbaab2`** (v1-e08-t14) with no conflict. The slow suite passes after the sync (11 in
+   4.6 s, sockets off), and the always-run list with the changed areas passes (600).
+4. **The affected set (94 files) is left to `ci`** (agreement 10): it grew because the launchd file is on
+   the default selection again, which is the point of the change. The note that recorded durations know
+   the three files under their old paths for one run is accepted; dev's next push run records them.
+5. **The first review's acceptances stand**, and its follow-ups are already filed (v1-e04-t10,
+   v1-e32-t48, v1-e41-t21, in the PM batch of 2026-11-04).
+6. **Merge:** a plain `scripts/task pr` once `ci` is green. The Goal is `Succeeded`.
+

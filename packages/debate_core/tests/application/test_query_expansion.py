@@ -486,6 +486,7 @@ def test_the_committed_taxonomy_nhi_topic_names_four_landscape_aff_mechanisms_aw
         position = positions.get(mechanism.landscape_id)
         assert position is not None, mechanism.landscape_id
         assert (position["kind"], position["side"], position["label"]) == ("aff", "aff", mechanism.label)
+        assert not position.get("deprecated", False), mechanism.landscape_id
         words = {position["label"].casefold(), *position.get("tag_keywords", [])}
         assert mechanism.phrase.casefold() in words, mechanism.landscape_id
 

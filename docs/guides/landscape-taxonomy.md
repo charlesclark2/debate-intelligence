@@ -184,6 +184,11 @@ An alias may stay on the retired position instead of moving, but never on both.
 `merged_into` and `parent` must name a position in the same file, a merged position must be
 `deprecated: true`, and merges may not go round in a circle.
 
+Search names some affirmative positions too. A topic preset in `config/argument_taxonomy.yaml` lists
+the plan mechanisms a DA's link search adds a query for, each by its aff position's id and label
+(v1-e08-t14). Renaming one of those positions, retiring it or changing its label fails a test until
+the preset says the same.
+
 ## Ids are forever
 
 A report classified under one version must mean the same thing under the next, so an id is never

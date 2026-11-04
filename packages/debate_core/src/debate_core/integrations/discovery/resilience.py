@@ -419,7 +419,12 @@ class ResilientMultiQueryProvider(ResilientProvider):
 
     async def search_each(self, queries: Sequence[ProviderQuery]) -> tuple[ProviderResponse, ...]:
         """Ask the wrapped adapter every query in one call, under one timeout, admission and record."""
-        return tuple([await self.search(query) for query in queries])  # SKELETON: one call per query
+        asked = tuple(queries)
+
+        async def ask() -> tuple[ProviderResponse, ...]:
+            return await self._each.search_each(asked)
+
+        return await self._guarded(ask, expected=len(asked))
 
 
 def resilient(

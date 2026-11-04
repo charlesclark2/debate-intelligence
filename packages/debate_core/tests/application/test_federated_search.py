@@ -55,7 +55,7 @@ from debate_core.domain.discovery import (
     ProviderStatus,
 )
 from debate_core.integrations.discovery.registry import ProviderRegistry
-from debate_core.integrations.discovery.resilience import ResiliencePolicy, ResilientProvider
+from debate_core.integrations.discovery.resilience import ResiliencePolicy, resilient
 from debate_core.integrations.local import SqliteDatabase, SqliteSearchRepository
 from debate_core.testing.builders import (
     build_candidate_result,
@@ -127,13 +127,11 @@ class ProvidersOnHand:
 def wrapped(
     *adapters: SearchProvider, timeout_seconds: float = 10.0, failure_threshold: int = 3
 ) -> ProviderRegistry:
-    """A real registry: each adapter in a ResilientProvider timed and benched by the loop clock."""
+    """A real registry: each adapter wrapped as `from_settings` wraps it, on the loop clock."""
     policy = ResiliencePolicy(
         timeout_seconds=timeout_seconds, failure_threshold=failure_threshold, cooldown_seconds=60.0
     )
-    return ProviderRegistry(
-        ResilientProvider(adapter, policy, clock=EventLoopClock()) for adapter in adapters
-    )
+    return ProviderRegistry(resilient(adapter, policy, clock=EventLoopClock()) for adapter in adapters)
 
 
 def service_over(

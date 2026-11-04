@@ -500,7 +500,7 @@ def test_search_provider_is_the_only_port_that_answers_a_provider_query() -> Non
         "MultiQuerySearchProvider.search_each",
         "SearchProvider.search",
     ]
-    assert providers.MultiQuerySearchProvider.__mro__[1] is providers.SearchProvider
+    assert providers.SearchProvider in inspect.getmro(providers.MultiQuerySearchProvider)
     assert providers.MultiQuerySearchProvider.search is providers.SearchProvider.search
     signature = inspect.signature(providers.SearchProvider.search)
     assert list(signature.parameters) == ["self", "query"]

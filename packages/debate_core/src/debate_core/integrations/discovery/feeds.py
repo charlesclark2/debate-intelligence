@@ -25,6 +25,13 @@ returns the entries kept from last time without parsing anything
 its error names the publishers that failed; when every feed fails, the first one's error is raised,
 as a single-request adapter's would be.
 
+**Several queries, one read** (v1-e08-t10). The provider is a
+:class:`~debate_core.application.ports.providers.MultiQuerySearchProvider`: an expanded search asks
+it every query in one call (:meth:`FeedProvider.search_each`), each feed is read once, and every
+query is matched against what was read, keeping exactly what it would keep asked alone. Each search
+logs, per feed read, how many of its entries any of the search's queries kept, so a feed that never
+matches a topic's queries shows up in the log.
+
 **Which entries are kept** (:func:`query_terms`, :func:`matches_terms`, :func:`in_window`):
 
 * every term of the query appears in the entry's title or snippet, ignoring case, as a whole word
@@ -288,53 +295,80 @@ class FeedProvider:
         await self._client.aclose()
 
     async def search(self, query: ProviderQuery) -> ProviderResponse:
+        (response,) = await self.search_each((query,))
+        return response
+
+    async def search_each(self, queries: Sequence[ProviderQuery]) -> tuple[ProviderResponse, ...]:
+        """Every query answered from one read of each feed: one response per query, in their order.
+
+        Each query keeps exactly what it would keep asked on its own. The feeds that failed make every
+        answer partial, with the same error; when every feed fails, the first failure is raised.
+        """
         started = time.perf_counter()
         outcomes = await self._fetch_all()
         failures = [(feed, outcome) for feed, outcome in outcomes if isinstance(outcome, ProviderError)]
         if self._feeds and len(failures) == len(self._feeds):
             raise failures[0][1]
-        terms = query_terms(query.query)
-        kept: list[CandidateResult] = []
-        seen_links: set[str] = set()
-        for feed, outcome in outcomes:
-            if isinstance(outcome, ProviderError):
-                continue
-            for entry in outcome.entries:
-                if entry.link in seen_links:
-                    continue
-                seen_links.add(entry.link)
-                if not (matches_terms(entry, terms) and in_window(entry.published_at, query.filters)):
-                    continue
-                candidate = candidate_from_entry(entry, provider=self.name, publication=feed.publisher)
-                if candidate is not None:
-                    kept.append(candidate)
-        results = tuple(newest_first(kept, lambda candidate: candidate.published_at))[
-            : query.filters.max_results
-        ]
-        unchanged = sum(
-            1 for _, outcome in outcomes if isinstance(outcome, FetchedFeed) and outcome.unchanged
-        )
+        read = [(feed, outcome) for feed, outcome in outcomes if isinstance(outcome, FetchedFeed)]
+        listed = _listed_once(read)
+        matched: set[int] = set()
+        answers: list[tuple[CandidateResult, ...]] = []
+        for query in queries:
+            terms = query_terms(query.query)
+            kept = [
+                position
+                for position, (_, _, entry) in enumerate(listed)
+                if matches_terms(entry, terms) and in_window(entry.published_at, query.filters)
+            ]
+            matched.update(kept)
+            candidates = [
+                candidate
+                for position in kept
+                if (candidate := self._candidate(read, listed[position])) is not None
+            ]
+            answers.append(
+                tuple(newest_first(candidates, lambda candidate: candidate.published_at))[
+                    : query.filters.max_results
+                ]
+            )
+        for index, (feed, outcome) in enumerate(read):
+            hits = sum(1 for position in matched if listed[position][0] == index)
+            logger.info(
+                "%s: %s: %d of %d entries matched a query",
+                self.name,
+                feed.publisher,
+                hits,
+                len(outcome.entries),
+            )
+        unchanged = sum(1 for _, outcome in read if outcome.unchanged)
         logger.info(
             "%s: %d feeds read, %d unchanged, %d failed",
             self.name,
-            len(outcomes) - len(failures) - unchanged,
+            len(read) - unchanged,
             unchanged,
             len(failures),
         )
         elapsed_ms = (time.perf_counter() - started) * 1000
+        error: str | None = None
         if failures:
             reasons = "; ".join(f"{feed.publisher}: {_reason(error)}" for feed, error in failures)
-            return ProviderResponse(
+            error = f"{len(failures)} of {len(self._feeds)} feeds failed: {reasons}"
+        return tuple(
+            ProviderResponse(
                 provider=self.name,
                 results=results,
                 elapsed_ms=elapsed_ms,
-                partial=True,
-                error=f"{len(failures)} of {len(self._feeds)} feeds failed: {reasons}",
+                partial=error is not None,
+                error=error,
             )
-        return ProviderResponse(provider=self.name, results=results, elapsed_ms=elapsed_ms)
+            for results in answers
+        )
 
-    async def search_each(self, queries: Sequence[ProviderQuery]) -> tuple[ProviderResponse, ...]:
-        return tuple([await self.search(query) for query in queries])  # SKELETON: reads per query
+    def _candidate(
+        self, read: Sequence[tuple[FeedSource, FetchedFeed]], listing: tuple[int, int, FeedEntry]
+    ) -> CandidateResult | None:
+        feed, _ = read[listing[0]]
+        return candidate_from_entry(listing[2], provider=self.name, publication=feed.publisher)
 
     async def _fetch_all(self) -> list[tuple[FeedSource, FetchedFeed | ProviderError]]:
         gate = asyncio.Semaphore(CONCURRENT_FETCHES)
@@ -347,6 +381,23 @@ class FeedProvider:
                     return feed, error
 
         return list(await asyncio.gather(*(one(feed) for feed in self._feeds)))
+
+
+def _listed_once(read: Sequence[tuple[FeedSource, FetchedFeed]]) -> list[tuple[int, int, FeedEntry]]:
+    """Every entry the feeds read list, as (feed's index, entry's index, entry), each link once.
+
+    In feed order, then entry order. An entry whose link was listed earlier, in the same feed or an
+    earlier one, is the same entry listed twice, and is left out.
+    """
+    listed: list[tuple[int, int, FeedEntry]] = []
+    seen_links: set[str] = set()
+    for feed_index, (_, fetched) in enumerate(read):
+        for entry_index, entry in enumerate(fetched.entries):
+            if entry.link in seen_links:
+                continue
+            seen_links.add(entry.link)
+            listed.append((feed_index, entry_index, entry))
+    return listed
 
 
 def _reason(error: ProviderError) -> str:

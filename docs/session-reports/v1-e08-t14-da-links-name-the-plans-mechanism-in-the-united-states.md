@@ -6,40 +6,136 @@
 | Spec | [`plan_specs/v1/e08-research-workflows/t14-da-links-name-the-plans-mechanism-in-the-united-states.yaml`](../../plan_specs/v1/e08-research-workflows/t14-da-links-name-the-plans-mechanism-in-the-united-states.yaml) |
 | Epic / release | `v1-e08-research-workflows` / `v1.4` |
 | Branch | `task/v1-e08-t14-da-links-name-the-plans-mechanism-in-the-united-states` |
-| Session status | BLOCKED: waiting for the PM's ruling on the proposal (ac1) <!-- COMPLETE / PARTIAL / BLOCKED --> |
+| Session status | COMPLETE: the Goal stays `InProgress` for the coach's review (ac1) and the operator's search (ac3) <!-- COMPLETE / PARTIAL / BLOCKED --> |
 
 ## Summary
 
-The spec and the PM's context both ask for a proposal before any code, so this session has only the
-proposal so far, [below](#proposal-for-the-pms-ruling). It answers the PM's five questions.
+A DA's link search on the NHI topic now names the plan's mechanisms and the United States. It does
+this for all five DAs, built as proposed and ruled on 2026-11-04.
 
-The recommendation, in short:
-- **Fan-out at expansion time.** Every reviewed template stays byte-identical.
-- **Where the new words go.** The NHI topic preset names four mechanisms and the country, taken from
-  the landscape's aff positions and the resolution's own words.
-- **Which DAs.** All five DAs (`kind: da`).
-- **What a link search adds.** At most five queries, each naming the United States: one per mechanism
-  and one on the resolution's words.
+How it works:
+- **The reviewed queries are unchanged.** The coach's link templates are asked as they are, first.
+- **Up to five queries are added.** They come from the DA's first link template that names only
+  `{query}` and `{topic}`. One is on the resolution's words and one is on each of the preset's four
+  mechanisms. Each ends with "United States" unless it already names it.
+- **Where the words live.** The mechanisms, their phrases and the country are in the NHI topic preset
+  of `config/argument_taxonomy.yaml` (taxonomy 1.3.0), which awaits the coach's review. No argument
+  entry changed, so the coach-reviewed guard is untouched.
+- **What the loader refuses:** a preset with more than four mechanisms, two mechanisms with the same
+  landscape id or the same phrase, a digit in a phrase, or no `topic` and `country` to build the
+  queries on.
 
-The politics DA's link search on NHI goes from 7 queries to 12. I wrote no code, and the Goal stays
-`InProgress`.
+The politics DA's link search goes from 7 queries to 12, and the CLI test shows OpenAlex asked
+exactly those 12.
+
+ac2 and the node criterion pass. The tests failed first against the skeleton: 23 failed, all at
+assertions. 23 mutants were all caught.
+
+**ac1's coach review and ac3's repeated search are the operator's, so the Goal stays
+`InProgress`.** The coach's review sheet and the ac3 blocks are below.
 
 ## Plan nodes
 
 | Node | Status | Notes |
 |---|---|---|
-| `da-links-name-the-plans-mechanism-in-the`: Mechanism links | Not started | Waiting for the PM's ruling on the proposal (ac1). |
+| `da-links-name-the-plans-mechanism-in-the`: Mechanism links | Done | Proposal, then the PM's ruling. Tests written first and run red against a skeleton with the fan-out off. Then the preset's rules and the fan-out, then 23 mutants. |
 
 ## Acceptance criteria
 
 | Criterion | Status | Evidence (command → result) |
 |---|---|---|
-| ac1: the PM rules on the proposal before any code, and the coach reviews the new templates (operator) | NOT RUN | The proposal is below. The PM's ruling comes first. The coach's review follows the build. |
-| ac2: a DA's link need expands over the topic's mechanisms and names the United States, with the resolution's words kept, by expansion tests shown failing first | NOT RUN | Waiting for the ruling. |
-| ac3: the operator repeats v1-e08-t05's Policy search and the coach labels it blind | NOT RUN | The operator runs it after the merge, on an installed build the PM schedules. |
-| Node: `uv run pytest packages/debate_core/tests/application/test_query_expansion.py` | NOT RUN | Waiting for the ruling. |
+| ac1 (part): the PM rules on the proposal before any code | PASS | Proposal committed in `f56bde1` with no code. The PM ruled on 2026-11-04 (summarised [below](#the-pms-ruling-2026-11-04)), and the first code commit is `79b86ed`, after the ruling. |
+| ac1 (part): the coach reviews the new templates (operator) | NOT RUN | The coach's. The sheet is [below](#review-sheet-for-the-coach). The NHI preset says `review: awaiting_coach_review`. |
+| ac2: a DA's link need expands over the topic's plan mechanisms and names the United States, with the resolution's words kept as one query, by expansion tests on the recorded fixtures shown failing first | PASS | See the red run below. The green run of `test_query_expansion.py` and `test_search_command.py` gives `165 passed in 4.67s`. The tests, all with expected queries written by hand: the politics DA's whole 12-query expansion on NHI; the other four DAs' 7 queries each; the reviewed queries first and unchanged, with exactly 5 added, for each DA; the resolution query on "national health insurance" when "Medicare for All" is typed; no fan-out for other needs, an advantage, a kritik, a counterplan, no topic, or a preset with no mechanisms; the first template that always renders, its own window, and a phrase already naming the country; the search's own `since`; the stored search on both repositories; the CLI asking OpenAlex the 12 queries; six loader refusals; the committed preset against the landscape file. |
+| ac3: the operator repeats v1-e08-t05's Policy search and the coach labels it blind; the PM records nDCG@10 and the relevant count against ac6's (3 of 20, 0.746) | NOT RUN | The operator's, after the merge, on an installed build the PM schedules (after Thursday's v1-e31-t32 copy). The blocks are under [Operator follow-ups](#operator-follow-ups). |
+| Node: `uv run pytest packages/debate_core/tests/application/test_query_expansion.py` | PASS | Run as `.venv/bin/python scripts/hard_stop.py 115 uv run pytest packages/debate_core/tests/application/test_query_expansion.py`: `114 passed in 2.31s` |
+
+### Red run
+
+The skeleton was commit `79b86ed`, "Mechanism link tests, written first against a skeleton with the
+fan-out off". It had:
+- the preset's new fields (`review`, `mechanisms`), accepted with no rule on them;
+- the 1.3.0 file;
+- no fan-out.
+
+```
+.venv/bin/python scripts/hard_stop.py 115 .venv/bin/python -m pytest -n 0 -q -p no:randomly --tb=line packages/debate_core/tests/application/test_query_expansion.py packages/debate_cli/tests/test_search_command.py
+```
+
+That gave `23 failed, 142 passed in 4.88s`, every failure at an assertion:
+
+| Count | Failure | Tests |
+|---|---|---|
+| 6 | `DID NOT RAISE InvalidArgumentTaxonomy` | five mechanisms; mechanisms and no country; mechanisms and no topic; one landscape id twice; one phrase twice; a digit in a phrase |
+| 16 | The expected queries are missing, or the count is short (`assert 7 == (7 + 5)`, `assert 7 == 12`, `assert [] == [...]`) | the politics expansion; the other four DAs; reviewed-first for each of the five DAs; the resolution's words when a mechanism is typed; only-a-DA's-link; the first template that always renders; the search's own `since`; the stored search on both repositories |
+| 1 | The OpenAlex query list is short | the CLI's 12 queries |
+
+The first attempt, before `79b86ed`, failed two older tests for reasons of their own, so I corrected
+them before recording the run above:
+- the committed-taxonomy test pins the version, and it moved from `1.2.1` to `1.3.0`;
+- the "a topic setting query" refusal was being refused for its missing `review` instead of its own
+  rule. It now carries a `review`.
+
+**What the red run cannot show.** Three checks passed on the skeleton:
+- the committed-content test (the four mechanisms, their landscape ids, labels and phrases, and the
+  preset's review status);
+- the missing-review refusal, because the skeleton already required the field;
+- the negative lines of the only-a-DA's-link test, which carries a positive control so that it failed
+  red.
+
+Each is proven by the mutants below instead.
+
+### Mutants
+
+Each mutant was applied to the committed tree and run against the two test files with
+`-n 0 -p no:randomly --tb=line` under `hard_stop.py 115`. The file was then restored with
+`git checkout HEAD --`. There are 23 mutants: 20 in one script (kept in the scratchpad, not committed),
+two of the landscape file, and one for the retired-position check added after them. Every one was
+caught at an assertion, with no crash and no collection error. No test here uses Hypothesis, so
+agreement 8's database does not apply.
+
+| Mutant | Caught by |
+|---|---|
+| Fan-out on every need of a DA | only-a-DA's-link: `('politics-da', 'uniqueness')` |
+| Fan-out for every kind of argument | only-a-DA's-link: `('economy-advantage', 'link')` |
+| The country never added | 16 tests: the politics expansion, the other DAs, the CLI's 12 |
+| The country added even when the phrase names it | first-template test (`beta plan in Testland link`) |
+| The last renderable template instead of the first | 11 tests, including the CLI's |
+| The resolution's query dropped (the forbidden entry) | 17 tests (`assert 11 == (7 + 5)`) |
+| The resolution's query built on something other than the topic's words | first-template test |
+| Added queries asked before the reviewed ones | 15 tests, including the CLI's |
+| The template's own window ignored for added queries | first-template test |
+| An added query's id without `/resolution` or the mechanism | 10 tests, including the CLI's template ids |
+| The cap of four off by one | the refusal `five plan mechanisms` (DID NOT RAISE) |
+| No check for the country | the refusal `plan mechanisms and no country` |
+| A repeated landscape id accepted | the refusal `two plan mechanisms with one landscape id` |
+| Phrases compared as written, not folded | the refusal `two plan mechanisms with one phrase` |
+| A digit in a phrase accepted | the refusal `a plan mechanism phrase with a digit` |
+| YAML: a mechanism that is a DA (`politics-da`) | 9 tests, among them the committed-content test |
+| YAML: a label unlike the landscape's (`Public options`) | the committed-content test, at the landscape comparison |
+| YAML: a phrase that is no landscape word (`Obamacare`) | 10 tests |
+| YAML: the preset marked `coach_reviewed` | the committed-content test |
+| YAML: a mechanism dropped | 16 tests |
+| Landscape file: `aca-reform-aff` made a negative CP | the committed-content test: `('cp', 'neg', 'ACA reform') == ('aff', 'aff', 'ACA reform')` |
+| Landscape file: `aca-reform-aff` renamed | the committed-content test: `AssertionError: aca-reform-aff` |
+| Landscape file: `aca-reform-aff` retired (`deprecated: true`) | the committed-content test, at the check added for it (`270d116`) |
+
+### Checks before the report
+
+| Check | Result |
+|---|---|
+| `uv run scripts/affected_tests.py` | 275 test files: the domain model and the CLI test file reach the CLI. |
+| `.venv/bin/python scripts/hard_stop.py 115 uv run scripts/affected_tests.py --run` | Stopped at its 115-second limit (exit 124), at a load average near 3. **Over two minutes, so under agreement 10 the affected set is left to the pull request's `ci` check, not handed over.** |
+| Every test file that reads the taxonomy or the expansion module, plus the changed areas and the always-run list: `.venv/bin/python scripts/hard_stop.py 115 .venv/bin/python -m pytest -q -n auto -m "not slow and not live"` over `test_search_command.py`, `test_query_expansion.py`, `test_federated_search.py`, `integrations/discovery/test_government.py`, `tests/scripts/test_stamp_build.py`, `tests/smoke/test_search_smoke.py`, `packages/debate_core/tests/domain`, `tests/architecture`, `tests/specs`, `tests/config`, and the CLI's `test_app.py`, `test_help_rendering.py` and `test_container_factories.py` | `2088 passed in 22.88s` |
+| `uv run --frozen ruff format --check .` / `ruff check .` | `1919 files already formatted` / `All checks passed!` |
+| `uv run --frozen pyright packages/debate_core packages/debate_cli tests/smoke` | `0 errors, 0 warnings, 0 informations` |
+| `uv run --frozen lint-imports` / `scripts/check_thin_handlers.py` | `Contracts: 20 kept, 0 broken.` / `OK: 72 CLI command and API route handlers within 25 statements` |
+| `scripts/export_schemas.py --check` | `OK: 10 schemas in packages/debate_core/schemas are up to date`: no schema changed (ruling 5a) |
+| `uv run scripts/validate_specs.py`, docs checks | See [Final checks](#final-checks) |
 
 ## Proposal for the PM's ruling
+
+As sent to the PM on 2026-11-04, before any code (`f56bde1`). The ruling is [below](#the-pms-ruling-2026-11-04); where it differs (5a, no `ExpandedQuery` field), the ruling is what was built.
 
 What I measured, all offline, with scripts kept in the session scratchpad:
 - `config/argument_taxonomy.yaml` 1.2.1, loaded by the real loader;
@@ -275,30 +371,225 @@ Not touched either way: commands/search.py (v1-e08-t06), and the 17 entries awai
 from v1-e08-t08.
 ```
 
+## The PM's ruling (2026-11-04)
+
+Every question was ruled as recommended. The proposal and its questions above are kept as written.
+
+1. **A.** The NHI preset lists the four mechanisms in the order proposed, each tested against the
+   landscape file, and the code reads no landscape file.
+2. **A.** `country: United States` goes on the added queries only. The author-country filter (C) is a
+   follow-up, and only if ac3 still shows other countries' NHI.
+3. **A.** At most 4 mechanisms and at most 5 added queries, from the first template that always
+   renders. The politics DA's link search goes from 7 queries to 12.
+4. **A.** The fan-out runs at expansion time, and the preset carries its own `review`. Taxonomy
+   1.2.1 becomes 1.3.0. The guard's fixture is refreshed only after the coach's review, and
+   v1-e08-t08's 17 entries are untouched.
+5. **5a:** the template id only (no `ExpandedQuery` field, no schema change). **5b:** DAs only, with
+   advantages under Follow-up work, "after ac3".
+
 ## Files changed
 
-- `docs/session-reports/v1-e08-t14-da-links-name-the-plans-mechanism-in-the-united-states.md`: this
-  report, with the proposal.
+- **`config/argument_taxonomy.yaml`** (1.2.1 → 1.3.0):
+  - the `country` variable;
+  - the NHI preset's `review: awaiting_coach_review`, `country: United States` and four `mechanisms`;
+  - the header and topics comments.
+
+  No argument entry or family changed.
+- **`packages/debate_core/src/debate_core/domain/argument_taxonomy.py`:**
+  - `TopicMechanism` (landscape id, label, phrase);
+  - `TopicPreset.review` and `.mechanisms`;
+  - `MAX_TOPIC_MECHANISMS = 4`;
+  - the loader's preset rules (`_check_mechanisms`).
+- **`packages/debate_core/src/debate_core/application/query_expansion.py`:**
+  - the fan-out (`_mechanism_queries`, `_naming`, `MECHANISM_NEED`);
+  - `_resolve` now also returns the preset;
+  - the template loop builds candidates and then removes repeats as before, through a shared
+    `_template_query`;
+  - the module docstring has a section on the fan-out.
+- **`packages/debate_core/tests/application/test_query_expansion.py`:**
+  - the new tests and six refusal cases;
+  - `review` on SMALL_TAXONOMY's preset and on one older refusal case;
+  - both version pins moved to `1.3.0`.
+- **`packages/debate_cli/tests/test_search_command.py`:** OpenAlex is asked the 12 queries, and the
+  JSON carries the five added template ids.
+- **`docs/guides/landscape-taxonomy.md`:** a paragraph under "Retire or merge a position". Renaming,
+  retiring or relabelling an aff position that a search preset names fails a test until the preset
+  matches.
+- **`packages/debate_core/README.md`:** the two module rows mention the mechanisms.
 
 ## Deviations from the spec
 
-None so far.
+1. **`packages/debate_core/README.md` is outside `constraints.packages`.** It gets two one-line row
+   edits, as in v1-e08-t04 and t08.
+2. **A required `review` on every topic preset.** The ruling put a review on the NHI preset. I made
+   it required on every preset, as on every argument, so that a preset cannot slip in without one. No
+   other preset exists, and only the test file's own taxonomy needed it.
 
 ## Decisions and assumptions
 
-- **"Every DA" means `kind: da`.** Those are `politics-da`, `midterms-da`, `economy-da`, `spending-da`
-  and `federalism-da`. Advantages are a question for the PM (question 5b).
+1. **The added queries use the preset's own `topic` and `country`.** A `--var` from the request does
+   not change them, because the resolution query must be the resolution's words whatever was typed
+   (ruling 5's reading). The reviewed queries still take the request's variables, as before.
+2. **Repeats are removed across all the queries, in order.** The reviewed queries come first. An
+   added query that repeats one of them, ignoring case and spacing, is asked once. None can repeat on
+   NHI, because every added query ends with the country and no reviewed template names it.
+3. **"Already names the country"** means the country's words appear, folded, as whole words.
+   `beta plan in Testland` gets no second `Testland`.
+4. **The committed-content test also checks each phrase is a landscape word:** the position's label,
+   or one of the coach's tag keywords, ignoring case. A phrase therefore can't drift into words the
+   landscape doesn't hold. "Affordable Care Act" is `aca-reform-aff`'s tag keyword, and "Medicare for
+   All" is `medicare-for-all-aff`'s.
+5. **A retired aff position fails the check.** The guide paragraph says so, and a mutant proved it.
+
+## Review sheet for the coach
+
+Rendered from `config/argument_taxonomy.yaml` 1.3.0. It uses taxonomy words only: landscape labels,
+the coach's tag keywords, and the reviewed templates.
+
+**What changes.** A DA's link search on the NHI topic still asks every link template you reviewed,
+exactly as before. Then it adds up to five queries, all from that DA's first link template:
+- one on the resolution's words, "national health insurance";
+- one on each mechanism below.
+
+Every added query ends with "United States" unless it already names it. That is the anchor rule. This
+applies to the five DAs (politics, midterms, economy, spending, federalism) and only to their link
+need. Advantages and the other needs are unchanged.
+
+**The four mechanisms** (at most four, in this order):
+
+| Order | Landscape position | Searched as |
+|---|---|---|
+| 1 | Single payer (`single-payer-aff`) | single payer |
+| 2 | Medicare for all (`medicare-for-all-aff`) | Medicare for All |
+| 3 | Public option (`public-option-aff`) | public option |
+| 4 | ACA reform (`aca-reform-aff`) | Affordable Care Act |
+
+**The five added queries for the ac6 search** (politics DA, link, "national health insurance"). The
+first link template is `{query} political capital`. Your seven reviewed queries come first, as
+before.
+
+1. `national health insurance political capital United States`
+2. `single payer political capital United States`
+3. `Medicare for All political capital United States`
+4. `public option political capital United States`
+5. `Affordable Care Act political capital United States`
+
+**The other DAs' added queries** use their own first link template the same way:
+
+| DA | First link template | First added query |
+|---|---|---|
+| Midterms | `{query} voters election impact` | `single payer voters election impact United States` |
+| Economy | `{query} cost economy` | `single payer cost economy United States` |
+| Spending | `{query} cost federal budget` | `single payer cost federal budget United States` |
+| Federalism | `{query} federal preemption states` | `single payer federal preemption states United States` |
+
+**The mechanisms the cap leaves out** (any can be swapped in for one of the four):
+- **Single payer's other mechanisms:** Global budgets, Single public authority, Lower payment rates,
+  Value-based reimbursement, Disparate impact enforcement, Degrowth, Prescription drug coverage,
+  Nanomedicine coverage.
+- **Other affs:** UCC, Indigenous, Reproductive health, Tiered NHI, Incarceration, Vouchers, Medicaid
+  expansion, Children's coverage, Ecological NHI, Human enhancement.
+- **Not candidates:** Resolutional NHI, which the resolution query already covers, and Kritikal
+  affirmative, which has no plan text.
+
+**Three questions:**
+
+1. Do you approve the four mechanisms and their search phrases, or would you swap any of them, or any
+   phrase?
+2. The politics DA's mechanism queries all use "political capital". Should they use a different link
+   template instead, for example a party-popularity one such as "unpopular with Republicans"?
+3. Do you approve the anchor rule, "United States" at the end of every added query and on none of
+   your reviewed ones?
+
+The PM applies the answers in a batch:
+- flip the preset's `review` to `coach_reviewed`;
+- raise `taxonomy_version` if anything changed;
+- refresh the guard's fixture for the reviewed entries.
+
+Moving a different politics template first would change a reviewed entry, so that entry would need
+his review again. The other way to answer question 2 is a per-DA choice of template in the preset,
+which is a code change.
 
 ## Operator follow-ups
 
-None yet. The blocks for ac3 (search, blind sheets, key) are written after the build, in the form
-v1-e08-t05's were. They run on an installed build carrying the merge, which the PM schedules, not
-before Thursday's v1-e31-t32 copy. Nothing is handed over today, the cloud run's day.
+ac1's coach review is a sign-off, not a command: the sheet above goes to him through the PM.
+
+**ac3: after the merge, on an installed dev build that carries it, and after Thursday's v1-e31-t32
+copy, as the PM schedules.** These are the same live calls as v1-e08-t05's ac6:
+- OpenAlex, now 12 requests for this search instead of 7;
+- the publisher feeds in `config/feeds/`.
+
+They write only to dev's local data directory and three files on your Desktop, and print exit codes,
+counts and taxonomy ids. No model is called. Each command takes under a minute, then the coach's
+time.
+
+**Operator command 1: check the installed build** (seconds)
+Where: your Mac, any terminal
+```bash
+debate-research --json --version | python3 -I -c 'import json, sys; print(json.load(sys.stdin)["data"]["tag"])'
+```
+Success looks like the tag of the dev pre-release the PM named, built after this merge. Command 2
+proves the build carries the change.
+
+**Operator command 2: the Policy NHI search, politics DA link, repeated** (under a minute)
+Where: the same terminal
+```bash
+if env | grep -q '^DEBATE_'; then echo "STOP: DEBATE_ overrides are set in this shell"; else cd "$HOME" && env DEBATE_ENV=dev debate-research --json search "national health insurance" --argument politics-da --need link --topic policy-2026-27-nhi --max-results 200 --save "$HOME/Desktop/search-policy-nhi-mechanisms.json" > /tmp/search-policy-nhi-mechanisms.json; echo "exit $?"; python3 -I -c 'import json, sys; e = json.load(open(sys.argv[1])); r = e.get("error") or {}; d = e.get("data") or r.get("details") or {}; x = d.get("expansion") or {}; q = x.get("queries") or []; print("code", r.get("code"), "exit_code", r.get("exit_code")); print("status", d.get("status"), "results", len(d.get("results") or [])); print("taxonomy", x.get("taxonomy_version"), "queries", len(q), "warning", x.get("warning")); print("added", [t.rsplit("/", 1)[1] for t in (y.get("template_id") or "" for y in q) if t.count("/") == 3]); print("providers", [(p["provider"], p["outcome"], p["results"]) for p in d.get("providers") or []])' /tmp/search-policy-nhi-mechanisms.json; fi
+```
+Success looks like:
+- `exit 0`;
+- `code None exit_code None`;
+- `status COMPLETE` and `results` above zero;
+- `taxonomy 1.3.0 queries 12 warning None` (a later taxonomy is fine if the coach's batch has landed);
+- `added ['resolution', 'single-payer-aff', 'medicare-for-all-aff', 'public-option-aff', 'aca-reform-aff']`;
+- `providers` naming `openalex` and `rss`, each with a count.
+
+`exit 6` with `rss` `partial` (an unreadable feed) is what v1-e08-t05's run gave, and still counts.
+**`queries 7` or an empty `added` means the build predates this merge: stop there and do not make
+the sheet.** Paste back the five lines. The titles stay in the saved file.
+
+**Operator command 3: the coach's blind sheet and its key** (seconds, then the coach's time)
+Where: the same terminal, after command 2 saved its file. This follows the PM's ruling on
+v1-e08-t05's Q4. It writes two files to your Desktop, from the top 10 by the ranking and the top 10 by
+raw provider order (up to 20 rows):
+- **`labels-policy-nhi-mechanisms.csv`**, for the coach: `item`, `title`, `url` and an empty
+  `relevant`, in title order with no rank;
+- **`key-policy-nhi-mechanisms.csv`**, for the scoring session only: `item`, `rank`,
+  `provider_order`.
+```bash
+python3 -I -c 'import csv, json, sys; d = json.load(open(sys.argv[1])); r = d["results"]; top = {x["rank"] for x in sorted(r, key=lambda x: x["rank"])[:10]} | {x["rank"] for x in sorted(r, key=lambda x: x["provider_order"])[:10]}; rows = sorted((x for x in r if x["rank"] in top), key=lambda x: ((x["title"] or "").casefold(), x["url"] or "")); s = csv.writer(open(sys.argv[2], "w", newline="")); k = csv.writer(open(sys.argv[3], "w", newline="")); s.writerow(["item", "title", "url", "relevant"]); k.writerow(["item", "rank", "provider_order"]); [(s.writerow([i, x["title"], x["url"], ""]), k.writerow([i, x["rank"], x["provider_order"]])) for i, x in enumerate(rows, start=1)]; print(sys.argv[2], len(rows), "rows; key", sys.argv[3])' "$HOME/Desktop/search-policy-nhi-mechanisms.json" "$HOME/Desktop/labels-policy-nhi-mechanisms.csv" "$HOME/Desktop/key-policy-nhi-mechanisms.csv"
+```
+Success looks like one line naming the labels file with between 10 and 20 rows, and the key file. I
+ran this line on an invented 30-result file in the session scratchpad: it wrote 17 rows, the
+untitled one first, and a key of the same items.
+- The coach gets the labels file only. He marks `relevant` `y` or `n` on each row, asked the same as
+  before: "would you want this in the first page for a debater researching this query?"
+- The key stays with you until he has answered.
+- The filled labels file, the key and the saved search file then go to the PM. The PM records
+  nDCG@10 for the ranking and for provider order, and the relevant count, against ac6's 3 of 20 and
+  0.746 (0.000 in provider order).
 
 ## Follow-up work
 
-- **An OpenAlex author-country filter (E07)**, if ac3 still shows other countries' national health
-  insurance (question 2C).
+- **Advantages' link need, after ac3 (ruling 5b).** An aff advantage's link is the plan's mechanism
+  too. If ac3 shows the fan-out helps, the same preset could feed advantages' link searches.
+- **An OpenAlex author-country filter (E07), only if ac3 still shows other countries' NHI** (ruling
+  2C).
+- **A per-DA choice of template for the mechanism queries**, if the coach answers question 2 with a
+  template that differs by DA. Today the fan-out takes each DA's first template that always renders.
+- **v1-e08-t10 (ask each provider once per search)** takes the 12 OpenAlex requests back to 1. Until
+  then, this search costs 12 of OpenAlex's keyless daily requests.
+
+## Final checks
+
+The Goal stays `InProgress`, because ac1's coach review and ac3 are open. No `set-phase` was run.
+
+| Check | Result |
+|---|---|
+| `uv run scripts/validate_specs.py` | `OK: 608 files, 41 epics, 545 tasks, 22 releases` |
+| `uv run --frozen python scripts/check_command_blocks.py --base origin/dev` | `OK: no # comments in 671 shell code blocks in 246 Markdown files (1 session reports changed since origin/dev)` |
+| `uv run --frozen python scripts/check_links.py` | `OK: 3531 relative links and anchors in 596 Markdown files` |
+| `uv run --frozen python scripts/docs_index.py --check-descriptions` | `All 68 indexed documents under docs/ have a description` |
 
 ## PM review
 

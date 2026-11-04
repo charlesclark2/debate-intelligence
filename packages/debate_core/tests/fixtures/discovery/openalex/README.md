@@ -31,3 +31,10 @@ never in a URL.
 * `works_malformed.json` is a `200` whose JSON body is cut off part-way through, which must be
   `ProviderUnavailable`.
 * `works_errors.expected.json` is the empty list the four failures expect.
+* `works_joined.body.json` (v1-e08-t10) answers one joined search of three queries, `carbon tax
+  revenue`, `carbon tax unpopular voters` and `border adjustment`, with four works written so that
+  attribution by words in the title and abstract has every case: the first matches only the first
+  query; the second matches the first two (its abstract supplies "voters"); the third matches only
+  the third; the fourth matches none ("Pricing emissions: a review", no abstract), so it goes to all
+  three. By hand, the answers are: first query W5550000001, W5550000002, W5550000004; second
+  W5550000002, W5550000004; third W5550000003, W5550000004.

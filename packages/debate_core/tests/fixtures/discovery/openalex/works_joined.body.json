@@ -1,0 +1,32 @@
+{
+  "meta": {"count": 4, "db_response_time_ms": 21, "page": 1, "per_page": 20},
+  "results": [
+    {
+      "id": "https://openalex.org/W5550000001",
+      "doi": "https://doi.org/10.5555/joined.0001",
+      "display_name": "Carbon tax revenue recycling in an invented province",
+      "publication_date": "2025-03-02",
+      "type": "article",
+      "abstract_inverted_index": {"Households": [0], "receive": [1], "dividends.": [2]}
+    },
+    {
+      "id": "https://openalex.org/W5550000002",
+      "display_name": "Carbon tax revenue and unpopular policies",
+      "publication_date": "2024-11-19",
+      "type": "article",
+      "abstract_inverted_index": {"A": [0], "survey": [1], "of": [2], "voters": [3], "in": [4], "three": [5], "states.": [6]}
+    },
+    {
+      "id": "https://openalex.org/W5550000003",
+      "display_name": "Border adjustment mechanisms in invented trade law",
+      "publication_date": "2023-06-30",
+      "type": "book-chapter"
+    },
+    {
+      "id": "https://openalex.org/W5550000004",
+      "display_name": "Pricing emissions: a review",
+      "publication_date": "2022-01-15",
+      "type": "review"
+    }
+  ]
+}

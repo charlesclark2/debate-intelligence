@@ -88,6 +88,7 @@ __all__ = [
     "matches_terms",
     "newest_first",
     "query_terms",
+    "text_matches_terms",
 ]
 
 PROVIDER_NAME: Final = SearchProviderName.RSS.value
@@ -125,7 +126,15 @@ def query_terms(query: str) -> tuple[str, ...]:
 
 def matches_terms(entry: FeedEntry, terms: Sequence[str]) -> bool:
     """Whether every term appears in the entry's title or snippet as a whole word or phrase."""
-    haystack = _fold(f"{entry.title} {entry.snippet or ''}")
+    return text_matches_terms(f"{entry.title} {entry.snippet or ''}", terms)
+
+
+def text_matches_terms(text: str, terms: Sequence[str]) -> bool:
+    """Whether every term appears in `text` as a whole word or phrase, ignoring case.
+
+    The feeds' rule, which OpenAlex's attribution of a joined search's works also uses (v1-e08-t10).
+    """
+    haystack = _fold(text)
     return all(re.search(rf"(?<!\w){re.escape(term)}(?!\w)", haystack) for term in terms)
 
 

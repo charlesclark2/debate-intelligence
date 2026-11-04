@@ -726,6 +726,49 @@ def test_the_stored_search_records_its_expansion(seams: Seams, data_dir: Path) -
     )
 
 
+def test_a_da_link_search_on_the_nhi_topic_asks_openalex_its_links_then_the_mechanisms_in_the_united_states(
+    seams: Seams,
+) -> None:
+    """v1-e08-t14, the PM's ruling: the politics DA's seven reviewed link queries as they are, then the
+    first of them on the resolution's words and on each of the topic's four plan mechanisms, each
+    naming the United States: twelve OpenAlex requests."""
+    result = search(
+        "national health insurance",
+        "--argument",
+        "politics-da",
+        "--need",
+        "link",
+        "--topic",
+        "policy-2026-27-nhi",
+        "--format",
+        "json",
+    )
+
+    assert result.exit_code == ExitCode.OK, result.output
+    assert seams.providers.openalex_queries() == [
+        "national health insurance political capital",
+        "national health insurance partisan fight Congress",
+        "national health insurance unpopular with voters",
+        "national health insurance popular with Republicans",
+        "national health insurance unpopular with Republicans",
+        "national health insurance popular with Democrats",
+        "national health insurance unpopular with Democrats",
+        "national health insurance political capital United States",
+        "single payer political capital United States",
+        "Medicare for All political capital United States",
+        "public option political capital United States",
+        "Affordable Care Act political capital United States",
+    ]
+    queries = envelope(result)["data"]["expansion"]["queries"]
+    assert [query["template_id"] for query in queries][7:] == [
+        "politics-da/link/1/resolution",
+        "politics-da/link/1/single-payer-aff",
+        "politics-da/link/1/medicare-for-all-aff",
+        "politics-da/link/1/public-option-aff",
+        "politics-da/link/1/aca-reform-aff",
+    ]
+
+
 def test_the_container_registers_openalex_feeds_and_google_news_and_closes_them(
     seams: Seams, monkeypatch: pytest.MonkeyPatch
 ) -> None:

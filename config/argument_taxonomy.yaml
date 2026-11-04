@@ -28,7 +28,9 @@
 # decisions. Version 1.2.0 (v1-e08-t08, for his review) gives each family its own needs, reshapes
 # util, deontology, structural violence and cost-benefit into framing with his content, gives theory
 # its own family, and adds the landscape's generic counterplans and kritiks. The DAs and advantages
-# he reviewed are unchanged.
+# he reviewed are unchanged. Version 1.3.0 (v1-e08-t14, for his review) gives the NHI topic preset
+# the country and its affirmatives' plan mechanisms, which a DA's link search names; no argument
+# entry changes.
 #
 # Ids: an argument the Policy landscape taxonomy also counts (config/landscape/taxonomies/) uses the
 # landscape's id, and says so in landscape_id. The spelling in the task spec is an alias
@@ -36,7 +38,7 @@
 #
 # Schema 2 (v1-e08-t08): `families`, each with its kinds and needs, replaces the one `needs` list.
 schema_version: 2
-taxonomy_version: 1.2.1
+taxonomy_version: 1.3.0
 
 variables:
   query: What the debater typed as the search query.
@@ -47,6 +49,9 @@ variables:
     written into a template, because it changes from week to week.
   impact: >-
     The impact a debater names for a scenario (for example war), as the request gives it.
+  country: >-
+    The country the resolution's plan is in, from the topic preset. A DA's link search on a topic
+    with plan mechanisms names it in every query it adds.
 
 families:
 
@@ -986,8 +991,24 @@ arguments:
 # What a topic gives its variables. Each value is taken word for word from the topic's resolution in
 # config/landscape/topics.yaml; a test checks it. LD's de-extinction topic is added when
 # v1-e32-t06 commits its resolution.
+#
+# Plan mechanisms (v1-e08-t14, the PM's ruling of 2026-11-04): the coach's rule is that generic
+# resolution links are fine, but links are usually to the mechanism of the plan text. So a DA's link
+# search on a topic that lists mechanisms asks its link templates as they are, and then adds, from
+# the DA's first link template that names only {query} and {topic}, one query on the resolution's
+# words and one per mechanism, each ending with the country unless it already names it. A topic
+# lists at most four. Each names the affirmative position in config/landscape/taxonomies/ it stands
+# for (a test checks the id, its side and its label) and the phrase a search names it with, which is
+# the coach's to edit. Phrases hold no digits.
 topics:
   - id: policy-2026-27-nhi
     format: POLICY
+    review: awaiting_coach_review
     variables:
       topic: national health insurance
+      country: United States
+    mechanisms:
+      - {landscape_id: single-payer-aff, label: Single payer, phrase: single payer}
+      - {landscape_id: medicare-for-all-aff, label: Medicare for all, phrase: Medicare for All}
+      - {landscape_id: public-option-aff, label: Public option, phrase: public option}
+      - {landscape_id: aca-reform-aff, label: ACA reform, phrase: Affordable Care Act}

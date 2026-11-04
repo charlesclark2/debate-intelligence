@@ -18,7 +18,8 @@ how recent the evidence for each need should be:
 * :class:`QueryTemplate` — query text with variables such as `{query}`, `{topic}` and `{bill}`,
   and, when the need's default does not fit, a window of its own.
 * :class:`TopicPreset` — the values a topic gives its variables, taken from what is committed
-  (`config/landscape/topics.yaml`'s resolutions), never from memory.
+  (`config/landscape/topics.yaml`'s resolutions), never from memory, and the plan mechanisms of its
+  affirmatives (:class:`TopicMechanism`, v1-e08-t14) that a DA's link search names.
 
 :class:`ArgumentTaxonomy` validates the whole file when it loads. Every argument has templates for
 exactly its family's needs, and every (argument, need) pair has at least one template that needs
@@ -51,6 +52,7 @@ from debate_core.domain.caselist.values import Event
 __all__ = [
     "ALWAYS_GIVEN_VARIABLES",
     "ARGUMENT_TAXONOMY_SCHEMA_VERSION",
+    "MAX_TOPIC_MECHANISMS",
     "Argument",
     "ArgumentKind",
     "ArgumentTaxonomy",
@@ -59,6 +61,7 @@ __all__ = [
     "QueryTemplate",
     "RecencyDays",
     "ReviewStatus",
+    "TopicMechanism",
     "TopicPreset",
     "normalized_choice",
     "template_variables",
@@ -71,6 +74,11 @@ family its own needs."""
 ALWAYS_GIVEN_VARIABLES: Final = frozenset({"query", "topic"})
 """The variables every expansion has a value for: the search's own query, and its topic, which is
 the request's or its topic preset's and otherwise the query itself."""
+
+MAX_TOPIC_MECHANISMS: Final = 4
+"""The most plan mechanisms a topic preset names (the PM's ruling on v1-e08-t14): a DA's link search
+on the topic adds one query per mechanism and one on the resolution's words, so at most five, while
+every query is still one request to every provider."""
 
 _ID_PATTERN: Final = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 _VARIABLE_PATTERN: Final = re.compile(r"^[a-z][a-z0-9_]*$")
@@ -239,18 +247,71 @@ class Argument(DomainModel):
     )
 
 
+class TopicMechanism(DomainModel):
+    """One plan mechanism the topic's affirmatives use, which a DA's link search names (v1-e08-t14).
+
+    The coach's rule: generic resolution links are fine, but links are usually to the mechanism of
+    the plan text.
+    """
+
+    landscape_id: Slug = Field(
+        description="The affirmative position's id in the topic's landscape taxonomy: `single-payer-aff`."
+    )
+    label: NonEmptyText = Field(description="That position's label in the landscape taxonomy.")
+    phrase: NonEmptyText = Field(
+        description="The words a search names the mechanism with, which the coach edits: `single payer`."
+    )
+
+
 class TopicPreset(DomainModel):
-    """The variable values one topic gives every expansion on it."""
+    """The variable values one topic gives every expansion on it, and its affirmatives' mechanisms."""
 
     id: Slug = Field(description="The topic's id in `config/landscape/topics.yaml`.")
     format: Event = Field(description="The event the topic is debated in.")
+    review: ReviewStatus = Field(description="Whether the coach has reviewed this preset.")
     variables: dict[str, NonEmptyText] = Field(
         min_length=1, description="Variable values, each taken word for word from the committed resolution."
+    )
+    mechanisms: tuple[TopicMechanism, ...] = Field(
+        default=(),
+        description=(
+            "The plan mechanisms a DA's link search on the topic names, in order, at most "
+            "MAX_TOPIC_MECHANISMS; none means its link searches are the templates' alone."
+        ),
     )
 
 
 def _repeated(values: Iterable[str]) -> list[str]:
     return sorted(value for value, count in Counter(values).items() if count > 1)
+
+
+def _check_mechanisms(topic: TopicPreset) -> None:
+    """A topic names at most :data:`MAX_TOPIC_MECHANISMS` distinct mechanisms in words, and, when it
+    names any, the topic and the country their queries are built on."""
+    if not topic.mechanisms:
+        return
+    if len(topic.mechanisms) > MAX_TOPIC_MECHANISMS:
+        raise ValueError(
+            f"topic {topic.id} names {len(topic.mechanisms)} plan mechanisms; a topic names at most "
+            f"{MAX_TOPIC_MECHANISMS}"
+        )
+    missing = [name for name in ("topic", "country") if name not in topic.variables]
+    if missing:
+        raise ValueError(f"topic {topic.id} names plan mechanisms, so it sets {' and '.join(missing)}")
+    repeated = _repeated(mechanism.landscape_id for mechanism in topic.mechanisms)
+    if repeated:
+        raise ValueError(
+            f"two plan mechanisms of topic {topic.id} share the landscape id {', '.join(repeated)}"
+        )
+    repeated = _repeated(" ".join(mechanism.phrase.casefold().split()) for mechanism in topic.mechanisms)
+    if repeated:
+        raise ValueError(f"two plan mechanisms of topic {topic.id} share the phrase {', '.join(repeated)}")
+    for mechanism in topic.mechanisms:
+        if any(character.isdigit() for character in mechanism.phrase):
+            raise ValueError(
+                f"topic {topic.id}: the phrase {mechanism.phrase!r} has a digit; a phrase names a "
+                "mechanism in words"
+            )
 
 
 class ArgumentTaxonomy(DomainModel):
@@ -283,6 +344,7 @@ class ArgumentTaxonomy(DomainModel):
                     f"topic {topic.id} sets {', '.join(unknown) or 'query'}; a topic sets declared "
                     "variables other than query"
                 )
+            _check_mechanisms(topic)
         return self
 
     def _check_variables(self) -> None:

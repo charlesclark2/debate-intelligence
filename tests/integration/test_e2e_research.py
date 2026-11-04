@@ -34,6 +34,7 @@ import pytest
 from tests.fixtures.extraction.expected_output import load_expected
 from tests.fixtures.http.cassettes import load_cassette
 from tests.integration.e2e_harness import Boundaries, Cli
+from typer.testing import Result
 
 from debate_cli.exit_codes import ExitCode
 from debate_core.evidence.docx_manifest_part import read_embedded_manifest_bytes
@@ -81,13 +82,9 @@ def blob(data_dir: Path, key: str) -> bytes:
     return body
 
 
-def test_search_auto_cut_3_writes_three_verified_cards_cut_from_their_snapshots_and_verify_passes_the_bundle(
-    cli: Cli, boundaries: Boundaries, cli_environment: Path, tmp_path: Path
-) -> None:
-    out = tmp_path / "research" / "bundle.docx"
+def auto_cut_3(cli: Cli, out: Path) -> Result:
     out.parent.mkdir()
-
-    searched = cli.run(
+    return cli.run(
         "search",
         "health insurance",
         "--argument",
@@ -101,6 +98,14 @@ def test_search_auto_cut_3_writes_three_verified_cards_cut_from_their_snapshots_
         "--output",
         str(out),
     )
+
+
+def test_search_auto_cut_3_writes_three_verified_cards_cut_from_their_snapshots_and_verify_passes_the_bundle(
+    cli: Cli, boundaries: Boundaries, cli_environment: Path, tmp_path: Path
+) -> None:
+    out = tmp_path / "research" / "bundle.docx"
+
+    searched = auto_cut_3(cli, out)
 
     assert searched.exit_code == ExitCode.OK, searched.output
     report = json.loads((out.parent / "report.json").read_text(encoding="utf-8"))
@@ -146,3 +151,23 @@ def test_search_auto_cut_3_writes_three_verified_cards_cut_from_their_snapshots_
     assert [(card["card_id"], card["status"]) for card in envelope["data"]["cards"]] == [
         (card["card_id"], "VERIFIED") for card in cards
     ]
+
+
+def test_the_bundle_does_not_verify_where_its_snapshots_are_not_stored(
+    cli: Cli, boundaries: Boundaries, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The same bundle, read on a machine whose data directory never stored its sources (§11.3)."""
+    out = tmp_path / "research" / "bundle.docx"
+    assert auto_cut_3(cli, out).exit_code == ExitCode.OK
+    monkeypatch.setenv("DEBATE_STORAGE__DATA_DIR", str(tmp_path / "another-machine"))
+
+    result, envelope = cli.envelope("verify", str(out))
+    shown = cli.run("verify", str(out))
+
+    assert result.exit_code == shown.exit_code == ExitCode.DOMAIN_FAILURE == 1
+    assert envelope["error"]["code"] == "UNVERIFIED"
+    verdicts = envelope["error"]["details"]["cards"]
+    assert [(verdict["status"], verdict["reason_codes"]) for verdict in verdicts] == [
+        ("UNVERIFIED", ["SNAPSHOT_MISSING"])
+    ] * 3
+    assert "SNAPSHOT_MISSING" in shown.stdout

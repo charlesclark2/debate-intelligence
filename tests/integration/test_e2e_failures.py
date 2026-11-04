@@ -13,6 +13,11 @@ Through the CLI's own entry point, over the recordings `e2e_harness.py` names:
 * **A hand-edited DOCX**: one evidence word changed in an exported card makes `verify` find it
   UNVERIFIED with `MANUAL_EDIT`, exit 1, while the untouched file still verifies.
 
+Each card is checked in the DOCX as §11 names it: its tag, its cite (the short cite of v1-e06-t01's
+hand-written `tests/fixtures/citation/<case>.expected.json`), its verbatim evidence and its underlining
+(EveryPageRouter underlines the evidence's first 20 characters); the government PDF's card carries its
+UNVERIFIED banner instead of a cite to trust.
+
 Exit codes and codes are the CLI's documented ones (`debate_cli.exit_codes`, the CLI README); each
 test asserts the code and the reason, never a message's wording. Expected evidence is the second
 paragraph of t04's hand-written extraction, which EveryPageRouter selects whole; the government
@@ -30,6 +35,7 @@ from typing import Any, Final
 
 import docx
 import pytest
+from tests.fixtures.card.every_page_router import EVERY_PAGE_TAG
 from tests.fixtures.extraction.expected_output import load_expected
 from tests.integration.e2e_harness import Boundaries, Cli
 
@@ -51,6 +57,8 @@ class Source:
     exit_code: int
     status: str
     reasons: tuple[str, ...]
+    short_cite: str | None
+    """`tests/fixtures/citation/<case>.expected.json`'s short cite; None where the cite is unverified."""
 
 
 SOURCES: Final = (
@@ -61,6 +69,7 @@ SOURCES: Final = (
         ExitCode.OK,
         "VERIFIED",
         (),
+        "Whitfield 26",
     ),
     Source(
         "think-tank",
@@ -69,6 +78,7 @@ SOURCES: Final = (
         ExitCode.OK,
         "VERIFIED",
         (),
+        "Ellery et al. 26",
     ),
     Source(
         "government PDF",
@@ -77,6 +87,7 @@ SOURCES: Final = (
         ExitCode.CARD_UNVERIFIED,
         "UNVERIFIED",
         ("CITATION_UNVERIFIED",),
+        None,
     ),
     Source(
         "open-access journal",
@@ -85,6 +96,7 @@ SOURCES: Final = (
         ExitCode.OK,
         "VERIFIED",
         (),
+        "Okonkwo-Hale et al. 26",
     ),
 )
 
@@ -103,6 +115,29 @@ EDITED_WORD: Final = ("surrogate", "synthetic")
 
 def cut(cli: Cli, url: str, out: Path) -> tuple[Any, dict[str, Any]]:
     return cli.envelope("cut", url, "--need", NEED, "--argument", ARGUMENT, "--output", str(out))
+
+
+def underlined_stretches(path: Path) -> list[str]:
+    """Each run of consecutive runs in the underline character style, joined, across the document."""
+    stretches: list[str] = []
+    for paragraph in docx.Document(io.BytesIO(path.read_bytes())).paragraphs:
+        previous = False
+        for run in paragraph.runs:
+            properties = run.element.rPr
+            style = (
+                properties.rStyle.val if properties is not None and properties.rStyle is not None else None
+            )
+            underlined = style == "StyleUnderline"
+            if underlined and previous:
+                stretches[-1] += run.text
+            elif underlined:
+                stretches.append(run.text)
+            previous = underlined
+    return stretches
+
+
+def paragraphs_of(path: Path) -> list[str]:
+    return [paragraph.text for paragraph in docx.Document(io.BytesIO(path.read_bytes())).paragraphs]
 
 
 def card_in(path: Path) -> dict[str, Any]:
@@ -126,8 +161,17 @@ def test_cut_writes_each_kind_of_sources_card_from_its_snapshot_and_verify_agree
     if source.exit_code == ExitCode.CARD_UNVERIFIED:
         assert envelope["error"]["code"] == "CARD_UNVERIFIED"
     card = card_in(out)
+    evidence = load_expected(source.sample)["paragraphs"][1]
     assert card["card_id"] == data["card_id"]
-    assert card["evidence_text"] == load_expected(source.sample)["paragraphs"][1]
+    assert card["evidence_text"] == evidence
+    body = paragraphs_of(out)
+    assert EVERY_PAGE_TAG in body
+    assert evidence in body
+    assert underlined_stretches(out) == [evidence[:20]]
+    if source.short_cite is not None:
+        assert any(paragraph.startswith(source.short_cite) for paragraph in body), body
+    else:
+        assert f"UNVERIFIED — not a finished card: {', '.join(source.reasons)}" in body
 
     verified, report = cli.envelope("verify", str(out))
 

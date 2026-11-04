@@ -2,7 +2,7 @@
 
 The recorded tier cannot fetch: the network guard refuses every host, loopback included, and the
 fetcher refuses a loopback stand-in by design, so retrieval over the recorded cassettes is checked in
-pytest's process by `tests/integration/test_fetch_cli.py`. What the build is checked for here is
+pytest's process by `tests/cli/test_fetch_cli.py`. What the build is checked for here is
 everything that needs no request: the command is installed with its help and exit codes, the
 composition root builds the fetcher and both extractors on this build's own dependencies, pasted text
 is stored as USER_SUPPLIED only after attestation, and a refusal stores nothing. The guard's log

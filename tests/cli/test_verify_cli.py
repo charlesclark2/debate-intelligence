@@ -23,10 +23,6 @@ import pytest
 from tests.fixtures.verify.manifest_world import ALL_VERIFIED, MIXED, TAMPERED, build_fixture_data_dir
 from tests.fixtures.verify.published_schemas import RESULT_SCHEMA, violations
 
-# The end-to-end suite's tier (v1-e09-t05): out of the PR `ci` check, run by validate-dev's slow tier and
-# nightly. tests/integration/conftest.py refuses a module here without it.
-pytestmark = pytest.mark.slow
-
 COMMAND = Path(sys.executable).parent / "debate-research"
 
 

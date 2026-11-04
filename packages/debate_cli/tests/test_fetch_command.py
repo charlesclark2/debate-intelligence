@@ -4,7 +4,7 @@ The service is the real ArticleService over the in-memory fakes (a canned fetche
 extractor, in-memory articles and blobs), registered in place of the container's `article_fetch`.
 What is tested here is the command-line surface: the exit code for each status, the output in both
 modes, `--refresh`, the arguments `--paste` needs and the attestation. The real fetcher and extractors
-over recorded responses are `tests/integration/test_fetch_cli.py`'s.
+over recorded responses are `tests/cli/test_fetch_cli.py`'s.
 
 Expected values are written by hand: the page has three paragraphs, its raw hash is SHA-256 of its
 bytes, and each failing status's reason is the access classifier's table (v1-e04-t03).

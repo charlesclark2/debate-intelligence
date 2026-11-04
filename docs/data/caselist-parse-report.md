@@ -2474,3 +2474,91 @@ No group's EVIDENCE precision is below its N1-off figure on either tier, and no 
 moved (123 of 135 boundaries on the full tier, 36 of 38 on the subset). With the coach's answer on
 paragraph 16 (s, by id) taken into its label, **N1 does not lower EVIDENCE precision**, and the PM's
 Option B, accepting a fall, was not needed.
+
+## Pairs card matching keeps apart, counted and sampled (`v1-e31-t29`)
+
+Three shapes `card-fingerprint-v4` keeps apart, counted and sampled before any rule changes, as the
+PM ordered. Counts only; no card text, tag, cite or name.
+
+**The store.** The operator ran both counts on 2026-11-03 against the Mac's dev store as it stood:
+hsld26, hspf26 and openev in `2026.10.20-docx-6`, hspolicy26 in `2026.10.27-docx-7`, every table
+`card-fingerprint-v4`, 13,518 parsed sources. It lacks the weeks the cloud has run since the
+cutover; nothing was fetched. `scripts/count_matching_recall.py` took 527 s and
+`scripts/count_card_boundaries.py` 558 s, both `exit 0`. The figures below are of the store's own
+tables, not of a new placement.
+
+### The counts
+
+| | hsld26 | hspf26 | hspolicy26 | openev | Total |
+|---|---|---|---|---|---|
+| Positions in the table / distinct full texts | 93,377 / 19,349 | 59,406 / 16,229 | 126,681 / 29,866 | 8,081 / 6,400 | 287,545 / 71,844 |
+| **(1) Nine-tenths inside a body holding neither of its ends** | **20** | **27** | **18** | **2** | **67** |
+| of them, held by such bodies in one cluster / in two or more | 19 / 1 | 21 / 6 | 12 / 6 | 2 / 0 | 54 / 13 |
+| of them, the body holding it also holds a passage it does not overlap | 13 | 14 | 9 | 0 | 36 |
+| **(2) Two passages of one holder sharing no text (pairs)** | **4,185** | **6,907** | **6,443** | **223** | **17,758** |
+| holders | 469 | 597 | 865 | 65 | 1,996 |
+| a card of each with the same tag and the same cite | 2 | 0 | 0 | 0 | 2 |
+| the same cite under other tags | 293 | 46 | 541 | 70 | 950 |
+| the same tag under other cites | 3 | 2 | 3 | 0 | 8 |
+| neither | 3,887 | 6,859 | 5,899 | 153 | 16,798 |
+| holder words in neither trim: 0 (end to end) / 1 to 9 / 10 to 49 / 50 or more | 164 / 169 / 158 / 3,694 | 209 / 196 / 370 / 6,132 | 296 / 185 / 210 / 5,752 | 10 / 6 / 6 / 201 | 679 / 556 / 744 / 15,779 |
+| one trim already in the holder's cluster | 644 | 619 | 847 | 33 | 2,143 |
+| **(3) Holders of two passages that do not overlap** (the refusal) | **1,472** | **1,327** | **2,280** | **120** | **5,199** |
+| of them under 300 words / sharing nothing and under 300 words | 67 / 50 | 65 / 58 | 147 / 127 | 7 / 7 | 286 / 242 |
+| bodies those under 300 words are refused as a witness for | 259 | 216 | 467 | 14 | 956 |
+| bodies the refusal keeps out of every cluster holding them | 1,035 | 1,145 | 1,878 | 182 | 4,240 |
+| of them, with a smallest container under 300 words | 66 | 49 | 140 | 9 | 264 |
+| **`v1-e31-t22`'s count, again: holding two bodies sharing no text** | 1,517 | 1,482 | 2,414 | 118 | 5,531 |
+| of them under 300 words (`v1-e31-t22`: 42 / 45 / 122 / 7, 216) | **61** | **72** | **140** | **7** | **280** |
+| holding two that do not overlap (`v1-e31-t22`: 5,173) | 1,792 | 1,644 | 2,683 | 142 | 6,261 |
+
+**Beside the earlier figures.** `v1-e31-t20`'s 13 were *divided pairs*, those `v3` joined and
+`v4` divided, on a `docx-5` store with both tables. No store holds a `v3` table of these cards, so
+(1) is counted as the shape itself in the `v4` tables: 67 bodies, every one over 63 words. The 216
+became 280 by `v1-e31-t22`'s own tool on the larger store. The refusal's own reading (passages at
+least a tenth of the holder, not overlapping) finds 286 holders under 300 words, 242 of them
+sharing nothing. `v1-e31-t22`'s count also re-parses long bodies; this checkout's parser
+(`2026.11.03-docx-8`) did not write the store, so that half is not used.
+
+### The sample
+
+`scripts/sample_matching_recall.py --seed 20261103`, run and answered by the operator on
+2026-11-03, 42 items in `less`, answers on a tally sheet holding no text. It ran before two changes
+to the sample (`bcac62f`, `b05fe2a`): the items showed the short cites of a pair beside each other,
+and a holder's tag and cite cut at the screen's edge, not whole; and same-cite pairs under other
+tags were not yet a stratum. The operator answered a few "same card?" items with the other
+question's keys; each is read by its meaning (one card cut twice as the same card, two cards as
+different).
+
+| Stratum | In the store | Asked | Same card / one card cut twice | Different / two cards | 95% (Wilson), different |
+|---|---|---|---|---|---|
+| (1) Nine-tenths inside a body holding neither end | 67 | 20 | 12 | **8** | 22% to 61% |
+| (2) Trims with the same tag and cite | 2 | 2 | 1 | 1 | |
+| (2) Trims with the same cite under other tags | 950 | not asked | | | |
+| (3) Holders under 300 words of two bodies sharing no text | 280 | 20 | 16 | **4** | 8% to 42% |
+
+What the operator's notes give as the reason for "different" (formatting and source terms only):
+
+* **(1):** different articles or sources, 3 (one author's two articles of different dates; one
+  dictionary word under different definitions; two sources quoting a third); the same article
+  making a different claim, 2; no note, 3.
+* **(2):** the same evidence used to argue the author reaches another conclusion, 1.
+* **(3):** the same article making different claims, 2; different authors perhaps quoting each
+  other, 1; no note, 1.
+
+### What recovering (2) and the amendment's shape would need
+
+Lifting the witness refusal alone recovers nothing. Two trims sharing no text that both propose
+joining their holder in one round are both refused, because they do not overlap each other
+(`near_duplicates._accepted_joins`, `v1-e31-t20`'s Decision 3). A mutant that lifts the refusal
+leaves every partition of Brannock's rows, `v1-e31-t11`'s false join and two trims of one holder as
+it was. Only lifting it and accepting joiners that do not overlap joins them. Recovering either
+shape means relaxing "every two bodies in a cluster overlap", the card ruling itself.
+
+### The PM's ruling (2026-11-03)
+
+No shape is recovered: each sample found the shape would join different cards. Shape (1) stays
+apart; no rule on the tag and cite, and no sample of the 950 same-cite pairs, since the overlap rule
+is not relaxed; the witness refusal stays unchanged for short holders and long. No placement changes,
+so `card-fingerprint-v4` stays, and nothing is rebuilt. The labelled sets are as `v1-e31-t20` left
+them, precision 1.000 on every row, and tests pin that each sampled shape stays apart.

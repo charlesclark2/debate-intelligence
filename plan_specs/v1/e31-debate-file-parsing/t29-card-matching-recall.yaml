@@ -48,15 +48,18 @@ spec:
         rule changes.
     - id: ac2
       description: >-
-        Precision stays 1.000 on every labelled set, Brannock's rows stay apart, and each
-        recovered shape has fixtures shown failing first.
+        PM amendment 2026-11-03 (PM ruling): No shape is recovered: the samples showed each
+        would join different cards. Precision and Brannock's rows stay as v1-e31-t20 left
+        them, and the shapes sampled stay apart, by test. Was: precision stays 1.000 on every
+        labelled set, Brannock's rows stay apart, and each recovered shape has fixtures shown
+        failing first.
     - id: ac3
       description: >-
         (PM amendment 2026-10-20) A sample of the holders under 300 words is tallied (one
         card cut twice, or two cards) before the witness refusal changes; any change keeps
         v1-e31-t11's false join apart, by test.
 status:
-  phase: Pending
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

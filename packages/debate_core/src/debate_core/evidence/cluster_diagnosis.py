@@ -318,15 +318,20 @@ def diagnose_cuts(
     thresholds: NearDuplicateThresholds | None = None,
     *,
     seed: str = MINHASH_SEED,
+    index: CutIndex | None = None,
 ) -> CutCensus:
     """Every body that another body outside its cluster contains, and what kept it out.
 
     `bodies` maps each exact fingerprint to its text and `clusters` maps it to the cluster id it
     was given, by any version of the rules. A body whose containers are all in its own cluster, or
-    that nothing contains, is not among the findings.
+    that nothing contains, is not among the findings. `index`, when given, is a :class:`CutIndex`
+    of these same bodies under `thresholds`, made by a caller that reads it afterwards.
     """
     limits = thresholds or NearDuplicateThresholds()
-    index = CutIndex(bodies, limits)
+    if index is None:
+        index = CutIndex(bodies, limits)
+    elif index.fingerprints != sorted(bodies) or index.limits != limits:
+        raise ValueError("the index given is not of the bodies and thresholds given")
     cluster_of: Callable[[str], str] = clusters.__getitem__
     members: defaultdict[str, list[str]] = defaultdict(list)
     for fingerprint in index.fingerprints:

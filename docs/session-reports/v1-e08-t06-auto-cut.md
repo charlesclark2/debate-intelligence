@@ -134,6 +134,28 @@ an assertion, 1 caught by the renderer's guard, and 1 survivor, removed as agree
 | `uv run scripts/validate_specs.py` | `OK: 608 files, 41 epics, 545 tasks, 22 releases` |
 | `scripts/check_command_blocks.py --base origin/dev`, `check_links.py`, `docs_index.py --check-descriptions` | `OK: no # comments in 670 shell code blocks` (1 session report changed) / `OK: 3523 relative links and anchors` / `All 68 indexed documents under docs/ have a description` |
 
+### CI on the pull request (2026-11-04)
+
+The first `ci` run failed in `test (6)`: `test_verified_is_set_only_by_the_evidence_verifier`
+(`packages/debate_core/tests/evidence/test_verifier.py`, 1 failed, 1283 passed). That scan refuses
+the string `VERIFIED` anywhere in `packages/*/src` outside `VerificationStatus`'s own definition,
+and it named `batch_cut_service.py:113`, the `BatchEntryStatus.VERIFIED = "VERIFIED"` member. My
+pre-report run had not reached it: it is in the affected set beyond the 115-second limit, and not in
+the directories I ran by hand.
+
+The fix keeps the scan as it is and adds no allowed writer, because the batch writes no status.
+`BatchEntryStatus` loses `VERIFIED` and `UNVERIFIED` for `CUT`. A cut entry carries `card_status`,
+the saved card's own `VerificationStatus` read off it, and `report.json`'s `status` is that value
+(`BatchEntry.verdict`), so the file's shape and values are unchanged. Every check is a comparison
+(`is_verified`), which the scan allows.
+
+| Command | Result |
+|---|---|
+| `hard_stop.py 115 … pytest test_verifier.py test_batch_cut_service.py test_export_service.py test_search_command.py` | `204 passed` |
+| always-run list plus `test_verifier.py::test_verified_is_set_only_by_the_evidence_verifier` | `378 passed` |
+| the mutants on the new counting: UNVERIFIED counted toward N, `verified` taking every cut, `section` always `verified` | caught: 2, 2 and 1 |
+| `ruff format --check`, `ruff check`, `pyright packages/debate_cli` and the service, `lint-imports` | clean, `0 errors`, `20 kept` |
+
 ## Files changed
 
 * **`packages/debate_core/src/debate_core/application/`**

@@ -1467,6 +1467,17 @@ def test_expand_llm_and_auto_cut_stop_at_one_budget_for_the_whole_command(
     assert f"the per-run budget is ${limit:.4f}, ${spent:.4f} is already spent or held" in refusal(report)
 
 
+def test_two_commands_in_one_process_are_two_budget_runs(live_cutting: Seams, tmp_path: Path) -> None:
+    expand = ("health insurance", "--argument", "politics-da", "--need", "link", "--expand-llm")
+
+    first, second = search(*expand), search(*expand)
+
+    assert (first.exit_code, second.exit_code) == (ExitCode.OK, ExitCode.OK), first.output + second.output
+    records = usage_records(tmp_path / "data")
+    assert [record["prompt_id"] for record in records] == [EXPAND_PROMPT_ID] * 2
+    assert len({record["run_id"] for record in records}) == 2
+
+
 def test_a_one_router_auto_cut_spends_up_to_its_max_cost_as_before(
     live_cutting: Seams, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

@@ -41,7 +41,7 @@ spec:
         command's total, by tests shown failing first with two routers, and a one-router
         command's behaviour is unchanged.
 status:
-  phase: InProgress
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

@@ -61,14 +61,14 @@ v2.3's extension work.
 | Release | Theme | Epics | Tasks | Done | Est. hours |
 |---|---|---|---|---|---|
 | [v1.0](plan_specs/releases/v1.0.yaml) | Foundation & verified evidence core | 3 | 55 | 55 | 252 |
-| [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 4 | 119 | 99 | 514 |
-| [v1.2](plan_specs/releases/v1.2.yaml) | Argument landscape & file building | 3 | 86 | 74 | 338 |
+| [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 4 | 120 | 99 | 518 |
+| [v1.2](plan_specs/releases/v1.2.yaml) | Argument landscape & file building | 3 | 89 | 74 | 344 |
 | [v1.3](plan_specs/releases/v1.3.yaml) | URL → verified card | 2 | 24 | 15 | 125 |
-| [v1.4](plan_specs/releases/v1.4.yaml) | Federated research from the CLI | 2 | 37 | 18 | 134 |
+| [v1.4](plan_specs/releases/v1.4.yaml) | Federated research from the CLI | 2 | 38 | 18 | 136 |
 | [v1.5](plan_specs/releases/v1.5.yaml) | V1 quality gate & team pilot | 1 | 7 | 1 | 66 |
 | [v1.6](plan_specs/releases/v1.6.yaml) | Public team website | 3 | 31 | 22 | 169 |
-| [v1.7](plan_specs/releases/v1.7.yaml) | Team evidence search pilot | 1 | 29 | 25 | 94 |
-| [v1.8](plan_specs/releases/v1.8.yaml) | Weekly caselist run in the cloud | 2 | 65 | 37 | 124 |
+| [v1.7](plan_specs/releases/v1.7.yaml) | Team evidence search pilot | 1 | 30 | 25 | 100 |
+| [v1.8](plan_specs/releases/v1.8.yaml) | Weekly caselist run in the cloud | 2 | 67 | 38 | 128 |
 | [v2.0](plan_specs/releases/v2.0.yaml) | Cloud platform foundation | 3 | 17 | 0 | 164 |
 | [v2.1](plan_specs/releases/v2.1.yaml) | Web app, debate tub & async jobs | 3 | 18 | 0 | 198 |
 | [v2.2](plan_specs/releases/v2.2.yaml) | Research workspace | 2 | 12 | 0 | 117 |
@@ -218,6 +218,7 @@ OpenCaselist archives and OpenEv camp files for HS LD, Policy and PF are importe
 | [Inbox deletions fsync the inbox directory, so a removed archive cannot come back after a power cut](plan_specs/v1/e30-caselist-ingestion/t30-inbox-deletions-fsync-the-directory.yaml) `v1-e30-t30-inbox-deletions-fsync-the-directory` | Succeeded | 0 | 1.0 |
 | [The pull keeps OpenEv's own camp word on a camp file's manifest row](plan_specs/v1/e30-caselist-ingestion/t31-openev-camp-word-on-the-manifest-row.yaml) `v1-e30-t31-openev-camp-word-on-the-manifest-row` | Succeeded | 2 | 1.0 |
 | [Michigan's three camps are filed apart, as OpenEv files them, so their cards can link](plan_specs/v1/e30-caselist-ingestion/t32-michigan-split-into-openevs-three-camps.yaml) `v1-e30-t32-michigan-split-into-openevs-three-camps` | Succeeded | 1 | 2.0 |
+| [A whole-file removal deletes only the aggregates of the caselists that hold the file, and its rebuild works in bucket mode](plan_specs/v1/e30-caselist-ingestion/t33-a-whole-file-removal-reaches-only-the-caselists-that-hold-it.yaml) `v1-e30-t33-a-whole-file-removal-reaches-only-the-caselists-that-hold-it` | Pending | 1 | 4.0 |
 
 #### [E31 — Debate File Parsing](plan_specs/v1/e31-debate-file-parsing/epic.yaml)
 
@@ -385,8 +386,11 @@ Weekly argument-landscape reports show which positions are being read and with w
 | [Prompt 1.2.0: the refusal fixes and the coach's answering stance](plan_specs/v1/e32-argument-landscape/t46-prompt-1-2-0-refusal-fixes-and-answering-stances.yaml) `v1-e32-t46-prompt-1-2-0-refusal-fixes-and-answering-stances` | Succeeded | 1 | 4.0 |
 | [The purge and removal runbooks' cassette blocks reach a route's cassettes](plan_specs/v1/e32-argument-landscape/t47-route-cassettes-in-the-purge-and-removal-blocks.yaml) `v1-e32-t47-route-cassettes-in-the-purge-and-removal-blocks` | Pending | 1 | 1.0 |
 | [A landscape model call can be recorded from a synthetic card with a command](plan_specs/v1/e32-argument-landscape/t48-landscape-report-records-a-synthetic-cassette.yaml) `v1-e32-t48-landscape-report-records-a-synthetic-cassette` | Pending | 1 | 2.0 |
-| [Prompt 1.3.0 and stage one: a card defending its own side's position reads it, and an answer is never the position it answers](plan_specs/v1/e32-argument-landscape/t49-prompt-1-3-0-own-side-answers-and-the-coachs-rulings.yaml) `v1-e32-t49-prompt-1-3-0-own-side-answers-and-the-coachs-rulings` | Pending | 1 | 4.0 |
+| [Prompt 1.3.0 and stage one: a card defending its own side's position reads it, and an answer is never the position it answers](plan_specs/v1/e32-argument-landscape/t49-prompt-1-3-0-own-side-answers-and-the-coachs-rulings.yaml) `v1-e32-t49-prompt-1-3-0-own-side-answers-and-the-coachs-rulings` | InProgress | 1 | 4.0 |
 | [A second labelled sample, held out from tuning, before the bar is read as met](plan_specs/v1/e32-argument-landscape/t50-a-second-labelled-sample-held-out.yaml) `v1-e32-t50-a-second-labelled-sample-held-out` | Pending | 1 | 3.0 |
+| [Late disclosures from tournaments before the de-extinction topic are counted on 2026-11-10 and 2026-11-17, and weekly after](plan_specs/v1/e32-argument-landscape/t51-late-disclosures-from-pre-topic-tournaments-counted.yaml) `v1-e32-t51-late-disclosures-from-pre-topic-tournaments-counted` | Blocked | 1 | 2.0 |
+| [A seeded taxonomy is reviewed by the coach one question at a time, and the decisions are applied by one command](plan_specs/v1/e32-argument-landscape/t52-guided-taxonomy-review-and-apply.yaml) `v1-e32-t52-guided-taxonomy-review-and-apply` | Pending | 1 | 4.0 |
+| [generic-k's description, rewritten as v1-e32-t49 proposed, for the coach's review](plan_specs/v1/e32-argument-landscape/t53-generic-k-description-for-the-coachs-review.yaml) `v1-e32-t53-generic-k-description-for-the-coachs-review` | Pending | 1 | 1.0 |
 
 #### [E33 — Evidence File Builder](plan_specs/v1/e33-file-builder/epic.yaml)
 
@@ -472,6 +476,7 @@ A student can run `debate-research cut <URL>` and receive a verified, tagged, ci
 | [The dev and prod profiles enable the discovery providers whose live smoke passed](plan_specs/v1/e07-discovery-adapters/t13-profiles-enable-the-providers-that-passed-their-smoke.yaml) `v1-e07-t13-profiles-enable-the-providers-that-passed-their-smoke` | Succeeded | 2 | 1.0 |
 | [Roll Call's unreadable feed is fixed or dropped, and one feed that keeps failing no longer marks every search partial](plan_specs/v1/e07-discovery-adapters/t14-an-unreadable-feed-found-and-fixed-or-dropped.yaml) `v1-e07-t14-an-unreadable-feed-found-and-fixed-or-dropped` | Succeeded | 1 | 2.0 |
 | [A provider the profile enables but no key configures is named, and no longer makes every search partial](plan_specs/v1/e07-discovery-adapters/t15-a-provider-without-its-key-does-not-make-a-search-partial.yaml) `v1-e07-t15-a-provider-without-its-key-does-not-make-a-search-partial` | Pending | 2 | 2.0 |
+| [The public-pool footer test counts its results on an injected clock, not the real one](plan_specs/v1/e07-discovery-adapters/t16-public-pool-footer-test-on-an-injected-clock.yaml) `v1-e07-t16-public-pool-footer-test-on-an-injected-clock` | Pending | 1 | 2.0 |
 
 #### [E08 — Federated Research Workflows](plan_specs/v1/e08-research-workflows/epic.yaml)
 
@@ -606,6 +611,7 @@ Debaters search the team's evidence store from a school Chromebook or at home: a
 | [A smoke check runs publish --newest on the current index against an installed build](plan_specs/v1/e39-evidence-search-pilot/t27-newest-on-the-current-index-smoke-check.yaml) `v1-e39-t27-newest-on-the-current-index-smoke-check` | Pending | 1 | 1.0 |
 | [A camp card links to its camp's page on OpenEv, the address the operator confirmed](plan_specs/v1/e39-evidence-search-pilot/t28-openev-link-goes-to-the-camps-page.yaml) `v1-e39-t28-openev-link-goes-to-the-camps-page` | Succeeded | 1 | 2.0 |
 | [A camp card's OpenEv link takes the camp word the pull recorded, before the table's](plan_specs/v1/e39-evidence-search-pilot/t29-openev-camp-word-from-the-row-into-the-index.yaml) `v1-e39-t29-openev-camp-word-from-the-row-into-the-index` | Pending | 2 | 2.0 |
+| [The coach reviews a topic's taxonomy updates in the tub app, writing the decisions the apply step reads](plan_specs/v1/e39-evidence-search-pilot/t30-coach-reviews-taxonomy-updates-in-the-tub-app.yaml) `v1-e39-t30-coach-reviews-taxonomy-updates-in-the-tub-app` | Pending | 1 | 6.0 |
 
 
 ### v1.8 — Weekly caselist run in the cloud
@@ -658,7 +664,8 @@ The weekly caselist run (pull, import, publish, parse, search index) runs in the
 | [In bucket mode a missing or unreadable token, and a download refused for an expired login, give the cloud's cure, not a login by hand](plan_specs/v1/e40-cloud-caselist-run/t40-token-errors-name-the-cloud-cure.yaml) `v1-e40-t40-token-errors-name-the-cloud-cure` | Pending | 1 | 1.0 |
 | [A cloud run's decision about each listed file is kept past the log's 90 days](plan_specs/v1/e40-cloud-caselist-run/t41-cloud-run-keeps-its-per-file-decisions.yaml) `v1-e40-t41-cloud-run-keeps-its-per-file-decisions` | Pending | 1 | 2.0 |
 | [The run's schedule tries again when AWS refuses to launch the task, and never starts a second run](plan_specs/v1/e40-cloud-caselist-run/t42-schedule-retries-a-refused-launch.yaml) `v1-e40-t42-schedule-retries-a-refused-launch` | InProgress | 1 | 2.0 |
-| [The weekly run logs each stage as it starts and ends, so a run can be read while it runs](plan_specs/v1/e40-cloud-caselist-run/t43-weekly-run-logs-each-stage.yaml) `v1-e40-t43-weekly-run-logs-each-stage` | Pending | 1 | 3.0 |
+| [The weekly run logs each stage as it starts and ends, so a run can be read while it runs](plan_specs/v1/e40-cloud-caselist-run/t43-weekly-run-logs-each-stage.yaml) `v1-e40-t43-weekly-run-logs-each-stage` | Succeeded | 1 | 3.0 |
+| [A scheduled pull refuses to run when the bucket's run log shows a run started within the last hours](plan_specs/v1/e40-cloud-caselist-run/t44-a-scheduled-run-refuses-a-second-run-within-hours.yaml) `v1-e40-t44-a-scheduled-run-refuses-a-second-run-within-hours` | Pending | 1 | 2.0 |
 
 #### [E41 — Delivery Tooling Upkeep](plan_specs/v1/e41-delivery-tooling-upkeep/epic.yaml)
 
@@ -686,6 +693,7 @@ The weekly caselist run (pull, import, publish, parse, search index) runs in the
 | [The move to the 5.x models, once the account's Bedrock quotas allow them](plan_specs/v1/e41-delivery-tooling-upkeep/t20-move-to-the-5x-models-after-the-quota-request.yaml) `v1-e41-t20-move-to-the-5x-models-after-the-quota-request` | Blocked | 1 | 3.0 |
 | [Order-dependence checks use a plugin that is installed, or commands stop naming one that isn't](plan_specs/v1/e41-delivery-tooling-upkeep/t21-order-dependence-checks-without-pytest-randomly.yaml) `v1-e41-t21-order-dependence-checks-without-pytest-randomly` | Pending | 0 | 1.0 |
 | [Keys come from a per-user file in any folder, and a deleted working folder no longer crashes a command](plan_specs/v1/e41-delivery-tooling-upkeep/t22-per-user-credentials-file-and-a-missing-working-folder.yaml) `v1-e41-t22-per-user-credentials-file-and-a-missing-working-folder` | Pending | 1 | 3.0 |
+| [The remove smoke file's setup no longer decides CI's slowest part](plan_specs/v1/e41-delivery-tooling-upkeep/t23-the-remove-smoke-file-no-longer-decides-the-slowest-part.yaml) `v1-e41-t23-the-remove-smoke-file-no-longer-decides-the-slowest-part` | Pending | 1 | 2.0 |
 
 
 ## V2

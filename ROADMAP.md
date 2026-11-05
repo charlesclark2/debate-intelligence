@@ -61,14 +61,14 @@ v2.3's extension work.
 | Release | Theme | Epics | Tasks | Done | Est. hours |
 |---|---|---|---|---|---|
 | [v1.0](plan_specs/releases/v1.0.yaml) | Foundation & verified evidence core | 3 | 55 | 55 | 252 |
-| [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 4 | 116 | 99 | 508 |
-| [v1.2](plan_specs/releases/v1.2.yaml) | Argument landscape & file building | 3 | 82 | 71 | 326 |
-| [v1.3](plan_specs/releases/v1.3.yaml) | URL → verified card | 2 | 23 | 15 | 124 |
-| [v1.4](plan_specs/releases/v1.4.yaml) | Federated research from the CLI | 2 | 29 | 13 | 120 |
-| [v1.5](plan_specs/releases/v1.5.yaml) | V1 quality gate & team pilot | 1 | 7 | 0 | 66 |
+| [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 4 | 119 | 99 | 514 |
+| [v1.2](plan_specs/releases/v1.2.yaml) | Argument landscape & file building | 3 | 84 | 71 | 330 |
+| [v1.3](plan_specs/releases/v1.3.yaml) | URL → verified card | 2 | 24 | 15 | 125 |
+| [v1.4](plan_specs/releases/v1.4.yaml) | Federated research from the CLI | 2 | 32 | 16 | 126 |
+| [v1.5](plan_specs/releases/v1.5.yaml) | V1 quality gate & team pilot | 1 | 7 | 1 | 66 |
 | [v1.6](plan_specs/releases/v1.6.yaml) | Public team website | 3 | 31 | 22 | 169 |
 | [v1.7](plan_specs/releases/v1.7.yaml) | Team evidence search pilot | 1 | 29 | 25 | 94 |
-| [v1.8](plan_specs/releases/v1.8.yaml) | Weekly caselist run in the cloud | 2 | 60 | 37 | 112 |
+| [v1.8](plan_specs/releases/v1.8.yaml) | Weekly caselist run in the cloud | 2 | 62 | 37 | 116 |
 | [v2.0](plan_specs/releases/v2.0.yaml) | Cloud platform foundation | 3 | 17 | 0 | 164 |
 | [v2.1](plan_specs/releases/v2.1.yaml) | Web app, debate tub & async jobs | 3 | 18 | 0 | 198 |
 | [v2.2](plan_specs/releases/v2.2.yaml) | Research workspace | 2 | 12 | 0 | 117 |
@@ -257,6 +257,9 @@ OpenCaselist archives and OpenEv camp files for HS LD, Policy and PF are importe
 | [A tag with a word left unbolded, above a cite, counted before any rule](plan_specs/v1/e31-debate-file-parsing/t32-bold-in-part-tags.yaml) `v1-e31-t32-bold-in-part-tags` | InProgress | 1 | 3.0 |
 | [A pointer to another card (`<<AUTHOR 'YY FOR REFERENCE>>`) is never promoted to a cite](plan_specs/v1/e31-debate-file-parsing/t33-reference-pointers-are-not-cites.yaml) `v1-e31-t33-reference-pointers-are-not-cites` | Pending | 1 | 1.0 |
 | [What the bold tag rules leave above a cite: the lines not bold, sampled, and the inline card, counted](plan_specs/v1/e31-debate-file-parsing/t34-what-the-bold-tag-rules-leave-above-a-cite.yaml) `v1-e31-t34-what-the-bold-tag-rules-leave-above-a-cite` | Pending | 1 | 3.0 |
+| [The two strata of short lines N1 left, sampled larger before any rule](plan_specs/v1/e31-debate-file-parsing/t35-the-two-strata-n1-left-sampled-again.yaml) `v1-e31-t35-the-two-strata-n1-left-sampled-again` | Pending | 1 | 3.0 |
+| [A bold in-round marker at reading size is not read as a tag](plan_specs/v1/e31-debate-file-parsing/t36-a-bold-marker-reads-as-a-marker-not-a-tag.yaml) `v1-e31-t36-a-bold-marker-reads-as-a-marker-not-a-tag` | Pending | 1 | 2.0 |
+| [The parser evaluation's baseline is refreshed from `docx-5` to the current parser](plan_specs/v1/e31-debate-file-parsing/t37-parser-evaluation-baseline-refreshed.yaml) `v1-e31-t37-parser-evaluation-baseline-refreshed` | Pending | 1 | 1.0 |
 
 #### [E34 — Scheduled Caselist Sync](plan_specs/v1/e34-caselist-sync/epic.yaml)
 
@@ -325,9 +328,10 @@ Weekly argument-landscape reports show which positions are being read and with w
 | [A cheaper model for the high-volume route, chosen by the coach-labelled evaluation](plan_specs/v1/e05-model-router/t14-cheaper-model-for-high-volume-evaluated-first.yaml) `v1-e05-t14-cheaper-model-for-high-volume-evaluated-first` | Pending | 2 | 3.0 |
 | [A monthly model budget beside the daily one, at the coach's $50 ceiling](plan_specs/v1/e05-model-router/t15-monthly-model-budget.yaml) `v1-e05-t15-monthly-model-budget` | Succeeded | 1 | 2.0 |
 | [An AWS budget alarm on the account's model spend, $100 a month with a first notice at $50](plan_specs/v1/e05-model-router/t16-bedrock-budget-alarm.yaml) `v1-e05-t16-bedrock-budget-alarm` | Succeeded | 1 | 2.0 |
-| [Dev back on the 5.5 models, and prod's Bedrock grant applied, once the quotas are restored](plan_specs/v1/e05-model-router/t17-switch-back-to-the-5-5-models.yaml) `v1-e05-t17-switch-back-to-the-5-5-models` | Blocked | 3 | 2.0 |
+| [Dev back on the 5.5 models, and prod's Bedrock grant applied, once the quotas are restored](plan_specs/v1/e05-model-router/t17-switch-back-to-the-5-5-models.yaml) `v1-e05-t17-switch-back-to-the-5-5-models` | Cancelled | 3 | 2.0 |
 | [The cost allocation tags are active by Terraform, so the budgets that filter on them never read zero again](plan_specs/v1/e05-model-router/t18-cost-allocation-tags-in-terraform.yaml) `v1-e05-t18-cost-allocation-tags-in-terraform` | Succeeded | 1 | 1.0 |
 | [The cost allocation tags' import blocks are removed once both tags are in state](plan_specs/v1/e05-model-router/t19-cost-allocation-tag-imports-removed.yaml) `v1-e05-t19-cost-allocation-tag-imports-removed` | Succeeded | 1 | 0.5 |
+| [Prod's model routes, grant and first calls on the models dev already uses](plan_specs/v1/e05-model-router/t20-prod-routes-on-the-4x-models.yaml) `v1-e05-t20-prod-routes-on-the-4x-models` | Pending | 3 | 3.0 |
 
 #### [E32 — Argument Landscape Reports](plan_specs/v1/e32-argument-landscape/epic.yaml)
 
@@ -380,6 +384,7 @@ Weekly argument-landscape reports show which positions are being read and with w
 | [The review queue's order model is trained again at taxonomy 1.5.0](plan_specs/v1/e32-argument-landscape/t45-review-order-model-retrained-at-the-current-taxonomy.yaml) `v1-e32-t45-review-order-model-retrained-at-the-current-taxonomy` | Pending | 2 | 1.0 |
 | [Prompt 1.2.0: the refusal fixes and the coach's answering stance](plan_specs/v1/e32-argument-landscape/t46-prompt-1-2-0-refusal-fixes-and-answering-stances.yaml) `v1-e32-t46-prompt-1-2-0-refusal-fixes-and-answering-stances` | Pending | 1 | 4.0 |
 | [The purge and removal runbooks' cassette blocks reach a route's cassettes](plan_specs/v1/e32-argument-landscape/t47-route-cassettes-in-the-purge-and-removal-blocks.yaml) `v1-e32-t47-route-cassettes-in-the-purge-and-removal-blocks` | Pending | 1 | 1.0 |
+| [A landscape model call can be recorded from a synthetic card with a command](plan_specs/v1/e32-argument-landscape/t48-landscape-report-records-a-synthetic-cassette.yaml) `v1-e32-t48-landscape-report-records-a-synthetic-cassette` | Pending | 1 | 2.0 |
 
 #### [E33 — Evidence File Builder](plan_specs/v1/e33-file-builder/epic.yaml)
 
@@ -420,6 +425,7 @@ A student can run `debate-research cut <URL>` and receive a verified, tagged, ci
 | [How extraction and access classification behave on real pages, measured in place](plan_specs/v1/e04-article-retrieval/t07-real-page-measurement.yaml) `v1-e04-t07-real-page-measurement` | Pending | 1 | 2.0 |
 | [An Article found by its DOI and by a URL a snapshot was fetched from](plan_specs/v1/e04-article-retrieval/t08-article-lookup-by-identifier-and-fetched-url.yaml) `v1-e04-t08-article-lookup-by-identifier-and-fetched-url` | Pending | 1 | 3.0 |
 | [fetch --paste can report the access status of the user's own copy](plan_specs/v1/e04-article-retrieval/t09-reported-status-for-pasted-text.yaml) `v1-e04-t09-reported-status-for-pasted-text` | Pending | 1 | 1.0 |
+| [A snapshot's canonical URL drops the tracking parameters its article's does](plan_specs/v1/e04-article-retrieval/t10-snapshot-canonical-url-without-tracking-parameters.yaml) `v1-e04-t10-snapshot-canonical-url-without-tracking-parameters` | Pending | 0 | 1.0 |
 
 #### [E06 — Card Cutting, Citation & Export](plan_specs/v1/e06-card-cutting/epic.yaml)
 
@@ -475,14 +481,17 @@ A student can run `debate-research cut <URL>` and receive a verified, tagged, ci
 | [`debate-research search` command](plan_specs/v1/e08-research-workflows/t05-search-command.yaml) `v1-e08-t05-search-command` | Succeeded | 4 | 6.0 |
 | [`--auto-cut N` batch cutting](plan_specs/v1/e08-research-workflows/t06-auto-cut.yaml) `v1-e08-t06-auto-cut` | Succeeded | 3 | 9.0 |
 | [`debate-research daily` digests](plan_specs/v1/e08-research-workflows/t07-daily-command.yaml) `v1-e08-t07-daily-command` | Pending | 2 | 7.0 |
-| [Counterplans and kritiks get the research needs their arguments have](plan_specs/v1/e08-research-workflows/t08-counterplan-and-kritik-needs.yaml) `v1-e08-t08-counterplan-and-kritik-needs` | InProgress | 1 | 2.0 |
+| [Counterplans and kritiks get the research needs their arguments have](plan_specs/v1/e08-research-workflows/t08-counterplan-and-kritik-needs.yaml) `v1-e08-t08-counterplan-and-kritik-needs` | Succeeded | 1 | 2.0 |
 | [An installed build carries the configuration `search` reads: the argument taxonomy, the ranking table and the feed lists](plan_specs/v1/e08-research-workflows/t09-installed-build-carries-search-configuration.yaml) `v1-e08-t09-installed-build-carries-search-configuration` | Succeeded | 2 | 1.0 |
-| [One search asks each provider once, however many queries the expansion gives](plan_specs/v1/e08-research-workflows/t10-search-asks-each-provider-once.yaml) `v1-e08-t10-search-asks-each-provider-once` | Pending | 1 | 2.0 |
+| [One search asks each provider once, however many queries the expansion gives](plan_specs/v1/e08-research-workflows/t10-search-asks-each-provider-once.yaml) `v1-e08-t10-search-asks-each-provider-once` | Succeeded | 1 | 2.0 |
 | [The search.expand prompt names the argument family's needs, not the DA family's](plan_specs/v1/e08-research-workflows/t11-expand-prompt-sends-the-familys-needs.yaml) `v1-e08-t11-expand-prompt-sends-the-familys-needs` | Pending | 1 | 1.0 |
 | [`search --json` says whether a result's date is a day, a month or a year](plan_specs/v1/e08-research-workflows/t12-search-json-names-a-dates-precision.yaml) `v1-e08-t12-search-json-names-a-dates-precision` | Pending | 2 | 1.0 |
 | [An expansion on a topic only a feed file names falls back cleanly, and a pair's templates are capped](plan_specs/v1/e08-research-workflows/t13-topic-expansion-fallback-and-templates-per-pair.yaml) `v1-e08-t13-topic-expansion-fallback-and-templates-per-pair` | Pending | 2 | 1.0 |
-| [A disadvantage's link queries name the plan's mechanism and the United States](plan_specs/v1/e08-research-workflows/t14-da-links-name-the-plans-mechanism-in-the-united-states.yaml) `v1-e08-t14-da-links-name-the-plans-mechanism-in-the-united-states` | Pending | 2 | 3.0 |
+| [A disadvantage's link queries name the plan's mechanism and the United States](plan_specs/v1/e08-research-workflows/t14-da-links-name-the-plans-mechanism-in-the-united-states.yaml) `v1-e08-t14-da-links-name-the-plans-mechanism-in-the-united-states` | InProgress | 2 | 3.0 |
 | [LD research starts broad and narrows from what the first page turns up](plan_specs/v1/e08-research-workflows/t15-ld-research-starts-broad-and-narrows-from-the-first-page.yaml) `v1-e08-t15-ld-research-starts-broad-and-narrows-from-the-first-page` | Pending | 1 | 3.0 |
+| [A DA's mechanism queries cross the link templates the coach chose, and a preset may name more mechanisms](plan_specs/v1/e08-research-workflows/t16-mechanism-queries-cross-the-chosen-link-templates.yaml) `v1-e08-t16-mechanism-queries-cross-the-chosen-link-templates` | Pending | 2 | 3.0 |
+| [`--max-cost` is one limit for the whole command, whatever routers it builds](plan_specs/v1/e08-research-workflows/t17-one-max-cost-across-every-router-a-command-builds.yaml) `v1-e08-t17-one-max-cost-across-every-router-a-command-builds` | Succeeded | 1 | 2.0 |
+| [An auto-cut run's report does not replace the last run's in the same directory](plan_specs/v1/e08-research-workflows/t18-auto-cut-report-names-per-run.yaml) `v1-e08-t18-auto-cut-report-names-per-run` | Pending | 1 | 1.0 |
 
 
 ### v1.5 — V1 quality gate & team pilot
@@ -497,7 +506,7 @@ Golden-card and LLM evaluations gate prompt/model changes; the CLI is packaged a
 | [Golden DOCX regression tests](plan_specs/v1/e09-v1-quality-pilot/t02-docx-golden-tests.yaml) `v1-e09-t02-docx-golden-tests` | Pending | 1 | 7.0 |
 | [Card selection and underlining eval harness](plan_specs/v1/e09-v1-quality-pilot/t03-span-eval-harness.yaml) `v1-e09-t03-span-eval-harness` | Pending | 2 | 9.0 |
 | [Prompt/model promotion gate](plan_specs/v1/e09-v1-quality-pilot/t04-prompt-promotion-gate.yaml) `v1-e09-t04-prompt-promotion-gate` | Pending | 3 | 5.5 |
-| [End-to-end recorded suite](plan_specs/v1/e09-v1-quality-pilot/t05-e2e-fixture-suite.yaml) `v1-e09-t05-e2e-fixture-suite` | Pending | 1 | 12.0 |
+| [End-to-end recorded suite](plan_specs/v1/e09-v1-quality-pilot/t05-e2e-fixture-suite.yaml) `v1-e09-t05-e2e-fixture-suite` | Succeeded | 1 | 12.0 |
 | [Packaging and release workflow](plan_specs/v1/e09-v1-quality-pilot/t06-packaging-release.yaml) `v1-e09-t06-packaging-release` | InProgress | 2 | 6.0 |
 | [Student/coach guide and team pilot](plan_specs/v1/e09-v1-quality-pilot/t07-team-pilot.yaml) `v1-e09-t07-team-pilot` | Pending | 2 | 14.0 |
 
@@ -665,6 +674,8 @@ The weekly caselist run (pull, import, publish, parse, search index) runs in the
 | [CI deals whole test files to its parts by their recorded durations, so an ordinary task pull request's parts finish together](plan_specs/v1/e41-delivery-tooling-upkeep/t17-ci-parts-dealt-by-recorded-durations.yaml) `v1-e41-t17-ci-parts-dealt-by-recorded-durations` | Succeeded | 1 | 3.0 |
 | [Each CI part collects only its own test files, after measuring what module fixtures cost](plan_specs/v1/e41-delivery-tooling-upkeep/t18-each-part-collects-only-its-own-files.yaml) `v1-e41-t18-each-part-collects-only-its-own-files` | Pending | 1 | 3.0 |
 | [Test selection does not follow an edge through a fixture that only names a guide's path](plan_specs/v1/e41-delivery-tooling-upkeep/t19-affected-tests-ignores-a-path-named-only-as-data.yaml) `v1-e41-t19-affected-tests-ignores-a-path-named-only-as-data` | Pending | 1 | 1.0 |
+| [The move to the 5.x models, once the account's Bedrock quotas allow them](plan_specs/v1/e41-delivery-tooling-upkeep/t20-move-to-the-5x-models-after-the-quota-request.yaml) `v1-e41-t20-move-to-the-5x-models-after-the-quota-request` | Blocked | 1 | 3.0 |
+| [Order-dependence checks use a plugin that is installed, or commands stop naming one that isn't](plan_specs/v1/e41-delivery-tooling-upkeep/t21-order-dependence-checks-without-pytest-randomly.yaml) `v1-e41-t21-order-dependence-checks-without-pytest-randomly` | Pending | 0 | 1.0 |
 
 
 ## V2

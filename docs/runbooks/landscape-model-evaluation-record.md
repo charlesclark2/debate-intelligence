@@ -239,3 +239,67 @@ SAMPLE=~/Documents/debate/landscape-review/policy-2026-27-nhi-coach-sample-label
 ROWS=~/.debate-research/dev/landscape/local-classifier/hspolicy26/policy-2026-27-nhi-coach-sample.jsonl
 if env | grep -q '^DEBATE_'; then echo "STOP: a DEBATE_ variable is set; unset it and paste again"; else uv run debate-research landscape evaluate --caselist hspolicy26 --snapshot 2026-10-20 --sample "$SAMPLE" --sample-rows "$ROWS" --breakdown; uv run debate-research landscape evaluate --caselist hspolicy26 --snapshot 2026-10-20 --sample "$SAMPLE" --sample-rows "$ROWS" --breakdown --route deep_audit; fi
 ```
+
+## Prompt 1.3.0: the re-record on `deep_audit` (`v1-e32-t49`)
+
+Prompt 1.3.0 carries the PM's rulings of 2026-11-05. A card defending its own side's position against
+answers reads it. An answer to a position is that position answered, never the answering side's own case.
+A definition the affirmative reads against a counterplan answers that counterplan. A generic kritik is
+chosen by its theory, and may carry a high confidence. The evaluation and the report also give READS to
+any placement in a file disclosed only on its position's own side
+([the evaluation's record](../data/landscape-model-evaluation.md#prompt-130-and-the-own-side-rule-v1-e32-t49-ruled-2026-11-05)).
+The coach's labels are unchanged since 1.2.0's re-record, so there is no sitting.
+
+The PM ruled one route, `deep_audit` (Claude Sonnet 4.6): prompts are tuned on it, and Haiku is not
+re-recorded. The price comes from `config/model_pricing.yaml` ($0.003 and $0.015 per 1,000 input and output
+tokens), at 1.2.0's recorded tokens (40,240 and 4,847) plus 1.3.0's 1,591 more characters of instructions in
+each of the 3 calls, about 1,200 tokens. That is about 41,400 input and 4,850 output tokens: **about
+$0.20**. The budget guard prices each call's ceiling from its variables, which 1.3.0 leaves as 1.2.0 had
+them. So the ceiling is 1.2.0's: $1.106 for the three calls, about $1.50 with a repair, inside dev's $2.00 a
+day if nothing else spent that day. 1.3.0's cassettes go beside 1.2.0's in `model-cassettes-deep_audit/`,
+under their own keys, and nothing is replaced.
+
+Run it from a checkout holding `v1-e32-t49`: its task worktree until it merges, a checkout of `dev` after.
+Go to it:
+
+```bash
+cd /Users/charlesclark/Documents/debate/debate-intelligence-tool/debate-intelligence-worktrees/v1-e32-t49-prompt-1-3-0-own-side-answers-and-the-coachs-rulings
+```
+
+One block, in order: the sample check, the Bedrock login check, the recording on `deep_audit`, then the
+breakdown replaying it. Each `STOP:` line stops it before any model call. Expected runtime: 2 to 4
+minutes.
+
+```bash
+SAMPLE=~/Documents/debate/landscape-review/policy-2026-27-nhi-coach-sample-labelled.csv
+ROWS=~/.debate-research/dev/landscape/local-classifier/hspolicy26/policy-2026-27-nhi-coach-sample.jsonl
+if env | grep -q '^DEBATE_'; then echo "STOP: a DEBATE_ variable is set; unset it and paste again"; elif pgrep -f "caselist pull" >/dev/null; then echo "STOP: a caselist pull is running; wait for it to finish"; elif ! uv run debate-research --json landscape evaluate --caselist hspolicy26 --snapshot 2026-10-20 --sample "$SAMPLE" --sample-rows "$ROWS" --check-sample; then echo "STOP: the sample check failed; paste its JSON and record nothing"; elif ! aws sts get-caller-identity --profile debate-dev-bedrock >/dev/null; then echo "STOP: the Bedrock profile is not logged in; log in and paste again"; else uv run debate-research --json landscape evaluate --caselist hspolicy26 --snapshot 2026-10-20 --sample "$SAMPLE" --sample-rows "$ROWS" --model-mode record --route deep_audit; uv run debate-research --json landscape evaluate --caselist hspolicy26 --snapshot 2026-10-20 --sample "$SAMPLE" --sample-rows "$ROWS" --breakdown --route deep_audit; fi
+```
+
+What to read, and paste back: **the three JSON objects, and nothing else.** They hold counts, taxonomy ids
+and sample row numbers.
+
+* **The sample check:** `labelled` 47, `by_stance` answers 10 and reads 35, as 1.2.0's re-record left
+  them.
+* **The recording:**
+  * `prompt_version` `1.3.0`, `route` `deep_audit`; `labelled`, `found` and `asked` 47; `calls` 3 or 4.
+  * `pipeline.accuracy` against `target` 0.85 is the bar. Exit 0 means the pipeline meets it and every
+    scan is clean. Exit 1 `EVALUATION_BELOW_BAR` puts the same counts in `error.details`.
+  * A stop before any answer (`MODEL_ACCESS_DENIED`, or a budget refusal) recorded nothing. Paste it, and
+    do not run the block again before the PM has read it.
+* **The breakdown:**
+  * the same counts with no call made, and `breakdown.outcomes` summing to 47;
+  * `breakdown.generic_answers`, the PM's condition on the generic-confidence clause: the answers naming
+    a generic position, how many are above the threshold, and how many of those are right and wrong.
+    `named_label_rows` lists any row labelled with a named kritik that was answered generic. Look for
+    rows 12 and 55 there, and in their cards' outcomes in `breakdown.cards`.
+
+If the recording's `scan` counts are above zero, read the hits in the terminal only, with this block.
+**Never paste or copy its output.** For each hit, give its number and whether its words name a team, a
+school or a tournament, or are an ordinary word that shares them.
+
+```bash
+SAMPLE=~/Documents/debate/landscape-review/policy-2026-27-nhi-coach-sample-labelled.csv
+ROWS=~/.debate-research/dev/landscape/local-classifier/hspolicy26/policy-2026-27-nhi-coach-sample.jsonl
+if env | grep -q '^DEBATE_'; then echo "STOP: a DEBATE_ variable is set; unset it and paste again"; else uv run debate-research landscape evaluate --caselist hspolicy26 --snapshot 2026-10-20 --sample "$SAMPLE" --sample-rows "$ROWS" --breakdown --route deep_audit; fi
+```

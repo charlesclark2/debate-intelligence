@@ -524,3 +524,71 @@ Recorded by the PM from the operator's output. Counts, ids and row numbers only.
 * **What follows:** neither route meets the bar, and the hold on live model runs stands. `v1-e32-t49`
   carries prompt 1.3.0 and stage one's own-side rule, tuned on `deep_audit`; `v1-e32-t50` draws a second
   labelled sample, held out from tuning, before any route is read as meeting the bar.
+
+## Prompt 1.3.0 and the own-side rule (`v1-e32-t49`, ruled 2026-11-05)
+
+The PM's rulings on `v1-e32-t49`'s proposal, built in that task. Counts, ids and row numbers only.
+
+* **The own-side rule.** A placement in a file disclosed only on its position's own side reads that
+  position, whatever its answer heading or the model's stance says. It is a card defending its own side's
+  position against the other side's answers. The rule applies to stage one's placements and the model's
+  answers alike, card by card, as the landscape run returns them. The evaluation scores a stance by the same
+  function. It mirrors `v1-e32-t46`'s rule, under which a placement in a file disclosed only on the other
+  side answers it. A file disclosed on both sides or on no readable side, and a position either side reads,
+  keep the role they have. Stage one's cache keeps the role it gave, since cards read alike in files on
+  different sides share a cache key.
+* **Prompt 1.3.0**, the stage's default: the own side's answers, the coach's rulings of 2026-11-05 and
+  `generic-k`. In detail:
+  * an advantage and a disadvantage about the same subject are different positions;
+  * an answer is never the answering side's own case, in either direction;
+  * a definition the affirmative reads against a counterplan answers that counterplan;
+  * a named kritik is chosen only by its theory, and a kritik's framework card is never topicality;
+  * a generic position may carry 0.9 or more when the card is plainly its kind's.
+
+  The variables, user turn and stanced schema are 1.2.0's, so 1.2.0's recordings keep their keys.
+* **The PM's condition on the generic-confidence clause.** `--breakdown` counts the answers naming a
+  generic position on their own (`breakdown.generic_answers`): how many, how many above the threshold,
+  how many of those are right and wrong, and the rows labelled with a named kritik that were answered
+  generic. If the generic answers above the threshold are wrong more often than right, the clause comes out
+  in a 1.3.1 follow-up. Rows 12 and 55 (`cap-k`, right under 1.2.0) are the ones to watch.
+* **Rows 16, 33 and 57** are labelled as read, in files disclosed only on the other side, so the side rule
+  scores any answer there as answering. They go to the coach alongside `v1-e32-t50`. Per row, the coach
+  chooses an `at:` label, a second label, or "the side rule is wrong here". The PM files a follow-up on the
+  last.
+
+### The kept 1.2.0 recordings under the own-side rule (computed 2026-11-05)
+
+These are the session's replays of both routes' 1.2.0 cassettes through the evaluation's own path, at
+prompt 1.2.0, with no model called (about a minute per route). The answers are identical on all 47 rows;
+only the scoring changes.
+
+| | Claude Haiku 4.5 (`high_volume`) | Claude Sonnet 4.6 (`deep_audit`) |
+|---|---|---|
+| Pipeline as recorded (bar 0.85) | 21 of 37, 0.568 | 23 of 33, 0.697 |
+| The rule on stage one's placements only | 21 of 37, 0.568 | 23 of 33, 0.697 |
+| **The rule on stage one's and the model's (built)** | **23 of 37, 0.622** | **26 of 33, 0.788** |
+
+* The rows it turns right: Sonnet 7, 13 and 17; Haiku 17 and 39. Each was a wrong stance, and none is
+  turned wrong.
+* Of the wrong-stance rows, only row 13 sits under an answer heading. Rows 7, 17 and 39 sit under none, in
+  files on their position's own side.
+* Of the 45 rows labelled with a position, 32 read in files on their own side and all 10 `at:` rows sit in
+  files on the other side. The other 3 are rows 16, 33 and 57, above.
+
+### The own-side rule in a landscape run (counted 2026-11-05)
+
+Stage one over the 126,681 cards of hspolicy26's 2026-10-20 snapshot. The PM accepted this as a product
+change: these are a side's cards defending its own position against answers, which the report had been
+dropping.
+
+* **181 sure placements** (19 more below the threshold) change role from ANSWERS to READS. By kind: da 112,
+  advantage 57, k 7, theory 4, t 1. On 146 of them the placing heading is itself the answer heading; on
+  35 the answer heading is above it.
+* They touch **20 positions in 61 files**: 75 position-and-file pairs. In 12 of those pairs the position
+  already reads in that file through another card, so **63 pairs** add the position to that file's rounds.
+* For scale: 62,535 sure placements already read. The 1,908 sure ANSWERS placements in files on the other
+  side, and the 14 in files on both sides, keep their role.
+* The model's answers in a run take the same rule; this count is stage one's alone.
+
+The re-record of the 47 under 1.3.0, on `deep_audit` only as ruled, is recorded here by the PM when the
+operator has it ([the record runbook](../runbooks/landscape-model-evaluation-record.md#prompt-130-the-re-record-on-deep_audit-v1-e32-t49)).

@@ -180,9 +180,39 @@ None. The affected set (464 files) is left to the pull request's `ci`, per worki
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-11-05
 
 **Notes:**
+
+`--max-cost` now means what its help says: one limit for the whole command.
+
+1. **ac1 passes.** Red on today's source: the two-router command spent $0.506527 under a $0.505452
+   limit; after, it stops at the limit (exit 9), with one run id and the refusal naming the command's
+   total. The core red run against an id-only skeleton is the important one: two guards of one run
+   admitted 4 in-flight calls where 2 fit. The one-router tests passed before and after, including
+   v1-e05-t07's exact refusal text and v1-e08-t06's per-entry `cost_usd`.
+2. **Ruling 2 answered from the code:** `search --expand-llm --auto-cut` is the only command that builds
+   two routers today, and the landscape stage gets the command's run too, so a future second router
+   stays one run.
+3. **Decision 2 (shared holds, not only the id) is right and accepted.** Sharing only the id would have
+   fixed today's command by luck of ordering; sharing the lock and the held total makes v1-e05-t07's
+   guarantee (a burst cannot pass a check only one call fits) hold across the whole command.
+4. **Decision 1 accepted:** one `BudgetRun` per container, which is one per command invocation, and a
+   test shows two commands in one process are two runs. The rule lives in `debate_core`; the CLI only
+   creates the identity.
+5. **Deviations accepted.** (1) `factory.py`, the only place the run can reach the guard; the PM adds
+   `debate_core.integrations.models` to the spec's packages in the next batch. (2) One sentence in
+   `bedrock-access.md`. (3) Mechanical call-site edits with no assertion changed.
+6. **Planted breaks:** all seven caught, including a process-wide run and the old help text.
+7. **Follow-up the PM files:** the auto-cut report's `cost_usd` leaves out the expansion's call, so it
+   can differ from what the limit counted; a `command_cost_usd` beside it (E08, p3).
+8. **Coordination:** v1-e08-t10 also changes `packages/debate_cli/tests/test_search_command.py`.
+   Whichever merges second runs `scripts/task sync` and resolves that file.
+9. **Closing checks:** the affected set (464 files, as `factory.py` reaches the root conftest) is left to
+   `ci` (agreement 10); the always-run list with the changed modules' tests (1,413 passed) and the whole
+   application test directory (5,201), ruff, whole-repo pyright, lint-imports, thin handlers, the docs
+   checks and the specs are clean.
+10. **Merge:** a plain `scripts/task pr` once `ci` is green. The Goal is `Succeeded`.

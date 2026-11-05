@@ -1,0 +1,82 @@
+# TASK v1-e39-t30-coach-reviews-taxonomy-updates-in-the-tub-app - The coach reviews a topic's taxonomy updates in the tub app, writing the decisions the apply step reads
+# Epic: E39 — Team Evidence Search (Student Pilot) | Release: v1.7 (Team evidence search pilot) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e39-t30-coach-reviews-taxonomy-updates-in-the-tub-app
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.7
+    debate/epic: v1-e39-evidence-search-pilot
+  annotations:
+    debate/title: "The coach reviews a topic's taxonomy updates in the tub app, writing the decisions the apply step reads"
+spec:
+  # Filed by the PM, 2026-11-05, from the operator's request recorded in v1-e32-t06 (2026-11-05).
+  description: >-
+    After a new LD or PF topic starts, the coach would rather review the seeded positions and
+    the headings no position claims in the tub app than at the command line. Propose, and stop
+    for the PM's ruling: a coach-only page (by group, as the accounts role already sets) that
+    shows v1-e32-t52's review questions and writes the same decisions file to the bucket, which
+    the operator's apply step reads and turns into configuration through a pull request. The app
+    never writes configuration itself, and no student account can reach the page. Say how the
+    page gets its candidates (a file the seeding step publishes), what it stores where, and how
+    real headings stay inside the coach's view and the bucket.
+  priority: 3
+  constraints:
+    packages: [web, debate_core.application, debate_core.domain, infrastructure, packages/debate_core/tests, docs/runbooks, docs/guides]
+    forbidden:
+      - The app writing configuration
+      - A student account reaching the page
+      - Real heading text in a fixture, a test or a commit
+      - A school, team code or debater name in a log
+  context:
+    - kind: TaskRef
+      name: v1-e32-t52-guided-taxonomy-review-and-apply
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        The proposal (the page, its access, where candidates and decisions live) is ruled on
+        by the PM before any code.
+    - id: ac2
+      description: >-
+        The page writes v1-e32-t52's decisions file for the coach alone, by tests shown
+        failing first, and the apply step reads it unchanged.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e39-t30-coach-reviews-taxonomy-updates-in-the-tub-app-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.7
+    debate/epic: v1-e39-evidence-search-pilot
+spec:
+  description: >-
+    The coach reviews a topic's taxonomy updates in the tub app, writing the decisions the apply
+    step reads.
+  goalRef:
+    name: v1-e39-t30-coach-reviews-taxonomy-updates-in-the-tub-app
+  graph:
+    nodes:
+      - id: coach-reviews-taxonomy-updates-in-the-tu
+        kind: Task
+        name: Coach review page
+        description: >-
+          The coach reviews a topic's taxonomy updates in the tub app, writing the
+          decisions the apply step reads.
+        estimatedEffort: 6h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Coach review page tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests, -k, taxonomy_review]
+status:
+  phase: Pending

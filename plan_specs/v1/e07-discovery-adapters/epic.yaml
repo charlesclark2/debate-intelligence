@@ -382,5 +382,25 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e07-t15-a-provider-without-its-key-does-not-make-a-search-partial
+    - id: t16
+      kind: Task
+      name: 'The public-pool footer test counts its results on an injected clock, not the real one'
+      description: >-
+        The public-pool footer test counts its results on an injected clock, not the real
+        one.
+      inputs:
+        specRef: plan_specs/v1/e07-discovery-adapters/t16-public-pool-footer-test-on-an-injected-clock.yaml
+        goalRef: v1-e07-t16-public-pool-footer-test-on-an-injected-clock
+      dependsOn:
+      - t13
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e07-t16-public-pool-footer-test-on-an-injected-clock reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e07-t16-public-pool-footer-test-on-an-injected-clock
 status:
   phase: Pending

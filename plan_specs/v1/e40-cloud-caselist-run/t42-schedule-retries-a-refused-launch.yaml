@@ -36,6 +36,13 @@ spec:
     it. The operator also reads the run's dead-letter queue for the 2026-11-04 message before
     2026-11-18 (the queue keeps 14 days) and says whether the schedule-failed alarm emailed the
     coach.
+    (PM amendment 2026-11-05, from the PM's rulings on the proposal.) Two additions in the same
+    module. Because no AWS page says whether Scheduler counts a RunTask answered with `failures` as a
+    failed invocation, a CloudTrail rule, `debate-<env>-caselist-launch-refused`, emails the coach on
+    every RunTask by either schedule's role that ECS refused or answered with a failure, its pattern
+    pinned in tftest. The schedule-failed alarm counts arrivals (NumberOfMessagesSent, 1 of 6
+    five-minute periods) instead of a queue's depth, so a message left waiting can no longer keep it
+    in ALARM and silence the next failure.
   priority: 1
   constraints:
     packages: [infrastructure, docs/runbooks, tests/docs]

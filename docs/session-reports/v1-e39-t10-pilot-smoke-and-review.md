@@ -343,3 +343,13 @@ Added by the PM. Nothing above is changed, and this section is not a review.
 | ac4 (part): the signed-in journey on dev | NOT RUN (operator) | stopped at J2, to resume on 2026-11-05 | 2026-11-03: the dev deploy (`e9769533`) and step 8's checks passed; J1 wrote the seed (sha256 `494c3359…`, the names check 0). J2's restore under `docx-7` held 0 parsed objects, because the dev bucket had no `docx-7` parsed store before the 2026-11-04 re-parse, so the journey was stopped before anything was written beyond the lock, and the copy was deleted (policy 1.18). J2 to J10 run on Thursday 2026-11-05, before any newer dev build is installed |
 
 The Goal stays `InProgress`. The runbook's promotion items 6, 7 and 9 now say they wait for the bucket to hold the installed build's parser version.
+
+## Operator records (recorded by the PM, 2026-11-05)
+
+Added by the PM. Nothing above is changed, and this section is not a review.
+
+| Criterion | Was | Now | Record |
+|---|---|---|---|
+| ac4: the signed-in journey, an operator-run script whose run is recorded in the report | J2 stopped (2026-11-03) | J2 to J6, J9, J10 PASS; J7 and J8 NOT RUN | 2026-11-05, build 1.1.0.dev342. J2: a copy restored under the dev lock in 351.8 s, 58 manifests, parsed store 2026.10.27-docx-7 18,345 objects. J3: 3 new sources imported into the copy. J4: 3 uploaded and verified; the parse 3 sources, 3 parsed, 4 cards; parsed/testcl26/2026.10.27-docx-7/ published, 6 uploads. J5: index ab5dd9d3ac95d07b, every store dev's index held unchanged, the suppression list the same, testcl26 2 documents, published. J6: every step PASS (sign in, search, result count, open the card, provenance on the card page, back link, Copy card, the copy holds the card, no provenance line in the copy, download offered, download). J7: the removal's dry run planned every caselist's aggregates, so the PM stopped it before --execute (v1-e30-t33). J9: index e95f10c1a8fda754, the stores as before the seed, published past the shrink guard for testcl26 alone. J10: the copy and the seed deleted |
+
+J7 and J8 run again after v1-e30-t33 merges, from a fresh copy with the seed published again. The seed's three sources and its parsed directory stay in the dev bucket under testcl26 until then: synthetic, and no dev run pulls that caselist.

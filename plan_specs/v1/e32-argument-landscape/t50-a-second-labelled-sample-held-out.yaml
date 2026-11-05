@@ -26,6 +26,14 @@ spec:
     ruling; the coach labels it in a sitting like v1-e32-t46's (stance included, unmarked, the
     model and the scores never shown); `--check-sample` reads it; and the evaluation reads the
     second sample as a holdout, never used to tune a prompt, beside the first.
+    (PM amendment 2026-11-05, from v1-e32-t49's ruling 3.) At the same sitting the coach sees rows
+    16, 33 and 57 of the first sample: each is labelled as read in a file disclosed only on the side
+    opposite its position, so t46's side rule scores any answer there as answering. They may not be
+    mislabels: a negative can read an affirmative's advantage (an advantage counterplan claiming to
+    solve it, rows 16 and 33), and a kritikal affirmative can read a kritik's theory (row 57). Per row
+    the coach chooses an at: label, a second label, or "the side rule is wrong here"; the third becomes
+    a PM-filed follow-up on t46's other-side rule. v1-e32-t53 (generic-k's description) is decided
+    before this sitting.
   priority: 3
   constraints:
     packages: [debate_core.application, debate_core.arguments, scripts, packages/debate_core/tests, packages/debate_cli/tests, docs/data, docs/runbooks]

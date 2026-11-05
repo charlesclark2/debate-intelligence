@@ -1,0 +1,88 @@
+# TASK v1-e32-t51-late-disclosures-from-pre-topic-tournaments-counted - Late disclosures from tournaments before the de-extinction topic are counted on 2026-11-10 and 2026-11-17, and weekly after
+# Epic: E32 Argument Landscape Reports | Release: v1.2 (Argument landscape & file building) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e32-t51-late-disclosures-from-pre-topic-tournaments-counted
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e32-argument-landscape
+  annotations:
+    debate/title: "Late disclosures from tournaments before the de-extinction topic are counted on 2026-11-10 and 2026-11-17, and weekly after"
+spec:
+  # Filed by the PM, 2026-11-05, from v1-e32-t06's Q2 ruling and its review (the PM, 2026-11-05).
+  description: >-
+    v1-e32-t06 resolves hsld26 disclosures by tournament entry, then by snapshot range: from
+    2026-11-10 every disclosure is de-extinction unless an entry says otherwise. The PM's Q2
+    ruling: count, do not pre-list. On the 2026-11-10 snapshot and again on 2026-11-17, count in
+    counts only the hsld26 disclosures whose tournament spelling was first seen in a snapshot on
+    or before 2026-11-03, FBK spellings excluded, with their share of the snapshot and the
+    topic-word split (de-extinction against space colonization words in tags and headings) as
+    the check. If such disclosures exceed 5% of a snapshot's hsld26 disclosures, or the check
+    shows space files landing in de-extinction counts, propose space colonization tournament
+    entries (v1-e32-t06's Decision 1 keeps that a configuration change). Also propose a line in
+    the landscape report that shows this count each week, so the check needs no session. Blocked
+    until the weekly run of 2026-11-11 has recorded the 2026-11-10 snapshot; the PM sets it to
+    Pending then.
+    (PM note 2026-11-05.) Blocked until the weekly run of 2026-11-11 has recorded hsld26's
+    2026-11-10 snapshot, a condition outside this repository; the PM sets it to Pending then.
+  priority: 2
+  constraints:
+    packages: [debate_core.application, debate_core.arguments, debate_core.domain, config/landscape, scripts, packages/debate_core/tests, tests/config, docs/data, docs/guides]
+    forbidden:
+      - A school, team code or debater name anywhere
+      - A tournament spelling only one school uses in configuration
+      - Heading or tag text in the report
+      - A topic word rule deciding a disclosure's topic
+  context:
+    - kind: TaskRef
+      name: v1-e32-t06-ld-de-extinction-taxonomy
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        The counts on 2026-11-10 and 2026-11-17 (operator-restored copies, deleted after
+        use) are recorded with their share and the topic-word check, and entries proposed if
+        the 5% trigger or the check says so.
+    - id: ac2
+      description: >-
+        The weekly report line, as ruled, by tests on synthetic stores shown failing first.
+status:
+  phase: Blocked
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e32-t51-late-disclosures-from-pre-topic-tournaments-counted-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e32-argument-landscape
+spec:
+  description: >-
+    Late disclosures from tournaments before the de-extinction topic are counted on 2026-11-10
+    and 2026-11-17, and weekly after.
+  goalRef:
+    name: v1-e32-t51-late-disclosures-from-pre-topic-tournaments-counted
+  graph:
+    nodes:
+      - id: late-disclosures-from-pre-topic-tourname
+        kind: Task
+        name: Late disclosures
+        description: >-
+          Late disclosures from tournaments before the de-extinction topic are counted on
+          2026-11-10 and 2026-11-17, and weekly after.
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Late disclosures tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests, -k, late_disclosure]
+status:
+  phase: Pending

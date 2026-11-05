@@ -987,5 +987,25 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e40-t43-weekly-run-logs-each-stage
+    - id: t44
+      kind: Task
+      name: 'A scheduled pull refuses to run when the bucket''s run log shows a run started within the last hours'
+      description: >-
+        A scheduled pull refuses to run when the bucket's run log shows a run started within
+        the last hours.
+      inputs:
+        specRef: plan_specs/v1/e40-cloud-caselist-run/t44-a-scheduled-run-refuses-a-second-run-within-hours.yaml
+        goalRef: v1-e40-t44-a-scheduled-run-refuses-a-second-run-within-hours
+      dependsOn:
+      - t42
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e40-t44-a-scheduled-run-refuses-a-second-run-within-hours reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e40-t44-a-scheduled-run-refuses-a-second-run-within-hours
 status:
   phase: Pending

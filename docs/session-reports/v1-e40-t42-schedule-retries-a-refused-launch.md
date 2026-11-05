@@ -317,3 +317,13 @@ and an alarm that could not fire twice) are closed in the same module rather tha
    clean; the 101-file affected set is the pull request's `ci` (agreement 10).
 10. **Merge:** `scripts/task pr --partial` once `ci` is green. The Goal stays `InProgress` until dev's
     apply and the plan after it are recorded.
+
+## Operator records (recorded by the PM, 2026-11-05)
+
+Added by the PM. Nothing above is changed, and this section is not a review.
+
+| Criterion | Was | Now | Record |
+|---|---|---|---|
+| ac3, first half: the operator reads the dead letter and whether the alarm emailed the coach (before 2026-11-18) | NOT RUN (operator) | PASS | Read 2026-11-05 without deleting: one message in debate-dev-caselist-run-dlq, sent 2026-11-04 12:00:28Z, ERROR_CODE ServerException, RETRY_ATTEMPTS 0, EXHAUSTED_RETRY_CONDITION MaximumRetryAttempts, the RunTask request for debate-dev-caselist-run:11 with no ClientToken. The alarm went OK to ALARM at 12:07:55Z on the 12:01:00Z datapoint, and the coach confirmed the email reached his inbox, about 7.5 minutes after the dead letter. The operator purged the queue on 2026-11-05 as ruled, and the alarm read OK at 2026-11-05 07:06:12Z |
+
+ac3's second half (dev's plan read by the PM, the apply, and the plan after it saying No changes) runs from `dev` after the merge, so the Goal stays `InProgress`. The guard against a second scheduled run within N hours (ruling 3) is filed as `v1-e40-t44`.

@@ -1,0 +1,80 @@
+# TASK v1-e32-t52-guided-taxonomy-review-and-apply - A seeded taxonomy is reviewed by the coach one question at a time, and the decisions are applied by one command
+# Epic: E32 Argument Landscape Reports | Release: v1.2 (Argument landscape & file building) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e32-t52-guided-taxonomy-review-and-apply
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e32-argument-landscape
+  annotations:
+    debate/title: "A seeded taxonomy is reviewed by the coach one question at a time, and the decisions are applied by one command"
+spec:
+  # Filed by the PM, 2026-11-05, from v1-e32-t06's follow-up and Decision 8 (the PM's review, 2026-11-05).
+  description: >-
+    v1-e32-t06's coach review used a one-off guided script beside the review sheet, because the
+    sheet plus four file listings was too hard to work through in one sitting: one question per
+    screen (each drafted position, the unplaced headings with file-structure labels grouped, the
+    proposed search arguments, the preset, approval), the decisions written to a JSON file. Make
+    it a tested tool: `seed_landscape_taxonomy.py review --interactive` writing a decisions file
+    in a stated schema, with stop and resume, and an apply step that reads the decisions into
+    the topic file, generic.yaml and argument_taxonomy.yaml's preset and arguments, so a new
+    topic's curation is one command for the coach and one for the operator. Real headings appear
+    in the operator's terminal only; the decisions file stays on the operator's Mac. Tests with
+    scripted keypresses and synthetic candidates.
+  priority: 3
+  constraints:
+    packages: [scripts, tests/scripts, debate_core.arguments, debate_core.domain, config/landscape, docs/guides]
+    forbidden:
+      - Real heading text in a fixture, a test or a commit
+      - A school, team code or debater name anywhere
+      - The apply step changing a released taxonomy version without a bump
+  context:
+    - kind: TaskRef
+      name: v1-e32-t06-ld-de-extinction-taxonomy
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        The guided review writes a decisions file in a stated schema with stop and resume,
+        and the apply step turns it into the configuration, by tests with scripted
+        keypresses on synthetic candidates shown failing first.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e32-t52-guided-taxonomy-review-and-apply-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e32-argument-landscape
+spec:
+  description: >-
+    A seeded taxonomy is reviewed by the coach one question at a time, and the decisions are
+    applied by one command.
+  goalRef:
+    name: v1-e32-t52-guided-taxonomy-review-and-apply
+  graph:
+    nodes:
+      - id: guided-taxonomy-review-and-apply
+        kind: Task
+        name: Guided review
+        description: >-
+          A seeded taxonomy is reviewed by the coach one question at a time, and the
+          decisions are applied by one command.
+        estimatedEffort: 4h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Guided review tests pass
+            command: uv
+            args: [run, pytest, tests/scripts, -k, seed_landscape]
+status:
+  phase: Pending

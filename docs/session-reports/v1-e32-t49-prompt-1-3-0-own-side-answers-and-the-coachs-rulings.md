@@ -517,6 +517,82 @@ ROWS=~/.debate-research/dev/landscape/local-classifier/hspolicy26/policy-2026-27
 if env | grep -q '^DEBATE_'; then echo "STOP: a DEBATE_ variable is set; unset it and paste again"; else uv run debate-research landscape evaluate --caselist hspolicy26 --snapshot 2026-10-20 --sample "$SAMPLE" --sample-rows "$ROWS" --breakdown --route deep_audit; fi
 ```
 
+## The re-record, as the operator returned it (2026-11-05)
+
+The operator ran the block above from this worktree and pasted the three JSON objects. They read the scan's
+hits in the terminal only and judged every one an ordinary word. **ac3 stays NOT RUN until the PM records
+it in docs/data**, as the criterion says. The figures below come from the pasted JSON. The comparison with
+1.2.0 uses the session's replay of 1.2.0's cassettes under this branch's scoring
+([How ac2 was shown](#how-ac2-was-shown)).
+
+**The recording and its scans:**
+
+* The sample check: `labelled` 47, `by_stance` answers 10 and reads 35, as 1.2.0 left it.
+* The recording: prompt 1.3.0 on `deep_audit` (Claude Sonnet 4.6), taxonomy 1.5.0; 47 found and asked in 3
+  calls, with no repair. 41,332 input and 4,737 output tokens: $0.195 at `config/model_pricing.yaml`'s
+  $0.003 and $0.015 per 1,000 (estimated about $0.20).
+* The scans:
+  * the prompt inputs: clean, 0 hits;
+  * the cassettes: 46 hits (41 a JSON key's name, 5 taxonomy words), none naming a team and none in the
+    cards sent. All 3 texts were set aside, so `clean` is true;
+  * no repair cassettes.
+
+**The score:**
+
+| Prompt, scored with the own-side rule | Pipeline (bar 0.85) | Below the threshold | Coverage |
+|---|---|---|---|
+| 1.2.0 (the session's replay of the kept cassettes) | 26 of 33, 0.788 | 14 | 0.702 |
+| **1.3.0 (this re-record)** | **24 of 32, 0.750** | 15 | 0.681 |
+
+* Outcomes under 1.3.0: correct 24, wrong stance 1 (row 57), wrong position of the same kind 3 (26, 45,
+  58), wrong kind 4 (5, 21, 40, 41), below the threshold 15.
+* The headings placed 4 cards (rows 11, 30, 31, 59), each naming the label.
+* Weighted by stratum: 0.655.
+
+**Where 1.3.0 differs from 1.2.0 under the same rule** (pipeline outcomes, row by row):
+
+| Row | Label | 1.2.0 | 1.3.0 |
+|---|---|---|---|
+| 47 | `costs-advantage` | wrong position, same kind | **correct** |
+| 15 | `none` | placed though labelled none | below the threshold (no longer counted wrong) |
+| 9 | `rates-da` | correct | below the threshold (0.50) |
+| 53 | `single-payer-t` | correct | below the threshold (0.55) |
+| 58 | `stagnation-advantage` | correct | wrong position, same kind (`costs-advantage`) |
+| 41 | `at:colonialism-k` | below the threshold | wrong kind (`kritikal-aff`, 0.62) |
+| 45 | `data-advantage` | below the threshold | wrong position, same kind (`bioterror-advantage`, 0.72) |
+| 26 | `at:cap-k` | wrong kind (`nhi-aff`) | wrong position, same kind (`at:generic-k`, 0.62) |
+
+Every other row has the same outcome.
+
+* Net: two rows gained, or one gained and one no longer counted wrong (47, 15). Five lost: two right
+  answers fell below the threshold (9, 53), one right answer turned wrong (58), and two answers that had been
+  below the threshold became wrong ones (41, 45).
+* One card moves the score about three points. A difference of this size between two recordings is within
+  what the sample can tell apart: the 95% interval on 24 of 32 runs from about 0.58 to 0.87 (Wilson).
+
+**The coach's rulings (b):** none of the rows they aim at turned right.
+
+* Row 5 is still `pharma-da`, and rows 21 and 40 are still `at:should-t`.
+* Row 34 is still `at:economy-da`, below the threshold.
+* Row 26 left the affirmative's own case (`nhi-aff`) and now has the stance right, but the position is
+  `generic-k`.
+* Row 28 is right on both.
+
+**The PM's condition on the generic-confidence clause (ruling 2).** `breakdown.generic_answers`:
+
+| Answers naming a generic position | Above the threshold | Right | Wrong | Named-label rows |
+|---|---|---|---|---|
+| 4 (rows 16, 26, 37, 46) | 1 (row 26, 0.62) | 0 | 1 | 26 |
+
+* The generic answers above the threshold are wrong more often than right (0 to 1). **By the ruling, the
+  clause comes out in a 1.3.1 follow-up**, not in this task.
+* Rows 12 and 55 (`cap-k`) stayed right.
+* The one named-label row is 26: an `at:cap-k` card answered `at:generic-k`, the risk the PM named.
+* On the three `generic-k` rows, neither the clause nor the framework bullet changed the outcome:
+  * row 46 is answered `generic-k`, the right position, but at 0.55, still below the threshold;
+  * row 50 is still `framework-t` (0.55);
+  * row 60 is still `cap-k` (0.50).
+
 ## Follow-up work
 
 * **The analytic texts' roles.** `analytic_texts.py` places overviews, CP texts and alternatives with

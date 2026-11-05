@@ -561,7 +561,9 @@ async def test_the_bar_reads_a_cassette_scan_whose_every_hit_is_a_json_key_or_a_
 
 
 @pytest.mark.anyio
-async def test_the_bar_reads_a_cassette_scan_with_one_unmarked_hit_as_unclean(prompts: PromptRegistry) -> None:
+async def test_the_bar_reads_a_cassette_scan_with_one_unmarked_hit_as_unclean(
+    prompts: PromptRegistry,
+) -> None:
     result = await marked_evaluation(prompts, [MARKED_ONLY, '{"rationale": "the KL team of Maple Grove"}'])
 
     scan = result.cassettes
@@ -575,7 +577,8 @@ async def test_the_bar_reads_a_cassette_scan_with_one_unmarked_hit_as_unclean(pr
 async def test_the_bar_reads_a_taxonomy_word_a_repair_cassettes_repaired_prompt_sent_as_unclean(
     prompts: PromptRegistry,
 ) -> None:
-    """The repaired prompt is what the failed call sent: its words are the cards', so no mark sets them aside."""
+    """The repaired prompt is what the failed call sent: its words are the cards', and no mark sets them
+    aside."""
     result = await marked_evaluation(
         prompts, [MARKED_ONLY], (repair_cassette(CLASSIFY_POSITION_VERSION, "a card read ab initio"),)
     )

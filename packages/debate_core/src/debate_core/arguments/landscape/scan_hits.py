@@ -444,7 +444,7 @@ def marked_scan(
             continue
         hits = hits_of(text)
         counted = {kind for count, kind in _SCAN_KINDS if getattr(scan, count)}
-        if hits and counted <= {hit.kind for hit in hits} and all(map(sets_aside, hits)):
+        if counted <= {hit.kind for hit in hits} and all(map(sets_aside, hits)):
             set_aside["texts"] += 1
             set_aside["hits"] += len(hits)
             for mark in MARKS_THAT_SET_A_HIT_ASIDE:

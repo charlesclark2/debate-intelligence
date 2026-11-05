@@ -19,7 +19,7 @@ from collections.abc import Sequence
 
 import pytest
 
-from debate_core.arguments.landscape.model_stage import name_scan, prompt_variables
+from debate_core.arguments.landscape.model_stage import NameScan, name_scan, prompt_variables
 from debate_core.arguments.landscape.scan_hits import (
     MARKS,
     MARKS_THAT_KEEP_A_HIT,
@@ -202,6 +202,13 @@ def test_scan_of_a_named_text_whose_hits_cover_only_some_kinds_is_not_clean() ->
     scan = marked_scan([MARKED_ONLY], school_hits_only, CASELIST_NAMES, TOURNAMENTS, leave_out=(POSITIONS,))
 
     assert not scan.clean
+
+
+def test_scan_not_judged_by_marks_is_unclean_with_any_count() -> None:
+    """A scan built without its hits' marks keeps the rule before `v1-e32-t44`: any count is unclean."""
+    assert not NameScan(texts=1, schools=1).clean
+    assert not NameScan(texts=1, other_names=1, set_aside={"texts": 1}).clean
+    assert NameScan(texts=1).clean
 
 
 def test_scan_of_texts_naming_nothing_is_clean_and_sets_nothing_aside() -> None:

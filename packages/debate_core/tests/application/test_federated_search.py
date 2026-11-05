@@ -6,7 +6,9 @@ that costs no real time, and the deadlines asyncio enforces (the providers' own 
 search's overall deadline) fire at their virtual instant. The service reads time through
 :class:`~debate_core.testing.virtual_time.EventLoopClock`, the `Clock` port over that same loop
 clock, so its recorded times and elapsed milliseconds agree with the deadlines. No test here sleeps
-for real; the timing tests also assert that they took under 100 ms of wall-clock time.
+for real; the timing tests also assert that the loop only ever asked the real selector beneath it to
+poll, so nothing really waited (`selector_polls`; until v1-e07-t16 a bound of 100 ms of wall-clock time,
+which a busy runner could break).
 
 Expected values are written out by hand from the fakes beside them (working agreement 6).
 """
@@ -14,7 +16,6 @@ Expected values are written out by hand from the fakes beside them (working agre
 from __future__ import annotations
 
 import asyncio
-import time
 from collections.abc import Callable, Sequence
 from datetime import timedelta
 from pathlib import Path
@@ -67,8 +68,7 @@ from debate_core.testing.fakes.persistence import InMemorySearchRepository
 from debate_core.testing.fakes.providers import FakeSearchProvider
 from debate_core.testing.virtual_time import EventLoopClock, run_in_virtual_time
 
-#: The most wall-clock time a test about seconds of provider latency may take.
-REAL_TIME_BUDGET_SECONDS = 0.1
+from ..testing.selector_polls import assert_only_polled, real_selector_timeouts
 
 FIRST_SEARCH_ID = "0SRCH000000000000000000001"
 
@@ -612,14 +612,13 @@ def test_fan_out_takes_as_long_as_the_slowest_provider_not_the_sum_of_them() -> 
     )
     service = service_over(providers, deadline_seconds=15.0)
 
-    started = time.perf_counter()
-    outcome = run_in_virtual_time(service.search(REQUEST))
-    real_seconds = time.perf_counter() - started
+    with real_selector_timeouts() as asked:
+        outcome = run_in_virtual_time(service.search(REQUEST))
 
     assert outcome.search.updated_at - outcome.search.created_at == timedelta(seconds=5)
     assert [status.elapsed_ms for status in outcome.provider_statuses] == [3000.0, 4000.0, 5000.0]
     assert outcome.status is SearchStatus.COMPLETE
-    assert real_seconds < REAL_TIME_BUDGET_SECONDS
+    assert_only_polled(asked)
 
 
 def test_fan_out_cuts_off_a_provider_still_running_at_the_deadline_and_keeps_the_others() -> None:
@@ -630,9 +629,8 @@ def test_fan_out_cuts_off_a_provider_still_running_at_the_deadline_and_keeps_the
     )
     service = service_over(providers, deadline_seconds=8.0)
 
-    started = time.perf_counter()
-    outcome = run_in_virtual_time(service.search(REQUEST))
-    real_seconds = time.perf_counter() - started
+    with real_selector_timeouts() as asked:
+        outcome = run_in_virtual_time(service.search(REQUEST))
 
     assert outcome.search.updated_at - outcome.search.created_at == timedelta(seconds=8)
     assert outcomes(outcome.provider_statuses) == [
@@ -644,15 +642,14 @@ def test_fan_out_cuts_off_a_provider_still_running_at_the_deadline_and_keeps_the
     assert cut_off.elapsed_ms == 8000.0
     assert outcome.candidates == (METHANE,)
     assert outcome.status is SearchStatus.PARTIAL
-    assert real_seconds < REAL_TIME_BUDGET_SECONDS
+    assert_only_polled(asked)
 
 
 def test_fan_out_with_every_provider_past_the_deadline_fails_at_the_deadline() -> None:
     providers = ProvidersOnHand(SlowProvider("openalex", 40.0), SlowProvider("crossref", 50.0))
 
-    started = time.perf_counter()
-    outcome = run_in_virtual_time(service_over(providers, deadline_seconds=12.0).search(REQUEST))
-    real_seconds = time.perf_counter() - started
+    with real_selector_timeouts() as asked:
+        outcome = run_in_virtual_time(service_over(providers, deadline_seconds=12.0).search(REQUEST))
 
     assert outcome.search.updated_at - outcome.search.created_at == timedelta(seconds=12)
     assert outcomes(outcome.provider_statuses) == [
@@ -660,7 +657,7 @@ def test_fan_out_with_every_provider_past_the_deadline_fails_at_the_deadline() -
         ("crossref", ProviderOutcome.TIMEOUT),
     ]
     assert outcome.status is SearchStatus.FAILED
-    assert real_seconds < REAL_TIME_BUDGET_SECONDS
+    assert_only_polled(asked)
 
 
 def test_fan_out_refuses_a_deadline_that_is_not_positive() -> None:

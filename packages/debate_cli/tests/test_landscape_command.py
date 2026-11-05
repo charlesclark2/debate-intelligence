@@ -74,6 +74,7 @@ from debate_core.arguments.landscape.evaluation_breakdown import (
 from debate_core.arguments.landscape.model_stage import DEFAULT_BATCH_SIZE, NameScan
 from debate_core.arguments.landscape.queue_order import QueueOrderModel
 from debate_core.arguments.landscape.scan_hits import HitField, HitKind, ScanHit
+from debate_core.domain.landscape_classification import Stance
 from debate_core.domain.model_contracts import ModelParams, ModelPrompt, ModelResponse, TaskClass
 from debate_core.integrations.docx_parser import DebateDocxParser
 from debate_core.integrations.landscape.classification_store import queue_order_model_path, review_queue_path
@@ -2713,6 +2714,7 @@ def test_evaluate_check_sample_counts_the_rows_by_label_kind_and_asks_no_model(
         "labelled": 4,
         "by_label_kind": {"advantage": 1, "cp": 1, "da": 1, "none": 1},
         "second_labels": {"rows": 2, "by_kind": {"aff": 1, "da": 1}},
+        "by_stance": {"answers": 0, "reads": 3},
     }
 
 
@@ -2740,8 +2742,86 @@ def test_evaluate_check_sample_displays_its_counts(
     assert result.exit_code == ExitCode.OK, result.output
     assert (
         f"The coach's sample reads against {SYNTHETIC_RUN_TOPIC} 1.0.0 ({CASELIST}, snapshot 2026-09-15): "
-        "2 labelled row(s); by the label's kind: cp 1, none 1. Second labels: 0. No model was asked."
+        "2 labelled row(s); by the label's kind: cp 1, none 1; by the label's stance: answers 0, reads 1. "
+        "Second labels: 0. No model was asked."
     ) in _flat(result.stdout)
+
+
+# v1-e32-t46: a label written `at:<id>` answers the position; `--check-sample` counts the stances.
+
+
+def test_evaluate_check_sample_counts_the_rows_by_their_labels_stance(
+    world: SyntheticRun, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _asks_nothing(monkeypatch)
+    files = _sample(
+        tmp_path,
+        "sample_row,position,also\n1,at:states-cp,\n2,spending-da,at:spending-da\n3,none,\n"
+        "4,AT:costs-advantage,\n",
+    )
+
+    result = _check_sample(world, files, "--check-sample")
+
+    assert result.exit_code == ExitCode.OK, result.output
+    data = json.loads(result.stdout)["data"]
+    assert data["by_stance"] == {"answers": 2, "reads": 1}
+    assert data["by_label_kind"] == {"advantage": 1, "cp": 1, "da": 1, "none": 1}
+    assert data["second_labels"] == {"rows": 1, "by_kind": {"da": 1}}
+
+
+@pytest.mark.parametrize("cell", ["at:none", "at:", "at:made-up-cp"])
+def test_evaluate_check_sample_refuses_a_stance_label_naming_nothing_by_its_row(
+    world: SyntheticRun, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, cell: str
+) -> None:
+    _asks_nothing(monkeypatch)
+
+    result = _check_sample(world, _sample(tmp_path, f"sample_row,position\n1,states-cp\n2,{cell}\n"), "--check-sample")
+
+    assert result.exit_code == ExitCode.DOMAIN_FAILURE, result.output
+    error = _error(result)
+    assert error["code"] == "EVALUATION_REFUSED"
+    assert "row 2" in error["message"]
+    assert "made-up" not in error["message"]
+
+
+def test_evaluate_breakdown_gives_each_card_its_stances_and_counts_wrong_stances(
+    world: SyntheticRun, sample_files: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """v1-e32-t46: card 1 answers its label's position with the other stance; card 2's label answers."""
+    original = _broken_down()
+    first, second, third = original.cards
+    sure = DeterministicPlacement(
+        position_id="states-cp", method="ALIAS", confidence=1.0, sent_to_model=False, stance=Stance.ANSWERS
+    )
+    cards = (
+        dataclasses.replace(
+            first,
+            outcome=CardOutcome.WRONG_STANCE,
+            stance=Stance.ANSWERS,
+            answer_stance=Stance.READS,
+            deterministic=sure,
+        ),
+        dataclasses.replace(second, stance=Stance.ANSWERS, answer_stance=Stance.READS),
+        third,
+    )
+    _stub_breakdown(monkeypatch, dataclasses.replace(original, cards=cards))
+
+    result = _breakdown(world, sample_files, "--json")
+
+    breakdown = _error(result)["details"]["breakdown"]
+    assert breakdown["outcomes"]["wrong_stance"] == 1
+    card = breakdown["cards"][0]
+    assert (card["outcome"], card["stance"], card["also_stance"], card["answer_stance"]) == (
+        "wrong_stance",
+        "answers",
+        "reads",
+        "reads",
+    )
+    assert card["deterministic"]["stance"] == "answers"
+    assert breakdown["cards"][2]["answer_stance"] is None
+    assert {"label": "at:spending-da", "answer": "spending-da", "cards": 1} in breakdown["confusion"]
+    shown = _flat(_breakdown(world, sample_files).stdout)
+    assert "row 1, None: at:spending-da (da) -> wrong_stance, spending-da 0.90" in shown
 
 
 @pytest.mark.parametrize(

@@ -24,7 +24,9 @@ version it was placed under.
 * **What a model may say.** `v1-e32-t07` asks a model about a batch of cards and holds its answer to
   :class:`ModelPositionAnswers`: per card, the batch's own item label, a position id or none, a
   confidence and a short rationale. Nothing else: no role (that comes from the headings, as the
-  matcher's), and no tag, cite or evidence text. The id is any short text here, so that one unknown id
+  matcher's), and no tag, cite or evidence text. From prompt 1.2.0 (`v1-e32-t46`) the answer is a
+  :class:`ModelStancedPositionAnswers`, each answer with a :class:`Stance` too, and the stance sets the
+  role instead of the headings. The id is any short text here, so that one unknown id
   sends its card to the review queue rather than failing the batch; the stage checks every accepted
   answer with :func:`checked_against`.
 * **No method, no position.** An item nothing placed has `method` None, `position_id` None and
@@ -79,9 +81,12 @@ __all__ = [
     "ItemKind",
     "ModelPositionAnswer",
     "ModelPositionAnswers",
+    "ModelStancedPositionAnswer",
+    "ModelStancedPositionAnswers",
     "OverrideRules",
     "PositionClassification",
     "PositionRole",
+    "Stance",
     "card_item_id",
     "checked_against",
     "classification_schema",
@@ -323,9 +328,41 @@ class ModelPositionAnswer(DomainModel):
 
 
 class ModelPositionAnswers(DomainModel):
-    """`landscape.classify_position`'s output schema: one answer per card of the batch."""
+    """`landscape.classify_position`'s output schema to 1.1.0: one answer per card of the batch."""
 
     answers: tuple[ModelPositionAnswer, ...] = Field(
+        description="Exactly one answer for every item of the request, in any order."
+    )
+
+
+class Stance(StrEnum):
+    """Whether a card reads a position or answers it (`v1-e32-t46`): the coach's label, written `at:<id>` for
+    an answer, and from prompt 1.2.0 the model's answer."""
+
+    READS = "reads"
+    """The card makes the position's own argument."""
+
+    ANSWERS = "answers"
+    """The other side reads the card against the position."""
+
+
+class ModelStancedPositionAnswer(ModelPositionAnswer):
+    """An answer of prompt 1.2.0 on: today's, and whether the card reads the position or answers it."""
+
+    stance: Stance = Field(
+        description="reads when the card makes the position's own argument; answers when the other side "
+        "reads it against the position."
+    )
+
+
+class ModelStancedPositionAnswers(ModelPositionAnswers):
+    """`landscape.classify_position`'s output schema from 1.2.0 (`v1-e32-t46`): each answer with its stance.
+
+    1.0.0 and 1.1.0 keep :class:`ModelPositionAnswers`, so their recorded answers validate and replay as
+    recorded; the schema's path is part of every cassette key.
+    """
+
+    answers: tuple[ModelStancedPositionAnswer, ...] = Field(  # pyright: ignore[reportIncompatibleVariableOverride]
         description="Exactly one answer for every item of the request, in any order."
     )
 

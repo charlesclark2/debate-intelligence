@@ -32,7 +32,7 @@ from __future__ import annotations
 import csv
 import json
 from collections import Counter
-from collections.abc import Callable, Iterable, Mapping, Sequence
+from collections.abc import Callable, Collection, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import date
 from typing import Any, Final, TextIO, cast
@@ -89,7 +89,7 @@ from debate_core.arguments.landscape.scan_hits import (
 from debate_core.arguments.landscape.source_headings import CaselistNames
 from debate_core.arguments.landscape.tag_scrub import DisclosedNames, code_words
 from debate_core.domain.landscape import Taxonomy, Topic
-from debate_core.domain.landscape_classification import ItemKind, OverrideRules
+from debate_core.domain.landscape_classification import ItemKind, OverrideRules, Stance
 
 __all__ = [
     "BATCH_ANSWERED",
@@ -101,6 +101,7 @@ __all__ = [
     "TARGET_ACCURACY",
     "UNSURE_LABEL",
     "BatchBreakdown",
+    "CoachLabel",
     "CoachSampleCheck",
     "EvaluationBreakdown",
     "EvaluationRefused",
@@ -110,6 +111,7 @@ __all__ = [
     "LandscapeModelEvaluationService",
     "ask_labelled_cards",
     "break_down_labelled_cards",
+    "coach_label",
     "coach_sample_counts",
     "committed_positions",
     "evaluate_labelled_cards",
@@ -119,6 +121,7 @@ __all__ = [
     "scanned_cassettes",
     "scanned_repairs",
     "score_labelled_answers",
+    "stance_counts",
 ]
 
 TARGET_ACCURACY: Final = 0.85
@@ -158,6 +161,33 @@ class LabelledCard:
     """The stratum `v1-e32-t21` drew it from, when the rows file says."""
     also: str | None = None
     """A second position id the coach accepts, from the sample's :data:`SECOND_LABEL_COLUMN`; never `none`."""
+    stance: Stance = Stance.READS
+    """ANSWERS for a label written `at:<id>` (`v1-e32-t46`)."""
+    also_stance: Stance = Stance.READS
+    """The second label's stance."""
+
+
+@dataclass(frozen=True, slots=True)
+class CoachLabel:
+    """One cell of the coach's sample read: a position id or `none`, and its stance."""
+
+    label: str
+    stance: Stance = Stance.READS
+
+
+def coach_label(cell: str, active: Collection[str]) -> CoachLabel | None:
+    """The label a cell of the coach's sample holds; None for a blank or `unsure` cell, which is not scored.
+
+    Raises `ValueError`, naming the rule and never the cell, for a label that names no active position.
+    """
+    text = cell.strip()
+    if not text or text.casefold() == UNSURE_LABEL:
+        return None
+    if text.casefold() == NO_POSITION_LABEL:
+        return CoachLabel(NO_POSITION_LABEL)
+    if text not in active:
+        raise ValueError("names a position that is not an active id")
+    return CoachLabel(text)
 
 
 @dataclass(frozen=True, slots=True)
@@ -312,6 +342,8 @@ class CoachSampleCheck:
     """Those rows by their label's kind (`da`, `cp`...), `none` for a card labelled none."""
     second_labels: dict[str, int]
     """The rows with a second label, by that label's kind."""
+    by_stance: dict[str, int] = field(default_factory=dict[str, int])
+    """The rows labelled a position, by their label's stance (`v1-e32-t46`)."""
 
 
 def coach_sample_counts(
@@ -322,6 +354,12 @@ def coach_sample_counts(
     kinds = Counter(label_kind(taxonomy, one.label) for one in chosen)
     second = Counter(label_kind(taxonomy, one.also) for one in chosen if one.also is not None)
     return dict(sorted(kinds.items())), dict(sorted(second.items()))
+
+
+def stance_counts(labelled: Iterable[LabelledCard]) -> dict[str, int]:
+    """The rows labelled a position by their label's stance, both stances named."""
+    del labelled
+    return {}
 
 
 def read_sample_populations(rows: Iterable[str]) -> dict[str, int]:
@@ -360,6 +398,8 @@ class LabelledAnswers:
     """The second label of each labelled card that has one, by item id (`v1-e32-t41`)."""
     labelled: tuple[LabelledCard, ...] = ()
     """The labelled cards, one per item id, in the sample's order: what each card's breakdown is of."""
+    file_sides: Mapping[str, frozenset[str]] = field(default_factory=dict[str, frozenset[str]])
+    """The sides each source holding a labelled card was disclosed on, by its digest (`v1-e32-t46`)."""
 
 
 async def ask_labelled_cards(

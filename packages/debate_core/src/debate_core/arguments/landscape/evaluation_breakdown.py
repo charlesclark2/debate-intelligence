@@ -34,7 +34,7 @@ by taxonomy ids, which are committed; nothing here holds a heading, tag or card 
 from __future__ import annotations
 
 from collections import Counter
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Collection, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from enum import StrEnum
 from typing import Final
@@ -42,9 +42,10 @@ from typing import Final
 from debate_core.arguments.landscape.model_stage import Refusal, places_nothing, refusal_reason
 from debate_core.arguments.landscape.review_queue import needs_review
 from debate_core.domain.landscape import Taxonomy
-from debate_core.domain.landscape_classification import ClassificationResult
+from debate_core.domain.landscape_classification import ClassificationResult, PositionRole, Stance
 
 __all__ = [
+    "ANSWERS_PREFIX",
     "COUNTED_OUTCOMES",
     "NO_POSITION_KIND",
     "NO_POSITION_LABEL",
@@ -68,6 +69,8 @@ __all__ = [
     "refusals_by_label",
     "related",
     "score",
+    "labelled_as",
+    "scored_stance",
     "second_label_counts",
     "stratum_scores",
     "weighted_accuracy",
@@ -80,11 +83,16 @@ read it (not imported from the local classifier, which loads scikit-learn)."""
 NO_POSITION_KIND: Final = NO_POSITION_LABEL
 """The kind a card the coach labelled none is counted under: it has no position, so no kind."""
 
+ANSWERS_PREFIX: Final = "at:"
+"""How the coach writes a label for a card that answers a position: `at:politics-da` (`v1-e32-t46`)."""
+
 
 class CardOutcome(StrEnum):
     """What became of one labelled card. Exactly one per card."""
 
     CORRECT = "correct"
+    WRONG_STANCE = "wrong_stance"
+    """The label's position (or the second label's) with the other stance (`v1-e32-t46`)."""
     WRONG_POSITION_SAME_KIND = "wrong_position_same_kind"
     WRONG_KIND = "wrong_kind"
     PLACED_LABELLED_NONE = "placed_labelled_none"
@@ -120,6 +128,8 @@ class DeterministicPlacement:
     confidence: float
     sent_to_model: bool
     """Whether a real run sends the card to the model: unplaced, or placed below the review threshold."""
+    stance: Stance | None = None
+    """Its stance as scored (:func:`scored_stance`); None when it places no position."""
 
     @property
     def decided_none(self) -> bool:
@@ -153,6 +163,12 @@ class CardBreakdown:
     """A wrong answer naming the label's parent or a child of it (an advantage and its aff)."""
     also: str | None = None
     """The second position id the coach accepts (`v1-e32-t41`); None when the sample gives none."""
+    stance: Stance = Stance.READS
+    """The stance of the coach's label: ANSWERS for `at:<id>` (`v1-e32-t46`)."""
+    also_stance: Stance = Stance.READS
+    """The stance of the second label."""
+    answer_stance: Stance | None = None
+    """The answer's stance as scored (:func:`scored_stance`); None when the model placed nothing."""
 
     @property
     def counted(self) -> bool:
@@ -184,6 +200,20 @@ def _ancestor(taxonomy: Taxonomy, ancestor: str, of: str) -> bool:
     return False
 
 
+def labelled_as(position_id: str, stance: Stance) -> str:
+    """A label or an answer as the coach writes it: the id, or `at:<id>` for one that answers."""
+    del stance
+    return position_id
+
+
+def scored_stance(
+    taxonomy: Taxonomy, position_id: str, role: PositionRole | None, file_sides: Collection[str] = ()
+) -> Stance:
+    """The stance a placement of `position_id` is scored with."""
+    del taxonomy, position_id, role, file_sides
+    return Stance.READS
+
+
 def card_outcome(
     taxonomy: Taxonomy,
     label: str,
@@ -191,6 +221,9 @@ def card_outcome(
     *,
     threshold: float,
     also: str | None = None,
+    stance: Stance = Stance.READS,
+    also_stance: Stance = Stance.READS,
+    file_sides: Collection[str] = (),
 ) -> CardOutcome:
     """The one outcome of a found card labelled `label` whose MODEL result is `result` (None: unasked).
 

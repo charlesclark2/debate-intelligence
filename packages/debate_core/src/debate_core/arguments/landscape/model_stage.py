@@ -86,6 +86,7 @@ __all__ = [
     "NameScan",
     "Refusal",
     "answer_problems",
+    "answer_schema",
     "batches",
     "bounded_words",
     "echoes",
@@ -313,6 +314,12 @@ def echoes(rationale: str, text: str | None, run: int = ECHO_WORDS) -> bool:
         return False
     runs = {tuple(source[start : start + run]) for start in range(len(source) - run + 1)}
     return any(tuple(said[start : start + run]) in runs for start in range(len(said) - run + 1))
+
+
+def answer_schema(prompt_version: str) -> type[ModelPositionAnswers]:
+    """The output schema `landscape.classify_position` at `prompt_version` answers in."""
+    del prompt_version
+    return ModelPositionAnswers
 
 
 def judge(

@@ -44,7 +44,7 @@ spec:
         shown by repeated runs at both profiles; any other test waiting on a real pace or
         deadline is fixed or named for the PM.
 status:
-  phase: InProgress
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

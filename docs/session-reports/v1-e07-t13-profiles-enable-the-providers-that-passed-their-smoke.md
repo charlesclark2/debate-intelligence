@@ -184,6 +184,35 @@ session. The only values used were invented ones in tests and in the measurement
    `packages/debate_cli/README.md`, which is inside the `debate_cli` package constraint, so that is
    where the update went. `v1-e08-t15`'s spec also names "the search guide" with `docs/guides` and
    will meet the same gap.
+3. **A smoke test outside the task's packages changed** (after the first CI run, below).
+   `tests/smoke/test_search_smoke.py` is not in `constraints.packages`, but the profile change broke
+   it, so it had to change with it.
+
+## After the first CI run (2026-11-05)
+
+The pull request's `ci` failed in `test (3)` and `test (4)`. Only the statuses were pasted, so I
+looked for the failures locally, starting with the affected files the pre-report run never reached.
+
+* **Found and fixed:** `tests/smoke/test_search_smoke.py::test_a_topic_alone_names_the_government_providers_it_could_not_ask`.
+  The offline smoke tier may never reach a provider, so this check searched with
+  `--providers federal_register,govinfo`, which the dev profile used to leave off: exit 1,
+  `NO_PROVIDER_ENABLED`. With both now enabled, the keyless Federal Register tried a real request.
+  The network guard refused it, so the search failed with exit 3, and the harness errored the test at
+  teardown (`NetworkAttempted`). The pre-report affected run had stopped at 54% before reaching it.
+  The test now asks `govinfo` alone (`76cd2e8`). With no key in the run's scratch environment, GovInfo
+  is `not configured` and nothing is sent. The test pins the reason, `no api.data.gov key
+  (DEBATE_PROVIDERS__API_DATA_GOV_KEY)`, which the build reports only when its own profile enables
+  GovInfo. On the pre-task profiles the same test fails at that assertion, because the reason is then
+  `not enabled in settings (providers.enabled)`. The Federal Register cannot be searched in this
+  tier, since it needs no key and would leave the machine. The tests in `test_search_command.py`
+  cover it over recorded answers.
+* **Runs since:** `tests/smoke/test_search_smoke.py` `7 passed in 3.80s`. The other likely files
+  passed: `1 failed` (the test above), `594 passed` over the e2e suites, `test_launchd_install.py`,
+  `test_check_stable_release.py`, the store and landscape smoke files, `test_government.py`,
+  `test_output.py` and the rest of that run. The remaining 28 smoke files reached 90% at the
+  115-second limit with no failure mark, at a load average near 20.
+* **Not yet known:** whether the second failing part holds a different failure. If the next `ci` run
+  still fails, the failing part's output is needed.
 
 ## Decisions and assumptions
 

@@ -76,7 +76,6 @@ from debate_core.arguments.landscape.matcher import MatchItem, PositionMatcher, 
 from debate_core.arguments.landscape.model_stage import (
     ModelCandidate,
     NameScan,
-    name_scan,
     places_nothing,
     prompt_variables,
     refusal_reason,
@@ -87,6 +86,7 @@ from debate_core.arguments.landscape.scan_hits import (
     ScanNames,
     cassette_hits,
     input_batch_hits,
+    marked_scan,
     repair_cassette_hits,
 )
 from debate_core.arguments.landscape.source_headings import CaselistNames
@@ -530,6 +530,7 @@ def score_labelled_answers(
     labels, outcome = asked.labels, asked.outcome
     cards = labelled_card_breakdowns(asked, taxonomy, overrides, threshold=review_threshold)
     committed = committed_positions(taxonomy)
+    names = ScanNames.of(reading.caselist_names, asked.tournaments, taxonomy_text=committed)
     alone = model_alone_score(cards)
     labelled_none = sum(card.outcome is CardOutcome.PLACED_LABELLED_NONE for card in cards)
     refused = Counter(outcome.refused)
@@ -551,15 +552,22 @@ def score_labelled_answers(
         refused=dict(sorted(refused.items())),
         input_tokens=outcome.input_tokens,
         output_tokens=outcome.output_tokens,
-        sent=name_scan(outcome.sent_inputs, reading.caselist_names, asked.tournaments),
-        cassettes=name_scan(
+        sent=marked_scan(
+            outcome.sent_inputs,
+            lambda text: input_batch_hits("input batch", text, names),
+            reading.caselist_names,
+            asked.tournaments,
+        ),
+        cassettes=marked_scan(
             scanned_cassettes(cassettes, prompt_version),
+            lambda text: cassette_hits("cassette", text, names),
             reading.caselist_names,
             asked.tournaments,
             leave_out=(committed,),
         ),
-        repair_cassettes=name_scan(
+        repair_cassettes=marked_scan(
             scanned_repairs(repair_cassettes, reading.caselist, prompt_version),
+            lambda text: repair_cassette_hits("repair cassette", text, names),
             reading.caselist_names,
             asked.tournaments,
             leave_out=(committed,),

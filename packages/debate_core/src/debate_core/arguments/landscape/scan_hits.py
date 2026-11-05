@@ -26,16 +26,19 @@ import contextlib
 import dataclasses
 import json
 from collections import Counter
-from collections.abc import Collection, Iterable, Iterator, Mapping, Sequence
+from collections.abc import Callable, Collection, Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Final, cast
 
 from debate_core.arguments.landscape.matcher import tag_words
-from debate_core.arguments.landscape.model_stage import json_values, scanned_values
+from debate_core.arguments.landscape.model_stage import NameScan, json_values, name_scan, scanned_values
 
 __all__ = [
     "CONTEXT_WORDS",
+    "MARKS",
+    "MARKS_THAT_KEEP_A_HIT",
+    "MARKS_THAT_SET_A_HIT_ASIDE",
     "HitField",
     "HitKind",
     "ScanHit",
@@ -44,11 +47,26 @@ __all__ = [
     "hit_counts",
     "input_batch_hits",
     "mark_counts",
+    "marked_scan",
     "repair_cassette_hits",
+    "sets_aside",
 ]
 
 CONTEXT_WORDS: Final = 4
 """Words shown either side of a hit."""
+
+MARKS: Final = ("team_name", "in_taxonomy", "json_key", "in_input")
+"""Every mark a :class:`ScanHit` carries, as :func:`mark_counts` counts them."""
+
+MARKS_THAT_SET_A_HIT_ASIDE: Final = ("json_key", "in_taxonomy")
+"""The marks the scan's `clean` trusts (`v1-e32-t44`, the PM's ruling of 2026-11-05), and the one place
+they are named: a hit carrying one of them, and neither of :data:`MARKS_THAT_KEEP_A_HIT`, is ordinary words
+(a JSON key's name, a word of the committed taxonomy), and a text whose every hit is so set aside is clean.
+A mark added to :class:`ScanHit` later sets no hit aside until a PM-reviewed change adds it here."""
+
+MARKS_THAT_KEEP_A_HIT: Final = ("team_name", "in_input")
+"""The marks that keep a hit counting toward `clean` whatever else it carries: a tournament hit that is a
+team's name, and words the text's own cards sent (copied from a card)."""
 
 
 class HitKind(StrEnum):
@@ -370,7 +388,7 @@ def mark_counts(hits: Iterable[ScanHit]) -> dict[str, dict[str, int]]:
     for hit in hits:
         marks = found.setdefault(hit.where.value, Counter())
         marks["hits"] += 1
-        for name in ("team_name", "in_taxonomy", "json_key", "in_input"):
+        for name in MARKS:
             marks[name] += getattr(hit, name)
     return {where: dict(marks) for where, marks in sorted(found.items())}
 
@@ -381,3 +399,63 @@ def hit_counts(hits: Iterable[ScanHit]) -> dict[str, dict[str, int]]:
     for hit in hits:
         found.setdefault(hit.kind.value, Counter())[hit.where.value] += 1
     return {kind: dict(sorted(fields.items())) for kind, fields in sorted(found.items())}
+
+
+def sets_aside(hit: ScanHit) -> bool:
+    """Whether the scan's `clean` sets `hit` aside (`v1-e32-t44`): it carries a mark of
+    :data:`MARKS_THAT_SET_A_HIT_ASIDE` and none of :data:`MARKS_THAT_KEEP_A_HIT`."""
+    return any(getattr(hit, mark) for mark in MARKS_THAT_SET_A_HIT_ASIDE) and not any(
+        getattr(hit, mark) for mark in MARKS_THAT_KEEP_A_HIT
+    )
+
+
+_SCAN_KINDS: Final = (
+    ("schools", HitKind.SCHOOL),
+    ("team_codes", HitKind.TEAM_CODE),
+    ("other_names", HitKind.TOURNAMENT),
+)
+"""Each count of a :class:`NameScan`, and the kind of hit that answers for it."""
+
+
+def marked_scan(
+    texts: Iterable[str],
+    hits_of: Callable[[str], Sequence[ScanHit]],
+    caselist_names: Mapping[str, Sequence[str]],
+    other_names: Iterable[str] = (),
+    *,
+    leave_out: Collection[str] = (),
+) -> NameScan:
+    """:func:`~debate_core.arguments.landscape.model_stage.name_scan` of `texts`, judged by its hits' marks
+    (`v1-e32-t44`, the PM's rulings of 2026-11-05).
+
+    The counts are the scan's, text by text, exactly as `name_scan` counts them. A text the scan names is
+    set aside, and leaves the scan clean, when `hits_of` (the listing of :func:`input_batch_hits`,
+    :func:`cassette_hits` or :func:`repair_cassette_hits`) gives it a hit of every kind the scan counted in
+    it and :func:`sets_aside` every one of them. Any other named text is left: a hit with no trusted mark,
+    a team's name, words its cards sent, or a count no listed hit answers for. `set_aside` counts what was
+    set aside: the texts, their hits, and those hits by trusted mark (a hit may carry both).
+    """
+    listed, others = list(texts), tuple(other_names)
+    scans = [name_scan([text], caselist_names, others, leave_out=leave_out) for text in listed]
+    set_aside: Counter[str] = Counter({"texts": 0, "hits": 0, **dict.fromkeys(MARKS_THAT_SET_A_HIT_ASIDE, 0)})
+    left = 0
+    for text, scan in zip(listed, scans, strict=True):
+        if not scan.named:
+            continue
+        hits = hits_of(text)
+        counted = {kind for count, kind in _SCAN_KINDS if getattr(scan, count)}
+        if hits and counted <= {hit.kind for hit in hits} and all(map(sets_aside, hits)):
+            set_aside["texts"] += 1
+            set_aside["hits"] += len(hits)
+            for mark in MARKS_THAT_SET_A_HIT_ASIDE:
+                set_aside[mark] += sum(getattr(hit, mark) for hit in hits)
+        else:
+            left += 1
+    return NameScan(
+        texts=len(scans),
+        schools=sum(one.schools for one in scans),
+        team_codes=sum(one.team_codes for one in scans),
+        other_names=sum(one.other_names for one in scans),
+        texts_left=left,
+        set_aside=dict(set_aside),
+    )

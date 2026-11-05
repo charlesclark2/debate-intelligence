@@ -20,6 +20,7 @@ from pydantic import BaseModel
 from debate_core.application.errors import ProviderError, ProviderRateLimited
 from debate_core.application.landscape_model_evaluation import (
     EvaluationRefused,
+    FormatEvaluation,
     LabelledCard,
     evaluate_labelled_cards,
     read_coach_sample,
@@ -515,6 +516,73 @@ async def test_the_scan_finds_a_school_a_team_code_and_a_tournament_in_a_cassett
     assert result.cassettes.other_names == 1
     assert not result.cassettes.clean
     assert result.sent.clean
+
+
+# v1-e32-t44: a hit marked as a JSON key's name or a taxonomy word leaves its text clean; the bar reads it.
+# `Rationale` is an invented school spelled like a key of every cassette, and `ab` (the AB team's code) is a
+# word of an invented position's description, as `v1-e32-t40`'s and `v1-e32-t43`'s marked hits were.
+MARKED_READING = dataclasses.replace(READING, caselist_names={"Maple Grove": ("AB",), "Rationale": ("KL",)})
+MARKED_TAXONOMY = Taxonomy.model_validate(
+    {
+        **TAXONOMY.model_dump(mode="json"),
+        "positions": [
+            *(one.model_dump(mode="json", exclude_defaults=True) for one in TAXONOMY.positions),
+            {"id": "ab-cp", "label": "AB CP", "kind": "cp", "side": "neg", "description": "Ab initio."},
+        ],
+    }
+)
+MARKED_ONLY = '{"rationale": "the rationale reads it ab initio"}'
+
+
+async def marked_evaluation(
+    prompts: PromptRegistry, cassettes: list[str], repairs: tuple[str, ...] = ()
+) -> FormatEvaluation:
+    return await evaluate_labelled_cards(
+        MARKED_READING,
+        MARKED_TAXONOMY,
+        LABELLED,
+        stage_over(ByTag(BETTER_ANSWERS), prompts),
+        cassette_texts=lambda: cassettes,
+        repair_cassette_texts=lambda: repairs,
+    )
+
+
+@pytest.mark.anyio
+async def test_the_bar_reads_a_cassette_scan_whose_every_hit_is_a_json_key_or_a_taxonomy_word_as_clean(
+    prompts: PromptRegistry,
+) -> None:
+    result = await marked_evaluation(prompts, [MARKED_ONLY, '{"rationale": "nothing named"}'])
+
+    scan = result.cassettes
+    assert (scan.texts, scan.schools, scan.team_codes, scan.other_names) == (2, 1, 1, 0)
+    assert (scan.clean, scan.texts_left) == (True, 0)
+    assert scan.set_aside == {"texts": 1, "hits": 2, "json_key": 1, "in_taxonomy": 1}
+    assert result.scans_clean and result.meets_target
+
+
+@pytest.mark.anyio
+async def test_the_bar_reads_a_cassette_scan_with_one_unmarked_hit_as_unclean(prompts: PromptRegistry) -> None:
+    result = await marked_evaluation(prompts, [MARKED_ONLY, '{"rationale": "the KL team of Maple Grove"}'])
+
+    scan = result.cassettes
+    assert (scan.texts, scan.schools, scan.team_codes) == (2, 2, 2)
+    assert (scan.clean, scan.texts_left) == (False, 1)
+    assert scan.set_aside == {"texts": 1, "hits": 2, "json_key": 1, "in_taxonomy": 1}
+    assert not result.scans_clean
+
+
+@pytest.mark.anyio
+async def test_the_bar_reads_a_taxonomy_word_a_repair_cassettes_repaired_prompt_sent_as_unclean(
+    prompts: PromptRegistry,
+) -> None:
+    """The repaired prompt is what the failed call sent: its words are the cards', so no mark sets them aside."""
+    result = await marked_evaluation(
+        prompts, [MARKED_ONLY], (repair_cassette(CLASSIFY_POSITION_VERSION, "a card read ab initio"),)
+    )
+
+    assert (result.cassettes.clean, result.repair_cassettes.team_codes) == (True, 1)
+    assert (result.repair_cassettes.clean, result.repair_cassettes.texts_left) == (False, 1)
+    assert not result.scans_clean
 
 
 @pytest.mark.anyio

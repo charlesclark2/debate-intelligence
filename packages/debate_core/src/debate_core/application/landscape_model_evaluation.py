@@ -54,6 +54,7 @@ from debate_core.application.ports.suppression import SuppressionList
 from debate_core.application.ports.taxonomy_repository import TaxonomyRepository
 from debate_core.application.position_classification import model_candidate
 from debate_core.arguments.landscape.evaluation_breakdown import (
+    ANSWERS_PREFIX,
     CardBreakdown,
     CardOutcome,
     LabelledScore,
@@ -62,11 +63,13 @@ from debate_core.arguments.landscape.evaluation_breakdown import (
     card_outcome,
     deterministic_placement,
     label_kind,
+    labelled_as,
     model_alone_score,
     model_set_score,
     outcome_counts,
     pipeline_score,
     related,
+    scored_stance,
     stratum_scores,
 )
 from debate_core.arguments.landscape.matcher import MatchItem, PositionMatcher, read_items
@@ -118,6 +121,7 @@ __all__ = [
     "labelled_card_breakdowns",
     "read_coach_sample",
     "read_sample_populations",
+    "row_labels",
     "scanned_cassettes",
     "scanned_repairs",
     "score_labelled_answers",
@@ -174,13 +178,30 @@ class CoachLabel:
     label: str
     stance: Stance = Stance.READS
 
+    @property
+    def written(self) -> str:
+        """The label as the sample writes it: the id, `at:<id>` for one that answers, or `none`."""
+        return labelled_as(self.label, self.stance)
+
 
 def coach_label(cell: str, active: Collection[str]) -> CoachLabel | None:
     """The label a cell of the coach's sample holds; None for a blank or `unsure` cell, which is not scored.
 
-    Raises `ValueError`, naming the rule and never the cell, for a label that names no active position.
+    `at:<id>` (:data:`~debate_core.arguments.landscape.evaluation_breakdown.ANSWERS_PREFIX`, read without
+    case, space after the colon ignored) labels a card that answers the position (`v1-e32-t46`); a plain id
+    one that reads it. Raises `ValueError`, naming the rule and never the cell, for a label that names no
+    active position: `at:none` and an `at:` with no id among them.
     """
     text = cell.strip()
+    if text[: len(ANSWERS_PREFIX)].casefold() == ANSWERS_PREFIX:
+        answered = text[len(ANSWERS_PREFIX) :].strip()
+        if not answered:
+            raise ValueError("is labelled at: with no position to answer")
+        if answered.casefold() == NO_POSITION_LABEL:
+            raise ValueError("is labelled at:none, and none is no position to answer")
+        if answered not in active:
+            raise ValueError("answers a position that is not an active id")
+        return CoachLabel(answered, Stance.ANSWERS)
     if not text or text.casefold() == UNSURE_LABEL:
         return None
     if text.casefold() == NO_POSITION_LABEL:
@@ -188,6 +209,29 @@ def coach_label(cell: str, active: Collection[str]) -> CoachLabel | None:
     if text not in active:
         raise ValueError("names a position that is not an active id")
     return CoachLabel(text)
+
+
+def row_labels(
+    row: int, position: str, also: str, taxonomy: Taxonomy
+) -> tuple[CoachLabel, CoachLabel | None] | None:
+    """Row `row`'s label and second label, from its `position` and `also` cells; None for a row not scored.
+
+    Raises :class:`EvaluationRefused`, naming the row and the rule and never a cell, as
+    :func:`read_coach_sample` refuses it.
+    """
+    active = {one.id for one in taxonomy.active_positions}
+    try:
+        label = coach_label(position, active)
+    except ValueError as refused:
+        of = (
+            f" of {taxonomy.topic_id} {taxonomy.taxonomy_version}"
+            if str(refused).endswith("active id")
+            else ""
+        )
+        raise EvaluationRefused(f"row {row} {refused}{of}") from None
+    if label is None:
+        return None
+    return label, _second_label(row, label, also.strip(), active, taxonomy)
 
 
 @dataclass(frozen=True, slots=True)
@@ -288,44 +332,52 @@ def read_coach_sample(sample: TextIO, rows: Iterable[str], taxonomy: Taxonomy) -
     reader = csv.DictReader(sample)
     if reader.fieldnames is None or not {"sample_row", "position"} <= set(reader.fieldnames):
         raise EvaluationRefused("the coach's sample needs its sample_row and position columns")
-    active = {position.id for position in taxonomy.active_positions}
     labelled: list[LabelledCard] = []
     for line in reader:
-        label = (line.get("position") or "").strip()
-        if not label or label.casefold() == UNSURE_LABEL:
-            continue
         row = int(line["sample_row"])
+        read = row_labels(row, line.get("position") or "", line.get(SECOND_LABEL_COLUMN) or "", taxonomy)
+        if read is None:
+            continue
         if row not in by_row:
             raise EvaluationRefused(f"row {row} of the coach's sample is not in its rows file")
-        if label.casefold() == NO_POSITION_LABEL:
-            label = NO_POSITION_LABEL
-        elif label not in active:
-            raise EvaluationRefused(
-                f"row {row} names a position that is not an active id of {taxonomy.topic_id} "
-                f"{taxonomy.taxonomy_version}"
-            )
-        also = _second_label(row, label, (line.get(SECOND_LABEL_COLUMN) or "").strip(), active, taxonomy)
+        label, also = read
         labelled.append(
-            LabelledCard(item_id=by_row[row], label=label, sample_row=row, stratum=strata.get(row), also=also)
+            LabelledCard(
+                item_id=by_row[row],
+                label=label.label,
+                sample_row=row,
+                stratum=strata.get(row),
+                also=also.label if also is not None else None,
+                stance=label.stance,
+                also_stance=also.stance if also is not None else Stance.READS,
+            )
         )
     return tuple(labelled)
 
 
-def _second_label(row: int, label: str, also: str, active: set[str], taxonomy: Taxonomy) -> str | None:
-    """Row `row`'s second label, None when blank: an active position id other than its first, never `none`."""
+def _second_label(
+    row: int, label: CoachLabel, also: str, active: set[str], taxonomy: Taxonomy
+) -> CoachLabel | None:
+    """Row `row`'s second label, None when blank: an active position other than its first in id or stance,
+    never `none`. The same id with the other stance accepts either stance (`v1-e32-t46`)."""
     if not also:
         return None
-    if label == NO_POSITION_LABEL:
+    if label.label == NO_POSITION_LABEL:
         raise EvaluationRefused(f"row {row} is labelled none and names a second label")
-    if also.casefold() == NO_POSITION_LABEL:
+    bare = also[len(ANSWERS_PREFIX) :] if also[: len(ANSWERS_PREFIX)].casefold() == ANSWERS_PREFIX else also
+    if bare.strip().casefold() == NO_POSITION_LABEL:
         raise EvaluationRefused(f"row {row}'s second label is none: a second label names a position")
-    if also == label:
-        raise EvaluationRefused(f"row {row}'s second label is its first")
-    if also not in active:
+    try:
+        second = coach_label(also, active)
+    except ValueError:
+        second = None
+    if second is None:
         raise EvaluationRefused(
             f"row {row}'s second label is not an active id of {taxonomy.topic_id} {taxonomy.taxonomy_version}"
         )
-    return also
+    if second == label:
+        raise EvaluationRefused(f"row {row}'s second label is its first")
+    return second
 
 
 @dataclass(frozen=True, slots=True)
@@ -357,9 +409,9 @@ def coach_sample_counts(
 
 
 def stance_counts(labelled: Iterable[LabelledCard]) -> dict[str, int]:
-    """The rows labelled a position by their label's stance, both stances named."""
-    del labelled
-    return {}
+    """The rows labelled a position by their label's stance, both stances named (`v1-e32-t46`)."""
+    found = Counter(one.stance.value for one in labelled if one.label != NO_POSITION_LABEL)
+    return {stance.value: found[stance.value] for stance in sorted(Stance, key=lambda one: one.value)}
 
 
 def read_sample_populations(rows: Iterable[str]) -> dict[str, int]:
@@ -418,10 +470,12 @@ async def ask_labelled_cards(
     candidates: dict[str, ModelCandidate] = {}
     items: dict[str, MatchItem] = {}
     tournaments: set[str] = set()
+    file_sides: dict[str, frozenset[str]] = {}
     for source in reading.sources:
         tournaments |= {team.tournament for team in source.teams if team.tournament}
         if not any(item_id.startswith(f"{source.sha256}:") for item_id in labels):
             continue
+        file_sides[source.sha256] = frozenset(team.side.value for team in source.teams)
         cards = iter(source.cards)
         for item in read_items(source, names):
             if item.kind is not ItemKind.CARD:
@@ -449,6 +503,7 @@ async def ask_labelled_cards(
         tournaments=frozenset(tournaments),
         second_labels=second_labels,
         labelled=tuple({one.item_id: one for one in chosen}.values()),
+        file_sides=file_sides,
     )
 
 
@@ -467,23 +522,15 @@ def score_labelled_answers(
     """The evaluation's score of `asked`, and the scans of what was sent, of `cassettes` and of
     `repair_cassettes`, each read as :func:`scanned_cassettes` and :func:`scanned_repairs` choose.
 
-    A counted answer is right when it names the card's label or its second label (`v1-e32-t41`). The
+    A counted answer is right when it names the card's label or its second label (`v1-e32-t41`), each with
+    its stance (`v1-e32-t46`): the counts are the cards' breakdowns' (:func:`labelled_card_breakdowns`). The
     pipeline's score places each card with `taxonomy` and `overrides`, the coach's decisions on its headings
     (none when None), as a landscape run does (`v1-e32-t43`)."""
     labels, outcome = asked.labels, asked.outcome
     cards = labelled_card_breakdowns(asked, taxonomy, overrides, threshold=review_threshold)
     committed = committed_positions(taxonomy)
-    counted = correct = below = labelled_none = 0
-    for item_id, item in asked.items.items():
-        result = outcome.results.get(item.fingerprint)
-        if result is None or places_nothing(result):
-            continue
-        if result.confidence < review_threshold:
-            below += 1
-            continue
-        counted += 1
-        correct += result.position_id in (labels[item_id], asked.second_labels.get(item_id))
-        labelled_none += labels[item_id] == NO_POSITION_LABEL
+    alone = model_alone_score(cards)
+    labelled_none = sum(card.outcome is CardOutcome.PLACED_LABELLED_NONE for card in cards)
     refused = Counter(outcome.refused)
     return FormatEvaluation(
         caselist=reading.caselist,
@@ -496,9 +543,9 @@ def score_labelled_answers(
         found=len(asked.items),
         asked=outcome.sent,
         calls=outcome.calls,
-        counted=counted,
-        correct=correct,
-        placed_below_threshold=below,
+        counted=alone.counted,
+        correct=alone.correct,
+        placed_below_threshold=alone.below_threshold,
         placed_labelled_none=labelled_none,
         refused=dict(sorted(refused.items())),
         input_tokens=outcome.input_tokens,
@@ -518,7 +565,7 @@ def score_labelled_answers(
         ),
         interrupted_by=outcome.interrupted_by,
         unanswered=len(asked.candidates) - outcome.sent,
-        model_alone=model_alone_score(cards),
+        model_alone=alone,
         pipeline=pipeline_score(cards),
     )
 
@@ -693,6 +740,7 @@ def labelled_card_breakdowns(
             matcher,
             batch_of,
             threshold=threshold,
+            file_sides=asked.file_sides.get(one.item_id.split(":", 1)[0], frozenset()),
         )
         for one in asked.labelled
     )
@@ -707,6 +755,7 @@ def _card_breakdown(
     batch_of: Mapping[str, int],
     *,
     threshold: float,
+    file_sides: Collection[str] = (),
 ) -> CardBreakdown:
     kind = label_kind(taxonomy, labelled.label)
     if item is None:
@@ -717,11 +766,23 @@ def _card_breakdown(
             sample_row=labelled.sample_row,
             stratum=labelled.stratum,
             also=labelled.also,
+            stance=labelled.stance,
+            also_stance=labelled.also_stance,
         )
     result = outcome.results.get(item.fingerprint)
-    found = card_outcome(taxonomy, labelled.label, result, threshold=threshold, also=labelled.also)
+    found = card_outcome(
+        taxonomy,
+        labelled.label,
+        result,
+        threshold=threshold,
+        also=labelled.also,
+        stance=labelled.stance,
+        also_stance=labelled.also_stance,
+        file_sides=file_sides,
+    )
     answered = result is not None and not places_nothing(result)
     answer = result.position_id if result is not None and answered else None
+    placed = matcher.place(item)
     reason = refusal_reason(result) if result is not None and found is CardOutcome.REFUSED else None
     return CardBreakdown(
         label=labelled.label,
@@ -730,7 +791,9 @@ def _card_breakdown(
         refusal=reason.value if reason is not None else None,
         answer=answer,
         confidence=result.confidence if result is not None and answered else None,
-        deterministic=deterministic_placement(matcher.place(item), threshold=threshold),
+        deterministic=deterministic_placement(
+            placed, threshold=threshold, taxonomy=taxonomy, file_sides=file_sides
+        ),
         sample_row=labelled.sample_row,
         stratum=labelled.stratum,
         batch=batch_of.get(item.fingerprint),
@@ -738,6 +801,11 @@ def _card_breakdown(
         and answer is not None
         and related(taxonomy, answer, labelled.label),
         also=labelled.also,
+        stance=labelled.stance,
+        also_stance=labelled.also_stance,
+        answer_stance=scored_stance(taxonomy, answer, result.role, file_sides)
+        if result is not None and answer is not None
+        else None,
     )
 
 
@@ -888,6 +956,7 @@ class LandscapeModelEvaluationService:
         labelled = _labelled(sample, rows, taxonomy)
         by_label_kind, second_labels = coach_sample_counts(labelled, taxonomy)
         return CoachSampleCheck(
+            by_stance=stance_counts(labelled),
             caselist=caselist,
             topic_id=taxonomy.topic_id,
             taxonomy_version=taxonomy.taxonomy_version,

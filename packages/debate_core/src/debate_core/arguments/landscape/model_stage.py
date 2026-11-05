@@ -45,7 +45,9 @@ A refused answer is kept as a MODEL result placing nothing (:func:`refusal`), so
 asked about again under the same prompt version. Such a result never reaches the report: the service
 keeps stage one's result for the card. An accepted answer becomes a MODEL result with the model's
 confidence, the role the headings give (ANSWERS under an `AT:` heading, as the matcher's), and the
-rationale it gave, which the review threshold then judges like any other.
+rationale it gave, which the review threshold then judges like any other. From prompt 1.2.0 the answer
+carries a stance (:func:`answer_schema`, `v1-e32-t46`), and the stance gives the role instead: the model is
+sent the answer-heading flag, and a card under an answer heading inside its own side's block still reads.
 
 Pure: values in, values out. Nothing here logs, and every value holding card text withholds it from
 its `repr`.
@@ -71,7 +73,10 @@ from debate_core.domain.landscape_classification import (
     ClassificationResult,
     ModelPositionAnswer,
     ModelPositionAnswers,
+    ModelStancedPositionAnswer,
+    ModelStancedPositionAnswers,
     PositionRole,
+    Stance,
     checked_against,
 )
 
@@ -80,6 +85,7 @@ __all__ = [
     "DEFAULT_BATCH_SIZE",
     "ECHO_WORDS",
     "EXCERPT_WORDS",
+    "STANCE_FROM_VERSION",
     "BatchProblem",
     "ModelCandidate",
     "ModelItem",
@@ -316,9 +322,16 @@ def echoes(rationale: str, text: str | None, run: int = ECHO_WORDS) -> bool:
     return any(tuple(said[start : start + run]) in runs for start in range(len(said) - run + 1))
 
 
+STANCE_FROM_VERSION: Final = (1, 2, 0)
+"""The first `landscape.classify_position` version whose answers carry a stance (`v1-e32-t46`)."""
+
+
 def answer_schema(prompt_version: str) -> type[ModelPositionAnswers]:
-    """The output schema `landscape.classify_position` at `prompt_version` answers in."""
-    del prompt_version
+    """The output schema `landscape.classify_position` at `prompt_version` answers in: 1.2.0 on, each answer
+    with its stance (:class:`ModelStancedPositionAnswers`); before it, as 1.0.0 and 1.1.0 were recorded."""
+    major, minor, patch = (int(part) for part in prompt_version.split("."))
+    if (major, minor, patch) >= STANCE_FROM_VERSION:
+        return ModelStancedPositionAnswers
     return ModelPositionAnswers
 
 
@@ -346,7 +359,10 @@ def judge(
         return refused(Refusal.NO_POSITION)
     if echoes(answer.rationale, item.evidence) or echoes(answer.rationale, item.candidate.tag):
         return refused(Refusal.ECHOES_EVIDENCE)
-    answers = any(heading.answer for heading in item.candidate.headings)
+    if isinstance(answer, ModelStancedPositionAnswer):
+        answers = answer.stance is Stance.ANSWERS
+    else:
+        answers = any(heading.answer for heading in item.candidate.headings)
     try:
         return checked_against(
             taxonomy,

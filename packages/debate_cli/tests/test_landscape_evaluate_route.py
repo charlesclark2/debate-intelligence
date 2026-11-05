@@ -27,7 +27,7 @@ from debate_cli.app import create_app
 from debate_cli.exit_codes import ExitCode
 from debate_core.application.ports.model_router import ModelRouter
 from debate_core.application.ports.parsed_store import OCCURRENCES_NAME, PARSED_PREFIX
-from debate_core.domain.landscape_classification import card_item_id
+from debate_core.domain.landscape_classification import ModelStancedPositionAnswers, card_item_id
 from debate_core.domain.model_contracts import ModelParams, ModelPrompt, ModelResponse, TaskClass
 from debate_core.integrations import bedrock
 from debate_core.integrations.models.prompt_registry import PromptRegistry
@@ -66,6 +66,7 @@ class AnswersByTag(ScriptedModelRouter):
                 "position_id": ANSWERS[item["tag"]],
                 "confidence": 0.9,
                 "rationale": "the tag states the argument",
+                **({"stance": "reads"} if issubclass(schema, ModelStancedPositionAnswers) else {}),
             }
             for item in items
         ]

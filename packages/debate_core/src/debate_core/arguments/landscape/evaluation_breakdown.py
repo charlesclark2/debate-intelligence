@@ -41,7 +41,7 @@ from typing import Final
 
 from debate_core.arguments.landscape.model_stage import Refusal, places_nothing, refusal_reason
 from debate_core.arguments.landscape.review_queue import needs_review
-from debate_core.domain.landscape import Taxonomy
+from debate_core.domain.landscape import PositionSide, Taxonomy
 from debate_core.domain.landscape_classification import ClassificationResult, PositionRole, Stance
 
 __all__ = [
@@ -110,12 +110,14 @@ class CardOutcome(StrEnum):
 COUNTED_OUTCOMES: Final = frozenset(
     {
         CardOutcome.CORRECT,
+        CardOutcome.WRONG_STANCE,
         CardOutcome.WRONG_POSITION_SAME_KIND,
         CardOutcome.WRONG_KIND,
         CardOutcome.PLACED_LABELLED_NONE,
     }
 )
-"""The outcomes the evaluation counts: a MODEL placement at or above the review threshold."""
+"""The outcomes the evaluation counts: a MODEL placement at or above the review threshold. A wrong stance is
+counted, and wrong (the PM's ruling for `v1-e32-t46`)."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -176,8 +178,11 @@ class CardBreakdown:
 
     @property
     def correct_on_second_label(self) -> bool:
-        """Scored correct because the answer names the second label, not the first."""
-        return self.outcome is CardOutcome.CORRECT and self.also is not None and self.answer == self.also
+        """Scored correct because the answer names the second label, with its stance, not the first."""
+        if self.outcome is not CardOutcome.CORRECT or self.also is None or self.answer is None:
+            return False
+        answered = (self.answer, self.answer_stance or Stance.READS)
+        return answered == (self.also, self.also_stance) and answered != (self.label, self.stance)
 
 
 def label_kind(taxonomy: Taxonomy, label: str) -> str:
@@ -202,15 +207,37 @@ def _ancestor(taxonomy: Taxonomy, ancestor: str, of: str) -> bool:
 
 def labelled_as(position_id: str, stance: Stance) -> str:
     """A label or an answer as the coach writes it: the id, or `at:<id>` for one that answers."""
-    del stance
-    return position_id
+    return f"{ANSWERS_PREFIX}{position_id}" if stance is Stance.ANSWERS else position_id
+
+
+_READABLE_SIDES: Final = {
+    "AFF": PositionSide.AFF,
+    "PRO": PositionSide.AFF,
+    "NEG": PositionSide.NEG,
+    "CON": PositionSide.NEG,
+}
+"""A disclosed file's side as a position's side: PF's pro and con count as aff and neg, as the report counts
+them; `UNKNOWN` is no readable side."""
+
+_OPPOSITE: Final = {PositionSide.AFF: PositionSide.NEG, PositionSide.NEG: PositionSide.AFF}
 
 
 def scored_stance(
     taxonomy: Taxonomy, position_id: str, role: PositionRole | None, file_sides: Collection[str] = ()
 ) -> Stance:
-    """The stance a placement of `position_id` is scored with."""
-    del taxonomy, position_id, role, file_sides
+    """The stance a placement of `position_id` is scored with: the report's (`v1-e32-t46`).
+
+    ANSWERS when its `role` is ANSWERS, or when every readable side its file was disclosed on (`file_sides`,
+    the disclosures' :class:`~debate_core.domain.caselist.Side` values) is the side opposite the position's:
+    the landscape report never counts either as a read. READS otherwise, a position either side reads and a
+    file on no readable side among them.
+    """
+    if role is PositionRole.ANSWERS:
+        return Stance.ANSWERS
+    opposite = _OPPOSITE.get(taxonomy.resolve(position_id).side)
+    readable = {_READABLE_SIDES[side] for side in file_sides if side in _READABLE_SIDES}
+    if opposite is not None and readable == {opposite}:
+        return Stance.ANSWERS
     return Stance.READS
 
 
@@ -229,6 +256,9 @@ def card_outcome(
 
     Checked in the evaluation's own order: placing nothing first, then the threshold, then the label. An
     answer naming `also`, the coach's second label, is correct too; a wrong one is judged against `label`.
+    An answer is right when it names a label's position with that label's `stance` (`v1-e32-t46`), its own
+    scored by :func:`scored_stance` from its role and the `file_sides` of the card's file; one naming a
+    label's position with the other stance is :attr:`~CardOutcome.WRONG_STANCE`.
     """
     if result is None:
         return CardOutcome.NOT_ASKED
@@ -240,22 +270,42 @@ def card_outcome(
         return CardOutcome.BELOW_THRESHOLD
     if label == NO_POSITION_LABEL:
         return CardOutcome.PLACED_LABELLED_NONE
-    if result.position_id == label or (also is not None and result.position_id == also):
+    if result.position_id is None:
+        return CardOutcome.WRONG_KIND
+    answered = (result.position_id, scored_stance(taxonomy, result.position_id, result.role, file_sides))
+    labels = [(label, stance)] + ([(also, also_stance)] if also is not None else [])
+    if answered in labels:
         return CardOutcome.CORRECT
-    if result.position_id is not None and label_kind(taxonomy, result.position_id) == label_kind(
-        taxonomy, label
-    ):
+    if result.position_id in (label, also):
+        return CardOutcome.WRONG_STANCE
+    if label_kind(taxonomy, result.position_id) == label_kind(taxonomy, label):
         return CardOutcome.WRONG_POSITION_SAME_KIND
     return CardOutcome.WRONG_KIND
 
 
-def deterministic_placement(result: ClassificationResult, *, threshold: float) -> DeterministicPlacement:
-    """Stage one's `result` for a card, and whether a run would send the card to the model."""
+def deterministic_placement(
+    result: ClassificationResult,
+    *,
+    threshold: float,
+    taxonomy: Taxonomy | None = None,
+    file_sides: Collection[str] = (),
+) -> DeterministicPlacement:
+    """Stage one's `result` for a card, and whether a run would send the card to the model.
+
+    With `taxonomy`, a placement carries its stance as scored (:func:`scored_stance`), from its role and the
+    `file_sides` of the card's file (`v1-e32-t46`).
+    """
+    stance = (
+        scored_stance(taxonomy, result.position_id, result.role, file_sides)
+        if taxonomy is not None and result.position_id is not None
+        else None
+    )
     return DeterministicPlacement(
         position_id=result.position_id,
         method=result.method.value if result.method is not None else None,
         confidence=result.confidence,
         sent_to_model=needs_review(result, threshold),
+        stance=stance,
     )
 
 
@@ -331,12 +381,12 @@ def confusion(cards: Iterable[CardBreakdown]) -> list[tuple[str, str, int]]:
     found: Counter[tuple[str, str]] = Counter()
     for card in cards:
         if card.answer is not None:
-            answer = card.answer
+            answer = labelled_as(card.answer, card.answer_stance or Stance.READS)
         elif card.refusal == Refusal.NO_POSITION.value:
             answer = NO_POSITION_LABEL
         else:
             answer = card.refusal or card.outcome.value
-        found[(card.label, answer)] += 1
+        found[(labelled_as(card.label, card.stance), answer)] += 1
     return [(label, answer, count) for (label, answer), count in sorted(found.items(), key=_most_first)]
 
 
@@ -443,9 +493,14 @@ def pipeline_score(cards: Iterable[CardBreakdown]) -> LabelledScore:
 
 
 def _names_a_label(card: CardBreakdown) -> bool:
-    """Whether stage one's placement of `card` is the coach's label or second label; never for `none`."""
+    """Whether stage one's placement of `card` is the coach's label or second label, each with its stance;
+    never for `none`."""
     placed = card.deterministic
-    return placed is not None and placed.position_id in (card.label, card.also)
+    if placed is None or placed.position_id is None:
+        return False
+    answered = (placed.position_id, placed.stance or Stance.READS)
+    labels = [(card.label, card.stance)] + ([(card.also, card.also_stance)] if card.also is not None else [])
+    return answered in labels
 
 
 @dataclass(frozen=True, slots=True)

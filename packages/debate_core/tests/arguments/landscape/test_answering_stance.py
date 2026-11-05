@@ -58,7 +58,9 @@ TAXONOMY = Taxonomy.model_validate(
 THRESHOLD = 0.6
 
 
-def placed(position_id: str, *, role: PositionRole = PositionRole.READS, confidence: float = 0.8) -> ClassificationResult:
+def placed(
+    position_id: str, *, role: PositionRole = PositionRole.READS, confidence: float = 0.8
+) -> ClassificationResult:
     return ClassificationResult(
         position_id=position_id,
         role=role,
@@ -138,9 +140,15 @@ def test_a_stanced_answer_sets_the_role_whatever_the_answer_heading_says(answer_
     assert judged(stanced(Stance.READS), answer_heading=answer_heading).role is PositionRole.READS
 
 
-@pytest.mark.parametrize(("answer_heading", "role"), [(False, PositionRole.READS), (True, PositionRole.ANSWERS)])
-def test_an_answer_without_a_stance_keeps_the_role_the_headings_give(answer_heading: bool, role: PositionRole) -> None:
-    plain = ModelPositionAnswer(item="item-1", position_id="politics-da", confidence=0.8, rationale="a reason")
+@pytest.mark.parametrize(
+    ("answer_heading", "role"), [(False, PositionRole.READS), (True, PositionRole.ANSWERS)]
+)
+def test_an_answer_without_a_stance_keeps_the_role_the_headings_give(
+    answer_heading: bool, role: PositionRole
+) -> None:
+    plain = ModelPositionAnswer(
+        item="item-1", position_id="politics-da", confidence=0.8, rationale="a reason"
+    )
 
     assert judged(plain, answer_heading=answer_heading).role is role
 
@@ -159,7 +167,7 @@ def test_an_answer_without_a_stance_keeps_the_role_the_headings_give(answer_head
         ("politics-da", PositionRole.READS, {"NEG"}, Stance.READS),
         ("politics-da", PositionRole.READS, {"AFF", "NEG"}, Stance.READS),
         ("politics-da", PositionRole.READS, {"UNKNOWN"}, Stance.READS),
-        ("politics-da", PositionRole.READS, set(), Stance.READS),
+        ("politics-da", PositionRole.READS, set[str](), Stance.READS),
         ("rural-adv", PositionRole.READS, {"NEG"}, Stance.ANSWERS),
         ("rural-adv", PositionRole.READS, {"CON"}, Stance.ANSWERS),
         ("rural-adv", PositionRole.READS, {"PRO"}, Stance.READS),
@@ -201,7 +209,13 @@ def test_an_answering_label_is_written_with_the_prefix() -> None:
         ),
         ("politics-da", Stance.ANSWERS, placed("spending-da"), {"AFF"}, CardOutcome.WRONG_POSITION_SAME_KIND),
         ("politics-da", Stance.ANSWERS, placed("medicare-aff"), {"AFF"}, CardOutcome.WRONG_KIND),
-        ("politics-da", Stance.ANSWERS, placed("politics-da", confidence=0.5), {"NEG"}, CardOutcome.BELOW_THRESHOLD),
+        (
+            "politics-da",
+            Stance.ANSWERS,
+            placed("politics-da", confidence=0.5),
+            {"NEG"},
+            CardOutcome.BELOW_THRESHOLD,
+        ),
     ],
 )
 def test_the_label_s_position_with_the_other_stance_is_a_wrong_stance(
@@ -246,7 +260,9 @@ def test_a_second_label_is_judged_with_its_own_stance() -> None:
 def test_a_wrong_stance_is_counted_and_wrong() -> None:
     assert CardOutcome.WRONG_STANCE in COUNTED_OUTCOMES
     cards = [
-        CardBreakdown(label="politics-da", label_kind="da", outcome=CardOutcome.CORRECT, answer="politics-da"),
+        CardBreakdown(
+            label="politics-da", label_kind="da", outcome=CardOutcome.CORRECT, answer="politics-da"
+        ),
         CardBreakdown(
             label="politics-da",
             label_kind="da",

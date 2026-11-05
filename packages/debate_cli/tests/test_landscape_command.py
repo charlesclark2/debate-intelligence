@@ -74,7 +74,7 @@ from debate_core.arguments.landscape.evaluation_breakdown import (
 from debate_core.arguments.landscape.model_stage import DEFAULT_BATCH_SIZE, NameScan
 from debate_core.arguments.landscape.queue_order import QueueOrderModel
 from debate_core.arguments.landscape.scan_hits import HitField, HitKind, ScanHit
-from debate_core.domain.landscape_classification import Stance
+from debate_core.domain.landscape_classification import ModelStancedPositionAnswers, Stance
 from debate_core.domain.model_contracts import ModelParams, ModelPrompt, ModelResponse, TaskClass
 from debate_core.integrations.docx_parser import DebateDocxParser
 from debate_core.integrations.landscape.classification_store import queue_order_model_path, review_queue_path
@@ -392,6 +392,7 @@ class _PlacesEverything(ScriptedModelRouter):
                         "position_id": "spending-da",
                         "confidence": 0.8,
                         "rationale": "a reason",
+                        **({"stance": "reads"} if issubclass(schema, ModelStancedPositionAnswers) else {}),
                     }
                     for item in items
                 ]
@@ -445,7 +446,7 @@ def test_replay_runs_the_model_stage_on_the_unplaced_cards_and_counts_it(
     assert data["classification"]["cards_by_method"] == {"ALIAS": 7, "MODEL": 2}
     model = data["classification"]["model"]
     assert (model["prompt_version"], model["asked"], model["held_back"], model["refused"]) == (
-        "1.1.0",
+        "1.2.0",
         2,
         0,
         {},
@@ -701,7 +702,7 @@ def test_the_container_builds_the_model_stage_from_the_committed_prompt(world: S
 
     assert (built.prompt_id, built.prompt_version, built.max_items) == (
         "landscape.classify_position",
-        "1.1.0",
+        "1.2.0",
         7,
     )
 
@@ -2567,7 +2568,10 @@ def test_evaluate_breakdown_lists_each_hit_in_a_terminal(
         in shown
     )
     assert landscape_module.HITS_NOTICE in shown
-    assert "Breakdown of the 3 labelled card(s): correct 1, wrong_position_same_kind 0, wrong_kind 1" in shown
+    assert (
+        "Breakdown of the 3 labelled card(s): correct 1, wrong_stance 0, wrong_position_same_kind 0, "
+        "wrong_kind 1" in shown
+    )
     assert "Batches: 1: 3 card(s), 2 call(s), repaired (string_too_long 1)." in shown
 
 
@@ -2775,7 +2779,9 @@ def test_evaluate_check_sample_refuses_a_stance_label_naming_nothing_by_its_row(
 ) -> None:
     _asks_nothing(monkeypatch)
 
-    result = _check_sample(world, _sample(tmp_path, f"sample_row,position\n1,states-cp\n2,{cell}\n"), "--check-sample")
+    result = _check_sample(
+        world, _sample(tmp_path, f"sample_row,position\n1,states-cp\n2,{cell}\n"), "--check-sample"
+    )
 
     assert result.exit_code == ExitCode.DOMAIN_FAILURE, result.output
     error = _error(result)

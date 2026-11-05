@@ -52,7 +52,12 @@ from debate_core.arguments.landscape.scan_hits import HitField, HitKind, ScanHit
 from debate_core.arguments.landscape.seeding import SeedCard, SeedSource, SeedTeam
 from debate_core.domain.caselist import Side
 from debate_core.domain.landscape import Taxonomy
-from debate_core.domain.landscape_classification import OverrideRules, card_item_id
+from debate_core.domain.landscape_classification import (
+    ModelStancedPositionAnswers,
+    OverrideRules,
+    Stance,
+    card_item_id,
+)
 from debate_core.domain.model_contracts import ModelParams, ModelPrompt, ModelResponse, TaskClass
 from debate_core.integrations.models.errors import MissingFixtureError
 from debate_core.integrations.models.model_mode import ModelMode
@@ -234,6 +239,7 @@ class ScriptedByTag(ScriptedModelRouter):
                     "rationale": (REPAIR_RATIONALES if repair else RATIONALES).get(
                         tag, "a reason in the model's words"
                     ),
+                    **({"stance": "reads"} if issubclass(schema, ModelStancedPositionAnswers) else {}),
                 }
             )
         self.enqueue({"answers": answers})
@@ -294,6 +300,7 @@ async def test_evaluation_breakdown_gives_every_labelled_card_one_outcome_summin
         assert sum(result.outcomes.values()) == 10
         assert result.outcomes == {
             "correct": 1,
+            "wrong_stance": 0,
             "wrong_position_same_kind": 1,
             "wrong_kind": 2,
             "placed_labelled_none": 1,
@@ -548,8 +555,16 @@ def test_evaluation_coach_sample_keeps_each_cards_row_and_stratum() -> None:
 
 SECOND_LABELS = {2: "election-da", 3: "spending-da", 4: "medicare-aff"}
 """By sample row: row 2's repaired answer and row 4's answer name these, row 3's (states-cp) does not."""
+SECOND_LABELS_ANSWERING = {4}
+"""Since `v1-e32-t46` a placement of an affirmative position in a file only the negative disclosed answers it,
+so row 4's second label is written `at:medicare-aff` for the answer naming it to be right."""
 WITH_SECOND_LABELS = tuple(
-    dataclasses.replace(card, also=SECOND_LABELS.get(card.sample_row or 0)) for card in LABELLED
+    dataclasses.replace(
+        card,
+        also=SECOND_LABELS.get(card.sample_row or 0),
+        also_stance=Stance.ANSWERS if card.sample_row in SECOND_LABELS_ANSWERING else Stance.READS,
+    )
+    for card in LABELLED
 )
 
 
@@ -565,6 +580,7 @@ async def test_evaluation_breakdown_scores_an_answer_naming_the_second_label_cor
 
     assert result.outcomes == {
         "correct": 3,
+        "wrong_stance": 0,
         "wrong_position_same_kind": 0,
         "wrong_kind": 1,
         "placed_labelled_none": 1,
@@ -597,7 +613,7 @@ async def test_evaluation_breakdown_keeps_the_confusion_table_and_label_kinds_on
     )
 
     assert ("spending-da", "election-da", 1) in confusion(result.cards)
-    assert ("rural-adv", "medicare-aff", 1) in confusion(result.cards)
+    assert ("rural-adv", "at:medicare-aff", 1) in confusion(result.cards)
     assert outcomes_by_label_kind(result.cards) == {
         "advantage": {"correct": 1},
         "cp": {"correct": 1, "below_threshold": 1, "not_found": 1},

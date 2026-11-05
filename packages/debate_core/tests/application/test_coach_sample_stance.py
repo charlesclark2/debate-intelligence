@@ -1,15 +1,15 @@
-"""The coach's stance labels and the model's stanced answers, through the evaluation's own path (`v1-e32-t46`).
+"""The coach's stance labels and the model's stanced answers, through the evaluation's path (`v1-e32-t46`).
 
 Two invented sources, one disclosed on the affirmative and one on the negative, six cards labelled by hand,
 asked about through the real prompt (1.2.0, the stage's default) over a scripted model. Stage one, by hand:
 `States CP` is an alias, placed surely and never sent; `AT: Link turn` is an answer heading; the rest are
 unplaced.
 
-| Row | File | Tag | Headings | Label | The model answers | Model alone |
+| Row | File | Tag | Headings | Label | Model answers | Model alone |
 |---|---|---|---|---|---|---|
-| 1 | aff | Not unique | Politics | at:election-da | election-da, reads, 0.9 | correct: an aff file answers a neg position |
+| 1 | aff | Not unique | Politics | at:election-da | election-da reads 0.9 | correct: aff file |
 | 2 | neg | Midterms shift | Politics | election-da | election-da, answers, 0.9 | wrong stance |
-| 3 | neg | Link turn wrong | AT: Link turn | election-da | election-da, reads, 0.8 | correct: the stance decides, not the heading |
+| 3 | neg | Link turn wrong | AT: Link turn | election-da | election-da reads 0.8 | correct: by the stance |
 | 4 | aff | Fed key wrong | States CP | at:states-cp | states-cp, reads, 0.9 | correct |
 | 5 | aff | Rural hospitals close | Solvency | rural-adv | rural-adv, reads, 0.9 | correct |
 | 6 | neg | Rural fine | Case | at:rural-adv | medicare-aff, answers, 0.9 | wrong kind |
@@ -89,10 +89,34 @@ OVERRIDES = OverrideRules.model_validate({"topic_id": TOPIC, "overrides": []})
 # (row, source, tag, heading, label, stance, the model's answer: position, stance, confidence)
 CARDS: tuple[tuple[int, str, str, str, str, Stance, tuple[str, Stance, float]], ...] = (
     (1, AFF_SHA, "Not unique", "Politics", "election-da", Stance.ANSWERS, ("election-da", Stance.READS, 0.9)),
-    (2, NEG_SHA, "Midterms shift", "Politics", "election-da", Stance.READS, ("election-da", Stance.ANSWERS, 0.9)),
-    (3, NEG_SHA, "Link turn wrong", "AT: Link turn", "election-da", Stance.READS, ("election-da", Stance.READS, 0.8)),
+    (
+        2,
+        NEG_SHA,
+        "Midterms shift",
+        "Politics",
+        "election-da",
+        Stance.READS,
+        ("election-da", Stance.ANSWERS, 0.9),
+    ),
+    (
+        3,
+        NEG_SHA,
+        "Link turn wrong",
+        "AT: Link turn",
+        "election-da",
+        Stance.READS,
+        ("election-da", Stance.READS, 0.8),
+    ),
     (4, AFF_SHA, "Fed key wrong", "States CP", "states-cp", Stance.ANSWERS, ("states-cp", Stance.READS, 0.9)),
-    (5, AFF_SHA, "Rural hospitals close", "Solvency", "rural-adv", Stance.READS, ("rural-adv", Stance.READS, 0.9)),
+    (
+        5,
+        AFF_SHA,
+        "Rural hospitals close",
+        "Solvency",
+        "rural-adv",
+        Stance.READS,
+        ("rural-adv", Stance.READS, 0.9),
+    ),
     (6, NEG_SHA, "Rural fine", "Case", "rural-adv", Stance.ANSWERS, ("medicare-aff", Stance.ANSWERS, 0.9)),
 )
 ANSWERS = {tag.lower(): answer for _, _, tag, _, _, _, answer in CARDS}
@@ -191,7 +215,9 @@ def stage_over(router: Any, registry: PromptRegistry, version: str | None = None
 async def test_the_stage_asks_prompt_1_2_0_for_stanced_answers(prompts: PromptRegistry) -> None:
     router = StancedByTag()
 
-    await evaluate_labelled_cards(READING, TAXONOMY, LABELLED, stage_over(router, prompts), overrides=OVERRIDES)
+    await evaluate_labelled_cards(
+        READING, TAXONOMY, LABELLED, stage_over(router, prompts), overrides=OVERRIDES
+    )
 
     assert CLASSIFY_POSITION_VERSION == "1.2.0"
     assert router.schemas == [ModelStancedPositionAnswers]
@@ -212,7 +238,9 @@ async def test_a_1_1_0_stage_still_asks_in_the_schema_it_was_recorded_in(prompts
 async def test_1_1_0_recordings_replay_unchanged_and_1_2_0_finds_none_of_them(
     tmp_path: Path, prompts: PromptRegistry
 ) -> None:
-    recording = RecordReplayModelRouter(StancedByTag(), mode=ModelMode.RECORD, cassette_dir=tmp_path, environ={})
+    recording = RecordReplayModelRouter(
+        StancedByTag(), mode=ModelMode.RECORD, cassette_dir=tmp_path, environ={}
+    )
     recorded = await evaluate_labelled_cards(
         READING, TAXONOMY, LABELLED, stage_over(recording, prompts, "1.1.0"), overrides=OVERRIDES
     )
@@ -226,7 +254,9 @@ async def test_1_1_0_recordings_replay_unchanged_and_1_2_0_finds_none_of_them(
     )
     assert (replayed.counted, replayed.correct) == (recorded.counted, recorded.correct)
     with pytest.raises(MissingFixtureError, match="1.2.0"):
-        await evaluate_labelled_cards(READING, TAXONOMY, LABELLED, stage_over(replaying, prompts), overrides=OVERRIDES)
+        await evaluate_labelled_cards(
+            READING, TAXONOMY, LABELLED, stage_over(replaying, prompts), overrides=OVERRIDES
+        )
 
 
 # ------------------------------------------------------------------------------------------------
@@ -253,7 +283,11 @@ async def test_a_wrong_stance_is_its_own_outcome_counted_and_wrong(prompts: Prom
     evaluation = broken_down.evaluation
     assert (evaluation.counted, evaluation.correct) == (6, 4)
     assert (evaluation.model_alone.counted, evaluation.model_alone.correct) == (6, 4)
-    assert (evaluation.pipeline.counted, evaluation.pipeline.correct, evaluation.pipeline.by_headings) == (6, 4, 1)
+    assert (evaluation.pipeline.counted, evaluation.pipeline.correct, evaluation.pipeline.by_headings) == (
+        6,
+        4,
+        1,
+    )
 
 
 @pytest.mark.anyio

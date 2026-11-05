@@ -233,6 +233,7 @@ from debate_core.arguments.landscape.evaluation_breakdown import (
     Score,
     confusion,
     deterministic_counts,
+    labelled_as,
     outcomes_by_label_kind,
     refusals_by_label,
     second_label_counts,
@@ -240,6 +241,7 @@ from debate_core.arguments.landscape.evaluation_breakdown import (
 )
 from debate_core.arguments.landscape.model_stage import NameScan
 from debate_core.arguments.landscape.scan_hits import ScanHit, hit_counts, mark_counts
+from debate_core.domain.landscape_classification import Stance
 from debate_core.domain.landscape_trends import LandscapeTrends, TrendLabel
 from debate_core.domain.model_contracts import TaskClass
 
@@ -575,16 +577,19 @@ def sample_check_summary(checked: CoachSampleCheck) -> dict[str, JsonValue]:
             "rows": sum(checked.second_labels.values()),
             "by_kind": dict(checked.second_labels),
         },
+        "by_stance": dict(checked.by_stance),
     }
 
 
 def _sample_check_display(checked: CoachSampleCheck) -> str:
     kinds = ", ".join(f"{kind} {count}" for kind, count in checked.by_label_kind.items())
     second = ", ".join(f"{kind} {count}" for kind, count in checked.second_labels.items())
+    stances = ", ".join(f"{stance} {count}" for stance, count in checked.by_stance.items())
     return (
         f"The coach's sample reads against {checked.topic_id} {checked.taxonomy_version} "
         f"({checked.caselist}, snapshot {checked.snapshot.isoformat()}): {checked.labelled} labelled row(s); "
-        f"by the label's kind: {kinds}. Second labels: {sum(checked.second_labels.values())}"
+        f"by the label's kind: {kinds}; by the label's stance: {stances}. "
+        f"Second labels: {sum(checked.second_labels.values())}"
         f"{f' ({second})' if second else ''}. No model was asked."
     )
 
@@ -653,10 +658,13 @@ def _card_json(card: CardBreakdown) -> dict[str, JsonValue]:
         "stratum": card.stratum,
         "label": card.label,
         "label_kind": card.label_kind,
+        "stance": card.stance.value,
         "also": card.also,
+        "also_stance": card.also_stance.value,
         "outcome": card.outcome.value,
         "refusal": card.refusal,
         "answer": card.answer,
+        "answer_stance": card.answer_stance.value if card.answer_stance is not None else None,
         "confidence": card.confidence,
         "batch": card.batch,
         "related": card.related,
@@ -667,6 +675,7 @@ def _card_json(card: CardBreakdown) -> dict[str, JsonValue]:
             "method": placed.method,
             "confidence": placed.confidence,
             "sent_to_model": placed.sent_to_model,
+            "stance": placed.stance.value if placed.stance is not None else None,
         },
     }
 
@@ -751,7 +760,11 @@ def _score_line(score: Score) -> str:
 
 
 def _card_line(card: CardBreakdown) -> str:
-    answer = "no answer" if card.answer is None else f"{card.answer} {card.confidence:.2f}"
+    answer = (
+        "no answer"
+        if card.answer is None
+        else f"{labelled_as(card.answer, card.answer_stance or Stance.READS)} {card.confidence:.2f}"
+    )
     outcome = f"{card.outcome.value} {card.refusal}" if card.refusal else card.outcome.value
     placed = card.deterministic
     if placed is None:
@@ -763,7 +776,8 @@ def _card_line(card: CardBreakdown) -> str:
     sent = "" if placed is None else (", sent" if placed.sent_to_model else ", not sent")
     batch = "" if card.batch is None else f", batch {card.batch}"
     return (
-        f"row {card.sample_row}, {card.stratum}: {card.label} ({card.label_kind}) -> {outcome}, {answer}"
+        f"row {card.sample_row}, {card.stratum}: {labelled_as(card.label, card.stance)} ({card.label_kind}) "
+        f"-> {outcome}, {answer}"
         f"{batch}; headings {headings}{sent}"
     )
 

@@ -1,16 +1,36 @@
 """The coach's relabelling sitting for the answering stance (`v1-e32-t46`): what it shows, in what order, and
 what it writes.
 
-`scripts/relabel_coach_sample.py` is the terminal half. This module is the rest, values in and values out.
+The PM's ruling (2026-11-05): the session's listed rows, the cards that may answer a position, are mixed with
+:data:`CONTROL_ROWS` rows drawn at random from the other labelled rows by a stated seed, all shown in one
+random order and unmarked (:func:`sitting_rows`). Each card shows the coach's own tag and headings from the
+coach's CSV, the side its file was disclosed on, and the coach's label, and nothing about the model's
+answers, the recordings or the score (:func:`run_sitting`). The coach answers with a label, `at:<id>` for a
+card that answers the position, and Enter keeps it; a label the evaluation would refuse is asked again,
+never echoed. Only changed labels are written (:func:`relabelled_sample`), after a copy of the CSV is kept
+(:func:`copy_path`), and the end counts changed and unchanged rows, listed and control
+(:func:`relabel_counts`).
+
+`scripts/relabel_coach_sample.py` is the terminal half. This module is the rest, values in and values out;
+nothing here logs, and no row's text leaves the terminal it is shown in.
 """
 
 from __future__ import annotations
 
+import csv
+import io
+import random
 from collections.abc import Callable, Collection, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Final
 
+from debate_core.application.landscape_model_evaluation import (
+    UNSURE_LABEL,
+    EvaluationRefused,
+    coach_label,
+    row_labels,
+)
 from debate_core.domain.landscape import Taxonomy
 
 __all__ = [
@@ -44,27 +64,74 @@ class SittingRow:
 def sitting_rows(
     listed: Collection[int], labelled: Iterable[int], *, controls: int = CONTROL_ROWS, seed: int
 ) -> tuple[SittingRow, ...]:
-    """The listed rows and `controls` rows drawn from the other `labelled` rows, all in one shuffled order."""
-    del labelled, controls, seed
-    return tuple(SittingRow(row, True) for row in sorted(listed))
+    """The listed rows and `controls` rows drawn from the other `labelled` rows, all in one shuffled order.
+
+    `random.Random(seed)` draws the controls from the labelled rows off the list, in row order, then shuffles
+    the whole sitting, so one seed gives one sitting. Raises `ValueError` for a listed row the coach did not
+    label, or too few rows off the list to draw the controls from.
+    """
+    chosen = set(listed)
+    scored = set(labelled)
+    unlabelled = sorted(chosen - scored)
+    if unlabelled:
+        raise ValueError(f"row {unlabelled[0]} is listed but the coach did not label it")
+    pool = sorted(scored - chosen)
+    if len(pool) < controls:
+        raise ValueError(f"{len(pool)} labelled row(s) off the list cannot give {controls} control rows")
+    draw = random.Random(seed)
+    rows = [SittingRow(row, True) for row in sorted(chosen)]
+    rows += [SittingRow(row, False) for row in sorted(draw.sample(pool, controls))]
+    draw.shuffle(rows)
+    return tuple(rows)
+
+
+_READABLE: Final = {"AFF": "aff", "PRO": "aff", "NEG": "neg", "CON": "neg"}
 
 
 def disclosed_side(sides: Collection[str]) -> str:
-    """The sides a row's file was disclosed on, in words."""
-    del sides
-    return ""
+    """The sides a row's file was disclosed on (:class:`~debate_core.domain.caselist.Side` values), in words:
+    PF's pro and con as aff and neg, and `UNKNOWN` as no readable side."""
+    readable = {_READABLE[side] for side in sides if side in _READABLE}
+    if readable == {"aff"}:
+        return "affirmative"
+    if readable == {"neg"}:
+        return "negative"
+    return "both sides" if readable else "no readable side"
 
 
 def relabelled_sample(text: str, labels: Mapping[int, str]) -> str:
-    """The coach's CSV `text` with the `position` cell of each row of `labels` set to its new label."""
-    del labels
-    return text
+    """The coach's CSV `text` with the `position` cell of each row of `labels` set to its new label.
+
+    Every other cell keeps its value, and the header and row order stay. With no change, `text` comes back
+    as it was. Raises `ValueError` for a row the sample does not have.
+    """
+    if not labels:
+        return text
+    records = list(csv.reader(io.StringIO(text, newline="")))
+    header = records[0]
+    row_column, position_column = header.index("sample_row"), header.index("position")
+    found: set[int] = set()
+    for record in records[1:]:
+        if not record:
+            continue
+        row = int(record[row_column])
+        if row in labels:
+            record[position_column] = labels[row]
+            found.add(row)
+    missing = sorted(set(labels) - found)
+    if missing:
+        raise ValueError(f"row {missing[0]} is not in the coach's sample")
+    written = io.StringIO(newline="")
+    csv.writer(written, lineterminator="\r\n" if "\r\n" in text else "\n").writerows(records)
+    return written.getvalue()
 
 
 def relabel_counts(rows: Sequence[SittingRow], changed: Collection[int]) -> dict[str, dict[str, int]]:
     """Changed and unchanged rows, split into listed and control: counts only."""
-    del rows, changed
-    return {}
+    counts = {"listed": {"changed": 0, "unchanged": 0}, "control": {"changed": 0, "unchanged": 0}}
+    for one in rows:
+        counts["listed" if one.listed else "control"]["changed" if one.row in changed else "unchanged"] += 1
+    return counts
 
 
 def copy_path(sample: Path) -> Path:
@@ -91,6 +158,50 @@ def run_sitting(
     ask: Callable[[str], str],
     say: Callable[[str], None],
 ) -> dict[int, str]:
-    """Show each row in turn and take the coach's label; the labels that changed, by row."""
-    del rows, shown, taxonomy, ask, say
-    return {}
+    """Show each row in turn and take the coach's label; the labels that changed, by row, as the sample
+    writes them (`at:<id>`, an id, `none` or `unsure`).
+
+    `ask` takes the prompt and returns what the coach typed; `say` shows a line. Enter keeps the label. A
+    label :func:`~debate_core.application.landscape_model_evaluation.row_labels` refuses, with the row's
+    second label, is asked again, the rule said and the typed text never repeated. The typed text is read in
+    lower case, as every position id is written.
+    """
+    changes: dict[int, str] = {}
+    for number, one in enumerate(rows, start=1):
+        row = shown[one.row]
+        say("")
+        say(f"Card {number} of {len(rows)}")
+        say(f"Tag: {row.tag}")
+        say(f"Headings: {row.headings}")
+        say(f"Disclosed on: {row.side}")
+        say(f"Your label: {row.label}")
+        if row.also.strip():
+            say(f"Your second label: {row.also}")
+        while True:
+            typed = ask("New label (Enter keeps yours): ").strip().casefold()
+            if not typed:
+                break
+            try:
+                read = row_labels(one.row, typed, row.also, taxonomy)
+            except EvaluationRefused as refused:
+                said = (
+                    str(refused)
+                    .replace(f"row {one.row}'s ", "this card's ")
+                    .replace(f"row {one.row} ", "this card ")
+                )
+                say(f"Not taken: {said}. Type another label, or press Enter to keep yours.")
+                continue
+            written = read[0].written if read is not None else UNSURE_LABEL
+            if written != _as_written(row.label, taxonomy):
+                changes[one.row] = written
+            break
+    return changes
+
+
+def _as_written(label: str, taxonomy: Taxonomy) -> str:
+    """`label` as :func:`run_sitting` writes a label, or as it stands when it does not read."""
+    try:
+        read = coach_label(label, {one.id for one in taxonomy.active_positions})
+    except ValueError:
+        return label.strip()
+    return read.written if read is not None else UNSURE_LABEL

@@ -61,6 +61,7 @@ from debate_core.domain.landscape_classification import (
     ClassificationMethod,
     ClassificationResult,
     ItemKind,
+    ModelStancedPositionAnswers,
     OverrideRules,
     PositionRole,
 )
@@ -766,6 +767,11 @@ class AnsweringRouter(ScriptedModelRouter):
                             "position_id": self.answers[item["tag"]][0],
                             "confidence": self.answers[item["tag"]][1],
                             "rationale": self.answers[item["tag"]][2],
+                            **(
+                                {"stance": "answers" if item["under_an_answer_heading"] else "reads"}
+                                if issubclass(schema, ModelStancedPositionAnswers)
+                                else {}
+                            ),
                         }
                         for item in items
                     ]
@@ -924,7 +930,8 @@ async def test_model_a_second_run_over_an_unchanged_snapshot_makes_no_model_call
 async def test_model_a_prompt_version_bump_asks_again_about_model_results_only(
     tmp_path: Path, prompts: PromptRegistry, placements: list[str]
 ) -> None:
-    """Cached under 1.0.0, asked again under the committed 1.1.0 (`v1-e32-t40`'s bump)."""
+    """Cached under 1.0.0, asked again under the committed version (`v1-e32-t40`'s bump to 1.1.0, then
+    `v1-e32-t46`'s to 1.2.0)."""
     repo = repository(taxonomy())
     data = tmp_path / "data"
     await model_run(
@@ -938,9 +945,9 @@ async def test_model_a_prompt_version_bump_asks_again_about_model_results_only(
     assert router.tags == [LEFTOVER_TAGS]
     assert {
         one.prompt_version for one in again.classifications if one.method is ClassificationMethod.MODEL
-    } == {"1.1.0"}
+    } == {CLASSIFY_POSITION_VERSION}
     kept = {entry.prompt_version for entry in await LocalClassificationStore(data).read(CASELIST)}
-    assert kept == {"none", "1.1.0"}
+    assert kept == {"none", CLASSIFY_POSITION_VERSION}
 
 
 CLIFF_EVIDENCE = (
@@ -1110,7 +1117,13 @@ async def test_model_a_batch_leaving_a_card_unanswered_is_repaired_once_then_ref
 ) -> None:
     partial = {
         "answers": [
-            {"item": "item-1", "position_id": "states-cp", "confidence": 0.8, "rationale": "a reason"}
+            {
+                "item": "item-1",
+                "position_id": "states-cp",
+                "confidence": 0.8,
+                "rationale": "a reason",
+                "stance": "reads",
+            }
         ]
     }
     router = ScriptedModelRouter([partial, partial], model_id=MODEL_ID)
@@ -1218,7 +1231,13 @@ async def test_model_a_card_sends_no_school_team_code_tournament_digest_or_whole
     router.enqueue(
         {
             "answers": [
-                {"item": "item-1", "position_id": "spending-da", "confidence": 0.7, "rationale": "a cliff"}
+                {
+                    "item": "item-1",
+                    "position_id": "spending-da",
+                    "confidence": 0.7,
+                    "rationale": "a cliff",
+                    "stance": "reads",
+                }
             ]
         }
     )

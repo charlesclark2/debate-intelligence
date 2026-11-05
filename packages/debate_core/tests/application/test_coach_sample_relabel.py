@@ -103,7 +103,13 @@ def test_a_change_to_a_row_the_sample_does_not_have_is_refused() -> None:
 
 
 def test_the_end_counts_changed_and_unchanged_split_into_listed_and_control() -> None:
-    rows = (SittingRow(1, True), SittingRow(2, False), SittingRow(3, True), SittingRow(4, False), SittingRow(5, True))
+    rows = (
+        SittingRow(1, True),
+        SittingRow(2, False),
+        SittingRow(3, True),
+        SittingRow(4, False),
+        SittingRow(5, True),
+    )
 
     assert relabel_counts(rows, {1, 2, 3}) == {
         "listed": {"changed": 2, "unchanged": 1},
@@ -119,7 +125,7 @@ def test_the_end_counts_changed_and_unchanged_split_into_listed_and_control() ->
         ({"AFF", "NEG"}, "both sides"),
         ({"NEG", "UNKNOWN"}, "negative"),
         ({"UNKNOWN"}, "no readable side"),
-        (set(), "no readable side"),
+        (set[str](), "no readable side"),
     ],
 )
 def test_the_disclosed_side_is_said_in_words(sides: set[str], words: str) -> None:
@@ -151,8 +157,12 @@ TAXONOMY = Taxonomy.model_validate(
     }
 )
 SHOWN = {
-    1: ShownRow(tag="An invented tag", headings="Off case > Politics", side="affirmative", label="politics-da"),
-    2: ShownRow(tag="Another invented tag", headings="Case", side="negative", label="rural-adv", also="politics-da"),
+    1: ShownRow(
+        tag="An invented tag", headings="Off case > Politics", side="affirmative", label="politics-da"
+    ),
+    2: ShownRow(
+        tag="Another invented tag", headings="Case", side="negative", label="rural-adv", also="politics-da"
+    ),
     3: ShownRow(tag="A third invented tag", headings="Answers", side="both sides", label="at:politics-da"),
 }
 ORDER = (SittingRow(3, True), SittingRow(1, False), SittingRow(2, True))
@@ -181,7 +191,7 @@ def test_a_label_naming_no_position_is_asked_again_without_echoing_it() -> None:
     changes, said = sat(["at:none", "made-up-da", "none", "", "unsure"])
 
     assert changes == {3: "none", 2: "unsure"}
-    refusals = [line for line in said if "not" in line.casefold() or "refused" in line.casefold()]
+    refusals = [line for line in said if line.startswith("Not taken")]
     assert len(refusals) == 2
     assert not any("made-up" in line for line in said)
 
@@ -205,4 +215,8 @@ def test_each_card_shows_its_tag_headings_side_and_label_and_nothing_of_the_list
     assert "Card 1 of 3" in shown and "Card 3 of 3" in shown
     for word in ("listed", "control", "model", "answer was", "score", "row 3", "row 1"):
         assert word not in shown.casefold()
-    assert shown.index("A third invented tag") < shown.index("An invented tag") < shown.index("Another invented tag")
+    assert (
+        shown.index("A third invented tag")
+        < shown.index("An invented tag")
+        < shown.index("Another invented tag")
+    )

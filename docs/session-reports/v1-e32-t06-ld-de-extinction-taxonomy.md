@@ -468,9 +468,51 @@ above are those runs.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-11-05
 
 **Notes:**
+
+Built to the ruling point by point, counted before it was built, and the coach's review made workable
+for the coach instead of being forced through a sheet.
+
+1. **ac1 to ac4 pass.** The topic and its Florida Blue Key entry are in `topics.yaml` with space
+   colonization untouched; 29 topic-map tests pin every snapshot to 2026-10-27 as before and 2026-11-03's
+   split; 15 positions seeded from headings two or more teams used, the loader and config tests passing;
+   the counts recorded; the coach's review applied and the dry run resolving the new topic at 1.0.0, the
+   entry's week reported as 292 of 902.
+2. **The ruling, checked:** only `bluekey` and `fbk` in configuration; the "Part of a week" notice and
+   the partial base; the loader's refusals, the reach-back one made precise so that Q2's remedy stays a
+   configuration change (Decision 1, accepted); Q3 by the held spelling; Q4's check done and recorded
+   (neither space-only source comes only through a one-school spelling, so holds stands). Eight mutants
+   caught, the two that first failed at import rewritten and run again rather than counted.
+3. **Deviations accepted.** (1) The rule in `debate_core.domain.landscape` and `landscape_trends`, where
+   the topic map and trends model live; the PM adds `debate_core.domain` to the spec's packages in the
+   next batch. (2) `tournament_entry_snapshots` in `--json`: it is how the 292 of 902 is checked outside
+   a unit test. (3) The four tournament names that are also schools' names left out of the quoted
+   proposal. (4) ac4's dry run from this worktree over a copy parsed with `docx-9`: the installed build
+   cannot read tournament entries; seeding read the run's own `docx-7` store, as asked.
+4. **`generic.yaml` 1.2.0 adds LD-only positions**, so the NHI topic keeps 1.5.0 and no Policy count
+   moves, as its changelog says. `v1-e32-t49` runs beside this task: once this merges, that session
+   replays the kept 1.2.0 cassettes once more and confirms 23 of 33 before its re-record. The PM tells it.
+5. **Decision 7, one `git fetch origin dev`:** a network call belongs to the operator, apart from
+   `scripts/task sync`. Harmless here; not again.
+6. **The 7 scan hits are a publish's matter**, as the report says: whoever publishes the first LD report
+   reads them in the terminal first.
+7. **The operator's decisions, ruled by the PM:**
+   - **Q2's counts move to a follow-up the PM files** (E32, p2, not before the run of 2026-11-11): the
+     late-disclosure count on 2026-11-10 and 2026-11-17 with the ruling's 5% trigger, and the report line
+     that would make the check weekly without a session. This task's Goal stays `Succeeded`.
+   - **A permanent guided review** (`seed_landscape_taxonomy.py review --interactive` and an apply step
+     reading the decisions file into the YAML), this task's script as its prototype: filed (E32, p3).
+   - **The coach reviewing taxonomy updates in the tub app**: filed (E39, p3, proposal first, after the
+     guided review), writing the same decisions file, which the operator's apply step reads, so the app
+     never writes configuration itself.
+   - The stale comment in `config/argument_taxonomy.yaml` and the runbook line on a branch whose parser is
+     ahead of the run image: the PM makes both edits in the next batch.
+8. **Closing checks:** the changed directories and the always-run list (3,750 passed after the review),
+   the two smoke files, ruff, pyright, lint-imports, thin handlers, the docs index, links, command blocks
+   and the specs are clean; the 346-file affected set is the pull request's `ci` (agreement 10).
+9. **Merge:** a plain `scripts/task pr` once `ci` is green. The Goal is `Succeeded`.

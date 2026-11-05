@@ -1,0 +1,82 @@
+# TASK v1-e40-t44-a-scheduled-run-refuses-a-second-run-within-hours - A scheduled pull refuses to run when the bucket's run log shows a run started within the last hours
+# Epic: E40 — Weekly Caselist Run in the Cloud | Release: v1.8 (Weekly caselist run in the cloud) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e40-t44-a-scheduled-run-refuses-a-second-run-within-hours
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.8
+    debate/epic: v1-e40-cloud-caselist-run
+  annotations:
+    debate/title: "A scheduled pull refuses to run when the bucket's run log shows a run started within the last hours"
+spec:
+  # Filed by the PM, 2026-11-05, from v1-e40-t42's ruling, point 3 (the PM's ruling of 2026-11-05).
+  description: >-
+    v1-e40-t42 made both schedules retry a launch ECS refused, three times within an hour. A
+    retry after an ambiguous ECS answer (the task created, the call answered as an error) can
+    start a second task, since Scheduler sends no ClientToken. The bucket's run lock refuses it
+    while the first run holds the lock, and the bound holds because the retries land long before
+    a run can finish (the shortest recorded run took 56 minutes, on 2026-10-28). Make "never
+    twice in a week" hold without that bound: a pull started by a schedule refuses, before the
+    lock and before any OpenCaselist call, when the bucket's run log records a run that started
+    within the last N hours, recording and announcing the refusal as a lock refusal is. Propose
+    N, how a scheduled start is told apart from a hand run (a hand run, such as the operator's
+    of 2026-11-05 after a refused launch, must still run), and which recorded runs count (a run
+    refused for the lock does not), and stop for the PM's ruling.
+  priority: 3
+  constraints:
+    packages: [debate_core.application, debate_core.integrations, debate_cli, packages/debate_core/tests, packages/debate_cli/tests, docs/runbooks]
+    forbidden:
+      - A hand run refused by the guard
+      - A live AWS or OpenCaselist call in a test
+      - A change to the lock's own rules
+  context:
+    - kind: TaskRef
+      name: v1-e40-t42-schedule-retries-a-refused-launch
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        The proposal (N, telling a scheduled start from a hand run, which runs count) is
+        ruled on by the PM, and a scheduled pull with a run started within N hours is
+        refused before the lock and any OpenCaselist call while a hand run is not, by tests
+        shown failing first.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e40-t44-a-scheduled-run-refuses-a-second-run-within-hours-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.8
+    debate/epic: v1-e40-cloud-caselist-run
+spec:
+  description: >-
+    A scheduled pull refuses to run when the bucket's run log shows a run started within the
+    last hours.
+  goalRef:
+    name: v1-e40-t44-a-scheduled-run-refuses-a-second-run-within-hours
+  graph:
+    nodes:
+      - id: a-scheduled-run-refuses-a-second-run-wit
+        kind: Task
+        name: Second run guard
+        description: >-
+          A scheduled pull refuses to run when the bucket's run log shows a run started
+          within the last hours.
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Second run guard tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests, -k, pull and guard]
+status:
+  phase: Pending

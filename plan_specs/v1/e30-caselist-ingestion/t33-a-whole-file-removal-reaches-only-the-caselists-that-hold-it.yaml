@@ -1,0 +1,115 @@
+# TASK v1-e30-t33-a-whole-file-removal-reaches-only-the-caselists-that-hold-it - A whole-file removal deletes only the aggregates of the caselists that hold the file, and its rebuild works in bucket mode
+# Epic: E30 Caselist Evidence Ingestion | Release: v1.1 | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e30-t33-a-whole-file-removal-reaches-only-the-caselists-that-hold-it
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e30-caselist-ingestion
+  annotations:
+    debate/title: "A whole-file removal deletes only the aggregates of the caselists that hold the file, and its rebuild works in bucket mode"
+spec:
+  # Filed by the PM, 2026-11-05, from v1-e39-t10's journey of 2026-11-05 (J7's dry run, stopped by the PM before --execute).
+  description: >-
+    J7 of the signed-in journey (evidence-search.md) dry-ran `caselist remove --source` for the
+    seed's one synthetic file in `testcl26` (RM-2026-91, dev, build 1.1.0.dev342). The plan
+    found the file correctly, its object under `raw/caselist/testcl26/` and its parsed file
+    under `parsed/testcl26/2026.10.27-docx-7/`, and also planned for deletion, with every
+    version, the `index.jsonl`, `failures.jsonl` and `occurrences.jsonl` of every caselist in
+    every version directory, in the bucket and on this machine: hsld26, hspf26, hspolicy26,
+    openev, testcl26 and the backfile hspolicy25, under both docx-6 and docx-7. The cause is in
+    removal_plan.py: for a REMOVE disposition `parsed_caselists` is every disclosing caselist
+    plus openev, and the aggregates of every one are planned, because the plan does not ask
+    which caselists hold the file. Before the cutover that was costly but safe, since P1b
+    rebuilt every caselist from the Mac's own store. Since the cutover it is not: the Mac's own
+    data directory no longer holds the weeks the cloud ran (it held docx-6 aggregates for most
+    caselists and docx-7 only for hspolicy26), so P1b's `caselist parse --publish` from it would
+    upload aggregates built from a stale store over the bucket's (and run a parse's --publish on
+    the Mac), and a backfile like hspolicy25 is rebuilt only by its cloud task (about 95 minutes
+    on 2026-11-02). Until rebuilt, everything reading the parsed store (the landscape report,
+    seeding restores, the parse reports' counts) finds no aggregates, and the weekly run
+    rebuilds a caselist's only when it imported into it that week. A real takedown in prod would
+    do the same, and the pilot's promotion item 8 (v1-e39-t07's prod removal exercise) cannot
+    run until this is fixed, so the coach's beta waits on it. Propose, and stop for the PM's
+    ruling: (a) which aggregates a whole-file removal plans, from what it can see (the
+    per-source parsed files that name the digest, by caselist and version directory, and the
+    manifests on either side that hold it), so a file held in one caselist plans that caselist's
+    aggregates in the version directories that hold its parsed file, and nothing else; a re-run
+    still finding what a first run left (the withdrawal record and the scopes beside the log),
+    as v1-e30-t19 built; (b) the plan's text showing those aggregates apart from the file's own
+    objects, as what is deleted and must be rebuilt; (c) how the aggregates are rebuilt in
+    bucket mode, never from the Mac's own store: from a working copy restored under the dev lock
+    (v1-e40-t10's restore), by the removal itself from the bucket's per-source files, or by the
+    cloud task, and how a backfile the plan reaches is rebuilt; (d) P1b and step 5 of
+    caselist-removal.md, and evidence-search.md's J7, rewritten to match. Then build what is
+    ruled. The operator then reruns the journey's J4 to J9 in dev (a fresh copy, the seed
+    published again) with J7's --execute, and the PM records it before promotion item 8.
+  priority: 1
+  constraints:
+    packages: [debate_core.application, debate_core.domain, debate_core.integrations, debate_cli, packages/debate_core/tests, packages/debate_cli/tests, docs/runbooks, docs/data]
+    forbidden:
+      - A removal that leaves a removed file's rows in any aggregate
+      - A rebuild that reads the Mac's own data directory in bucket mode
+      - A parse's --publish run on the Mac from a store that is not a restored copy
+      - A school, team code or debater name in a test, log or report
+      - A real disclosure in a fixture
+  context:
+    - kind: TaskRef
+      name: v1-e30-t07-source-removal
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        The proposal ((a) which aggregates, (b) the plan's text, (c) the rebuild in bucket
+        mode, backfiles included, (d) the runbooks) is ruled on by the PM before any code.
+    - id: ac2
+      description: >-
+        A whole-file removal of a file held in one caselist plans only that caselist's
+        aggregates, in the version directories holding its parsed file; a file held in two
+        caselists plans both; a re-run still plans what a first run left; and the ruled
+        rebuild restores the aggregates without the removed rows, by tests on synthetic
+        stores shown failing first.
+    - id: ac3
+      description: >-
+        The operator reruns the journey's J4 to J9 in dev with J7's --execute and the ruled
+        rebuild, the card gone in J8, and the PM records it (operator).
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e30-t33-a-whole-file-removal-reaches-only-the-caselists-that-hold-it-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e30-caselist-ingestion
+spec:
+  description: >-
+    A whole-file removal deletes only the aggregates of the caselists that hold the file, and
+    its rebuild works in bucket mode.
+  goalRef:
+    name: v1-e30-t33-a-whole-file-removal-reaches-only-the-caselists-that-hold-it
+  graph:
+    nodes:
+      - id: a-whole-file-removal-reaches-only-the-ca
+        kind: Task
+        name: Removal reaches its caselists
+        description: >-
+          A whole-file removal deletes only the aggregates of the caselists that hold the
+          file, and its rebuild works in bucket mode.
+        estimatedEffort: 4h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Removal reaches its caselists tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests, -k, removal]
+status:
+  phase: Pending

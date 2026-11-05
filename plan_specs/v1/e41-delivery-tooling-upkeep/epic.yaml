@@ -586,5 +586,24 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e41-t22-per-user-credentials-file-and-a-missing-working-folder
+    - id: t23
+      kind: Task
+      name: 'The remove smoke file''s setup no longer decides CI''s slowest part'
+      description: >-
+        The remove smoke file's setup no longer decides CI's slowest part.
+      inputs:
+        specRef: plan_specs/v1/e41-delivery-tooling-upkeep/t23-the-remove-smoke-file-no-longer-decides-the-slowest-part.yaml
+        goalRef: v1-e41-t23-the-remove-smoke-file-no-longer-decides-the-slowest-part
+      dependsOn:
+      - t18
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e41-t23-the-remove-smoke-file-no-longer-decides-the-slowest-part reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e41-t23-the-remove-smoke-file-no-longer-decides-the-slowest-part
 status:
   phase: Pending

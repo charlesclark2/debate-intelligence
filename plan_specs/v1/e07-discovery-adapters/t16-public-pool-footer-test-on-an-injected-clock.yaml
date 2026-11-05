@@ -1,0 +1,79 @@
+# TASK v1-e07-t16-public-pool-footer-test-on-an-injected-clock - The public-pool footer test counts its results on an injected clock, not the real one
+# Epic: E07 Discovery Provider Adapters | Release: v1.4 (Federated research from the CLI) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e07-t16-public-pool-footer-test-on-an-injected-clock
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.4
+    debate/epic: v1-e07-discovery-adapters
+  annotations:
+    debate/title: "The public-pool footer test counts its results on an injected clock, not the real one"
+spec:
+  # Filed by the PM, 2026-11-05, from v1-e41-t18's follow-up 2 (the PM's review, 2026-11-05).
+  description: >-
+    `packages/debate_cli/tests/test_search_command.py::test_on_the_committed_profile_without_a_c
+    ontact_email_crossref_names_the_public_pool_in_the_footer` (from v1-e07-t13) depends on the
+    real clock: how many Crossref queries fit under the public pool's pace of one query a second
+    before the deadline decides how many results it sees. It failed dev's push run of `6db251b`
+    (the `[dev]` case: expected 1 result, got 2), passed on the dispatch at `440f797`, and
+    failed locally on v1-e41-t18's branch (the `[prod]` case: expected 2, got 1). A failed part
+    also costs dev its durations refresh (v1-e41-t17's rule). Give the pace and the deadline an
+    injected clock in this test, so the count is fixed, and say what the test now proves. Then
+    list, by test name and count only, any other test whose outcome waits on a provider's real
+    pace or a real deadline, and fix each the same way, or name it for the PM.
+  priority: 2
+  constraints:
+    packages: [debate_cli, debate_core.application, debate_core.integrations, packages/debate_cli/tests, packages/debate_core/tests]
+    forbidden:
+      - A live provider call in a test
+      - A sleep or a retry added to make a test pass
+      - Loosening an assertion to accept either count
+  context:
+    - kind: TaskRef
+      name: v1-e07-t13-profiles-enable-the-providers-that-passed-their-smoke
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        The public-pool footer test runs on an injected clock and gives one count every run,
+        shown by repeated runs at both profiles; any other test waiting on a real pace or
+        deadline is fixed or named for the PM.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e07-t16-public-pool-footer-test-on-an-injected-clock-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.4
+    debate/epic: v1-e07-discovery-adapters
+spec:
+  description: >-
+    The public-pool footer test counts its results on an injected clock, not the real one.
+  goalRef:
+    name: v1-e07-t16-public-pool-footer-test-on-an-injected-clock
+  graph:
+    nodes:
+      - id: public-pool-footer-test-on-an-injected-c
+        kind: Task
+        name: Injected clock
+        description: >-
+          The public-pool footer test counts its results on an injected clock, not the
+          real one.
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Injected clock tests pass
+            command: uv
+            args: [run, pytest, packages/debate_cli/tests/test_search_command.py, -k, public_pool]
+status:
+  phase: Pending

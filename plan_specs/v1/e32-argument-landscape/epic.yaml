@@ -1123,5 +1123,64 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e32-t50-a-second-labelled-sample-held-out
+    - id: t51
+      kind: Task
+      name: 'Late disclosures from tournaments before the de-extinction topic are counted on 2026-11-10 and 2026-11-17, and weekly after'
+      description: >-
+        Late disclosures from tournaments before the de-extinction topic are counted on
+        2026-11-10 and 2026-11-17, and weekly after.
+      inputs:
+        specRef: plan_specs/v1/e32-argument-landscape/t51-late-disclosures-from-pre-topic-tournaments-counted.yaml
+        goalRef: v1-e32-t51-late-disclosures-from-pre-topic-tournaments-counted
+      dependsOn:
+      - t06
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e32-t51-late-disclosures-from-pre-topic-tournaments-counted reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e32-t51-late-disclosures-from-pre-topic-tournaments-counted
+    - id: t52
+      kind: Task
+      name: 'A seeded taxonomy is reviewed by the coach one question at a time, and the decisions are applied by one command'
+      description: >-
+        A seeded taxonomy is reviewed by the coach one question at a time, and the decisions
+        are applied by one command.
+      inputs:
+        specRef: plan_specs/v1/e32-argument-landscape/t52-guided-taxonomy-review-and-apply.yaml
+        goalRef: v1-e32-t52-guided-taxonomy-review-and-apply
+      dependsOn:
+      - t06
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e32-t52-guided-taxonomy-review-and-apply reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e32-t52-guided-taxonomy-review-and-apply
+    - id: t53
+      kind: Task
+      name: 'generic-k''s description, rewritten as v1-e32-t49 proposed, for the coach''s review'
+      description: >-
+        generic-k's description, rewritten as v1-e32-t49 proposed, for the coach's review.
+      inputs:
+        specRef: plan_specs/v1/e32-argument-landscape/t53-generic-k-description-for-the-coachs-review.yaml
+        goalRef: v1-e32-t53-generic-k-description-for-the-coachs-review
+      dependsOn:
+      - t49
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e32-t53-generic-k-description-for-the-coachs-review reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e32-t53-generic-k-description-for-the-coachs-review
 status:
   phase: Pending

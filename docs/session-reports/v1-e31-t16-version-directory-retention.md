@@ -461,3 +461,13 @@ Added by the PM. Nothing above is changed, and this section is not a review.
 | ac4: prod's retirements | NOT RUN (operator) | refused as designed; to run after prod holds `docx-7` | 2026-11-03, `caselist retire --bucket` dry run against prod on `v1.1.0-dev.342` (parser `2026.10.27-docx-7`): 20 directories, `docx-1`, `-2`, `-3`, `-5` and `-6` in each of hsld26, hspf26, hspolicy26 and openev, every one `not yet superseded`, because prod holds no `docx-7` directory and a directory is superseded only by the installed build's version. No tag was read or written, so the tagging grant is first exercised by the next dry run |
 
 The Goal stays `InProgress`. Prod's retirement runs after the pilot's promotion item 6 publishes `docx-7` to prod, and then names five directories, `2026.10.20-docx-6` included (12,713 objects, about 7.5 GB). The dev bucket and this machine also retire `docx-6` once the 2026-11-04 cloud run has published `docx-7` for every caselist (steps 1, 2 and 4).
+
+## Operator records (recorded by the PM, 2026-11-05)
+
+Added by the PM. Nothing above is changed, and this section is not a review.
+
+| Criterion | Was | Now | Record |
+|---|---|---|---|
+| Dev's `2026.10.20-docx-6` (the PM's amendment of 2026-11-03) | not yet superseded | Retired in the dev bucket | 2026-11-05, build 1.1.0.dev342: the dry run read docx-6 superseded in hsld26, hspf26, hspolicy26 and openev and docx-7 current; --execute tagged 16,299 objects (6,417, 5,429, 4,345, 108), and the dry run after it read Tagged equal to Objects |
+
+This machine's docx-6 directory stays while v1-e32-t49 replays the coach's sample from it. Prod's five directories follow promotion item 6.

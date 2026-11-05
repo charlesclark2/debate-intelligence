@@ -1,0 +1,78 @@
+# TASK v1-e41-t23-the-remove-smoke-file-no-longer-decides-the-slowest-part - The remove smoke file's setup no longer decides CI's slowest part
+# Epic: E41 — Delivery Tooling Upkeep | Release: v1.8 (Weekly caselist run in the cloud) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e41-t23-the-remove-smoke-file-no-longer-decides-the-slowest-part
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.8
+    debate/epic: v1-e41-delivery-tooling-upkeep
+  annotations:
+    debate/title: "The remove smoke file's setup no longer decides CI's slowest part"
+spec:
+  # Filed by the PM, 2026-11-05, from v1-e41-t18's follow-up 1 (the PM's review, 2026-11-05).
+  description: >-
+    Since v1-e41-t17 whole files are dealt to parts by recorded duration.
+    `tests/smoke/test_caselist_remove_smoke.py` has function-scoped `installation`, `bucket` and
+    `published` fixtures that cost 11 to 15 s a test, 911 s of worker time on `6db251b`'s push
+    against a 775 s share. Dealt whole when its recorded time falls just under a share and
+    spread when just over, it swings the slowest part by about 70 s from run to run (298 s on
+    the dispatch at `440f797`, against 179 to 229 s for the others). Propose, and stop for the
+    PM's ruling: spreading any file above some fraction of a share test by test (which fraction,
+    and what it does to the parts' times on the recorded durations), or a module-scoped
+    installation if the file's tests allow it (which tests share what, and why that is safe), or
+    both. Then build what is ruled; the partition proof still holds at every size.
+  priority: 3
+  constraints:
+    packages: [tests/pytest_plugins, tests/smoke, tests/scripts, scripts, docs/process]
+    forbidden:
+      - Paid or larger runners
+      - A selected test in no part, or in two
+      - A smoke test weakened to make it faster
+  context:
+    - kind: TaskRef
+      name: v1-e41-t18-each-part-collects-only-its-own-files
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        The proposal is ruled on by the PM, and what is ruled is built with the partition
+        proof holding at every size, and the slowest part's time on the recorded durations
+        reported before and after.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e41-t23-the-remove-smoke-file-no-longer-decides-the-slowest-part-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.8
+    debate/epic: v1-e41-delivery-tooling-upkeep
+spec:
+  description: >-
+    The remove smoke file's setup no longer decides CI's slowest part.
+  goalRef:
+    name: v1-e41-t23-the-remove-smoke-file-no-longer-decides-the-slowest-part
+  graph:
+    nodes:
+      - id: the-remove-smoke-file-no-longer-decides
+        kind: Task
+        name: Slowest part
+        description: >-
+          The remove smoke file's setup no longer decides CI's slowest part.
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Slowest part tests pass
+            command: uv
+            args: [run, pytest, tests/scripts, -k, parts or durations]
+status:
+  phase: Pending

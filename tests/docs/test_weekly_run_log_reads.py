@@ -211,7 +211,8 @@ def test_how_far_it_has_got_comes_after_step_8s_watch_and_before_its_record() ->
     text = CLOUD_RUN.read_text(encoding="utf-8")
     step_8 = text.index("## Step 8")
     watch = text.index("**Watch it**, every half hour", step_8)
-    how_far = text.index("**How far it has got**", step_8)
+    how_far = text.find("**How far it has got**", step_8)
+    assert how_far != -1, "Step 8 reads the last step line"
     record = text.index("**Its record reads as a Mac run's does**", step_8)
     assert watch < how_far < record
     assert text.index(command_containing(CLOUD_RUN, HOW_FAR), step_8) < record

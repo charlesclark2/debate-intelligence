@@ -19,7 +19,9 @@ from __future__ import annotations
 
 import asyncio
 import gc
+import heapq
 import io
+import itertools
 import json
 import os
 import sqlite3
@@ -67,6 +69,7 @@ from debate_core.evidence.docx_manifest_part import read_embedded_manifest_bytes
 # The Bedrock module (boto3) likewise, whose router factory the one-limit tests stand in for.
 from debate_core.integrations import bedrock
 from debate_core.integrations import html_extractor as html_extractor
+from debate_core.integrations.discovery import crossref as crossref_discovery
 from debate_core.integrations.discovery.feed_cache import InMemoryFeedCache
 from debate_core.integrations.discovery.feed_config import FeedConfig, FeedReview, FeedSource
 from debate_core.integrations.discovery.feeds import feed_factory
@@ -77,6 +80,7 @@ from debate_core.integrations.models.factory import RealRouterFactory
 from debate_core.integrations.models.prompt_registry import PromptRegistry
 from debate_core.integrations.models.routing_policy import RoutingPolicy
 from debate_core.retrieval import canonicalize_url
+from debate_core.testing.fakes.clock_and_ids import FixedClock
 from debate_core.testing.fakes.model_router import ScriptedModelRouter
 
 runner = CliRunner()
@@ -1053,17 +1057,91 @@ def test_on_the_committed_profile_a_search_on_the_nhi_topic_with_a_key_asks_govi
     assert DATA_GOV_KEY not in result.stdout + result.stderr
 
 
+class PacerTime:
+    """A clock and a sleep for Crossref's pacer, on one timeline that moves only when every task is waiting,
+    for the public-pool footer test below; the wall clock is never read.
+
+    The command runs its own event loop, so the timeline drives itself from inside it: the first sleep
+    starts a driver task that lets every runnable task run (200 turns of the loop, as `VirtualTime` in
+    `debate_core`'s `test_crossref.py` does), then jumps the clock to the earliest sleeper's wake time and
+    wakes it, until no sleeper is left. A sleep cancelled before it wakes is dropped.
+    """
+
+    def __init__(self, start: datetime) -> None:
+        self.clock = FixedClock(start)
+        self._timers: list[tuple[datetime, int, asyncio.Future[None]]] = []
+        self._order = itertools.count()
+        self._driver: asyncio.Task[None] | None = None
+
+    async def sleep(self, seconds: float) -> None:
+        if seconds <= 0:
+            await asyncio.sleep(0)
+            return
+        loop = asyncio.get_running_loop()
+        wake: asyncio.Future[None] = loop.create_future()
+        heapq.heappush(self._timers, (self.clock.now() + timedelta(seconds=seconds), next(self._order), wake))
+        if self._driver is None or self._driver.done():
+            self._driver = loop.create_task(self._drive())
+        await wake
+
+    async def _drive(self) -> None:
+        while True:
+            for _ in range(200):
+                await asyncio.sleep(0)
+            while self._timers and self._timers[0][2].done():
+                heapq.heappop(self._timers)
+            if not self._timers:
+                return
+            wake_at, _, wake = heapq.heappop(self._timers)
+            self.clock.set(max(wake_at, self.clock.now()))
+            wake.set_result(None)
+
+
 def test_on_the_committed_profile_without_a_contact_email_crossref_names_the_public_pool_in_the_footer(
     committed_profile: Seams, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """An expanded search's queries all reach Crossref at once, and the public pool sends one a second, so
     the ones it cannot send before their timeout less a reserve come back not asked, named in the footer
-    with the cure (v1-e07-t03). Here the timeout is 2 seconds, the reserve 1, and the clock runs, so the
-    first of the twelve NHI link queries is sent and the second's turn, a second after the first, comes
-    too late: one request, eleven not asked, within about a second. With the profiles' 10 seconds, the
-    same search sends nine (the before-and-after measurement in v1-e07-t13's report)."""
-    committed_profile.moving_clock = True
+    with the cure (v1-e07-t03). With the profiles' 10 seconds, the same search sends nine (the
+    before-and-after measurement in v1-e07-t13's report).
+
+    The pacer runs on the test's time (:class:`PacerTime`), handed to it through `crossref_factory`'s own
+    `clock` and `sleep`, which the container leaves at the wall clock and `asyncio.sleep`. On the wall
+    clock a busy runner let the second query arrive after the first was sent, and then its turn came
+    inside its deadline: two requests (`v1-e32-t49`, PM ruling of 2026-11-05).
+
+    Worked by hand, the same under the dev and the prod profile (neither sets a contact email, so both
+    are on the public pool, and the environment's 2 seconds replace both profiles' timeout):
+
+    * The public pool sends 1 query a second, 1 at a time, so a query's turn is 1 second after the one
+      before it started.
+    * The reserve is the median answer time clamped to at least 1 second and at most half the timeout:
+      half of 2 is 1, so it is 1 whatever Crossref's answers take.
+    * All twelve NHI link queries arrive at the start, before the timeline moves, so every query's
+      deadline is the start plus 2 less 1: the start plus 1 second.
+    * The first is sent at the start. The second's turn is at the start plus 1 second, its deadline:
+      too late, not asked. The third to the twelfth come after it, past the same deadline: not asked.
+
+    One request, its one recorded result, eleven not asked; the timeline moves once, by the second's
+    one-second wait.
+    """
     monkeypatch.setenv("DEBATE_PROVIDERS__TIMEOUT_SECONDS", "2")
+    pacer_time = PacerTime(NOW)
+    build = crossref_discovery.crossref_factory
+
+    def on_the_test_s_time(
+        http: HttpSettings,
+        *,
+        version: str,
+        clock: object,
+        transport: httpx.AsyncBaseTransport | None = None,
+    ) -> Callable[[ProviderSettings], crossref_discovery.CrossrefProvider]:
+        del clock
+        return build(
+            http, version=version, clock=pacer_time.clock, sleep=pacer_time.sleep, transport=transport
+        )
+
+    monkeypatch.setattr(crossref_discovery, "crossref_factory", on_the_test_s_time)
 
     result = search(
         "national health insurance",
@@ -1083,6 +1161,7 @@ def test_on_the_committed_profile_without_a_contact_email_crossref_names_the_pub
         f"  crossref: partial, 1 result from 12 queries: {PUBLIC_POOL_NOT_ASKED}",
     ]
     assert hosts_asked(committed_profile) == {CROSSREF_HOST: 1}
+    assert pacer_time.clock.now() == NOW + timedelta(seconds=1)
 
 
 def test_a_topic_alone_searches_the_query_as_typed(seams: Seams) -> None:

@@ -229,6 +229,7 @@ from debate_core.application.plan_texts import PlanTextCounts
 from debate_core.application.settings import Environment, Settings, find_repository_root
 from debate_core.arguments.landscape.evaluation_breakdown import (
     CardBreakdown,
+    GenericAnswers,
     LabelledScore,
     Score,
     confusion,
@@ -619,6 +620,7 @@ def breakdown_summary(result: EvaluationBreakdown) -> dict[str, JsonValue]:
             for label, answer, count in confusion(result.cards)
         ],
         "wrong_answers_naming_a_related_position": sum(card.related for card in result.cards),
+        "generic_answers": _generic_json(result.generic_answers),
         "second_label": dict(second_label_counts(result.cards)),
         "model_set": _score_json(result.model_set),
         "deterministic": dict(deterministic_counts(result.cards)),
@@ -644,6 +646,17 @@ def breakdown_summary(result: EvaluationBreakdown) -> dict[str, JsonValue]:
             "cassettes": _hits_json(result.cassette_hits),
             "repair_cassettes": {"texts": result.repair_cassettes, **_hits_json(result.repair_hits)},
         },
+    }
+
+
+def _generic_json(found: GenericAnswers) -> dict[str, JsonValue]:
+    """The model's answers naming a generic position, on their own (`v1-e32-t49`): counts and row numbers."""
+    return {
+        "answers": found.answers,
+        "above_threshold": found.above_threshold,
+        "correct": found.correct,
+        "wrong": found.wrong,
+        "named_label_rows": list(found.named_label_rows),
     }
 
 

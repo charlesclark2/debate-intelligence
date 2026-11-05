@@ -53,6 +53,8 @@ __all__ = [
     "CardBreakdown",
     "CardOutcome",
     "DeterministicPlacement",
+    "GENERIC_POSITION_PREFIX",
+    "GenericAnswers",
     "LabelledScore",
     "Score",
     "StratumScore",
@@ -60,6 +62,8 @@ __all__ = [
     "confusion",
     "deterministic_counts",
     "deterministic_placement",
+    "generic_answer_counts",
+    "generic_positions",
     "label_kind",
     "model_alone_score",
     "model_set_score",
@@ -209,6 +213,64 @@ def _ancestor(taxonomy: Taxonomy, ancestor: str, of: str) -> bool:
 def labelled_as(position_id: str, stance: Stance) -> str:
     """A label or an answer as the coach writes it: the id, or `at:<id>` for one that answers."""
     return f"{ANSWERS_PREFIX}{position_id}" if stance is Stance.ANSWERS else position_id
+
+
+GENERIC_POSITION_PREFIX: Final = "generic-"
+"""The id prefix of a kind's generic position (`generic-k`, `generic-theory`): the one whose description says
+it fits no named position of its kind, which the classify prompt sends a card of that kind to
+(`v1-e32-t40`)."""
+
+
+def generic_positions(taxonomy: Taxonomy) -> dict[str, str]:
+    """Each active generic position of `taxonomy`, by id, with its kind's value."""
+    return {
+        one.id: one.kind.value
+        for one in taxonomy.active_positions
+        if one.id.startswith(GENERIC_POSITION_PREFIX)
+    }
+
+
+@dataclass(frozen=True, slots=True)
+class GenericAnswers:
+    """The model's answers naming a generic position, on their own (the PM's condition on prompt 1.3.0's
+    generic-confidence clause, `v1-e32-t49`)."""
+
+    answers: int = 0
+    """Answers naming a generic position, at any confidence."""
+    above_threshold: int = 0
+    """Of those, the ones counted: at or above the review threshold."""
+    correct: int = 0
+    """Of the counted, the ones the coach's label (or second label) agrees with."""
+    wrong: int = 0
+    """Of the counted, the rest."""
+    named_label_rows: tuple[int, ...] = ()
+    """The sample rows labelled with a named position of a generic's kind that the model answered with that
+    generic position, at any confidence, unless the answer is scored right (a second label the coach gave): a
+    named kritik's card turning generic, the clause's other risk."""
+
+
+def generic_answer_counts(cards: Iterable[CardBreakdown], generic: Mapping[str, str]) -> GenericAnswers:
+    """The answers among `cards` naming one of the `generic` positions (id to kind:
+    :func:`generic_positions`)."""
+    named = [card for card in cards if card.answer is not None and card.answer in generic]
+    counted = [card for card in named if card.counted]
+    correct = sum(card.outcome is CardOutcome.CORRECT for card in counted)
+    return GenericAnswers(
+        answers=len(named),
+        above_threshold=len(counted),
+        correct=correct,
+        wrong=len(counted) - correct,
+        named_label_rows=tuple(
+            sorted(
+                card.sample_row
+                for card in named
+                if card.sample_row is not None
+                and card.label not in generic
+                and card.label_kind == generic[card.answer or ""]
+                and card.outcome is not CardOutcome.CORRECT
+            )
+        ),
+    )
 
 
 def scored_stance(

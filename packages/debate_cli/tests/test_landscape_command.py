@@ -2592,6 +2592,59 @@ def test_evaluate_breakdown_json_counts_the_hits_and_holds_none_of_their_words(
             assert "quillfeather" not in path.read_bytes().decode("utf-8", errors="replace"), path
 
 
+def test_evaluate_breakdown_counts_the_answers_naming_a_generic_position(
+    world: SyntheticRun, sample_files: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`v1-e32-t49`: row 1 is a named kritik's card answered generic and counted wrong, row 2 a generic card
+    answered generic below the threshold; the stub's other card names no generic position."""
+    placed = DeterministicPlacement(position_id=None, method=None, confidence=0.0, sent_to_model=True)
+    result = EvaluationBreakdown(
+        evaluation=_evaluated(labelled=3, found=3, asked=3, calls=1, counted=2, correct=1),
+        cards=(
+            CardBreakdown(
+                "cap-k",
+                "k",
+                CardOutcome.WRONG_POSITION_SAME_KIND,
+                answer="generic-k",
+                confidence=0.9,
+                deterministic=placed,
+                sample_row=1,
+            ),
+            CardBreakdown(
+                "generic-k",
+                "k",
+                CardOutcome.BELOW_THRESHOLD,
+                answer="generic-k",
+                confidence=0.5,
+                deterministic=placed,
+                sample_row=2,
+            ),
+            CardBreakdown(
+                "spending-da",
+                "da",
+                CardOutcome.CORRECT,
+                answer="spending-da",
+                confidence=0.9,
+                deterministic=placed,
+                sample_row=3,
+            ),
+        ),
+        batches=(),
+        generic={"generic-k": "k"},
+    )
+    _stub_breakdown(monkeypatch, result)
+
+    outcome = _breakdown(world, sample_files, "--json")
+
+    assert _error(outcome)["details"]["breakdown"]["generic_answers"] == {
+        "answers": 2,
+        "above_threshold": 1,
+        "correct": 0,
+        "wrong": 1,
+        "named_label_rows": [1],
+    }
+
+
 def test_evaluate_breakdown_lists_each_hit_in_a_terminal(
     world: SyntheticRun, sample_files: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch
 ) -> None:

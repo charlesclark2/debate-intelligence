@@ -642,3 +642,25 @@ def test_prompt_1_3_0_drops_the_1_2_0_sentences_it_replaces(prompts: PromptRegis
 
     assert sentence in old_system
     assert sentence not in new_system
+
+
+@pytest.mark.anyio
+async def test_the_breakdown_carries_the_taxonomy_s_generic_positions(prompts: PromptRegistry) -> None:
+    """`v1-e32-t49`: the breakdown counts the answers naming a generic position from its taxonomy's own."""
+    positions = [one.model_dump(mode="json", exclude_none=True) for one in TAXONOMY.positions]
+    with_generic = Taxonomy.model_validate(
+        {
+            **TAXONOMY.model_dump(mode="json", exclude_none=True),
+            "positions": [
+                *positions,
+                {"id": "generic-k", "label": "Generic K", "kind": "k", "side": "neg"},
+            ],
+        }
+    )
+
+    broken_down = await break_down_labelled_cards(
+        READING, with_generic, OVERRIDES, LABELLED, stage_over(StancedByTag(), prompts)
+    )
+
+    assert broken_down.generic == {"generic-k": "k"}
+    assert broken_down.generic_answers.answers == 0

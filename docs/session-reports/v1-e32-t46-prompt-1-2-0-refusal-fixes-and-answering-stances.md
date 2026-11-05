@@ -356,9 +356,37 @@ if env | grep -q '^DEBATE_'; then echo "STOP: a DEBATE_ variable is set; unset i
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-11-05
 
 **Notes:**
+
+Built as ruled, and the one number that could mislead (the 1.1.0 scores falling under the stance rule) is
+explained before anyone reads it.
+
+1. **ac2 passes.** Red against a skeleton that changes nothing (65 failed), then the two later reds, each
+   failure an assertion or a missing 1.2.0; 1.2.0 locked; 1.1.0's recordings keep their key and replay
+   unchanged, by test; 15 mutants all caught, including controls drawn from the listed rows, an unshuffled
+   sitting and a wrong stance not counted.
+2. **The rulings are built as given:** `at:` labels with `by_stance`; the stanced schema from 1.2.0 only,
+   its stance deciding over the answer-heading flag; `wrong_stance` counted and wrong; the prompt diff as
+   proposed; the sitting with 6 seeded controls, unmarked, in one random order, showing nothing of the
+   model, the recordings or the score; the re-record on both routes.
+3. **The computed 1.1.0 figures are recorded** (no relabel Haiku 17 of 33 and Sonnet 22 of 36; the 11
+   relabelled 21 and 26; with row 13, 21 and 27). They show what the stance rule does to the old
+   convention, not a regression: the coach's sitting decides which cards answer.
+4. **Deviations accepted.** (1) The smoke file (the PM's ruling). (2) The synthetic archive's cassette,
+   rewritten offline by its own script in the stage's default schema: the same kind of edit. (3) The
+   session's read-only replay of the kept cassettes (agreement 2). (4) The affected set (324 files) left to
+   `ci` (agreement 10).
+5. **Decisions accepted**, including 8: a landscape run would ask again for every card cached under 1.1.0,
+   which costs nothing while the hold on live runs stands.
+6. **The two operator blocks are right,** and the scan rule is kept: hits read in the terminal, numbers and
+   kinds only. Both run from this worktree before the merge, so the PM records ac1 and ac3 in a batch.
+7. **Follow-ups the PM files** if the coach's sitting keeps row 13 reading: stage one's role under an answer
+   heading inside its own side's block (E32). A `--prompt-version` on `landscape evaluate` only if the
+   side by side is wanted again.
+8. **Merge:** `scripts/task pr --partial` once `ci` is green. The Goal stays `InProgress` until the
+   sitting (ac1) and the re-record (ac3) are recorded.

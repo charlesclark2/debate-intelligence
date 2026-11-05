@@ -5,6 +5,10 @@
 # snapshot is on exactly one topic. A topic with a taxonomy_version has a file of that version at
 # taxonomies/<id>.yaml; a topic without one has no taxonomy yet, and a report on it says so.
 #
+# A topic may also list tournaments: a disclosure in an entry's snapshots whose tournament text holds
+# one of its spellings is on that topic, whatever the snapshot's range says (v1-e32-t06). A snapshot no
+# range covers is on its one entry's topic, and a report on it reads only the entry's disclosures.
+#
 # A resolution is written exactly as the coach gave it, and only when the coach has given it.
 schema_version: 1
 topics:
@@ -20,13 +24,34 @@ topics:
         to: 2027-06-30
 
   # September-October 2026 LD and PF topics: kept so earlier snapshots resolve, with no taxonomy.
-  # The LD November-December topic and its taxonomy arrive with v1-e32-t06.
   - id: ld-2026-sep-oct-space-colonization
     event: LD
     caselists:
       - caselist: hsld26
         from: 2026-09-01
         to: 2026-10-31
+
+  # November-December 2026 LD topic (v1-e32-t06). The coach's word of 2026-11-01: de-extinction covers
+  # the Florida Blue Key Speech and Debate Tournament (October 30 to November 1, 2026) and every
+  # tournament starting on or after Friday 2026-11-06. So the 2026-11-03 snapshot holds both topics:
+  # its Florida Blue Key disclosures (its round robin among them, the PM's ruling of 2026-11-05) are on
+  # this topic through the tournament entry, and its other disclosures on no topic, as before. A
+  # spelling is matched as part of a disclosure's tournament text, lower-cased with only letters and
+  # digits kept; only spellings two or more schools wrote are listed, never one naming a school.
+  - id: ld-2026-nov-dec-de-extinction
+    event: LD
+    resolution: >-
+      Resolved: De-extinction is unethical
+    caselists:
+      - caselist: hsld26
+        from: 2026-11-06
+        to: 2026-12-31
+    tournaments:
+      - caselist: hsld26
+        name: Florida Blue Key Speech and Debate Tournament
+        spellings: [bluekey, fbk]
+        from: 2026-11-03
+        to: 2026-11-03
 
   - id: pf-2026-sep-oct-data-center-moratorium
     event: PF

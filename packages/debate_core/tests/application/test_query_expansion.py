@@ -315,7 +315,7 @@ COACH_REVIEWED_FILE = (
 def test_the_committed_taxonomy_validates_and_every_argument_has_a_template_for_each_need_of_its_family(
     committed: ArgumentTaxonomy,
 ) -> None:
-    assert committed.taxonomy_version == "1.4.0"
+    assert committed.taxonomy_version == "1.5.0"
     assert {family.id: [need.id for need in family.needs] for family in committed.families} == FAMILY_NEEDS
     for argument in committed.arguments:
         family = committed.family_of(argument)
@@ -454,7 +454,7 @@ def test_the_committed_taxonomy_takes_topic_presets_word_for_word_from_committed
 ) -> None:
     topics = yaml.safe_load((REPOSITORY / "config" / "landscape" / "topics.yaml").read_text(encoding="utf-8"))
     resolutions = {topic["id"]: topic.get("resolution") for topic in topics["topics"]}
-    assert [topic.id for topic in committed.topics] == ["policy-2026-27-nhi"]
+    assert [topic.id for topic in committed.topics] == ["policy-2026-27-nhi", "ld-2026-nov-dec-de-extinction"]
     for topic in committed.topics:
         resolution = resolutions[topic.id]
         assert resolution is not None, f"{topic.id} has no committed resolution to take values from"
@@ -469,7 +469,7 @@ def test_the_committed_taxonomy_nhi_topic_names_four_landscape_aff_mechanisms_th
     """The PM's ruling on v1-e08-t14: the four mechanisms, in order, each an aff position of the topic's
     landscape taxonomy under its own label, searched with that label or one of the coach's tag keywords.
     The coach approved the four and the anchor rule on 2026-11-04 (v1-e08-t14's ac1)."""
-    [topic] = committed.topics
+    topic = next(topic for topic in committed.topics if topic.id == "policy-2026-27-nhi")
     assert topic.review is ReviewStatus.COACH_REVIEWED
     assert topic.variables == {"topic": "national health insurance", "country": "United States"}
     assert [(mechanism.landscape_id, mechanism.phrase) for mechanism in topic.mechanisms] == [
@@ -870,7 +870,7 @@ def test_template_expansion_of_politics_da_link_on_health_insurance(committed: A
     expansion = expand(request_for("health insurance", argument="politics-da", need="link"), committed)
     since = NOW - timedelta(days=1826)
     assert expansion == SearchExpansion(
-        taxonomy_version="1.4.0",
+        taxonomy_version="1.5.0",
         argument="politics-da",
         need="link",
         variables={"query": "health insurance", "topic": "health insurance"},
@@ -1030,7 +1030,7 @@ def test_template_expansion_of_politics_da_link_on_the_nhi_topic_adds_its_mechan
     expansion = expand(nhi_link(), committed)
 
     assert expansion == SearchExpansion(
-        taxonomy_version="1.4.0",
+        taxonomy_version="1.5.0",
         argument="politics-da",
         need="link",
         topic_id=NHI,
@@ -1676,3 +1676,17 @@ def test_model_expansion_stage_takes_one_to_five_model_queries() -> None:
     for wrong in (0, 6):
         with pytest.raises(ValueError, match="max_model_queries"):
             QueryExpansionStage(TAXONOMY, clock=FixedClock(NOW), max_model_queries=wrong)
+
+
+def test_the_committed_taxonomy_de_extinction_preset_names_its_topic_and_no_mechanisms(
+    committed: ArgumentTaxonomy,
+) -> None:
+    """v1-e32-t06: the LD preset gives {topic} from the committed resolution, awaiting the coach's review;
+    an LD resolution has no plan, so it lists no mechanisms."""
+    topic = next(topic for topic in committed.topics if topic.id == "ld-2026-nov-dec-de-extinction")
+    assert (topic.format, topic.review, topic.variables, topic.mechanisms) == (
+        Event.LD,
+        ReviewStatus.AWAITING_COACH_REVIEW,
+        {"topic": "de-extinction"},
+        (),
+    )

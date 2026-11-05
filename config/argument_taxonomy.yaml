@@ -30,7 +30,8 @@
 # its own family, and adds the landscape's generic counterplans and kritiks. The DAs and advantages
 # he reviewed are unchanged. Version 1.3.0 (v1-e08-t14, for his review) gives the NHI topic preset
 # the country and its affirmatives' plan mechanisms, which a DA's link search names; no argument
-# entry changes.
+# entry changes. Version 1.5.0 (v1-e32-t06, for his review) adds the LD de-extinction topic preset,
+# whose topic is taken word for word from its committed resolution; no argument entry changes.
 #
 # Ids: an argument the Policy landscape taxonomy also counts (config/landscape/taxonomies/) uses the
 # landscape's id, and says so in landscape_id. The spelling in the task spec is an alias
@@ -38,7 +39,7 @@
 #
 # Schema 2 (v1-e08-t08): `families`, each with its kinds and needs, replaces the one `needs` list.
 schema_version: 2
-taxonomy_version: 1.4.0
+taxonomy_version: 1.5.0
 
 variables:
   query: What the debater typed as the search query.
@@ -1013,8 +1014,8 @@ arguments:
         - {text: "{query} Buddhism cannot solve"}
 
 # What a topic gives its variables. Each value is taken word for word from the topic's resolution in
-# config/landscape/topics.yaml; a test checks it. LD's de-extinction topic is added when
-# v1-e32-t06 commits its resolution.
+# config/landscape/topics.yaml; a test checks it. LD's de-extinction preset came with its resolution
+# (v1-e32-t06); it names no mechanisms, since an LD resolution has no plan.
 #
 # Plan mechanisms (v1-e08-t14, the PM's ruling of 2026-11-04): the coach's rule is that generic
 # resolution links are fine, but links are usually to the mechanism of the plan text. So a DA's link
@@ -1036,3 +1037,8 @@ topics:
       - {landscape_id: medicare-for-all-aff, label: Medicare for all, phrase: Medicare for All}
       - {landscape_id: public-option-aff, label: Public option, phrase: public option}
       - {landscape_id: aca-reform-aff, label: ACA reform, phrase: Affordable Care Act}
+  - id: ld-2026-nov-dec-de-extinction
+    format: LD
+    review: awaiting_coach_review
+    variables:
+      topic: de-extinction

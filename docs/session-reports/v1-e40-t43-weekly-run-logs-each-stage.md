@@ -242,7 +242,18 @@ in the output means CloudWatch counts step lines, and goes to the PM before the 
 1. **The lines exist only in an image built after this merges.** If the docx-9 run image built this
    week carries this task, the run of 2026-11-11 is the first to log its steps; otherwise the first
    run on a later image. Until then Step 8's read prints nothing, and the runbook says so.
-2. **The affected set** (336 files) is the pull request's `ci`, under agreement 10.
+2. **The affected set** (336 files) is the pull request's `ci`, under agreement 10. Its first run
+   on PR #843, run 42107028553, was red from one test outside this task and nothing else: test part
+   7, 1 failed and 891 passed, the failure
+   `packages/debate_cli/tests/test_search_command.py::test_on_the_committed_profile_without_a_contact_email_crossref_names_the_public_pool_in_the_footer[prod]`
+   (footer `2 results from 12 queries` where the test expects 1). The test (`v1-e07-t13`, #829)
+   ran Crossref's public-pool pacer on the wall clock and is timing-dependent: dev's own push runs
+   failed on it 4 times in 5 on 2026-11-05. This branch changes nothing in search, Crossref or
+   discovery; the affected-test selection reached the test from the caselist changes. The fix is
+   `v1-e32-t49`'s commit def4453 (PR #840), which the PM ruled on 2026-11-05, so this branch leaves
+   the test alone. Once #840 has merged, the operator runs `scripts/task sync
+   v1-e40-t43-weekly-run-logs-each-stage` and CI runs the fixed test. If it still fails after that,
+   the clock is not the cause, and the footer it printed goes to the PM.
 3. **Small, if the PM wants them** (E40): the run record's publish by the monitor has no line of
    its own, and the two saves carry no counts (the bundle's `saved`/`not saved` is in the details).
    Neither was needed to tell a run that is working from one that hung.

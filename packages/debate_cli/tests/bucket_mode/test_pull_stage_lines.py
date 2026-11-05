@@ -280,12 +280,12 @@ def test_on_a_terminal_each_step_is_a_sentence_on_stderr(world: World) -> None:
 
     assert result.exit_code == ExitCode.OK, result.output
     said = result.stderr.splitlines()
-    assert said[0] == "caselist pull: restore step started"
+    assert said[:1] == ["caselist pull: restore step started"]
     assert any(
         line.startswith("caselist pull: parse step ended at 0.0 s (completed); caselists 1, ")
         for line in said
     )
-    assert said[-1].startswith("caselist pull: save_state_files step ended at ")
+    assert said[-1:] and said[-1].startswith("caselist pull: save_state_files step ended at ")
 
 
 # ------------------------------------------------------------------------------------------------
@@ -409,7 +409,7 @@ def test_a_failed_runs_result_is_the_one_line_runs_recorded_counts(world: World)
 
     assert result.exit_code == ExitCode.DOMAIN_FAILURE, result.output
     lines = step_lines(result)
-    assert ended(lines, "download")[0]["outcome"] == "failed"
+    assert [line["outcome"] for line in ended(lines, "download")] == ["failed"]
     [result_line] = result.stdout.splitlines()
     assert counted(result) == [result_line]
     assert result.output.splitlines()[-1] == result_line

@@ -306,8 +306,9 @@ async def test_a_stage_that_fails_without_raising_ends_with_the_outcome_failed_a
     parse = summary.stage(SyncStage.PARSE)
     assert parse is not None and parse.outcome is StageOutcome.FAILED
     ends = heard.ends()
-    assert ends["parse"].outcome == "failed"
-    assert ends["parse"].counts["failed"] == 1
+    assert [(line.outcome, line.counts.get("failed")) for line in ends.values() if line.step == "parse"] == [
+        ("failed", 1)
+    ]
     assert ("step_failed", "parse") not in heard.events()
     assert heard.events()[-2:] == start_and_end("retention"), "the run goes on to its last stage"
 

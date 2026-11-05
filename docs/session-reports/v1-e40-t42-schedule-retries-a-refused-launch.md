@@ -278,9 +278,42 @@ the PM.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-11-05
 
 **Notes:**
+
+Built exactly as ruled, and the two gaps the proposal found (a refusal no page says Scheduler retries,
+and an alarm that could not fire twice) are closed in the same module rather than left as notes.
+
+1. **ac1 passes.** The proposal came with the branch at its start commit, and both rulings came before
+   the changes they govern (`f756f1b`, and `b30fa4b` for the alarm).
+2. **ac2 passes.** Red against a skeleton (4 failed, each an assertion: both retries, the topic policy,
+   the new run), green at 43; the alarm red alone (1 failed), green at 43; `terraform_checks.sh` passes.
+   Nine mutants caught, including the trailing slash that keeps a similarly named role out, each branch
+   of the `$or`, the event age, and the alarm's metric and periods. The comments in run_task.tf and
+   login_task.tf carry the corrected facts (the 56-minute run of 2026-10-28; the lock as the bound).
+3. **ac3, first half, passes:** the dead letter read without deleting it, the coach's confirmation that
+   the 2026-11-04 email arrived (7.5 minutes after the dead letter), and the queue purged. The PM records
+   all three in the next batch. The plan, apply and the plan after come from `dev` after the merge.
+4. **The scope the rulings added** (the `launch-refused` rule; the alarm counting arrivals) is accepted,
+   and the PM writes both into the spec in the next batch.
+5. **Deviation accepted:** the invented events judged in HCL. Only AWS's matcher settles the
+   array-of-objects case (`failures[].reason`), and step 5 of caselist-run-alerts.md runs it after the
+   apply. A FAIL there on that case comes back to the PM before anything else changes.
+6. **Two things the first real event will show, no task now:** whether CloudTrail's RunTask record
+   carries `responseElements.failures` (the report's stated assumption), and how the email renders a
+   path the event lacks (`<error>` on a failures refusal, `<failure>` on an error). If either reads
+   badly, the PM files the fix then.
+7. **The plan hand-off is right:** counts only from `owner.auto.tfvars`, the expected shape checked by
+   script, `aws_ssoadmin` at 0, the apply from a saved plan, never on a Wednesday, and the plan after
+   it. A `PLAN STOP` comes to the PM with the whole plan.
+8. **Follow-ups:** the guard against a second scheduled run within N hours (ruling 3) is filed by the PM
+   (E40). Prod at the pilot's promotion, as caselist-run-alerts.md's prod section says.
+9. **Closing checks:** the Terraform checks, the 16 test files naming the two runbooks (229 passed), the
+   always-run list (377), ruff, lint-imports, links, command blocks, the docs index and the specs are
+   clean; the 101-file affected set is the pull request's `ci` (agreement 10).
+10. **Merge:** `scripts/task pr --partial` once `ci` is green. The Goal stays `InProgress` until dev's
+    apply and the plan after it are recorded.

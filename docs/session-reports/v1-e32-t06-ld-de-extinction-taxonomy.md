@@ -241,6 +241,35 @@ only its own version. Nothing was written. The copy was then deleted (`removed`;
 2 restored copies left on the Mac, neither this task's). The seeding counts above stand: they were read
 from the run's own `docx-7` store. The next dry run parses a fresh copy with this worktree's code first.
 
+## ac4's dry run (2026-11-05): the new topic resolves
+
+A third copy, restored 2026-11-05 (7,030 of 7,030 sources, 0 suppressed), parsed with this worktree's
+code (`uv run debate-research caselist parse` with `DEBATE_STORAGE__DATA_DIR` naming the copy): dry run
+`parser_version 2026.11.03-docx-9`, 7,030 to parse; the parse attempted 7,030, parsed 6,889, 105,944
+cards, failure rate 0.0004, threshold not exceeded, 767.2 s. Then, from the worktree:
+
+    uv run debate-research --json landscape report --caselist hsld26 --restored-copy <copy> --config-dir <worktree>/config/landscape --model-mode none --publish --dry-run
+
+| Field | Value |
+|---|---|
+| exit, code | 1, `SCAN_HITS_NOT_ACCEPTED` |
+| snapshot, topic, taxonomy | 2026-11-03, `ld-2026-nov-dec-de-extinction`, 1.0.0 |
+| parsed version, stale | `2026.11.03-docx-9`, False |
+| sources, cards, cards counted, positions | 256, 2,593, 267, 17 |
+| rounds, teams | 291, 51 |
+| would ask the model, model calls | 0, 0 |
+| scan hits, not yet accepted | 7, 7 |
+| planned uploads | 7, each `UPLOAD` |
+| `tournament_entry_snapshots` | 2026-11-03, Florida Blue Key Speech and Debate Tournament, 292 on the topic of 902 |
+
+The newest snapshot resolves the new topic at 1.0.0, and the report counts the entry's week as the PM
+ruled: 292 of 902. The exit is the scan's: the dry run found 7 lines in the bundle no earlier publish
+accepted, the refusal a publish would also meet. Publishing is not this task's, so they were not read
+(their lines can name a school, and are for a terminal only); whoever publishes the first LD report reads
+them first, as the runbook's step 3 says (Follow-up work). 267 of 2,593 cards counted is the deterministic
+first pass on a 1.0.0 taxonomy of two-team headings; the report shows the rest as unclassified. The copy
+was deleted after the run (`removed`; the 2 restored copies the search still lists are other tasks').
+
 ## Plan nodes
 
 <!-- One row per Plan graph node, in the order they were completed. -->

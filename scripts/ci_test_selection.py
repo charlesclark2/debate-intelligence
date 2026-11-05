@@ -30,7 +30,10 @@ push run recorded, which the `test-selection` job restores from GitHub's Actions
 script as `--durations`. scripts/ci_test_durations.py makes the deal and says when it cannot be made:
 a record missing, unreadable or stale deals the parts test by test, as before, with the reason in the
 job summary, and never fails the run. For the whole selection the files dealt are every test file
-under pyproject.toml's `testpaths`, as scripts/affected_tests.py lists them.
+under pyproject.toml's `testpaths`, as scripts/affected_tests.py lists them. Every part is handed the
+same deal, and since v1-e41-t18 each collects only the files it gives that part and any it does not
+name (run_in_parts.py), so the deal is also each part's list of files: one output for every part,
+which a missing or empty deal leaves collecting everything as before.
 
 It fails toward more tests, never fewer. The choice is written in `$GITHUB_OUTPUT`'s format:
 `run_parts`, whether the parts run at all, `parts`, the matrix's list of part numbers as JSON,

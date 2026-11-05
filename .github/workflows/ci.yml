@@ -28,6 +28,9 @@
 #     saves them in the Actions cache, and `test-selection` restores them once and hands every part
 #     the same deal (scripts/ci_test_durations.py). A record missing, unreadable or stale deals each
 #     file's tests round the parts as before, and the job summary says why; it never fails a run.
+#     Since v1-e41-t18 a part collects only the files the deal gives it and any the deal does not
+#     name, never another part's: 1 to 3 s of collection a part on the operator's Mac, where each
+#     collected the whole suite in 7 to 9 s; with no deal every part collects everything, as before.
 #     tests/scripts/test_ci_workflow_test_job.py collects every part and proves that together they
 #     are exactly the unsplit selection, under a deal and under none, and deals the real collection
 #     both ways at every size the matrix can take. That proof collects the whole suite nine times, so it runs in the
@@ -414,7 +417,9 @@ jobs:
         # runs every path in `testpaths`. `--files-to-parts` is the deal written down above, as one
         # `--option=PATH` word: pytest takes a separate word naming a file for a test path when it looks
         # for its rootdir, and the runner's temp directory is outside the checkout, so a part of the
-        # whole selection would find no pyproject.toml and refuse the option (v1-e41-t17).
+        # whole selection would find no pyproject.toml and refuse the option (v1-e41-t17). Under a
+        # deal a part collects only its own files and those the deal does not name (v1-e41-t18), and
+        # its summary says how long it took to collect, which this log's timestamps cannot show.
         if: github.event_name != 'push'
         run: uv run --frozen pytest -n auto -m "not slow and not live and not partition_proof" --part "${{ matrix.part }}/${{ strategy.job-total }}" --files-to-parts="$RUNNER_TEMP/files-to-parts.json" --dist "$XDIST_DIST" --durations=25 "@$RUNNER_TEMP/test-selection.txt"
       - name: pytest --cov (one part of the selection, measuring coverage, on a push)

@@ -32,6 +32,10 @@ still looks green:
   collection of both. Since v1-e41-t15 the `test-selection` job chooses them once for every part, and
   `tests/scripts/test_ci_workflow_selection_once_and_no_queue.py` runs its step and the part's;
   which files the script chooses for which event is `tests/scripts/test_ci_workflow_test_selection.py`.
+* **Each part collects only its own files** (v1-e41-t18): under a deal, a part never collects a
+  file the deal gives another part, so it collects about an eighth of the suite rather than all of
+  it. The proofs read each part's count of tests collected before it kept its share, and bound it;
+  at every size, the part each test is dealt to is one that collects the test's file.
 
 The commands are read out of ci.yml, not restated, so these tests follow the workflow.
 """
@@ -281,15 +285,21 @@ def run_pytest(*arguments: str, **environment: str) -> subprocess.CompletedProce
     )
 
 
-def collected(*arguments: str) -> list[str]:
-    """The node ids pytest collects for these arguments."""
+def collected_and_total(*arguments: str) -> tuple[list[str], int]:
+    """The node ids pytest collects for these arguments, and how many tests it collected before the
+    markers and the part left some out: `2066/2067 tests collected (1 deselected)` is 2,067."""
     completed = run_pytest(*arguments, "--collect-only", "-q", "--no-cov")
     assert completed.returncode == 0, completed.stdout[-2000:] + completed.stderr[-2000:]
     listing, _, summary = completed.stdout.partition("\n\n")
     node_ids = listing.splitlines()
-    counted = re.search(r"^(\d+)(?:/\d+)? tests collected", summary, re.MULTILINE)
+    counted = re.search(r"^(\d+)(?:/(\d+))? tests collected", summary, re.MULTILINE)
     assert counted and int(counted.group(1)) == len(node_ids), summary
-    return node_ids
+    return node_ids, int(counted.group(2) or counted.group(1))
+
+
+def collected(*arguments: str) -> list[str]:
+    """The node ids pytest collects for these arguments."""
+    return collected_and_total(*arguments)[0]
 
 
 def some(node_ids: set[str]) -> str:
@@ -668,9 +678,19 @@ def assert_the_parts_are_exactly(
             assert max(held) - min(held) <= 1, f"{test_file} is dealt unevenly: {held}"
 
 
-def collect_unsplit_and_each_part(
-    selection: Path, *matrices: tuple[list[int], Path]
-) -> tuple[list[str], list[list[list[str]]]]:
+class Collections:
+    """The unsplit collection of a selection and every part's of each matrix, with the count of tests
+    each collected before the markers and its part left some out."""
+
+    def __init__(
+        self, unsplit: tuple[list[str], int], each_matrix: list[list[tuple[list[str], int]]]
+    ) -> None:
+        self.unsplit, self.unsplit_total = unsplit
+        self.each_matrix = [[node_ids for node_ids, _ in matrix] for matrix in each_matrix]
+        self.totals = [[total for _, total in matrix] for matrix in each_matrix]
+
+
+def collect_unsplit_and_each_part(selection: Path, *matrices: tuple[list[int], Path]) -> Collections:
     """One unsplit collection of what `selection` names (a part's command without `--part`), and each
     part's of each matrix under its deal, run side by side. Until v1-e01-t42 the unsplit command was
     the `coverage` job's; a push part's command is this one with coverage added, which collects
@@ -679,12 +699,31 @@ def collect_unsplit_and_each_part(
     for parts, deal in matrices:
         commands += [part_arguments(part, len(parts), selection, deal=deal) for part in parts]
     with ThreadPoolExecutor(max_workers=len(commands)) as pool:
-        unsplit, *every_part = pool.map(lambda arguments: collected(*arguments), commands)
-    each_matrix: list[list[list[str]]] = []
+        unsplit, *every_part = pool.map(lambda arguments: collected_and_total(*arguments), commands)
+    each_matrix: list[list[tuple[list[str], int]]] = []
     for parts, _ in matrices:
         each_matrix.append(every_part[: len(parts)])
         every_part = every_part[len(parts) :]
-    return unsplit, each_matrix
+    return Collections(unsplit, each_matrix)
+
+
+def assert_each_part_collected_only_its_own_files(
+    collections: Collections, matrix: int, part_of_file: dict[str, int], what: str
+) -> None:
+    """Under a deal (v1-e41-t18), a part collects its own files and every file the deal does not
+    name, and nothing else. So what it collects and then leaves out is at most what the markers leave
+    out of the whole of `what`, and the tests of files the deal does not name, which every part
+    collects and deals test by test. Collecting the whole selection, a part leaves out the other
+    parts' seven eighths."""
+    unsplit = collections.unsplit
+    left_out_by_the_markers = collections.unsplit_total - len(unsplit)
+    in_no_deal = sum(node_id.partition("::")[0] not in part_of_file for node_id in unsplit)
+    each_part, totals = collections.each_matrix[matrix], collections.totals[matrix]
+    for number, (part, total) in enumerate(zip(each_part, totals, strict=True), start=1):
+        assert total - len(part) <= left_out_by_the_markers + in_no_deal, (
+            f"part {number} of {len(each_part)} of {what} collected {total} tests to keep {len(part)}: "
+            f"more than the {left_out_by_the_markers} the markers leave out and the {in_no_deal} in no deal"
+        )
 
 
 def invented_record(tmp_path: Path, test_files: list[str]) -> Path:
@@ -735,14 +774,24 @@ def assert_dealt_at_every_size(
         set(part) for part in collected_parts
     ]
     durations = importlib.import_module("ci_test_durations")
+    run_in_parts = importlib.import_module("run_in_parts")
     for size in the_selection_script().SIZES_THE_RULE_GIVES:
         assert_the_parts_are_exactly(unsplit, dealt_into(unsplit, size), f"{what}, in {size} parts")
         deal = durations.deal(test_files, size, record, datetime.now(UTC))
+        each_part = dealt_into(unsplit, size, deal.part_of_file)
         assert_the_parts_are_exactly(
-            unsplit,
-            dealt_into(unsplit, size, deal.part_of_file),
-            f"{what}, in {size} parts by durations",
-            deal.part_of_file,
+            unsplit, each_part, f"{what}, in {size} parts by durations", deal.part_of_file
+        )
+        # A part collects only its own files and those the deal does not name (v1-e41-t18), so a test
+        # dealt to a part that does not collect its file would be in no part.
+        not_collected = [
+            node_id
+            for number, part in enumerate(each_part, start=1)
+            for node_id in part
+            if not run_in_parts.collects(node_id.partition("::")[0], number, deal.part_of_file)
+        ]
+        assert not not_collected, (
+            f"{what}, in {size} parts: dealt where not collected: {some(set(not_collected))}"
         )
 
 
@@ -762,7 +811,8 @@ def test_the_parts_together_are_exactly_the_default_selection_and_no_test_is_in_
     deal, deal_file = the_deal(test_files, len(parts), record, tmp_path)
     assert deal.by_durations, deal.why
 
-    unsplit, [each_part] = collect_unsplit_and_each_part(the_whole_selection(tmp_path), (parts, deal_file))
+    collections = collect_unsplit_and_each_part(the_whole_selection(tmp_path), (parts, deal_file))
+    unsplit, [each_part] = collections.unsplit, collections.each_matrix
 
     assert len(unsplit) > 5000, "the unsplit collection is not the whole suite"
     # Every file pytest collects is one the deal counted, so none is a stranger to its durations.
@@ -771,6 +821,7 @@ def test_the_parts_together_are_exactly_the_default_selection_and_no_test_is_in_
         collected_files - set(deal.part_of_file) - set(deal.spread)
     )
     assert_the_parts_are_exactly(unsplit, each_part, "the default selection", deal.part_of_file)
+    assert_each_part_collected_only_its_own_files(collections, 0, deal.part_of_file, "the default selection")
     assert_dealt_at_every_size(
         unsplit, each_part, deal.part_of_file, test_files, record, "the default selection"
     )
@@ -800,9 +851,8 @@ def test_the_parts_together_are_exactly_an_affected_set_and_each_holds_some_of_t
     record = invented_record(tmp_path, given)
     deal, deal_file = the_deal(given, len(the_most), record, tmp_path)
     assert deal.by_durations, deal.why
-    unsplit, [in_its_own_parts, each_part] = collect_unsplit_and_each_part(
-        selection, (its_own, test_by_test), (the_most, deal_file)
-    )
+    collections = collect_unsplit_and_each_part(selection, (its_own, test_by_test), (the_most, deal_file))
+    unsplit, [in_its_own_parts, each_part] = collections.unsplit, collections.each_matrix
 
     collected_files = {node_id.partition("::")[0] for node_id in unsplit}
     assert collected_files <= set(given)
@@ -810,6 +860,9 @@ def test_the_parts_together_are_exactly_an_affected_set_and_each_holds_some_of_t
     assert len(unsplit) < 5000, "the selection file was not read: this is the whole suite"
     assert_the_parts_are_exactly(unsplit, in_its_own_parts, "the selection given")
     assert_the_parts_are_exactly(unsplit, each_part, "the selection given", deal.part_of_file)
+    assert_each_part_collected_only_its_own_files(collections, 1, deal.part_of_file, "the selection given")
+    # Dealt test by test, every part collects the whole selection given, as before v1-e41-t18.
+    assert collections.totals[0] == [collections.unsplit_total] * len(its_own)
     assert_dealt_at_every_size(unsplit, each_part, deal.part_of_file, given, record, "the selection given")
     for number, part in enumerate(dealt_into(unsplit, len(the_most)), start=1):
         assert any(node_id.partition("::")[0] in always_run for node_id in part), f"part {number}"

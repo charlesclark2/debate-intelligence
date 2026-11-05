@@ -419,12 +419,18 @@ def an_invented_suite(tmp_path: Path, files: dict[str, str] = INVENTED_SUITE) ->
     return root
 
 
-def run_pytest_in(root: Path, *arguments: str) -> subprocess.CompletedProcess[str]:
-    """pytest over the invented suite with this repository's plugin, and nothing this run set."""
+def run_pytest_in(
+    root: Path, *arguments: str, environment: dict[str, str] | None = None
+) -> subprocess.CompletedProcess[str]:
+    """pytest over the invented suite with this repository's plugin, and nothing this run set but
+    `environment`."""
     environment = {
-        name: value
-        for name, value in os.environ.items()
-        if not name.startswith(("PYTEST_", "COV_CORE_", "COVERAGE_"))
+        **{
+            name: value
+            for name, value in os.environ.items()
+            if not name.startswith(("PYTEST_", "COV_CORE_", "COVERAGE_"))
+        },
+        **(environment or {}),
     }
     environment["PYTHONPATH"] = str(PLUGINS)
     return subprocess.run(

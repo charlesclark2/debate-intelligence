@@ -1550,11 +1550,12 @@ class ServiceContainer:
 
         :meth:`~debate_core.integrations.discovery.registry.ProviderRegistry.from_settings` over this
         build's adapters: OpenAlex (`openalex_factory`, `v1-e07-t02`), Crossref
-        (`crossref_factory`, `v1-e07-t03`, not enabled by default), the publisher feeds
+        (`crossref_factory`, `v1-e07-t03`), the publisher feeds
         (`feed_factory`), Google News's RSS search (`google_news_factory`, `v1-e07-t05`) and the
         Federal Register and GovInfo (`federal_register_factory` and `govinfo_factory`, `v1-e07-t07`,
-        neither enabled by default, each asked only by a search on a topic whose feed file lists it;
-        GovInfo without an api.data.gov key is reported not configured). The feed
+        each asked only by a search on a topic whose feed file lists it; GovInfo without an api.data.gov
+        key is reported not configured). The committed dev and prod profiles enable OpenAlex, Crossref,
+        the feeds and both government sources (`v1-e07-t13`); the built-in profiles enable none. The feed
         providers read the committed `config/feeds/` topics and keep a
         :class:`~debate_core.integrations.discovery.feed_cache.FileFeedCache` in `<data dir>/feeds/`.
         A name enabled with no adapter in this build is the registry's configuration error.

@@ -20,10 +20,25 @@ snippet for discovery only: card evidence comes from a stored snapshot, never fr
 
 **The venue** is `primary_location.source.display_name`. OpenAlex removed `host_venue`.
 
-**The request** is one `GET /works` (:func:`works_parameters`): `search=` the query, the date window
+**The request** is `GET /works` (:func:`works_parameters`): `search=` the query, the date window
 as `from_publication_date`/`to_publication_date` filters, `per_page` and a `select=` of the fields
-mapped here. OpenAlex serves at most 100 works a page and this adapter asks for one page, so a query
-whose `max_results` is above 100 returns at most 100 results.
+mapped here. OpenAlex serves at most 100 works a page, so a query whose `max_results` is above 100
+asks for pages (`page=1`, `page=2`, …, 100 works each) until it has `max_results` works or a page
+comes back short; OpenAlex pages no further than 10,000 works. Each page is one billed request.
+
+**Every query of a search in one request** (v1-e08-t10; the PM read OpenAlex's searching guide,
+2026-11-04). The adapter is a
+:class:`~debate_core.application.ports.providers.MultiQuerySearchProvider`. :func:`works_requests`
+joins the queries that share their filters into one `search=`, each in parentheses and joined by
+`OR`: OpenAlex ANDs the words of a group, as it does a query asked alone, and a query is kept
+unquoted, as today. A request URL over about 4 KB is refused with `400`, so the joined queries are
+split into the fewest requests whose URL stays within :data:`MAX_URL_CHARS`. A result says nothing
+about which group it matched (only a relevance score), so :func:`answered_queries` attributes each
+work by the feeds' rule: a query answered it when every one of its words is in the work's title or
+abstract. A work that matches no query's words answered the joined search, and goes to every query
+of its request; one that matches several goes to each of them. When one request of several fails,
+the queries it carried get an empty, partial answer naming why; when all fail, the first failure is
+raised. A rate limit fails the whole call, so that the wrapper holds OpenAlex off as asked.
 
 **Authentication** (PM ruling 2026-10-21). OpenAlex retired its `mailto` polite pool in February
 2026 and now ignores `mailto`; a free API key replaced it (help.openalex.org/api/deprecations and
@@ -41,8 +56,10 @@ the `Retry-After` when OpenAlex sends one, and the wrapper's cool-down when it d
 
 from __future__ import annotations
 
+import math
 import time
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
+from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from http.cookiejar import CookieJar, DefaultCookiePolicy
 from types import MappingProxyType
@@ -52,27 +69,35 @@ from urllib.parse import urlsplit
 import httpx
 from pydantic import SecretStr, ValidationError
 
-from debate_core.application.errors import ProviderUnavailable
+from debate_core.application.errors import ProviderError, ProviderRateLimited, ProviderUnavailable
 from debate_core.application.ports.providers import Clock
 from debate_core.application.settings import HttpSettings, ProviderSettings
 from debate_core.domain.article import ArticleIdentifiers
 from debate_core.domain.discovery import CandidateResult, ProviderQuery, ProviderResponse
 from debate_core.domain.enums import SourceType
+from debate_core.integrations.discovery.feeds import query_terms, text_matches_terms
 from debate_core.integrations.discovery.http_failures import provider_error_for_status
-from debate_core.integrations.discovery.redaction import protect_logs
+from debate_core.integrations.discovery.redaction import logger, protect_logs
 
 __all__ = [
+    "MAX_PAGED_RESULTS",
     "MAX_PER_PAGE",
+    "MAX_URL_CHARS",
     "OPENALEX_WORKS_URL",
     "PROVIDER_NAME",
     "SELECTED_FIELDS",
     "SOURCE_TYPE_BY_WORK_TYPE",
     "OpenAlexProvider",
+    "WorksRequest",
+    "answered_queries",
     "candidate_from_work",
+    "joined_search",
     "openalex_factory",
     "rebuild_abstract",
     "source_type_for",
     "works_parameters",
+    "works_requests",
+    "works_url",
 ]
 
 PROVIDER_NAME: Final = "openalex"
@@ -83,6 +108,13 @@ OPENALEX_WORKS_URL: Final = "https://api.openalex.org/works"
 
 MAX_PER_PAGE: Final = 100
 """OpenAlex's largest page (help.openalex.org/api/paging; 200 is deprecated)."""
+
+MAX_PAGED_RESULTS: Final = 10_000
+"""The furthest `page=` paging reaches: page × per_page may not pass it (help.openalex.org/api/paging)."""
+
+MAX_URL_CHARS: Final = 3_500
+"""The longest request URL sent. OpenAlex refuses one over about 4 KB with `400` and suggests splitting
+an `OR` list into chunks (developers.openalex.org/guides/searching, read by the PM 2026-11-04)."""
 
 SELECTED_FIELDS: Final = (
     "id",
@@ -294,8 +326,11 @@ def _mapping(value: object) -> Mapping[str, Any]:
 # --------------------------------------------------------------------------------------------
 
 
-def works_parameters(query: ProviderQuery) -> dict[str, str]:
-    """The `/works` query parameters for `query`; see the module docstring for what each one does."""
+def works_parameters(query: ProviderQuery, *, page: int | None = None) -> dict[str, str]:
+    """The `/works` query parameters for `query`; see the module docstring for what each one does.
+
+    `page` is sent only when the query pages, that is when its `max_results` is above 100.
+    """
     parameters = {"search": query.query}
     window: list[str] = []
     if query.filters.since is not None:
@@ -306,14 +341,95 @@ def works_parameters(query: ProviderQuery) -> dict[str, str]:
         parameters["filter"] = ",".join(window)
     parameters["per_page"] = str(min(query.filters.max_results, MAX_PER_PAGE))
     parameters["select"] = ",".join(SELECTED_FIELDS)
+    if page is not None:
+        parameters["page"] = str(page)
     return parameters
 
 
-class OpenAlexProvider:
-    """Searches OpenAlex's works; a :class:`~debate_core.application.ports.providers.SearchProvider`.
+def page_count(query: ProviderQuery) -> int:
+    """How many pages `query` may ask for: enough for its `max_results`, to OpenAlex's 10,000 at most."""
+    return math.ceil(min(query.filters.max_results, MAX_PAGED_RESULTS) / MAX_PER_PAGE)
 
-    Sends one request per search and never retries it: the wrapper decides what happens after a
-    failure. Owns `client`; close it with :meth:`aclose`.
+
+def works_url(parameters: Mapping[str, str]) -> str:
+    """The request URL for `parameters`, encoded as the client sends it."""
+    return str(httpx.URL(OPENALEX_WORKS_URL, params=dict(parameters)))
+
+
+def joined_search(queries: Sequence[ProviderQuery]) -> str:
+    """One `search=` for `queries`: a single query as it is, several each in parentheses, joined by `OR`."""
+    if len(queries) == 1:
+        return queries[0].query
+    return " OR ".join(f"({query.query})" for query in queries)
+
+
+@dataclass(frozen=True, slots=True)
+class WorksRequest:
+    """One joined search: the query it sends, and the positions of the search's queries it carries."""
+
+    query: ProviderQuery
+    answers: tuple[int, ...]
+
+
+def works_requests(queries: Sequence[ProviderQuery]) -> tuple[WorksRequest, ...]:
+    """The fewest joined searches that ask every query: one per filters, split to fit :data:`MAX_URL_CHARS`.
+
+    Queries with the same filters (date window, result cap) share a request, in the order they
+    first appear; each request's URL, at its last page, stays within the limit. A query too long to
+    fit with any other is a request of its own, as it would be asked alone.
+    """
+    groups: dict[object, list[int]] = {}
+    for position, query in enumerate(queries):
+        groups.setdefault(query.filters, []).append(position)
+    requests: list[WorksRequest] = []
+    for positions in groups.values():
+        chunk: list[int] = []
+        for position in positions:
+            trial = [*chunk, position]
+            if chunk and len(works_url(_last_page_parameters(queries, trial))) > MAX_URL_CHARS:
+                requests.append(_request(queries, chunk))
+                chunk = [position]
+            else:
+                chunk = trial
+        requests.append(_request(queries, chunk))
+    return tuple(requests)
+
+
+def _request(queries: Sequence[ProviderQuery], positions: Sequence[int]) -> WorksRequest:
+    asked = [queries[position] for position in positions]
+    return WorksRequest(ProviderQuery(query=joined_search(asked), filters=asked[0].filters), tuple(positions))
+
+
+def _last_page_parameters(queries: Sequence[ProviderQuery], positions: Sequence[int]) -> dict[str, str]:
+    query = _request(queries, positions).query
+    pages = page_count(query)
+    return works_parameters(query, page=pages if pages > 1 else None)
+
+
+def answered_queries(
+    candidate: CandidateResult, queries: Sequence[ProviderQuery], positions: Sequence[int]
+) -> tuple[int, ...]:
+    """Which of the queries at `positions` a joined search's work answered (see the module docstring).
+
+    The ones whose every word is in the work's title or abstract; when none is, all of them.
+    """
+    return _matching(candidate, queries, positions) or tuple(positions)
+
+
+def _matching(
+    candidate: CandidateResult, queries: Sequence[ProviderQuery], positions: Sequence[int]
+) -> tuple[int, ...]:
+    text = f"{candidate.title} {candidate.snippet or ''}"
+    return tuple(
+        position for position in positions if text_matches_terms(text, query_terms(queries[position].query))
+    )
+
+
+class OpenAlexProvider:
+    """Searches OpenAlex's works: a multi-query `SearchProvider` (`MultiQuerySearchProvider`).
+
+    Sends one request per page of each joined search and never retries one: the wrapper decides what
+    happens after a failure. Owns `client`; close it with :meth:`aclose`.
     """
 
     def __init__(self, client: httpx.AsyncClient, *, api_key: SecretStr | None, clock: Clock) -> None:
@@ -337,13 +453,87 @@ class OpenAlexProvider:
         await self._client.aclose()
 
     async def search(self, query: ProviderQuery) -> ProviderResponse:
+        (response,) = await self.search_each((query,))
+        return response
+
+    async def search_each(self, queries: Sequence[ProviderQuery]) -> tuple[ProviderResponse, ...]:
+        """Every query in the fewest joined requests, each work attributed to the queries it answered."""
         started = time.perf_counter()
+        requests = works_requests(queries)
+        found: list[list[CandidateResult]] = [[] for _ in queries]
+        errors: list[str | None] = [None for _ in queries]
+        failures: list[ProviderError] = []
+        attributed = {"one": 0, "several": 0, "none": 0}
+        for request in requests:
+            try:
+                candidates, shortfall = await self._pages(request.query)
+            except ProviderRateLimited:
+                raise
+            except ProviderError as error:
+                failures.append(error)
+                for position in request.answers:
+                    errors[position] = _reason(error)
+                continue
+            for position in request.answers:
+                errors[position] = shortfall
+            for candidate in candidates:
+                matched = _matching(candidate, queries, request.answers)
+                if len(request.answers) > 1:
+                    attributed["one" if len(matched) == 1 else "several" if matched else "none"] += 1
+                for position in matched or request.answers:
+                    found[position].append(candidate)
+        if failures and len(failures) == len(requests):
+            raise failures[0]
+        if len(queries) > 1:
+            logger.info(
+                "%s: %d queries in %d requests; works matching one query %d, several %d, none %d",
+                self.name,
+                len(queries),
+                len(requests),
+                attributed["one"],
+                attributed["several"],
+                attributed["none"],
+            )
+        elapsed_ms = (time.perf_counter() - started) * 1000
+        return tuple(
+            ProviderResponse(
+                provider=self.name,
+                results=tuple(found[position])[: query.filters.max_results],
+                elapsed_ms=elapsed_ms,
+                partial=errors[position] is not None,
+                error=errors[position],
+            )
+            for position, query in enumerate(queries)
+        )
+
+    async def _pages(self, query: ProviderQuery) -> tuple[list[CandidateResult], str | None]:
+        """Every page `query` asks for, until `max_results` works or a short page.
+
+        A failure on the first page is raised; on a later one, the pages already read are kept and the
+        failure is returned as the reason the answer is partial.
+        """
+        pages = page_count(query)
+        candidates: list[CandidateResult] = []
+        for page in range(1, pages + 1):
+            try:
+                works, sent = await self._page(query, page if pages > 1 else None)
+            except ProviderError as error:
+                if page == 1:
+                    raise
+                return candidates, f"page {page} of {pages} failed: {_reason(error)}"
+            candidates.extend(works)
+            if len(candidates) >= query.filters.max_results or sent < MAX_PER_PAGE:
+                break
+        return candidates[: query.filters.max_results], None
+
+    async def _page(self, query: ProviderQuery, page: int | None) -> tuple[list[CandidateResult], int]:
+        """One page's candidates, and how many works OpenAlex sent on it."""
         headers = (
             {} if self._api_key is None else {"Authorization": f"Bearer {self._api_key.get_secret_value()}"}
         )
         try:
             response = await self._client.get(
-                OPENALEX_WORKS_URL, params=works_parameters(query), headers=headers
+                OPENALEX_WORKS_URL, params=works_parameters(query, page=page), headers=headers
             )
         except httpx.TimeoutException as error:
             raise ProviderUnavailable(self.name, "timed out") from error
@@ -354,11 +544,9 @@ class OpenAlexProvider:
         )
         if failure is not None:
             raise failure
-        results = self._read(response, query)
-        elapsed_ms = (time.perf_counter() - started) * 1000
-        return ProviderResponse(provider=self.name, results=results, elapsed_ms=elapsed_ms)
+        return self._read(response)
 
-    def _read(self, response: httpx.Response, query: ProviderQuery) -> tuple[CandidateResult, ...]:
+    def _read(self, response: httpx.Response) -> tuple[list[CandidateResult], int]:
         try:
             document = response.json()
         except ValueError as error:
@@ -368,10 +556,14 @@ class OpenAlexProvider:
             isinstance(work, dict) for work in cast(list[object], works)
         ):
             raise ProviderUnavailable(self.name, "unreadable response: no list of works")
-        candidates = (candidate_from_work(work) for work in cast(list[dict[str, Any]], works))
-        return tuple(candidate for candidate in candidates if candidate is not None)[
-            : query.filters.max_results
-        ]
+        listed = cast(list[dict[str, Any]], works)
+        candidates = (candidate_from_work(work) for work in listed)
+        return [candidate for candidate in candidates if candidate is not None], len(listed)
+
+
+def _reason(error: ProviderError) -> str:
+    """The error's message without the provider name it starts with."""
+    return str(error).removeprefix(f"{error.provider}: ")
 
 
 def openalex_factory(

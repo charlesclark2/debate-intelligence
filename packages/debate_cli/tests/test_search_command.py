@@ -438,11 +438,39 @@ def test_presenter_json_items_carry_rank_score_features_explanation_identifiers_
     assert data["expansion"]["argument"] == "politics-da"
     assert data["expansion"]["need"] == "link"
     assert [query["query"] for query in data["expansion"]["queries"]] == POLITICS_LINK_QUERIES
-    assert seams.providers.openalex_queries() == POLITICS_LINK_QUERIES
+    assert seams.providers.openalex_queries() == [joined(*POLITICS_LINK_QUERIES)]
     assert [(entry["provider"], entry["outcome"]) for entry in data["providers"]] == [
         ("openalex", "ok"),
         ("rss", "ok"),
     ]
+
+
+def test_an_expanded_search_reads_each_feed_once_however_many_queries_it_asks(seams: Seams) -> None:
+    """v1-e08-t10: the politics DA's seven link queries make one OpenAlex request and read the Courier
+    feed once, not seven times each, and
+    each query still has its own record: only the first template's words are all in the one item that
+    matches ("Health insurance fight costs the president political capital")."""
+    result = search("health insurance", "--argument", "politics-da", "--need", "link", "--format", "json")
+
+    assert result.exit_code == ExitCode.OK, result.output
+    assert [str(request.url) for request in seams.providers.requests].count(FEED_URL) == 1
+    assert seams.providers.openalex_queries() == [joined(*POLITICS_LINK_QUERIES)]
+    data = envelope(result)["data"]
+    rss_calls = [call for call in data["provider_calls"] if call["provider"] == "rss"]
+    assert [(call["query"], call["outcome"], call["results"]) for call in rss_calls] == [
+        (query, "ok", 1 if position == 0 else 0) for position, query in enumerate(POLITICS_LINK_QUERIES)
+    ]
+    assert footer_of(data, "rss") == {"outcome": "ok", "queries": 7, "failed": 0, "results": 1}
+
+
+def joined(*queries: str) -> str:
+    """One OpenAlex search for several queries: each in parentheses, joined by OR (v1-e08-t10)."""
+    return " OR ".join(f"({query})" for query in queries)
+
+
+def footer_of(data: dict[str, Any], provider: str) -> dict[str, Any]:
+    [entry] = [entry for entry in data["providers"] if entry["provider"] == provider]
+    return {key: entry[key] for key in ("outcome", "queries", "failed", "results")}
 
 
 def test_presenter_json_gives_each_result_its_place_in_raw_provider_order(seams: Seams) -> None:
@@ -731,7 +759,7 @@ def test_a_da_link_search_on_the_nhi_topic_asks_openalex_its_links_then_the_mech
 ) -> None:
     """v1-e08-t14, the PM's ruling: the politics DA's seven reviewed link queries as they are, then the
     first of them on the resolution's words and on each of the topic's four plan mechanisms, each
-    naming the United States: twelve OpenAlex requests."""
+    naming the United States. Since v1-e08-t10 the twelve go to OpenAlex in one joined request."""
     result = search(
         "national health insurance",
         "--argument",
@@ -746,18 +774,20 @@ def test_a_da_link_search_on_the_nhi_topic_asks_openalex_its_links_then_the_mech
 
     assert result.exit_code == ExitCode.OK, result.output
     assert seams.providers.openalex_queries() == [
-        "national health insurance political capital",
-        "national health insurance partisan fight Congress",
-        "national health insurance unpopular with voters",
-        "national health insurance popular with Republicans",
-        "national health insurance unpopular with Republicans",
-        "national health insurance popular with Democrats",
-        "national health insurance unpopular with Democrats",
-        "national health insurance political capital United States",
-        "single payer political capital United States",
-        "Medicare for All political capital United States",
-        "public option political capital United States",
-        "Affordable Care Act political capital United States",
+        joined(
+            "national health insurance political capital",
+            "national health insurance partisan fight Congress",
+            "national health insurance unpopular with voters",
+            "national health insurance popular with Republicans",
+            "national health insurance unpopular with Republicans",
+            "national health insurance popular with Democrats",
+            "national health insurance unpopular with Democrats",
+            "national health insurance political capital United States",
+            "single payer political capital United States",
+            "Medicare for All political capital United States",
+            "public option political capital United States",
+            "Affordable Care Act political capital United States",
+        )
     ]
     queries = envelope(result)["data"]["expansion"]["queries"]
     assert [query["template_id"] for query in queries][7:] == [
@@ -946,7 +976,9 @@ def test_expand_llm_adds_the_models_validated_queries(seams: Seams) -> None:
     expansion = envelope(result)["data"]["expansion"]
     assert expansion["model_requested"] is True
     assert expansion["queries"][-1]["query"] == "health insurance midterm stakes"
-    assert seams.providers.openalex_queries() == [*POLITICS_LINK_QUERIES, "health insurance midterm stakes"]
+    assert seams.providers.openalex_queries() == [
+        joined(*POLITICS_LINK_QUERIES, "health insurance midterm stakes")
+    ]
 
 
 def test_expand_llm_that_cannot_reach_a_model_prints_the_expansions_warning(seams: Seams) -> None:
@@ -956,7 +988,7 @@ def test_expand_llm_that_cannot_reach_a_model_prints_the_expansions_warning(seam
 
     assert result.exit_code == ExitCode.OK, result.output
     assert "searched with the template queries alone" in " ".join(result.stderr.split())
-    assert seams.providers.openalex_queries() == POLITICS_LINK_QUERIES
+    assert seams.providers.openalex_queries() == [joined(*POLITICS_LINK_QUERIES)]
 
 
 def test_save_writes_the_search_object_to_a_file(seams: Seams, tmp_path: Path) -> None:

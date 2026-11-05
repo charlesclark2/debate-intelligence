@@ -53,7 +53,7 @@ spec:
         the feed read once, with the same ranked results on the recorded fixtures, by tests
         counting requests and shown failing first.
 status:
-  phase: Pending
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

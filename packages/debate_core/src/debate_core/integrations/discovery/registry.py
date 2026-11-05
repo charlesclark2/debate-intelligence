@@ -4,7 +4,8 @@
 providers and no others: an adapter that is not enabled is never constructed, so it can neither
 reach the network nor read a credential. Each adapter is wrapped in a
 :class:`~debate_core.integrations.discovery.resilience.ResilientProvider` whose timeout and breaker
-come from the same settings group, and whose redaction list is every credential in it.
+come from the same settings group, and whose redaction list is every credential in it; an adapter
+that answers several queries at once is wrapped so that it still can (v1-e08-t10).
 
 Which adapter answers to which name is the composition root's to say, through `factories`: one
 function per :class:`~debate_core.application.settings.SearchProviderName`, taking the provider
@@ -29,7 +30,7 @@ from debate_core.application.errors import NotFound
 from debate_core.application.ports.providers import Clock, SearchProvider
 from debate_core.application.settings import ConfigurationError, ProviderSettings, SearchProviderName
 from debate_core.domain.discovery import ProviderHealth
-from debate_core.integrations.discovery.resilience import ResiliencePolicy, ResilientProvider
+from debate_core.integrations.discovery.resilience import ResiliencePolicy, ResilientProvider, resilient
 
 __all__ = [
     "ProviderNotConfigured",
@@ -134,7 +135,7 @@ class ProviderRegistry:
                     f"the adapter built for {name.value!r} calls itself {adapter.name!r}",
                     field="providers.enabled",
                 )
-            wrapped.append(ResilientProvider(adapter, policy, clock=clock, secrets=secrets))
+            wrapped.append(resilient(adapter, policy, clock=clock, secrets=secrets))
         return cls(wrapped, not_configured=not_configured)
 
     @property

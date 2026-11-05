@@ -55,7 +55,7 @@ from debate_core.domain.discovery import (
     ProviderStatus,
 )
 from debate_core.integrations.discovery.registry import ProviderRegistry
-from debate_core.integrations.discovery.resilience import ResiliencePolicy, ResilientProvider
+from debate_core.integrations.discovery.resilience import ResiliencePolicy, resilient
 from debate_core.integrations.local import SqliteDatabase, SqliteSearchRepository
 from debate_core.testing.builders import (
     build_candidate_result,
@@ -127,13 +127,11 @@ class ProvidersOnHand:
 def wrapped(
     *adapters: SearchProvider, timeout_seconds: float = 10.0, failure_threshold: int = 3
 ) -> ProviderRegistry:
-    """A real registry: each adapter in a ResilientProvider timed and benched by the loop clock."""
+    """A real registry: each adapter wrapped as `from_settings` wraps it, on the loop clock."""
     policy = ResiliencePolicy(
         timeout_seconds=timeout_seconds, failure_threshold=failure_threshold, cooldown_seconds=60.0
     )
-    return ProviderRegistry(
-        ResilientProvider(adapter, policy, clock=EventLoopClock()) for adapter in adapters
-    )
+    return ProviderRegistry(resilient(adapter, policy, clock=EventLoopClock()) for adapter in adapters)
 
 
 def service_over(
@@ -395,6 +393,209 @@ def test_fan_out_passes_the_requests_filters_to_every_provider() -> None:
     )
 
     assert openalex.queries == [ProviderQuery(query="arctic methane", filters=filters)]
+
+
+# --------------------------------------------------------------------------------------------
+# Fan-out: a provider that answers several queries at once is asked once (v1-e08-t10)
+# --------------------------------------------------------------------------------------------
+
+
+class AnswersEachQuery:
+    """A `MultiQuerySearchProvider`: answers every query in one call, from `results_by_query`.
+
+    Each call to `search_each` is kept in `batches` and each call to `search` in `singles`, so a test
+    can count how the fan-out asked it. `seconds` of loop time pass in every call; `failure` is raised
+    by every call; `answers` overrides how many responses `search_each` returns.
+    """
+
+    def __init__(
+        self,
+        name: str,
+        results_by_query: dict[str, tuple[CandidateResult, ...]] | None = None,
+        *,
+        seconds: float = 0.0,
+        failure: Exception | None = None,
+        answers: int | None = None,
+    ) -> None:
+        self._name = name
+        self._results_by_query = results_by_query or {}
+        self._seconds = seconds
+        self._failure = failure
+        self._answers = answers
+        self.batches: list[list[ProviderQuery]] = []
+        self.singles: list[ProviderQuery] = []
+
+    @property
+    def name(self) -> str:
+        return self._name
+
+    def _answer(self, query: ProviderQuery) -> ProviderResponse:
+        results = self._results_by_query.get(query.query, ())
+        return ProviderResponse(provider=self._name, results=results, elapsed_ms=self._seconds * 1000)
+
+    async def search(self, query: ProviderQuery) -> ProviderResponse:
+        self.singles.append(query)
+        await asyncio.sleep(self._seconds)
+        if self._failure is not None:
+            raise self._failure
+        return self._answer(query)
+
+    async def search_each(self, queries: Sequence[ProviderQuery]) -> tuple[ProviderResponse, ...]:
+        self.batches.append(list(queries))
+        await asyncio.sleep(self._seconds)
+        if self._failure is not None:
+            raise self._failure
+        answers = tuple(self._answer(query) for query in queries)
+        return answers if self._answers is None else answers[: self._answers]
+
+
+THREE_QUERIES = ("arctic methane feedback", "midterms polling", "permafrost thaw")
+
+
+class ThreeQueries:
+    """An expand stage: the request's query, then two more."""
+
+    async def run(self, state: SearchState) -> SearchState:
+        return state.evolve(queries=tuple(ProviderQuery(query=text) for text in THREE_QUERIES))
+
+
+def test_fan_out_asks_a_provider_that_answers_several_queries_once_with_every_query() -> None:
+    """One call for three queries, and still one record per query, in the order a provider asked
+    one query at a time would give them."""
+    openalex = AnswersEachQuery(
+        "openalex", {"arctic methane feedback": (METHANE,), "permafrost thaw": (PERMAFROST, METHANE)}
+    )
+    crossref = FakeSearchProvider("crossref", default_results=(METHANE_FROM_CROSSREF,))
+
+    outcome = run_in_virtual_time(
+        service_over(ProvidersOnHand(openalex, crossref), expand=ThreeQueries()).search(REQUEST)
+    )
+
+    asked = [ProviderQuery(query=text) for text in THREE_QUERIES]
+    assert openalex.batches == [asked]
+    assert openalex.singles == []
+    assert crossref.queries == asked
+    assert [(status.query.query, status.provider) for status in outcome.provider_statuses] == [
+        ("arctic methane feedback", "openalex"),
+        ("arctic methane feedback", "crossref"),
+        ("midterms polling", "openalex"),
+        ("midterms polling", "crossref"),
+        ("permafrost thaw", "openalex"),
+        ("permafrost thaw", "crossref"),
+    ]
+    assert [
+        status.response.results if status.response is not None else None
+        for status in outcome.provider_statuses
+        if status.provider == "openalex"
+    ] == [(METHANE,), (), (PERMAFROST, METHANE)]
+    assert outcome.candidates == (
+        METHANE,
+        METHANE_FROM_CROSSREF,
+        METHANE_FROM_CROSSREF,
+        PERMAFROST,
+        METHANE,
+        METHANE_FROM_CROSSREF,
+    )
+    assert outcome.status is SearchStatus.COMPLETE
+
+
+def test_fan_out_asks_a_wrapped_provider_that_answers_several_queries_once() -> None:
+    """Through the real registry, whose wrapper must keep the adapter's way of answering."""
+    openalex = AnswersEachQuery("openalex", {"permafrost thaw": (PERMAFROST,)})
+
+    outcome = run_in_virtual_time(service_over(wrapped(openalex), expand=ThreeQueries()).search(REQUEST))
+
+    assert openalex.batches == [[ProviderQuery(query=text) for text in THREE_QUERIES]]
+    assert openalex.singles == []
+    assert outcome.candidates == (PERMAFROST,)
+    [health] = outcome.provider_health
+    assert (health.success_count, health.error_count) == (1, 0)
+
+
+def test_fan_out_records_the_failure_of_a_provider_asked_every_query_at_once_on_each_query() -> None:
+    openalex = AnswersEachQuery("openalex", failure=ProviderRateLimited("openalex", "429 Too Many Requests"))
+    crossref = FakeSearchProvider("crossref", default_results=(METHANE_FROM_CROSSREF,))
+
+    outcome = run_in_virtual_time(
+        service_over(ProvidersOnHand(openalex, crossref), expand=ThreeQueries()).search(REQUEST)
+    )
+
+    assert len(openalex.batches) == 1
+    assert openalex.singles == []
+    assert (
+        outcomes(outcome.provider_statuses)
+        == [
+            ("openalex", ProviderOutcome.RATE_LIMITED),
+            ("crossref", ProviderOutcome.OK),
+        ]
+        * 3
+    )
+    assert {status.error for status in outcome.provider_statuses if status.provider == "openalex"} == {
+        "openalex: 429 Too Many Requests"
+    }
+    assert outcome.status is SearchStatus.PARTIAL
+
+
+def test_fan_out_cuts_off_every_query_of_a_provider_asked_them_at_once_still_running_at_the_deadline() -> (
+    None
+):
+    openalex = AnswersEachQuery("openalex", seconds=60.0)
+    crossref = SlowProvider("crossref", 3.0, (METHANE_FROM_CROSSREF,))
+
+    outcome = run_in_virtual_time(
+        service_over(ProvidersOnHand(openalex, crossref), deadline_seconds=8.0, expand=ThreeQueries()).search(
+            REQUEST
+        )
+    )
+
+    assert len(openalex.batches) == 1
+    assert openalex.singles == []
+    assert (
+        outcomes(outcome.provider_statuses)
+        == [
+            ("openalex", ProviderOutcome.TIMEOUT),
+            ("crossref", ProviderOutcome.OK),
+        ]
+        * 3
+    )
+    cut_off = [status for status in outcome.provider_statuses if status.provider == "openalex"]
+    assert {status.error for status in cut_off} == {"openalex: no answer before the search's 8s deadline"}
+    assert {status.elapsed_ms for status in cut_off} == {8000.0}
+
+
+def test_fan_out_reports_a_provider_answering_fewer_queries_than_it_was_asked_as_an_error_on_each() -> None:
+    openalex = AnswersEachQuery("openalex", {"arctic methane feedback": (METHANE,)}, answers=2)
+
+    outcome = run_in_virtual_time(
+        service_over(ProvidersOnHand(openalex), expand=ThreeQueries()).search(REQUEST)
+    )
+
+    assert len(openalex.batches) == 1
+    assert outcomes(outcome.provider_statuses) == [("openalex", ProviderOutcome.ERROR)] * 3
+    assert {status.error for status in outcome.provider_statuses} == {
+        "openalex: the provider answered 2 of 3 queries"
+    }
+    assert outcome.candidates == ()
+
+
+def test_fan_out_reports_the_queries_of_a_provider_asked_at_once_that_settings_do_not_enable() -> None:
+    openalex = AnswersEachQuery("openalex")
+
+    outcome = run_in_virtual_time(
+        service_over(ProvidersOnHand(openalex), expand=ThreeQueries()).search(
+            SearchRequest(query="arctic methane feedback", providers=("openalex", "core"))
+        )
+    )
+
+    assert len(openalex.batches) == 1
+    assert (
+        outcomes(outcome.provider_statuses)
+        == [
+            ("openalex", ProviderOutcome.OK),
+            ("core", ProviderOutcome.NOT_CONFIGURED),
+        ]
+        * 3
+    )
 
 
 # --------------------------------------------------------------------------------------------

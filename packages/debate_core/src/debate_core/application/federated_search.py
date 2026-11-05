@@ -12,6 +12,14 @@ Every selected provider is asked every query at the same time, in one :class:`as
 and the whole fan-out runs under one overall deadline. A search therefore takes as long as its
 slowest provider or its deadline, whichever comes first, never the sum of its providers.
 
+**A provider that answers several queries at once is asked once** (v1-e08-t10). A
+:class:`~debate_core.application.ports.providers.MultiQuerySearchProvider` gets one call with every
+query of the search, however many the expansion gave, and answers each query separately; any other
+provider gets one call per query. Either way the search keeps one record per query and provider, in
+the same order (query by query, each provider in the selection's order), so nothing after the
+fan-out can tell how a provider was asked. A batched call that fails, or is still running at the
+deadline, is recorded on each of its queries with the same reason.
+
 Each provider the :class:`~debate_core.application.ports.DiscoveryProviders` port hands out is
 already wrapped in its own timeout, circuit breaker and rate-limit hold
 (:class:`~debate_core.integrations.discovery.resilience.ResilientProvider`), so the fan-out adds no
@@ -51,7 +59,7 @@ because cancelling a call that is still running is the event loop's job.
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Awaitable, Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Final
@@ -71,11 +79,17 @@ from debate_core.application.federated_search_types import (
     SearchState,
 )
 from debate_core.application.ports.persistence import SearchRepository
-from debate_core.application.ports.providers import Clock, DiscoveryProviders, IdGenerator, SearchProvider
+from debate_core.application.ports.providers import (
+    Clock,
+    DiscoveryProviders,
+    IdGenerator,
+    MultiQuerySearchProvider,
+    SearchProvider,
+)
 from debate_core.application.query_expansion import UnknownExpansionChoice
 from debate_core.application.settings import TOPIC_ENABLED_PROVIDERS
 from debate_core.domain import Search, SearchStatus
-from debate_core.domain.discovery import ProviderOutcome, ProviderQuery, ProviderStatus
+from debate_core.domain.discovery import ProviderOutcome, ProviderQuery, ProviderResponse, ProviderStatus
 
 __all__ = [
     "DEFAULT_DEADLINE_SECONDS",
@@ -172,7 +186,11 @@ def selected_providers(
 
 
 class FanOutStage:
-    """Asks every selected provider every query, concurrently, under one overall deadline."""
+    """Asks every selected provider every query, concurrently, under one overall deadline.
+
+    A provider that answers several queries at once is asked them in one call (see the module's
+    docstring); every other provider is asked each query in a call of its own.
+    """
 
     def __init__(
         self,
@@ -218,16 +236,21 @@ class FanOutStage:
         deadline = asyncio.timeout(self._deadline_seconds)
         try:
             async with deadline, asyncio.TaskGroup() as group:
-                for index, (query, name) in enumerate(calls):
+                for name in names:
+                    indices = [index for index, (_, called) in enumerate(calls) if called == name]
                     provider = enabled.get(name)
                     if not self._topics.allows(name, topic_id):
-                        finished[index] = self._not_configured(
-                            name, query, self._topics.refusal(name, topic_id)
-                        )
+                        reason = self._topics.refusal(name, topic_id)
+                        for index in indices:
+                            finished[index] = self._not_configured(name, calls[index][0], reason)
                     elif provider is None:
-                        finished[index] = self._not_configured(name, query, unbuilt.get(name))
+                        for index in indices:
+                            finished[index] = self._not_configured(name, calls[index][0], unbuilt.get(name))
+                    elif isinstance(provider, MultiQuerySearchProvider):
+                        group.create_task(self._record_each(finished, indices, provider, calls))
                     else:
-                        group.create_task(self._record(finished, index, provider, query))
+                        for index in indices:
+                            group.create_task(self._record(finished, index, provider, calls[index][0]))
         except TimeoutError:
             if not deadline.expired():
                 raise
@@ -252,33 +275,76 @@ class FanOutStage:
     ) -> None:
         finished[index] = await self._call(provider, query)
 
+    async def _record_each(
+        self,
+        finished: dict[int, ProviderStatus],
+        indices: Sequence[int],
+        provider: MultiQuerySearchProvider,
+        calls: Sequence[tuple[ProviderQuery, str]],
+    ) -> None:
+        """Ask `provider` every query at `indices` in one call, and record each query's answer."""
+        queries = tuple(calls[index][0] for index in indices)
+        statuses = await self._ask(provider.name, queries, lambda: provider.search_each(queries))
+        finished.update(zip(indices, statuses, strict=True))
+
     async def _call(self, provider: SearchProvider, query: ProviderQuery) -> ProviderStatus:
         """Ask one provider one query; every way it can fail becomes a status, never an exception."""
-        name = provider.name
+
+        async def one() -> tuple[ProviderResponse, ...]:
+            return (await provider.search(query),)
+
+        (status,) = await self._ask(provider.name, (query,), one)
+        return status
+
+    async def _ask(
+        self,
+        name: str,
+        queries: Sequence[ProviderQuery],
+        ask: Callable[[], Awaitable[Sequence[ProviderResponse]]],
+    ) -> tuple[ProviderStatus, ...]:
+        """Make one call for `queries`: one status each, and every way the call can fail on each of them."""
         started = self._clock.now()
         try:
-            response = await provider.search(query)
+            responses = tuple(await ask())
         except ProviderTimedOut as error:
-            return self._failed(name, query, ProviderOutcome.TIMEOUT, str(error), started)
+            return self._failed_each(name, queries, ProviderOutcome.TIMEOUT, str(error), started)
         except ProviderCircuitOpen as error:
-            return self._failed(name, query, ProviderOutcome.BREAKER_OPEN, str(error), started)
+            return self._failed_each(name, queries, ProviderOutcome.BREAKER_OPEN, str(error), started)
         except ProviderRateLimited as error:
-            return self._failed(name, query, ProviderOutcome.RATE_LIMITED, str(error), started)
+            return self._failed_each(name, queries, ProviderOutcome.RATE_LIMITED, str(error), started)
         except ProviderError as error:
-            return self._failed(name, query, ProviderOutcome.ERROR, str(error), started)
+            return self._failed_each(name, queries, ProviderOutcome.ERROR, str(error), started)
         except Exception as error:
             reason = f"{name}: the provider raised {type(error).__name__}, which it should have translated"
-            return self._failed(name, query, ProviderOutcome.ERROR, reason, started)
-        if response.provider != name:
-            reason = f"{name}: the provider answered as {response.provider!r}"
-            return self._failed(name, query, ProviderOutcome.ERROR, reason, started)
-        return ProviderStatus(
-            provider=name,
-            query=query,
-            outcome=ProviderOutcome.OK,
-            elapsed_ms=self._elapsed_ms(started),
-            response=response,
+            return self._failed_each(name, queries, ProviderOutcome.ERROR, reason, started)
+        strangers = [response.provider for response in responses if response.provider != name]
+        if strangers:
+            reason = f"{name}: the provider answered as {strangers[0]!r}"
+            return self._failed_each(name, queries, ProviderOutcome.ERROR, reason, started)
+        if len(responses) != len(queries):
+            reason = f"{name}: the provider answered {len(responses)} of {len(queries)} queries"
+            return self._failed_each(name, queries, ProviderOutcome.ERROR, reason, started)
+        elapsed_ms = self._elapsed_ms(started)
+        return tuple(
+            ProviderStatus(
+                provider=name,
+                query=query,
+                outcome=ProviderOutcome.OK,
+                elapsed_ms=elapsed_ms,
+                response=response,
+            )
+            for query, response in zip(queries, responses, strict=True)
         )
+
+    def _failed_each(
+        self,
+        name: str,
+        queries: Sequence[ProviderQuery],
+        outcome: ProviderOutcome,
+        error: str,
+        started: datetime,
+    ) -> tuple[ProviderStatus, ...]:
+        return tuple(self._failed(name, query, outcome, error, started) for query in queries)
 
     def _failed(
         self, name: str, query: ProviderQuery, outcome: ProviderOutcome, error: str, started: datetime

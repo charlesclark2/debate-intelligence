@@ -20,7 +20,7 @@ import respx
 from pydantic import SecretStr
 
 from debate_core.application.errors import ProviderRateLimited, ProviderUnavailable
-from debate_core.application.ports.providers import SearchProvider
+from debate_core.application.ports.providers import MultiQuerySearchProvider, SearchProvider
 from debate_core.application.settings import HttpSettings, ProviderSettings, SearchProviderName
 from debate_core.domain.discovery import CandidateResult, ProviderQuery
 from debate_core.domain.search import SearchFilters
@@ -501,7 +501,115 @@ async def test_feed_logs_counts_and_never_a_title(caplog: pytest.LogCaptureFixtu
         for record in caplog.records
         if record.name == "debate_core.integrations.discovery"
     ]
-    assert lines == ["rss: 2 feeds read, 0 unchanged, 0 failed"]
+    assert lines == [
+        "rss: Example Courier: 5 of 11 entries matched a query",
+        "rss: Example Health Ledger: 3 of 5 entries matched a query",
+        "rss: 2 feeds read, 0 unchanged, 0 failed",
+    ]
+
+
+# --------------------------------------------------------------------------------------------
+# Every query of a search from one read of each feed (v1-e08-t10)
+# --------------------------------------------------------------------------------------------
+
+THREE_QUERIES: Final = tuple(
+    ProviderQuery(query=text, filters=WINDOW) for text in ("health insurance", "senate", "reinsurance")
+)
+
+
+class CountingFeeds:
+    """Serves the Courier's RSS and the Ledger's Atom, counting the requests for each URL."""
+
+    def __init__(self) -> None:
+        self.requests: dict[str, int] = {}
+
+    def handle(self, request: httpx.Request) -> httpx.Response:
+        url = str(request.url)
+        self.requests[url] = self.requests.get(url, 0) + 1
+        name = {RSS_URL: "publisher_rss.xml", ATOM_URL: "publisher_atom.xml"}[url]
+        return feed_response(name)
+
+
+def titles(results: tuple[CandidateResult, ...]) -> list[str]:
+    return [result.title for result in results]
+
+
+async def test_feeds_answer_every_query_of_a_search_from_one_read_of_each_feed() -> None:
+    """Three queries, two feeds: two requests, where asking each query on its own took six."""
+    served = CountingFeeds()
+    provider = build_feeds(httpx.MockTransport(served.handle))
+
+    responses = await provider.search_each(THREE_QUERIES)
+
+    assert served.requests == {RSS_URL: 1, ATOM_URL: 1}
+    assert [titles(response.results) for response in responses] == [
+        titles(recording("feeds_search").expected),
+        ["Senate panel advances health insurance subsidy bill", "Polling shows a tight Senate race"],
+        ["Reinsurance pool and health costs"],
+    ]
+    assert [response.partial for response in responses] == [False, False, False]
+
+
+async def test_each_querys_answer_from_one_read_is_its_answer_asked_alone() -> None:
+    together = await build_feeds(httpx.MockTransport(CountingFeeds().handle)).search_each(THREE_QUERIES)
+    alone = [
+        await build_feeds(httpx.MockTransport(CountingFeeds().handle)).search(query)
+        for query in THREE_QUERIES
+    ]
+    assert [dumped(response.results) for response in together] == [
+        dumped(response.results) for response in alone
+    ]
+
+
+async def test_one_feed_failing_marks_every_querys_answer_from_one_read_partial() -> None:
+    served = CountingFeeds()
+
+    def handle(request: httpx.Request) -> httpx.Response:
+        if str(request.url) == RSS_URL:
+            served.requests[RSS_URL] = served.requests.get(RSS_URL, 0) + 1
+            return httpx.Response(503)
+        return served.handle(request)
+
+    responses = await build_feeds(httpx.MockTransport(handle)).search_each(THREE_QUERIES)
+
+    assert served.requests == {RSS_URL: 1, ATOM_URL: 1}
+    assert [titles(response.results) for response in responses] == [
+        [
+            "Health insurance mergers draw scrutiny",
+            "Health insurance costs, explained",
+            "Employers rethink coverage",
+        ],
+        [],
+        [],
+    ]
+    assert {response.error for response in responses} == {"1 of 2 feeds failed: Example Courier: HTTP 503"}
+
+
+async def test_feeds_log_per_feed_how_many_entries_any_query_of_the_search_matched(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    provider = build_feeds(httpx.MockTransport(CountingFeeds().handle))
+    with caplog.at_level(logging.INFO, logger="debate_core.integrations.discovery"):
+        await provider.search_each(THREE_QUERIES)
+    lines = [
+        record.getMessage()
+        for record in caplog.records
+        if record.name == "debate_core.integrations.discovery"
+    ]
+    assert lines == [
+        "rss: Example Courier: 7 of 11 entries matched a query",
+        "rss: Example Health Ledger: 3 of 5 entries matched a query",
+        "rss: 2 feeds read, 0 unchanged, 0 failed",
+    ]
+
+
+def test_the_feed_provider_answers_several_queries_at_once_and_google_news_asks_each() -> None:
+    feeds = build_feeds(httpx.MockTransport(CountingFeeds().handle))
+    assert isinstance(feeds, MultiQuerySearchProvider)
+    google_news = google_news_factory(
+        HttpSettings(), version=VERSION, clock=FixedClock(), topics=(TOPIC,), cache=InMemoryFeedCache()
+    )(provider_settings())
+    assert not isinstance(google_news, MultiQuerySearchProvider)
 
 
 async def test_the_feed_registry_builds_rss_wrapped_and_it_answers() -> None:

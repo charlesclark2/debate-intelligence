@@ -26,19 +26,22 @@ from debate_core.application.errors import (
     ProviderRateLimited,
     ProviderUnavailable,
 )
-from debate_core.application.ports.providers import SearchProvider
+from debate_core.application.ports.providers import MultiQuerySearchProvider, SearchProvider
 from debate_core.application.settings import HttpSettings, ProviderSettings, SearchProviderName
 from debate_core.domain.discovery import BreakerState, CandidateResult, ProviderQuery, ProviderResponse
 from debate_core.domain.enums import SourceType
 from debate_core.domain.search import SearchFilters
 from debate_core.integrations.discovery.openalex import (
+    MAX_URL_CHARS,
     OPENALEX_WORKS_URL,
     OpenAlexProvider,
     candidate_from_work,
+    joined_search,
     openalex_factory,
     rebuild_abstract,
     source_type_for,
     works_parameters,
+    works_url,
 )
 from debate_core.integrations.discovery.redaction import PROTECTED_LOGGERS, logger
 from debate_core.integrations.discovery.registry import ProviderRegistry
@@ -638,20 +641,242 @@ def test_the_request_date_window_is_the_utc_date() -> None:
     )
 
 
-async def test_a_request_above_100_results_returns_at_most_100() -> None:
-    works = [
+def numbered_works(first: int, count: int) -> list[dict[str, Any]]:
+    return [
         {"id": f"https://openalex.org/W{number}", "display_name": f"Work {number}"}
-        for number in range(1, 101)
+        for number in range(first, first + count)
     ]
-    router = respx.MockRouter(assert_all_mocked=True)
-    route = router.get(OPENALEX_WORKS_URL, params={"per_page": "100"})
-    route.return_value = httpx.Response(200, json={"results": works})
+
+
+class PagedWorks:
+    """Answers `/works` page by page from `pages` (page number to works, or a status), keeping every
+    request; a page not in `pages` is an HTTP 599, so asking for one fails at the test's assertions."""
+
+    def __init__(self, pages: dict[int, list[dict[str, Any]] | int]) -> None:
+        self._pages = pages
+        self.requests: list[httpx.Request] = []
+
+    def handle(self, request: httpx.Request) -> httpx.Response:
+        self.requests.append(request)
+        answer = self._pages.get(int(request.url.params.get("page", "1")), 599)
+        if isinstance(answer, int):
+            return httpx.Response(answer)
+        return httpx.Response(200, json={"results": answer})
+
+
+async def test_a_request_above_100_results_asks_for_pages_of_100_until_it_has_them() -> None:
+    """v1-e08-t10, the PM's ruling: pages up to `max_results`; 150 is two pages, the second cut to 50."""
+    served = PagedWorks({1: numbered_works(1, 100), 2: numbered_works(101, 100)})
     query = ProviderQuery(query="x", filters=SearchFilters(max_results=150))
 
-    answer = await build_over(httpx.MockTransport(router.async_handler)).search(query)
+    answer = await build_over(httpx.MockTransport(served.handle)).search(query)
 
-    assert route.call_count == 1
+    assert [(request.url.params["page"], request.url.params["per_page"]) for request in served.requests] == [
+        ("1", "100"),
+        ("2", "100"),
+    ]
+    assert len(answer.results) == 150
+    assert (answer.results[0].provider_record_id, answer.results[-1].provider_record_id) == ("W1", "W150")
+
+
+async def test_paging_stops_at_a_short_page() -> None:
+    served = PagedWorks({1: numbered_works(1, 60)})
+    query = ProviderQuery(query="x", filters=SearchFilters(max_results=200))
+
+    answer = await build_over(httpx.MockTransport(served.handle)).search(query)
+
+    assert [request.url.params["page"] for request in served.requests] == ["1"]
+    assert len(answer.results) == 60
+
+
+async def test_a_later_page_failing_keeps_the_pages_read_and_says_the_answer_is_partial() -> None:
+    served = PagedWorks({1: numbered_works(1, 100), 2: 503})
+    query = ProviderQuery(query="x", filters=SearchFilters(max_results=200))
+
+    answer = await build_over(httpx.MockTransport(served.handle)).search(query)
+
     assert len(answer.results) == 100
+    assert (answer.partial, answer.error) == (True, "page 2 of 2 failed: HTTP 503")
+
+
+# --------------------------------------------------------------------------------------------
+# Every query of a search in one joined request (v1-e08-t10)
+# --------------------------------------------------------------------------------------------
+
+CARBON_WINDOW: Final = SearchFilters(since=datetime(2022, 1, 1, tzinfo=UTC), max_results=20)
+CARBON_QUERIES: Final = tuple(
+    ProviderQuery(query=text, filters=CARBON_WINDOW)
+    for text in ("carbon tax revenue", "carbon tax unpopular voters", "border adjustment")
+)
+
+
+class JoinedWorks:
+    """Answers every `/works` request with `works_joined.body.json` and keeps each request."""
+
+    def __init__(self, status: dict[str, int] | None = None) -> None:
+        self.requests: list[httpx.Request] = []
+        self._status = status or {}
+
+    def handle(self, request: httpx.Request) -> httpx.Response:
+        self.requests.append(request)
+        status = self._status.get(request.url.params["search"])
+        if status is not None:
+            return httpx.Response(status)
+        return httpx.Response(200, content=(FIXTURES / "works_joined.body.json").read_bytes())
+
+
+async def test_every_query_of_a_search_goes_to_openalex_in_one_joined_request() -> None:
+    served = JoinedWorks()
+
+    await build_over(httpx.MockTransport(served.handle)).search_each(CARBON_QUERIES)
+
+    [request] = served.requests
+    assert dict(request.url.params) == {
+        "search": "(carbon tax revenue) OR (carbon tax unpopular voters) OR (border adjustment)",
+        "filter": "from_publication_date:2022-01-01",
+        "per_page": "20",
+        "select": SELECT,
+    }
+
+
+async def test_each_work_of_a_joined_search_goes_to_the_queries_whose_words_it_carries_or_to_all(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """By hand from the fixture (its README): one work per case of attribution."""
+    provider = build_over(httpx.MockTransport(JoinedWorks().handle))
+    with caplog.at_level(logging.INFO, logger="debate_core.integrations.discovery"):
+        answers = await provider.search_each(CARBON_QUERIES)
+
+    assert [[result.provider_record_id for result in answer.results] for answer in answers] == [
+        ["W5550000001", "W5550000002", "W5550000004"],
+        ["W5550000002", "W5550000004"],
+        ["W5550000003", "W5550000004"],
+    ]
+    assert [answer.partial for answer in answers] == [False, False, False]
+    assert "openalex: 3 queries in 1 requests; works matching one query 2, several 1, none 1" in [
+        record.getMessage() for record in caplog.records
+    ]
+
+
+async def test_queries_with_different_windows_are_joined_per_window() -> None:
+    """By hand: in the first request "Border adjustment…" matches neither query, so it goes to both
+    (4 and 3 works); the third query is asked alone, so every work answered it (4)."""
+    other = SearchFilters(since=datetime(2025, 6, 1, tzinfo=UTC), max_results=20)
+    queries = (*CARBON_QUERIES[:2], ProviderQuery(query="border adjustment", filters=other))
+    served = JoinedWorks()
+
+    answers = await build_over(httpx.MockTransport(served.handle)).search_each(queries)
+
+    assert [(request.url.params["search"], request.url.params["filter"]) for request in served.requests] == [
+        ("(carbon tax revenue) OR (carbon tax unpopular voters)", "from_publication_date:2022-01-01"),
+        ("border adjustment", "from_publication_date:2025-06-01"),
+    ]
+    assert [len(answer.results) for answer in answers] == [4, 3, 4]
+
+
+async def test_one_joined_request_failing_leaves_its_queries_partial_and_answers_the_others() -> None:
+    other = SearchFilters(since=datetime(2025, 6, 1, tzinfo=UTC), max_results=20)
+    queries = (*CARBON_QUERIES[:2], ProviderQuery(query="border adjustment", filters=other))
+    served = JoinedWorks(status={"border adjustment": 503})
+
+    answers = await build_over(httpx.MockTransport(served.handle)).search_each(queries)
+
+    assert [(len(answer.results), answer.partial, answer.error) for answer in answers] == [
+        (4, False, None),
+        (3, False, None),
+        (0, True, "HTTP 503"),
+    ]
+
+
+async def test_every_joined_request_failing_raises_the_first_failure() -> None:
+    served = JoinedWorks(
+        status={"(carbon tax revenue) OR (carbon tax unpopular voters) OR (border adjustment)": 503}
+    )
+    with pytest.raises(ProviderUnavailable, match="openalex: HTTP 503"):
+        await build_over(httpx.MockTransport(served.handle)).search_each(CARBON_QUERIES)
+
+
+async def test_a_rate_limited_joined_request_fails_the_whole_call() -> None:
+    other = SearchFilters(since=datetime(2025, 6, 1, tzinfo=UTC), max_results=20)
+    queries = (CARBON_QUERIES[0], ProviderQuery(query="border adjustment", filters=other))
+    served = JoinedWorks(status={"carbon tax revenue": 429})
+    with pytest.raises(ProviderRateLimited):
+        await build_over(httpx.MockTransport(served.handle)).search_each(queries)
+    assert len(served.requests) == 1
+
+
+NHI_LINK_QUERIES: Final = (
+    "national health insurance political capital",
+    "national health insurance partisan fight Congress",
+    "national health insurance unpopular with voters",
+    "national health insurance popular with Republicans",
+    "national health insurance unpopular with Republicans",
+    "national health insurance popular with Democrats",
+    "national health insurance unpopular with Democrats",
+    "national health insurance political capital United States",
+    "single payer political capital United States",
+    "Medicare for All political capital United States",
+    "public option political capital United States",
+    "Affordable Care Act political capital United States",
+)
+"""The politics DA's twelve link queries on the NHI topic (v1-e08-t14)."""
+
+PARTY_TAILS: Final = (
+    "popular with Republicans",
+    "unpopular with Republicans",
+    "popular with Democrats",
+    "unpopular with Democrats",
+)
+MECHANISMS: Final = (
+    "national health insurance",
+    "single payer",
+    "Medicare for All",
+    "public option",
+    "Affordable Care Act",
+)
+THIRTY_TWO: Final = (*NHI_LINK_QUERIES, *(f"{m} {t} United States" for m in MECHANISMS for t in PARTY_TAILS))
+"""Today's twelve, then each mechanism crossed with the party-popularity templates: 32 queries."""
+
+AC6_WINDOW: Final = SearchFilters(since=datetime(2021, 11, 3, tzinfo=UTC), max_results=200)
+
+
+@pytest.mark.parametrize("texts", [NHI_LINK_QUERIES, THIRTY_TWO], ids=["12 queries", "32 queries"])
+async def test_a_12_or_32_query_search_is_one_request_per_page(texts: tuple[str, ...]) -> None:
+    """The PM's figures: both fit under 3,500 characters, so each is one request per page (two pages
+    for `--max-results 200`)."""
+    assert len(texts) in (12, 32)
+    served = PagedWorks({1: numbered_works(1, 100), 2: numbered_works(101, 100)})
+    queries = [ProviderQuery(query=text, filters=AC6_WINDOW) for text in texts]
+
+    await build_over(httpx.MockTransport(served.handle)).search_each(queries)
+
+    assert [request.url.params["page"] for request in served.requests] == ["1", "2"]
+    assert {request.url.params["search"].count(") OR (") for request in served.requests} == {len(texts) - 1}
+    assert max(len(str(request.url)) for request in served.requests) <= MAX_URL_CHARS
+
+
+async def test_a_joined_search_too_long_for_one_url_is_split_into_the_fewest_requests_that_fit() -> None:
+    """96 queries do not fit in one 3,500-character URL. Each request fits, and none could have taken the
+    next request's first query: the split is greedy, so it is the fewest, and keeps the queries' order."""
+    texts = [f"{text} survey {number}" for number in range(8) for text in NHI_LINK_QUERIES]
+    queries = [ProviderQuery(query=text, filters=AC6_WINDOW) for text in texts]
+    served = PagedWorks({1: [], 2: []})
+
+    await build_over(httpx.MockTransport(served.handle)).search_each(queries)
+
+    joined = [request.url.params["search"] for request in served.requests]
+    assert len(joined) >= 2
+    carried = [search.removeprefix("(").removesuffix(")").split(") OR (") for search in joined]
+    assert [text for chunk in carried for text in chunk] == texts
+    assert all(len(str(request.url)) <= MAX_URL_CHARS for request in served.requests)
+    for chunk, following in zip(carried, carried[1:], strict=False):
+        grown = [ProviderQuery(query=text, filters=AC6_WINDOW) for text in [*chunk, following[0]]]
+        joined = ProviderQuery(query=joined_search(grown), filters=AC6_WINDOW)
+        assert len(works_url(works_parameters(joined, page=2))) > MAX_URL_CHARS
+
+
+def test_the_openalex_provider_answers_several_queries_at_once() -> None:
+    assert isinstance(build_over(httpx.MockTransport(JoinedWorks().handle)), MultiQuerySearchProvider)
 
 
 async def test_the_answer_keeps_to_max_results_when_openalex_sends_more() -> None:
@@ -904,7 +1129,10 @@ class SendsTheKeyInTheUrl(OpenAlexProvider):
         response = await self._client.get(
             OPENALEX_WORKS_URL, params={**works_parameters(query), "api_key": API_KEY}
         )
-        return ProviderResponse(provider=self.name, results=self._read(response, query), elapsed_ms=1.0)
+        works, _ = self._read(response)
+        return ProviderResponse(
+            provider=self.name, results=tuple(works)[: query.filters.max_results], elapsed_ms=1.0
+        )
 
 
 async def test_the_kits_secrets_check_catches_a_key_sent_in_the_url() -> None:

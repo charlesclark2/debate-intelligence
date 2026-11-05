@@ -19,6 +19,11 @@ A federated search asks several providers at once and must not be held hostage b
   library's exceptions; one that leaks something else is reported as
   :class:`~debate_core.application.errors.ProviderUnavailable` naming the exception's type;
 * **records health** for the CLI's status footer (:meth:`ResilientProvider.health`);
+* **asks an adapter that answers several queries at once with all of them** (v1-e08-t10):
+  :func:`resilient` wraps a :class:`~debate_core.application.ports.providers.MultiQuerySearchProvider`
+  in :class:`ResilientMultiQueryProvider`, whose `search_each` is one guarded call for every query
+  of a search: one admission by the breaker, one timeout, and one success or failure in the health
+  record, however many queries it carries;
 * **never retries.** One search is at most one call to the adapter. Retrying a non-idempotent
   request could do the provider's work twice, and retrying a refused one ignores the provider's own
   rate limit; an adapter that retries an idempotent `GET` after a transient error does so inside its
@@ -40,7 +45,7 @@ from __future__ import annotations
 import asyncio
 import statistics
 from collections import deque
-from collections.abc import Iterable
+from collections.abc import Awaitable, Callable, Iterable, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
@@ -51,7 +56,7 @@ from debate_core.application.errors import (
     ProviderTimedOut,
     ProviderUnavailable,
 )
-from debate_core.application.ports.providers import Clock, SearchProvider
+from debate_core.application.ports.providers import Clock, MultiQuerySearchProvider, SearchProvider
 from debate_core.domain.discovery import BreakerState, ProviderHealth, ProviderQuery, ProviderResponse
 from debate_core.integrations.discovery.redaction import logger, protect_logs, redact_exception_chain
 
@@ -59,7 +64,9 @@ __all__ = [
     "BreakerPermit",
     "CircuitBreaker",
     "ResiliencePolicy",
+    "ResilientMultiQueryProvider",
     "ResilientProvider",
+    "resilient",
 ]
 
 
@@ -245,6 +252,17 @@ class ResilientProvider:
 
     async def search(self, query: ProviderQuery) -> ProviderResponse:
         """Ask the wrapped adapter once, within the timeout, unless the breaker or a hold says not to."""
+
+        async def ask() -> tuple[ProviderResponse, ...]:
+            return (await self._inner.search(query),)
+
+        (response,) = await self._guarded(ask, expected=1)
+        return response
+
+    async def _guarded(
+        self, ask: Callable[[], Awaitable[Sequence[ProviderResponse]]], *, expected: int
+    ) -> tuple[ProviderResponse, ...]:
+        """Make one call to the adapter under the hold, the breaker and the timeout; `expected` answers."""
         self._refuse_while_rate_limited()
         try:
             permit = self._breaker.admit(self._name)
@@ -256,7 +274,7 @@ class ResilientProvider:
         deadline = asyncio.timeout(self._policy.timeout_seconds)
         try:
             async with deadline:
-                response = await self._inner.search(query)
+                responses = tuple(await ask())
         except TimeoutError as error:
             if deadline.expired():
                 failure: ProviderError = ProviderTimedOut(self._name, self._policy.timeout_seconds)
@@ -275,12 +293,19 @@ class ResilientProvider:
         except BaseException:
             self._breaker.release(permit)
             raise
-        if response.provider != self._name:
-            failure = ProviderUnavailable(self._name, f"the adapter answered as {response.provider!r}")
+        strangers = [response.provider for response in responses if response.provider != self._name]
+        if strangers:
+            failure = ProviderUnavailable(self._name, f"the adapter answered as {strangers[0]!r}")
+            self._fail(permit, failure, started)
+            raise failure
+        if len(responses) != expected:
+            failure = ProviderUnavailable(
+                self._name, f"the adapter answered {len(responses)} of {expected} queries"
+            )
             self._fail(permit, failure, started)
             raise failure
         self._succeed(permit, started)
-        return response
+        return responses
 
     async def aclose(self) -> None:
         """Close the wrapped adapter's connections, when it holds any (an `aclose` of its own).
@@ -369,3 +394,43 @@ class ResilientProvider:
 
     def _elapsed_ms(self, started: datetime) -> float:
         return max((self._clock.now() - started).total_seconds() * 1000.0, 0.0)
+
+
+class ResilientMultiQueryProvider(ResilientProvider):
+    """A :class:`ResilientProvider` over an adapter that answers several queries at once.
+
+    A :class:`~debate_core.application.ports.providers.MultiQuerySearchProvider` itself, so the
+    fan-out asks it every query of a search in one call (v1-e08-t10). That call is guarded exactly as
+    one query is: the hold, one admission by the breaker, one timeout over the whole call, and one
+    success or failure in the health record. An adapter that answers a different number of queries
+    than it was asked has failed, as one answering under another name has.
+    """
+
+    def __init__(
+        self,
+        inner: MultiQuerySearchProvider,
+        policy: ResiliencePolicy,
+        *,
+        clock: Clock,
+        secrets: Iterable[str] = (),
+    ) -> None:
+        super().__init__(inner, policy, clock=clock, secrets=secrets)
+        self._each = inner
+
+    async def search_each(self, queries: Sequence[ProviderQuery]) -> tuple[ProviderResponse, ...]:
+        """Ask the wrapped adapter every query in one call, under one timeout, admission and record."""
+        asked = tuple(queries)
+
+        async def ask() -> tuple[ProviderResponse, ...]:
+            return await self._each.search_each(asked)
+
+        return await self._guarded(ask, expected=len(asked))
+
+
+def resilient(
+    inner: SearchProvider, policy: ResiliencePolicy, *, clock: Clock, secrets: Iterable[str] = ()
+) -> ResilientProvider:
+    """`inner` wrapped: in a :class:`ResilientMultiQueryProvider` when it answers several queries at once."""
+    if isinstance(inner, MultiQuerySearchProvider):
+        return ResilientMultiQueryProvider(inner, policy, clock=clock, secrets=secrets)
+    return ResilientProvider(inner, policy, clock=clock, secrets=secrets)

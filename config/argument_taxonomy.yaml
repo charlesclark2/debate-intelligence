@@ -31,7 +31,8 @@
 # he reviewed are unchanged. Version 1.3.0 (v1-e08-t14, for his review) gives the NHI topic preset
 # the country and its affirmatives' plan mechanisms, which a DA's link search names; no argument
 # entry changes. Version 1.5.0 (v1-e32-t06, for his review) adds the LD de-extinction topic preset,
-# whose topic is taken word for word from its committed resolution; no argument entry changes.
+# whose topic is taken word for word from its committed resolution, and proposes six of the topic's
+# own LD arguments, each a contention of its landscape taxonomy; no other argument entry changes.
 #
 # Ids: an argument the Policy landscape taxonomy also counts (config/landscape/taxonomies/) uses the
 # landscape's id, and says so in landscape_id. The spelling in the task spec is an alias
@@ -595,6 +596,177 @@ arguments:
         - {text: "{query} theory frivolous"}
         - {text: "theory not a voting issue"}
         - {text: "{query} counter interpretation"}
+
+  # ---------------------------------------------------------------------------------------------
+  # LD: the de-extinction topic's own arguments (v1-e32-t06, awaiting the coach's review). Each is a
+  # contention of config/landscape/taxonomies/ld-2026-nov-dec-de-extinction.yaml, under its id. The
+  # affirmative's contentions (de-extinction is unethical) are written as DAs, a cost of the action;
+  # the negative's as advantages, a good of it. {topic} is "de-extinction" from the topic preset.
+  # ---------------------------------------------------------------------------------------------
+
+  - id: animal-suffering
+    label: Animal suffering
+    kind: da
+    formats: [LD]
+    aliases: [animal-welfare]
+    landscape_id: animal-suffering
+    review: awaiting_coach_review
+    note: >-
+      An affirmative contention seeded from the hsld26 headings: bringing a species back makes animals
+      suffer, the surrogates and the revived animals both.
+    templates:
+      uniqueness:
+        - {text: "{topic} cloning success rate"}
+        - {text: "{topic} first animals born"}
+      link:
+        - {text: "{topic} animal suffering"}
+        - {text: "{topic} surrogate mothers risks"}
+        - {text: "{query} cloned animals health problems"}
+      internal-link:
+        - {text: "revived species lack social learning"}
+        - {text: "{query} animal welfare captivity"}
+      impact:
+        - {text: "animal suffering moral weight"}
+        - {text: "{query} animal welfare ethics"}
+      answers:
+        - {text: "{topic} animal welfare protections"}
+        - {text: "{topic} cloning techniques improving"}
+        - {text: "{query} animal suffering outweighed by conservation"}
+
+  - id: ecological-damage
+    label: Ecological damage
+    kind: da
+    formats: [LD]
+    aliases: [ecosystem-damage]
+    landscape_id: ecological-damage
+    review: awaiting_coach_review
+    note: An affirmative contention seeded from the hsld26 headings, a revived species damaging its ecosystem.
+    templates:
+      uniqueness:
+        - {text: "{topic} species release plans"}
+        - {text: "ecosystems changed since extinction"}
+      link:
+        - {text: "{topic} invasive species risk"}
+        - {text: "{query} revived species disrupt ecosystems"}
+      internal-link:
+        - {text: "invasive species ecosystem collapse"}
+        - {text: "{query} disease spillover wildlife"}
+      impact:
+        - {text: "ecosystem collapse impact"}
+        - {text: "biodiversity loss consequences"}
+      answers:
+        - {text: "{topic} ecosystem restoration benefits"}
+        - {text: "{query} revived species fill ecological niche"}
+        - {text: "{topic} release regulated"}
+
+  - id: moral-hazard
+    label: Moral hazard
+    kind: da
+    formats: [LD]
+    landscape_id: moral-hazard
+    review: awaiting_coach_review
+    note: >-
+      An affirmative contention seeded from the hsld26 headings: the promise of bringing species back
+      weakens the will to protect living ones.
+    templates:
+      uniqueness:
+        - {text: "conservation funding declining"}
+        - {text: "endangered species protections weakened"}
+      link:
+        - {text: "{topic} moral hazard"}
+        - {text: "{topic} undermines conservation"}
+      internal-link:
+        - {text: "{query} extinction seen as reversible"}
+        - {text: "{query} conservation complacency"}
+      impact:
+        - {text: "species extinction rate impact"}
+        - {text: "{query} biodiversity loss"}
+      answers:
+        - {text: "{topic} boosts conservation interest"}
+        - {text: "{topic} no moral hazard"}
+        - {text: "{query} public support for conservation"}
+
+  - id: opportunity-cost
+    label: Opportunity cost
+    kind: da
+    formats: [LD]
+    landscape_id: opportunity-cost
+    review: awaiting_coach_review
+    note: >-
+      An affirmative contention seeded from the hsld26 headings: the money and effort would save more
+      species spent on conservation.
+    templates:
+      uniqueness:
+        - {text: "conservation funding shortfall"}
+        - {text: "{topic} private investment"}
+      link:
+        - {text: "{topic} opportunity cost"}
+        - {text: "{topic} diverts conservation funding"}
+      internal-link:
+        - {text: "{query} conservation spending saves more species"}
+        - {text: "{query} cost per species saved"}
+      impact:
+        - {text: "species extinction rate impact"}
+        - {text: "{query} biodiversity loss"}
+      answers:
+        - {text: "{topic} privately funded"}
+        - {text: "{topic} funding not zero sum"}
+        - {text: "{query} conservation benefits of research"}
+
+  - id: biotech-innovation
+    label: Biotech innovation
+    kind: advantage
+    formats: [LD]
+    aliases: [innovation]
+    landscape_id: biotech-innovation
+    review: awaiting_coach_review
+    note: >-
+      A negative contention seeded from the hsld26 headings: de-extinction research advances biotechnology
+      and genetic engineering.
+    templates:
+      uniqueness:
+        - {text: "{topic} research funding"}
+        - {text: "gene editing research progress"}
+      link:
+        - {text: "{topic} biotechnology advances"}
+        - {text: "{topic} gene editing spillover"}
+      internal-link:
+        - {text: "{query} genetic engineering medicine"}
+        - {text: "{query} biotech innovation applications"}
+      impact:
+        - {text: "biotechnology innovation saves lives"}
+        - {text: "{query} medical breakthroughs"}
+      answers:
+        - {text: "{topic} research does not spill over"}
+        - {text: "{query} gene editing risks"}
+        - {text: "{topic} innovation overstated"}
+
+  - id: biodiversity
+    label: Biodiversity
+    kind: advantage
+    formats: [LD]
+    landscape_id: biodiversity
+    review: awaiting_coach_review
+    note: >-
+      A negative contention seeded from the hsld26 headings: reviving lost species restores biodiversity
+      and the ecosystem roles they played.
+    templates:
+      uniqueness:
+        - {text: "biodiversity loss accelerating"}
+        - {text: "{query} keystone species lost"}
+      link:
+        - {text: "{topic} restores biodiversity"}
+        - {text: "{topic} keystone species ecosystem"}
+      internal-link:
+        - {text: "{query} keystone species ecosystem function"}
+        - {text: "{query} genetic diversity resilience"}
+      impact:
+        - {text: "biodiversity loss extinction"}
+        - {text: "{query} ecosystem services value"}
+      answers:
+        - {text: "{topic} does not restore biodiversity"}
+        - {text: "{query} revived populations too small"}
+        - {text: "{topic} proxies not the original species"}
 
   # ---------------------------------------------------------------------------------------------
   # Policy: counterplans. The landscape's counterplans that are not about a topic's mechanism, under

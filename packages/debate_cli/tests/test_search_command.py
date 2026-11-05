@@ -42,6 +42,7 @@ from tests.fixtures.model_routing import EXAMPLE_ROUTING_FILE
 from typer.testing import CliRunner, Result
 
 from debate_cli.app import create_app
+from debate_cli.commands import search as search_command
 from debate_cli.container import ServiceContainer
 from debate_cli.exit_codes import ExitCode, exit_code_for, exit_code_for_search
 from debate_core.application.budget import BudgetExceededError, UnpricedModelError
@@ -81,6 +82,7 @@ from debate_core.integrations.models.routing_policy import RoutingPolicy
 from debate_core.retrieval import canonicalize_url
 from debate_core.testing.fakes.clock_and_ids import FixedClock
 from debate_core.testing.fakes.model_router import ScriptedModelRouter
+from debate_core.testing.virtual_time import run_in_virtual_time
 
 runner = CliRunner()
 
@@ -352,6 +354,14 @@ def seams(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Seams]:
 
 
 @pytest.fixture
+def on_virtual_time(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Run the command's event loop on virtual time (`VirtualTimeEventLoop`), through the command's own
+    `_run`: the providers' timeouts, the search's deadline and any `asyncio.sleep` a recorded answer takes
+    are measured on a clock that moves only while every task waits, so a busy runner cannot spend them."""
+    monkeypatch.setattr(search_command, "_run", run_in_virtual_time)
+
+
+@pytest.fixture
 def data_dir(tmp_path: Path) -> Path:
     return tmp_path / "data"
 
@@ -541,7 +551,12 @@ def test_presenter_never_prints_an_abstract_or_a_feed_description(seams: Seams) 
 # ------------------------------------------------------------------------------------------------
 
 
-def test_a_provider_that_times_out_makes_the_results_partial_and_exits_6(seams: Seams) -> None:
+def test_a_provider_that_times_out_makes_the_results_partial_and_exits_6(
+    seams: Seams, on_virtual_time: None
+) -> None:
+    """OpenAlex answers after 5 seconds and the providers' timeout is 0.2, so OpenAlex times out and the
+    feed, which answers at once, is the search's two results. On virtual time: on the wall clock a runner
+    busy for 0.2 seconds timed the feed out too, and the search failed with exit 3 (v1-e07-t16)."""
     seams.providers.timeout_seconds = 0.2
     seams.providers.openalex_delay_seconds = 5.0
 
@@ -557,7 +572,10 @@ def test_a_provider_that_times_out_makes_the_results_partial_and_exits_6(seams: 
     assert "SEARCH_PARTIAL" in result.stderr
 
 
-def test_a_partial_search_in_json_carries_its_results_and_the_failed_provider(seams: Seams) -> None:
+def test_a_partial_search_in_json_carries_its_results_and_the_failed_provider(
+    seams: Seams, on_virtual_time: None
+) -> None:
+    """The timeout above, in JSON, on virtual time for the same reason."""
     seams.providers.timeout_seconds = 0.2
     seams.providers.openalex_delay_seconds = 5.0
 

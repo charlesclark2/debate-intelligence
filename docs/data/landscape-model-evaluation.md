@@ -440,3 +440,41 @@ stance: its role is the headings'). The replay reproduces the recorded model-alo
   same 4 and row 13, an answer heading's card it named rightly, whose 1.1.0 role is the heading's.
 * The 1.2.0 re-record, on both routes, and the coach's relabel are recorded here by the PM when the
   operator has them.
+
+## Marked hits leave a text clean (`v1-e32-t44`, 2026-11-05)
+
+The PM's rulings of 2026-11-05. The scan's lists, its counts and the terminal listing are unchanged; only
+`clean`, and the bar that reads it, changed.
+
+* **The marks the rule trusts** are two, named in one place in the code,
+  `MARKS_THAT_SET_A_HIT_ASIDE` in `debate_core.arguments.landscape.scan_hits`: **a JSON key's name**
+  (`json_key`: every matched word is a word of a key of the text) and **a taxonomy word** (`in_taxonomy`:
+  the matched words are words of the committed taxonomy). A mark added to a hit later sets nothing aside
+  until a PM-reviewed change adds it there and here.
+* **What keeps a hit counting**, whatever else it carries: **a team's name** (`team_name`) and **words the
+  text's cards sent** (`in_input`, copied from a card). A hit with no mark counts too.
+* **Text by text.** A text the scan names is set aside when each kind it counts in that text has a listed
+  hit and every hit is set aside; otherwise the text is left, and the scan is unclean. A text with one
+  unmarked hit beside marked ones is left. A count no listed hit answers for leaves the text.
+* **The prompt inputs are never set aside**: every hit there is in the cards they send.
+* **The record of what was excused.** Each `scan` entry of `landscape evaluate --json` carries `set_aside`:
+  the texts set aside, their hits, and those hits by mark (a hit may carry both). Its counts of schools, team
+  codes and tournaments, `breakdown.scan_hits` and the terminal listing count every hit as before.
+
+### The kept 1.1.0 recordings' scans, judged by the rule (computed 2026-11-04)
+
+The session's replay of both routes' 1.1.0 cassettes through the evaluation's own path at prompt 1.1.0
+(`break_down`, replay mode, 62 seconds for both, nothing written, no model called). Counts only.
+
+| Text | Claude Haiku 4.5 (`high_volume`) | Claude Sonnet 4.6 (`deep_audit`) |
+|---|---|---|
+| Prompt inputs: texts, hits | 3, 0 | 3, 0 |
+| Cassettes: texts naming a school / team code / tournament | 3 / 1 / 2 | 3 / 2 / 1 |
+| Cassettes: hits; a JSON key, a taxonomy word | 27; 22, 5 | 42; 38, 4 |
+| Cassettes: hits a team's name, hits in the cards sent | 0, 0 | 0, 0 |
+| Cassettes set aside, of 3 | 3 (27 hits) | 3 (42 hits) |
+| Repair cassettes | 0 | 0 |
+| `clean`, every scan | **true** | **true** |
+
+* The hits and their marks are the recordings' as the PM recorded them above (27: 22 and 5; 42: 38 and 4).
+* Both recordings would now pass the scan; neither meets the bar, which this task did not change.

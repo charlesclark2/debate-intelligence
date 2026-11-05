@@ -240,7 +240,12 @@ from debate_core.arguments.landscape.evaluation_breakdown import (
     weighted_accuracy,
 )
 from debate_core.arguments.landscape.model_stage import NameScan
-from debate_core.arguments.landscape.scan_hits import ScanHit, hit_counts, mark_counts
+from debate_core.arguments.landscape.scan_hits import (
+    MARKS_THAT_SET_A_HIT_ASIDE,
+    ScanHit,
+    hit_counts,
+    mark_counts,
+)
 from debate_core.domain.landscape_classification import Stance
 from debate_core.domain.landscape_trends import LandscapeTrends, TrendLabel
 from debate_core.domain.model_contracts import TaskClass
@@ -844,6 +849,7 @@ def evaluation_summary(result: FormatEvaluation, *, route: TaskClass | None = No
                 "team_codes": scan.team_codes,
                 "other_names": scan.other_names,
                 "clean": scan.clean,
+                "set_aside": dict(scan.set_aside),
             }
             for name, scan in (
                 ("prompt_inputs", result.sent),
@@ -896,10 +902,25 @@ def _evaluation_display(result: FormatEvaluation) -> str:
 
 
 def _scan_line(scan: NameScan) -> str:
+    """A scan's counts, and the texts `clean` set aside when there are any (`v1-e32-t44`)."""
+    set_aside = scan.set_aside.get("texts", 0)
+    marks = ", ".join(
+        f"{_MARK_NAMES.get(mark, mark)} {scan.set_aside.get(mark, 0)}" for mark in MARKS_THAT_SET_A_HIT_ASIDE
+    )
     return (
         f"{scan.texts} text(s), {scan.schools} naming a school, {scan.team_codes} a team code, "
         f"{scan.other_names} a tournament"
+        + (
+            f" ({set_aside} set aside as clean: {scan.set_aside.get('hits', 0)} hit(s), each a JSON key's "
+            f"name or a taxonomy word; {marks})"
+            if set_aside
+            else ""
+        )
     )
+
+
+_MARK_NAMES: Final = {"json_key": "a JSON key", "in_taxonomy": "a taxonomy word"}
+"""How the display names each mark `clean` trusts, as the hit listing does."""
 
 
 def _evaluation_failure(result: FormatEvaluation, payload: dict[str, JsonValue]) -> CommandFailure:
@@ -916,7 +937,7 @@ def _evaluation_failure(result: FormatEvaluation, payload: dict[str, JsonValue])
     if not result.scans_clean:
         message = (
             "the scan found a school, team code or tournament in the prompt inputs, the cassettes or the "
-            "repair cassettes"
+            "repair cassettes that no mark sets aside as a JSON key's name or a taxonomy word"
         )
     elif stopped is not None:
         failure = CommandFailure.from_exception(stopped)

@@ -42,7 +42,7 @@ spec:
         one with any unmarked or team-naming hit is not, and every hit is still counted by
         mark, by tests on invented words shown failing first.
 status:
-  phase: Pending
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

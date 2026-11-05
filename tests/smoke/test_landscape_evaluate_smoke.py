@@ -218,7 +218,8 @@ def evaluate(installed_cli: InstalledCli, world: SyntheticRun, sample: Path, row
     )
 
 
-CLEAN = {"schools": 0, "team_codes": 0, "other_names": 0, "clean": True}
+NOTHING_SET_ASIDE = {"texts": 0, "hits": 0, "json_key": 0, "in_taxonomy": 0}
+CLEAN = {"schools": 0, "team_codes": 0, "other_names": 0, "clean": True, "set_aside": NOTHING_SET_ASIDE}
 
 
 def test_landscape_evaluate_replays_the_recorded_sample_with_clean_scans(

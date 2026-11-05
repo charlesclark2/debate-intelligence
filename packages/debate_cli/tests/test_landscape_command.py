@@ -1976,6 +1976,7 @@ def test_evaluate_meeting_the_bar_with_clean_scans_exits_0_and_counts_it(
         "team_codes": 0,
         "other_names": 0,
         "clean": True,
+        "set_aside": {},
     }
     assert data["scan"]["repair_cassettes"] == {
         "texts": 1,
@@ -1983,8 +1984,43 @@ def test_evaluate_meeting_the_bar_with_clean_scans_exits_0_and_counts_it(
         "team_codes": 0,
         "other_names": 0,
         "clean": True,
+        "set_aside": {},
     }
     assert asked == [False]
+
+
+# v1-e32-t44: a scan whose every named text's hits a trusted mark set aside is clean, and the bar reads it.
+NOTHING_SET_ASIDE = {"texts": 0, "hits": 0, "json_key": 0, "in_taxonomy": 0}
+ALL_SET_ASIDE = NameScan(
+    texts=3,
+    schools=3,
+    team_codes=2,
+    texts_left=0,
+    set_aside={"texts": 3, "hits": 27, "json_key": 22, "in_taxonomy": 5},
+)
+
+
+def test_evaluate_meets_the_bar_with_a_cassette_scan_whose_every_hit_was_set_aside(
+    world: SyntheticRun, sample_files: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _stub_evaluation(monkeypatch, _evaluated(cassettes=ALL_SET_ASIDE))
+
+    result = evaluate(world, sample_files)
+
+    assert result.exit_code == ExitCode.OK, result.output
+    assert _data(result)["scan"]["cassettes"] == {
+        "texts": 3,
+        "schools": 3,
+        "team_codes": 2,
+        "other_names": 0,
+        "clean": True,
+        "set_aside": {"texts": 3, "hits": 27, "json_key": 22, "in_taxonomy": 5},
+    }
+    shown = " ".join(_plain_display(world, sample_files).split())
+    assert (
+        "Of the cassettes: 3 text(s), 3 naming a school, 2 a team code, 0 a tournament (3 set aside as "
+        "clean: 27 hit(s), each a JSON key's name or a taxonomy word; a JSON key 22, a taxonomy word 5)."
+    ) in shown
 
 
 def test_evaluate_displays_the_repair_cassettes_scan(
@@ -2097,6 +2133,7 @@ def test_evaluate_displays_the_pipelines_score_and_the_models_own(
         {"counted": 0, "correct": 0},
         {"cassettes": NameScan(texts=2, team_codes=1)},
         {"repair_cassettes": NameScan(texts=1, other_names=1)},
+        {"cassettes": NameScan(texts=2, schools=1, texts_left=1, set_aside=NOTHING_SET_ASIDE)},
     ],
 )
 def test_evaluate_under_the_bar_or_with_a_name_in_a_cassette_exits_1(

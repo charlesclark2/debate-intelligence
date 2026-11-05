@@ -419,10 +419,24 @@ class NameScan:
     schools: int = 0
     team_codes: int = 0
     other_names: int = 0
+    texts_left: int | None = None
+    """Of the texts counted above, how many hold a hit the marks the scan trusts do not set aside
+    (:func:`~debate_core.arguments.landscape.scan_hits.marked_scan`, `v1-e32-t44`). None when the scan was
+    not judged by its hits' marks: then any count above makes it unclean."""
+    set_aside: Mapping[str, int] = field(default_factory=dict[str, int])
+    """What `clean` set aside: the texts whose every hit a trusted mark sets aside, their hits, and those
+    hits by mark. Counts only; the hits themselves stay listed and counted where they always were."""
+
+    @property
+    def named(self) -> bool:
+        """Whether any text named a school, a team code or another name: the counts, before any mark."""
+        return bool(self.schools or self.team_codes or self.other_names)
 
     @property
     def clean(self) -> bool:
-        return not (self.schools or self.team_codes or self.other_names)
+        """Whether no text named a name, or every text that did had each hit set aside by a trusted mark
+        (`v1-e32-t44`): what the evaluation's bar reads. An unjudged scan with any count is not clean."""
+        return not self.named or self.texts_left == 0
 
 
 def name_scan(

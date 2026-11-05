@@ -264,9 +264,38 @@ Q3. Should a one-query search name Crossref's pool? Today the footer names it on
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-11-05
 
 **Notes:**
+
+The three providers that passed their smokes are on in both profiles, the government sources keep their
+topic scope, and the cost of turning Crossref on is measured instead of discovered by students.
+
+1. **ac1 passes.** Both profiles enable openalex, crossref, rss, federal_register and govinfo; twelve new
+   tests on the committed profiles themselves, red first against the pre-task profiles (12 failed, each at
+   an assertion); no credential in either profile, and none printed with invented values set.
+2. **Part 2:** scope unchanged. The government providers are still asked only on a topic whose feed file
+   lists them (NHI), shown by test with no topic and with the NHI topic.
+3. **Part 3, the PM's ruling on Q1: C.** With a contact email the 12-query NHI search sends every query in
+   about 3.8 s inside the 15 s deadline; a cap would discard coverage that one line of setup saves. A cap
+   (A) is filed only if machines without an email become common. The join (B) is not pursued: Crossref
+   has no OR, so it would be a different search.
+4. **Part 4, Q2: approved as a new task**, filed by the PM (E41, p2) with the working-folder crash fix in
+   the same task: a per-user `~/.debate-research/<env>.env` holding credentials only, (a) refused when
+   group or others can read it, (b) no writing command yet, (c) in `debate_core.application` settings;
+   `config show` names its source with the value masked, and `doctor` gains the never-failing provider
+   rows.
+5. **Q3: no.** A one-query search doesn't name Crossref's pool; doctor is where a missing email belongs.
+6. **One more follow-up the PM files (E07, p3):** a provider that is `not configured` (GovInfo without a
+   key) makes every NHI search exit 6, though a retry can never get more. It should be named in the footer
+   without making the search partial, as v1-e07-t14's standing feed failures are.
+7. **Deviations accepted.** (1) The public pool is named only when a query goes unasked; the tests and the
+   guide state the real rule. (2) The search guide is the CLI README's search section; the PM notes it on
+   v1-e08-t15's spec, which names a guide that doesn't exist.
+8. **Closing checks:** the affected set (205 files) is left to `ci` (agreement 10); the changed files,
+   profile readers and the always-run list (720 passed), the settings tests, ruff, pyright, lint-imports,
+   thin handlers, command blocks and the specs are clean.
+9. **Merge:** a plain `scripts/task pr` once `ci` is green. The Goal is `Succeeded`.

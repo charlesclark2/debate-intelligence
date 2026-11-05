@@ -45,7 +45,7 @@ from debate_core.application.landscape_model_evaluation import LandscapeModelEva
 from debate_core.application.landscape_model_stage import ModelClassificationStage, ParsedStoreCardTexts
 from debate_core.application.ports.parsed_store import OCCURRENCES_NAME, PARSED_PREFIX
 from debate_core.application.structured_output import REPAIR_PROMPT_ID, StructuredOutputGuard
-from debate_core.domain.landscape_classification import card_item_id
+from debate_core.domain.landscape_classification import ModelStancedPositionAnswers, card_item_id
 from debate_core.domain.model_contracts import ModelParams, ModelPrompt, ModelResponse, TaskClass
 from debate_core.integrations.landscape.yaml_taxonomy_repository import YamlTaxonomyRepository
 from debate_core.integrations.local import BLOB_DIRECTORY, FsEvidenceObjectStore
@@ -89,7 +89,8 @@ IDENTITIES = (
 
 
 class AnswersRightAfterARepair(ScriptedModelRouter):
-    """Names an item the batch lacks in its first answer; answers every card by its tag after the repair."""
+    """Names an item the batch lacks in its first answer; answers every card by its tag after the repair, with
+    the stance `reads` when the prompt's version asks for one (1.2.0 on, `v1-e32-t46`)."""
 
     def __init__(self) -> None:
         super().__init__(model_id="recorded-model")
@@ -113,6 +114,7 @@ class AnswersRightAfterARepair(ScriptedModelRouter):
                 "position_id": ANSWERS.get(item["tag"]),
                 "confidence": 0.9,
                 "rationale": "the tag states the argument",
+                **({"stance": "reads"} if issubclass(schema, ModelStancedPositionAnswers) else {}),
             }
             for index, item in enumerate(items)
         ]
@@ -228,7 +230,7 @@ def test_landscape_evaluate_replays_the_recorded_sample_with_clean_scans(
 
     assert result.exit_code == ExitCode.OK, result.output
     data = json.loads(result.stdout)["data"]
-    assert (data["prompt_version"], data["taxonomy_version"], data["event"]) == ("1.1.0", "1.0.0", "POLICY")
+    assert (data["prompt_version"], data["taxonomy_version"], data["event"]) == ("1.2.0", "1.0.0", "POLICY")
     assert (data["labelled"], data["found"], data["asked"], data["calls"]) == (4, 4, 4, 2)
     assert (data["counted"], data["correct"], data["accuracy"], data["meets_target"]) == (4, 4, 1.0, True)
     assert (data["placed_below_threshold"], data["placed_labelled_none"], data["refused"]) == (0, 0, {})
@@ -270,12 +272,13 @@ def test_landscape_evaluate_check_sample_counts_a_second_label_and_asks_no_model
     installed_cli: InstalledCli, evaluation: tuple[SyntheticRun, Path, Path], tmp_path: Path
 ) -> None:
     """`v1-e32-t41`: the same rows with a second label on the first, read and counted with nothing asked or
-    recorded. By hand: four labelled, one per kind, and one second label, an advantage."""
+    recorded. By hand: four labelled, one per kind, and one second label, an advantage. `v1-e32-t46`: row 3's
+    label is written `AT:states-cp`, a card that answers the CP, so one row answers and three read."""
     world, _, rows = evaluation
     sample = tmp_path / "coach-sample-with-a-second-label.csv"
     labels = [label for _, _, label, _ in LABELLED]
     lines = ["sample_row,position,also", f"1,{labels[0]},costs-advantage"]
-    lines += [f"{row},{label}," for row, label in enumerate(labels[1:], start=2)]
+    lines += [f"{row},{'AT:' if row == 3 else ''}{label}," for row, label in enumerate(labels[1:], start=2)]
     sample.write_text("\n".join(lines) + "\n", encoding="utf-8")
     cassettes = world.data_dir / "landscape" / "model-cassettes"
     before = sorted(cassettes.rglob("*"))
@@ -287,4 +290,5 @@ def test_landscape_evaluate_check_sample_counts_a_second_label_and_asks_no_model
     assert (data["taxonomy_version"], data["snapshot"], data["labelled"]) == ("1.0.0", SNAPSHOT, 4)
     assert data["by_label_kind"] == {"advantage": 1, "aff": 1, "cp": 1, "da": 1}
     assert data["second_labels"] == {"rows": 1, "by_kind": {"advantage": 1}}
+    assert data["by_stance"] == {"answers": 1, "reads": 3}
     assert sorted(cassettes.rglob("*")) == before

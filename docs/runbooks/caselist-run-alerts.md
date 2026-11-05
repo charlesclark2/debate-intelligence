@@ -22,7 +22,8 @@ All in the environment's own names, `debate-dev-...` in dev and `debate-prod-...
 | A run or a login stops non-zero, or never starts | The rules `debate-dev-caselist-run-stopped` and `-login-stopped` on ECS task state changes | `The dev weekly caselist run task stopped with exit code N (stop code: reason). Task <arn>.` For the run's family it adds that the task may be a backfile import started by hand (`v1-e40-t09`), whose result names its command |
 | The weekly login fails | The login itself, through the same notifier | Subject `debate dev: Weekly caselist login failed`; its code and the two fixes, never the account |
 | No run recorded in seven days | The alarm `debate-dev-caselist-run-late` on `RunsRecorded` from the run's log group. **Its email is off until the cutover's first recorded run** | An `ALARM` email naming the alarm |
-| A schedule could not start its task | The queues `debate-dev-caselist-login-dlq` and `-run-dlq`, and the alarm `debate-dev-caselist-schedule-failed` | An `ALARM` email naming the alarm and the two queues |
+| A schedule could not start its task | The queues `debate-dev-caselist-login-dlq` and `-run-dlq`, and the alarm `debate-dev-caselist-schedule-failed`. Since `v1-e40-t42` a refused launch is tried again three times within the hour first, so a message is here once every try was refused | An `ALARM` email naming the alarm and the two queues |
+| ECS refuses a schedule's start of its task, or answers it with a failure (`v1-e40-t42`) | The rule `debate-dev-caselist-launch-refused` on CloudTrail's `RunTask` by either schedule's role, at each try | `A dev caselist schedule asked ECS to start <task definition> at <time>, and ECS refused it: error <error>, failure <failure>.`, and that it is tried again |
 | Someone changes who may read the password, or reads it | The rules `-credentials-key-changed`, `-credentials-secret-policy-changed`, `-login-role-changed`, `-login-task-changed`, and `-password-read` on CloudTrail events | The event, the principal, the time, and the error code if it was refused |
 
 Everything goes to one SNS topic, `debate-dev-caselist-run-alerts`, whose one subscription is the
@@ -351,9 +352,18 @@ def call(source, name, who, parameters, error=None):
     if error:
         detail["errorCode"] = error
     return event(source, "AWS API Call via CloudTrail", detail)
+def launch(who, error=None, failures=None):
+    detail = {"eventSource": "ecs.amazonaws.com", "eventName": "RunTask", "userIdentity": {"arn": who}, "requestParameters": {"taskDefinition": "arn:aws:ecs:us-east-1:%s:task-definition/%srun:11" % (account, prefix)}}
+    if error:
+        detail["errorCode"] = error
+    if failures is not None:
+        detail["responseElements"] = {"tasks": [], "failures": failures}
+    return event("aws.ecs", "AWS API Call via CloudTrail", detail)
 login_session = "arn:aws:sts::%s:assumed-role/%slogin/0123456789abcdef" % (account, prefix)
 admin_session = "arn:aws:sts::%s:assumed-role/AWSReservedSSO_DebateBreakGlassAdmin_0000/coach" % account
 scheduler_session = "arn:aws:sts::%s:assumed-role/%sscheduler/0123456789abcdef" % (account, prefix)
+run_scheduler_session = "arn:aws:sts::%s:assumed-role/%srun-scheduler/0123456789abcdef" % (account, prefix)
+look_alike_session = "arn:aws:sts::%s:assumed-role/%srun-scheduler-copy/0123456789abcdef" % (account, prefix)
 cases = [
     ("run-stopped", stopped("run", 2), True), ("run-stopped", stopped("run", None, "TaskFailedToStart"), True),
     ("run-stopped", stopped("run", 0), False), ("run-stopped", stopped("login", 1), False),
@@ -367,6 +377,11 @@ cases = [
     ("login-role-changed", call("aws.iam", "PutRolePolicy", admin_session, {"roleName": prefix + "run"}), False),
     ("login-task-changed", call("aws.ecs", "RunTask", admin_session, {"taskDefinition": prefix + "login"}), True),
     ("login-task-changed", call("aws.ecs", "RunTask", scheduler_session, {"taskDefinition": "arn:aws:ecs:us-east-1:%s:task-definition/%slogin:7" % (account, prefix)}), False),
+    ("launch-refused", launch(run_scheduler_session, error="ServerException"), True),
+    ("launch-refused", launch(scheduler_session, failures=[{"reason": "Capacity is unavailable at this time."}]), True),
+    ("launch-refused", launch(run_scheduler_session, failures=[]), False),
+    ("launch-refused", launch(admin_session, error="ServerException"), False),
+    ("launch-refused", launch(look_alike_session, error="ServerException"), False),
 ]
 failures = 0
 for rule, sample, expected in cases:
@@ -377,7 +392,10 @@ for rule, sample, expected in cases:
 print("PATTERNS OK: %d of %d" % (len(cases), len(cases)) if failures == 0 else "PATTERNS STOP: %d of %d wrong" % (failures, len(cases)))
 PATTERNS
 ```
-Success looks like fifteen `ok` lines and `PATTERNS OK: 15 of 15`. Any `FAIL` goes to the PM with the
+Success looks like twenty `ok` lines and `PATTERNS OK: 20 of 20`. The last five are
+`launch-refused`'s (`v1-e40-t42`), and its second case is the one only AWS can answer: a `failures`
+entry matched inside an array of objects. Before that task's apply the rule does not exist, and the
+block stops on `describe-rule`. Any `FAIL` goes to the PM with the
 output: that rule would miss, or wrongly send, the alert it names.
 
 ## Step 6 — One test alert
@@ -489,17 +507,22 @@ Success looks like `Apply complete! Resources: 0 added, 1 changed, 0 destroyed.`
 | `Weekly caselist login failed` | Its fix line: `caselist auth set-password` if the password changed, or a hand login ([caselist-cloud-credentials.md](caselist-cloud-credentials.md)) |
 | `ALARM: "debate-dev-caselist-run-late"` | No run recorded in seven days: was the schedule enabled, did the run start (`aws ecs list-tasks`), and did its log end with a summary? The Mac is the fallback for a week ([caselist-cloud-run.md](caselist-cloud-run.md)) |
 | `ALARM: "debate-dev-caselist-schedule-failed"` | Read the message in the queue, below: it names the schedule and why its start failed. Then empty the queue, or the alarm stays in `ALARM` and the next failure sends no email |
+| `A dev caselist schedule asked ECS to start ...` (`launch-refused`) | Wait until 07:00 America/Chicago: the schedule tries again up to three times within the hour. Then [caselist-cloud-run.md, "A launch AWS refused"](caselist-cloud-run.md#a-launch-aws-refused) says how to tell whether a try started the run |
 | A credentials rule (`...key...`, `...secret...`, `...login role...`, `...login task...`, `...Tabroom password...`) | If it was your own apply or a new image (the login task definition is replaced each time), nothing. Otherwise treat it as an incident: who is the principal, and was it refused? |
 
-**Reading a dead letter.** Read-only: it shows the message and leaves it in the queue.
+**Reading a dead letter.** Read-only: it shows the message and leaves it in the queue. It prints each
+queue's depth first, `ApproximateNumberOfMessages`, which is how many messages there are.
 
 **Operator command** (expected runtime ~1 min)
 Where: your Mac, anywhere
 ```bash
-for QUEUE in debate-dev-caselist-login-dlq debate-dev-caselist-run-dlq; do URL=$(aws sqs get-queue-url --profile debate-admin --region us-east-1 --queue-name "$QUEUE" --query QueueUrl --output text); echo "== $QUEUE"; aws sqs receive-message --profile debate-admin --region us-east-1 --queue-url "$URL" --max-number-of-messages 10 --visibility-timeout 0 --message-attribute-names All --query 'Messages[].[MessageAttributes,Body]' --output json; done
+for QUEUE in debate-dev-caselist-login-dlq debate-dev-caselist-run-dlq; do URL=$(aws sqs get-queue-url --profile debate-admin --region us-east-1 --queue-name "$QUEUE" --query QueueUrl --output text); echo "== $QUEUE"; aws sqs get-queue-attributes --profile debate-admin --region us-east-1 --queue-url "$URL" --attribute-names ApproximateNumberOfMessages --query 'Attributes.ApproximateNumberOfMessages' --output text; aws sqs receive-message --profile debate-admin --region us-east-1 --queue-url "$URL" --max-number-of-messages 10 --visibility-timeout 0 --attribute-names SentTimestamp --message-attribute-names All --query 'Messages[].[MessageId,MessageAttributes,Body]' --output json; done
 ```
-The message's attributes name the schedule's ARN and the error (`ERROR_CODE`, `ERROR_MESSAGE`).
-Fix what it names first.
+**The same `MessageId` printed several times is one message.** A visibility timeout of 0 leaves it
+visible at once, so one read can return it up to ten times (on 2026-11-05 the read of one
+2026-11-04 message returned it ten times). Count the distinct ids, and the depth above. The message's
+attributes name the schedule's ARN, its `SCHEDULED_TIME`, the error (`ERROR_CODE`, `ERROR_MESSAGE`)
+and, since `v1-e40-t42`, the tries made (`RETRY_ATTEMPTS`, at most `3`). Fix what it names first.
 
 **Emptying the queue that held it**, after the fix. Name the queue the block above showed a message
 in; this deletes every message in it.

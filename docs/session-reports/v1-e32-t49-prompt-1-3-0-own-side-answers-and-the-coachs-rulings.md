@@ -611,9 +611,48 @@ Every other row has the same outcome.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-11-05
 
 **Notes:**
+
+Built exactly as ruled, measured honestly, and the condition the ruling set was read and reported as
+failing rather than argued around.
+
+1. **ac1 passes.** Proposed in `c8c1209` with counts from replays that reproduce the recorded scores;
+   ruled before the first code commit.
+2. **ac2 passes.** `side_role` red against a skeleton (15 failed, each a role or stance assertion), 1.3.0
+   red before its file existed, the generic count red against a skeleton; 1.3.0 released, locked and the
+   default; 1.2.0's key kept and its real recordings replaying with every answer identical, the rule alone
+   giving 26 of 33 and 23 of 37 as proposed. Twelve mutants caught, the one equivalent guard removed.
+3. **Decisions accepted**, 1 in particular: `classify` applies only the own-side half, so the report's
+   other-side tally per round is untouched, and a mutant adding the other half is caught. Decision 6's
+   moved t46 expectations follow the ruling, redone by hand.
+4. **Deviations accepted:** the one `generic_answers` key in the CLI; the synthetic archive's cassette
+   rewritten offline by its own script, as in t46; the read-only replays (agreement 2); the affected set
+   left to `ci` (agreement 10).
+5. **ac3, the re-record, is in** and the PM records it in docs/data in the next batch: 24 of 32 (0.750) on
+   `deep_audit`, below the 0.85 bar; the scans clean, the operator judging all 46 hits ordinary words.
+   Against 1.2.0 under the same rule (26 of 33) it is within what 47 cards can separate (24 of 32: about
+   0.58 to 0.87). The hold on live model runs stands.
+6. **The generic condition fails** (above the threshold: 0 right, 1 wrong, row 26), so by the ruling the
+   clause comes out in a 1.3.1 follow-up the PM files. Rows 12 and 55 stayed right.
+7. **The operator's questions, ruled:**
+   - **v1-e32-t50's prompt is 1.3.1**: 1.3.0 less the generic-confidence sentence, every other bullet
+     kept. The (b) bullets and the framework and kritik bullets state the coach's rulings and the taxonomy's
+     meaning; on this sample they neither gain nor measurably lose, and the choice is made now, on that
+     ground, not on the held-out sample, so t50 measures one prompt it did not choose. Rows 9 and 53 (right
+     under 1.2.0, below the threshold under 1.3.0) are the ones to watch in t50's breakdown.
+   - **The (b) bullets stay** (above). If t50's held-out score falls below 1.2.0-with-the-rule's on the
+     same rows, that comes back to the PM as its own question.
+8. **Follow-ups the PM files:** 1.3.1 (E32, p2, before t50); the analytic texts' own-side role (E32, p3).
+   The generic-k description (v1-e32-t53) and rows 16, 33 and 57 (on v1-e32-t50) are already filed.
+9. **Closing checks:** the changed directories and the always-run list (4,131 passed), ruff, pyright,
+   lint-imports, thin handlers, the prompt lock, command blocks, links and the specs are clean; the
+   294-file affected set is the pull request's `ci`. Its search tests include
+   `test_on_the_committed_profile_without_a_contact_email_crossref_names_the_public_pool_in_the_footer`,
+   which fails on the real clock (v1-e07-t16): if `ci` fails on it alone, re-run the failed job.
+10. **Merge:** `scripts/task pr --partial` once `ci` is green. The Goal stays `InProgress` until the PM
+    records ac3 in docs/data.

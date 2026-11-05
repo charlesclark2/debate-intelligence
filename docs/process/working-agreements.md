@@ -24,7 +24,10 @@ The goal is a short wait between opening a PR and being able to merge it into `d
   the same deal. A file with no record counts as the record's median, and a file heavier than a
   part's share is dealt test by test. A record that is missing, older than two weeks, or that knows
   under three quarters of the chosen files deals every file's tests round the parts as before,
-  and the job summary says why; it never fails a run (`scripts/ci_test_durations.py`). The
+  and the job summary says why; it never fails a run (`scripts/ci_test_durations.py`). Under a
+  deal a part collects only the files it was dealt and any file the deal does not name, which it
+  deals test by test, never another part's (`v1-e41-t18`); its summary says how long it took to
+  collect. The
   parts together are the selection: on a pull request into `dev` the tests its changes reach, and
   otherwise the whole default selection ([agreement 10](#10-a-session-tests-what-it-changed-a-pull-request-what-it-reaches-and-dev-and-main-everything)).
   `ci.yml`'s `test-selection` job chooses it once and every part reads it; when it chooses no test,

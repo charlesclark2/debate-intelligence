@@ -239,7 +239,7 @@ def test_every_test_is_in_exactly_one_part_at_every_size_and_each_part_imports_o
     tmp_path: Path,
 ) -> None:
     """Every part at every size from one to eight, collected for real under the deal ci_test_durations.py
-    makes for that size, named in a file as CI names an affected set. 45 collections, side by side."""
+    makes for that size, named in a file as CI names an affected set. 36 collections, side by side."""
     root = an_invented_suite(tmp_path, SIZED_SUITE)
     listing = named_in_a_file(root, tmp_path, sorted(SIZED_SUITE))
     deals = {parts: the_deal_at(tmp_path, parts) for parts in SIZES}

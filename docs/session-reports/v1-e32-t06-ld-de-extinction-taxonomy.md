@@ -6,7 +6,26 @@
 | Spec | [`plan_specs/v1/e32-argument-landscape/t06-ld-de-extinction-taxonomy.yaml`](../../plan_specs/v1/e32-argument-landscape/t06-ld-de-extinction-taxonomy.yaml) |
 | Epic / release | `v1-e32-argument-landscape` / `v1.2` |
 | Branch | `task/v1-e32-t06-ld-de-extinction-taxonomy` |
-| Session status | IN PROGRESS <!-- COMPLETE / PARTIAL / BLOCKED --> |
+| Session status | PARTIAL <!-- COMPLETE / PARTIAL / BLOCKED --> |
+
+## Summary
+
+The LD de-extinction topic is in `topics.yaml` with the coach's resolution, copied from the spec, and a
+taxonomy file, `ld-2026-nov-dec-de-extinction.yaml` 1.0.0, seeded from hsld26's 2026-11-03 snapshot:
+14 positions, plus 4 LD format-level positions in `generic.yaml` (1.2.0). Because the coach's word
+(PM amendment of 2026-11-01) makes the topic follow the tournament, the topic map gained **tournament
+entries**, built to the PM's ruling of 2026-11-05: a disclosure resolves by a matching entry, then its
+snapshot's range, then to no topic. Florida Blue Key's 292 of the snapshot's 902 disclosures are on
+de-extinction; every earlier snapshot resolves as before, which a config test pins. Seeding, the
+report and its trends read each disclosure's topic; a report on an entry-only week says it reads 292 of
+902, and the week after calls it a partial base. A dry run on the newest snapshot (2026-11-03) resolves
+the new topic at 1.0.0. `argument_taxonomy.yaml` 1.5.0 adds the topic's search preset and proposes six
+of its LD arguments for the coach.
+
+**The Goal stays InProgress**: the coach has not reviewed the seeded file yet, so ac3's kept, merged and
+dropped counts and ac4's first half are NOT RUN. The PM should look first at the loader change in
+`debate_core.domain.landscape` (Deviation 1), the one JSON key added to `landscape report --json`
+(Deviation 2), and the dry run's exit on 7 unaccepted scan hits, which concerns a publish, not this task.
 
 ## Counts taken before any rule (2026-11-05)
 
@@ -39,10 +58,6 @@ scratch file, not committed; each run took 2 to 7 s.
   which counts real late disclosures and spellings that recur (two tournaments, one word) alike.
 * **Disclosures naming no tournament:** 0 in the 2026-11-03 snapshot (the path parser gives every
   disclosure some tournament text).
-
-## Summary
-
-<!-- 3-6 sentences: what was built, how it fits the epic, anything the PM should look at first. -->
 
 ## The proposal (2026-11-05, for the PM's ruling, kept as written)
 
@@ -272,45 +287,143 @@ was deleted after the run (`removed`; the 2 restored copies the search still lis
 
 ## Plan nodes
 
-<!-- One row per Plan graph node, in the order they were completed. -->
-
 | Node | Status | Notes |
 |---|---|---|
-| | | |
+| seed-and-curate | Seeded; curation NOT DONE | Files counted, seeding run, taxonomy and topics.yaml written, t01's config tests pass. The coach's curation is outstanding (ac3, ac4) |
 
 ## Acceptance criteria
 
-<!-- Goal criteria (ac1…) and every node criterion. Status: PASS / FAIL / NOT RUN. -->
-
 | Criterion | Status | Evidence (command → result) |
 |---|---|---|
-| | | |
+| ac1: `topics.yaml` maps hsld26 for the coach's de-extinction range to a new taxonomy file, and keeps space colonization's range with no taxonomy | PASS | `topics.yaml`: `ld-2026-nov-dec-de-extinction`, `taxonomy_version: 1.0.0`, hsld26 2026-11-06 to 2026-12-31 plus the Florida Blue Key entry for 2026-11-03 (the 2026-11-01 amendment supersedes the first range); space colonization unchanged at 2026-09-01 to 2026-10-31, no `taxonomy_version`. `pytest tests/config/test_landscape_topic_map.py` → 29 passed (every snapshot to 2026-10-27 as before; 2026-11-03's split; 2026-11-10 onward by range) |
+| ac2: at least 12 active positions seeded from hsld26 headings, each with id, label, kind, side and an alias; passes t01's loader and config tests | PASS | 14 positions, none retired, each with 1 to 3 aliases, all from the candidates CSV (two or more teams). `uv run pytest tests/config/test_landscape_taxonomies.py` → 58 passed |
+| ac3: the report records the disclosed hsld26 files on the new topic, the candidate count, and the coach's kept, merged and dropped, as counts | NOT RUN (the coach's part) | Counted: 292 disclosures, 257 sources, 256 parsed and read; 59 candidate rows (Seeding section). The coach's decisions are outstanding |
+| ac4: the coach has reviewed the seeded file, and a `landscape report --caselist hsld26` dry run on the newest snapshot resolves the new topic | NOT RUN (the coach's review); dry run PASS | Dry run over a restored copy: snapshot 2026-11-03, topic `ld-2026-nov-dec-de-extinction`, taxonomy 1.0.0, 256 sources, 17 positions, entry week 292 of 902; exit 1 `SCAN_HITS_NOT_ACCEPTED` (7 hits, a publish's matter). The coach's review is outstanding |
+| Node: taxonomy config tests pass | PASS | `uv run pytest tests/config/test_landscape_taxonomies.py` → 58 passed in 1.80 s |
+
+### Checks run before this report
+
+* The affected set: `uv run scripts/affected_tests.py` chose **346 of 698 test files** from 30 changed
+  files. A selection that size runs well past two minutes on this Mac, so under working agreement 10 it
+  is left to the pull request's `ci` check, which runs the same selection. Run instead, within the
+  limit: the always-run list and every test directory or file of what changed (33 paths:
+  `tests/architecture`, `tests/specs`, the CLI wiring tests, `packages/debate_core/tests/domain`,
+  `.../arguments/landscape`, `.../integrations/landscape`, every `test_landscape_*.py` in
+  `.../application`, `test_query_expansion.py`, `test_aff_assignment.py`,
+  `test_position_classification.py`, `test_analytic_texts.py`, `tests/config`, the CLI's
+  `test_landscape_command.py`, and the scripts' tests for the six scripts changed) →
+  **3,737 passed in 42.9 s**; `tests/smoke/test_landscape_smoke.py` and `test_search_smoke.py` → 13 passed.
+* `ruff format --check .` → 1,953 files already formatted; `ruff check .` → all passed;
+  `pyright` over `packages/debate_core`, `packages/debate_cli`, the six scripts and `tests/config` →
+  0 errors; `lint-imports` → 20 kept, 0 broken; `scripts/check_thin_handlers.py` → 72 handlers within 25
+  statements; `docs_index.py --check-descriptions`, `check_links.py` and
+  `check_command_blocks.py --base origin/dev` → OK; `scripts/validate_specs.py` → OK, 619 files.
+
+### Mutants
+
+Eight, on the new rules, each run against the four test files that cover them
+(`test_landscape_tournament_entries.py`, `test_landscape_topic_map.py`, `test_landscape_seeding.py`,
+`test_landscape_trends.py`), the file restored from HEAD after each. No Hypothesis property is involved.
+
+| Mutant | Result |
+|---|---|
+| Entries ignored when a disclosure resolves | Caught: 14 failed |
+| Exact spelling instead of "holds" | Caught: 10 failed |
+| No refusal of an entry reaching into an older topic's range | Caught: 1 failed |
+| No refusal of two topics' entries covering one snapshot | Caught: 1 failed |
+| A snapshot no range covers does not fall back to its entry | Caught: 3 failed |
+| Seeding resolves each disclosure by its snapshot alone | Caught: 1 failed |
+| Trends drop the partial windows | Caught: 2 failed |
+| No "Part of a week" notice | Caught: 1 failed |
+
+The first and fifth were written first as deleted `if` blocks, which left an empty loop body and failed
+at import (4 errors each): not catches. They were rewritten as `if False:` and run again; the counts
+above are those runs.
 
 ## Files changed
 
-<!-- Group by package or directory; one line on why each group changed. -->
+* **`debate_core.domain.landscape`**: `TournamentEntry`, `Topic.tournaments`, `tournament_key`,
+  `TopicMap.resolve_disclosure`, the snapshot-level fallback flagged `tournament_entries_only`, the two
+  refusals, and `TournamentEntrySnapshot`.
+* **`debate_core.domain.landscape_trends`**, **`debate_core.application.landscape_trends`**,
+  **`debate_core.application.landscape_report`**, **`debate_core.arguments.landscape.render`**: the
+  partial windows, the "Part of a week" notice and the partial base.
+* **`debate_core.application.landscape_seeding`**: each disclosure's topic from the whole map, and the
+  entry-only snapshots with their counts; **`landscape_run`**, **`aff_assignment`**,
+  **`landscape_model_evaluation`** and six scripts pass the topic map; `landscape_run` gives an entry-only
+  snapshot its topic's first later range.
+* **`debate_cli.commands.landscape`**: `tournament_entry_snapshots` in `--json`.
+* **`config/landscape/`**: `topics.yaml` (the topic and its entry), `taxonomies/ld-2026-nov-dec-de-extinction.yaml`
+  (new), `taxonomies/generic.yaml` (four LD positions, 1.2.0).
+* **`config/argument_taxonomy.yaml`**: 1.5.0, the preset and six proposed arguments.
+* **Tests**: `test_landscape_tournament_entries.py` (new), `tests/config/test_landscape_topic_map.py`
+  (new), additions to the seeding, trends, query-expansion and CLI landscape tests, `SHORT_WORDS` in
+  `tests/config/test_landscape_taxonomies.py`.
+* **`docs/guides/landscape-taxonomy.md`**: tournament entries.
 
 ## Deviations from the spec
 
-None.
+1. **Packages outside `constraints.packages`.** The rule lives in `debate_core.domain.landscape` and
+   `debate_core.domain.landscape_trends`, where the topic map and the trends model are; the spec's list
+   has no `debate_core.domain`. The proposal named the domain module and the ruling accepted the form;
+   the amendment makes the loader change this task's.
+2. **One `--json` key in `debate_cli`** (`tournament_entry_snapshots`), not in the proposal: without it a
+   dry run cannot show the 292 of 902 the report states, and the PM's condition could only be checked in
+   unit tests. No test pinned the landscape JSON's key set. Drop it if unwanted; nothing else reads it.
+3. **The proposal is in this report with four tournament names left out**: they are also their host
+   schools' names, and this report names no school.
+4. **ac4's dry run ran from this worktree's code, over a copy parsed with its parser** (`docx-9`): the
+   installed build cannot read tournament entries, and the cloud image's `docx-7` store is refused by a
+   report from this branch. Seeding read the run's own `docx-7` store, as the brief asked.
 
 ## Decisions and assumptions
 
-<!-- Choices the spec left open, with the reasoning. -->
+1. **The reach-back refusal, made precise.** An entry may not overlap the range of a topic that began
+   before its own topic (by its first range or entry on the caselist). An older topic's entry may reach
+   forward into a newer topic's range, so Q2's remedy, space colonization entries for late disclosures,
+   stays possible without a code change.
+2. **A report on an entry-only snapshot** takes its topic's first range after that snapshot as the topic's
+   dates (2026-11-06 to 2026-12-31), so its "Short history" line reads as for any first week.
+3. **`psychoanalysis-k` is in the topic file**, not added to generic.yaml's Policy position: changing that
+   position's events would edit a Policy position that released reports counted.
+4. **`de` and `nc` join `SHORT_WORDS`**: `de` because the normalizer splits de-extinction, `nc` the
+   negative constructive (1NC's NC). Both are debate or topic words, not initials.
+5. **The proposed arguments** are written as DAs (affirmative contentions, a cost of de-extinction) and
+   advantages (negative contentions, a good of it), the families whose needs fit; each takes its landscape
+   position's id.
+6. **I ran the seeding and the Q4 and topic-word counts myself**, read-only over the restored copy in
+   seconds, as t01 ran its seeding; the restores, parses and the dry run went to the operator.
+7. **One `git fetch origin dev`**, to compare this spec with dev's before the report.
 
 ## Operator follow-ups
 
-<!-- Commands the operator must run (anything over ~2 minutes), with where to run them, the exact
-command, expected runtime and what success looks like. Also GitHub/AWS settings to change. -->
+1. **The coach's review** (ac3, ac4). The operator reads the review sheet with the coach in the terminal
+   and sends the decisions by position id; the session applies them and records counts only. The
+   commands are in the session's last message, and here:
 
-None.
+```bash
+less ~/Documents/debate/landscape-seed/ld-2026-nov-dec-de-extinction-review.md
+```
+
+2. **Q2's counts on 2026-11-10 and 2026-11-17** (the PM's ruling): once the weekly run has imported each
+   snapshot, restore a copy (the runbook's step 1 with `CASELIST=hsld26`), and the session counts the
+   disclosures whose tournament spelling was first seen on or before 2026-11-03, FBK spellings excluded,
+   with their share and the topic-word split; then delete the copy (step 5). Above 5% of the snapshot, or
+   space files counted under de-extinction, the session proposes space colonization entries.
 
 ## Follow-up work
 
-<!-- Bugs, gaps or ideas outside this task's scope, each with the task or epic it belongs to.
-The PM decides whether they become spec changes or new tasks. -->
-
-None.
+* **The first LD report's publish** reads the 7 scan hits the dry run found before publishing, as the
+  runbook's step 3 says, then writes the release lock for `ld-2026-nov-dec-de-extinction` 1.0.0
+  (`scripts/release_landscape_taxonomy.py`). For E32's publishing tasks.
+* **A stale comment in `config/argument_taxonomy.yaml`** above the generic LD framing still says the
+  de-extinction resolution is not committed. Left as v1-e08-t04 wrote it, as the brief asked; a one-line
+  edit when the coach reviews the framing.
+* **The late-disclosure count could be a report line**, so the weekly report shows Q2's check without a
+  session (E32).
+* **`landscape-copy-*` restores and a newer dev parser**: the runbook's report steps assume the installed
+  build's parser matches the restored store; a branch ahead of the run image needs its own parse
+  (Deviation 4). Worth a line in `landscape-report-from-the-cloud-run.md` (E40).
 
 ## PM review
 

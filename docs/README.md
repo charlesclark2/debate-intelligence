@@ -51,7 +51,7 @@ regenerates it on `dev` ([`v1-e01-t16`](../plan_specs/v1/e01-repo-foundation/t16
 | [policies/caselist-data-use.md](policies/caselist-data-use.md) | Data-use policy for OpenCaselist disclosures and OpenEv camp files |
 | [policies/website-publishing.md](policies/website-publishing.md) | What may be published on the public team website: student names and photos, results, branding, accessibility, third parties, donations, removal on request |
 | [process/branching-and-environments.md](process/branching-and-environments.md) | `main` = prod, `dev` = development; promotion rules |
-| [process/ci-test-part-costs.md](process/ci-test-part-costs.md) | What one ci.yml test part costs besides its tests (measured 2026-11-01), how many parts a selection gets, how whole files are dealt to parts by recorded durations (2026-11-02), and the options for making parts cheaper |
+| [process/ci-test-part-costs.md](process/ci-test-part-costs.md) | What one ci.yml test part costs besides its tests (measured 2026-11-01), how many parts a selection gets, how whole files are dealt to parts by recorded durations (2026-11-02), what module fixtures and collection cost a part (2026-11-05), each part collecting only its own files, and the options for making parts cheaper |
 | [process/session-report-template.md](process/session-report-template.md) | Template for session reports |
 | [process/task-workflow.md](process/task-workflow.md) | `scripts/task`: start → session → PM review → PR → finish |
 | [process/working-agreements.md](process/working-agreements.md) | Project rules: light CI, operator hand-off for long commands, doc locations, naming |

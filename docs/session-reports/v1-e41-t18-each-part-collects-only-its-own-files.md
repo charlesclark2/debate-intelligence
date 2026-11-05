@@ -170,9 +170,50 @@ it. Nine fail at an assertion. The tenth was equivalent, so I removed the code b
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-11-05
 
 **Notes:**
+
+Measured first, and the measurement changed the story: the module-fixture saving the spec expected is not
+there, and the report says so plainly instead of claiming it.
+
+1. **ac1 passes.** The costs page's measurement section is committed (`48c8d3a`) before any code: no
+   module- or class-scoped setup reaches any part's 25 slowest entries on three runs, every heavy setup
+   is function-scoped, and collection costs 7.2 to 9.0 s a part whole against 1.1 to 3.2 s for its own
+   files.
+2. **ac2's first half passes.** `collects` is one line, applied in both places pytest needs it (the
+   named paths in `pytest_configure`, the walked files in `pytest_ignore_collect`), so the controller,
+   every worker and `-n 0` agree. A file no deal names, a path outside the rootdir and a run with no
+   deal are all collected as before; a part whose named files all belong elsewhere collects nothing
+   rather than falling back to the rootdir, by test. Red against a skeleton (15 failed, each at an
+   assertion), the one bad test owned and re-run red, the `-n 2` cases changed to start workers for
+   real, and 9 of 10 mutants caught (the tenth equivalent, its code removed). The partition proof now
+   deals the real suite at every size and bounds what each part collects.
+3. **Deviations accepted.** (1) One deal that each part reads, not a list per part: the same rule
+   once, and the only form that keeps the fallback for a whole-selection command naming directories.
+   (2) The collection-time line: it is the only way a runner can measure collection, and it selects
+   nothing. (3) The "before" is the dispatched whole-selection run on dev, the same kind of run as this
+   pull request's.
+4. **Hidden cross-file dependencies:** the static scan found three, each covered by its directory's
+   conftest. Runtime-state dependencies show only in a whole-selection run, and this pull request's
+   `ci` is one, so it is the test that matters: a failure there that passes when its file runs alone
+   comes back to this task.
+5. **Follow-up 1 is filed by the PM** (E41, p3): the remove smoke file decides the slowest part
+   (function-scoped installation, bucket and published fixtures at 11 to 15 s a test). A proposal
+   first: spread a file above a fraction of a share, or a module-scoped installation if its tests
+   allow it.
+6. **Follow-up 2 is filed by the PM** (E07, p2): the public-pool footer test from `v1-e07-t13` counts
+   results that depend on the real clock under the public pool's pace, so it fails on some runs (dev's
+   push of `6db251b`). It moves to an injected clock. If this pull request's `ci` fails on that test
+   alone, re-run the failed job; it is not this task's code.
+7. **Follow-up 3 is declined.** A failed part keeps uploading no durations: a failing run's timings
+   are not a run's normal timings, and dealing by an older record is safe (t17's rule).
+8. **Closing checks:** the affected set is the whole selection (ci.yml changed), so it is the pull
+   request's `ci` (agreement 10); the node's command (265 passed), ruff, pyright on the changed files,
+   lint-imports, thin handlers, command blocks, links and the specs are clean.
+9. **Merge:** `scripts/task pr --partial` once `ci` is green. The Goal stays `InProgress` until the PM
+   reads three task pull requests' slowest parts after the merge (ac2's second half). The operator's
+   timing block runs after this pull request's `ci` finishes.

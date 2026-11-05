@@ -71,6 +71,12 @@ locals {
   # unchanged by the apply that creates the topic; the module's tests hold the two equal.
   alert_topic_arn = "arn:${local.partition}:sns:${local.region}:${local.account_id}:${local.alert_topic_name}"
 
+  # Both schedules' retry policy (v1-e40-t42, the PM's ruling of 2026-11-05). Scheduler retries only
+  # an invocation that failed, a RunTask ECS refused, which started nothing: three tries at most, all
+  # within an hour of the scheduled time. run_task.tf says why none can make a second run.
+  schedule_retry_attempts       = 3
+  schedule_event_age_in_seconds = 3600
+
   ecs_tasks_assume_role_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [

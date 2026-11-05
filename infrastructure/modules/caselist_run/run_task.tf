@@ -313,11 +313,30 @@ resource "aws_scheduler_schedule" "run" {
       }
     }
 
-    # Never twice in a week: a second run would spend the week's downloads again. A start that
-    # failed goes to the dead-letter queue, whose alarm emails the coach (alerts.tf).
+    # A launch ECS refused is tried again (v1-e40-t42, the PM's ruling of 2026-11-05): three times at
+    # most, all within an hour of 06:00. On 2026-11-04 RunTask answered ServerException, nothing
+    # tried again, and the week ran only because the operator started it by hand the next day.
+    #
+    # Why a retry cannot make a second run. Scheduler retries only an invocation that failed, and a
+    # run that started is a RunTask that returned a task: whatever its container then does, that
+    # Wednesday is never invoked again. A refused launch started no container, downloaded nothing and
+    # took no lock. The one gap is an ambiguous answer, a task placed and an error returned: Scheduler
+    # passes ECS no idempotency token, so its retry would start a second task. That task meets the
+    # bucket's run lock, which `caselist pull` takes before it restores anything or calls
+    # OpenCaselist; while the first run holds its lease, the second is refused (RunLockHeld),
+    # downloads nothing and writes nothing. It could take the lock only after the first run had
+    # finished and released it. A run has finished in 56 minutes (2026-10-28), inside the event age,
+    # but three retries land far earlier than any run's end. A scheduled pull that refuses after a
+    # recent run is the PM's follow-up.
+    #
+    # Nor would a second run spend the week's downloads again: the download ledger, five per rolling
+    # 24 hours, is kept in the bucket and saved before each download, so a run starts from what is
+    # left; its weeklies are already imported, and it could fetch at most the one complete archive a
+    # run may. A start whose retries are spent goes to the dead-letter queue, whose alarm emails the
+    # coach; a RunTask refused, or answered with a failure, emails at once (alerts.tf).
     retry_policy {
-      maximum_retry_attempts       = 0
-      maximum_event_age_in_seconds = 3600
+      maximum_retry_attempts       = local.schedule_retry_attempts
+      maximum_event_age_in_seconds = local.schedule_event_age_in_seconds
     }
 
     dead_letter_config {

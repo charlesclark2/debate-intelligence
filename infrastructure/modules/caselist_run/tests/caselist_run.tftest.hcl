@@ -15,7 +15,8 @@
 #        policies, each on its own.
 #   ac3  the writer permission set can write both secrets and read neither.
 #   and  the two applies: credentials alone with no login task, then the task pinned by digest
-#        and its Wednesday schedule, never retried.
+#        and its Wednesday schedule. Never retried until v1-e40-t42: since then a launch ECS refused
+#        is tried again, three times within the hour, and a refused login still never is.
 #
 # And what they hold it to for task v1-e40-t03, from "The run" below:
 #
@@ -31,6 +32,9 @@
 # subscription, the task-state rules, the late-run metric and alarm, the dead-letter queues and their
 # alarm, the CloudTrail rules on who may read the password (its ac1 and ac2), and the run role's one
 # new grant, sns:Publish on that topic alone ("nothing more" above, updated).
+#
+# And for task v1-e40-t42: both schedules try a refused launch again, three times within the hour,
+# and a RunTask either schedule's role was refused, or answered with a failure, emails the coach.
 #
 # The account id, user name and address below are invented.
 
@@ -202,6 +206,13 @@ override_resource {
   target = aws_cloudwatch_event_rule.password_read
   values = {
     arn = "arn:aws:events:us-east-1:111122223333:rule/debate-mock-caselist-password-read"
+  }
+}
+
+override_resource {
+  target = aws_cloudwatch_event_rule.launch_refused
+  values = {
+    arn = "arn:aws:events:us-east-1:111122223333:rule/debate-mock-caselist-launch-refused"
   }
 }
 
@@ -859,8 +870,12 @@ run "the_login_task_runs_the_pinned_image_as_the_login_role_every_wednesday" {
   }
 
   assert {
-    condition     = aws_scheduler_schedule.login[0].target[0].retry_policy[0].maximum_retry_attempts == 0
-    error_message = "The schedule never retries: a refused login is not tried twice in a week."
+    condition = (
+      aws_scheduler_schedule.login[0].target[0].retry_policy[0].maximum_retry_attempts == 3
+      && aws_scheduler_schedule.login[0].target[0].retry_policy[0].maximum_event_age_in_seconds == 3600
+      && aws_scheduler_schedule.login[0].flexible_time_window[0].mode == "OFF"
+    )
+    error_message = "A launch ECS refused is tried again, three times at most and within the hour (v1-e40-t42): it started no container and cost no login attempt. A refused login is a task that started, which Scheduler never retries."
   }
 
   assert {
@@ -1395,8 +1410,12 @@ run "the_run_schedule_starts_after_the_login_and_is_disabled_by_default" {
   }
 
   assert {
-    condition     = aws_scheduler_schedule.run[0].target[0].retry_policy[0].maximum_retry_attempts == 0 && aws_scheduler_schedule.run[0].flexible_time_window[0].mode == "OFF"
-    error_message = "Never twice in a week, and never late by a window: a second run would spend the week's downloads again."
+    condition = (
+      aws_scheduler_schedule.run[0].target[0].retry_policy[0].maximum_retry_attempts == 3
+      && aws_scheduler_schedule.run[0].target[0].retry_policy[0].maximum_event_age_in_seconds == 3600
+      && aws_scheduler_schedule.run[0].flexible_time_window[0].mode == "OFF"
+    )
+    error_message = "A launch ECS refused is tried again, three times at most and within the hour (v1-e40-t42), and never late by a window: a refused launch started no run, and a run that started is a RunTask Scheduler never retries."
   }
 
   assert {
@@ -1598,6 +1617,7 @@ run "the_alert_topic_emails_the_coach_and_admits_only_these_rules_and_alarms" {
             "arn:aws:events:us-east-1:111122223333:rule/debate-mock-caselist-run-stopped",
             "arn:aws:events:us-east-1:111122223333:rule/debate-mock-caselist-login-stopped",
             "arn:aws:events:us-east-1:111122223333:rule/debate-mock-caselist-password-read",
+            "arn:aws:events:us-east-1:111122223333:rule/debate-mock-caselist-launch-refused",
           ],
           [for name in ["credentials-key-changed", "credentials-secret-policy-changed", "login-role-changed", "login-task-changed"] : "arn:aws:events:us-east-1:111122223333:rule/debate-mock-caselist-${name}"],
         ))
@@ -1799,7 +1819,7 @@ run "a_schedule_that_cannot_start_its_task_emails_the_coach" {
       aws_scheduler_schedule.login[0].target[0].dead_letter_config[0].arn == "arn:aws:sqs:us-east-1:111122223333:debate-mock-caselist-login-dlq"
       && aws_scheduler_schedule.run[0].target[0].dead_letter_config[0].arn == "arn:aws:sqs:us-east-1:111122223333:debate-mock-caselist-run-dlq"
     )
-    error_message = "The login's schedule, which never retries, and the run's each send a start they could not deliver to their own queue."
+    error_message = "The login's schedule and the run's each send a start they could not deliver, once their retries are spent, to their own queue."
   }
 
   assert {
@@ -1985,6 +2005,143 @@ run "a_read_of_the_password_by_anyone_but_the_login_role_emails_the_coach" {
       })
     )
     error_message = "The password rule's target is the alert topic, and its email says the event, the principal, the time and whether it was refused (ADR-0020 (6))."
+  }
+}
+
+run "a_launch_either_schedule_was_refused_emails_the_coach" {
+  command = apply
+
+  # v1-e40-t42: a RunTask by either schedule's role that ECS answered with an error, or with a
+  # `failures` entry. No AWS page says whether Scheduler counts a 200 carrying `failures` as a failed
+  # invocation (the PM's ruling, 2026-11-05), so this rule does not rely on the retry for it.
+
+  assert {
+    condition = jsonencode(jsondecode(aws_cloudwatch_event_rule.launch_refused.event_pattern)) == jsonencode({
+      detail = {
+        "$or" = [
+          { errorCode = [{ exists = true }] },
+          { responseElements = { failures = { reason = [{ exists = true }] } } },
+        ]
+        eventName   = ["RunTask"]
+        eventSource = ["ecs.amazonaws.com"]
+        userIdentity = { arn = [
+          { prefix = "arn:aws:sts::111122223333:assumed-role/debate-mock-caselist-scheduler/" },
+          { prefix = "arn:aws:sts::111122223333:assumed-role/debate-mock-caselist-run-scheduler/" },
+        ] }
+      }
+      "detail-type" = ["AWS API Call via CloudTrail"]
+      source        = ["aws.ecs"]
+    })
+    error_message = "The launch rule matches a RunTask by the login's or the run's scheduler role that ECS refused with an error or answered with a failure."
+  }
+
+  assert {
+    # Invented CloudTrail events, each judged against the pattern's own values, with EventBridge's
+    # meaning for the operators this pattern uses alone: a listed value, `prefix`, `exists`, `$or`, and
+    # a field inside an array of objects matching when any element's does. AWS's matcher is the real
+    # one; this is what tells a pattern that names the wrong role, or lost a branch, from this one.
+    condition = alltrue([
+      for name, case in {
+        the_run_schedule_refused_with_an_error = {
+          expected = true
+          detail = {
+            eventSource      = "ecs.amazonaws.com"
+            eventName        = "RunTask"
+            userIdentity     = { arn = "arn:aws:sts::111122223333:assumed-role/debate-mock-caselist-run-scheduler/0123456789abcdef0123456789abcdef" }
+            errorCode        = "ServerException"
+            responseElements = null
+          }
+        }
+        the_login_schedule_answered_with_a_failure = {
+          expected = true
+          detail = {
+            eventSource      = "ecs.amazonaws.com"
+            eventName        = "RunTask"
+            userIdentity     = { arn = "arn:aws:sts::111122223333:assumed-role/debate-mock-caselist-scheduler/fedcba9876543210fedcba9876543210" }
+            responseElements = { tasks = [], failures = [{ reason = "Capacity is unavailable at this time." }] }
+          }
+        }
+        the_run_schedule_started_its_task = {
+          expected = false
+          detail = {
+            eventSource      = "ecs.amazonaws.com"
+            eventName        = "RunTask"
+            userIdentity     = { arn = "arn:aws:sts::111122223333:assumed-role/debate-mock-caselist-run-scheduler/0123456789abcdef0123456789abcdef" }
+            responseElements = { tasks = [{ taskArn = "arn:aws:ecs:us-east-1:111122223333:task/debate-mock-caselist-run/00000000000000000000000000000001" }], failures = [] }
+          }
+        }
+        a_run_started_by_hand_and_refused = {
+          expected = false
+          detail = {
+            eventSource      = "ecs.amazonaws.com"
+            eventName        = "RunTask"
+            userIdentity     = { arn = "arn:aws:sts::111122223333:assumed-role/AWSReservedSSO_DebateMockCaselistRunDeployer_0123456789abcdef/operator" }
+            errorCode        = "ServerException"
+            responseElements = null
+          }
+        }
+        a_role_named_like_the_run_scheduler = {
+          expected = false
+          detail = {
+            eventSource      = "ecs.amazonaws.com"
+            eventName        = "RunTask"
+            userIdentity     = { arn = "arn:aws:sts::111122223333:assumed-role/debate-mock-caselist-run-scheduler-copy/0123456789abcdef0123456789abcdef" }
+            errorCode        = "ServerException"
+            responseElements = null
+          }
+        }
+        another_ecs_call_by_the_run_scheduler = {
+          expected = false
+          detail = {
+            eventSource      = "ecs.amazonaws.com"
+            eventName        = "DescribeTasks"
+            userIdentity     = { arn = "arn:aws:sts::111122223333:assumed-role/debate-mock-caselist-run-scheduler/0123456789abcdef0123456789abcdef" }
+            errorCode        = "AccessDeniedException"
+            responseElements = null
+          }
+        }
+      } :
+      (
+        contains(jsondecode(aws_cloudwatch_event_rule.launch_refused.event_pattern).source, "aws.ecs")
+        && contains(jsondecode(aws_cloudwatch_event_rule.launch_refused.event_pattern)["detail-type"], "AWS API Call via CloudTrail")
+        && contains(jsondecode(aws_cloudwatch_event_rule.launch_refused.event_pattern).detail.eventSource, case.detail.eventSource)
+        && contains(jsondecode(aws_cloudwatch_event_rule.launch_refused.event_pattern).detail.eventName, case.detail.eventName)
+        && anytrue([
+          for matcher in jsondecode(aws_cloudwatch_event_rule.launch_refused.event_pattern).detail.userIdentity.arn :
+          startswith(case.detail.userIdentity.arn, matcher.prefix)
+        ])
+        && anytrue([
+          for branch in jsondecode(aws_cloudwatch_event_rule.launch_refused.event_pattern).detail["$or"] :
+          (try(branch.errorCode[0].exists, false) == true && try(case.detail.errorCode, null) != null)
+          || (try(branch.responseElements.failures.reason[0].exists, false) == true && anytrue([
+            for failure in try(case.detail.responseElements.failures, []) : try(failure.reason, null) != null
+          ]))
+        ])
+      ) == case.expected
+    ])
+    error_message = "The launch rule matches the run's schedule refused with an error and the login's answered with a failure, and not a task the schedule started, a run started by hand, a role named like a scheduler's, or another ECS call."
+  }
+
+  assert {
+    condition     = aws_cloudwatch_event_rule.launch_refused.name == "debate-mock-caselist-launch-refused" && aws_cloudwatch_event_rule.launch_refused.state == "ENABLED"
+    error_message = "The rule is debate-<env>-caselist-launch-refused, enabled: RunTask is a write event, which reaches a rule in the default state."
+  }
+
+  assert {
+    condition = (
+      aws_cloudwatch_event_target.launch_refused.rule == aws_cloudwatch_event_rule.launch_refused.name
+      && aws_cloudwatch_event_target.launch_refused.arn == aws_sns_topic.alerts.arn
+      && can(tostring(jsondecode(aws_cloudwatch_event_target.launch_refused.input_transformer[0].input_template)))
+      && strcontains(aws_cloudwatch_event_target.launch_refused.input_transformer[0].input_template, "tried again up to 3 times within the hour")
+      && aws_cloudwatch_event_target.launch_refused.input_transformer[0].input_paths == tomap({
+        principal       = "$.detail.userIdentity.arn"
+        time            = "$.detail.eventTime"
+        error           = "$.detail.errorCode"
+        failure         = "$.detail.responseElements.failures[0].reason"
+        task_definition = "$.detail.requestParameters.taskDefinition"
+      })
+    )
+    error_message = "The launch rule's target is the alert topic, and its email says which schedule's role, when, the error or the failure, the task definition, and that the schedule tries again."
   }
 }
 

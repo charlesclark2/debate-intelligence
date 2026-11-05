@@ -2,9 +2,10 @@
 #
 # Every Wednesday at 03:00 America/Chicago, three hours before the run, EventBridge Scheduler
 # starts one Fargate task as the login role. Its command is `debate-research caselist auth renew`:
-# read the password, log in once, write the token. A refused login is never retried, and neither
-# is a start that failed: the schedule's retry policy is zero, so a wrong password costs one
-# attempt a week.
+# read the password, log in once, write the token. A refused login is never retried: it is a task
+# that started and exited non-zero, a RunTask that succeeded, which Scheduler never invokes again,
+# so a wrong password costs one attempt a week. A launch ECS refused is tried again, three times
+# within the hour (v1-e40-t42): it started no container and made no login.
 #
 # It runs on the run's cluster, in its subnets and security group, from its repository
 # (v1-e40-t03: network.tf, cluster.tf). None of it exists until var.image_digest names an image
@@ -297,11 +298,17 @@ resource "aws_scheduler_schedule" "login" {
       }
     }
 
-    # Never twice in a week, and a refused login is not tried again. A start that failed goes to
-    # the dead-letter queue, whose alarm emails the coach (alerts.tf).
+    # A launch ECS refused is tried again, three times at most, all within the hour (v1-e40-t42, the
+    # PM's ruling of 2026-11-05). A refused login is a task that started, which Scheduler never
+    # retries. The login takes no lock: an ambiguous RunTask answer (run_task.tf) could make two
+    # logins within the hour, and a new login does not end another login's token (ADR-0020), so the
+    # run still finds one that works. The retries are this schedule's role's own, so
+    # login-task-changed (alerts.tf) stays quiet. A start whose retries are spent goes to the
+    # dead-letter queue, whose alarm emails the coach; a RunTask refused, or answered with a
+    # failure, emails at once (alerts.tf).
     retry_policy {
-      maximum_retry_attempts       = 0
-      maximum_event_age_in_seconds = 3600
+      maximum_retry_attempts       = local.schedule_retry_attempts
+      maximum_event_age_in_seconds = local.schedule_event_age_in_seconds
     }
 
     dead_letter_config {

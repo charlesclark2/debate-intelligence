@@ -87,7 +87,9 @@ What to read:
   `error.details`.
 * `scan`: `prompt_inputs`, `cassettes` and `repair_cassettes`, each with its `texts` and its counts of
   schools, team codes and tournaments. The cassettes scanned are this prompt version's; `v1-e32-t39`'s
-  1.0.0 cassettes stay on the Mac, unread by this scan.
+  1.0.0 cassettes stay on the Mac, unread by this scan. Since `v1-e32-t44` a text whose every hit is marked
+  a JSON key's name or a taxonomy word (and none a team's name or words its cards sent) leaves `clean`
+  true; `set_aside` counts those texts and their hits by mark. The counts above still count every hit.
 * Paste the whole JSON object back.
 
 ## 4. Break it down, as JSON

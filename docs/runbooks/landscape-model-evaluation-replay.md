@@ -80,6 +80,11 @@ model rationale, taxonomy positions, repaired prompt, cassette metadata, across 
 cards sent), and the matched words with four words either side. Step 2's JSON counts the marks by
 field (`marks_by_field`).
 
+Since `v1-e32-t44` two of those marks leave a text clean: a text whose every hit is a JSON key or a
+taxonomy word, and none a team's name or in the cards sent, no longer makes its scan unclean. Every hit is
+still listed here and counted in the JSON; each `scan` entry's `set_aside` counts the texts and hits the
+rule set aside, by mark ([the evaluation's record](../data/landscape-model-evaluation.md#marked-hits-leave-a-text-clean-v1-e32-t44-2026-11-05)).
+
 ```bash
 if env | grep -q '^DEBATE_'; then echo "STOP: a DEBATE_ variable is set; unset it and paste again"; elif pgrep -f "caselist pull" >/dev/null; then echo "STOP: a caselist pull is running; wait for it to finish"; else uv run debate-research landscape evaluate --caselist hspolicy26 --snapshot 2026-10-20 --sample ~/Documents/debate/landscape-review/policy-2026-27-nhi-coach-sample-labelled.csv --sample-rows ~/.debate-research/dev/landscape/local-classifier/hspolicy26/policy-2026-27-nhi-coach-sample.jsonl --breakdown; fi
 ```

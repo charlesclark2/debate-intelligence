@@ -21,7 +21,9 @@ One evaluation, for one caselist (one format) at its newest weekly snapshot unle
 4. **scans** what was sent, every cassette of the prompt version it ran, and every repair cassette of that
    version filed under the caselist, for the caselist's schools, team codes and the disclosing teams'
    tournaments (:func:`~debate_core.arguments.landscape.model_stage.name_scan`): their values, not their
-   JSON keys, and without the committed positions text a cassette holds (`v1-e32-t40`).
+   JSON keys, and without the committed positions text a cassette holds (`v1-e32-t40`). A text whose
+   every hit is marked a JSON key's name or a taxonomy word leaves its scan clean, and is counted as set
+   aside (:func:`~debate_core.arguments.landscape.scan_hits.marked_scan`, `v1-e32-t44`).
 
 Nothing is cached and no report is written: the evaluation measures the stage and changes no placement.
 Every count is a number; no tag, heading or label text is returned or logged.

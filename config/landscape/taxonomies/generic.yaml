@@ -8,9 +8,9 @@
 # position, which the model stage sends; policy-2026-27-nhi moves to 1.4.1 with it.
 # 1.1.2 (2026-11-02, v1-e32-t41): the coach's corrections to the antiblackness-k, psychoanalysis-k and aspec
 # descriptions; policy-2026-27-nhi moves to 1.5.0 with it, for its own new positions.
-# 1.2.0 (2026-11-05, v1-e32-t06, awaiting the coach's review): LD's format-level positions, a
-# framework, a trick and two theory positions, each with headings two or more hsld26 teams used on the
-# de-extinction topic as aliases. They name LD only, so no Policy count moves and policy-2026-27-nhi
+# 1.2.0 (2026-11-05, v1-e32-t06, the coach's review of the same day): LD's format-level positions,
+# Kantian ethics and skepticism, each with headings two or more hsld26 teams used on the de-extinction
+# topic as aliases; the two theory positions drafted beside them were dropped by the coach. They name LD only, so no Policy count moves and policy-2026-27-nhi
 # keeps its version.
 schema_version: 1
 topic_id: generic
@@ -175,7 +175,7 @@ positions:
     events: [POLICY]
     aliases: [fiat good, state good]
 
-  # LD frameworks, tricks and theory (v1-e32-t06)
+  # LD frameworks and tricks (v1-e32-t06)
   - id: kantian-ethics
     label: Kantian ethics
     kind: criterion
@@ -190,17 +190,3 @@ positions:
     description: Moral skepticism, that no moral claim can be true, so the resolution cannot be affirmed.
     events: [LD]
     aliases: [skep, skepticism]
-  - id: presumption
-    label: Presumption
-    kind: theory
-    side: both
-    description: Which side wins when neither side has offense, and why.
-    events: [LD]
-    aliases: [presumption]
-  - id: theory-preempts
-    label: Theory preempts
-    kind: theory
-    side: aff
-    description: The affirmative's answers, read in advance, to the theory the negative is expected to run.
-    events: [LD]
-    aliases: [pre empts]

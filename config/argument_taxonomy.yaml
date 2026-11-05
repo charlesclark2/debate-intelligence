@@ -30,9 +30,10 @@
 # its own family, and adds the landscape's generic counterplans and kritiks. The DAs and advantages
 # he reviewed are unchanged. Version 1.3.0 (v1-e08-t14, for his review) gives the NHI topic preset
 # the country and its affirmatives' plan mechanisms, which a DA's link search names; no argument
-# entry changes. Version 1.5.0 (v1-e32-t06, for his review) adds the LD de-extinction topic preset,
-# whose topic is taken word for word from its committed resolution, and proposes six of the topic's
-# own LD arguments, each a contention of its landscape taxonomy; no other argument entry changes.
+# entry changes. Version 1.5.0 (v1-e32-t06) adds the LD de-extinction topic preset, whose topic is
+# taken word for word from its committed resolution, and six of the topic's own LD arguments, each a
+# contention of its landscape taxonomy; the coach approved the preset and all six on 2026-11-05, none
+# changed. No other argument entry changes.
 #
 # Ids: an argument the Policy landscape taxonomy also counts (config/landscape/taxonomies/) uses the
 # landscape's id, and says so in landscape_id. The spelling in the task spec is an alias
@@ -598,7 +599,7 @@ arguments:
         - {text: "{query} counter interpretation"}
 
   # ---------------------------------------------------------------------------------------------
-  # LD: the de-extinction topic's own arguments (v1-e32-t06, awaiting the coach's review). Each is a
+  # LD: the de-extinction topic's own arguments (v1-e32-t06, the coach's review of 2026-11-05). Each is a
   # contention of config/landscape/taxonomies/ld-2026-nov-dec-de-extinction.yaml, under its id. The
   # affirmative's contentions (de-extinction is unethical) are written as DAs, a cost of the action;
   # the negative's as advantages, a good of it. {topic} is "de-extinction" from the topic preset.
@@ -610,7 +611,7 @@ arguments:
     formats: [LD]
     aliases: [animal-welfare]
     landscape_id: animal-suffering
-    review: awaiting_coach_review
+    review: coach_reviewed
     note: >-
       An affirmative contention seeded from the hsld26 headings: bringing a species back makes animals
       suffer, the surrogates and the revived animals both.
@@ -639,7 +640,7 @@ arguments:
     formats: [LD]
     aliases: [ecosystem-damage]
     landscape_id: ecological-damage
-    review: awaiting_coach_review
+    review: coach_reviewed
     note: An affirmative contention seeded from the hsld26 headings, a revived species damaging its ecosystem.
     templates:
       uniqueness:
@@ -663,8 +664,9 @@ arguments:
     label: Moral hazard
     kind: da
     formats: [LD]
+    aliases: []
     landscape_id: moral-hazard
-    review: awaiting_coach_review
+    review: coach_reviewed
     note: >-
       An affirmative contention seeded from the hsld26 headings: the promise of bringing species back
       weakens the will to protect living ones.
@@ -690,8 +692,9 @@ arguments:
     label: Opportunity cost
     kind: da
     formats: [LD]
+    aliases: []
     landscape_id: opportunity-cost
-    review: awaiting_coach_review
+    review: coach_reviewed
     note: >-
       An affirmative contention seeded from the hsld26 headings: the money and effort would save more
       species spent on conservation.
@@ -719,7 +722,7 @@ arguments:
     formats: [LD]
     aliases: [innovation]
     landscape_id: biotech-innovation
-    review: awaiting_coach_review
+    review: coach_reviewed
     note: >-
       A negative contention seeded from the hsld26 headings: de-extinction research advances biotechnology
       and genetic engineering.
@@ -745,8 +748,9 @@ arguments:
     label: Biodiversity
     kind: advantage
     formats: [LD]
+    aliases: []
     landscape_id: biodiversity
-    review: awaiting_coach_review
+    review: coach_reviewed
     note: >-
       A negative contention seeded from the hsld26 headings: reviving lost species restores biodiversity
       and the ecosystem roles they played.
@@ -1211,6 +1215,6 @@ topics:
       - {landscape_id: aca-reform-aff, label: ACA reform, phrase: Affordable Care Act}
   - id: ld-2026-nov-dec-de-extinction
     format: LD
-    review: awaiting_coach_review
+    review: coach_reviewed
     variables:
       topic: de-extinction

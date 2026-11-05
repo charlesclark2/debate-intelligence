@@ -12,6 +12,9 @@
 # snapshot, the Florida Blue Key disclosures the tournament entry in topics.yaml puts on this topic
 # (256 parsed sources, 59 candidate headings two or more teams used). Labels and descriptions are
 # drafts from the headings alone until the coach approves or corrects them.
+# The coach's review (2026-11-05, before any release, so still 1.0.0): 15 positions kept as drafted,
+# trade's description his; the Jurassic Park aff added from a heading two teams used; generic.yaml's
+# two LD theory positions dropped. Approved.
 schema_version: 1
 topic_id: ld-2026-nov-dec-de-extinction
 taxonomy_version: 1.0.0
@@ -47,8 +50,16 @@ positions:
     label: Trade
     kind: contention
     side: aff
-    description: A contention two teams title trade; drafted from the heading alone, for the coach to name.
+    description: Trade advantage which likely indicates that de-extinction efforts result in animal trade.
     aliases: [c3 trade]
+
+  # Affirmative cases
+  - id: jurassic-park-aff
+    label: Jurassic park aff
+    kind: aff
+    side: aff
+    description: A Jurassic Park aff about the negative effects of de-extinction.
+    aliases: [jurassic park]
 
   # Negative contentions: de-extinction is not unethical
   - id: biotech-innovation

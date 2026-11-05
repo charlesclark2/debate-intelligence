@@ -308,7 +308,7 @@ ADDED_KRITIKS = {
 """generic.yaml's named kritiks; generic-k, its catch-all for a card that fits none, is not an argument."""
 
 COACH_REVIEWED_FILE = (
-    REPOSITORY / "packages/debate_core/tests/fixtures/argument_taxonomy/coach_reviewed_1_4_0.yaml"
+    REPOSITORY / "packages/debate_core/tests/fixtures/argument_taxonomy/coach_reviewed_1_5_0.yaml"
 )
 
 
@@ -383,13 +383,14 @@ def test_the_committed_taxonomy_keeps_every_coach_reviewed_entry_as_he_reviewed_
     committed: ArgumentTaxonomy,
 ) -> None:
     """The coach's reviewed entries (1.1.0's nine, the three he approved on 2026-11-02 and the seventeen
-    he approved on 2026-11-04: every argument) and the DA and advantage needs' windows are unchanged; an
+    he approved on 2026-11-04, and the six de-extinction arguments he approved on 2026-11-05: every
+    argument) and the DA and advantage needs' windows are unchanged; an
     entry added or reshaped later waits for his review."""
     reviewed_file = yaml.safe_load(COACH_REVIEWED_FILE.read_text(encoding="utf-8"))
     reviewed = {
         entry["id"]: entry for entry in reviewed_file["arguments"] if entry["review"] == "coach_reviewed"
     }
-    assert len(reviewed) == 29
+    assert len(reviewed) == 35
     for argument in committed.arguments:
         entry = reviewed.get(argument.id)
         if entry is None:
@@ -1681,12 +1682,12 @@ def test_model_expansion_stage_takes_one_to_five_model_queries() -> None:
 def test_the_committed_taxonomy_de_extinction_preset_names_its_topic_and_no_mechanisms(
     committed: ArgumentTaxonomy,
 ) -> None:
-    """v1-e32-t06: the LD preset gives {topic} from the committed resolution, awaiting the coach's review;
-    an LD resolution has no plan, so it lists no mechanisms."""
+    """v1-e32-t06: the LD preset gives {topic} from the committed resolution, approved by the coach on
+    2026-11-05; an LD resolution has no plan, so it lists no mechanisms."""
     topic = next(topic for topic in committed.topics if topic.id == "ld-2026-nov-dec-de-extinction")
     assert (topic.format, topic.review, topic.variables, topic.mechanisms) == (
         Event.LD,
-        ReviewStatus.AWAITING_COACH_REVIEW,
+        ReviewStatus.COACH_REVIEWED,
         {"topic": "de-extinction"},
         (),
     )

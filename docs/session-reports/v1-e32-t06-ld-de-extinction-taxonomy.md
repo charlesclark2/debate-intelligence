@@ -231,6 +231,16 @@ are 23 structure labels (overview, framing, contention, offense, the speech and 
 the like), 2 that name a tournament or a round, and 8 whose meaning would be a guess; the review sheet
 lists them as unplaced for the coach.
 
+## ac4's first dry run (2026-11-05): refused for the parser version
+
+Over the second copy, from this worktree (`uv run debate-research --json landscape report --caselist
+hsld26 --restored-copy <copy> --config-dir <worktree>/config/landscape --model-mode none --publish
+--dry-run`): `exit 2`, `PARSED_VERSION_NOT_IN_STORE`. The copy's parsed store is the cloud image's
+`2026.10.27-docx-7`; this branch, started from dev, parses with `2026.11.03-docx-9`, and a report reads
+only its own version. Nothing was written. The copy was then deleted (`removed`; the marker search listed
+2 restored copies left on the Mac, neither this task's). The seeding counts above stand: they were read
+from the run's own `docx-7` store. The next dry run parses a fresh copy with this worktree's code first.
+
 ## Plan nodes
 
 <!-- One row per Plan graph node, in the order they were completed. -->

@@ -1295,8 +1295,10 @@ refused launch up to three times, all within an hour of the scheduled time
   launch refused twice and then started sends two.
 * **When every try was refused,** or the error is one AWS never retries: the dead letter in
   `debate-dev-caselist-run-dlq` (or `-login-dlq`), and the `ALARM: "debate-dev-caselist-schedule-failed"`
-  email. The message's `RETRY_ATTEMPTS` says how many tries were made, and `ERROR_CODE` and
-  `ERROR_MESSAGE` what ECS answered.
+  email, within about ten minutes of the last try (on 2026-11-04, 7.5 minutes:
+  [caselist-run-alerts.md](caselist-run-alerts.md#when-an-alert-arrives)). The message's
+  `RETRY_ATTEMPTS` says how many tries were made, and `ERROR_CODE` and `ERROR_MESSAGE` what ECS
+  answered.
 * No AWS page says whether Scheduler retries an answer that carries `failures`. If it does not, that
   launch sends the rule's email and nothing more: no dead letter, no alarm.
 
@@ -1325,7 +1327,8 @@ aws ecs list-tasks --profile debate-admin --region us-east-1 --cluster debate-de
    [caselist-run-alerts.md](caselist-run-alerts.md#when-an-alert-arrives) says. A run by hand is the
    PM's word, then
    [Step 8's "One run by hand"](#step-8--the-seed-bucket-mode-and-one-run-by-hand-at-the-cutover-after-v1-e40-t04),
-   as on 2026-11-05. Then empty the queue as that runbook says, so the next failure emails.
+   as on 2026-11-05. Emptying the queue afterwards is housekeeping: since `v1-e40-t42` the alarm
+   counts dead letters as they arrive, so the next one emails whatever the queue still holds.
 
 A refused launch of the **login** looks the same in `-login-dlq`, and the run three hours later uses
 the previous token if it still works. A refused login is not this: it is a task that started and

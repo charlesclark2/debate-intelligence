@@ -22,7 +22,7 @@ All in the environment's own names, `debate-dev-...` in dev and `debate-prod-...
 | A run or a login stops non-zero, or never starts | The rules `debate-dev-caselist-run-stopped` and `-login-stopped` on ECS task state changes | `The dev weekly caselist run task stopped with exit code N (stop code: reason). Task <arn>.` For the run's family it adds that the task may be a backfile import started by hand (`v1-e40-t09`), whose result names its command |
 | The weekly login fails | The login itself, through the same notifier | Subject `debate dev: Weekly caselist login failed`; its code and the two fixes, never the account |
 | No run recorded in seven days | The alarm `debate-dev-caselist-run-late` on `RunsRecorded` from the run's log group. **Its email is off until the cutover's first recorded run** | An `ALARM` email naming the alarm |
-| A schedule could not start its task | The queues `debate-dev-caselist-login-dlq` and `-run-dlq`, and the alarm `debate-dev-caselist-schedule-failed`. Since `v1-e40-t42` a refused launch is tried again three times within the hour first, so a message is here once every try was refused | An `ALARM` email naming the alarm and the two queues |
+| A schedule could not start its task | The queues `debate-dev-caselist-login-dlq` and `-run-dlq`, and the alarm `debate-dev-caselist-schedule-failed`. Since `v1-e40-t42` a refused launch is tried again three times within the hour first, so a message is here once every try was refused. The alarm counts messages *sent* to either queue in the last 30 minutes, not what they hold, so each new dead letter emails even while an old one waits unread | An `ALARM` email naming the alarm and the two queues. Two dead letters within 30 minutes send one email; the login (03:00) and the run (06:00 America/Chicago) are three hours apart, so the two schedules never share one |
 | ECS refuses a schedule's start of its task, or answers it with a failure (`v1-e40-t42`) | The rule `debate-dev-caselist-launch-refused` on CloudTrail's `RunTask` by either schedule's role, at each try | `A dev caselist schedule asked ECS to start <task definition> at <time>, and ECS refused it: error <error>, failure <failure>.`, and that it is tried again |
 | Someone changes who may read the password, or reads it | The rules `-credentials-key-changed`, `-credentials-secret-policy-changed`, `-login-role-changed`, `-login-task-changed`, and `-password-read` on CloudTrail events | The event, the principal, the time, and the error code if it was refused |
 
@@ -497,6 +497,15 @@ Success looks like `Apply complete! Resources: 0 added, 1 changed, 0 destroyed.`
 
 ## When an alert arrives
 
+**What one looks like, and how soon.** On Wednesday 2026-11-04 ECS refused the run's start, and its
+dead letter reached `debate-dev-caselist-run-dlq` at 12:00:28Z. The alarm went from `OK` to `ALARM`
+at 12:07:55Z, on the datapoint of 12:01:00Z (1.0 >= 1.0, 1 of 1 periods of 300 seconds), and its
+action on the topic `debate-dev-caselist-run-alerts` ran in the same second. The coach's inbox
+received `ALARM: "debate-dev-caselist-schedule-failed"`, about 7.5 minutes after the dead letter.
+Expect an alarm's email **within about ten minutes** of what it watches. Since `v1-e40-t42` this
+alarm counts messages sent in five-minute periods and alarms on 1 of 6, so its email says `1 out of
+the last 6 datapoints`; the datapoint is the same one, so the timing is the same.
+
 | The email | What to do |
 |---|---|
 | `caselist pull failed: will be retried` | Nothing: the next Wednesday's run retries it. If the next one says the same, read the run's log |
@@ -506,7 +515,7 @@ Success looks like `Apply complete! Resources: 0 added, 1 changed, 0 destroyed.`
 | `caselist pull stopped: OpenCaselist login expired` | Usually nothing: the next Wednesday 03:00 login renews the token, and the run after it carries on. Never log in by hand for it ([caselist-cloud-run.md, "A run refused for an expired login"](caselist-cloud-run.md#a-run-refused-for-an-expired-login), which says when it goes to the PM) |
 | `Weekly caselist login failed` | Its fix line: `caselist auth set-password` if the password changed, or a hand login ([caselist-cloud-credentials.md](caselist-cloud-credentials.md)) |
 | `ALARM: "debate-dev-caselist-run-late"` | No run recorded in seven days: was the schedule enabled, did the run start (`aws ecs list-tasks`), and did its log end with a summary? The Mac is the fallback for a week ([caselist-cloud-run.md](caselist-cloud-run.md)) |
-| `ALARM: "debate-dev-caselist-schedule-failed"` | Read the message in the queue, below: it names the schedule and why its start failed. Then empty the queue, or the alarm stays in `ALARM` and the next failure sends no email |
+| `ALARM: "debate-dev-caselist-schedule-failed"` | Read the message in the queue, below: it names the schedule and why its start failed. The alarm returns to `OK` by itself 30 minutes after the last message arrived, and the next one emails again, whether or not the queue was emptied (`v1-e40-t42`). Before `v1-e40-t42`'s apply it counted what the queue held, and stayed in `ALARM` until the queue was emptied |
 | `A dev caselist schedule asked ECS to start ...` (`launch-refused`) | Wait until 07:00 America/Chicago: the schedule tries again up to three times within the hour. Then [caselist-cloud-run.md, "A launch AWS refused"](caselist-cloud-run.md#a-launch-aws-refused) says how to tell whether a try started the run |
 | A credentials rule (`...key...`, `...secret...`, `...login role...`, `...login task...`, `...Tabroom password...`) | If it was your own apply or a new image (the login task definition is replaced each time), nothing. Otherwise treat it as an incident: who is the principal, and was it refused? |
 
@@ -524,8 +533,10 @@ visible at once, so one read can return it up to ten times (on 2026-11-05 the re
 attributes name the schedule's ARN, its `SCHEDULED_TIME`, the error (`ERROR_CODE`, `ERROR_MESSAGE`)
 and, since `v1-e40-t42`, the tries made (`RETRY_ATTEMPTS`, at most `3`). Fix what it names first.
 
-**Emptying the queue that held it**, after the fix. Name the queue the block above showed a message
-in; this deletes every message in it.
+**Emptying the queue that held it**, after the fix, once the PM has the message's attributes. It is
+housekeeping since `v1-e40-t42`: the alarm counts arrivals, so a message left in the queue no longer
+stops the next failure's email, and the queue drops it after 14 days anyway. Name the queue the block
+above showed a message in; this deletes every message in it.
 
 **Operator command** (expected runtime ~1 min)
 Where: your Mac, anywhere
@@ -533,8 +544,8 @@ Where: your Mac, anywhere
 QUEUE='debate-dev-caselist-run-dlq'
 URL=$(aws sqs get-queue-url --profile debate-admin --region us-east-1 --queue-name "$QUEUE" --query QueueUrl --output text) && aws sqs purge-queue --profile debate-admin --region us-east-1 --queue-url "$URL" && echo "emptied $QUEUE"
 ```
-Success looks like `emptied debate-dev-caselist-run-dlq`. The alarm returns to `OK` within about ten
-minutes.
+Success looks like `emptied debate-dev-caselist-run-dlq`. Before `v1-e40-t42`'s apply the alarm
+returns to `OK` within about ten minutes of it; after, emptying the queue does not move the alarm.
 
 ## Prod, at the pilot's promotion (follow-up)
 

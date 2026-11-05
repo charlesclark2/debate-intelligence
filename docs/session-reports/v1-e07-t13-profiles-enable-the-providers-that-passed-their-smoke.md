@@ -149,7 +149,7 @@ session. The only values used were invented ones in tests and in the measurement
 | `uv run pyright packages/debate_cli` | `0 errors, 0 warnings, 0 informations` |
 | `uv run lint-imports` | `Contracts: 20 kept, 0 broken.` |
 | `uv run --frozen python scripts/check_thin_handlers.py` | `OK: 72 CLI command and API route handlers within 25 statements` |
-| `uv run python scripts/check_command_blocks.py --base origin/dev` | `OK: no `#` comments in 670 shell code blocks in 247 Markdown files (1 session reports changed since origin/dev)` |
+| `uv run python scripts/check_command_blocks.py --base origin/dev` | OK: no `#` comments in 670 shell code blocks in 247 Markdown files (1 session report changed since origin/dev) |
 | `uv run scripts/validate_specs.py` (after setting the phase to Succeeded) | `OK: 619 files, 41 epics, 556 tasks, 22 releases` |
 
 ## Files changed

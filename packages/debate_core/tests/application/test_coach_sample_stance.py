@@ -243,10 +243,21 @@ async def test_the_stage_asks_prompt_1_2_0_for_stanced_answers(prompts: PromptRe
     router = StancedByTag()
 
     await evaluate_labelled_cards(
+        READING, TAXONOMY, LABELLED, stage_over(router, prompts, "1.2.0"), overrides=OVERRIDES
+    )
+
+    assert router.schemas == [ModelStancedPositionAnswers]
+
+
+@pytest.mark.anyio
+async def test_the_stage_asks_prompt_1_3_0_by_default_in_the_stanced_schema(prompts: PromptRegistry) -> None:
+    router = StancedByTag()
+
+    await evaluate_labelled_cards(
         READING, TAXONOMY, LABELLED, stage_over(router, prompts), overrides=OVERRIDES
     )
 
-    assert CLASSIFY_POSITION_VERSION == "1.2.0"
+    assert CLASSIFY_POSITION_VERSION == "1.3.0"
     assert router.schemas == [ModelStancedPositionAnswers]
 
 
@@ -282,7 +293,7 @@ async def test_1_1_0_recordings_replay_unchanged_and_1_2_0_finds_none_of_them(
     assert (replayed.counted, replayed.correct) == (recorded.counted, recorded.correct)
     with pytest.raises(MissingFixtureError, match="1.2.0"):
         await evaluate_labelled_cards(
-            READING, TAXONOMY, LABELLED, stage_over(replaying, prompts), overrides=OVERRIDES
+            READING, TAXONOMY, LABELLED, stage_over(replaying, prompts, "1.2.0"), overrides=OVERRIDES
         )
 
 
@@ -496,3 +507,138 @@ def test_prompt_1_2_0_drops_1_1_0_s_null_clause_for_a_general_card(prompts: Prom
 
     assert "and you cannot tell which position it serves" not in new_system
     assert "it answers the position rather than reading it" not in new_system
+
+
+# ------------------------------------------------------------------------------------------------
+# Prompt 1.3.0 (`v1-e32-t49`): the own side's answers, the coach's rulings of 2026-11-05 and generic-k,
+# with 1.2.0's variables, user turn and schema; 1.2.0's recordings keep their key
+# ------------------------------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_1_2_0_recordings_replay_unchanged_and_1_3_0_finds_none_of_them(
+    tmp_path: Path, prompts: PromptRegistry
+) -> None:
+    recording = RecordReplayModelRouter(
+        StancedByTag(), mode=ModelMode.RECORD, cassette_dir=tmp_path, environ={}
+    )
+    recorded = await evaluate_labelled_cards(
+        READING, TAXONOMY, LABELLED, stage_over(recording, prompts, "1.2.0"), overrides=OVERRIDES
+    )
+    [cassette] = sorted((tmp_path / CLASSIFY_POSITION_PROMPT_ID).glob("*.json"))
+    request = json.loads(cassette.read_text(encoding="utf-8"))["request"]
+    assert request["prompt"]["prompt_version"] == "1.2.0"
+    assert (
+        request["output_schema"] == "debate_core.domain.landscape_classification.ModelStancedPositionAnswers"
+    )
+
+    replaying = RecordReplayModelRouter(None, mode=ModelMode.REPLAY, cassette_dir=tmp_path)
+    replayed = await evaluate_labelled_cards(
+        READING, TAXONOMY, LABELLED, stage_over(replaying, prompts, "1.2.0"), overrides=OVERRIDES
+    )
+    assert (replayed.counted, replayed.correct) == (recorded.counted, recorded.correct) == (7, 5)
+    with pytest.raises(MissingFixtureError, match="1.3.0"):
+        await evaluate_labelled_cards(
+            READING, TAXONOMY, LABELLED, stage_over(replaying, prompts), overrides=OVERRIDES
+        )
+
+
+def test_prompt_1_3_0_is_released_with_the_stanced_schema(prompts: PromptRegistry) -> None:
+    registered = prompts.get(CLASSIFY_POSITION_PROMPT_ID, "1.3.0")
+
+    assert registered.spec.status.value == "released"
+    assert registered.schema is ModelStancedPositionAnswers
+    assert registered.spec.task_class is TaskClass.HIGH_VOLUME
+
+
+def test_prompt_1_3_0_keeps_1_2_0_s_variables_and_user_turn(prompts: PromptRegistry) -> None:
+    _, new_user = rendered(prompts, "1.3.0")
+    _, old_user = rendered(prompts, "1.2.0")
+
+    assert new_user == old_user
+
+
+@pytest.mark.parametrize(
+    "sentence",
+    [
+        pytest.param(
+            "A card that defends a position against the other side's answers to it reads the position",
+            id="own side: defending reads",
+        ),
+        pytest.param(
+            "Its stance is reads, even under an answer heading.", id="own side: even under a heading"
+        ),
+        pytest.param(
+            "When a card is marked as under an answer heading and does not defend the position the headings "
+            "name, it answers that position: stance answers.",
+            id="own side: the answer heading otherwise",
+        ),
+        pytest.param(
+            "An advantage and a disadvantage about the same subject are different positions, and neither "
+            "stands for the other.",
+            id="ruling: no mirror pairs",
+        ),
+        pytest.param(
+            "never choose the disadvantage about the same subject for it",
+            id="ruling: an answer to an advantage is not the DA",
+        ),
+        pytest.param(
+            "with the stance answers, never to the answering side's own case",
+            id="ruling: an answer is never the answering side's case",
+        ),
+        pytest.param(
+            "not to the negative's own disadvantage, counterplan or kritik",
+            id="ruling: the negative's direction",
+        ),
+        pytest.param(
+            "A definition the affirmative reads against a counterplan, to show that the counterplan does not "
+            "compete or is ruled out, is not topicality: it answers that counterplan.",
+            id="ruling: a definition against a counterplan",
+        ),
+        pytest.param(
+            "Choose a named one only when the card argues its theory or its text, as its description says",
+            id="generic: a named kritik by its theory",
+        ),
+        pytest.param(
+            "even when the card's subject is near a named one", id="generic: not the nearest subject"
+        ),
+        pytest.param(
+            "A kritik's framework card (how the judge should weigh the round: that representations, ethics "
+            "or ontology come before consequences, or the role of the ballot) belongs to a kritik, named or "
+            "generic, never to a topicality position.",
+            id="generic: a kritik's framework is not topicality",
+        ),
+        pytest.param(
+            "A generic position is never named by a tag or heading: give it 0.9 or more when the card is "
+            "plainly that kind's and no named position of the kind fits",
+            id="generic: its confidence",
+        ),
+    ],
+)
+def test_prompt_1_3_0_says_the_own_side_rule_the_coach_s_rulings_and_generic_k(
+    prompts: PromptRegistry, sentence: str
+) -> None:
+    new_system, _ = rendered(prompts, "1.3.0")
+    old_system, _ = rendered(prompts, "1.2.0")
+
+    assert sentence in new_system
+    assert sentence not in old_system
+
+
+@pytest.mark.parametrize(
+    "sentence",
+    [
+        "When a card is marked as under an answer heading, it answers the position the headings name: stance "
+        "answers.",
+        "A card under an answer heading inside the position's own block, answering the other side's answers "
+        "to it, still reads it.",
+        "Choose the named one it fits;",
+        "Do not choose the plan or advantage the card defends instead.",
+    ],
+)
+def test_prompt_1_3_0_drops_the_1_2_0_sentences_it_replaces(prompts: PromptRegistry, sentence: str) -> None:
+    new_system, _ = rendered(prompts, "1.3.0")
+    old_system, _ = rendered(prompts, "1.2.0")
+
+    assert sentence in old_system
+    assert sentence not in new_system

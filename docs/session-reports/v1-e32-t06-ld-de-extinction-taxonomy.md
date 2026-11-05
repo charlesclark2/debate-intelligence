@@ -6,26 +6,26 @@
 | Spec | [`plan_specs/v1/e32-argument-landscape/t06-ld-de-extinction-taxonomy.yaml`](../../plan_specs/v1/e32-argument-landscape/t06-ld-de-extinction-taxonomy.yaml) |
 | Epic / release | `v1-e32-argument-landscape` / `v1.2` |
 | Branch | `task/v1-e32-t06-ld-de-extinction-taxonomy` |
-| Session status | PARTIAL <!-- COMPLETE / PARTIAL / BLOCKED --> |
+| Session status | COMPLETE <!-- COMPLETE / PARTIAL / BLOCKED --> |
 
 ## Summary
 
 The LD de-extinction topic is in `topics.yaml` with the coach's resolution, copied from the spec, and a
-taxonomy file, `ld-2026-nov-dec-de-extinction.yaml` 1.0.0, seeded from hsld26's 2026-11-03 snapshot:
-14 positions, plus 4 LD format-level positions in `generic.yaml` (1.2.0). Because the coach's word
-(PM amendment of 2026-11-01) makes the topic follow the tournament, the topic map gained **tournament
-entries**, built to the PM's ruling of 2026-11-05: a disclosure resolves by a matching entry, then its
-snapshot's range, then to no topic. Florida Blue Key's 292 of the snapshot's 902 disclosures are on
-de-extinction; every earlier snapshot resolves as before, which a config test pins. Seeding, the
-report and its trends read each disclosure's topic; a report on an entry-only week says it reads 292 of
-902, and the week after calls it a partial base. A dry run on the newest snapshot (2026-11-03) resolves
-the new topic at 1.0.0. `argument_taxonomy.yaml` 1.5.0 adds the topic's search preset and proposes six
-of its LD arguments for the coach.
+taxonomy file, `ld-2026-nov-dec-de-extinction.yaml` 1.0.0, seeded from hsld26's 2026-11-03 snapshot and
+approved by the coach on 2026-11-05: 15 positions, plus 2 LD format-level positions in `generic.yaml`
+(1.2.0). Because the coach's word (PM amendment of 2026-11-01) makes the topic follow the tournament, the
+topic map gained **tournament entries**, built to the PM's ruling of 2026-11-05: a disclosure resolves by
+a matching entry, then its snapshot's range, then to no topic. Florida Blue Key's 292 of the snapshot's
+902 disclosures are on de-extinction; every earlier snapshot resolves as before, which a config test
+pins. Seeding, the report and its trends read each disclosure's topic; a report on an entry-only week
+says it reads 292 of 902, and the week after calls it a partial base. A dry run on the newest snapshot
+resolves the new topic at 1.0.0. `argument_taxonomy.yaml` 1.5.0 adds the topic's search preset and six
+LD arguments, both approved by the coach. Every acceptance criterion passes; the Goal is `Succeeded`.
 
-**The Goal stays InProgress**: the coach has not reviewed the seeded file yet, so ac3's kept, merged and
-dropped counts and ac4's first half are NOT RUN. The PM should look first at the loader change in
-`debate_core.domain.landscape` (Deviation 1), the one JSON key added to `landscape report --json`
-(Deviation 2), and the dry run's exit on 7 unaccepted scan hits, which concerns a publish, not this task.
+The PM should look first at the loader change in `debate_core.domain.landscape` (Deviation 1), the one
+JSON key added to `landscape report --json` (Deviation 2), the dry run's exit on 7 unaccepted scan hits
+(a publish's matter), and **Q2's counts**: the ruling asks for them on the 2026-11-10 and 2026-11-17
+snapshots "while the task is open", and neither snapshot exists yet (Operator follow-ups).
 
 ## Counts taken before any rule (2026-11-05)
 
@@ -285,20 +285,44 @@ them first, as the runbook's step 3 says (Follow-up work). 267 of 2,593 cards co
 first pass on a 1.0.0 taxonomy of two-team headings; the report shows the rest as unclassified. The copy
 was deleted after the run (`removed`; the 2 restored copies the search still lists are other tasks').
 
+## The coach's review (2026-11-05)
+
+In one sitting, through the guided script of Decision 8, which saved the decisions to a JSON file on the
+operator's Mac. Counts only:
+
+| | Count |
+|---|---|
+| Positions drafted (14 in the topic file, 4 in generic.yaml) | 18 |
+| Kept as drafted | 15 |
+| Kept with the coach's description (`trade`) | 1 |
+| Renamed, merged | 0, 0 |
+| Dropped (generic.yaml's two LD theory positions) | 2 |
+| Added, from an unplaced candidate | 1 (an aff) |
+| Candidate headings: aliases before the review, after | 26, 25 of 59 |
+| Unplaced candidates left out | 34 |
+| Proposed search arguments approved, changed, dropped | 6, 0, 0 |
+| Topic preset | approved |
+| Taxonomy approved once the changes are made | yes |
+
+The added aff's label is in sentence case, "Jurassic park aff": the coach's "Jurassic Park aff" fails the
+personal-data check, which reads a capital after a label's first word as a person's name (the guide's
+rule, sentence case). His description keeps its capitals. Still 1.0.0: nothing of this topic has been
+released, as t01 kept its first version through its coach's changes.
+
 ## Plan nodes
 
 | Node | Status | Notes |
 |---|---|---|
-| seed-and-curate | Seeded; curation NOT DONE | Files counted, seeding run, taxonomy and topics.yaml written, t01's config tests pass. The coach's curation is outstanding (ac3, ac4) |
+| seed-and-curate | Done | Files counted, seeding run, taxonomy and topics.yaml written, the coach's review applied, t01's config tests pass |
 
 ## Acceptance criteria
 
 | Criterion | Status | Evidence (command → result) |
 |---|---|---|
 | ac1: `topics.yaml` maps hsld26 for the coach's de-extinction range to a new taxonomy file, and keeps space colonization's range with no taxonomy | PASS | `topics.yaml`: `ld-2026-nov-dec-de-extinction`, `taxonomy_version: 1.0.0`, hsld26 2026-11-06 to 2026-12-31 plus the Florida Blue Key entry for 2026-11-03 (the 2026-11-01 amendment supersedes the first range); space colonization unchanged at 2026-09-01 to 2026-10-31, no `taxonomy_version`. `pytest tests/config/test_landscape_topic_map.py` → 29 passed (every snapshot to 2026-10-27 as before; 2026-11-03's split; 2026-11-10 onward by range) |
-| ac2: at least 12 active positions seeded from hsld26 headings, each with id, label, kind, side and an alias; passes t01's loader and config tests | PASS | 14 positions, none retired, each with 1 to 3 aliases, all from the candidates CSV (two or more teams). `uv run pytest tests/config/test_landscape_taxonomies.py` → 58 passed |
-| ac3: the report records the disclosed hsld26 files on the new topic, the candidate count, and the coach's kept, merged and dropped, as counts | NOT RUN (the coach's part) | Counted: 292 disclosures, 257 sources, 256 parsed and read; 59 candidate rows (Seeding section). The coach's decisions are outstanding |
-| ac4: the coach has reviewed the seeded file, and a `landscape report --caselist hsld26` dry run on the newest snapshot resolves the new topic | NOT RUN (the coach's review); dry run PASS | Dry run over a restored copy: snapshot 2026-11-03, topic `ld-2026-nov-dec-de-extinction`, taxonomy 1.0.0, 256 sources, 17 positions, entry week 292 of 902; exit 1 `SCAN_HITS_NOT_ACCEPTED` (7 hits, a publish's matter). The coach's review is outstanding |
+| ac2: at least 12 active positions seeded from hsld26 headings, each with id, label, kind, side and an alias; passes t01's loader and config tests | PASS | 15 positions after the coach's review, none retired, each with 1 to 3 aliases, all from the candidates CSV (two or more teams). `uv run pytest tests/config/test_landscape_taxonomies.py` → 58 passed |
+| ac3: the report records the disclosed hsld26 files on the new topic, the candidate count, and the coach's kept, merged and dropped, as counts | PASS | 292 disclosures, 257 sources, 256 parsed and read; 59 candidate rows (Seeding section); the coach kept 16, merged 0, dropped 2, added 1 (The coach's review) |
+| ac4: the coach has reviewed the seeded file, and a `landscape report --caselist hsld26` dry run on the newest snapshot resolves the new topic | PASS | The coach reviewed and approved it on 2026-11-05. Dry run over a restored copy (before his review): snapshot 2026-11-03, topic `ld-2026-nov-dec-de-extinction`, taxonomy 1.0.0, 256 sources, 17 positions, entry week 292 of 902; exit 1 `SCAN_HITS_NOT_ACCEPTED` (7 hits, a publish's matter). His changes moved aliases and positions, not the topic map, so the topic resolves as it did |
 | Node: taxonomy config tests pass | PASS | `uv run pytest tests/config/test_landscape_taxonomies.py` → 58 passed in 1.80 s |
 
 ### Checks run before this report
@@ -313,6 +337,7 @@ was deleted after the run (`removed`; the 2 restored copies the search still lis
   `test_position_classification.py`, `test_analytic_texts.py`, `tests/config`, the CLI's
   `test_landscape_command.py`, and the scripts' tests for the six scripts changed) →
   **3,737 passed in 42.9 s**; `tests/smoke/test_landscape_smoke.py` and `test_search_smoke.py` → 13 passed.
+  After the coach's review was applied, the same paths with the two smoke files: **3,750 passed in 36.5 s**.
 * `ruff format --check .` → 1,953 files already formatted; `ruff check .` → all passed;
   `pyright` over `packages/debate_core`, `packages/debate_cli`, the six scripts and `tests/config` →
   0 errors; `lint-imports` → 20 kept, 0 broken; `scripts/check_thin_handlers.py` → 72 handlers within 25
@@ -354,8 +379,10 @@ above are those runs.
   snapshot its topic's first later range.
 * **`debate_cli.commands.landscape`**: `tournament_entry_snapshots` in `--json`.
 * **`config/landscape/`**: `topics.yaml` (the topic and its entry), `taxonomies/ld-2026-nov-dec-de-extinction.yaml`
-  (new), `taxonomies/generic.yaml` (four LD positions, 1.2.0).
-* **`config/argument_taxonomy.yaml`**: 1.5.0, the preset and six proposed arguments.
+  (new), `taxonomies/generic.yaml` (two LD positions, 1.2.0).
+* **`config/argument_taxonomy.yaml`**: 1.5.0, the preset and six arguments, coach-reviewed; its reviewed
+  copy is now `packages/debate_core/tests/fixtures/argument_taxonomy/coach_reviewed_1_5_0.yaml` (1.4.0's
+  removed, as its header says to do when the coach reviews a change).
 * **Tests**: `test_landscape_tournament_entries.py` (new), `tests/config/test_landscape_topic_map.py`
   (new), additions to the seeding, trends, query-expansion and CLI landscape tests, `SHORT_WORDS` in
   `tests/config/test_landscape_taxonomies.py`.
@@ -401,25 +428,18 @@ above are those runs.
    writes the decisions as JSON. It lives beside the review sheet because it shows real headings, and
    because a permanent, tested guided review is a scope change (Follow-up work). Tested here with scripted
    keypresses: an all-Enter run, a stop and resume, and rename, merge, drop, join and new answers.
+9. **`aliases: []` written out** on three of the six arguments: the reviewed-copy test compares each
+   entry's dump, which carries the empty list, with the YAML. No search changes.
 
 ## Operator follow-ups
 
-1. **The coach's review** (ac3, ac4), in one terminal window (expected ~15 to 20 minutes with the coach).
-   A guided sitting, one question per screen, Enter keeps the draft; it saves every answer, so `q` stops
-   it and the same command resumes. It writes
-   `~/Documents/debate/landscape-seed/ld-2026-nov-dec-de-extinction-coach-decisions.json`, outside the
-   repository, which the session applies, recording counts only. The script is a one-off kept beside the
-   review sheet, not committed (Decision 8):
-
-```bash
-cd "$HOME/Documents/debate/debate-intelligence-tool/debate-intelligence-worktrees/v1-e32-t06-ld-de-extinction-taxonomy" && .venv/bin/python ~/Documents/debate/landscape-seed/ld-2026-nov-dec-de-extinction-coach-review.py --worktree .
-```
-
-2. **Q2's counts on 2026-11-10 and 2026-11-17** (the PM's ruling): once the weekly run has imported each
-   snapshot, restore a copy (the runbook's step 1 with `CASELIST=hsld26`), and the session counts the
-   disclosures whose tournament spelling was first seen on or before 2026-11-03, FBK spellings excluded,
-   with their share and the topic-word split; then delete the copy (step 5). Above 5% of the snapshot, or
-   space files counted under de-extinction, the session proposes space colonization entries.
+1. **Q2's counts on 2026-11-10 and 2026-11-17** (the PM's ruling). Neither snapshot exists until the weekly
+   runs of 2026-11-11 and 2026-11-18. For each: restore a copy (the runbook's step 1 with
+   `CASELIST=hsld26`); the session counts the disclosures whose tournament spelling was first seen on or
+   before 2026-11-03, FBK spellings excluded, with their share and the topic-word split; then delete the
+   copy (step 5). Above 5% of the snapshot, or space files counted under de-extinction, the session
+   proposes space colonization entries. The ruling asks for them in this report while the task is open,
+   so the PM decides whether the pull request waits for them or they move to a follow-up.
 
 ## Follow-up work
 
@@ -433,6 +453,10 @@ cd "$HOME/Documents/debate/debate-intelligence-tool/debate-intelligence-worktree
   (or an apply step that reads the decisions file into the YAML), so a new topic's curation is one
   command for the coach rather than a sheet plus file listings. This task's one-off script is the
   prototype (Decision 8). For E32, or wherever the next topic's seeding lands.
+* **The coach reviews taxonomy updates in the tub application** (the operator's request, 2026-11-05):
+  after a new LD or PF topic starts, the coach would periodically review the seeded positions and the
+  headings no position claims inside the tub app rather than the command line, with the decisions
+  written back as the guided script writes them. Out of this task's scope; for the PM to place.
 * **The late-disclosure count could be a report line**, so the weekly report shows Q2's check without a
   session (E32).
 * **`landscape-copy-*` restores and a newer dev parser**: the runbook's report steps assume the installed

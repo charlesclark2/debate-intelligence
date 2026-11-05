@@ -7,8 +7,10 @@ the same way: take the option, and build the command's services from the setting
         settings = with_max_cost(cli_context(ctx).services.settings, max_cost)
 
 The option sets `models.budget_usd_per_run` for that one command, in place of whatever the settings
-said. The accounting is the budget guard's (`debate_core.application.budget`), which refuses a call
-that could take the run past it; nothing here counts anything.
+said. It is one limit for the whole command, however many model routers the command builds: the
+container gives each of them the command's one budget run (v1-e08-t17). The accounting is the budget
+guard's (`debate_core.application.budget`), which refuses a call that could take the run past it;
+nothing here counts anything.
 """
 
 from __future__ import annotations
@@ -30,8 +32,9 @@ MaxCost = Annotated[
         min=0.0,
         metavar="USD",
         help=(
-            "The most this command may spend on model calls, in USD. A call that could take it past "
-            "this is refused before it is made. Default: models.budget_usd_per_run, else no limit."
+            "The most this command may spend on model calls, in USD: one limit for the whole command, "
+            "whatever models it asks. A call that could take it past this is refused before it is "
+            "made. Default: models.budget_usd_per_run, else no limit."
         ),
     ),
 ]

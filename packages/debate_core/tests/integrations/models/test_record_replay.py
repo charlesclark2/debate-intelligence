@@ -26,6 +26,7 @@ from debate_core.application.budget import (
     BudgetExceededError,
     BudgetGuard,
     BudgetLimits,
+    BudgetRun,
     CalendarMonth,
     CallCeiling,
     Spend,
@@ -859,7 +860,7 @@ def test_record_a_budget_refusal_records_nothing_and_reaches_no_model(
         limits=BudgetLimits(per_run_usd=0.01),
         pricer=FixedCeiling(ceiling_usd),
         ledger=NothingSpent(),
-        run_id="a-budgeted-run",
+        run=BudgetRun("a-budgeted-run"),
         clock=FixedClock(RECORDED_AT),
     )
 
@@ -1013,7 +1014,7 @@ def test_record_through_the_built_router_logs_both_halves_once_and_replay_logs_n
             real_router=real_router,
             cassette_dir=cassettes,
             clock=FixedClock(RECORDED_AT),
-            run_id="a-recording-run",
+            run=BudgetRun("a-recording-run"),
             usage_log=UsageLog.for_data_dir(settings.storage.data_dir),
         )
     )

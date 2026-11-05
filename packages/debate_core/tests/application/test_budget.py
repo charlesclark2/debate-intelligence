@@ -24,6 +24,7 @@ from debate_core.application.budget import (
     BudgetExceededError,
     BudgetGuard,
     BudgetLimits,
+    BudgetRun,
     CalendarMonth,
     CallCeiling,
     Spend,
@@ -225,7 +226,7 @@ def metered_chain(
         limits=limits,
         pricer=RoutePricing(policy(), pricing),
         ledger=log,
-        run_id=RUN,
+        run=BudgetRun(RUN),
         clock=clock,
         local_zone=CHICAGO,
     )
@@ -633,7 +634,7 @@ def guard_over(
         limits=limits,
         pricer=pricer,
         ledger=ledger,
-        run_id=RUN,
+        run=BudgetRun(RUN),
         clock=FixedClock(LATE_EVENING),
         local_zone=CHICAGO,
     )
@@ -686,6 +687,128 @@ async def test_a_finished_or_failed_call_lets_go_of_its_hold() -> None:
         await guard.generate_structured(TaskClass.HIGH_VOLUME, WARMING, ContractPassage)
 
     assert delegate.planned == []
+
+
+# ---------------------------------------------------------------------------------------------
+# One run, however many guards (v1-e08-t17): every router one command builds is one budget run
+# ---------------------------------------------------------------------------------------------
+
+
+def guard_of(
+    run: BudgetRun, delegate: ModelRouter, limits: BudgetLimits, pricer: FixedPricer, ledger: StillLedger
+) -> BudgetGuard:
+    return BudgetGuard(
+        delegate,
+        limits=limits,
+        pricer=pricer,
+        ledger=ledger,
+        run=run,
+        clock=FixedClock(LATE_EVENING),
+        local_zone=CHICAGO,
+    )
+
+
+async def test_calls_in_flight_through_two_guards_of_one_budget_run_hold_against_one_limit() -> None:
+    # Each call could cost $0.02 under a $0.05 limit: two fit, whichever guard they go through.
+    run = BudgetRun()
+    expanding, cutting = GatedRouter(), GatedRouter()
+    limits, pricer, ledger = BudgetLimits(per_run_usd=0.05), FixedPricer(0.02), StillLedger()
+    guards = [
+        guard_of(run, expanding, limits, pricer, ledger),
+        guard_of(run, cutting, limits, pricer, ledger),
+    ]
+
+    calls = [
+        asyncio.ensure_future(guard.generate_structured(TaskClass.HIGH_VOLUME, WARMING, ContractPassage))
+        for guard in guards
+        for _ in range(2)
+    ]
+    await asyncio.sleep(0)
+    expanding.gate.set()
+    cutting.gate.set()
+    outcomes = await asyncio.gather(*calls, return_exceptions=True)
+
+    assert [type(outcome).__name__ for outcome in outcomes] == [
+        "ModelResponse[ContractPassage]",
+        "ModelResponse[ContractPassage]",
+        "BudgetExceededError",
+        "BudgetExceededError",
+    ]
+    refused = outcomes[2]
+    assert isinstance(refused, BudgetExceededError)
+    assert (refused.limit_name, refused.spent_usd) == ("per-run", pytest.approx(0.04))
+    assert (len(expanding.calls), len(cutting.calls)) == (2, 0)
+
+
+async def test_guards_of_two_budget_runs_hold_nothing_against_each_other() -> None:
+    first, second = GatedRouter(), GatedRouter()
+    limits, pricer, ledger = BudgetLimits(per_run_usd=0.05), FixedPricer(0.02), StillLedger()
+    guards = [
+        guard_of(BudgetRun(), first, limits, pricer, ledger),
+        guard_of(BudgetRun(), second, limits, pricer, ledger),
+    ]
+
+    calls = [
+        asyncio.ensure_future(guard.generate_structured(TaskClass.HIGH_VOLUME, WARMING, ContractPassage))
+        for guard in guards
+        for _ in range(2)
+    ]
+    await asyncio.sleep(0)
+    first.gate.set()
+    second.gate.set()
+    outcomes = await asyncio.gather(*calls, return_exceptions=True)
+
+    assert [type(outcome).__name__ for outcome in outcomes] == ["ModelResponse[ContractPassage]"] * 4
+
+
+async def test_a_budget_run_lets_go_of_a_hold_through_either_guard_when_its_call_ends() -> None:
+    run = BudgetRun()
+    limits, pricer, ledger = BudgetLimits(per_run_usd=0.05), FixedPricer(0.04), StillLedger()
+    first = guard_of(run, MeteredRouter([(VALID, 1, 1)] * 2), limits, pricer, ledger)
+    second = guard_of(run, MeteredRouter([(VALID, 1, 1)] * 2), limits, pricer, ledger)
+
+    for guard in (first, second, first, second):
+        await guard.generate_structured(TaskClass.HIGH_VOLUME, WARMING, ContractPassage)
+
+
+def test_a_budget_run_is_named_by_its_id_and_a_new_one_by_a_new_id() -> None:
+    assert BudgetRun("run-under-test").run_id == "run-under-test"
+    assert BudgetRun().run_id != BudgetRun().run_id
+
+
+async def test_a_refusal_through_a_budget_runs_second_guard_names_what_the_whole_run_spent(
+    log: UsageLog, pricing: ModelPricing
+) -> None:
+    # The first guard's call has a $0.000523 ceiling and reports 50,000 in and 2,000 out at test.haiku's
+    # prices: $0.06 spent, under $0.0605. The second guard's call, with the same ceiling, would make
+    # $0.060523, so it is refused, naming the $0.06 the run spent through the first.
+    run = BudgetRun(RUN)
+    limits = BudgetLimits(per_run_usd=0.0605)
+
+    def guarded(delegate: ModelRouter) -> BudgetGuard:
+        recording = UsageRecordingRouter(
+            delegate, log=log, pricing=pricing, run_id=run.run_id, clock=FixedClock(LATE_EVENING)
+        )
+        return BudgetGuard(
+            recording,
+            limits=limits,
+            pricer=RoutePricing(policy(), pricing),
+            ledger=log,
+            run=run,
+            clock=FixedClock(LATE_EVENING),
+            local_zone=CHICAGO,
+        )
+
+    second_router = MeteredRouter([(VALID, 1, 1)])
+    await guarded(MeteredRouter([(VALID, 50_000, 2_000)])).generate_structured(
+        TaskClass.HIGH_VOLUME, WARMING, ContractPassage
+    )
+    with pytest.raises(BudgetExceededError) as raised:
+        await guarded(second_router).generate_structured(TaskClass.HIGH_VOLUME, WARMING, ContractPassage)
+
+    assert second_router.calls == []
+    assert (raised.value.limit_name, raised.value.limit_usd) == ("per-run", 0.0605)
+    assert raised.value.spent_usd == pytest.approx(0.06)
 
 
 async def test_the_guard_asks_the_ledger_for_this_run_on_the_local_day_in_the_chicago_month() -> None:
@@ -843,7 +966,13 @@ def bedrock_settings(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, **models: 
 
 
 def factory_router(
-    settings: Settings, delegate: ModelRouter, mode: str, tmp_path: Path, pricing: Path | None
+    settings: Settings,
+    delegate: ModelRouter,
+    mode: str,
+    tmp_path: Path,
+    pricing: Path | None,
+    *,
+    run: BudgetRun | None = None,
 ) -> ModelRouter:
     def real_router(policy: RoutingPolicy, *, aws_profile: str | None) -> ModelRouter:  # noqa: ARG001
         return delegate
@@ -855,6 +984,7 @@ def factory_router(
         real_router=real_router,
         cassette_dir=tmp_path / "cassettes",
         clock=FixedClock(LATE_EVENING),
+        run=run,
         pricing_file=pricing,
         usage_log=UsageLog.for_data_dir(settings.storage.data_dir, local_zone=CHICAGO),
     )
@@ -887,6 +1017,38 @@ async def test_build_model_router_holds_a_real_router_to_the_settings_run_budget
     assert delegate.calls == ["example.select-passage"]
     assert (raised.value.limit_name, raised.value.model_id) == ("per-run", "anthropic.claude-haiku-5-5")
     assert raised.value.ceiling_usd == pytest.approx(0.010263)
+
+
+@pytest.mark.parametrize("shared", [True, False], ids=["one budget run", "a budget run each"])
+async def test_build_model_router_routers_given_one_budget_run_share_its_per_run_limit(
+    shared: bool, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # As above: the first router's call reports $0.06 against $0.05. Given the same run, the second
+    # router's call is refused before it is made; each built with a run of its own, it is made.
+    pricing = tmp_path / "model_pricing.yaml"
+    pricing.write_text(FIXTURE_PRICES + HAIKU_PRICED_AS_TEST_HAIKU, encoding="utf-8")
+    settings = bedrock_settings(tmp_path, monkeypatch, budget_usd_per_run=0.05, budget_usd_daily=None)
+    run = BudgetRun() if shared else None
+    expanding = MeteredRouter([(VALID, 50_000, 2_000)])
+    cutting = MeteredRouter([(VALID, 1, 1)])
+    first = factory_router(settings, expanding, "live", tmp_path, pricing, run=run)
+    second = factory_router(settings, cutting, "live", tmp_path, pricing, run=run)
+
+    await first.generate_structured(TaskClass.HIGH_VOLUME, WARMING, ContractPassage)
+    if shared:
+        with pytest.raises(BudgetExceededError) as raised:
+            await second.generate_structured(TaskClass.HIGH_VOLUME, WARMING, ContractPassage)
+        assert raised.value.spent_usd == pytest.approx(0.06)
+    else:
+        await second.generate_structured(TaskClass.HIGH_VOLUME, WARMING, ContractPassage)
+
+    assert cutting.calls == ([] if shared else ["example.select-passage"])
+    records = UsageLog.for_data_dir(settings.storage.data_dir, local_zone=CHICAGO).read(THE_DAY)
+    run_ids = [record.run_id for record in records]
+    if run is not None:
+        assert run_ids == [run.run_id]
+    else:
+        assert len(set(run_ids)) == 2
 
 
 HAIKU_PRICED_AS_TEST_HAIKU = (

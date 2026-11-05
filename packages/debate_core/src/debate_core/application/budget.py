@@ -11,12 +11,14 @@ in the ledger, because the router behind the guard records it there
 (:class:`~debate_core.integrations.models.usage_router.UsageRecordingRouter`), so the next check
 reads it.
 
-* **Three limits, from settings.** `per_run_usd` is one run's limit, a run being one router built by
-  :func:`~debate_core.integrations.models.factory.build_model_router`, which is one command; the
-  `--max-cost` option sets it for that command. `per_day_usd` is one local day's, across every run
-  on this machine, and `per_month_usd` one calendar month's (v1-e05-t15). Any may be unset, and code
-  sets none: there is no default limit. All three are held by the same comparison, so a call that
-  would land exactly on a limit is made.
+* **Three limits, from settings.** `per_run_usd` is one run's limit, a run (:class:`BudgetRun`) being
+  one command, whatever model routers it builds: every router the command's composition root builds
+  with :func:`~debate_core.integrations.models.factory.build_model_router` is given the command's one
+  run (v1-e08-t17), so `search --expand-llm --auto-cut` holds its expansion's call and its cuts'
+  calls to one limit. The `--max-cost` option sets it for that command. `per_day_usd` is one local
+  day's, across every run on this machine, and `per_month_usd` one calendar month's (v1-e05-t15).
+  Any may be unset, and code sets none: there is no default limit. All three are held by the same
+  comparison, so a call that would land exactly on a limit is made.
 * **The day is the local date** of the injected clock's time (:func:`local_day`), which also names
   the day's usage log file, so the guard and the ledger never disagree on which day a call is in.
 * **The month is the calendar month in America/Chicago** (:class:`CalendarMonth`), the coach's, on
@@ -25,8 +27,9 @@ reads it.
 * **Fail closed.** With a limit set, a call whose ceiling cannot be priced, because its model has no
   price or its route sets no output cap, is refused with :class:`UnpricedModelError` naming the
   model. It is never treated as free.
-* **Parallel calls** each hold their ceiling until they finish, so a burst of calls started together
-  cannot all pass a check that each would pass alone.
+* **Parallel calls** each hold their ceiling in their run until they finish, so a burst of calls
+  started together, through one of the run's routers or several, cannot all pass a check that each
+  would pass alone.
 
 Without any limit the guard checks nothing and asks nothing; the composition root does not build it.
 """
@@ -34,7 +37,8 @@ Without any limit the guard checks nothing and asks nothing; the composition roo
 from __future__ import annotations
 
 import threading
-from collections.abc import Generator, Sequence
+import uuid
+from collections.abc import Callable, Generator, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta, tzinfo
@@ -60,6 +64,7 @@ __all__ = [
     "BudgetExceededError",
     "BudgetGuard",
     "BudgetLimits",
+    "BudgetRun",
     "CalendarMonth",
     "CallCeiling",
     "CallPricer",
@@ -266,6 +271,41 @@ class UnreadableUsageLog(DomainError):
         super().__init__(f"the model usage log {location} could not be read: {reason}")
 
 
+class BudgetRun:
+    """One run, as the budget counts it: the id its spend is recorded under, and what its calls in flight
+    hold.
+
+    A run is one command, however many model routers it builds (v1-e08-t17). The composition root
+    makes one per command and gives it to every router it builds, so each of their guards asks the
+    ledger for the one run's spend, and checks and holds a call's ceiling under the run's one lock,
+    against the one total its calls in flight hold. Two guards of a run hold calls to its per-run limit
+    as one guard does.
+    """
+
+    def __init__(self, run_id: str | None = None) -> None:
+        self.run_id: Final = run_id or uuid.uuid4().hex
+        """What the run's usage records name and the ledger is asked for; a new one by default."""
+        self._lock = threading.Lock()
+        self._held_usd = 0.0
+
+    @contextmanager
+    def holding(self, ceiling_usd: float, refuse: Callable[[float], None]) -> Generator[None, None, None]:
+        """Hold `ceiling_usd` until the call is over, however it ends, unless `refuse` raises first.
+
+        `refuse` is given what the run's calls in flight already hold, and raises to refuse the call. It
+        runs under the run's lock, with nothing awaited between it and the hold, so two calls started
+        together, through one guard or two, cannot both pass a check only one of them fits.
+        """
+        with self._lock:
+            refuse(self._held_usd)
+            self._held_usd += ceiling_usd
+        try:
+            yield
+        finally:
+            with self._lock:
+                self._held_usd -= ceiling_usd
+
+
 class BudgetGuard:
     """A `ModelRouter` that refuses, before it is made, any call that could take a limit past its value."""
 
@@ -276,11 +316,11 @@ class BudgetGuard:
         limits: BudgetLimits,
         pricer: CallPricer,
         ledger: SpendLedger,
-        run_id: str,
+        run: BudgetRun,
         clock: Clock,
         local_zone: tzinfo | None = None,
     ) -> None:
-        """Guard `delegate` with `limits`, for the run `run_id`.
+        """Guard `delegate` with `limits`, for `run`, which every other guard of the same command shares.
 
         `ledger` must be the log the router behind `delegate` records into, so a finished call's
         cost is there for the next check. `local_zone` is the zone the day is read in, this
@@ -289,14 +329,17 @@ class BudgetGuard:
         self._delegate = delegate
         self.limits = limits
         """The limits this guard holds calls to."""
-        self.run_id = run_id
-        """The run whose spend counts against `per_run_usd`."""
+        self.run = run
+        """The run whose spend, and whose calls in flight, count against `per_run_usd`."""
         self._pricer = pricer
         self._ledger = ledger
         self._clock = clock
         self._local_zone = local_zone
-        self._lock = threading.Lock()
-        self._held_usd = 0.0
+
+    @property
+    def run_id(self) -> str:
+        """The id of the run whose spend counts against `per_run_usd`."""
+        return self.run.run_id
 
     async def generate_structured[OutputT: BaseModel](
         self,
@@ -324,32 +367,30 @@ class BudgetGuard:
 
     @contextmanager
     def _admitted(self, ceiling: CallCeiling) -> Generator[None, None, None]:
-        """Refuse the call, or hold its ceiling until it is over, however it ends.
-
-        The check and the hold are one step under a lock, with nothing awaited between them, so two
-        calls started together cannot both pass a check only one of them fits.
-        """
-        if ceiling.usd is None:
+        """Refuse the call, or hold its ceiling in the run until it is over, however it ends."""
+        usd = ceiling.usd
+        if usd is None:
             raise UnpricedModelError(ceiling.model_id, ceiling.unpriced_reason)
-        with self._lock:
-            now = self._clock.now()
-            spend = self._ledger.spent(self.run_id, local_day(now, self._local_zone), CalendarMonth.of(now))
-            for limit_name, limit_usd, spent_usd in (
-                ("per-run", self.limits.per_run_usd, spend.run_usd),
-                ("per-day", self.limits.per_day_usd, spend.day_usd),
-                ("per-month", self.limits.per_month_usd, spend.month_usd),
-            ):
-                if limit_usd is not None and spent_usd + self._held_usd + ceiling.usd > limit_usd:
-                    raise BudgetExceededError(
-                        limit_name=limit_name,
-                        limit_usd=limit_usd,
-                        spent_usd=spent_usd + self._held_usd,
-                        ceiling_usd=ceiling.usd,
-                        model_id=ceiling.model_id,
-                    )
-            self._held_usd += ceiling.usd
-        try:
+        with self.run.holding(
+            usd, lambda held_usd: self._refuse_past_a_limit(ceiling.model_id, usd, held_usd)
+        ):
             yield
-        finally:
-            with self._lock:
-                self._held_usd -= ceiling.usd
+
+    def _refuse_past_a_limit(self, model_id: str, ceiling_usd: float, held_usd: float) -> None:
+        """Raise :class:`BudgetExceededError` when what is spent, plus `held_usd`, plus this call's ceiling
+        is over a limit: the run's own spend for the per-run limit, every run's for the day and the month."""
+        now = self._clock.now()
+        spend = self._ledger.spent(self.run_id, local_day(now, self._local_zone), CalendarMonth.of(now))
+        for limit_name, limit_usd, spent_usd in (
+            ("per-run", self.limits.per_run_usd, spend.run_usd),
+            ("per-day", self.limits.per_day_usd, spend.day_usd),
+            ("per-month", self.limits.per_month_usd, spend.month_usd),
+        ):
+            if limit_usd is not None and spent_usd + held_usd + ceiling_usd > limit_usd:
+                raise BudgetExceededError(
+                    limit_name=limit_name,
+                    limit_usd=limit_usd,
+                    spent_usd=spent_usd + held_usd,
+                    ceiling_usd=ceiling_usd,
+                    model_id=model_id,
+                )

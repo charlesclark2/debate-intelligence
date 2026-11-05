@@ -163,9 +163,43 @@ the terminal when a count is above zero is still step 5 of the record runbook.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-11-05
 
 **Notes:**
+
+The scan now judges a text by its hits' marks, fails toward unclean everywhere it could guess, and hides
+nothing: the counts, `breakdown.scan_hits` and the terminal listing are unchanged.
+
+1. **ac1 passes.** 22 new tests on invented words, red first against a skeleton that set nothing aside (11
+   failed, each at an assertion), and the evaluation's and CLI's "every hit marked, clean" tests red against
+   the pre-task rule. The guard tests (unmarked, team-naming, sent in the cards) pass under both rules, as
+   they should, since the old rule refused every named text; the 12 mutants, each caught at an assertion,
+   are what show the guards would catch a rule that sets too much aside. The node's command: 143 passed.
+2. **The rule read in the code is the ruling.** `sets_aside` needs a trusted mark and no keeping mark;
+   `marked_scan` sets a text aside only when its listing answers for every kind the scan counted in it and
+   every listed hit is set aside, so an empty or short listing leaves the text; `NameScan.clean` keeps the
+   old rule for an unjudged scan (`texts_left` None). The trusted marks are a closed list with a test that
+   fails when a new mark appears, which is the right place for the question to surface.
+3. **The prompt inputs never set aside** (every input hit is `in_input`): accepted as the ruling read
+   literally. A taxonomy word in a sent tag keeps the input scan unclean; if that ever blocks a recording,
+   it comes back to the PM as its own question, not as a widened mark.
+4. **Ruling 5 passes:** the kept 1.1.0 recordings, replayed offline, read clean on both routes with the
+   marks the PM recorded (27: 22 and 5; 42: 38 and 4). The 1.2.0 re-record of 2026-11-05 carries the same
+   shape (23: 19 JSON keys and 4 taxonomy words; 44: 37 and 7; no team's name, nothing in the input), so
+   once this merges its scans would read clean too. The operator's terminal judgement (step 5 of the record
+   runbook) stays, and is what the PM records.
+5. **Deviations accepted.** (1) `debate_cli.commands.landscape`, (2) the smoke pin and (3)
+   `docs/data/landscape-model-evaluation.md` were each needed by the PM's rulings; the PM adds the three to
+   the spec's packages in the next batch. (4) The session's read-only offline replay: agreement 2. (5) The
+   affected set (258 files) is left to `ci` (agreement 10).
+6. **The scores in the replay** differ from the recorded ones because the coach's relabel was already in
+   the CSV; they are correctly kept out of the record.
+7. **Follow-up declined:** the display's set-aside note stays as it is. It names both marks once per scan,
+   which is what an operator reading the terminal needs; no task.
+8. **Closing checks:** the always-run list (377), the changed directories' landscape tests (1726), the other
+   importers (200), ruff, pyright, lint-imports, thin handlers, links, command blocks and the specs are
+   clean. The branch sits on `v1-e32-t46`'s merge, so the stance work and this rule were tested together.
+9. **Merge:** a plain `scripts/task pr` once `ci` is green. The Goal is `Succeeded`.

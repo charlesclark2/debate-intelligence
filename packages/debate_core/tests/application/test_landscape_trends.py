@@ -399,9 +399,9 @@ def test_a_report_on_a_partial_window_says_it_reads_part_of_the_week() -> None:
     inputs = dataclasses.replace(_through(SECOND), tournament_entry_snapshots=(_partial(SECOND, 292, 902),))
     shown = _report_md(inputs)
     assert (
-        "**Part of a week.** topics.yaml puts the 2026-09-15 snapshot on this topic only through its tournament "
-        "entry (Harbor City Classic): this report reads 292 of the snapshot's 902 disclosures, those the entry "
-        "names, not the whole week." in shown
+        "**Part of a week.** topics.yaml puts the 2026-09-15 snapshot on this topic only through its "
+        "tournament entry (Harbor City Classic): this report reads 292 of the snapshot's 902 disclosures, "
+        "those the entry names, not the whole week." in shown
     )
     assert "a partial base" not in shown
 

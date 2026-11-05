@@ -1976,7 +1976,6 @@ def test_evaluate_meeting_the_bar_with_clean_scans_exits_0_and_counts_it(
         "team_codes": 0,
         "other_names": 0,
         "clean": True,
-        "clean": True,
         "set_aside": {},
     }
     assert data["scan"]["repair_cassettes"] == {
@@ -1984,7 +1983,6 @@ def test_evaluate_meeting_the_bar_with_clean_scans_exits_0_and_counts_it(
         "schools": 0,
         "team_codes": 0,
         "other_names": 0,
-        "clean": True,
         "clean": True,
         "set_aside": {},
     }
@@ -2020,8 +2018,8 @@ def test_evaluate_meets_the_bar_with_a_cassette_scan_whose_every_hit_was_set_asi
     }
     shown = " ".join(_plain_display(world, sample_files).split())
     assert (
-        "Of the cassettes: 3 text(s), 3 naming a school, 2 a team code, 0 a tournament (3 set aside as clean: "
-        "27 hit(s), each a JSON key's name or a taxonomy word; a JSON key 22, a taxonomy word 5)."
+        "Of the cassettes: 3 text(s), 3 naming a school, 2 a team code, 0 a tournament (3 set aside as "
+        "clean: 27 hit(s), each a JSON key's name or a taxonomy word; a JSON key 22, a taxonomy word 5)."
     ) in shown
 
 

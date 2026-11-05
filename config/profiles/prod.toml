@@ -33,10 +33,13 @@ region = "us-east-1"
 aws_profile = "debate-prod-evidence"
 
 [providers]
-# Only the providers this build has an adapter for: the registry refuses to build any search while
-# a name it cannot build is enabled (v1-e07-t01). Crossref and Semantic Scholar are added back by
-# the tasks that bring their adapters, v1-e07-t03 and v1-e07-t04 (v1-e08-t05).
-enabled = ["openalex", "rss"]
+# The same providers as dev, for the same reasons (v1-e07-t13): an adapter in this build and a live
+# smoke passed on the operator's machine, Crossref, the Federal Register and GovInfo on 2026-11-02.
+# dev.toml's [providers] comment says what a machine without a contact email or an api.data.gov key
+# sees. Neither belongs in this file: each machine sets its own in the environment or an
+# uncommitted .env. The government providers are still asked only on a topic whose feed file lists
+# them.
+enabled = ["openalex", "crossref", "rss", "federal_register", "govinfo"]
 
 [http]
 per_host_interval_seconds = 1.0

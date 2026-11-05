@@ -47,7 +47,7 @@ spec:
         What the PM rules for a failing feed's effect on a search's outcome is built with
         tests shown failing first.
 status:
-  phase: Pending
+  phase: InProgress
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

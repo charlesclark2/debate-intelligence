@@ -47,12 +47,14 @@ COACH_REVIEWED_2026_11_04: Final = {
     ("politics", "https://www.pbs.org/newshour/feeds/rss/politics", "PBS NewsHour"),
     ("politics", "https://rss.politico.com/politics-news.xml", "Politico"),
     ("politics", "https://thehill.com/homenews/feed/", "The Hill"),
-    ("politics", "https://rollcall.com/feed/", "Roll Call"),
     ("health-insurance", "https://kffhealthnews.org/feed/", "KFF Health News"),
     ("health-insurance", "https://feeds.npr.org/1128/rss.xml", "NPR"),
     ("health-insurance", "https://www.statnews.com/feed/", "STAT"),
 }
-"""The eight starter feeds the coach reviewed and kept on 2026-11-04 (v1-e07-t14's PM context)."""
+"""The starter feeds the coach reviewed and kept on 2026-11-04 (v1-e07-t14's PM context).
+
+Roll Call was the eighth; the PM dropped it on 2026-11-05 because its dates carry no time zone.
+"""
 
 
 def test_the_coach_reviewed_every_committed_feed_and_google_news_is_off() -> None:

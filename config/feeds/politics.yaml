@@ -5,8 +5,11 @@
 # The coach reviewed and kept every feed here on 2026-11-04 (v1-e07-t14), so each says
 # `review: coach_reviewed`. A feed added later says `awaiting_coach_review` until the coach has
 # kept it. No URL here has been shown to answer by being listed: the operator's feed check is what
-# does that. Its run of 2026-10-22 had every feed here answer HTTP 200, and every entry dated
-# except Roll Call's (see its entry).
+# does that. Its run of 2026-10-22 had every feed here answer HTTP 200 with every entry dated.
+#
+# Roll Call (https://rollcall.com/feed/) was dropped on 2026-11-05 (v1-e07-t14, PM ruling). Its
+# dates carry no time zone, so none of its entries could fall in a search's date window, and from
+# 2026-11-02 every search reported it unreadable, which made every search partial.
 #
 # Google News is off. Its items can rarely be traced to the publisher's own URL without asking
 # Google, which the platform does not do (PM ruling 2026-10-22).
@@ -26,12 +29,6 @@ feeds:
     review: coach_reviewed
   - url: https://thehill.com/homenews/feed/
     publisher: The Hill
-    review: coach_reviewed
-  # The operator's feed check of 2026-10-22: HTTP 200, 10 entries, 0 dated. Roll Call's pubDate is
-  # `2026-10-21 20:18:41`, with no time zone, so no entry can be placed in a search's date window.
-  # Worth replacing unless undated results are wanted.
-  - url: https://rollcall.com/feed/
-    publisher: Roll Call
     review: coach_reviewed
 google_news:
   enabled: false

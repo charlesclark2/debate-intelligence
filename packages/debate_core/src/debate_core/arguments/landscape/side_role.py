@@ -65,7 +65,7 @@ def side_role(
     """`role` for a placement of `position_id` in a file disclosed on `file_sides`: READS when every readable
     side is the position's own, the role it has otherwise."""
     side = taxonomy.resolve(position_id).side
-    if side in OPPOSITE_SIDES and readable_sides(file_sides) == frozenset({side}):
+    if readable_sides(file_sides) == frozenset({side}):
         return PositionRole.READS
     return role
 

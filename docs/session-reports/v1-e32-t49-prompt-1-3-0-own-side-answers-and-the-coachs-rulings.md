@@ -6,35 +6,116 @@
 | Spec | [`plan_specs/v1/e32-argument-landscape/t49-prompt-1-3-0-own-side-answers-and-the-coachs-rulings.yaml`](../../plan_specs/v1/e32-argument-landscape/t49-prompt-1-3-0-own-side-answers-and-the-coachs-rulings.yaml) |
 | Epic / release | `v1-e32-argument-landscape` / `v1.2` |
 | Branch | `task/v1-e32-t49-prompt-1-3-0-own-side-answers-and-the-coachs-rulings` |
-| Session status | IN PROGRESS: the proposal waits on the PM's ruling (ac1); no code yet <!-- COMPLETE / PARTIAL / BLOCKED --> |
+| Session status | COMPLETE (the Goal stays InProgress: ac3's re-record on `deep_audit` is the operator's) <!-- COMPLETE / PARTIAL / BLOCKED --> |
 
 ## Summary
 
-The proposal below is for the PM's ruling before any code (ac1). It was counted by replaying the kept 1.2.0
-cassettes of both routes offline (no model called); the replay reproduces the recorded 23 of 33 and 21 of
-37. The PM should look first at two findings. **The own-side rule decides the stance far more than
-answer headings do:** of the wrong-stance rows, only row 13 sits under an answer heading; rows 7, 17 and 39
-sit under none, in files on their own position's side. Applied to every placement, stage one's and the
-model's, the rule takes Sonnet from 23 to 26 of 33 (0.788) and Haiku from 21 to 23 of 37 (0.622). Applied to
-stage one alone it changes nothing on the 47. **Three rows can never be scored right:** rows 16, 33 and 57
-are labelled as read, in files disclosed only on the other side, and t46's side rule scores any answer
-there as answering.
+**The Goal stays InProgress.** ac3 is the operator's re-record on `deep_audit`. Its block is under
+[Operator follow-ups](#operator-follow-ups), and the PM records the result. Everything else is built as the
+PM ruled on 2026-11-05 ([the ruling](#the-pms-ruling-2026-11-05)), with tests on invented cards shown
+failing first.
 
+**What was built:**
+
+* **The own-side rule.** A placement in a file disclosed only on its position's own side reads it.
+  `side_role` lives in a new module, `debate_core.arguments.landscape.side_role`. It is applied per card in
+  `PositionClassificationService.classify`, to stage one's placements and the model's answers alike, and
+  `scored_stance` is built on it.
+* **Prompt 1.3.0.** Released, locked and the stage's default, exactly as proposed. It keeps 1.2.0's
+  variables, user turn and stanced schema.
+* **The generic count.** `--breakdown` counts the answers naming a generic position on their own
+  (`generic_answers`), as the ruling's condition on the generic-confidence clause asks.
+
+**What it measures, on the operator's kept 1.2.0 recordings** (replayed from this branch at 1.2.0, no model
+called): every answer is identical, and the rule alone takes Sonnet from 23 to 26 of 33 (0.788) and Haiku
+from 21 to 23 of 37 (0.622), the figures the proposal computed.
+
+**What the PM should look at first:**
+
+* In `classify`, the rule decides only the own-side half. The other side's half stays per round in the
+  report, so its `other_side_position_rounds` tally is unchanged ([decision 1](#decisions-and-assumptions)).
+* Two of t46's hand-worked expectations moved with the ruling ([decision 6](#decisions-and-assumptions)).
 ## Plan nodes
-
-<!-- One row per Plan graph node, in the order they were completed. -->
 
 | Node | Status | Notes |
 |---|---|---|
-| | | |
+| `prompt-1-3-0-own-side-answers-and-the-co` (Prompt 1.3.0) | Done | Built in the ruled order: `side_role` and its tests, then 1.3.0 (version, lock, cassette key), then the generic count the condition needs, then the operator's block. Its criterion passes (1,244 tests). ac3 waits on the operator |
 
 ## Acceptance criteria
 
-<!-- Goal criteria (ac1…) and every node criterion. Status: PASS / FAIL / NOT RUN. -->
-
 | Criterion | Status | Evidence (command → result) |
 |---|---|---|
-| | | |
+| ac1: the proposal (the own-side rule for the prompt and stage one, with its counts; the prompt's changes for (b); the generic-k finding) ruled on by the PM before any code | PASS | Proposed in `c8c1209`, before any code ([the proposal](#the-proposal-2026-11-05-for-the-pms-ruling-kept-as-written)). The PM ruled on 2026-11-05 ([the ruling](#the-pms-ruling-2026-11-05)). The first code commit is `ff5ebc0` |
+| ac2: prompt 1.3.0 and stage one carry what is ruled, by tests on invented cards shown failing first, with the version bumped and its cassettes keyed by it, and 1.2.0's recordings replaying unchanged | PASS | See [How ac2 was shown](#how-ac2-was-shown) below |
+| ac3: the operator's re-record of the 47 under 1.3.0 on the ruled routes, its breakdown and scans, recorded in docs/data beside 1.2.0's (operator, recorded by the PM) | NOT RUN (operator) | The PM ruled `deep_audit` only. The block is under [Operator follow-ups](#operator-follow-ups) and in [the record runbook's last section](../runbooks/landscape-model-evaluation-record.md#prompt-130-the-re-record-on-deep_audit-v1-e32-t49); the PM records the result |
+| Node: Prompt 1.3.0 tests pass (`uv run pytest packages/debate_core/tests/arguments/landscape`) | PASS | `.venv/bin/python scripts/hard_stop.py 115 uv run pytest packages/debate_core/tests/arguments/landscape` → 1,244 passed in 12 s |
+
+### How ac2 was shown
+
+**Red, each step against a skeleton that keeps today's behaviour:**
+
+* **The own-side rule:** `side_role` returned the role it was given, and `classify` called it. 15 failed,
+  37 passed. Every failure was a role or stance assertion.
+* **The cache guard** (the cache keeps stage one's role) is green on the skeleton by design: it guards
+  against the rule moving into the matcher or the cache.
+* **Prompt 1.3.0:** before the prompt file existed, 20 failed, 40 passed. 18 failed on the missing 1.3.0,
+  1 on the default still being 1.2.0, and 1 on the default finding 1.2.0's recording.
+* **The generic count:** a skeleton counting nothing. 2 failed, both on the count assertions.
+
+**Green:**
+
+* 1.3.0 is released and locked (`scripts/lock_prompts.py`, then `--check` OK). It is the stage's default
+  (`CLASSIFY_POSITION_VERSION`), in the stanced schema.
+* 1.2.0's key is kept and 1.3.0 never finds it:
+  `test_1_2_0_recordings_replay_unchanged_and_1_3_0_finds_none_of_them`.
+
+**The kept 1.2.0 recordings replay unchanged:**
+
+* The session replayed the operator's real 1.2.0 cassettes on both routes from this branch, with the stage
+  pinned to 1.2.0 (read-only, no model, about 1 minute per route). No `MISSING_FIXTURE`.
+* All 47 answers, confidences and refusals are identical to the pre-task replay on each route.
+* Only rows 7, 13 and 17 (Sonnet) and 17 and 39 (Haiku) change outcome, from wrong stance to correct.
+  Pipeline: 26 of 33 and 23 of 37.
+
+**Mutants:** all 12 caught ([below](#mutants)).
+
+### Checks run before this report
+
+| Command | Result |
+|---|---|
+| `uv run scripts/affected_tests.py` | 294 of 699 test files (42.1%) from 23 changed files |
+| `.venv/bin/python scripts/hard_stop.py 115 uv run scripts/affected_tests.py --run` | Stopped at its 115-second limit (exit 124) before the run finished. Left to the pull request's `ci` (agreement 10) |
+| The changed test directories and the always-run list: `packages/debate_core/tests/{arguments/landscape,domain,integrations/models,integrations/landscape}`, every `test_landscape_*`, `test_coach_sample_*` and `test_position_classification.py` in `debate_core/tests/application`, `debate_cli/tests/test_landscape*.py`, `tests/smoke/test_landscape*.py`, `tests/integration/test_e2e_caselist.py`, `tests/fixtures/caselist/test_synthetic_archive.py`, `tests/architecture`, `tests/specs`, `test_app.py`, `test_help_rendering.py`, `test_container_factories.py`, with `-m "slow or not slow"` | 4,131 passed in 59 s |
+| `uv run ruff format --check .`, `uv run ruff check .` | 1,958 files formatted; all checks passed |
+| `uv run pyright packages/debate_core packages/debate_cli`, and `tests/smoke/test_landscape_evaluate_smoke.py` | 0 errors |
+| `uv run lint-imports`, `uv run python scripts/check_thin_handlers.py` | 20 contracts kept; 72 handlers within 25 statements |
+| `uv run scripts/lock_prompts.py --check`, `uv run scripts/check_command_blocks.py`, `uv run scripts/check_links.py` | OK (3,597 links and anchors) |
+| `uv run scripts/validate_specs.py` (the Goal left InProgress: ac3 is the operator's) | OK: 629 files, 41 epics, 566 tasks, 22 releases |
+
+### Mutants
+
+Run against the landscape argument tests, `test_position_classification.py`, `test_coach_sample_stance.py`,
+`test_landscape_evaluation_breakdown.py` (and the CLI tests for the generic count). Each mutant was
+restored after its run (`git checkout HEAD --`):
+
+| Mutant | Caught by |
+|---|---|
+| Own side means any side the file holds (a file on both sides reads) | 7 tests |
+| `UNKNOWN` counts as a readable side | 6 |
+| PF's pro is not read as aff | 1 |
+| `classify` does not apply the rule | 2 |
+| `classify` applies it to stage one only, not the model's answers | 1 |
+| The rule also turns a read in a file on the other side into ANSWERS (the report's half) | 2 |
+| A changed result's rationale gains no note | 3 |
+| `scored_stance` ignores `side_role` | 7 |
+| A below-threshold generic answer is counted | 2 |
+| A generic answer the coach accepts on a second label is a named-label row | 1 |
+| A named label of another kind is a named-label row | 1 |
+| The breakdown carries no generic positions | 1 |
+
+One planned mutant was equivalent, and the check it targeted was deleted (`d9b1bf9`). `side_role` had
+required the position to be read by one side. A position either side reads has the side `both`, which never
+equals a file's readable sides (only aff or neg), so the guard could never matter.
 
 ## The proposal (2026-11-05, for the PM's ruling, kept as written)
 
@@ -315,29 +396,139 @@ operator's re-record block. The bar, the threshold and the coach's labels do not
 
 ## Files changed
 
-<!-- Group by package or directory; one line on why each group changed. -->
+* **`prompts/`**: `landscape/classify_position@1.3.0.md` (released; its body is the proposal's), and its
+  entry in `prompts.lock.json`.
+* **`debate_core.arguments.landscape.side_role`** (new): `side_role`, `on_own_side`, the readable sides.
+* **`debate_core.arguments.landscape.evaluation_breakdown`**: `scored_stance` built on `side_role`; and
+  `GENERIC_POSITION_PREFIX`, `generic_positions`, `GenericAnswers` and `generic_answer_counts`.
+* **`debate_core.arguments.landscape.model_stage`**: its docstring (the model is never sent the side).
+* **`debate_core.application.position_classification`**: each item's result through `on_own_side`, and its
+  docstring.
+* **`debate_core.application.landscape_model_stage`**: default 1.3.0.
+* **`debate_core.application.landscape_model_evaluation`**: `EvaluationBreakdown.generic` and
+  `generic_answers`.
+* **`debate_cli.commands.landscape`**: `breakdown.generic_answers` in `--breakdown`'s JSON (Deviation 1).
+* **Tests:**
+  * new: `test_side_role.py` and `test_generic_answers.py`;
+  * `test_position_classification.py`: the own-side section;
+  * `test_answering_stance.py` and `test_coach_sample_stance.py`: the rule's scoring, and 1.3.0's version,
+    replay and text;
+  * `test_landscape_command.py`: the generic count, and the version pins;
+  * the smoke version pin.
+* **Outside the packages:** `tests/fixtures/caselist/synthetic_archive/` (Deviation 2).
+* **Docs:**
+  * [the evaluation's record](../data/landscape-model-evaluation.md#prompt-130-and-the-own-side-rule-v1-e32-t49-ruled-2026-11-05):
+    the rulings, the computed 1.2.0 figures and the production effect;
+  * [the record runbook](../runbooks/landscape-model-evaluation-record.md#prompt-130-the-re-record-on-deep_audit-v1-e32-t49):
+    the block;
+  * [the replay runbook](../runbooks/landscape-model-evaluation-replay.md): which checkout replays 1.2.0.
 
 ## Deviations from the spec
 
-None.
+1. **`debate_cli.commands.landscape`**, outside the spec's packages. The ruling's condition on the
+   generic-confidence clause asks the breakdown to count the generic answers, and `--breakdown`'s JSON is
+   written there. The counting is in `debate_core`; the CLI writes one key, `generic_answers`. No smoke
+   check pins the breakdown's key set.
+2. **`tests/fixtures/caselist/synthetic_archive/`**, outside the spec's packages, as in t46. The end-to-end
+   suite's one landscape cassette is keyed by the stage's default version, so it was written again offline
+   by its own script (`uv run --frozen python -m tests.fixtures.caselist.synthetic_archive.record_landscape_cassette`;
+   no model). The diff is the key and the prompt version, nothing else.
+3. **The session's own read-only replays** of both routes' kept cassettes, and a stage-one pass over the
+   snapshot. These found the proposal's counts and showed 1.2.0's recordings replaying. Each is a read-only
+   command over files on the operator's Mac, about a minute long, which agreement 2 lets a session run.
+   Nothing was written and no model was called.
+4. **The affected set** (294 files) was stopped at 115 seconds and is left to the pull request's `ci`
+   (agreement 10). The changed test directories and the always-run list ran instead.
 
 ## Decisions and assumptions
 
-<!-- Choices the spec left open, with the reasoning. -->
+1. **`classify` applies only the own-side half.** The report reads a READS card in a round on the other
+   side as `other_side_position_rounds`, per round. Turning those cards into ANSWERS in `classify` would
+   have emptied that tally. So `side_role` only gives READS on the position's own side. The other-side half
+   stays the report's (per round) and `scored_stance`'s (per file), as t46 left it. A mutant adding it to
+   `classify` is caught.
+2. **The cache keeps the role stage one or the model gave.** The rule is applied as each result meets its
+   card's own file. A card read alike in a file on the other side keeps ANSWERS from the same cached result,
+   by test.
+3. **Every item goes through the rule, sections included.** One rule for every placement. The report counts
+   only cards, so sections change no count.
+4. **A changed result says so in its rationale.** `OWN_SIDE_NOTE` is added at the end, and the rationale is
+   cut first so the whole stays within the 280-character limit. The matcher's own text ("an answer heading
+   makes the role ANSWERS") would otherwise contradict the role.
+5. **A generic position is one whose id starts `generic-`.** Today these are `generic-k` and
+   `generic-theory`, the two the prompt calls "a generic position of that kind"; no other id starts so.
+   `named_label_rows` names a row labelled with a named position of a generic's kind, answered with that
+   generic, unless the answer scores right on a second label (the coach accepts it). It counts at any
+   confidence, so a row below the threshold is named too.
+6. **Two of t46's hand-worked expectations moved with the ruling.**
+   * In `test_answering_stance.py`, a placement with role ANSWERS in a negative file, under a negative
+     position, now scores reads. One pinned stance case and one outcome case changed, and the cases were
+     extended (own side, other side, both sides, no side, a position either side reads).
+   * In `test_coach_sample_stance.py`, row 2 (a negative file, the model saying `answers`) is now correct.
+     The test exists to show a wrong stance counted through the evaluation's path. A seventh row in a file
+     disclosed on both sides keeps one, and the hand-worked table and its counts (7 counted, 5 right) were
+     redone by hand.
+   * t46's two tests on the stage's default version now name 1.2.0 explicitly.
+7. **The model is not sent the file's side.** As proposed and ruled: the model is asked once per
+   fingerprint, and the deterministic rule decides the side.
+8. **The budget ceiling.** The guard prices each call's ceiling from its variables only
+   (`usage_router.structured_ceiling`), and 1.3.0 leaves them as 1.2.0 had them. So the block quotes t46's
+   ceiling ($1.106 for Sonnet's three calls).
+9. **A landscape run asks again** about every card cached under 1.2.0, since results are cached by prompt
+   version. The hold on live runs stands.
 
 ## Operator follow-ups
 
-<!-- Commands the operator must run (anything over ~2 minutes), with where to run them, the exact
-command, expected runtime and what success looks like. Also GitHub/AWS settings to change. -->
+**ac3: the re-record of the 47 under 1.3.0 on `deep_audit`, then its breakdown.** It is also in
+[the record runbook's last section](../runbooks/landscape-model-evaluation-record.md#prompt-130-the-re-record-on-deep_audit-v1-e32-t49),
+with what to read. It costs about $0.20, priced from `config/model_pricing.yaml` ($0.003 and $0.015 per
+1,000 input and output tokens for Claude Sonnet 4.6) at 1.2.0's recorded tokens plus 1.3.0's longer
+instructions. Expected runtime: 2 to 4 minutes. Run it from this task's worktree until it merges, or a
+checkout of `dev` after. Go to it:
 
-None.
+```bash
+cd /Users/charlesclark/Documents/debate/debate-intelligence-tool/debate-intelligence-worktrees/v1-e32-t49-prompt-1-3-0-own-side-answers-and-the-coachs-rulings
+```
+
+Then the block. It refuses a set `DEBATE_` variable, a running caselist pull, a failed sample check and a
+Bedrock profile that is not signed in, each before any model call:
+
+```bash
+SAMPLE=~/Documents/debate/landscape-review/policy-2026-27-nhi-coach-sample-labelled.csv
+ROWS=~/.debate-research/dev/landscape/local-classifier/hspolicy26/policy-2026-27-nhi-coach-sample.jsonl
+if env | grep -q '^DEBATE_'; then echo "STOP: a DEBATE_ variable is set; unset it and paste again"; elif pgrep -f "caselist pull" >/dev/null; then echo "STOP: a caselist pull is running; wait for it to finish"; elif ! uv run debate-research --json landscape evaluate --caselist hspolicy26 --snapshot 2026-10-20 --sample "$SAMPLE" --sample-rows "$ROWS" --check-sample; then echo "STOP: the sample check failed; paste its JSON and record nothing"; elif ! aws sts get-caller-identity --profile debate-dev-bedrock >/dev/null; then echo "STOP: the Bedrock profile is not logged in; log in and paste again"; else uv run debate-research --json landscape evaluate --caselist hspolicy26 --snapshot 2026-10-20 --sample "$SAMPLE" --sample-rows "$ROWS" --model-mode record --route deep_audit; uv run debate-research --json landscape evaluate --caselist hspolicy26 --snapshot 2026-10-20 --sample "$SAMPLE" --sample-rows "$ROWS" --breakdown --route deep_audit; fi
+```
+
+Paste back **the three JSON objects**, nothing else.
+
+* **Success:** the sample check exits 0 with `labelled` 47. The recording shows `prompt_version` `1.3.0`,
+  `route` `deep_audit`, and `labelled`, `found` and `asked` 47. The breakdown has `outcomes` summing to 47
+  and `generic_answers` present.
+* **Below the bar:** exit 1 `EVALUATION_BELOW_BAR` carries the counts in `error.details`.
+* **A stop before any answer:** nothing was recorded. Paste it and run nothing again before the PM reads
+  it.
+
+**Only if a `scan` count is above zero:** read the hits in the terminal, and **never paste or copy them**.
+Give each hit's number and whether its words name a team, a school or a tournament, or an ordinary word:
+
+```bash
+SAMPLE=~/Documents/debate/landscape-review/policy-2026-27-nhi-coach-sample-labelled.csv
+ROWS=~/.debate-research/dev/landscape/local-classifier/hspolicy26/policy-2026-27-nhi-coach-sample.jsonl
+if env | grep -q '^DEBATE_'; then echo "STOP: a DEBATE_ variable is set; unset it and paste again"; else uv run debate-research landscape evaluate --caselist hspolicy26 --snapshot 2026-10-20 --sample "$SAMPLE" --sample-rows "$ROWS" --breakdown --route deep_audit; fi
+```
 
 ## Follow-up work
 
-<!-- Bugs, gaps or ideas outside this task's scope, each with the task or epic it belongs to.
-The PM decides whether they become spec changes or new tasks. -->
-
-None.
+* **The analytic texts' roles.** `analytic_texts.py` places overviews, CP texts and alternatives with
+  `matcher.place`. Under an answer heading in a file on the position's own side they are ANSWERS, and the
+  report counts them "elsewhere". This is the same gap the ruling closed for cards, but it is outside
+  `classify`. E32, the PM's to file.
+* **The PM's own follow-ups, as ruled:**
+  * 1.3.1, removing the generic-confidence clause, if the re-record's `generic_answers` above the
+    threshold are wrong more often than right;
+  * the `generic-k` description for the coach's review;
+  * rows 16, 33 and 57 for the coach alongside `v1-e32-t50`, and a follow-up on t46's other-side rule if
+    the coach rules it wrong for any of them.
 
 ## PM review
 

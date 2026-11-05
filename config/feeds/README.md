@@ -1,9 +1,9 @@
 # Topic feed lists
 
 One YAML file per topic names the publisher RSS and Atom feeds the `rss` discovery provider reads
-for that topic, and whether Google News may be searched for it. The lists are the coach's. He
-reviewed the starter set on 2026-11-04 and kept it, so every feed committed here says
-`review: coach_reviewed`.
+for that topic, and whether Google News may be searched for it. The lists are the coach's: on
+2026-11-04 the coach reviewed the starter set and chose more health-policy outlets, so every feed
+committed here says `review: coach_reviewed`.
 
 The LD and PF topics change on 2026-11-01, so they are left for the coach to add.
 

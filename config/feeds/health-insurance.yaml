@@ -2,10 +2,17 @@
 # Read by debate_core.integrations.discovery.feed_config (v1-e07-t05); a mistake here fails the load
 # with this file and the field named. config/feeds/README.md describes every key.
 #
-# The coach reviewed and kept every feed here on 2026-11-04 (v1-e07-t14), so each says
-# `review: coach_reviewed`. A feed added later says `awaiting_coach_review` until the coach has
-# kept it. No URL here has been shown to answer by being listed: the operator's feed check is what
-# does that. Its run of 2026-10-22 had every feed here answer HTTP 200 with every entry dated.
+# The coach reviewed and kept the first three feeds here on 2026-11-04 and chose the outlets of the
+# rest the same day (v1-e07-t14), so each says `review: coach_reviewed`. A feed added later says
+# `awaiting_coach_review` until the coach has kept it. No URL here has been shown to answer by
+# being listed: the operator's feed check is what does that. Its run of 2026-10-22 had the first
+# three answer HTTP 200 with every entry dated; each later feed's comment gives its own run.
+#
+# Asked for by the coach and not listed (v1-e07-t14's report has the detail): Fierce Healthcare
+# (its feed answered HTTP 403 to the feed check of 2026-11-05); Health Affairs Forefront, Modern
+# Healthcare, Axios Vitals and Politico Pulse (no public feed of their own: the PM found only
+# third-party generated feeds or email newsletters); The Commonwealth Fund (its feed's URL not yet
+# checked).
 #
 # The NHI Policy topic's searches (`search --topic policy-2026-27-nhi`) also ask the Federal Register
 # and GovInfo; no other search does (v1-e07-t07, PM ruling 2026-11-02). GovInfo needs an api.data.gov
@@ -26,6 +33,21 @@ feeds:
     review: coach_reviewed
   - url: https://www.statnews.com/feed/
     publisher: STAT
+    review: coach_reviewed
+  # The operator's feed check of 2026-11-05: HTTP 200, 10 entries, 10 dated, newest 2026-11-04.
+  - url: https://www.healthcaredive.com/feeds/news/
+    publisher: Healthcare Dive
+    review: coach_reviewed
+  # KFF's own site (polls, fact sheets and analyses), not KFF Health News. The whole site's feed, so
+  # it carries more than health insurance; the coach decides whether that breadth is wanted. The
+  # operator's feed check of 2026-11-05: HTTP 200, 20 entries, 20 dated, newest 2026-11-05.
+  - url: https://www.kff.org/feed/
+    publisher: KFF
+    review: coach_reviewed
+  # The Hill's health care section. The operator's feed check of 2026-11-05: HTTP 200, 15 entries,
+  # 15 dated, newest 2026-11-04.
+  - url: https://thehill.com/policy/healthcare/feed/
+    publisher: The Hill
     review: coach_reviewed
 google_news:
   enabled: false

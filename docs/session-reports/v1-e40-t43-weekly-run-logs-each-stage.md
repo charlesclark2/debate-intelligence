@@ -252,9 +252,36 @@ in the output means CloudWatch counts step lines, and goes to the PM before the 
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-11-05
 
 **Notes:**
+
+Reused rather than copied, the move committed alone so its diff proves nothing changed, and the one
+line that matters to the alarm held against the filter read out of Terraform itself.
+
+1. **ac1 passes.** Red against a skeleton that logs nothing (20 of 21 failed, each at an assertion,
+   the two early crashes turned into assertions first); green over the core service and the real
+   command in bucket mode against moto. Ten mutants caught, including a step line carrying a
+   `run_record`, a caselist's name in a progress line, and step lines on stdout.
+2. **ac2 passes.** The `RunsRecorded` pattern is read out of `alerts.tf` and evaluated over every line a
+   real run wrote: exactly one counted, the result, the last line, for a success and a failure, none for
+   a dry run. The result's keys are pinned whole. Infrastructure untouched.
+3. **Decision 1 accepted:** every step the run carries out logs under the name it already has, so
+   "upload" is `publish` and the two saves, and search index, report and retention log too. Decision 6
+   matters most: two existing log reads (Step 7's counts block and the cutover's summary check) would
+   have miscounted the new lines, and both are fixed and tested over synthetic logs.
+4. **No deviations.** The lines reach the cloud only in an image built after this merges; the docx-9 run
+   image is built after it, so the run of 2026-11-11 is the first to log its steps.
+5. **The optional AWS check is taken:** the operator runs `aws logs test-metric-filter` (read-only,
+   seconds) before the image is built. `2	3` is the answer; a `1` comes to the PM first.
+6. **Follow-up 3 declined, no task:** the run record's publish and the saves' counts were not needed to
+   tell a working run from a hung one.
+7. **Closing checks:** the touched suites (1,867, 125, 220, 1,253 passed), ruff, pyright, lint-imports,
+   thin handlers, the docs index, links, command blocks and the specs are clean; the 336-file affected set
+   is the pull request's `ci`. If `ci` fails only on
+   `test_on_the_committed_profile_without_a_contact_email_crossref_names_the_public_pool_in_the_footer`
+   (the real clock, v1-e07-t16), re-run the failed job.
+8. **Merge:** a plain `scripts/task pr` once `ci` is green. The Goal is `Succeeded`.

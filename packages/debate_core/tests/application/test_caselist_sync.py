@@ -260,7 +260,7 @@ class RecordingParseStage:
         self.calls: list[str] = []
         self.published: list[tuple[str, str]] = []
 
-    async def parse_new_sources(self, caselist: str) -> ParsedCaselist:
+    async def parse_new_sources(self, caselist: str, *, progress: object = None) -> ParsedCaselist:
         self.calls.append(caselist)
         if self.failure is not None:
             raise self.failure

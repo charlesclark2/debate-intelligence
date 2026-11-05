@@ -98,9 +98,9 @@ def parses(world: World) -> Iterator[list[str]]:
     called: list[str] = []
     parse = PullParseStage.parse_new_sources
 
-    async def recorded(self: PullParseStage, caselist: str) -> Any:
+    async def recorded(self: PullParseStage, caselist: str, *, progress: Any = None) -> Any:
         called.append(caselist)
-        return await parse(self, caselist)
+        return await parse(self, caselist, progress=progress)
 
     world.monkeypatch.setattr(PullParseStage, "parse_new_sources", recorded)
     yield called

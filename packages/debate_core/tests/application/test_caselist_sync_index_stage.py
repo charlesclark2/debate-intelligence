@@ -137,7 +137,7 @@ class ExpiredBucket:
 class FailingParseStage:
     """A parse stage whose pipeline raises on every caselist."""
 
-    async def parse_new_sources(self, caselist: str) -> ParsedCaselist:
+    async def parse_new_sources(self, caselist: str, *, progress: object = None) -> ParsedCaselist:
         raise SearchIndexStoreNotReady(caselist, "a synthetic parse failure")
 
     async def publish(self, caselist: str, version: str) -> PublishedParsedStore:  # pragma: no cover

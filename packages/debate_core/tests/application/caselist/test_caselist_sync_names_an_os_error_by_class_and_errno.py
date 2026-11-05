@@ -69,7 +69,7 @@ class ParseRaises:
     def __init__(self, error: BaseException) -> None:
         self.error = error
 
-    async def parse_new_sources(self, caselist: str) -> ParsedCaselist:
+    async def parse_new_sources(self, caselist: str, *, progress: object = None) -> ParsedCaselist:
         raise self.error
 
     async def publish(self, caselist: str, version: str) -> PublishedParsedStore:

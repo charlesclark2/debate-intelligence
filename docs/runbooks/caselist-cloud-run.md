@@ -533,10 +533,12 @@ one line in the run's log.
 **Operator command** (expected runtime ~1 min)
 Where: `$WT`, in the same shell
 ```bash
-aws logs tail debate-dev-caselist-run --profile debate-dev-caselist-run-deployer --region us-east-1 --since 1h | grep '"command": "caselist pull"' | grep -oE '"status": "(ok|error)"|"dry_run": true|"archives_wanted": [0-9]+|"archives_downloaded": [0-9]+|"objects_published": [0-9]+|"code": "[A-Z_]+"'
+aws logs tail debate-dev-caselist-run --profile debate-dev-caselist-run-deployer --region us-east-1 --since 1h | grep '"command": "caselist pull"' | grep -v '"event": ' | grep -oE '"status": "(ok|error)"|"dry_run": true|"archives_wanted": [0-9]+|"archives_downloaded": [0-9]+|"objects_published": [0-9]+|"code": "[A-Z_]+"'
 ```
 Success looks like `"status": "ok"`, `"dry_run": true`, `"archives_wanted": <any count>`,
 `"archives_downloaded": 0` and `"objects_published": 0`. A `"code"` line is a failure.
+The `grep -v` drops the run's step lines (`v1-e40-t43`), which carry the same `"command"` and counts
+of the same names.
 `CASELIST_AUTH_EXPIRED` means the secret's token does not work: go back to step 3. Any other code,
 or nothing printed, goes to the PM with the log's last lines (`aws logs tail` without the `grep`s).
 
@@ -693,6 +695,42 @@ Success looks like `started arn:aws:ecs:us-east-1:<account>:task/debate-dev-case
 aws ecs describe-tasks --profile debate-dev-caselist-run-deployer --region us-east-1 --cluster debate-dev-caselist-run --tasks "$TASK" --query 'tasks[0].[lastStatus,stopCode,containers[0].exitCode]' --output text
 aws logs tail debate-dev-caselist-run --profile debate-dev-caselist-run-deployer --region us-east-1 --since 3h | tail -3
 ```
+
+**How far it has got** (`v1-e40-t43`). From an image with `v1-e40-t43` on, the run writes a line to
+its log as each step starts and ends: the restore, each stage (select, download, import, publish,
+parse, search index, the landscape stage when one is installed, report, retention), and the saves of
+the bundle and the state files to the bucket. During the parse it writes one every five minutes with
+the sources done and left. Each holds step names and counts only. This read prints the last of them,
+filtered to its event, step, seconds, outcome, counts and memory figures, as the import's
+[How far it got](#the-four-imports-v1-e40-t09-ac3) does, over the six hours a run may take. It reads
+the log and changes nothing.
+
+**Operator command** (expected runtime ~1 min each time)
+Where: `$WT`, in the same shell
+```bash
+if env | grep -q '^DEBATE_'; then echo "STOP: a DEBATE_ variable is set in this shell; unset it and paste again"; else aws logs tail debate-dev-caselist-run --profile debate-dev-caselist-run-deployer --region us-east-1 --since 6h | grep '"command": "caselist pull"' | grep '"event": ' | tail -1 | grep -oE '"event": "[a-z_]+"|"step": "[a-z_]+"|"seconds": [0-9.]+|"outcome": "[a-z_]+"|"counts": [{][^}]*[}]|"memory": [{][^}]*[}]'; fi
+```
+What it prints, by its `"event"`:
+
+* `"event": "step_started"`: the run is inside that step now, or stopped in it. A start line has no
+  seconds and no counts yet. Read again in half an hour: the same line, with the task still
+  `RUNNING`, is a step that long.
+* `"event": "step_ended"`: that step finished, after its `"seconds"`, with its `"counts"`, and the
+  next has not started. Its `"outcome"` is the stage's, as the summary will record it: a stage that
+  ends `"failed"` does not stop the run, and the result says why.
+* `"event": "step_failed"`: that step raised, as a SIGTERM at the deadline does, and the run stopped.
+* `"event": "parse_progress"`: inside the parse. `"sources_done"` and `"sources_left"` are the
+  current caselist's, and `"caselists_done"` and `"caselists_left"` say which of the run's caselists
+  it is on, by count. The parse writes one every five minutes, so a progress line more than about
+  ten minutes old, with the task still `RUNNING`, is a parse that stopped moving: send the PM this
+  line and the task's status.
+* `"memory"` reads as in [The run's memory figures](#the-runs-memory-figures).
+* Nothing printed: the run has not reached its restore yet, or its image was built before
+  `v1-e40-t43` merged. If the image built in the week of 2026-11-09 carries it, the run of 2026-11-11
+  is the first to log its steps.
+
+The run's result is still one line, the last it writes, and the only one the late-run alarm counts:
+the step lines carry no `run_record`, which the `RunsRecorded` metric filter requires.
 
 **Its record reads as a Mac run's does** (ac2). The run published its record to the bucket like any
 run; `caselist runs --remote` on the Mac, with the everyday profile, lists it beside the Mac's runs,
@@ -1274,6 +1312,11 @@ hand is
 is [caselist-cutover.md](caselist-cutover.md)'s, and falling back to the Mac is the PM's decision. A
 run on an image built before `v1-e40-t28` still names `debate-research caselist pull` as its fix;
 the rule holds for that email too.
+
+**Where it stopped.** From an image with `v1-e40-t43` on, Step 8's
+[How far it has got](#step-8--the-seed-bucket-mode-and-one-run-by-hand-at-the-cutover-after-v1-e40-t04)
+read prints the last step the run began or finished before it stopped. Send that line to the PM
+with the run's id.
 
 ## A launch AWS refused
 

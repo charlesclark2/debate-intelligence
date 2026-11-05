@@ -62,9 +62,9 @@ v2.3's extension work.
 |---|---|---|---|---|---|
 | [v1.0](plan_specs/releases/v1.0.yaml) | Foundation & verified evidence core | 3 | 55 | 55 | 252 |
 | [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 4 | 119 | 99 | 514 |
-| [v1.2](plan_specs/releases/v1.2.yaml) | Argument landscape & file building | 3 | 84 | 71 | 330 |
+| [v1.2](plan_specs/releases/v1.2.yaml) | Argument landscape & file building | 3 | 84 | 72 | 330 |
 | [v1.3](plan_specs/releases/v1.3.yaml) | URL → verified card | 2 | 24 | 15 | 125 |
-| [v1.4](plan_specs/releases/v1.4.yaml) | Federated research from the CLI | 2 | 32 | 17 | 126 |
+| [v1.4](plan_specs/releases/v1.4.yaml) | Federated research from the CLI | 2 | 32 | 18 | 126 |
 | [v1.5](plan_specs/releases/v1.5.yaml) | V1 quality gate & team pilot | 1 | 7 | 1 | 66 |
 | [v1.6](plan_specs/releases/v1.6.yaml) | Public team website | 3 | 31 | 22 | 169 |
 | [v1.7](plan_specs/releases/v1.7.yaml) | Team evidence search pilot | 1 | 29 | 25 | 94 |
@@ -380,7 +380,7 @@ Weekly argument-landscape reports show which positions are being read and with w
 | [The coach's review applied: three new NHI positions, corrected descriptions, and a second accepted label in the coach sample](plan_specs/v1/e32-argument-landscape/t41-coach-sample-second-label-and-three-new-positions.yaml) `v1-e32-t41-coach-sample-second-label-and-three-new-positions` | Succeeded | 2 | 3.0 |
 | [`landscape cassettes --delete` can delete only one prompt version's cassettes](plan_specs/v1/e32-argument-landscape/t42-landscape-cassettes-delete-by-prompt-version.yaml) `v1-e32-t42-landscape-cassettes-delete-by-prompt-version` | Pending | 1 | 1.0 |
 | [The model stage is scored as students meet it, its refusals are explained, and a second model route is measured on the same cards](plan_specs/v1/e32-argument-landscape/t43-model-evaluation-system-score-refusals-and-a-second-route.yaml) `v1-e32-t43-model-evaluation-system-score-refusals-and-a-second-route` | Succeeded | 2 | 3.0 |
-| [A scan hit already marked as a JSON key's name or a taxonomy word does not make a text unclean](plan_specs/v1/e32-argument-landscape/t44-scan-marked-hits-leave-a-text-clean.yaml) `v1-e32-t44-scan-marked-hits-leave-a-text-clean` | Pending | 1 | 1.0 |
+| [A scan hit already marked as a JSON key's name or a taxonomy word does not make a text unclean](plan_specs/v1/e32-argument-landscape/t44-scan-marked-hits-leave-a-text-clean.yaml) `v1-e32-t44-scan-marked-hits-leave-a-text-clean` | Succeeded | 1 | 1.0 |
 | [The review queue's order model is trained again at taxonomy 1.5.0](plan_specs/v1/e32-argument-landscape/t45-review-order-model-retrained-at-the-current-taxonomy.yaml) `v1-e32-t45-review-order-model-retrained-at-the-current-taxonomy` | Pending | 2 | 1.0 |
 | [Prompt 1.2.0: the refusal fixes and the coach's answering stance](plan_specs/v1/e32-argument-landscape/t46-prompt-1-2-0-refusal-fixes-and-answering-stances.yaml) `v1-e32-t46-prompt-1-2-0-refusal-fixes-and-answering-stances` | InProgress | 1 | 4.0 |
 | [The purge and removal runbooks' cassette blocks reach a route's cassettes](plan_specs/v1/e32-argument-landscape/t47-route-cassettes-in-the-purge-and-removal-blocks.yaml) `v1-e32-t47-route-cassettes-in-the-purge-and-removal-blocks` | Pending | 1 | 1.0 |
@@ -467,7 +467,7 @@ A student can run `debate-research cut <URL>` and receive a verified, tagged, ci
 | [The resilience wrapper does not count time a provider spends waiting on its own pace as a failure](plan_specs/v1/e07-discovery-adapters/t10-time-waiting-on-a-pace-is-not-a-failure.yaml) `v1-e07-t10-time-waiting-on-a-pace-is-not-a-failure` | Pending | 1 | 2.0 |
 | [A bill found by search shows its latest action and committees from Congress.gov](plan_specs/v1/e07-discovery-adapters/t11-congress-gov-bill-details.yaml) `v1-e07-t11-congress-gov-bill-details` | Pending | 1 | 2.0 |
 | [GAO reports and CRS reports can be found by search](plan_specs/v1/e07-discovery-adapters/t12-gao-and-crs-reports.yaml) `v1-e07-t12-gao-and-crs-reports` | Pending | 1 | 3.0 |
-| [The dev and prod profiles enable the discovery providers whose live smoke passed](plan_specs/v1/e07-discovery-adapters/t13-profiles-enable-the-providers-that-passed-their-smoke.yaml) `v1-e07-t13-profiles-enable-the-providers-that-passed-their-smoke` | Pending | 2 | 1.0 |
+| [The dev and prod profiles enable the discovery providers whose live smoke passed](plan_specs/v1/e07-discovery-adapters/t13-profiles-enable-the-providers-that-passed-their-smoke.yaml) `v1-e07-t13-profiles-enable-the-providers-that-passed-their-smoke` | Succeeded | 2 | 1.0 |
 | [Roll Call's unreadable feed is fixed or dropped, and one feed that keeps failing no longer marks every search partial](plan_specs/v1/e07-discovery-adapters/t14-an-unreadable-feed-found-and-fixed-or-dropped.yaml) `v1-e07-t14-an-unreadable-feed-found-and-fixed-or-dropped` | Succeeded | 1 | 2.0 |
 
 #### [E08 — Federated Research Workflows](plan_specs/v1/e08-research-workflows/epic.yaml)

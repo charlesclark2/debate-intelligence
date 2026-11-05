@@ -478,3 +478,49 @@ The session's replay of both routes' 1.1.0 cassettes through the evaluation's ow
 
 * The hits and their marks are the recordings' as the PM recorded them above (27: 22 and 5; 42: 38 and 4).
 * Both recordings would now pass the scan; neither meets the bar, which this task did not change.
+
+## The sitting and the re-record under 1.2.0 (`v1-e32-t46`, 2026-11-05)
+
+Recorded by the PM from the operator's output. Counts, ids and row numbers only.
+
+* **The coach's sitting** (2026-11-04): the 13 listed rows and 6 controls, unmarked and in one order.
+  Listed: 9 changed, 4 kept (rows 13, 16, 33 and 57). Controls: 1 changed (row 40), 5 kept. The rows now
+  labelled `at:` are 5, 11, 20, 21, 25, 26, 31, 40, 41 and 59.
+* **The sample** (`--check-sample`, taxonomy 1.5.0): labelled 47; by the label's kind advantage 15, cp 7,
+  da 6, k 10, none 2, t 7; by stance answers 10, reads 35; two rows with a second label, both advantages.
+* **The re-record** (prompt 1.2.0, both routes, 2026-11-05): 47 found and asked in 3 calls on each route;
+  40,237 input and 4,282 output tokens on `high_volume`, 40,240 and 4,847 on `deep_audit`.
+
+| | Claude Haiku 4.5 (`high_volume`) | Claude Sonnet 4.6 (`deep_audit`) |
+|---|---|---|
+| Pipeline under 1.1.0, by position only (2026-11-02/03) | 21 of 33, 0.636 | 27 of 36, 0.750 |
+| **Pipeline under 1.2.0, with the stance (bar 0.85)** | **21 of 37, 0.568** | **23 of 33, 0.697** |
+| The model alone under 1.2.0 | 20 of 37, 0.541 | 23 of 33, 0.697 |
+| The same pipeline, a wrong stance counted right | 24 of 37, 0.649 | 27 of 33, 0.818 |
+| Refused `NO_POSITION` | 6 (5 labelled with a position, 1 none) | 0 |
+| Below the threshold | 4 | 14 (2 of them name the label: rows 25 and 45) |
+| Placed though labelled none | 0 | 1 (row 15) |
+| Coverage, counted of labelled | 0.787 | 0.702 |
+| Weighted by stratum | 0.445 | 0.675 |
+
+* **Outcomes.** Haiku: correct 20, wrong stance 3, wrong position of the same kind 6, wrong kind 8,
+  refused 6, below the threshold 4. Sonnet: correct 23, wrong stance 4, same kind 1, wrong kind 4, placed
+  though labelled none 1, below the threshold 14. The headings placed 4 cards, each naming the label.
+* **Where Sonnet is wrong.** A wrong stance on rows 7, 13, 17 and 57 (each answered as answering a
+  position the coach labelled as read; Haiku the same on 17 and 57, and on 39). The wrong kind on row 5
+  (`at:pharma-advantage` answered as reading `pharma-da`, both routes), rows 21 and 40 (`at:delay-cp`
+  answered as `at:should-t`, both routes) and row 26 (`at:cap-k` answered as reading `nhi-aff`). Row 47 a
+  neighbouring advantage. `generic-k` (rows 46, 50 and 60) is counted right on neither route.
+* **The scans.** The prompt-input scans were clean. The cassette scans found 23 hits on `high_volume` (19 a
+  JSON key's name, 4 taxonomy words) and 44 on `deep_audit` (37 and 7); none named a team and none was in
+  the cards sent. The operator read them in the terminal on 2026-11-05 and judged all 67 ordinary words, so
+  the 1.2.0 cassettes are kept. Under `v1-e32-t44`'s rule, merged after this recording, both scans read
+  clean.
+* **The coach's rulings** (2026-11-05). A card that answers an advantage is not the matching DA
+  (pharmaceutical, innovation, growth against economy), so the taxonomy declares no mirror pairs and rows 5,
+  28 and 34 stay wrong when so answered. Rows 21 and 40 take no `should-t` second label.
+* **How far the sample reaches.** Sonnet counts 33 cards, so one card moves the score about three points,
+  and the 95% interval on 23 of 33 runs from about 0.53 to 0.83.
+* **What follows:** neither route meets the bar, and the hold on live model runs stands. `v1-e32-t49`
+  carries prompt 1.3.0 and stage one's own-side rule, tuned on `deep_audit`; `v1-e32-t50` draws a second
+  labelled sample, held out from tuning, before any route is read as meeting the bar.

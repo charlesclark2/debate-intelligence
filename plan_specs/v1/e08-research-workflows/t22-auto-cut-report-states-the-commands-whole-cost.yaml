@@ -1,0 +1,72 @@
+# TASK v1-e08-t22-auto-cut-report-states-the-commands-whole-cost - The auto-cut report states the whole command's spend beside its own calls' cost
+# Epic: E08 Federated Research Workflows | Release: v1.4 (Federated research from the CLI) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e08-t22-auto-cut-report-states-the-commands-whole-cost
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.4
+    debate/epic: v1-e08-research-workflows
+  annotations:
+    debate/title: "The auto-cut report states the whole command's spend beside its own calls' cost"
+spec:
+  # Filed by the PM, 2026-11-05, from v1-e08-t17's review (the PM's follow-up, 2026-11-05).
+  description: >-
+    Since v1-e08-t17 every router a command builds shares one budget run, so `--max-cost` limits
+    the command's total. The auto-cut report's `cost_usd` still counts only the cut calls,
+    leaving out `--expand-llm`'s call, so it can differ from what the limit counted. Add
+    `command_cost_usd`, the shared budget run's total for the command, beside it, and say in the
+    guide which is which. Tests with recorded calls.
+  priority: 3
+  constraints:
+    packages: [debate_core.application, debate_cli, packages/debate_core/tests, packages/debate_cli/tests]
+    forbidden:
+      - A real model call in a test
+      - A price written from memory
+      - Business logic in debate_cli
+  context:
+    - kind: TaskRef
+      name: v1-e08-t17-one-max-cost-across-every-router-a-command-builds
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        The auto-cut report carries `command_cost_usd`, equal to what the budget counted for
+        the whole command, beside `cost_usd`, by tests shown failing first.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e08-t22-auto-cut-report-states-the-commands-whole-cost-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.4
+    debate/epic: v1-e08-research-workflows
+spec:
+  description: >-
+    The auto-cut report states the whole command's spend beside its own calls' cost.
+  goalRef:
+    name: v1-e08-t22-auto-cut-report-states-the-commands-whole-cost
+  graph:
+    nodes:
+      - id: auto-cut-report-states-the-commands-whol
+        kind: Task
+        name: Whole cost
+        description: >-
+          The auto-cut report states the whole command's spend beside its own calls' cost.
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Whole cost tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests, packages/debate_cli/tests, -k, auto_cut and cost]
+status:
+  phase: Pending

@@ -1,0 +1,75 @@
+# TASK v1-e08-t19-a-batching-providers-footer-counts-distinct-works - A batching provider's footer counts the distinct works it returned, not one per query
+# Epic: E08 Federated Research Workflows | Release: v1.4 (Federated research from the CLI) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e08-t19-a-batching-providers-footer-counts-distinct-works
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.4
+    debate/epic: v1-e08-research-workflows
+  annotations:
+    debate/title: "A batching provider's footer counts the distinct works it returned, not one per query"
+spec:
+  # Filed by the PM, 2026-11-05, from v1-e08-t10's review (the PM's follow-up, 2026-11-05).
+  description: >-
+    Since v1-e08-t10 OpenAlex answers every query of a search in one joined request, and a work
+    no query's words fully match is attributed to every query. On ac6's saved results that was
+    all 200 works, so each query's record carries the whole answer and the footer's OpenAlex
+    count can read 200 times 12, which misleads a student. Count a batching provider's results
+    in the footer and the JSON's per-provider counts as the distinct works it returned, keeping
+    each work's attribution to its queries as it is. Ranking does not change. Tests on recorded
+    fixtures.
+  priority: 3
+  constraints:
+    packages: [debate_core.application, debate_cli, packages/debate_core/tests, packages/debate_cli/tests]
+    forbidden:
+      - A change to ranking
+      - A live provider call in a test
+      - Business logic in debate_cli
+  context:
+    - kind: TaskRef
+      name: v1-e08-t10-search-asks-each-provider-once
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        A batching provider's footer and JSON counts are its distinct works, with
+        attributions and ranks unchanged, by tests on recorded fixtures shown failing first.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e08-t19-a-batching-providers-footer-counts-distinct-works-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.4
+    debate/epic: v1-e08-research-workflows
+spec:
+  description: >-
+    A batching provider's footer counts the distinct works it returned, not one per query.
+  goalRef:
+    name: v1-e08-t19-a-batching-providers-footer-counts-distinct-works
+  graph:
+    nodes:
+      - id: a-batching-providers-footer-counts-disti
+        kind: Task
+        name: Distinct works
+        description: >-
+          A batching provider's footer counts the distinct works it returned, not one per
+          query.
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Distinct works tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests, packages/debate_cli/tests, -k, footer or batch]
+status:
+  phase: Pending

@@ -1,0 +1,82 @@
+# TASK v1-e07-t15-a-provider-without-its-key-does-not-make-a-search-partial - A provider the profile enables but no key configures is named, and no longer makes every search partial
+# Epic: E07 Discovery Provider Adapters | Release: v1.4 (Federated research from the CLI) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e07-t15-a-provider-without-its-key-does-not-make-a-search-partial
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.4
+    debate/epic: v1-e07-discovery-adapters
+  annotations:
+    debate/title: "A provider the profile enables but no key configures is named, and no longer makes every search partial"
+spec:
+  # Filed by the PM, 2026-11-05, from v1-e07-t13's review (the PM's follow-up, 2026-11-05).
+  description: >-
+    v1-e07-t13 enabled GovInfo in both profiles, and the NHI topic asks it. On a machine without
+    the api.data.gov key GovInfo is `not_configured`, so `search_status` makes every NHI search
+    PARTIAL and exit 6, though no retry can ever get more: the same complaint v1-e07-t14 settled
+    for a feed failing day after day, which is still named in the footer and the JSON's
+    `reasons` but no longer makes the search partial. Do the same for a provider the profile
+    enables that settings cannot configure: named in the footer and `reasons` with its cure (the
+    key or email it lacks), and left out of the partial reckoning. Propose whether a provider
+    the student names with `--provider` keeps today's rule, and stop for the PM's ruling. A
+    search in which nothing answered is still FAILED.
+  priority: 3
+  constraints:
+    packages: [debate_core.application, debate_core.domain, debate_cli, packages/debate_core/tests, packages/debate_cli/tests]
+    forbidden:
+      - Hiding a provider from the footer or `reasons`
+      - A live provider call in a test
+      - Business logic in debate_cli
+  context:
+    - kind: TaskRef
+      name: v1-e07-t13-profiles-enable-the-providers-that-passed-their-smoke
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e07-t14-an-unreadable-feed-found-and-fixed-or-dropped
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        A profile-enabled provider that is not configured is named with its cure and no
+        longer makes a search partial, a search with no answer stays FAILED, and the ruled
+        `--provider` case holds, by tests shown failing first.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e07-t15-a-provider-without-its-key-does-not-make-a-search-partial-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.4
+    debate/epic: v1-e07-discovery-adapters
+spec:
+  description: >-
+    A provider the profile enables but no key configures is named, and no longer makes every
+    search partial.
+  goalRef:
+    name: v1-e07-t15-a-provider-without-its-key-does-not-make-a-search-partial
+  graph:
+    nodes:
+      - id: a-provider-without-its-key-does-not-make
+        kind: Task
+        name: Not configured is not partial
+        description: >-
+          A provider the profile enables but no key configures is named, and no longer
+          makes every search partial.
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Not configured is not partial tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests, packages/debate_cli/tests, -k, search_status or not_configured]
+status:
+  phase: Pending

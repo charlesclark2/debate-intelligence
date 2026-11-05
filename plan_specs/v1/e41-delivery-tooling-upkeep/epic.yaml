@@ -558,5 +558,33 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e41-t21-order-dependence-checks-without-pytest-randomly
+    - id: ext-v1-e07-t13-profiles-enable-the-providers-that-passed-their-smoke
+      kind: External
+      name: 'Prerequisite from E07: The dev and prod profiles enable the discovery providers whose live smoke passed'
+      description: >-
+        Cross-epic prerequisite owned by v1-e07-discovery-adapters (release v1.4).
+      inputs:
+        goalRef: v1-e07-t13-profiles-enable-the-providers-that-passed-their-smoke
+        specRef: plan_specs/v1/e07-discovery-adapters/t13-profiles-enable-the-providers-that-passed-their-smoke.yaml
+    - id: t22
+      kind: Task
+      name: 'Keys come from a per-user file in any folder, and a deleted working folder no longer crashes a command'
+      description: >-
+        Keys come from a per-user file in any folder, and a deleted working folder no longer
+        crashes a command.
+      inputs:
+        specRef: plan_specs/v1/e41-delivery-tooling-upkeep/t22-per-user-credentials-file-and-a-missing-working-folder.yaml
+        goalRef: v1-e41-t22-per-user-credentials-file-and-a-missing-working-folder
+      dependsOn:
+      - ext-v1-e07-t13-profiles-enable-the-providers-that-passed-their-smoke
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e41-t22-per-user-credentials-file-and-a-missing-working-folder reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e41-t22-per-user-credentials-file-and-a-missing-working-folder
 status:
   phase: Pending

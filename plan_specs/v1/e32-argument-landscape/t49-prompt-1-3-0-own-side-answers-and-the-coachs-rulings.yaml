@@ -1,0 +1,108 @@
+# TASK v1-e32-t49-prompt-1-3-0-own-side-answers-and-the-coachs-rulings - Prompt 1.3.0 and stage one: a card defending its own side's position reads it, and an answer is never the position it answers
+# Epic: E32 Argument Landscape Reports | Release: v1.2 (Argument landscape & file building) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e32-t49-prompt-1-3-0-own-side-answers-and-the-coachs-rulings
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e32-argument-landscape
+  annotations:
+    debate/title: "Prompt 1.3.0 and stage one: a card defending its own side's position reads it, and an answer is never the position it answers"
+spec:
+  # Filed by the PM, 2026-11-05, from the 1.2.0 re-record of 2026-11-05, v1-e32-t46's follow-up on stage one, and the coach's rulings of 2026-11-05.
+  description: >-
+    Under prompt 1.2.0 neither route meets the 0.85 bar
+    (docs/data/landscape-model-evaluation.md, 2026-11-05): Claude Sonnet 4.6 (`deep_audit`)
+    scores 23 of 33, 0.697, and Claude Haiku 4.5 (`high_volume`) 21 of 37, 0.568. Tune on
+    `deep_audit`; Haiku is reported, not tuned for. Sonnet's 10 wrong answers: four a wrong
+    stance (rows 7, 13, 17, 57, each answered as answering a position the coach labelled as
+    read; Haiku the same on 17 and 57, and on 39), four the wrong kind (row 5,
+    `at:pharma-advantage` answered as reading `pharma-da`, on both routes; rows 21 and 40,
+    `at:delay-cp` answered as `at:should-t`, on both routes; row 26, `at:cap-k` answered as
+    reading `nhi-aff`), one the wrong position of the same kind (row 47), and one card labelled
+    none placed (row 15). `generic-k` (rows 46, 50, 60) is counted right on neither route. Three
+    changes, proposed first. (a) The own side's answer heading: a card under an answer heading
+    inside the block of its own position's side defends that position and reads it (the coach
+    kept rows 13 and 57 reading at the sitting). Count first, by row number and heading kind
+    only, which of the wrong-stance rows sit so, and make the same rule stage one's: today the
+    matcher gives ANSWERS to every card under an answer heading (v1-e32-t46's follow-up). (b)
+    The coach's rulings of 2026-11-05: a card that answers an advantage is `at:<advantage>`,
+    never the matching DA (pharmaceutical, innovation, growth against economy: no mirror pairs,
+    so rows 5, 28 and 34 stay wrong when so answered), and more generally an answer to a
+    position is that position answered, not the answering side's own case; and a definition card
+    the affirmative reads against a counterplan answers that counterplan (no `should-t` second
+    label for rows 21 and 40). (c) `generic-k`: from the three rows' outcomes and the taxonomy's
+    description, what the model is missing, and a proposed change to the prompt or to the
+    description (a description change is the coach's to review). The prompt's version is bumped
+    with its cassettes keyed by it; the operator re-records the 47 on `deep_audit` (and
+    `high_volume` if the PM rules), recorded by the PM. The bar, the threshold and the coach's
+    labels do not change.
+  priority: 2
+  constraints:
+    packages: [debate_core.application, debate_core.arguments, prompts, scripts, packages/debate_core/tests, packages/debate_cli/tests, tests/smoke, docs/data, docs/runbooks]
+    forbidden:
+      - Card text, a tag, heading or label text in the report, docs, logs or a test
+      - A school, team code or debater name anywhere
+      - A change to the 85% bar, the review threshold or the coach's labels
+      - A taxonomy description change without the coach's review
+      - A live model call by the session
+      - A price written from memory
+  context:
+    - kind: TaskRef
+      name: v1-e32-t46-prompt-1-2-0-refusal-fixes-and-answering-stances
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        The proposal (the own-side rule for the prompt and stage one, with its counts; the
+        prompt's changes for (b); the generic-k finding) is ruled on by the PM before any
+        code.
+    - id: ac2
+      description: >-
+        Prompt 1.3.0 and stage one carry what is ruled, by tests on invented cards shown
+        failing first, with the version bumped and its cassettes keyed by it, and 1.2.0's
+        recordings replaying unchanged.
+    - id: ac3
+      description: >-
+        The operator's re-record of the 47 under 1.3.0 on the ruled routes, its breakdown
+        and scans, is recorded in docs/data beside 1.2.0's (operator, recorded by the PM).
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e32-t49-prompt-1-3-0-own-side-answers-and-the-coachs-rulings-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e32-argument-landscape
+spec:
+  description: >-
+    Prompt 1.3.0 and stage one: a card defending its own side's position reads it, and an answer
+    is never the position it answers.
+  goalRef:
+    name: v1-e32-t49-prompt-1-3-0-own-side-answers-and-the-coachs-rulings
+  graph:
+    nodes:
+      - id: prompt-1-3-0-own-side-answers-and-the-co
+        kind: Task
+        name: Prompt 1.3.0
+        description: >-
+          Prompt 1.3.0 and stage one: a card defending its own side's position reads it,
+          and an answer is never the position it answers.
+        estimatedEffort: 4h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Prompt 1.3.0 tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/arguments/landscape]
+status:
+  phase: Pending

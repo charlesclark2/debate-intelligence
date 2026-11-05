@@ -26,6 +26,16 @@ spec:
     feed the coach approves. (2) Propose whether one feed that fails should mark every search
     partial, or only when no feed answers, or after it has failed for some number of days, and
     how the footer says which feed failed; the PM rules before it is built.
+    (PM amendment 2026-11-05, from the PM's review: the coach's decisions this task applied.)
+    The coach approved the eight starter feeds (`coach_reviewed`; Roll Call since dropped, its
+    body invalid at the publisher) and named nine health-policy outlets. Three passed the feed
+    check and were added: Healthcare Dive, KFF and The Hill's health section. KFF's feed is the
+    whole of kff.org, and the coach keeps it (a feed entry must hold every word of a query, so
+    its breadth adds noise only to plain topic searches). Fierce Healthcare answered 403 and
+    stays out: the tool does not disguise its requests to get past a publisher's refusal. The
+    Commonwealth Fund's topic feeds (204 and 4, checked 2026-11-05) answer but carry no entries,
+    so it is not added. Health Affairs, Modern Healthcare, Axios Vitals and Politico Pulse
+    publish no public feed.
   priority: 3
   constraints:
     # PM ruling 2026-11-05 (ac2, option C): a feed failing on every read for 3 days stops marking the

@@ -1,0 +1,88 @@
+# TASK v1-e32-t50-a-second-labelled-sample-held-out - A second labelled sample, held out from tuning, before the bar is read as met
+# Epic: E32 Argument Landscape Reports | Release: v1.2 (Argument landscape & file building) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e32-t50-a-second-labelled-sample-held-out
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e32-argument-landscape
+  annotations:
+    debate/title: "A second labelled sample, held out from tuning, before the bar is read as met"
+spec:
+  # Filed by the PM, 2026-11-05, from the 1.2.0 re-record of 2026-11-05 (the PM's reading of the sample's size).
+  description: >-
+    The bar is read on the coach's 47 labelled cards, of which Sonnet counts 33: one card moves
+    the score about three points, and the 95% interval on 23 of 33 runs from about 0.53 to 0.83,
+    so a route that truly scores 0.85 can score 0.75 on this sample. Three prompt versions have
+    now been tuned on the same 47, so a score on them also flatters the prompt. Before any route
+    is declared to meet the bar: draw a second sample by the same strata and seed rule, sharing
+    no card with the 47, of a size proposed from the interval wanted at 0.85 (say the size, the
+    interval it gives, and the coach's time at the t46 sitting's pace), and stop for the PM's
+    ruling; the coach labels it in a sitting like v1-e32-t46's (stance included, unmarked, the
+    model and the scores never shown); `--check-sample` reads it; and the evaluation reads the
+    second sample as a holdout, never used to tune a prompt, beside the first.
+  priority: 3
+  constraints:
+    packages: [debate_core.application, debate_core.arguments, scripts, packages/debate_core/tests, packages/debate_cli/tests, docs/data, docs/runbooks]
+    forbidden:
+      - Card text, a tag, heading or label text in the report, docs, logs or a test
+      - A school, team code or debater name anywhere
+      - A card shared with the first sample
+      - A prompt tuned on the holdout
+      - A live model call by the session
+  context:
+    - kind: TaskRef
+      name: v1-e32-t46-prompt-1-2-0-refusal-fixes-and-answering-stances
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        The second sample's size, drawn from the interval wanted at 0.85 and the coach's
+        time, is ruled on by the PM.
+    - id: ac2
+      description: >-
+        The second sample is drawn by the strata and seed rule with no card from the first,
+        by tests on invented cards shown failing first, and the evaluation reads it as a
+        holdout beside the first.
+    - id: ac3
+      description: >-
+        The coach labels it in a sitting and `--check-sample` reads it (operator, recorded
+        by the PM).
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e32-t50-a-second-labelled-sample-held-out-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e32-argument-landscape
+spec:
+  description: >-
+    A second labelled sample, held out from tuning, before the bar is read as met.
+  goalRef:
+    name: v1-e32-t50-a-second-labelled-sample-held-out
+  graph:
+    nodes:
+      - id: a-second-labelled-sample-held-out
+        kind: Task
+        name: Holdout sample
+        description: >-
+          A second labelled sample, held out from tuning, before the bar is read as met.
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Holdout sample tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/arguments/landscape, -k, sample]
+status:
+  phase: Pending

@@ -1,0 +1,76 @@
+# TASK v1-e08-t20-a-typed-query-that-would-break-the-joined-search - A typed query with an unbalanced parenthesis or a bare operator cannot change or break the joined search
+# Epic: E08 Federated Research Workflows | Release: v1.4 (Federated research from the CLI) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e08-t20-a-typed-query-that-would-break-the-joined-search
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.4
+    debate/epic: v1-e08-research-workflows
+  annotations:
+    debate/title: "A typed query with an unbalanced parenthesis or a bare operator cannot change or break the joined search"
+spec:
+  # Filed by the PM, 2026-11-05, from v1-e08-t10's review (the PM's follow-up, 2026-11-05).
+  description: >-
+    v1-e08-t10 joins a search's queries as `(q1) OR (q2)` in one request. A student's typed
+    query with an unbalanced parenthesis, or a bare `OR`, `AND` or `NOT`, now reaches inside
+    that joined request: it can change what every other query means, or make the provider refuse
+    the request and so fail every query at once. Propose how such a query is handled (sent in
+    its own request, its operators quoted, or refused with a message that says why), and what
+    happens when a provider refuses a joined request (a fallback to one request per query, or
+    not), and stop for the PM's ruling. Tests on fixtures.
+  priority: 3
+  constraints:
+    packages: [debate_core.application, debate_core.integrations, debate_cli, packages/debate_core/tests, packages/debate_cli/tests]
+    forbidden:
+      - A live provider call in a test
+      - A typed query silently rewritten into a different search
+  context:
+    - kind: TaskRef
+      name: v1-e08-t10-search-asks-each-provider-once
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        The handling is ruled on by the PM, and a typed query with an unbalanced parenthesis
+        or a bare operator cannot change or fail the other queries of a joined search, by
+        tests shown failing first.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e08-t20-a-typed-query-that-would-break-the-joined-search-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.4
+    debate/epic: v1-e08-research-workflows
+spec:
+  description: >-
+    A typed query with an unbalanced parenthesis or a bare operator cannot change or break the
+    joined search.
+  goalRef:
+    name: v1-e08-t20-a-typed-query-that-would-break-the-joined-search
+  graph:
+    nodes:
+      - id: a-typed-query-that-would-break-the-joine
+        kind: Task
+        name: Typed query guard
+        description: >-
+          A typed query with an unbalanced parenthesis or a bare operator cannot change or
+          break the joined search.
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Typed query guard tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests, packages/debate_cli/tests, -k, joined or batch]
+status:
+  phase: Pending

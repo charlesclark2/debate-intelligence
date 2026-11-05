@@ -23,9 +23,11 @@ spec:
     container builds for one command, so the budget guard counts every call against one limit; a
     refusal then names the command's total. Show by test that `--expand-llm` and `--auto-cut`
     together stop at the one limit, and that a single-router command is unchanged.
+    (PM amendment 2026-11-05, from the PM's review.) The shared budget run reaches the
+    router's construction in `debate_core.integrations.models`, which is added to the packages.
   priority: 2
   constraints:
-    packages: [debate_cli, debate_core.application, packages/debate_cli/tests, packages/debate_core/tests]
+    packages: [debate_cli, debate_core.application, debate_core.integrations.models, packages/debate_cli/tests, packages/debate_core/tests]
     forbidden:
       - A real model call in a test
       - A price written from memory

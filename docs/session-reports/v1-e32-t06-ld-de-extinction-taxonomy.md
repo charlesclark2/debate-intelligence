@@ -394,15 +394,25 @@ above are those runs.
 6. **I ran the seeding and the Q4 and topic-word counts myself**, read-only over the restored copy in
    seconds, as t01 ran its seeding; the restores, parses and the dry run went to the operator.
 7. **One `git fetch origin dev`**, to compare this spec with dev's before the report.
+8. **The coach's review is a one-off guided script**, not a committed tool. The operator found the review
+   sheet plus four file listings hard to work through in one sitting. The script walks the sheet's
+   content one question per screen (the 18 positions; the unplaced headings, the 25 that look like file
+   structure on one screen, left out unless picked; the six proposed arguments; the preset; approval) and
+   writes the decisions as JSON. It lives beside the review sheet because it shows real headings, and
+   because a permanent, tested guided review is a scope change (Follow-up work). Tested here with scripted
+   keypresses: an all-Enter run, a stop and resume, and rename, merge, drop, join and new answers.
 
 ## Operator follow-ups
 
-1. **The coach's review** (ac3, ac4). The operator reads the review sheet with the coach in the terminal
-   and sends the decisions by position id; the session applies them and records counts only. The
-   commands are in the session's last message, and here:
+1. **The coach's review** (ac3, ac4), in one terminal window (expected ~15 to 20 minutes with the coach).
+   A guided sitting, one question per screen, Enter keeps the draft; it saves every answer, so `q` stops
+   it and the same command resumes. It writes
+   `~/Documents/debate/landscape-seed/ld-2026-nov-dec-de-extinction-coach-decisions.json`, outside the
+   repository, which the session applies, recording counts only. The script is a one-off kept beside the
+   review sheet, not committed (Decision 8):
 
 ```bash
-less ~/Documents/debate/landscape-seed/ld-2026-nov-dec-de-extinction-review.md
+cd "$HOME/Documents/debate/debate-intelligence-tool/debate-intelligence-worktrees/v1-e32-t06-ld-de-extinction-taxonomy" && .venv/bin/python ~/Documents/debate/landscape-seed/ld-2026-nov-dec-de-extinction-coach-review.py --worktree .
 ```
 
 2. **Q2's counts on 2026-11-10 and 2026-11-17** (the PM's ruling): once the weekly run has imported each
@@ -419,6 +429,10 @@ less ~/Documents/debate/landscape-seed/ld-2026-nov-dec-de-extinction-review.md
 * **A stale comment in `config/argument_taxonomy.yaml`** above the generic LD framing still says the
   de-extinction resolution is not committed. Left as v1-e08-t04 wrote it, as the brief asked; a one-line
   edit when the coach reviews the framing.
+* **A permanent guided review for a seeded taxonomy**: `seed_landscape_taxonomy.py review --interactive`
+  (or an apply step that reads the decisions file into the YAML), so a new topic's curation is one
+  command for the coach rather than a sheet plus file listings. This task's one-off script is the
+  prototype (Decision 8). For E32, or wherever the next topic's seeding lands.
 * **The late-disclosure count could be a report line**, so the weekly report shows Q2's check without a
   session (E32).
 * **`landscape-copy-*` restores and a newer dev parser**: the runbook's report steps assume the installed

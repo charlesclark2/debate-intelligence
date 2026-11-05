@@ -25,6 +25,15 @@ returns the entries kept from last time without parsing anything
 its error names the publishers that failed; when every feed fails, the first one's error is raised,
 as a single-request adapter's would be.
 
+**A feed that keeps failing** (v1-e07-t14, PM ruling 2026-11-05). The first failure after a
+successful read is dated by the clock and kept in the feed's cache entry
+(:attr:`~debate_core.integrations.discovery.feed_cache.CachedFeed.failing_since`); any successful
+read, a `304` included, clears it. A feed failing for less than :data:`STANDING_FAILURE_AFTER` makes
+the answer partial, because a retry may get it. One that has failed on every read for longer is a
+standing failure that a retry will not fix: it no longer makes the answer partial, and every answer
+names it in `notes` instead (`Roll Call failing since 2026-11-02: unreadable feed: ...`), so it is
+never hidden. A failure the cache cannot keep stays new, and partial.
+
 **Several queries, one read** (v1-e08-t10). The provider is a
 :class:`~debate_core.application.ports.providers.MultiQuerySearchProvider`: an expanded search asks
 it every query in one call (:meth:`FeedProvider.search_each`), each feed is read once, and every
@@ -55,7 +64,7 @@ import time
 import unicodedata
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 from http.cookiejar import CookieJar, DefaultCookiePolicy
 from typing import Final
 
@@ -79,6 +88,7 @@ __all__ = [
     "FEED_ACCEPT",
     "MAX_FEED_BYTES",
     "PROVIDER_NAME",
+    "STANDING_FAILURE_AFTER",
     "FeedBody",
     "FeedFetcher",
     "FeedProvider",
@@ -100,6 +110,9 @@ MAX_FEED_BYTES: Final = 5 * 1024 * 1024
 
 CONCURRENT_FETCHES: Final = 4
 """How many feeds are fetched at once."""
+
+STANDING_FAILURE_AFTER: Final = timedelta(days=3)
+"""How long a feed fails on every read before it stops making answers partial (PM ruling 2026-11-05)."""
 
 FEED_ACCEPT: Final = (
     "application/rss+xml, application/atom+xml, application/xml;q=0.9, text/xml;q=0.8, */*;q=0.1"
@@ -204,10 +217,13 @@ class FeedFetcher:
     async def fetch(self, url: str) -> FetchedFeed:
         """The feed's entries; raises a :class:`ProviderError` for every way it can fail."""
         cached = self._cache.get(url)
-        answer = await self._get(url, cached.conditional_headers if cached is not None else {})
+        headers = cached.conditional_headers if cached is not None else {}
+        answer = await self._get(url, headers)
         if answer is None:
-            if cached is None:
+            if cached is None or not headers:
                 raise ProviderUnavailable(self._provider, "HTTP 304 for a feed with nothing cached")
+            if cached.failing_since is not None:
+                self._keep(cached.model_copy(update={"failing_since": None}))
             return FetchedFeed(cached.entries, unchanged=True)
         parsed = self.read(answer)
         self._keep(
@@ -270,6 +286,21 @@ class FeedFetcher:
                 )
         return bytes(body)
 
+    def failing_since(self, url: str, now: datetime) -> datetime:
+        """When `url` started failing: the moment kept from an earlier failure, or `now`, which is kept.
+
+        Only a successful read clears it (:meth:`fetch`). A cache that cannot be written keeps nothing,
+        so every failure is `now`: new.
+        """
+        cached = self._cache.get(url)
+        if cached is not None and cached.failing_since is not None:
+            return cached.failing_since
+        if cached is None:
+            self._keep(CachedFeed(url=url, failing_since=now))
+        else:
+            self._keep(cached.model_copy(update={"failing_since": now}))
+        return now
+
     def _keep(self, feed: CachedFeed) -> None:
         """Cache the answer; a cache that cannot be written costs the next fetch its `304`, nothing more."""
         try:
@@ -319,6 +350,7 @@ class FeedProvider:
         max_bytes: int = MAX_FEED_BYTES,
     ) -> None:
         self._client = client
+        self._clock = clock
         self._feeds = feeds_of(topics)
         self._fetcher = FeedFetcher(
             client, cache=cache, clock=clock, provider=PROVIDER_NAME, max_bytes=max_bytes
@@ -347,12 +379,15 @@ class FeedProvider:
     async def search_each(self, queries: Sequence[ProviderQuery]) -> tuple[ProviderResponse, ...]:
         """Every query answered from one read of each feed: one response per query, in their order.
 
-        Each query keeps exactly what it would keep asked on its own. The feeds that failed make every
-        answer partial, with the same error; when every feed fails, the first failure is raised.
+        Each query keeps exactly what it would keep asked on its own. The feeds that newly failed make
+        every answer partial, with the same error, and those failing for :data:`STANDING_FAILURE_AFTER`
+        or longer are named in every answer's `notes`; when every feed fails, the first failure is
+        raised.
         """
         started = time.perf_counter()
         outcomes = await self._fetch_all()
         failures = [(feed, outcome) for feed, outcome in outcomes if isinstance(outcome, ProviderError)]
+        new_failures, standing = self._sort_failures(failures)
         if self._feeds and len(failures) == len(self._feeds):
             raise failures[0][1]
         read = [(feed, outcome) for feed, outcome in outcomes if isinstance(outcome, FetchedFeed)]
@@ -396,9 +431,9 @@ class FeedProvider:
         )
         elapsed_ms = (time.perf_counter() - started) * 1000
         error: str | None = None
-        if failures:
-            reasons = "; ".join(f"{feed.publisher}: {_reason(error)}" for feed, error in failures)
-            error = f"{len(failures)} of {len(self._feeds)} feeds failed: {reasons}"
+        if new_failures:
+            reasons = "; ".join(f"{feed.publisher}: {_reason(error)}" for feed, error in new_failures)
+            error = f"{len(new_failures)} of {len(self._feeds)} feeds failed: {reasons}"
         return tuple(
             ProviderResponse(
                 provider=self.name,
@@ -406,9 +441,26 @@ class FeedProvider:
                 elapsed_ms=elapsed_ms,
                 partial=error is not None,
                 error=error,
+                notes=standing,
             )
             for results in answers
         )
+
+    def _sort_failures(
+        self, failures: Sequence[tuple[FeedSource, ProviderError]]
+    ) -> tuple[list[tuple[FeedSource, ProviderError]], tuple[str, ...]]:
+        """The failures still new, and a note for each feed failing on every read since long enough."""
+        now = self._clock.now()
+        new: list[tuple[FeedSource, ProviderError]] = []
+        standing: list[str] = []
+        for feed, failure in failures:
+            since = self._fetcher.failing_since(feed.url, now)
+            if now - since < STANDING_FAILURE_AFTER:
+                new.append((feed, failure))
+                continue
+            day = since.astimezone(UTC).date().isoformat()
+            standing.append(f"{feed.publisher} failing since {day}: {_reason(failure)}")
+        return new, tuple(standing)
 
     def _candidate(
         self, read: Sequence[tuple[FeedSource, FetchedFeed]], listing: tuple[int, int, FeedEntry]

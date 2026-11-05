@@ -52,6 +52,15 @@ listed twice, a provider in `government_providers` that is not a government one 
 does not match the file name stops the load with the file and the problem named. `packages/debate_core/tests/integrations/discovery/test_feed_config.py` loads every
 file here on every pull request.
 
+## A feed that fails
+
+A search that reads the feeds names every feed that failed in its provider footer. A feed failing for
+the first time makes the search partial (`PARTIAL`, exit 6), because trying again may reach it. One
+that has failed on every read for three days, with no successful read between, no longer does: the
+footer still names it, `rss: ok, 14 results: not counted as partial: <publisher> failing since
+<date>: <reason>`, and the search exits as it would without it. Its next successful read clears the
+date. A feed named that way is one to run the feed check on, and then to fix or remove here.
+
 ## Checking that the feeds answer
 
 A URL listed here has not been shown to work by being listed. The operator's feed check fetches each

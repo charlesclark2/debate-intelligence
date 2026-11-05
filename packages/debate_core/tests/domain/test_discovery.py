@@ -287,6 +287,17 @@ def test_a_response_with_an_error_must_say_it_is_partial() -> None:
         ProviderResponse(provider="openalex", elapsed_ms=1.0, error="timed out")
 
 
+def test_a_response_names_a_standing_shortfall_in_notes_without_being_partial() -> None:
+    note = "Example Wire failing since 2026-11-02: HTTP 503"
+    response = ProviderResponse(provider="rss", elapsed_ms=1.0, notes=(note,))
+    assert (response.partial, response.error, response.notes) == (False, None, (note,))
+
+
+def test_a_response_stored_before_notes_existed_reads_with_none() -> None:
+    stored = '{"provider": "rss", "results": [], "elapsed_ms": 3.5, "partial": false, "error": null}'
+    assert ProviderResponse.model_validate_json(stored).notes == ()
+
+
 def test_a_response_refuses_a_result_from_another_provider() -> None:
     with pytest.raises(ValidationError, match="from 'openalex' carries results from 'crossref'"):
         ProviderResponse(

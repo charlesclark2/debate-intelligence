@@ -22,6 +22,17 @@ collection order, like cards, starting from a part chosen by a checksum of the f
 * the deal has no state here. Every part and every xdist worker reads the same file and collects the
   same tests, so they deal alike; the record is read once, by ci.yml's `test-selection` job.
 
+What a part collects (v1-e41-t18). Until then every part collected the whole selection and kept its
+share, about 8 s of collection a part on the operator's Mac and four times that in CPU under xdist,
+whose workers each collect. Now a part never imports a file the deal gives another part: `collects`
+is the rule, applied to the paths the command names (an affected set's files) in `pytest_configure`,
+and to the files pytest finds walking a directory (the whole selection's `testpaths`) in
+`pytest_ignore_collect`, which pytest does not ask about paths the command names. Its own files and
+every file the deal does not name are collected as before, and a file the deal does not name is
+dealt test by test; with no deal every part collects everything, as before. So the partition holds
+for the same reason it did: a test is dealt to a part that collects its file (`collects` of
+`parts_dealt`'s part is always true), and `parts_dealt` puts every test in exactly one part.
+
 How many parts CI asks for follows the selection (v1-e41-t16): one per 30 test files, at most
 MOST_PARTS. The dealing is the same at every N, and the partition proof deals the real suite at
 every N the rule can give with `parts_dealt`, the function this hook deals with.
@@ -40,6 +51,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+import time
 import zlib
 from collections import Counter, defaultdict
 from collections.abc import Iterable, Mapping
@@ -85,8 +97,9 @@ def files_to_parts(text: str, parts: int) -> dict[str, int]:
 
 
 def collects(test_file: str, part: int, part_of_file: Mapping[str, int]) -> bool:
-    """Skeleton for v1-e41-t18's red run: every part collects every file, as before."""
-    return True
+    """Whether part `part` (from 1) collects `test_file` at all: not when the deal gives the file to
+    another part. Its own files, and a file the deal does not name, it collects."""
+    return part_of_file.get(test_file, part) == part
 
 
 def first_part_dealt_to(test_file: str, parts: int) -> int:
@@ -164,6 +177,27 @@ def pytest_addoption(parser: pytest.Parser) -> None:
 DEAL = pytest.StashKey[dict[str, int]]()
 
 
+def in_the_repository(config: pytest.Config, path: Path) -> str | None:
+    """`path` as the deal names test files: relative to the rootdir, with forward slashes."""
+    try:
+        return path.relative_to(config.rootpath).as_posix()
+    except ValueError:
+        try:
+            return path.resolve().relative_to(config.rootpath.resolve()).as_posix()
+        except ValueError:
+            return None
+
+
+def collected_here(config: pytest.Config, path: Path) -> bool:
+    """Whether this part collects the test file at `path`; every path, when there is no deal."""
+    chosen: tuple[int, int] | None = config.getoption("part")
+    deal = config.stash.get(DEAL, {})
+    if chosen is None or not deal:
+        return True
+    test_file = in_the_repository(config, path)
+    return test_file is None or collects(test_file, chosen[0], deal)
+
+
 def pytest_configure(config: pytest.Config) -> None:
     chosen: tuple[int, int] | None = config.getoption("part")
     deal: Path | None = config.getoption("files_to_parts")
@@ -173,10 +207,54 @@ def pytest_configure(config: pytest.Config) -> None:
         except OSError as error:
             raise pytest.UsageError(f"--files-to-parts: could not read {deal}: {error}") from None
         config.stash[DEAL] = files_to_parts(text, chosen[1])
+        # The paths the command names, which pytest_ignore_collect is not asked about: an affected
+        # set's files and any node id. A directory is no test file the deal names, so it stays.
+        named = config.invocation_params.dir
+        config.args[:] = [
+            argument
+            for argument in config.args
+            if collected_here(config, Path(named, argument.partition("::")[0]))
+        ]
+    if chosen is not None and not hasattr(config, "workerinput"):
+        config.pluginmanager.register(CollectionTimer(chosen), "run_in_parts_collection_timer")
     path: Path | None = config.getoption("record_durations")
     # An xdist worker's reports reach the controller, which writes the one file.
     if path is not None and not hasattr(config, "workerinput"):
         config.pluginmanager.register(DurationsRecorder(path), "run_in_parts_durations")
+
+
+def pytest_ignore_collect(collection_path: Path, config: pytest.Config) -> bool | None:
+    """A file the deal gives another part, found walking a directory, is never imported here."""
+    return None if collected_here(config, collection_path) else True
+
+
+class CollectionTimer:
+    """How long this part took to collect, from pytest's configuration: under xdist until the last
+    worker's collection reached the controller, which includes starting the workers. A runner's log
+    cannot say, because pytest's output to a pipe is buffered and its timestamps are its flushes'."""
+
+    def __init__(self, chosen: tuple[int, int]) -> None:
+        self.chosen = chosen
+        self.started = time.monotonic()
+        self.collected: float | None = None
+        self.workers = 0
+
+    def pytest_collection_finish(self) -> None:
+        self.collected = time.monotonic()
+
+    @pytest.hookimpl(optionalhook=True)
+    def pytest_xdist_node_collection_finished(self) -> None:
+        self.workers += 1
+        self.collected = time.monotonic()
+
+    def pytest_terminal_summary(self, terminalreporter: pytest.TerminalReporter) -> None:
+        if self.collected is None:
+            return
+        last = f", the last of {self.workers} workers" if self.workers else ""
+        terminalreporter.write_line(
+            f"part {self.chosen[0]} of {self.chosen[1]} collected in "
+            f"{self.collected - self.started:.1f} s{last} (tests/pytest_plugins/run_in_parts.py)"
+        )
 
 
 def pytest_report_header(config: pytest.Config) -> str | None:
@@ -184,8 +262,13 @@ def pytest_report_header(config: pytest.Config) -> str | None:
     if chosen is None:
         return None
     deal = config.stash.get(DEAL, {})
-    dealt = f" {len(deal)} whole files as the deal given says, the rest" if deal else ""
-    return f"part: {chosen[0]} of {chosen[1]},{dealt} test by test (tests/pytest_plugins/run_in_parts.py)"
+    if not deal:
+        return f"part: {chosen[0]} of {chosen[1]}, test by test (tests/pytest_plugins/run_in_parts.py)"
+    own = sum(part == chosen[0] for part in deal.values())
+    return (
+        f"part: {chosen[0]} of {chosen[1]}, collecting its own {own} of the deal's {len(deal)} whole "
+        "files and any file the deal does not name, test by test (tests/pytest_plugins/run_in_parts.py)"
+    )
 
 
 @pytest.hookimpl(trylast=True)

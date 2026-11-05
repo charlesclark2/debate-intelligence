@@ -71,8 +71,9 @@ def the_plugin() -> Any:
 def a_part(
     root: Path, tmp_path: Path, part: int, parts: int, deal: str | None, *arguments: str, workers: str = "0"
 ) -> tuple[list[str], list[str], str]:
-    """Part `part` of `parts` collected under `deal` (None: no `--files-to-parts`): its node ids, the
-    files its processes imported, and pytest's output."""
+    """Part `part` of `parts` under `deal` (None: no `--files-to-parts`): its node ids, the files its
+    processes imported, and pytest's output. With no workers it is collected; with workers it is run,
+    because xdist starts none for `--collect-only`, and its node ids are read from its PASSED lines."""
     imports = tmp_path / f"imports-{part}-of-{parts}-{workers}.txt"
     imports.write_text("", encoding="utf-8")
     dealing: list[str] = []
@@ -80,10 +81,10 @@ def a_part(
         written = tmp_path / f"files-to-parts-{part}-of-{parts}.json"
         written.write_text(deal, encoding="utf-8")
         dealing = [f"--files-to-parts={written}"]
+    how = ["--collect-only", "-q"] if workers == "0" else ["-v"]
     completed = run_pytest_in(
         root,
-        "--collect-only",
-        "-q",
+        *how,
         "-n",
         workers,
         "--part",
@@ -93,8 +94,20 @@ def a_part(
         environment={"IMPORTS_WRITTEN_TO": str(imports)},
     )
     assert completed.returncode in (0, 5), completed.stdout + completed.stderr
-    node_ids = [line for line in completed.stdout.splitlines() if "::" in line]
+    lines = completed.stdout.splitlines()
+    if workers == "0":
+        node_ids = [line for line in lines if "::" in line]
+    else:
+        assert f"created: {workers}/{workers} workers" in completed.stdout or not node_ids_in(lines), (
+            completed.stdout
+        )
+        node_ids = node_ids_in(lines)
     return node_ids, sorted(set(imports.read_text(encoding="utf-8").split())), completed.stdout
+
+
+def node_ids_in(lines: list[str]) -> list[str]:
+    """The tests a run under xdist passed, from `-v`'s `[gw0] [ 50%] PASSED test_a.py::test_a_0`."""
+    return sorted(line.split(" PASSED ")[1].split()[0] for line in lines if " PASSED " in line)
 
 
 def held(node_ids: list[str], test_file: str) -> int:
@@ -167,6 +180,19 @@ def test_a_part_given_only_other_parts_files_imports_none_rather_than_everything
     assert node_ids == []
     assert imported == []
     assert "no tests collected" in output or "no tests ran" in output
+
+
+def test_a_file_outside_the_rootdir_is_collected_and_dealt_test_by_test(tmp_path: Path) -> None:
+    """No deal names a file outside the rootdir, so every part collects it, as any file in no deal."""
+    root = an_invented_suite(tmp_path, SUITE)
+    outside = tmp_path / "elsewhere" / "test_outside.py"
+    outside.parent.mkdir()
+    outside.write_text(a_module(3, "outside"), encoding="utf-8")
+
+    parts = [a_part(root, tmp_path, part, 3, json.dumps(DEAL), str(outside)) for part in (1, 2, 3)]
+
+    assert [imported for _, imported, _ in parts] == [["test_outside.py"]] * 3
+    assert sorted(len(node_ids) for node_ids, _, _ in parts) == [1, 1, 1]
 
 
 # Nine files of 1 to 9 tests, and seconds for eight of them: test_i.py is in no record and counts as
@@ -293,7 +319,7 @@ def test_a_part_says_how_long_it_took_to_collect(tmp_path: Path, workers: str) -
     [line] = lines
     assert line.endswith(f" s{workers_named} (tests/pytest_plugins/run_in_parts.py)"), line
     seconds = float(line.removeprefix("part 1 of 3 collected in ").partition(" s")[0])
-    assert 0 < seconds < 60
+    assert 0 <= seconds < 60
     assert "part 1 of 1 collected in " in unsplit
     # Without `--part` the plugin does nothing, and says nothing.
     plain = run_pytest_in(

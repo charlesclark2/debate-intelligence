@@ -170,7 +170,8 @@ def test_a_part_given_only_other_parts_files_imports_none_rather_than_everything
 
 
 # Nine files of 1 to 9 tests, and seconds for eight of them: test_i.py is in no record and counts as
-# the record's median, and at a small number of parts test_h.py is heavier than a part's share.
+# the record's median (5.5 s). By hand: 70.5 s in all, so test_h.py's 30 s is heavier than a part's
+# share from three parts on (23.5 s), and is dealt test by test there.
 SIZED_SUITE = {
     f"test_{letter}.py": a_module(tests, letter)
     for tests, letter in zip(range(1, 10), "abcdefghi", strict=True)
@@ -216,9 +217,9 @@ def test_every_test_is_in_exactly_one_part_at_every_size_and_each_part_imports_o
     root = an_invented_suite(tmp_path, SIZED_SUITE)
     listing = named_in_a_file(root, tmp_path, sorted(SIZED_SUITE))
     deals = {parts: the_deal_at(tmp_path, parts) for parts in SIZES}
-    # The deal is by durations at every size but one: a single part holds the heavy file whole.
+    # The deal is by durations at every size; from three parts on test_h.py is spread.
     assert all(deals[parts].by_durations for parts in SIZES), {parts: deals[parts].why for parts in SIZES}
-    assert "test_h.py" in deals[2].spread
+    assert [parts for parts in SIZES if "test_h.py" in deals[parts].spread] == list(range(3, 9))
     commands = [(parts, part) for parts in SIZES for part in range(1, parts + 1)]
 
     with ThreadPoolExecutor(max_workers=8) as pool:

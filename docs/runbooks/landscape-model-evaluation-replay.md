@@ -38,6 +38,9 @@ A checkout replays only what was recorded under the prompt version and the scrub
   until it merges;
 * the first recording, under 1.0.0, only from a checkout of `dev` at `28d4c88` (`v1-e32-t39`'s merge) or
   earlier. A later checkout asks for 1.1.0 and stops with `MISSING_FIXTURE_ERROR`.
+* since `v1-e32-t46`, prompt 1.2.0, whose answers carry a stance, recorded by the record runbook's last
+  section. A checkout holding `v1-e32-t46` asks for 1.2.0, so it replays 1.1.0's recordings no more; they
+  stay on the Mac under their own keys, and replay from a checkout of `dev` before `v1-e32-t46`'s merge.
 
 ```bash
 cd /Users/charlesclark/Documents/debate/debate-intelligence-tool/debate-intelligence-worktrees/v1-e32-t40-model-stage-reads-the-argument-not-the-subject

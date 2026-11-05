@@ -742,11 +742,20 @@ it is there:
 | Column | What you write |
 |---|---|
 | `sample_row` | Already filled: the card's row number. Leave it as it is |
-| `position` | The position id the card argues, `none` for a card that argues no position, or `unsure` or nothing for a card you will not label. Only a position id or `none` is scored |
-| `also` | Optional. A second position id you accept for the card, when it fits two positions equally well. An answer naming either is scored right |
+| `position` | The position id the card argues, `at:` and the id for a card that answers a position (`at:politics-da`), `none` for a card that argues no position, or `unsure` or nothing for a card you will not label. Only a position id, with or without `at:`, or `none` is scored |
+| `also` | Optional. A second position id you accept for the card, when it fits two positions equally well, written the same way. An answer naming either is scored right |
+
+**Reading or answering (since `v1-e32-t46`).** A plain id says the card reads the position: it makes the
+position's own argument. `at:<id>` says it answers it: the other side reads it against the position, as a
+card in an affirmative file answering the politics DA does. `AT:` works as well as `at:`, and a space after
+the colon is ignored; `at:none`, or `at:` with no id, is refused. The model is asked the same question, and
+an answer naming your position with the other stance is scored wrong (`wrong_stance` in the breakdown). A
+placement is scored as answering when the model says so, or when its file was disclosed only by the side
+opposite the position's, which is how the report counts it too.
 
 A second label is a position id of the taxonomy, never `none`, and never the same as the row's
-`position`. A card labelled `none` takes none, since an answer naming any position is wrong for it. A
+`position` in both id and stance. The same id with the other stance (`politics-da` and `at:politics-da`)
+says you accept either stance. A card labelled `none` takes none, since an answer naming any position is wrong for it. A
 row you mark `unsure` or leave blank is not scored, so its `also` is not read. A sample without the
 `also` column scores exactly as before. The breakdown counts how many cards were scored right on their
 second label, and its table of label against answer stays on the first.
@@ -758,8 +767,8 @@ runs this in a checkout on the Mac that holds the store. It takes a few seconds:
 uv run debate-research --json landscape evaluate --caselist hspolicy26 --snapshot 2026-10-20 --sample ~/Documents/debate/landscape-review/policy-2026-27-nhi-coach-sample-labelled.csv --sample-rows ~/.debate-research/dev/landscape/local-classifier/hspolicy26/policy-2026-27-nhi-coach-sample.jsonl --check-sample
 ```
 
-It prints the labelled rows by the kind of their position, and the second labels by theirs: counts
-only. A label the taxonomy does not have, or a second label that breaks the rules above, is refused
+It prints the labelled rows by the kind of their position, by their stance (`by_stance`, answers and
+reads), and the second labels by their kind: counts only. A label the taxonomy does not have, or a second label that breaks the rules above, is refused
 with `EVALUATION_REFUSED` and the row number.
 
 ## Seeding a new taxonomy

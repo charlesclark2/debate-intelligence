@@ -202,6 +202,7 @@ async def _run(arguments: argparse.Namespace) -> int:
         topic=resolved.topic,
         caselist=caselist,
         through=through,
+        topic_map=taxonomies.topic_map(),
     )
     run = await PositionClassificationService(
         taxonomies=taxonomies,

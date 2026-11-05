@@ -7,9 +7,14 @@ module builds them from this machine's stores:
 * **the sources** are the parsed entries of one version directory of the caselist's parsed card
   store, the newest unless one is named;
 * **a source is on the topic** when one of its live disclosures (the suppression list neither stops
-  nor holds it, :func:`~debate_core.application.caselist.parse_sources.live_disclosures`) is dated
-  inside one of the topic's ranges for this caselist in `topics.yaml`, and, when a `through` date is
-  given, on or before it: the store as it stood at that snapshot (the position classifier, `v1-e32-t02`);
+  nor holds it, :func:`~debate_core.application.caselist.parse_sources.live_disclosures`) resolves to
+  the topic in `topics.yaml`, and, when a `through` date is given, is dated on or before it: the store
+  as it stood at that snapshot (the position classifier, `v1-e32-t02`). A disclosure resolves by its
+  snapshot's range, or first by a tournament entry its filename's tournament matches
+  (:meth:`~debate_core.domain.landscape.TopicMap.resolve_disclosure`, `v1-e32-t06`);
+* **the snapshots on the topic only through a tournament entry** are listed with how many of their
+  live disclosures the entry put on the topic and how many they hold in all, so that a report on one
+  says it reads part of a week (the PM's ruling of 2026-11-05);
 * **the caselist's names** are every school a disclosure's path names, with its team codes, whatever
   the date, so that seeding can take another school's name out of a heading;
 * **its teams** come from those disclosures' paths, read by the importer's own path parser: the
@@ -27,11 +32,17 @@ is not a position); nothing here writes, logs or returns them in a `repr`.
 
 from __future__ import annotations
 
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from datetime import date
 
 from debate_core.application.caselist.evidence_listing import LocalEvidence
-from debate_core.application.caselist.parse_sources import Disclosed, enumerate_sources, live_disclosures
+from debate_core.application.caselist.parse_sources import (
+    Disclosed,
+    EnumeratedSource,
+    enumerate_sources,
+    live_disclosures,
+)
 from debate_core.application.caselist.path_parser import (
     UNKNOWN_SCHOOL,
     UNKNOWN_TEAM_CODE,
@@ -40,10 +51,10 @@ from debate_core.application.caselist.path_parser import (
 from debate_core.application.caselist.suppression import load_suppression_state
 from debate_core.application.errors import DomainError
 from debate_core.application.ports.parsed_store import DocumentRecord, ParsedStore, SourceOutcome
-from debate_core.application.ports.suppression import SuppressionList
+from debate_core.application.ports.suppression import SuppressionList, SuppressionState
 from debate_core.arguments.landscape.seeding import SeedCard, SeedSource, SeedTeam
 from debate_core.domain.caselist import Disclosure
-from debate_core.domain.landscape import Topic
+from debate_core.domain.landscape import Topic, TopicMap, TournamentEntrySnapshot
 
 __all__ = ["SeedReading", "SeedingCannotStart", "read_seed_sources"]
 
@@ -75,6 +86,8 @@ class SeedReading:
     """The latest date among the on-topic disclosures read; None when no source was read."""
     disclosures: tuple[Disclosure, ...] = field(default=(), repr=False)
     """Every on-topic live disclosure of the sources read, as E30 records one, for the landscape report."""
+    tournament_entry_snapshots: tuple[TournamentEntrySnapshot, ...] = ()
+    """The snapshots on the topic only through a tournament entry, with their counts, in date order."""
 
 
 async def read_seed_sources(
@@ -86,15 +99,23 @@ async def read_seed_sources(
     caselist: str,
     version: str | None = None,
     through: date | None = None,
+    topic_map: TopicMap | None = None,
 ) -> SeedReading:
     """`caselist`'s parsed sources on `topic`, each with its disclosing teams and its cards' headings.
 
     With `through`, only disclosures dated on or before it count, so a source first disclosed later is
-    left out as off the topic.
+    left out as off the topic. `topic_map` is the whole of `topics.yaml`, whose other topics' tournament
+    entries can take a disclosure off this one; None reads `topic` alone.
     """
-    ranges = [one for one in topic.caselists if one.caselist == caselist]
-    if not ranges:
+    if not any(one.caselist == caselist for one in (*topic.caselists, *topic.tournaments)):
         raise SeedingCannotStart(f"topics.yaml gives {topic.id} no range of {caselist}")
+    topics = topic_map if topic_map is not None else TopicMap(topics=(topic,))
+    try:
+        mapped = topics.topic(topic.id)
+    except KeyError:
+        mapped = None
+    if mapped != topic:
+        raise SeedingCannotStart(f"the topic map's {topic.id} is not the topic being read")
     versions = await store.version_directories(caselist)
     if version is None:
         if not versions:
@@ -112,6 +133,15 @@ async def read_seed_sources(
                 if read.team_code != UNKNOWN_TEAM_CODE:
                     codes.add(read.team_code)
     state = await load_suppression_state(suppression)
+
+    def on_the_topic(disclosure: Disclosed) -> bool:
+        tournament = parse_disclosure_path(disclosure.path, event=topic.event).tournament
+        resolved = topics.resolve_disclosure(caselist, disclosure.provenance_date, tournament)
+        return resolved is not None and resolved.topic_id == topic.id
+
+    entry_snapshots = _tournament_entry_snapshots(
+        topics, topic, caselist, disclosed.values(), state, on_the_topic, through
+    )
     entries = await store.read_entries(caselist, version)
     parsed = [entry for entry in entries if entry.outcome is SourceOutcome.PARSED]
     sources: list[SeedSource] = []
@@ -123,8 +153,7 @@ async def read_seed_sources(
             [
                 disclosure
                 for disclosure in live_disclosures(enumerated, state)
-                if any(one.covers(caselist, disclosure.provenance_date) for one in ranges)
-                and (through is None or disclosure.provenance_date <= through)
+                if (through is None or disclosure.provenance_date <= through) and on_the_topic(disclosure)
             ]
             if enumerated is not None
             else []
@@ -150,7 +179,40 @@ async def read_seed_sources(
         caselist_names={school: tuple(sorted(codes)) for school, codes in sorted(names.items())},
         newest_disclosure=newest,
         disclosures=tuple(disclosures),
+        tournament_entry_snapshots=entry_snapshots,
     )
+
+
+def _tournament_entry_snapshots(
+    topics: TopicMap,
+    topic: Topic,
+    caselist: str,
+    sources: Iterable[EnumeratedSource],
+    state: SuppressionState,
+    on_the_topic: Callable[[Disclosed], bool],
+    through: date | None,
+) -> tuple[TournamentEntrySnapshot, ...]:
+    """Each snapshot on `topic` only through its tournament entries, with its live disclosures counted."""
+    live = [disclosure for source in sources for disclosure in live_disclosures(source, state)]
+    found: list[TournamentEntrySnapshot] = []
+    for day in sorted({disclosure.provenance_date for disclosure in live}):
+        if through is not None and day > through:
+            continue
+        resolved = topics.resolve(caselist, day)
+        if resolved is None or resolved.topic_id != topic.id or not resolved.tournament_entries_only:
+            continue
+        week = [disclosure for disclosure in live if disclosure.provenance_date == day]
+        found.append(
+            TournamentEntrySnapshot(
+                snapshot=day,
+                tournaments=tuple(
+                    entry.name for entry in topic.tournaments if entry.covers_snapshot(caselist, day)
+                ),
+                disclosures_on_topic=sum(1 for disclosure in week if on_the_topic(disclosure)),
+                disclosures=len(week),
+            )
+        )
+    return tuple(found)
 
 
 def _team(path: str, topic: Topic) -> SeedTeam:

@@ -97,6 +97,7 @@ __all__ = [
     "TopicMap",
     "TopicResolution",
     "TournamentEntry",
+    "TournamentEntrySnapshot",
     "tournament_key",
 ]
 
@@ -581,6 +582,23 @@ class TopicMap(DomainModel):
             if topic.range_covering(caselist, snapshot) is not None:
                 return _resolution(topic)
         return None
+
+
+class TournamentEntrySnapshot(DomainModel):
+    """A snapshot on a topic only through its tournament entries: a report on it reads part of a week."""
+
+    snapshot: date
+    tournaments: tuple[NonEmptyText, ...] = Field(
+        min_length=1, description="The public names of the entries covering the snapshot."
+    )
+    disclosures_on_topic: int = Field(ge=0, description="Its live disclosures the entries put on the topic.")
+    disclosures: int = Field(ge=0, description="Its live disclosures in all, on any topic or none.")
+
+    @model_validator(mode="after")
+    def _check(self) -> Self:
+        if self.disclosures_on_topic > self.disclosures:
+            raise ValueError("a snapshot's disclosures on the topic are some of its disclosures")
+        return self
 
 
 def _resolution(topic: Topic, *, tournament_entries_only: bool = False) -> TopicResolution:

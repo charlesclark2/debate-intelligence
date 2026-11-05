@@ -167,6 +167,7 @@ class AffAssignmentService:
             caselist=caselist,
             version=version,
             through=through,
+            topic_map=self._taxonomies.topic_map(),
         )
         taxonomy = self._taxonomies.taxonomy(resolved.topic.id)
         plan_texts = await self._read_plan_texts(reading, taxonomy, writes=True)

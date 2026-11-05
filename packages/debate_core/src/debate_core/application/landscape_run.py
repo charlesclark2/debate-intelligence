@@ -520,6 +520,7 @@ class LandscapeRunService:
             topic=resolved.topic,
             caselist=request.caselist,
             through=snapshot,
+            topic_map=self._taxonomies.topic_map(),
         )
         if not reading.sources:
             raise NothingToReport(

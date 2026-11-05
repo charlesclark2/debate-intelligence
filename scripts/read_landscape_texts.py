@@ -104,6 +104,7 @@ async def _read(arguments: argparse.Namespace) -> int:
         caselist=arguments.caselist,
         version=arguments.version,
         through=snapshot,
+        topic_map=repository.topic_map(),
     )
     negative = {
         source.sha256 for source in reading.sources if any(team.side is Side.NEG for team in source.teams)

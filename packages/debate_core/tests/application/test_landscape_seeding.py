@@ -20,7 +20,7 @@ from debate_core.application.landscape_seeding import SeedingCannotStart, SeedRe
 from debate_core.application.ports.parsed_store import SourceOutcome
 from debate_core.application.ports.suppression import ReasonCode, SuppressionAction, SuppressionEntry
 from debate_core.domain.caselist import Side
-from debate_core.domain.landscape import Topic
+from debate_core.domain.landscape import Topic, TopicMap
 from debate_core.integrations.local import BLOB_DIRECTORY, FsEvidenceObjectStore
 from debate_core.integrations.local.parsed_store import LocalParsedStore
 from debate_core.testing.fakes.suppression import InMemoryAppendOnlyRecord, empty_suppression_list
@@ -213,3 +213,114 @@ def test_a_readings_repr_holds_no_card_or_team() -> None:
         sources=(),
     )
     assert "sources" not in repr(reading)
+
+
+# ------------------------------------------------------------------------------------------------
+# v1-e32-t06: a snapshot shared by two topics, split by the tournament each disclosure names
+# ------------------------------------------------------------------------------------------------
+
+LD_CASELIST = "hsld99"
+LD_OLD = "ld-sample-old-topic"
+LD_NEW = "ld-sample-new-topic"
+SHARED_WEEK = "2026-09-01"
+HARBOR_NEG = "School One/CodeOne/School One-CodeOne-Neg-Harbor City Classic-Round 1.docx"
+HARBOR_RR_AFF = "School Two/CodeTwo/School Two-CodeTwo-Aff-Harbor City Round Robin-Round 2.docx"
+LAKESIDE_AFF = "School Three/CodeThree/School Three-CodeThree-Aff-Lakeside Open-Round 1.docx"
+LAKESIDE_NEG = "School One/CodeOne/School One-CodeOne-Neg-Lakeside Open-Round 4.docx"
+
+
+def ld_topics() -> TopicMap:
+    return TopicMap.model_validate(
+        {
+            "schema_version": 1,
+            "topics": [
+                {
+                    "id": LD_OLD,
+                    "event": "LD",
+                    "caselists": [{"caselist": LD_CASELIST, "from": "2026-07-01", "to": "2026-08-31"}],
+                },
+                {
+                    "id": LD_NEW,
+                    "event": "LD",
+                    "caselists": [{"caselist": LD_CASELIST, "from": "2026-09-04", "to": "2026-12-31"}],
+                    "tournaments": [
+                        {
+                            "caselist": LD_CASELIST,
+                            "name": "Harbor City Classic",
+                            "spellings": ["harborcity"],
+                            "from": SHARED_WEEK,
+                            "to": SHARED_WEEK,
+                        }
+                    ],
+                },
+            ],
+        }
+    )
+
+
+async def read_ld(data_dir: Path, topic_id: str, *, topic_map: TopicMap | None = None) -> SeedReading:
+    topics = ld_topics()
+    return await read_seed_sources(
+        store=LocalParsedStore(data_dir),
+        local=local(data_dir),
+        suppression=empty_suppression_list(),
+        topic=topics.topic(topic_id),
+        caselist=LD_CASELIST,
+        topic_map=topics if topic_map is None else topic_map,
+    )
+
+
+@pytest.mark.anyio
+async def test_a_shared_snapshot_reads_only_the_disclosures_its_tournament_entry_puts_on_the_topic(
+    tmp_path: Path,
+) -> None:
+    planted = PlantedCaselist(tmp_path, LD_CASELIST)
+    harbor = planted.source("harbor", SPENDING, disclosures=[(SHARED_WEEK, HARBOR_NEG)])
+    round_robin = planted.source("round-robin", SPENDING, disclosures=[(SHARED_WEEK, HARBOR_RR_AFF)])
+    planted.source("lakeside", SPENDING, disclosures=[(SHARED_WEEK, LAKESIDE_AFF)])
+    planted.source("earlier", SPENDING, disclosures=[("2026-08-25", LAKESIDE_NEG)])
+    later = planted.source("later", SPENDING, disclosures=[("2026-09-08", LAKESIDE_NEG)])
+
+    new = await read_ld(planted.data_dir, LD_NEW)
+    assert sorted(source.sha256 for source in new.sources) == sorted([harbor, round_robin, later])
+    assert [
+        (one.snapshot, one.tournaments, one.disclosures_on_topic, one.disclosures)
+        for one in new.tournament_entry_snapshots
+    ] == [(date(2026, 9, 1), ("Harbor City Classic",), 2, 3)]
+
+    old = await read_ld(planted.data_dir, LD_OLD)
+    assert len(old.sources) == 1
+    assert old.sources[0].teams[0].tournament == "Lakeside Open"
+    assert old.tournament_entry_snapshots == ()
+
+
+@pytest.mark.anyio
+async def test_a_reading_through_a_date_before_the_shared_snapshot_lists_no_partial_week(
+    tmp_path: Path,
+) -> None:
+    planted = PlantedCaselist(tmp_path, LD_CASELIST)
+    planted.source("harbor", SPENDING, disclosures=[(SHARED_WEEK, HARBOR_NEG)])
+    planted.source("later", SPENDING, disclosures=[("2026-09-08", LAKESIDE_NEG)])
+    topics = ld_topics()
+    reading = await read_seed_sources(
+        store=LocalParsedStore(planted.data_dir),
+        local=local(planted.data_dir),
+        suppression=empty_suppression_list(),
+        topic=topics.topic(LD_NEW),
+        caselist=LD_CASELIST,
+        through=date(2026, 8, 31),
+        topic_map=topics,
+    )
+    assert reading.sources == ()
+    assert reading.tournament_entry_snapshots == ()
+
+
+@pytest.mark.anyio
+async def test_a_topic_the_map_does_not_hold_is_refused(tmp_path: Path) -> None:
+    planted = PlantedCaselist(tmp_path, LD_CASELIST)
+    planted.source("harbor", SPENDING, disclosures=[(SHARED_WEEK, HARBOR_NEG)])
+    elsewhere = TopicMap.model_validate(
+        {"schema_version": 1, "topics": [ld_topics().topic(LD_OLD).model_dump(by_alias=True)]}
+    )
+    with pytest.raises(SeedingCannotStart, match="is not the topic being read"):
+        await read_ld(planted.data_dir, LD_NEW, topic_map=elsewhere)

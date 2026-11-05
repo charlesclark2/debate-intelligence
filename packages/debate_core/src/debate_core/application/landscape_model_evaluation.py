@@ -1022,6 +1022,7 @@ class LandscapeModelEvaluationService:
             topic=topic,
             caselist=caselist,
             through=through,
+            topic_map=self._taxonomies.topic_map(),
         )
         return _Prepared(reading=reading, taxonomy=taxonomy, labelled=labelled, through=through)
 

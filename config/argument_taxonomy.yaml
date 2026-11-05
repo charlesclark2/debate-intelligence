@@ -464,8 +464,8 @@ arguments:
         - {text: "{query} no impact to inequality"}
 
   # ---------------------------------------------------------------------------------------------
-  # Framing. The coach's content (2026-11-02), written as templates for his review. Since v1-e32-t06 the
-  # de-extinction topic's preset gives {topic}; on any other LD topic these templates take it from the request.
+  # Framing. The coach's content (2026-11-02), written as templates for his review. The November-December de-extinction resolution is not committed yet (v1-e32-t06), so
+  # these templates take {topic} from the request until then.
   # ---------------------------------------------------------------------------------------------
 
   - id: util

@@ -54,9 +54,9 @@ file here on every pull request.
 ## Checking that the feeds answer
 
 A URL listed here has not been shown to work by being listed. The operator's feed check fetches each
-configured feed once and prints, per feed, the status, the number of entries and how many of them
-carried a date. It prints nothing from an entry. Run it from the repository root, on a machine with
-network access:
+configured feed once and prints, per feed, the status, the number of entries, how many of them
+carried a date and the newest of those dates. It prints nothing from an entry. Run it from the
+repository root, on a machine with network access:
 
 ```bash
 uv run python -m debate_core.integrations.discovery.feed_check --feeds-dir config/feeds
@@ -64,3 +64,17 @@ uv run python -m debate_core.integrations.discovery.feed_check --feeds-dir confi
 
 It exits with status 1 when any feed failed. A feed that answers `HTTP 200` with dated entries is
 ready for the coach's review; one that fails or carries no dates is worth replacing.
+
+A feed that answers but cannot be parsed gets a second line, `why:`, in counts and statuses only:
+the content type and encoding the server declared, the body's size, what comes before its first
+markup and what kind of markup that is (an XML declaration, an HTML page), the XML parser's error
+with its line and column, how many control characters XML forbids and how many bare `&` the body
+holds, whether it is UTF-8, and whether it would parse with leading whitespace removed. That tells a
+publisher serving broken XML or a web page from a parser refusing a valid feed.
+
+To check a feed before it is added, give its URL instead; `--url` may be repeated, and the rows say
+`candidate` for the topic and the URL's host for the publisher:
+
+```bash
+uv run python -m debate_core.integrations.discovery.feed_check --url https://publisher.example.org/feed.xml
+```

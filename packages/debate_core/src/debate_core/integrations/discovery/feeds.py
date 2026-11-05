@@ -70,7 +70,7 @@ from debate_core.domain.enums import SourceType
 from debate_core.domain.search import SearchFilters
 from debate_core.integrations.discovery.feed_cache import CachedFeed, FeedCache
 from debate_core.integrations.discovery.feed_config import FeedConfig, FeedSource, feeds_of
-from debate_core.integrations.discovery.feed_parsing import FeedEntry, FeedUnreadable, parse_feed
+from debate_core.integrations.discovery.feed_parsing import FeedEntry, FeedUnreadable, ParsedFeed, parse_feed
 from debate_core.integrations.discovery.http_failures import provider_error_for_status
 from debate_core.integrations.discovery.redaction import logger
 
@@ -79,6 +79,7 @@ __all__ = [
     "FEED_ACCEPT",
     "MAX_FEED_BYTES",
     "PROVIDER_NAME",
+    "FeedBody",
     "FeedFetcher",
     "FeedProvider",
     "FetchedFeed",
@@ -164,6 +165,17 @@ def _age_key(published_at: datetime | None) -> tuple[bool, float]:
 
 
 @dataclass(frozen=True, slots=True)
+class FeedBody:
+    """A feed's `200` answer before parsing: the body, decoded from its transfer encoding, and headers."""
+
+    body: bytes
+    etag: str | None = None
+    last_modified: str | None = None
+    content_type: str | None = None
+    content_encoding: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
 class FetchedFeed:
     """One feed's entries, and whether they came from the cache on a `304`."""
 
@@ -192,13 +204,40 @@ class FeedFetcher:
     async def fetch(self, url: str) -> FetchedFeed:
         """The feed's entries; raises a :class:`ProviderError` for every way it can fail."""
         cached = self._cache.get(url)
-        headers = cached.conditional_headers if cached is not None else {}
+        answer = await self._get(url, cached.conditional_headers if cached is not None else {})
+        if answer is None:
+            if cached is None:
+                raise ProviderUnavailable(self._provider, "HTTP 304 for a feed with nothing cached")
+            return FetchedFeed(cached.entries, unchanged=True)
+        parsed = self.read(answer)
+        self._keep(
+            CachedFeed(url=url, etag=answer.etag, last_modified=answer.last_modified, entries=parsed.entries)
+        )
+        return FetchedFeed(parsed.entries, unchanged=False)
+
+    async def fetch_body(self, url: str) -> FeedBody:
+        """One unconditional `GET` of the feed, unparsed: the operator's feed check reads it (v1-e07-t14).
+
+        Fails as :meth:`fetch` does for every reason but an unreadable body, which :meth:`read` names.
+        """
+        answer = await self._get(url, {})
+        if answer is None:
+            raise ProviderUnavailable(self._provider, "HTTP 304 for a feed with nothing cached")
+        return answer
+
+    def read(self, answer: FeedBody) -> ParsedFeed:
+        """Parse a fetched body; :class:`ProviderUnavailable` naming why when it is not a feed."""
+        try:
+            return parse_feed(answer.body)
+        except FeedUnreadable as error:
+            raise ProviderUnavailable(self._provider, f"unreadable feed: {error}") from error
+
+    async def _get(self, url: str, headers: dict[str, str]) -> FeedBody | None:
+        """The `200` answer's body and headers, or `None` for `304 Not Modified`."""
         try:
             async with self._client.stream("GET", url, headers=headers) as response:
                 if response.status_code == 304:
-                    if cached is None:
-                        raise ProviderUnavailable(self._provider, "HTTP 304 for a feed with nothing cached")
-                    return FetchedFeed(cached.entries, unchanged=True)
+                    return None
                 failure = provider_error_for_status(
                     self._provider, response.status_code, response.headers, now=self._clock.now()
                 )
@@ -206,19 +245,17 @@ class FeedFetcher:
                     raise failure
                 if response.status_code != 200:
                     raise ProviderUnavailable(self._provider, f"HTTP {response.status_code}: not a feed")
-                body = await self._read(response)
-                etag = response.headers.get("etag")
-                last_modified = response.headers.get("last-modified")
+                return FeedBody(
+                    body=await self._read(response),
+                    etag=response.headers.get("etag"),
+                    last_modified=response.headers.get("last-modified"),
+                    content_type=response.headers.get("content-type"),
+                    content_encoding=response.headers.get("content-encoding"),
+                )
         except httpx.TimeoutException as error:
             raise ProviderUnavailable(self._provider, "timed out") from error
         except httpx.HTTPError as error:
             raise ProviderUnavailable(self._provider, f"transport failure: {type(error).__name__}") from error
-        try:
-            parsed = parse_feed(body)
-        except FeedUnreadable as error:
-            raise ProviderUnavailable(self._provider, f"unreadable feed: {error}") from error
-        self._keep(CachedFeed(url=url, etag=etag, last_modified=last_modified, entries=parsed.entries))
-        return FetchedFeed(parsed.entries, unchanged=False)
 
     async def _read(self, response: httpx.Response) -> bytes:
         declared = response.headers.get("content-length")

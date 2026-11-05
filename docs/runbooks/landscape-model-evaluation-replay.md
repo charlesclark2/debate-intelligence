@@ -41,6 +41,10 @@ A checkout replays only what was recorded under the prompt version and the scrub
 * since `v1-e32-t46`, prompt 1.2.0, whose answers carry a stance, recorded by the record runbook's last
   section. A checkout holding `v1-e32-t46` asks for 1.2.0, so it replays 1.1.0's recordings no more; they
   stay on the Mac under their own keys, and replay from a checkout of `dev` before `v1-e32-t46`'s merge.
+* since `v1-e32-t49`, prompt 1.3.0, recorded on `deep_audit` only by the record runbook's last section. A
+  checkout holding `v1-e32-t49` asks for 1.3.0; 1.2.0's recordings on both routes keep their keys and replay
+  from a checkout of `dev` before `v1-e32-t49`'s merge, which scores them as recorded (23 of 33 and 21 of
+  37), without the own-side rule.
 
 ```bash
 cd /Users/charlesclark/Documents/debate/debate-intelligence-tool/debate-intelligence-worktrees/v1-e32-t40-model-stage-reads-the-argument-not-the-subject

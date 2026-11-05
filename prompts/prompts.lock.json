@@ -30,6 +30,11 @@
         "body_sha256": "9e4817bf0eb29e4394aad5f9f9ebb04b5d4f85c3b2cb0dac907ce07ba57718b1",
         "output_schema": "debate_core.domain.landscape_classification.ModelStancedPositionAnswers",
         "task_class": "high_volume"
+      },
+      "1.3.0": {
+        "body_sha256": "2d82c576d4021e2cdb452d839ca05cfe389be294e1b51fd60a204764b322107f",
+        "output_schema": "debate_core.domain.landscape_classification.ModelStancedPositionAnswers",
+        "task_class": "high_volume"
       }
     },
     "model.repair": {

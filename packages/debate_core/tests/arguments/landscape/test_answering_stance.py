@@ -3,8 +3,9 @@
 
 Every expected value is written by hand from the invented taxonomy below. No card, heading or tag is real.
 
-A placement's stance, as scored, is the report's: ANSWERS when its role is ANSWERS, or when every readable
-side its file was disclosed on is opposite the position's side; READS otherwise.
+A placement's stance, as scored, is the report's: READS when every readable side its file was disclosed on is
+the position's own (`v1-e32-t49`, whatever its role); otherwise ANSWERS when its role is ANSWERS, or when
+every readable side is opposite the position's side; READS otherwise.
 """
 
 from __future__ import annotations
@@ -161,7 +162,13 @@ def test_an_answer_without_a_stance_keeps_the_role_the_headings_give(
 @pytest.mark.parametrize(
     ("position_id", "role", "sides", "stance"),
     [
-        ("politics-da", PositionRole.ANSWERS, {"NEG"}, Stance.ANSWERS),
+        ("politics-da", PositionRole.ANSWERS, {"NEG"}, Stance.READS),
+        ("politics-da", PositionRole.ANSWERS, {"CON", "UNKNOWN"}, Stance.READS),
+        ("politics-da", PositionRole.ANSWERS, {"AFF"}, Stance.ANSWERS),
+        ("politics-da", PositionRole.ANSWERS, {"AFF", "NEG"}, Stance.ANSWERS),
+        ("politics-da", PositionRole.ANSWERS, set[str](), Stance.ANSWERS),
+        ("rural-adv", PositionRole.ANSWERS, {"AFF"}, Stance.READS),
+        ("condo-bad", PositionRole.ANSWERS, {"NEG"}, Stance.ANSWERS),
         ("politics-da", PositionRole.READS, {"AFF"}, Stance.ANSWERS),
         ("politics-da", PositionRole.READS, {"AFF", "UNKNOWN"}, Stance.ANSWERS),
         ("politics-da", PositionRole.READS, {"NEG"}, Stance.READS),
@@ -176,7 +183,7 @@ def test_an_answer_without_a_stance_keeps_the_role_the_headings_give(
         ("condo-bad", PositionRole.ANSWERS, {"AFF"}, Stance.ANSWERS),
     ],
 )
-def test_a_placement_answers_by_its_role_or_a_file_read_only_by_the_other_side(
+def test_a_placement_reads_on_its_own_side_and_otherwise_answers_by_its_role_or_the_other_side(
     position_id: str, role: PositionRole, sides: set[str], stance: Stance
 ) -> None:
     assert scored_stance(TAXONOMY, position_id, role, frozenset(sides)) is stance
@@ -205,6 +212,20 @@ def test_an_answering_label_is_written_with_the_prefix() -> None:
             Stance.ANSWERS,
             placed("politics-da", role=PositionRole.ANSWERS),
             {"NEG"},
+            CardOutcome.WRONG_STANCE,
+        ),
+        (
+            "politics-da",
+            Stance.READS,
+            placed("politics-da", role=PositionRole.ANSWERS),
+            {"NEG"},
+            CardOutcome.CORRECT,
+        ),
+        (
+            "politics-da",
+            Stance.ANSWERS,
+            placed("politics-da", role=PositionRole.ANSWERS),
+            {"AFF", "NEG"},
             CardOutcome.CORRECT,
         ),
         ("politics-da", Stance.ANSWERS, placed("spending-da"), {"AFF"}, CardOutcome.WRONG_POSITION_SAME_KIND),

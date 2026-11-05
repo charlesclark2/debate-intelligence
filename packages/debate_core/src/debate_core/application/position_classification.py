@@ -35,7 +35,11 @@ parsed sources on the topic, with their disclosing teams):
    and count is the same with it or without it.
 
 It returns every item's :class:`~debate_core.domain.landscape_classification.PositionClassification`
-for the report, with counts for the run's summary.
+for the report, with counts for the run's summary. Each result, stage one's or the model's, takes its role
+from its own file's side as it is returned (:func:`~debate_core.arguments.landscape.side_role.on_own_side`,
+`v1-e32-t49`): an item in a file disclosed only on its position's own side reads it, whatever its answer
+heading or the model's stance says. The cache keeps the role stage one or the model gave, since items read
+alike in files on different sides share a key.
 """
 
 from __future__ import annotations
@@ -80,6 +84,7 @@ from debate_core.arguments.landscape.review_queue import (
     needs_review,
 )
 from debate_core.arguments.landscape.seeding import SeedCard, SeedSource
+from debate_core.arguments.landscape.side_role import on_own_side
 from debate_core.arguments.landscape.source_headings import CaselistNames
 from debate_core.arguments.landscape.tag_scrub import DisclosedNames, card_tag, code_words
 from debate_core.domain.landscape import Taxonomy
@@ -243,7 +248,11 @@ class PositionClassificationService:
         by_kind: dict[ItemKind, Counter[str]] = {ItemKind.SECTION: Counter(), ItemKind.CARD: Counter()}
         below = counted = 0
         for one in read:
-            result = model.placement(one) or one.result
+            result = on_own_side(
+                taxonomy,
+                model.placement(one) or one.result,
+                [team.side.value for team in one.source.teams],
+            )
             item = one.item
             classifications.append(_classification(item, result))
             by_kind[item.kind][_count_key(result)] += 1

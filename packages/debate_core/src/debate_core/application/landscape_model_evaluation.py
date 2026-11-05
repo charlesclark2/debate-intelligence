@@ -59,11 +59,14 @@ from debate_core.arguments.landscape.evaluation_breakdown import (
     ANSWERS_PREFIX,
     CardBreakdown,
     CardOutcome,
+    GenericAnswers,
     LabelledScore,
     Score,
     StratumScore,
     card_outcome,
     deterministic_placement,
+    generic_answer_counts,
+    generic_positions,
     label_kind,
     labelled_as,
     model_alone_score,
@@ -654,10 +657,17 @@ class EvaluationBreakdown:
     """Its hits in this prompt's repair cassettes filed under the caselist, which that scan does not read."""
     repair_cassettes: int = 0
     """How many repair cassettes those are."""
+    generic: Mapping[str, str] = field(default_factory=dict[str, str])
+    """The taxonomy's generic positions, id to kind (:func:`generic_positions`, `v1-e32-t49`)."""
 
     @property
     def outcomes(self) -> dict[str, int]:
         return outcome_counts(self.cards)
+
+    @property
+    def generic_answers(self) -> GenericAnswers:
+        """The model's answers naming a generic position, on their own (`v1-e32-t49`)."""
+        return generic_answer_counts(self.cards, self.generic)
 
     @property
     def model_set(self) -> Score:
@@ -726,6 +736,7 @@ async def break_down_labelled_cards(
             for hit in repair_cassette_hits(f"repair cassette {number}", text, names)
         ),
         repair_cassettes=len(repairs),
+        generic=generic_positions(taxonomy),
     )
 
 

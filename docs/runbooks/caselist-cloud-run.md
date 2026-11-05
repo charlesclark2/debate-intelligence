@@ -21,7 +21,7 @@ agent session never applies, pushes or calls AWS.
 | The run's VPC, subnets, security group | `debate-dev-caselist-run`: two public subnets, no inbound rule, outbound HTTPS, an S3 gateway endpoint | the same, `debate-prod-caselist-run`, at the promotion |
 | Cluster, image repository, log group | `debate-dev-caselist-run` | `debate-prod-caselist-run` |
 | Run task definition | `debate-dev-caselist-run`: Fargate, arm64, 8 vCPU, 16 GB, 100 GiB, `debate-research --json caselist pull` under a 6-hour deadline, as the run role | the same |
-| Run schedule (apply B) | `debate-dev-caselist-run`, Wednesdays 06:00 America/Chicago, **created disabled** | the same |
+| Run schedule (apply B) | `debate-dev-caselist-run`, Wednesdays 06:00 America/Chicago, **created disabled**; a launch AWS refused is tried again, three times within the hour (`v1-e40-t42`) | the same |
 | Login task and schedule (apply B) | t02's, Wednesdays 03:00 America/Chicago, now on this network and image | the same |
 | The deployer: pushes the image, registers a run task definition, starts a run | `DebateDevCaselistRunDeployer` | `DebateProdCaselistRunDeployer` |
 | Its SSO profile | `debate-dev-caselist-run-deployer` | `debate-prod-caselist-run-deployer` |
@@ -1274,6 +1274,65 @@ hand is
 is [caselist-cutover.md](caselist-cutover.md)'s, and falling back to the Mac is the PM's decision. A
 run on an image built before `v1-e40-t28` still names `debate-research caselist pull` as its fix;
 the rule holds for that email too.
+
+## A launch AWS refused
+
+When the Wednesday schedule fires and ECS refuses to start the task, **no task exists**. There is
+no task-stopped email (there was no task to stop), no log stream in `debate-dev-caselist-run`, and
+no run record. On 2026-11-04 the login ran at 03:00, and at 06:00 the run's RunTask was answered
+`ServerException`, `Internal Error.`: an AWS-side fault. Nothing tried again, and the week ran only
+because the operator started the same task definition by hand the next day.
+
+**Since `v1-e40-t42` the schedule tries again.** Both schedules, the run's and the login's, retry a
+refused launch up to three times, all within an hour of the scheduled time
+([run_task.tf](../../infrastructure/modules/caselist_run/run_task.tf),
+[login_task.tf](../../infrastructure/modules/caselist_run/login_task.tf)). What reaches the coach:
+
+* **At once, for each refused try:** an email from the rule `debate-dev-caselist-launch-refused`,
+  `A dev caselist schedule asked ECS to start <task definition> at <time>, and ECS refused it: error
+  <error>, failure <failure>.` It comes for an answer with an error, such as 2026-11-04's, and for an
+  answer that carries a `failures` entry instead, such as no Fargate capacity. One email per try, so a
+  launch refused twice and then started sends two.
+* **When every try was refused,** or the error is one AWS never retries: the dead letter in
+  `debate-dev-caselist-run-dlq` (or `-login-dlq`), and the `ALARM: "debate-dev-caselist-schedule-failed"`
+  email, within about ten minutes of the last try (on 2026-11-04, 7.5 minutes:
+  [caselist-run-alerts.md](caselist-run-alerts.md#when-an-alert-arrives)). The message's
+  `RETRY_ATTEMPTS` says how many tries were made, and `ERROR_CODE` and `ERROR_MESSAGE` what ECS
+  answered.
+* No AWS page says whether Scheduler retries an answer that carries `failures`. If it does not, that
+  launch sends the rule's email and nothing more: no dead letter, no alarm.
+
+**Why a retry cannot make a second run.** Scheduler tries again only when the RunTask call failed. A
+run that started is a RunTask that returned a task, and Scheduler never invokes that Wednesday
+again, whatever the task then does. A refused launch started no container, downloaded nothing and
+took no lock. If ECS ever placed a task *and* answered with an error, the retry's task would meet the
+bucket's run lock, taken before anything is restored or fetched, and stop refused while the first run
+holds it. A run takes the best part of an hour (56 minutes on 2026-10-28), and the retries come well
+before that. [run_task.tf](../../infrastructure/modules/caselist_run/run_task.tf) says it in full.
+
+**What to do.**
+
+1. **Wait until 07:00 America/Chicago.** Until then the schedule may still be trying. Never start a run
+   by hand on a Wednesday before 07:00.
+2. **Did a task start?** As break-glass, read-only:
+
+**Operator command** (expected runtime under 1 min)
+Where: your Mac, anywhere
+```bash
+aws ecs list-tasks --profile debate-admin --region us-east-1 --cluster debate-dev-caselist-run --family debate-dev-caselist-run --desired-status RUNNING --query 'taskArns' --output text
+```
+   A task ARN means a retry started the run: nothing to do. The refusal emails were notice only.
+   Nothing printed, after 07:00, means the week has no run.
+3. **No run that week:** send the PM the emails and the dead letter, read as
+   [caselist-run-alerts.md](caselist-run-alerts.md#when-an-alert-arrives) says. A run by hand is the
+   PM's word, then
+   [Step 8's "One run by hand"](#step-8--the-seed-bucket-mode-and-one-run-by-hand-at-the-cutover-after-v1-e40-t04),
+   as on 2026-11-05. Emptying the queue afterwards is housekeeping: since `v1-e40-t42` the alarm
+   counts dead letters as they arrive, so the next one emails whatever the queue still holds.
+
+A refused launch of the **login** looks the same in `-login-dlq`, and the run three hours later uses
+the previous token if it still works. A refused login is not this: it is a task that started and
+stopped non-zero, which emails `Weekly caselist login failed`, and it is never retried.
 
 ## A run refused for an expired login
 

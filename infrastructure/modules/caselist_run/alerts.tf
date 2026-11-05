@@ -10,7 +10,9 @@
 #                                             the cutover's first recorded run
 #   debate-<env>-caselist-login-dlq           what each schedule could not start, kept 14 days
 #   debate-<env>-caselist-run-dlq
-#   debate-<env>-caselist-schedule-failed     an alarm on either queue holding a message
+#   debate-<env>-caselist-schedule-failed     an alarm on a message sent to either queue
+#   debate-<env>-caselist-launch-refused      a RunTask by either schedule's role that ECS refused,
+#                                             or answered with a failure (v1-e40-t42)
 #   debate-<env>-caselist-credentials-*       the CloudTrail rules of ADR-0020 (2): a change to the
 #   debate-<env>-caselist-login-*             key, either secret's policy, the login role or its
 #   debate-<env>-caselist-password-read       task definition; a read of the password by anyone but
@@ -29,6 +31,7 @@ locals {
   login_stopped_rule_name = "${var.name_prefix}-login-stopped"
   late_run_alarm_name     = "${var.name_prefix}-run-late"
   schedule_alarm_name     = "${var.name_prefix}-schedule-failed"
+  launch_refused_rule     = "${var.name_prefix}-launch-refused"
 
   # ADR-0020 (6): one per run that writes its record, so a week with none breaches.
   runs_recorded_namespace = "debate/caselist-run"
@@ -161,6 +164,42 @@ locals {
     }
   })
 
+  # v1-e40-t42, the PM's ruling of 2026-11-05. A RunTask by the login's or the run's scheduler role
+  # that ECS refused with an error (2026-11-04's ServerException), or answered with an entry in
+  # `failures` (no capacity, for one) and so started nothing. No AWS page says whether Scheduler
+  # counts a 200 carrying `failures` as a failed invocation, so its retry and its dead-letter queue
+  # may never see that one: this rule does not rely on them. Each try is a CloudTrail event of its
+  # own, so a launch refused and then retried emails once per refused try. A field inside an array
+  # of objects matches when any element's does, as task_stopped_pattern's containers do, so an empty
+  # `failures` (a task started) matches nothing. The roles by session, as login-task-changed names
+  # the login's: the trailing slash keeps a role named like one of these out.
+  launch_refused_pattern = jsonencode({
+    source        = ["aws.ecs"]
+    "detail-type" = ["AWS API Call via CloudTrail"]
+    detail = {
+      eventSource = ["ecs.amazonaws.com"]
+      eventName   = ["RunTask"]
+      userIdentity = { arn = [
+        { prefix = "${local.assumed_role_arn_prefix}${var.name_prefix}-scheduler/" },
+        { prefix = "${local.assumed_role_arn_prefix}${var.name_prefix}-run-scheduler/" },
+      ] }
+      "$or" = [
+        { errorCode = [{ exists = true }] },
+        { responseElements = { failures = { reason = [{ exists = true }] } } },
+      ]
+    }
+  })
+
+  launch_refused_input_paths = {
+    principal       = "$.detail.userIdentity.arn"
+    time            = "$.detail.eventTime"
+    error           = "$.detail.errorCode"
+    failure         = "$.detail.responseElements.failures[0].reason"
+    task_definition = "$.detail.requestParameters.taskDefinition"
+  }
+
+  launch_refused_message = "\"A ${var.environment} caselist schedule asked ECS to start <task_definition> at <time>, and ECS refused it: error <error>, failure <failure>. No task started. A refused start is tried again up to ${local.schedule_retry_attempts} times within the hour, and when every try is refused the alarm ${local.schedule_alarm_name} emails too. The schedule's role: <principal>. docs/runbooks/caselist-cloud-run.md, A launch AWS refused.\""
+
   # What the coach reads: the event, who, when, and whether it was refused. Never a value.
   credential_event_input_paths = {
     event     = "$.detail.eventName"
@@ -202,7 +241,7 @@ locals {
             "aws:SourceArn" = concat(
               [aws_cloudwatch_event_rule.task_stopped["run"].arn, aws_cloudwatch_event_rule.task_stopped["login"].arn],
               [for name in sort(keys(local.credential_write_rules)) : aws_cloudwatch_event_rule.credential_write[name].arn],
-              [aws_cloudwatch_event_rule.password_read.arn],
+              [aws_cloudwatch_event_rule.password_read.arn, aws_cloudwatch_event_rule.launch_refused.arn],
             )
           }
         }
@@ -322,8 +361,9 @@ resource "aws_cloudwatch_metric_alarm" "late_run" {
 # ---------------------------------------------------------------------------------------------
 
 # Where EventBridge Scheduler puts an invocation it could not deliver: a RunTask refused, a role it
-# could not assume. Neither schedule retries (login_task.tf, run_task.tf), so each failure is here
-# at once. The message names the schedule. Encrypted with SQS's own key.
+# could not assume. A retryable error is here once the schedule's three tries within the hour are
+# spent (v1-e40-t42; login_task.tf, run_task.tf), a permanent one at once. The message names the
+# schedule, the error, and the tries in RETRY_ATTEMPTS. Encrypted with SQS's own key.
 # tflint-ignore: aws_resource_missing_tags
 resource "aws_sqs_queue" "schedule_dead_letters" {
   for_each = toset(["login", "run"])
@@ -333,23 +373,38 @@ resource "aws_sqs_queue" "schedule_dead_letters" {
   sqs_managed_sse_enabled   = true
 }
 
-# Either queue holding a message. One alarm over both, as ADR-0020 (8) counts it: the email names the
+# A message sent to either queue. One alarm over both, as ADR-0020 (8) counts it: the email names the
 # alarm, and the queue that holds the message names the schedule.
+#
+# It counts arrivals, NumberOfMessagesSent, not what a queue holds (v1-e40-t42, the PM's ruling of
+# 2026-11-05). SQS's metrics page recommends ApproximateNumberOfMessagesVisible for a dead-letter
+# queue, and this alarm used it until 2026-11-04, when it showed why not here: that is the backlog,
+# and an alarm acts only when its state changes, so while one message waited unread the alarm stayed
+# in ALARM and the next failure would have sent no email. NumberOfMessagesSent counts every
+# SendMessage, those aimed at a dead-letter queue directly included; it leaves out only what SQS
+# moves there by redrive. Scheduler sends directly, as its role (the 2026-11-04 message's SenderId),
+# and these queues have no redrive, so every dead letter counts.
+#
+# One datapoint in six five-minute periods: any send in the last 30 minutes alarms, which is the
+# margin for a late datapoint from a queue idle all week, and the alarm is OK again 30 minutes after
+# the last send. Two dead letters within 30 minutes send one email; the login (03:00) and the run
+# (06:00 America/Chicago) are three hours apart, so the two schedules never share a window. Emptying
+# a queue after reading it is housekeeping, not what lets the next failure email.
 # tflint-ignore: aws_resource_missing_tags
 resource "aws_cloudwatch_metric_alarm" "schedule_failed" {
   alarm_name          = local.schedule_alarm_name
   alarm_description   = "A ${var.environment} caselist schedule could not start its task. The message in ${aws_sqs_queue.schedule_dead_letters["login"].name} or ${aws_sqs_queue.schedule_dead_letters["run"].name} names the schedule; docs/runbooks/caselist-cloud-run.md."
   comparison_operator = "GreaterThanOrEqualToThreshold"
   threshold           = 1
-  evaluation_periods  = 1
+  evaluation_periods  = 6
   datapoints_to_alarm = 1
-  # An idle queue stops reporting: no data is no message.
+  # An idle queue stops reporting: no data is no message sent.
   treat_missing_data = "notBreaching"
 
   metric_query {
-    id          = "held"
+    id          = "sent"
     expression  = "FILL(login, 0) + FILL(run, 0)"
-    label       = "Messages a schedule could not deliver"
+    label       = "Starts a schedule could not deliver, sent to its dead-letter queue"
     return_data = true
   }
 
@@ -361,9 +416,9 @@ resource "aws_cloudwatch_metric_alarm" "schedule_failed" {
 
       metric {
         namespace   = "AWS/SQS"
-        metric_name = "ApproximateNumberOfMessagesVisible"
+        metric_name = "NumberOfMessagesSent"
         dimensions  = { QueueName = metric_query.value.name }
-        stat        = "Maximum"
+        stat        = "Sum"
         period      = 300
       }
     }
@@ -371,6 +426,30 @@ resource "aws_cloudwatch_metric_alarm" "schedule_failed" {
 
   actions_enabled = true
   alarm_actions   = [aws_sns_topic.alerts.arn]
+}
+
+# ---------------------------------------------------------------------------------------------
+# A launch either schedule was refused, as it happens (v1-e40-t42)
+# ---------------------------------------------------------------------------------------------
+
+# tflint-ignore: aws_resource_missing_tags
+resource "aws_cloudwatch_event_rule" "launch_refused" {
+  name          = local.launch_refused_rule
+  description   = "ECS refused a ${var.environment} caselist schedule's start of its task, or answered it with a failure (v1-e40-t42)."
+  event_pattern = local.launch_refused_pattern
+  # RunTask is a write event, refused calls included, which reaches a rule in the default state.
+  state = "ENABLED"
+}
+
+resource "aws_cloudwatch_event_target" "launch_refused" {
+  rule      = aws_cloudwatch_event_rule.launch_refused.name
+  target_id = "tell-the-coach"
+  arn       = aws_sns_topic.alerts.arn
+
+  input_transformer {
+    input_paths    = local.launch_refused_input_paths
+    input_template = local.launch_refused_message
+  }
 }
 
 # ---------------------------------------------------------------------------------------------

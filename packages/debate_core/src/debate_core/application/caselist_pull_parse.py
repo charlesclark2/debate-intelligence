@@ -26,9 +26,9 @@ this module does not enumerate.
 Nothing of its own. The run's progress lines (`v1-e40-t43`) are the run's: it hands
 :meth:`PullParseStage.parse_new_sources` a
 :class:`~debate_core.application.caselist.step_lines.SourceProgress`, told the number of sources
-and then each one done, counts only. The pipeline and the publisher each log one line of counts, the caselist and
-the version (and, for an object the bucket did not confirm, its key, which is a caselist, a version
-and a digest). No path, school, team code, file name or card text is in either.
+and then each one done, counts only. The pipeline and the publisher each log one line of counts,
+the caselist and the version (and, for an object the bucket did not confirm, its key, which is a
+caselist, a version and a digest). No path, school, team code, file name or card text is in either.
 """
 
 from __future__ import annotations

@@ -300,9 +300,47 @@ printed lines. If any work prints `MISSING`, the PM revisits the pool size (Q2).
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-11-05
 
 **Notes:**
+
+The request counts fall as the spec asked (OpenAlex 12 to 1, the feeds 96 to 8 on the NHI search) and
+everything after the fan-out keeps its shape, because a batching provider still answers per query.
+
+1. **ac1 passes.** Two red runs, each failure at an assertion after the two crashing wrapper tests were
+   given a per-query answer; the before-and-after measurement on HEAD against the six pre-task files
+   shows rank, score, features, explanation and `provider_order` unchanged on every fixture search. 19
+   planted breaks caught, and the one that crashed rather than failed (the `dx.doi.org` prefixes) was
+   not counted, and it explains why dedupe can't compare a DOI as written.
+2. **The PM's Q1 facts are applied as given:** joined `(q1) OR (q2)` per set of filters, unquoted inside
+   each group, split before 3,500 URL characters (12 and 32 queries are one request; 96 go as 47, 47 and
+   2), `page=` with 100 a page up to `max_results`, and a single query sent unchanged so recorded URLs
+   still match.
+3. **Deviations accepted.** (1) The widened port test. (2) A single-query search above 100 results now
+   pages, as the ruling applies to every request. (3) `matched_on` and the footer count on one fixture
+   search: a provider returning fewer copies leaves dedupe less to merge; ranks are unchanged.
+   (4) The test helper.
+4. **The live attribution finding matters most.** On the saved ac6 results no title holds a whole
+   templated query, so all 200 works fall back to "every query". Ranking doesn't depend on which query
+   a work answered (its features are the result's own, and provider agreement counts providers), which
+   is why ranks hold. But each query's record now carries the whole joined answer, so **the footer's
+   OpenAlex count can read 200 x 12**. That is misleading to a student. The PM files a follow-up: a
+   batching provider's footer counts distinct works (E08, p3).
+5. **The required live check** stands as written, with two changes from the PM: run it from
+   `~/Documents/debate/crossref-smoke` (where the OpenAlex key's `.env` is), not `$HOME`; and run it
+   after Thursday 2026-11-05's v1-e31-t32 copy, on the next dev build. The PM reads the three works'
+   presence **and their ranks** against ac6's 1st, 9th and 10th. A missing work, or a fall well out of
+   the first page, reopens the pool size (Q2).
+6. **Follow-ups the PM files:** a shared DOI overruling differing OpenAlex work ids (E08, Q4); a guard
+   for a typed query with an unbalanced parenthesis or a bare `OR`, which now affects the whole joined
+   search (E08, p3); the footer count above. Topic feeds are already decided: the coach approved the
+   eight feeds and named nine health-policy outlets, which go to v1-e07-t14.
+7. **Closing checks:** the affected set (554 files, the provider port is a hub) is left to `ci`
+   (agreement 10); the changed directories and the always-run list (7,737 passed), v1-e09-t05's slow
+   research and failure modules (10 passed), ruff, pyright, lint-imports, thin handlers and the specs are
+   clean.
+8. **Merge:** a plain `scripts/task pr` once `ci` is green. The Goal is `Succeeded`; the live check is
+   recorded by the PM when it runs.

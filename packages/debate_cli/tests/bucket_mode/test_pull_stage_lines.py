@@ -390,7 +390,9 @@ def test_a_runs_result_is_the_one_line_runs_recorded_counts_and_the_last_it_writ
 
     assert result.exit_code == ExitCode.OK, result.output
     assert len(step_lines(result)) == len(A_BUCKET_MODE_RUN)
-    [result_line] = result.stdout.splitlines()
+    stdout = result.stdout.splitlines()
+    assert len(stdout) == 1, "stdout holds the result alone"
+    [result_line] = stdout
     assert counted(result) == [result_line]
     assert result.output.splitlines()[-1] == result_line, "every step line comes before the result"
     envelope = json.loads(result_line)
@@ -410,7 +412,9 @@ def test_a_failed_runs_result_is_the_one_line_runs_recorded_counts(world: World)
     assert result.exit_code == ExitCode.DOMAIN_FAILURE, result.output
     lines = step_lines(result)
     assert [line["outcome"] for line in ended(lines, "download")] == ["failed"]
-    [result_line] = result.stdout.splitlines()
+    stdout = result.stdout.splitlines()
+    assert len(stdout) == 1, "stdout holds the result alone"
+    [result_line] = stdout
     assert counted(result) == [result_line]
     assert result.output.splitlines()[-1] == result_line
     envelope = json.loads(result_line)

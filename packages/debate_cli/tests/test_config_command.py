@@ -376,3 +376,33 @@ def test_the_committed_dev_and_prod_profiles_differ_in_config_show(
     assert settings["models.routing_file"] == str(root / "config" / f"model_routing.{environment}.yaml")
     assert settings["models.budget_usd_daily"] == budget
     assert settings["models.budget_usd_monthly"] == 50.0
+
+
+SMOKE_PASSED_PROVIDERS = ["openalex", "crossref", "rss", "federal_register", "govinfo"]
+"""The providers with an adapter whose live smoke the PM recorded as passed (v1-e07-t13): OpenAlex and the
+feeds from the start, Crossref (v1-e07-t03's operator record) and the Federal Register and GovInfo
+(v1-e07-t07's), all on 2026-11-02."""
+
+
+@pytest.mark.parametrize("environment", ["dev", "prod"])
+def test_the_committed_profiles_enable_the_providers_whose_smoke_passed_and_set_no_credential(
+    environment: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """v1-e07-t13 ac1: the five are enabled by the profile itself, and the contact email and the
+    api.data.gov key each machine sets come from nowhere in it: with neither in the environment, both
+    are unset, from their defaults."""
+    from debate_core.application.settings import find_repository_root
+
+    root = find_repository_root(Path(__file__).parent)
+    assert root is not None
+    monkeypatch.delenv("DEBATE_PROFILE_DIR")
+    monkeypatch.delenv("DEBATE_PROVIDERS__CONTACT_EMAIL")
+    monkeypatch.chdir(root)
+    monkeypatch.setenv("DEBATE_ENV", environment)
+
+    data = envelope_of(runner.invoke(create_app(), ["--json", "config", "show"]))["data"]
+
+    assert data["settings"]["providers.enabled"] == SMOKE_PASSED_PROVIDERS
+    assert data["sources"]["providers.enabled"] == f"profile:config/profiles/{environment}.toml"
+    for credential in ("providers.contact_email", "providers.api_data_gov_key"):
+        assert (data["settings"][credential], data["sources"][credential]) == (None, "default")

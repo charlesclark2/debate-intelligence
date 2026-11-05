@@ -396,3 +396,47 @@ touched.
   names a team. The operator read them in the terminal on 2026-11-03 and judged all 42 ordinary words, so
   the cassettes are kept.
 * The bar still reads the pipeline, and neither route meets it. The hold on live runs stands.
+
+## Prompt 1.2.0 and the answering stance (`v1-e32-t46`, ruled 2026-11-05)
+
+The PM's rulings on `v1-e32-t46`'s proposal, built in that task. Counts, ids and row numbers only.
+
+* **The coach's label carries a stance.** A plain id says the card reads the position; `at:<id>` (read
+  without case) says it answers it. `at:none` and a bare `at:` are refused by row; the `also` column takes
+  the same forms, and may name the same id with the other stance. `--check-sample` counts `by_stance`.
+* **The model's answer carries one too.** Prompt `landscape.classify_position` 1.2.0 answers in
+  `ModelStancedPositionAnswers`, each answer with a required `stance`, `reads` or `answers`, which sets the
+  result's role (the answer-heading flag is still sent, and no longer decides it). 1.0.0 and 1.1.0 keep
+  `ModelPositionAnswers`; the cassette key covers the version and the schema's path, so their recordings
+  are neither replaced nor served to 1.2.0. 1.2.0 also carries the refusal fixes: (a) a kritik's or
+  counterplan's card goes to its named or generic position, never null; (b) a general card under a heading
+  naming a word of a position serves that position, and null stays for a general card under no such
+  heading.
+* **How a stance is scored.** A placement answers when its role is ANSWERS, or when every readable side
+  its file was disclosed on is opposite the position's side, the report's own rule; it reads otherwise.
+  The label's position (or the second label's) with the other stance is a new outcome, `wrong_stance`,
+  which the bar counts as counted and wrong, for the model alone and the pipeline alike. The scores' JSON
+  keeps its keys; `breakdown.outcomes` and each card's breakdown gain the stance.
+* **The rows the coach relabels**: 5, 11, 16, 20, 21, 26, 31, 33, 41, 57 and 59 (a file disclosed on the
+  side opposite the label's) and 13 and 25 (under an answer heading), mixed in the sitting with 6 control
+  rows drawn from the other labelled rows by the seed 20261105, all in one order and unmarked.
+
+### The kept 1.1.0 recordings, scored with the stance (computed 2026-11-04)
+
+The session's replay of both routes' 1.1.0 cassettes (29 seconds, no model called), each labelled row's
+file side read from the store, and the stance rule applied to the recorded answers (a 1.1.0 answer has no
+stance: its role is the headings'). The replay reproduces the recorded model-alone scores, 19 of 32 and
+27 of 36.
+
+| Labels | Claude Haiku 4.5 (`high_volume`), pipeline | Claude Sonnet 4.6 (`deep_audit`), pipeline |
+|---|---|---|
+| Scored by position only (as recorded) | 21 of 33, 0.636 | 27 of 36, 0.750 |
+| The stance rule, no relabel | 17 of 33, 0.515 | 22 of 36, 0.611 |
+| The stance rule, the 11 opposite-side rows relabelled `at:` | 21 of 33, 0.636 | 26 of 36, 0.722 |
+| The same, and row 13 `at:` too | 21 of 33, 0.636 | 27 of 36, 0.750 |
+
+* With no relabel, Haiku's 4 lost cards are rows 11, 31 and 59 (placed by the headings) and 57 (the
+  model): each names the label's position in a file disclosed only on the other side. Sonnet loses the
+  same 4 and row 13, an answer heading's card it named rightly, whose 1.1.0 role is the heading's.
+* The 1.2.0 re-record, on both routes, and the coach's relabel are recorded here by the PM when the
+  operator has them.

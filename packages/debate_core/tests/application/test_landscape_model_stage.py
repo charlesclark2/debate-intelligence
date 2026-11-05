@@ -38,7 +38,11 @@ from debate_core.arguments.landscape.model_stage import ModelCandidate, ModelIte
 from debate_core.arguments.landscape.seeding import SeedCard, SeedSource, SeedTeam
 from debate_core.domain.caselist import Side
 from debate_core.domain.landscape import Taxonomy
-from debate_core.domain.landscape_classification import RATIONALE_LIMIT, card_item_id
+from debate_core.domain.landscape_classification import (
+    RATIONALE_LIMIT,
+    ModelStancedPositionAnswers,
+    card_item_id,
+)
 from debate_core.domain.model_contracts import ModelParams, ModelPrompt, ModelResponse, TaskClass
 from debate_core.integrations.models.errors import MissingFixtureError
 from debate_core.integrations.models.model_mode import ModelMode
@@ -370,6 +374,7 @@ class ByTag(ScriptedModelRouter):
                         "position_id": self.answers[item["tag"]][0],
                         "confidence": self.answers[item["tag"]][1],
                         "rationale": "a reason in the model's words",
+                        **({"stance": "reads"} if issubclass(schema, ModelStancedPositionAnswers) else {}),
                     }
                     for item in items
                 ]
@@ -624,10 +629,12 @@ DESCRIBED = Taxonomy.model_validate(
 )
 
 
-def test_the_stage_runs_classify_position_1_1_0_as_released() -> None:
-    assert CLASSIFY_POSITION_VERSION == "1.1.0"
-    stage = stage_over(ByTag(FIRST_ANSWERS), PromptRegistry.load(REPOSITORY / "prompts"))
-    assert stage.prompt_version == "1.1.0"
+def test_the_stage_runs_its_default_version_and_1_1_0_stays_released() -> None:
+    """Since `v1-e32-t46` the default is 1.2.0 (`test_coach_sample_stance.py`); 1.1.0 is kept, released."""
+    registry = PromptRegistry.load(REPOSITORY / "prompts")
+    stage = stage_over(ByTag(FIRST_ANSWERS), registry)
+    assert stage.prompt_version == CLASSIFY_POSITION_VERSION
+    assert registry.get(CLASSIFY_POSITION_PROMPT_ID, "1.1.0").spec.status.value == "released"
 
 
 def test_prompt_1_1_0_reads_the_argument_not_the_subject_with_sides_descriptions_and_the_limit(
@@ -684,7 +691,7 @@ async def test_a_cassette_recorded_under_1_0_0_is_never_served_to_the_stage_afte
     assert json.loads(stale.read_text(encoding="utf-8"))["request"]["prompt"]["prompt_version"] == "1.0.0"
 
     replaying = RecordReplayModelRouter(None, mode=ModelMode.REPLAY, cassette_dir=tmp_path)
-    with pytest.raises(MissingFixtureError, match="1.1.0"):
+    with pytest.raises(MissingFixtureError, match=CLASSIFY_POSITION_VERSION):
         await evaluate_labelled_cards(READING, TAXONOMY, LABELLED, stage_over(replaying, prompts))
 
 
@@ -746,6 +753,7 @@ class AnswersAny(ScriptedModelRouter):
                         "position_id": "spending-da",
                         "confidence": 0.9,
                         "rationale": "a reason",
+                        **({"stance": "reads"} if issubclass(schema, ModelStancedPositionAnswers) else {}),
                     }
                     for item in items
                 ]
@@ -849,10 +857,10 @@ async def test_the_evaluation_scans_its_prompts_repair_cassettes_filed_under_the
     prompts: PromptRegistry,
 ) -> None:
     repairs = [
-        repair_cassette("1.1.0", "cards read at the Lakeside Invitational"),
-        repair_cassette("1.1.0", "nothing named"),
+        repair_cassette(CLASSIFY_POSITION_VERSION, "cards read at the Lakeside Invitational"),
+        repair_cassette(CLASSIFY_POSITION_VERSION, "nothing named"),
         repair_cassette("1.0.0", "the AB team"),
-        repair_cassette("1.1.0", "Maple Grove", caselist="hspolicy98"),
+        repair_cassette(CLASSIFY_POSITION_VERSION, "Maple Grove", caselist="hspolicy98"),
     ]
     result = await evaluate_labelled_cards(
         READING,
@@ -872,7 +880,7 @@ async def test_the_evaluation_scans_no_cassette_of_another_prompt_version(prompt
     """A text whose version cannot be read is scanned: the filter fails toward reading more."""
     cassettes = [
         classify_cassette("1.0.0", "as Maple Grove reads it"),
-        classify_cassette("1.1.0", "a reason"),
+        classify_cassette(CLASSIFY_POSITION_VERSION, "a reason"),
         '{"rationale": "the KL team"}',
     ]
     result = await evaluate_labelled_cards(

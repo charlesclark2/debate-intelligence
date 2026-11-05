@@ -54,7 +54,11 @@ from debate_core.arguments.landscape.evaluation_breakdown import LabelledScore
 from debate_core.arguments.landscape.seeding import SeedCard, SeedSource, SeedTeam
 from debate_core.domain.caselist import Side
 from debate_core.domain.landscape import Taxonomy
-from debate_core.domain.landscape_classification import OverrideRules, card_item_id
+from debate_core.domain.landscape_classification import (
+    ModelStancedPositionAnswers,
+    OverrideRules,
+    card_item_id,
+)
 from debate_core.domain.model_contracts import ModelParams, ModelPrompt, ModelResponse, TaskClass
 from debate_core.integrations.landscape.yaml_taxonomy_repository import (
     YamlTaxonomyRepository,
@@ -169,6 +173,7 @@ class AnswersByTag(ScriptedModelRouter):
                         "position_id": ANSWERS[item["tag"]][0],
                         "confidence": ANSWERS[item["tag"]][1],
                         "rationale": "a reason in the model's words",
+                        **({"stance": "reads"} if issubclass(schema, ModelStancedPositionAnswers) else {}),
                     }
                     for item in items
                 ]
@@ -331,6 +336,7 @@ class AnswersSyntheticCards(ScriptedModelRouter):
                 "position_id": SYNTHETIC_ANSWERS[item["tag"]],
                 "confidence": 0.9,
                 "rationale": "the tag states the argument",
+                **({"stance": "reads"} if issubclass(schema, ModelStancedPositionAnswers) else {}),
             }
             for item in items
         ]

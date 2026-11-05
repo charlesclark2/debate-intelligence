@@ -8,7 +8,9 @@ no model call, card by card ([the replay runbook](landscape-model-evaluation-rep
 
 `v1-e32-t40` wrote this for prompt `landscape.classify_position` 1.1.0, on the same 47 cards `v1-e32-t07`
 recorded under 1.0.0 ([the counts](../data/landscape-model-evaluation.md)). A recording made under one
-prompt version is never served to another: a 1.1.0 request finds no 1.0.0 cassette.
+prompt version is never served to another: a 1.1.0 request finds no 1.0.0 cassette. Since `v1-e32-t46` a
+checkout runs prompt 1.2.0, whose answers carry a stance: its re-record, on both routes, after the coach's
+relabelling sitting, is [the last section](#prompt-120-the-coachs-relabelling-sitting-then-both-routes-v1-e32-t46).
 
 ## Before you start
 
@@ -53,16 +55,17 @@ credentials, then run step 3 again (2026-11-02).
 ## 2. Check what the recording will read, with no model call
 
 Expected runtime: about a minute. A replay before anything is recorded: it reads the labels, the
-snapshot and the cards, then stops at the first batch, because no 1.1.0 cassette exists yet.
+snapshot and the cards, then stops at the first batch, because no cassette of the checkout's prompt version
+exists yet (1.1.0 when `v1-e32-t40` wrote it; 1.2.0 since `v1-e32-t46`).
 
 ```bash
 if env | grep -q '^DEBATE_'; then echo "STOP: a DEBATE_ variable is set; unset it and paste again"; elif pgrep -f "caselist pull" >/dev/null; then echo "STOP: a caselist pull is running; wait for it to finish"; else uv run debate-research --json landscape evaluate --caselist hspolicy26 --snapshot 2026-10-20 --sample ~/Documents/debate/landscape-review/policy-2026-27-nhi-coach-sample-labelled.csv --sample-rows ~/.debate-research/dev/landscape/local-classifier/hspolicy26/policy-2026-27-nhi-coach-sample.jsonl; fi
 ```
 
 What to read: `error.code` is `MISSING_FIXTURE_ERROR` and its message says there is no recorded answer
-for prompt `landscape.classify_position@1.1.0`. That is the expected stop, and no model was called. Stop, and do not go on to step 3, on
+for prompt `landscape.classify_position@` and the checkout's version. That is the expected stop, and no model was called. Stop, and do not go on to step 3, on
 anything else: a `STOP:` line, `EVALUATION_REFUSED` (the labels, the snapshot or the taxonomy), or an
-exit 0 (something already recorded under 1.1.0, which the PM should hear about first).
+exit 0 (something already recorded under that version, which the PM should hear about first).
 
 ## 3. Record
 
@@ -74,7 +77,8 @@ if env | grep -q '^DEBATE_'; then echo "STOP: a DEBATE_ variable is set; unset i
 
 What to read:
 
-* `prompt_version` is `1.1.0`, and `labelled`, `found` and `asked` are 47.
+* `prompt_version` is the checkout's (`1.1.0` when this was written, `1.2.0` since `v1-e32-t46`), and
+  `labelled`, `found` and `asked` are 47.
 * `calls` is above zero, and `pipeline.accuracy` against `target` 0.85 says whether it meets the bar
   (`bar_reads` is `pipeline`, since `v1-e32-t43`): the cards as students meet them, the headings' sure
   placements first and the model's answers for the rest. `model_alone` is the model's score on every
@@ -153,4 +157,83 @@ that shares them.
 SAMPLE=~/Documents/debate/landscape-review/policy-2026-27-nhi-coach-sample-labelled.csv
 ROWS=~/.debate-research/dev/landscape/local-classifier/hspolicy26/policy-2026-27-nhi-coach-sample.jsonl
 if env | grep -q '^DEBATE_'; then echo "STOP: a DEBATE_ variable is set; unset it and paste again"; else uv run debate-research landscape evaluate --caselist hspolicy26 --snapshot 2026-10-20 --sample "$SAMPLE" --sample-rows "$ROWS" --breakdown --route deep_audit; fi
+```
+
+## Prompt 1.2.0: the coach's relabelling sitting, then both routes (`v1-e32-t46`)
+
+Prompt 1.2.0 asks the model whether each card reads its position or answers it, and the coach's sample
+says the same with `at:<id>` for a card that answers ([the guide](../guides/landscape-taxonomy.md#your-labelled-sample-of-cards)).
+Two blocks, in order, each run once. Run them from a checkout holding `v1-e32-t46`: its task worktree until
+it merges, a checkout of `dev` after (step 1). Go to it:
+
+```bash
+cd /Users/charlesclark/Documents/debate/debate-intelligence-tool/debate-intelligence-worktrees/v1-e32-t46-prompt-1-2-0-refusal-fixes-and-answering-stances
+```
+
+### 1. The coach's relabelling sitting
+
+The coach sits at the terminal. The PM ruled the rows (2026-11-05): the 13 that may answer a position,
+mixed with 6 control rows drawn at random from the other labelled rows by the seed 20261105, all 19 in one
+random order and unmarked. Each card shows the coach's own tag and headings from the CSV, the side its file
+was disclosed on, and the coach's label; nothing about the model's answers, the recordings or the score.
+Type a label (`at:politics-da` for a card that answers the politics DA, a plain id for one that reads it,
+`none`, or `unsure`), or press Enter to keep it. A label the evaluation would refuse is asked again.
+
+The script first reads the store for each card's side (about half a minute), then keeps a copy of the CSV
+beside it (`policy-2026-27-nhi-coach-sample-labelled.before-stance-relabel.csv`) before anything is
+written. It writes only changed labels, once, at the end; Ctrl-C writes nothing. It ends with one line of
+counts, then `--check-sample` reads the result: a few seconds, no card read and no model asked.
+
+```bash
+SAMPLE=~/Documents/debate/landscape-review/policy-2026-27-nhi-coach-sample-labelled.csv
+ROWS=~/.debate-research/dev/landscape/local-classifier/hspolicy26/policy-2026-27-nhi-coach-sample.jsonl
+if env | grep -q '^DEBATE_'; then echo "STOP: a DEBATE_ variable is set; unset it and paste again"; elif pgrep -f "caselist pull" >/dev/null; then echo "STOP: a caselist pull is running; wait for it to finish"; elif ! uv run python scripts/relabel_coach_sample.py --caselist hspolicy26 --snapshot 2026-10-20 --sample "$SAMPLE" --sample-rows "$ROWS" --rows 5,11,13,16,20,21,25,26,31,33,41,57,59 --seed 20261105; then echo "STOP: the sitting stopped; paste its last line only"; else uv run debate-research --json landscape evaluate --caselist hspolicy26 --snapshot 2026-10-20 --sample "$SAMPLE" --sample-rows "$ROWS" --check-sample; fi
+```
+
+What to paste back: **the sitting's last line** (`Done. Listed: ... Control: ...`, counts only) **and the
+JSON object**, nothing else. The cards the sitting showed stay in the terminal. Success: exit 0, `labelled`
+47 (fewer only if the coach turned a row `unsure`), and `by_stance` with `answers` above zero if the coach
+wrote any `at:` label. Stop on a `STOP:` line, on `EVALUATION_REFUSED` (its message names the row and the
+rule), or on a `Stopped:` line from the sitting.
+
+### 2. The re-record on both routes, then the breakdowns
+
+The PM ruled both routes (2026-11-05): `high_volume` (Claude Haiku 4.5), the route the landscape stage runs
+on and the bar must meet, and `deep_audit` (Claude Sonnet 4.6). Priced from `config/model_pricing.yaml` at
+the 1.1.0 recordings' tokens with 1.2.0's longer instructions, about $0.06 and $0.19. The budget guard
+prices each call's ceiling from its variables, which 1.2.0 leaves as they were: $0.154 for Haiku's three
+calls and $1.106 for Sonnet's (about $0.21 and $1.50 with a repair), inside dev's $2.00 a day if nothing
+else spent that day. 1.2.0's cassettes go beside 1.1.0's, under their own keys, in
+`model-cassettes/` and `model-cassettes-deep_audit/`; nothing is replaced.
+
+One block, in this order: the sample check, the Bedrock login check, the recording on each route, then
+the breakdown replaying each. Each `STOP:` line stops it before any model call. Expected runtime: 4 to 6
+minutes.
+
+```bash
+SAMPLE=~/Documents/debate/landscape-review/policy-2026-27-nhi-coach-sample-labelled.csv
+ROWS=~/.debate-research/dev/landscape/local-classifier/hspolicy26/policy-2026-27-nhi-coach-sample.jsonl
+if env | grep -q '^DEBATE_'; then echo "STOP: a DEBATE_ variable is set; unset it and paste again"; elif pgrep -f "caselist pull" >/dev/null; then echo "STOP: a caselist pull is running; wait for it to finish"; elif ! uv run debate-research --json landscape evaluate --caselist hspolicy26 --snapshot 2026-10-20 --sample "$SAMPLE" --sample-rows "$ROWS" --check-sample; then echo "STOP: the sample check failed; paste its JSON and record nothing"; elif ! aws sts get-caller-identity --profile debate-dev-bedrock >/dev/null; then echo "STOP: the Bedrock profile is not logged in; log in and paste again"; else uv run debate-research --json landscape evaluate --caselist hspolicy26 --snapshot 2026-10-20 --sample "$SAMPLE" --sample-rows "$ROWS" --model-mode record; uv run debate-research --json landscape evaluate --caselist hspolicy26 --snapshot 2026-10-20 --sample "$SAMPLE" --sample-rows "$ROWS" --model-mode record --route deep_audit; uv run debate-research --json landscape evaluate --caselist hspolicy26 --snapshot 2026-10-20 --sample "$SAMPLE" --sample-rows "$ROWS" --breakdown; uv run debate-research --json landscape evaluate --caselist hspolicy26 --snapshot 2026-10-20 --sample "$SAMPLE" --sample-rows "$ROWS" --breakdown --route deep_audit; fi
+```
+
+What to read, and paste back: **the five JSON objects, and nothing else.** They hold counts, taxonomy ids
+and sample row numbers.
+
+* The sample check: `labelled` as the sitting left it, 47.
+* Each recording: `prompt_version` `1.2.0`; `labelled`, `found` and `asked` 47; `calls` 3 or 4; and for
+  the second, `route` `deep_audit`. `pipeline.accuracy` against `target` 0.85 is the bar. Exit 0 means the
+  pipeline meets it and every scan is clean; exit 1 `EVALUATION_BELOW_BAR` puts the same counts in
+  `error.details`. A stop before any answer (`MODEL_ACCESS_DENIED`, or a budget refusal) recorded nothing
+  on that route: paste it, and do not run the block again before the PM has read it.
+* Each breakdown: the same counts with no call made, `breakdown.outcomes` summing to 47, `wrong_stance`
+  among them.
+
+If any `scan` count in either recording is above zero, read the hits in the terminal only, with this
+block (step 5's, for each route). **Never paste or copy its output**; give each hit's number and whether
+its words name a team, a school or a tournament, or are an ordinary word that shares them.
+
+```bash
+SAMPLE=~/Documents/debate/landscape-review/policy-2026-27-nhi-coach-sample-labelled.csv
+ROWS=~/.debate-research/dev/landscape/local-classifier/hspolicy26/policy-2026-27-nhi-coach-sample.jsonl
+if env | grep -q '^DEBATE_'; then echo "STOP: a DEBATE_ variable is set; unset it and paste again"; else uv run debate-research landscape evaluate --caselist hspolicy26 --snapshot 2026-10-20 --sample "$SAMPLE" --sample-rows "$ROWS" --breakdown; uv run debate-research landscape evaluate --caselist hspolicy26 --snapshot 2026-10-20 --sample "$SAMPLE" --sample-rows "$ROWS" --breakdown --route deep_audit; fi
 ```

@@ -43,7 +43,7 @@ from debate_core.application.landscape_model_stage import (
     CLASSIFY_POSITION_VERSION,
 )
 from debate_core.application.structured_output import StructuredOutputGuard
-from debate_core.domain.landscape_classification import ModelPositionAnswers
+from debate_core.arguments.landscape.model_stage import answer_schema
 from debate_core.domain.model_contracts import ModelPrompt
 from debate_core.integrations.models.model_mode import ModelMode
 from debate_core.integrations.models.prompt_registry import PromptRegistry
@@ -96,10 +96,12 @@ ANSWER: Final = {
             "position_id": "spending-da",
             "confidence": 0.8,
             "rationale": "Automatic cuts after a breach are the impact of the spending argument.",
+            "stance": "reads",
         }
     ]
 }
-"""The answer, written by hand: card 4 is the spending disadvantage's impact."""
+"""The answer, written by hand: card 4 is the spending disadvantage's impact, which it reads (the stance
+prompt 1.2.0 asks for, `v1-e32-t46`)."""
 
 
 async def _record(cassettes: Path) -> None:
@@ -111,7 +113,10 @@ async def _record(cassettes: Path) -> None:
     )
     with filed_under(CASELIST):
         await guard.generate(
-            CLASSIFICATION_TASK_CLASS, prompt, ModelPositionAnswers, policy=CLASSIFICATION_POLICY
+            CLASSIFICATION_TASK_CLASS,
+            prompt,
+            answer_schema(CLASSIFY_POSITION_VERSION),
+            policy=CLASSIFICATION_POLICY,
         )
 
 

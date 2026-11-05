@@ -10,7 +10,8 @@ not already cached under this prompt version. :meth:`ModelClassificationStage.ru
 2. **reads** each kept card's evidence text from the parsed store (:class:`ParsedStoreCardTexts`), and
    cuts its excerpt: its first words, without the names of the caselist's schools and teams, or any
    disclosing team's school, code or tournament (`v1-e32-t40`);
-3. **asks** in batches of `batch_size`, each one call to `landscape.classify_position` through the
+3. **asks** in batches of `batch_size`, each one call to `landscape.classify_position`, in the schema of the
+   stage's prompt version (from 1.2.0 each answer carries a stance, `v1-e32-t46`), through the
    :class:`~debate_core.application.structured_output.StructuredOutputGuard` on the `high_volume` route.
    A batch whose answer leaves a card unanswered, answers one twice or names one it was not asked about
    is repaired once, as an answer that does not fit the schema is, and then refused. Each call is
@@ -68,6 +69,7 @@ from debate_core.arguments.landscape.model_stage import (
     ModelItem,
     Refusal,
     answer_problems,
+    answer_schema,
     batches,
     bounded_words,
     item_label,
@@ -105,8 +107,10 @@ logger = logging.getLogger(__name__)
 CLASSIFY_POSITION_PROMPT_ID: Final = "landscape.classify_position"
 """The registered prompt the stage runs (`prompts/landscape/classify_position.md`)."""
 
-CLASSIFY_POSITION_VERSION: Final = "1.1.0"
-"""The version of :data:`CLASSIFY_POSITION_PROMPT_ID` a stage runs unless it is built with another."""
+CLASSIFY_POSITION_VERSION: Final = "1.2.0"
+"""The version of :data:`CLASSIFY_POSITION_PROMPT_ID` a stage runs unless it is built with another: 1.2.0,
+whose answers carry a stance (`v1-e32-t46`). A stage built with 1.0.0 or 1.1.0 asks in the schema they were
+recorded in, so their cassettes replay as recorded."""
 
 CLASSIFICATION_TASK_CLASS: Final = TaskClass.HIGH_VOLUME
 """The task class the prompt declares and is routed as: cheap, frequent classification."""
@@ -333,7 +337,7 @@ class ModelClassificationStage:
                     answered = await self._guard.generate(
                         CLASSIFICATION_TASK_CLASS,
                         prompt,
-                        ModelPositionAnswers,
+                        answer_schema(self.prompt_version),
                         policy=CLASSIFICATION_POLICY,
                         check=lambda answers, size=size: _as_output_problems(answers, size),
                     )

@@ -1108,7 +1108,7 @@ class PacerTime:
 
 
 def test_on_the_committed_profile_without_a_contact_email_crossref_names_the_public_pool_in_the_footer(
-    committed_profile: Seams, monkeypatch: pytest.MonkeyPatch
+    committed_profile: Seams, monkeypatch: pytest.MonkeyPatch, on_virtual_time: None
 ) -> None:
     """An expanded search's queries all reach Crossref at once, and the public pool sends one a second, so
     the ones it cannot send before their timeout less a reserve come back not asked, named in the footer
@@ -1118,7 +1118,10 @@ def test_on_the_committed_profile_without_a_contact_email_crossref_names_the_pub
     The pacer runs on the test's time (:class:`PacerTime`), handed to it through `crossref_factory`'s own
     `clock` and `sleep`, which the container leaves at the wall clock and `asyncio.sleep`. On the wall
     clock a busy runner let the second query arrive after the first was sent, and then its turn came
-    inside its deadline: two requests (`v1-e32-t49`, PM ruling of 2026-11-05).
+    inside its deadline: two requests (`v1-e32-t49`, PM ruling of 2026-11-05). The command's own loop runs on
+    virtual time too (`on_virtual_time`), so the wrapper's 2-second timeout and the search's deadline are not
+    the wall clock's either: a runner busy for 2 seconds while the queries waited timed one out
+    (`v1-e07-t16`, PM ruling of 2026-11-05).
 
     Worked by hand, the same under the dev and the prod profile (neither sets a contact email, so both
     are on the public pool, and the environment's 2 seconds replace both profiles' timeout):

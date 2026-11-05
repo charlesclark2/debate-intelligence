@@ -6,29 +6,81 @@
 | Spec | [`plan_specs/v1/e32-argument-landscape/t46-prompt-1-2-0-refusal-fixes-and-answering-stances.yaml`](../../plan_specs/v1/e32-argument-landscape/t46-prompt-1-2-0-refusal-fixes-and-answering-stances.yaml) |
 | Epic / release | `v1-e32-argument-landscape` / `v1.2` |
 | Branch | `task/v1-e32-t46-prompt-1-2-0-refusal-fixes-and-answering-stances` |
-| Session status | IN PROGRESS <!-- COMPLETE / PARTIAL / BLOCKED --> |
+| Session status | COMPLETE (the Goal stays InProgress: ac1's sitting and ac3's re-record are the operator's) <!-- COMPLETE / PARTIAL / BLOCKED --> |
 
 ## Summary
 
-<!-- 3-6 sentences: what was built, how it fits the epic, anything the PM should look at first. -->
+Prompt `landscape.classify_position` 1.2.0 is released and is the stage's default. It carries the refusal
+fixes (a) and (b) and the coach's answering stance (c), with 1.1.0's variables and user turn. Its answers
+use a new schema, `ModelStancedPositionAnswers`, which requires a `stance` (`reads` or `answers`) that sets
+the result's role. 1.0.0 and 1.1.0 keep `ModelPositionAnswers`, so their recordings keep their keys and
+replay as recorded. The coach's sample reads `at:<id>` in `position` and `also`, and `--check-sample`
+counts `by_stance`. A placement's stance is scored the way the report counts it, and the label's position
+with the other stance is the new outcome `wrong_stance`, counted and wrong. The relabelling sitting is
+`scripts/relabel_coach_sample.py`, over `debate_core.application.coach_sample_relabel`. All of it was built
+on the PM's ruling of 2026-11-05, with tests on invented cards shown failing first; 15 mutants were all
+caught.
+**The Goal stays InProgress:** ac1's sitting and ac3's re-record on both routes are the operator's (two
+blocks under [Operator follow-ups](#operator-follow-ups)). The PM should look first at the 1.1.0 figures
+under the stance rule ([ruling 3](#the-pms-ruling-2026-11-05)): without the relabel, Haiku's pipeline score
+falls from 0.636 to 0.515.
 
 ## Plan nodes
 
-<!-- One row per Plan graph node, in the order they were completed. -->
-
 | Node | Status | Notes |
 |---|---|---|
-| | | |
+| `prompt-1-2-0-refusal-fixes-and-answering` (Prompt 1.2.0) | Done | Its criterion passes (455 tests). ac1 and ac3 wait on the operator |
 
 ## Acceptance criteria
 
-<!-- Goal criteria (ac1…) and every node criterion. Status: PASS / FAIL / NOT RUN. -->
-
 | Criterion | Status | Evidence (command → result) |
 |---|---|---|
-| | | |
+| ac1: the stance label's format and the relabelling ruled by the PM, and the coach's relabelled sample reads with `--check-sample` (operator) | NOT RUN (operator) | The PM ruled both on 2026-11-05 ([the ruling](#the-pms-ruling-2026-11-05)). The sitting and its `--check-sample` are the first block under [Operator follow-ups](#operator-follow-ups); the PM records the result |
+| ac2: prompt 1.2.0 carries (a), (b) and the stance; a wrong stance is its own outcome; tests on invented cards shown failing first; the version bumped with its cassettes keyed by it | PASS | Red against a skeleton that changes nothing: 65 failed, 70 passed. Then 2 failed for `shown_rows` and `sample_sides`, then 1 for the byte-kept rows; each failure was an assertion, a missing 1.2.0 prompt, or `at:` still refused. Green: 4,033 passed over the changed test directories and the always-run list. 1.2.0 is locked (`scripts/lock_prompts.py`). 1.1.0's key is kept and 1.2.0 never finds it: `test_1_1_0_recordings_replay_unchanged_and_1_2_0_finds_none_of_them`. All 15 mutants caught ([below](#mutants)) |
+| ac3: the operator's re-record of the 47 under 1.2.0 on the PM's route, its breakdown and scans, recorded in docs/data (operator, recorded by the PM) | NOT RUN (operator) | The PM ruled both routes. The second block under [Operator follow-ups](#operator-follow-ups); the PM records it |
+| Node: Prompt 1.2.0 tests pass (`uv run pytest packages/debate_core/tests packages/debate_cli/tests -k "evaluat or prompt or stance"`) | PASS | `.venv/bin/python scripts/hard_stop.py 115 .venv/bin/python -m pytest packages/debate_core/tests packages/debate_cli/tests -k "evaluat or prompt or stance"` → 455 passed in 26 s |
 
-## The proposal (2026-11-04, for the PM's ruling; nothing built yet)
+### Checks run before this report
+
+| Command | Result |
+|---|---|
+| `uv run scripts/affected_tests.py` | 324 of 693 test files (46.8%) from 29 changed files. Over two minutes, so it is left to the pull request's `ci` (agreement 10) |
+| The changed test directories and the always-run list: `packages/debate_core/tests/{arguments/landscape,domain,integrations/models,integrations/landscape}`, every `test_landscape_*`, `test_coach_sample_*` and `test_position_classification.py` in `debate_core/tests/application`, `debate_cli/tests/test_landscape*.py`, `tests/architecture`, `tests/specs`, `test_app.py`, `test_help_rendering.py`, `test_container_factories.py` | 4,033 passed in 58 s |
+| `tests/integration/test_e2e_caselist.py` and `tests/smoke/test_landscape_evaluate_smoke.py`, with `-m "slow or not slow"` | 4 passed |
+| `tests/fixtures/caselist/test_synthetic_archive.py` | passed (the re-recorded cassette is what its script writes) |
+| `uv run ruff format --check .`, `uv run ruff check .` | 1,944 files formatted; all checks passed |
+| `uv run pyright packages/debate_core packages/debate_cli` and the script, smoke and fixture files | 0 errors |
+| `uv run lint-imports`, `uv run python scripts/check_thin_handlers.py` | 20 contracts kept; 72 handlers within 25 statements |
+| `uv run scripts/lock_prompts.py --check`, `uv run scripts/check_command_blocks.py`, `uv run scripts/check_links.py` | OK |
+| `uv run scripts/validate_specs.py` | OK: 619 files |
+
+### Mutants
+
+Run against the stance, label and sitting tests, `test_landscape_evaluation_breakdown.py` and
+`test_evaluation_pipeline_score.py`, each mutant restored after its run:
+
+| Mutant | Caught by |
+|---|---|
+| `scored_stance` ignores the role | 5 tests |
+| `scored_stance` ignores the file's side | 10 |
+| A file disclosed by both sides answers | 1 |
+| The right position with any stance is correct | 4 |
+| The second label takes the first's stance | 4 |
+| A wrong stance is not counted | 2 |
+| The headings' placement is scored without its stance | 1 |
+| `judge` ignores the model's stance | 4 |
+| 1.2.0 is asked without a stance (`>` for `>=`) | 12 failures, the schema-by-version and stage-schema assertions among them (7 fixtures also errored) |
+| The `at:` prefix is read with case | 3 |
+| `at:none` is taken | 3 |
+| A second label refused as its first when only the id matches | 1 |
+| The sitting is not shuffled | 1 |
+| Every shown row is written as changed | 2 |
+| Controls may come from the listed rows | 2 |
+
+A planted break of the `--check-sample` JSON (`by_stance` emptied) failed the smoke check and two CLI
+tests for its reason, and was restored.
+
+## The proposal (2026-11-04, for the PM's ruling, kept as written)
 
 Counted on the operator's Mac with a scratch script that replays the kept 1.1.0 cassettes of both routes
 through the evaluation's own path (29 seconds, no model called) and prints ids, sides and flags only: each
@@ -144,31 +196,160 @@ then runs `landscape evaluate --check-sample`. One block, in the shape of `v1-e3
   answers through the stage's default prompt version, and 1.2.0's schema needs a stance in each answer (as
   `v1-e32-t43`'s smoke edit, accepted).
 
+## The PM's ruling (2026-11-05)
+
+1. The label format, as proposed.
+2. The model's answer, as proposed: 1.2.0's stance overrides the answer-heading flag (the flag is still
+   sent).
+3. Scoring, as proposed: `wrong_stance` is its own outcome, counted and wrong; the computed 1.1.0 figures
+   are recorded in docs/data.
+4. Prompt 1.2.0 as proposed.
+5. The sitting, with an addition: the 13 rows mixed with 6 control rows drawn at random from the other
+   labelled rows (seed stated), all 19 in random order and unmarked; each row's tag, headings and
+   disclosed side shown, nothing of the model's answers, the recordings or the score; Enter keeps; a copy
+   first; only changed labels written; counts only at the end, changed and unchanged, listed and control.
+   Then `--check-sample`.
+6. The re-record on two routes, `high_volume` and `deep_audit`, in one block, priced from
+   `config/model_pricing.yaml`.
+
+The smoke deviation was accepted.
+
 ## Files changed
+
+* **`prompts/`**: `landscape/classify_position@1.2.0.md` (released), and its entry in `prompts.lock.json`.
+* **`debate_core.domain.landscape_classification`**: `Stance`, `ModelStancedPositionAnswer(s)`.
+* **`debate_core.arguments.landscape.model_stage`**: `answer_schema` (stanced from 1.2.0) and `judge`
+  taking the role from a stance.
+* **`debate_core.arguments.landscape.evaluation_breakdown`**: `scored_stance`, `labelled_as`,
+  `CardOutcome.WRONG_STANCE` (counted), the stances on `CardBreakdown` and `DeterministicPlacement`, and the
+  pipeline, confusion table and second-label count reading them.
+* **`debate_core.application.landscape_model_stage`**: default 1.2.0, the schema picked by version.
+* **`debate_core.application.landscape_model_evaluation`**: `coach_label`, `row_labels` and the `at:`
+  rules; `stance_counts` and `CoachSampleCheck.by_stance`; the file sides through `ask_labelled_cards`; the
+  evaluation's counts taken from the cards' breakdowns; `sample_sides` for the sitting.
+* **`debate_core.application.coach_sample_relabel`** (new): the sitting's rows, order, screens, write and
+  counts.
+* **`scripts/relabel_coach_sample.py`** (new): the sitting's terminal half.
+* **`debate_cli.commands.landscape`**: `by_stance` in `--check-sample`; each card's stances in the breakdown's
+  JSON and lines.
+* **Tests** (`packages/debate_core/tests`, `packages/debate_cli/tests`): three new files on invented cards
+  (`test_answering_stance.py`, `test_coach_sample_stance.py`, `test_coach_sample_relabel.py`), new CLI tests,
+  and scripted routers in six files answering with a stance when asked in the stanced schema.
+* **Outside the packages**: `tests/smoke/test_landscape_evaluate_smoke.py` and
+  `tests/fixtures/caselist/synthetic_archive/` (Deviations).
+* **Docs**: [the evaluation's data page](../data/landscape-model-evaluation.md) (the rulings and the
+  computed 1.1.0 figures), [the record runbook](../runbooks/landscape-model-evaluation-record.md) (the two
+  blocks), [the replay runbook](../runbooks/landscape-model-evaluation-replay.md) (which checkout replays
+  1.1.0), [the taxonomy guide](../guides/landscape-taxonomy.md) (`at:` labels).
 
 <!-- Group by package or directory; one line on why each group changed. -->
 
 ## Deviations from the spec
 
-None.
+1. **`tests/smoke/test_landscape_evaluate_smoke.py`**, outside the spec's packages: its in-process
+   recording answers with a stance, its version pin reads 1.2.0, and its `--check-sample` check writes one
+   `AT:` label and reads `by_stance`. Accepted by the PM in the ruling.
+2. **`tests/fixtures/caselist/synthetic_archive/`**, outside the spec's packages: the end-to-end suite's one
+   landscape cassette is keyed by the stage's default version, so its recorder now answers in the schema of
+   that version (`answer_schema`) with `"stance": "reads"`, and the cassette was written again offline by
+   its own script (`uv run --frozen python -m tests.fixtures.caselist.synthetic_archive.record_landscape_cassette`;
+   no model). The diff is the key, the version, the schema's path and the stance. Not in the proposal; the
+   same kind of edit as the smoke file.
+3. **The session's own offline replay** of both routes' 1.1.0 cassettes (29 seconds, read-only, no model),
+   to find the relabel rows and compute the figures: a read-only command over files on the operator's Mac,
+   which agreement 2 lets a session run.
+4. **The affected set** (324 files) was not run: over two minutes, so it is the pull request's `ci`
+   (agreement 10). The changed test directories and the always-run list ran instead.
 
 ## Decisions and assumptions
+
+1. **A placement's sides** are the `Side` values of every disclosure of its file; PF's pro and con count as
+   aff and neg, `UNKNOWN` as no side. A file disclosed on both sides reads, as the report counts a round on
+   the position's side.
+2. **`wrong_stance` comes right after `correct`** in the outcomes, so `breakdown.outcomes` and its display
+   list it first among the wrong ones. A wrong position is judged by kind as before, whatever its stance.
+3. **The evaluation's counts come from the cards' breakdowns** (`model_alone_score`). They were counted in a
+   loop of their own, which would have ignored the stance. Values are unchanged for every existing test.
+4. **Two hand-worked expectations moved with the rule** in `test_landscape_evaluation_breakdown.py`. Its
+   source is a negative file, so an answer naming `medicare-aff` there is scored as answering. The row-4
+   second label is now written `at:medicare-aff` (the test's point, a card right on its second label,
+   stands), and the confusion table reads `at:medicare-aff`. `outcomes` names `wrong_stance` 0.
+5. **Scripted routers answer `reads`** when asked in the stanced schema. `test_position_classification.py`'s
+   router answers `answers` for a card sent under an answer heading, as 1.2.0 asks, so its role assertions
+   keep their meaning.
+6. **The sitting shows the coach's current label** (Enter keeps it), and reads a typed label in lower case,
+   as every id is written. A restart over a kept copy that still matches the sample byte for byte goes on
+   (a sitting stopped early wrote nothing); one that differs stops. Every other row of the CSV keeps its
+   bytes; a changed row keeps its other cells' values and its line ending.
+7. **Seed 20261105** for the controls and the order, stated in the block.
+8. **A landscape run asks again** about every card it cached under 1.1.0, since results are cached by prompt
+   version. The hold on live runs stands, so nothing changes until the PM lifts it.
+9. **Prices** from `config/model_pricing.yaml` (Haiku 4.5 $0.001 and $0.005 per 1,000 input and output
+   tokens; Sonnet 4.6 $0.003 and $0.015), at the 1.1.0 recordings' tokens plus 1.2.0's 980 more characters
+   of instructions per call and a stance per answer. The guard's ceilings price the variables, which 1.2.0
+   does not change.
 
 <!-- Choices the spec left open, with the reasoning. -->
 
 ## Operator follow-ups
 
-<!-- Commands the operator must run (anything over ~2 minutes), with where to run them, the exact
-command, expected runtime and what success looks like. Also GitHub/AWS settings to change. -->
+Both blocks are also in [the record runbook's last section](../runbooks/landscape-model-evaluation-record.md#prompt-120-the-coachs-relabelling-sitting-then-both-routes-v1-e32-t46),
+with what to read. Run them in order, from this task's worktree until it merges (a checkout of `dev`
+after). Go to it:
 
-None.
+```bash
+cd /Users/charlesclark/Documents/debate/debate-intelligence-tool/debate-intelligence-worktrees/v1-e32-t46-prompt-1-2-0-refusal-fixes-and-answering-stances
+```
+
+**1. ac1: the coach's relabelling sitting, then the check.** Charlie sits at the terminal. The 13 rows (5,
+11, 13, 16, 20, 21, 25, 26, 31, 33, 41, 57, 59) are mixed with 6 controls drawn by seed 20261105, all 19 in
+one random order and unmarked. Each card shows its tag, its headings and the side its file was disclosed
+on. Type a label (`at:<id>` for a card that answers the position) or press Enter to keep it. About half a
+minute to read the store, then the sitting at the coach's pace, then a few seconds for the check:
+
+```bash
+SAMPLE=~/Documents/debate/landscape-review/policy-2026-27-nhi-coach-sample-labelled.csv
+ROWS=~/.debate-research/dev/landscape/local-classifier/hspolicy26/policy-2026-27-nhi-coach-sample.jsonl
+if env | grep -q '^DEBATE_'; then echo "STOP: a DEBATE_ variable is set; unset it and paste again"; elif pgrep -f "caselist pull" >/dev/null; then echo "STOP: a caselist pull is running; wait for it to finish"; elif ! uv run python scripts/relabel_coach_sample.py --caselist hspolicy26 --snapshot 2026-10-20 --sample "$SAMPLE" --sample-rows "$ROWS" --rows 5,11,13,16,20,21,25,26,31,33,41,57,59 --seed 20261105; then echo "STOP: the sitting stopped; paste its last line only"; else uv run debate-research --json landscape evaluate --caselist hspolicy26 --snapshot 2026-10-20 --sample "$SAMPLE" --sample-rows "$ROWS" --check-sample; fi
+```
+
+Paste back **the sitting's last line** (`Done. Listed: ... Control: ...`) **and the JSON**, nothing else:
+the cards stay in the terminal. Success: exit 0, `labelled` 47, and `by_stance` counting the `at:` labels.
+
+**2. ac3: the re-record on both routes, then both breakdowns** (4 to 6 minutes; about $0.06 on
+`high_volume` and $0.19 on `deep_audit`). Run it after block 1:
+
+```bash
+SAMPLE=~/Documents/debate/landscape-review/policy-2026-27-nhi-coach-sample-labelled.csv
+ROWS=~/.debate-research/dev/landscape/local-classifier/hspolicy26/policy-2026-27-nhi-coach-sample.jsonl
+if env | grep -q '^DEBATE_'; then echo "STOP: a DEBATE_ variable is set; unset it and paste again"; elif pgrep -f "caselist pull" >/dev/null; then echo "STOP: a caselist pull is running; wait for it to finish"; elif ! uv run debate-research --json landscape evaluate --caselist hspolicy26 --snapshot 2026-10-20 --sample "$SAMPLE" --sample-rows "$ROWS" --check-sample; then echo "STOP: the sample check failed; paste its JSON and record nothing"; elif ! aws sts get-caller-identity --profile debate-dev-bedrock >/dev/null; then echo "STOP: the Bedrock profile is not logged in; log in and paste again"; else uv run debate-research --json landscape evaluate --caselist hspolicy26 --snapshot 2026-10-20 --sample "$SAMPLE" --sample-rows "$ROWS" --model-mode record; uv run debate-research --json landscape evaluate --caselist hspolicy26 --snapshot 2026-10-20 --sample "$SAMPLE" --sample-rows "$ROWS" --model-mode record --route deep_audit; uv run debate-research --json landscape evaluate --caselist hspolicy26 --snapshot 2026-10-20 --sample "$SAMPLE" --sample-rows "$ROWS" --breakdown; uv run debate-research --json landscape evaluate --caselist hspolicy26 --snapshot 2026-10-20 --sample "$SAMPLE" --sample-rows "$ROWS" --breakdown --route deep_audit; fi
+```
+
+Paste back **the five JSON objects**, nothing else. Each recording: `prompt_version` `1.2.0`; `labelled`,
+`found` and `asked` 47; `calls` 3 or 4 (the second with `route` `deep_audit`). Exit 1 `EVALUATION_BELOW_BAR`
+carries the counts in `error.details`. A stop before any answer recorded nothing on that route: paste it and
+run nothing again before the PM reads it.
+
+**Only if a `scan` count is above zero**: read the hits in the terminal, and **never paste or copy them**.
+Give each hit's number and whether its words name a team, a school or a tournament, or an ordinary word:
+
+```bash
+SAMPLE=~/Documents/debate/landscape-review/policy-2026-27-nhi-coach-sample-labelled.csv
+ROWS=~/.debate-research/dev/landscape/local-classifier/hspolicy26/policy-2026-27-nhi-coach-sample.jsonl
+if env | grep -q '^DEBATE_'; then echo "STOP: a DEBATE_ variable is set; unset it and paste again"; else uv run debate-research landscape evaluate --caselist hspolicy26 --snapshot 2026-10-20 --sample "$SAMPLE" --sample-rows "$ROWS" --breakdown; uv run debate-research landscape evaluate --caselist hspolicy26 --snapshot 2026-10-20 --sample "$SAMPLE" --sample-rows "$ROWS" --breakdown --route deep_audit; fi
+```
 
 ## Follow-up work
 
-<!-- Bugs, gaps or ideas outside this task's scope, each with the task or epic it belongs to.
-The PM decides whether they become spec changes or new tasks. -->
-
-None.
+* **Stage one's role under an answer heading inside its own side's block.** The matcher gives ANSWERS to
+  every card under an answer heading. Row 13's kind, a negative card answering the affirmative's answers
+  to its own DA, therefore counts as an answer, in the pipeline's score and in the report. 1.2.0's model
+  decides that by its stance; stage one does not. E32, the PM's to file if the relabel keeps row 13
+  reading.
+* **Replaying an older prompt version after the merge.** A checkout runs one prompt version, so 1.1.0's
+  recordings replay only from a pre-merge checkout (as 1.0.0's did after `v1-e32-t40`). A
+  `--prompt-version` on `landscape evaluate` would let one checkout replay both. E32, only if the PM wants
+  the side by side again.
 
 ## PM review
 

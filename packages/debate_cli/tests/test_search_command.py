@@ -25,7 +25,6 @@ import itertools
 import json
 import os
 import sqlite3
-import time
 from collections.abc import Callable, Iterator, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
@@ -310,9 +309,6 @@ class Seams:
     itself, through the budget guard and the usage log, over the `bedrock_router_factory` a test
     stands in for; Crossref is answered too."""
     crossref: CrossrefAnswers = field(default_factory=CrossrefAnswers)
-    moving_clock: bool = False
-    """Let the container's clock run on from `NOW` in real time, for Crossref's pacer, which reads it to
-    space its queries and to know when one is too late to send; otherwise it stands still at `NOW`."""
     containers: list[ServiceContainer] = field(default_factory=list[ServiceContainer])
     """Every container the app built, for a test that reads the settings a command left in one."""
 
@@ -330,11 +326,7 @@ def seams(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Seams]:
 
     def with_seams(self: ServiceContainer, **arguments: Any) -> None:
         build(self, **arguments)
-        if seams.moving_clock:
-            started = time.monotonic()
-            self.override("clock", lambda: NOW + timedelta(seconds=time.monotonic() - started))
-        else:
-            self.override("clock", lambda: NOW)
+        self.override("clock", lambda: NOW)
         if seams.live_models is None:
             self.override("search_model_router", seams.router)
         else:

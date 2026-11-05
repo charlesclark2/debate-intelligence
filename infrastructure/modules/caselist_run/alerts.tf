@@ -10,7 +10,7 @@
 #                                             the cutover's first recorded run
 #   debate-<env>-caselist-login-dlq           what each schedule could not start, kept 14 days
 #   debate-<env>-caselist-run-dlq
-#   debate-<env>-caselist-schedule-failed     an alarm on either queue holding a message
+#   debate-<env>-caselist-schedule-failed     an alarm on a message sent to either queue
 #   debate-<env>-caselist-launch-refused      a RunTask by either schedule's role that ECS refused,
 #                                             or answered with a failure (v1-e40-t42)
 #   debate-<env>-caselist-credentials-*       the CloudTrail rules of ADR-0020 (2): a change to the
@@ -373,23 +373,38 @@ resource "aws_sqs_queue" "schedule_dead_letters" {
   sqs_managed_sse_enabled   = true
 }
 
-# Either queue holding a message. One alarm over both, as ADR-0020 (8) counts it: the email names the
+# A message sent to either queue. One alarm over both, as ADR-0020 (8) counts it: the email names the
 # alarm, and the queue that holds the message names the schedule.
+#
+# It counts arrivals, NumberOfMessagesSent, not what a queue holds (v1-e40-t42, the PM's ruling of
+# 2026-11-05). SQS's metrics page recommends ApproximateNumberOfMessagesVisible for a dead-letter
+# queue, and this alarm used it until 2026-11-04, when it showed why not here: that is the backlog,
+# and an alarm acts only when its state changes, so while one message waited unread the alarm stayed
+# in ALARM and the next failure would have sent no email. NumberOfMessagesSent counts every
+# SendMessage, those aimed at a dead-letter queue directly included; it leaves out only what SQS
+# moves there by redrive. Scheduler sends directly, as its role (the 2026-11-04 message's SenderId),
+# and these queues have no redrive, so every dead letter counts.
+#
+# One datapoint in six five-minute periods: any send in the last 30 minutes alarms, which is the
+# margin for a late datapoint from a queue idle all week, and the alarm is OK again 30 minutes after
+# the last send. Two dead letters within 30 minutes send one email; the login (03:00) and the run
+# (06:00 America/Chicago) are three hours apart, so the two schedules never share a window. Emptying
+# a queue after reading it is housekeeping, not what lets the next failure email.
 # tflint-ignore: aws_resource_missing_tags
 resource "aws_cloudwatch_metric_alarm" "schedule_failed" {
   alarm_name          = local.schedule_alarm_name
   alarm_description   = "A ${var.environment} caselist schedule could not start its task. The message in ${aws_sqs_queue.schedule_dead_letters["login"].name} or ${aws_sqs_queue.schedule_dead_letters["run"].name} names the schedule; docs/runbooks/caselist-cloud-run.md."
   comparison_operator = "GreaterThanOrEqualToThreshold"
   threshold           = 1
-  evaluation_periods  = 1
+  evaluation_periods  = 6
   datapoints_to_alarm = 1
-  # An idle queue stops reporting: no data is no message.
+  # An idle queue stops reporting: no data is no message sent.
   treat_missing_data = "notBreaching"
 
   metric_query {
-    id          = "held"
+    id          = "sent"
     expression  = "FILL(login, 0) + FILL(run, 0)"
-    label       = "Messages a schedule could not deliver"
+    label       = "Starts a schedule could not deliver, sent to its dead-letter queue"
     return_data = true
   }
 
@@ -401,9 +416,9 @@ resource "aws_cloudwatch_metric_alarm" "schedule_failed" {
 
       metric {
         namespace   = "AWS/SQS"
-        metric_name = "ApproximateNumberOfMessagesVisible"
+        metric_name = "NumberOfMessagesSent"
         dimensions  = { QueueName = metric_query.value.name }
-        stat        = "Maximum"
+        stat        = "Sum"
         period      = 300
       }
     }

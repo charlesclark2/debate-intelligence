@@ -1846,12 +1846,19 @@ run "a_schedule_that_cannot_start_its_task_emails_the_coach" {
   assert {
     condition = (
       toset([for query in aws_cloudwatch_metric_alarm.schedule_failed.metric_query : try(query.metric[0].dimensions.QueueName, null) if length(query.metric) > 0]) == toset(["debate-mock-caselist-login-dlq", "debate-mock-caselist-run-dlq"])
-      && alltrue([for query in aws_cloudwatch_metric_alarm.schedule_failed.metric_query : try(query.metric[0].metric_name, "") == "ApproximateNumberOfMessagesVisible" if length(query.metric) > 0])
+      && alltrue([
+        for query in aws_cloudwatch_metric_alarm.schedule_failed.metric_query :
+        try(query.metric[0].metric_name, "") == "NumberOfMessagesSent" && try(query.metric[0].stat, "") == "Sum" && try(query.metric[0].period, 0) == 300
+        if length(query.metric) > 0
+      ])
       && one([for query in aws_cloudwatch_metric_alarm.schedule_failed.metric_query : query.expression if query.return_data == true]) == "FILL(login, 0) + FILL(run, 0)"
       && aws_cloudwatch_metric_alarm.schedule_failed.threshold == 1
       && aws_cloudwatch_metric_alarm.schedule_failed.comparison_operator == "GreaterThanOrEqualToThreshold"
+      && aws_cloudwatch_metric_alarm.schedule_failed.evaluation_periods == 6
+      && aws_cloudwatch_metric_alarm.schedule_failed.datapoints_to_alarm == 1
+      && aws_cloudwatch_metric_alarm.schedule_failed.treat_missing_data == "notBreaching"
     )
-    error_message = "One alarm over both queues: a message in either is a schedule that could not start its task."
+    error_message = "One alarm over both queues, on what arrives (v1-e40-t42): a message sent to either in the last 30 minutes is a schedule that could not start its task, and each new one emails, whatever the queue still holds."
   }
 
   assert {

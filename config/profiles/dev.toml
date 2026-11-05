@@ -41,10 +41,22 @@ region = "us-east-1"
 aws_profile = "debate-dev-evidence"
 
 [providers]
-# Only the providers this build has an adapter for: the registry refuses to build any search while
-# a name it cannot build is enabled (v1-e07-t01). Crossref and Semantic Scholar are added back by
-# the tasks that bring their adapters, v1-e07-t03 and v1-e07-t04 (v1-e08-t05).
-enabled = ["openalex", "rss"]
+# Only providers this build has an adapter for and whose live smoke has passed on the operator's
+# machine (v1-e07-t13): the registry refuses to build any search while a name it cannot build is
+# enabled (v1-e07-t01). Crossref, the Federal Register and GovInfo passed theirs on 2026-11-02.
+# Semantic Scholar and GDELT have no adapter in this build, and Google News is not enabled.
+#
+# None of them needs anything in this file, and nothing secret may go here. Each machine sets its
+# own in the environment or an uncommitted .env (.env.example):
+# * crossref: DEBATE_PROVIDERS__CONTACT_EMAIL puts it in Crossref's polite pool, 3 queries a
+#   second. Without one it uses the public pool, 1 query a second; an expanded search's last
+#   queries can then come back "not asked: the public pool allows 1 query a second", which the
+#   search footer prints, and the search is partial.
+# * federal_register and govinfo are asked only by a search whose --topic lists them under
+#   government_providers in config/feeds/ (today the NHI Policy topic); enabling them here does not
+#   widen that. The Federal Register takes no key. GovInfo needs DEBATE_PROVIDERS__API_DATA_GOV_KEY;
+#   without one a search on such a topic reports "govinfo: not configured" and is partial.
+enabled = ["openalex", "crossref", "rss", "federal_register", "govinfo"]
 
 [http]
 # Slower than prod on purpose: dev is where a new adapter's first, wrong version runs.

@@ -515,19 +515,38 @@ at once and ranks what they find. `FederatedSearchService` in `debate_core` does
 them by seven explainable features (`config/federated_ranking.yaml`, `v1-e08-t03`), matches each to an
 Article without fetching it, and stores the search. The providers are the ones `providers.enabled`
 names that this build has adapters for: `openalex`, `crossref`, `rss` (the publisher feeds in
-`config/feeds/`), `google_news`, and the government sources `federal_register` and `govinfo`. The words
-are `debate_cli.presenters.search_presenter`'s.
+`config/feeds/`), `google_news`, and the government sources `federal_register` and `govinfo`. The
+committed dev and prod profiles enable `openalex`, `crossref`, `rss`, `federal_register` and `govinfo`,
+the providers whose live smoke has passed on the operator's machine (`v1-e07-t13`). The words are
+`debate_cli.presenters.search_presenter`'s.
+
+**Without a contact email or a key** a search still runs, and its footer says what is missing. Neither
+goes in a profile: each machine sets its own as an exported variable or in a `.env` file. Today a `.env`
+is read from the checkout a command runs in, or, outside a checkout, from the folder it runs in, and
+nowhere else (`.env.example` lists the variables).
+
+* Crossref without `DEBATE_PROVIDERS__CONTACT_EMAIL` uses its public pool, which takes one query a
+  second instead of three. A search of one query looks the same either way. An expanded search sends
+  its queries one a second, and any it cannot send before its timeout come back not asked. The footer
+  then says, for example, `crossref: partial, 9 results from 12 queries: not asked: the public pool
+  allows 1 query a second; set a contact email for the polite pool`, and the search exits `6`. On the
+  recorded fixtures the twelve-query NHI link search sends nine of its twelve Crossref queries in about
+  9 seconds without an email, and all twelve in about 4 seconds with one.
+* GovInfo without `DEBATE_PROVIDERS__API_DATA_GOV_KEY` is `not configured` on a topic that lists it,
+  as below, and that search exits `6` too.
 
 **Government sources** (`v1-e07-t07`) are asked only by a search on a topic that lists them:
 `--topic policy-2026-27-nhi` asks the Federal Register's rules, proposed rules and notices and GovInfo's
 bills, committee reports, hearings and committee prints, because `config/feeds/health-insurance.yaml`
 lists both for that topic. A search with no `--topic` never asks them, and neither does one where
-`providers.enabled` does not list them. The Federal Register takes no key. GovInfo needs a free
+`providers.enabled` does not list them; enabling them in the profiles changed neither rule. The Federal
+Register takes no key. GovInfo needs a free
 api.data.gov key in `DEBATE_PROVIDERS__API_DATA_GOV_KEY`, from https://api.data.gov/signup/. Without one,
 a search on the topic reports `govinfo: not configured: govinfo: no api.data.gov key
-(DEBATE_PROVIDERS__API_DATA_GOV_KEY)` and exits `6`. api.data.gov allows a key 1,000 requests an hour,
-which is about 90 searches an hour expanded to eleven queries, and then answers `429` for the rest of
-the hour; the footer says so.
+(DEBATE_PROVIDERS__API_DATA_GOV_KEY)` and exits `6`. GovInfo and the Federal Register are each asked
+once per query, so the twelve-query NHI link search sends each twelve requests. api.data.gov allows a
+key 1,000 requests an hour, which is about 80 such searches an hour, and then answers `429` for the
+rest of the hour; the footer says so.
 
 ```console
 $ uv run debate-research search "midterm elections" --since 2026-09-14 --max-results 20

@@ -23,9 +23,10 @@ import io
 import json
 import os
 import sqlite3
+import time
 from collections.abc import Callable, Iterator, Sequence
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, Final
 
@@ -305,6 +306,9 @@ class Seams:
     itself, through the budget guard and the usage log, over the `bedrock_router_factory` a test
     stands in for; Crossref is answered too."""
     crossref: CrossrefAnswers = field(default_factory=CrossrefAnswers)
+    moving_clock: bool = False
+    """Let the container's clock run on from `NOW` in real time, for Crossref's pacer, which reads it to
+    space its queries and to know when one is too late to send; otherwise it stands still at `NOW`."""
     containers: list[ServiceContainer] = field(default_factory=list[ServiceContainer])
     """Every container the app built, for a test that reads the settings a command left in one."""
 
@@ -322,7 +326,11 @@ def seams(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Seams]:
 
     def with_seams(self: ServiceContainer, **arguments: Any) -> None:
         build(self, **arguments)
-        self.override("clock", lambda: NOW)
+        if seams.moving_clock:
+            started = time.monotonic()
+            self.override("clock", lambda: NOW + timedelta(seconds=time.monotonic() - started))
+        else:
+            self.override("clock", lambda: NOW)
         if seams.live_models is None:
             self.override("search_model_router", seams.router)
         else:
@@ -936,6 +944,145 @@ def test_govinfo_with_its_key_is_asked_on_its_topic_with_the_key_in_a_header_onl
     assert request.headers["x-api-key"] == DATA_GOV_KEY
     assert DATA_GOV_KEY not in str(request.url)
     assert DATA_GOV_KEY not in result.stdout + result.stderr
+
+
+# ------------------------------------------------------------------------------------------------
+# The committed dev and prod profiles: what a student's machine asks (v1-e07-t13)
+# ------------------------------------------------------------------------------------------------
+
+INVENTED_CONTACT_EMAIL: Final = "invented-t13@example.org"
+"""An address of no one's, for the polite pool."""
+
+PUBLIC_POOL_NOT_ASKED: Final = (
+    "not asked: the public pool allows 1 query a second; set a contact email for the polite pool"
+)
+"""Crossref's reason for a query its public pool could not send in time (v1-e07-t03)."""
+
+
+@pytest.fixture(params=["dev", "prod"])
+def committed_profile(
+    request: pytest.FixtureRequest, seams: Seams, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> Seams:
+    """A search under the committed dev or prod profile, the container building every provider it enables
+    over the recorded answers, with no contact email and no api.data.gov key: a student's machine before
+    they set either. Run from a folder of the test's own, so no `.env` can supply one."""
+    from debate_core.application.settings import find_repository_root
+
+    root = find_repository_root(Path(__file__).parent)
+    assert root is not None
+    seams.registry_override = False
+    seams.providers.any_feed_url = True
+    monkeypatch.setenv("DEBATE_ENV", request.param)
+    monkeypatch.setenv("DEBATE_PROFILE_DIR", str(root / "config" / "profiles"))
+    monkeypatch.chdir(tmp_path)
+    return seams
+
+
+def hosts_asked(seams: Seams) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for request in seams.providers.requests:
+        counts[request.url.host] = counts.get(request.url.host, 0) + 1
+    return counts
+
+
+def test_on_the_committed_profile_a_search_with_no_topic_asks_crossref_publicly_and_no_government_source(
+    committed_profile: Seams,
+) -> None:
+    result = search("midterm elections", "--since", "2026-09-14")
+
+    assert result.exit_code == ExitCode.OK, result.output
+    assert footer(result) == [
+        "Providers: COMPLETE",
+        "  openalex: ok, 3 results",
+        "  crossref: ok, 1 result",
+        "  rss: ok, 2 results",
+    ]
+    [request] = [r for r in committed_profile.providers.requests if r.url.host == CROSSREF_HOST]
+    assert "mailto" not in request.url.params
+    assert "mailto" not in request.headers["user-agent"]
+    assert FEDERAL_REGISTER_HOST not in hosts_asked(committed_profile)
+    assert GOVINFO_HOST not in hosts_asked(committed_profile)
+
+
+def test_on_the_committed_profile_a_contact_email_puts_crossref_in_the_polite_pool_and_is_never_printed(
+    committed_profile: Seams, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("DEBATE_PROVIDERS__CONTACT_EMAIL", INVENTED_CONTACT_EMAIL)
+
+    result = search("midterm elections", "--since", "2026-09-14")
+
+    assert result.exit_code == ExitCode.OK, result.output
+    assert "  crossref: ok, 1 result" in footer(result)
+    [request] = [r for r in committed_profile.providers.requests if r.url.host == CROSSREF_HOST]
+    assert request.url.params["mailto"] == INVENTED_CONTACT_EMAIL
+    assert f"mailto:{INVENTED_CONTACT_EMAIL}" in request.headers["user-agent"]
+    assert INVENTED_CONTACT_EMAIL not in result.stdout + result.stderr
+
+
+def test_on_the_committed_profile_a_search_on_the_nhi_topic_without_a_key_reports_govinfo_not_configured(
+    committed_profile: Seams,
+) -> None:
+    """The Federal Register takes no key and answers; GovInfo has none and is never asked. The topic's
+    feed file lists both (`config/feeds/health-insurance.yaml`); enabling them in the profile adds no
+    topic."""
+    result = search("health insurance", "--topic", "policy-2026-27-nhi")
+
+    assert result.exit_code == ExitCode.SEARCH_PARTIAL, result.output
+    assert footer(result) == [
+        "Providers: PARTIAL, results may be missing",
+        "  openalex: ok, 3 results",
+        "  crossref: ok, 1 result",
+        "  rss: ok, 2 results",
+        "  federal_register: ok, 1 result",
+        "  govinfo: not configured: no api.data.gov key (DEBATE_PROVIDERS__API_DATA_GOV_KEY)",
+    ]
+    assert hosts_asked(committed_profile)[FEDERAL_REGISTER_HOST] == 1
+    assert GOVINFO_HOST not in hosts_asked(committed_profile)
+
+
+def test_on_the_committed_profile_a_search_on_the_nhi_topic_with_a_key_asks_govinfo_and_is_complete(
+    committed_profile: Seams, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("DEBATE_PROVIDERS__API_DATA_GOV_KEY", DATA_GOV_KEY)
+
+    result = search("health insurance", "--topic", "policy-2026-27-nhi")
+
+    assert result.exit_code == ExitCode.OK, result.output
+    assert footer(result)[0] == "Providers: COMPLETE"
+    assert footer(result)[-2:] == ["  federal_register: ok, 1 result", "  govinfo: ok, 1 result"]
+    assert DATA_GOV_KEY not in result.stdout + result.stderr
+
+
+def test_on_the_committed_profile_without_a_contact_email_crossref_names_the_public_pool_in_the_footer(
+    committed_profile: Seams, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An expanded search's queries all reach Crossref at once, and the public pool sends one a second, so
+    the ones it cannot send before their timeout less a reserve come back not asked, named in the footer
+    with the cure (v1-e07-t03). Here the timeout is 2 seconds, the reserve 1, and the clock runs, so the
+    first of the twelve NHI link queries is sent and the second's turn, a second after the first, comes
+    too late: one request, eleven not asked, within about a second. With the profiles' 10 seconds, the
+    same search sends nine (the before-and-after measurement in v1-e07-t13's report)."""
+    committed_profile.moving_clock = True
+    monkeypatch.setenv("DEBATE_PROVIDERS__TIMEOUT_SECONDS", "2")
+
+    result = search(
+        "national health insurance",
+        "--argument",
+        "politics-da",
+        "--need",
+        "link",
+        "--topic",
+        "policy-2026-27-nhi",
+        "--providers",
+        "crossref",
+    )
+
+    assert result.exit_code == ExitCode.SEARCH_PARTIAL, result.output
+    assert footer(result) == [
+        "Providers: PARTIAL, results may be missing",
+        f"  crossref: partial, 1 result from 12 queries: {PUBLIC_POOL_NOT_ASKED}",
+    ]
+    assert hosts_asked(committed_profile) == {CROSSREF_HOST: 1}
 
 
 def test_a_topic_alone_searches_the_query_as_typed(seams: Seams) -> None:

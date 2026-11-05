@@ -44,7 +44,7 @@ spec:
         and the guide say so, and a run without a key or an email reports not_configured or
         the public pool as designed.
 status:
-  phase: Pending
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

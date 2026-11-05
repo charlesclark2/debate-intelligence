@@ -1309,3 +1309,124 @@ async def test_model_a_run_sends_no_disclosing_teams_name_in_a_heading_or_tag(
     assert [(item["headings"], item["tag"]) for batch in router.batches for item in batch] == [
         (["cliff"], "cliff nears")
     ]
+
+
+# ------------------------------------------------------------------------------------------------
+# The own side's answer heading (`v1-e32-t49`): a card in a file disclosed only on its position's
+# own side reads it, whatever the heading or the model's stance says; every other card keeps its role
+# ------------------------------------------------------------------------------------------------
+
+SIDED_POSITIONS = [
+    {"id": "spending-da", "label": "Spending DA", "kind": "da", "side": "neg", "aliases": ["spending da"]},
+    {"id": "sample-aff", "label": "Sample plan", "kind": "aff", "side": "aff", "aliases": ["sample plan"]},
+    {"id": "condo-bad", "label": "Condo Bad", "kind": "theory", "side": "both", "aliases": ["condo bad"]},
+]
+DEFENDED = ((("AT: Spending DA",), "Link holds"), (("AT: Condo Bad",), "Condo good"))
+"""Two cards under an answer heading that is an alias: the role stage one gives both is ANSWERS."""
+
+
+def sided(number: int, *owners: SeedTeam, cards: Sequence[tuple[tuple[str, ...], str | None]]) -> SeedSource:
+    return SeedSource(
+        sha256=f"{number:x}".rjust(64, "0"),
+        teams=owners,
+        cards=tuple(
+            SeedCard(tag=tag, section_path=path, first_element_index=index * 3)
+            for index, (path, tag) in enumerate(cards)
+        ),
+    )
+
+
+def roles(found: ClassificationRun) -> dict[str, tuple[str | None, PositionRole | None]]:
+    """Each card as `<source number>:<card number>` → (position, role)."""
+    return {
+        f"{int(one.source_sha256, 16)}:{(one.first_element_index or 0) // 3}": (one.position_id, one.role)
+        for one in found.classifications
+        if one.item_kind is ItemKind.CARD
+    }
+
+
+@pytest.mark.anyio
+async def test_own_side_stage_one_s_card_under_an_answer_heading_reads_on_its_own_side_only(
+    tmp_path: Path,
+) -> None:
+    own = sided(11, team("own", Side.NEG), cards=DEFENDED)
+    other = sided(12, team("other", Side.AFF), cards=DEFENDED)
+    both = sided(13, team("both-neg", Side.NEG), team("both-aff", Side.AFF), cards=DEFENDED)
+    unknown = sided(14, team("unknown", Side.UNKNOWN), cards=DEFENDED)
+    aff_own = sided(15, team("aff-own", Side.AFF), cards=[(("AT: Sample Plan",), "Plan still solves")])
+    other_reads = sided(16, team("other-reads", Side.AFF), cards=[(("Spending DA",), "Deficits rise")])
+
+    found = await run(
+        tmp_path,
+        repository(taxonomy(positions=SIDED_POSITIONS)),
+        own,
+        other,
+        both,
+        unknown,
+        aff_own,
+        other_reads,
+    )
+
+    answers, reads = PositionRole.ANSWERS, PositionRole.READS
+    assert roles(found) == {
+        "11:0": ("spending-da", reads),
+        "11:1": ("condo-bad", answers),
+        "12:0": ("spending-da", answers),
+        "12:1": ("condo-bad", answers),
+        "13:0": ("spending-da", answers),
+        "13:1": ("condo-bad", answers),
+        "14:0": ("spending-da", answers),
+        "14:1": ("condo-bad", answers),
+        "15:0": ("sample-aff", reads),
+        "16:0": ("spending-da", reads),
+    }
+    changed = [
+        one
+        for one in found.classifications
+        if one.item_kind is ItemKind.CARD and one.rationale.endswith("so it reads it")
+    ]
+    assert sorted(int(one.source_sha256, 16) for one in changed) == [11, 15]
+
+
+@pytest.mark.anyio
+async def test_own_side_the_cache_keeps_stage_one_s_role_for_the_twin_on_the_other_side(
+    tmp_path: Path,
+) -> None:
+    repo = repository(taxonomy(positions=SIDED_POSITIONS))
+    await run(tmp_path, repo, sided(11, team("own", Side.NEG), cards=DEFENDED))
+
+    found = await run(tmp_path, repo, sided(12, team("other", Side.AFF), cards=DEFENDED))
+
+    assert (found.counts.hits, found.counts.misses) == (4, 0)
+    assert roles(found)["12:0"] == ("spending-da", PositionRole.ANSWERS)
+    cache = (tmp_path / "landscape" / "classifications" / f"{CASELIST}.jsonl").read_text(encoding="utf-8")
+    assert '"ANSWERS"' in cache
+    assert "so it reads it" not in cache
+
+
+@pytest.mark.anyio
+async def test_own_side_the_model_s_answer_reads_on_its_own_side_and_answers_on_the_other(
+    tmp_path: Path, prompts: PromptRegistry
+) -> None:
+    unplaced = [(("1NC", "AT: No Link"), "Link holds")]
+    router = AnsweringRouter({"link holds": ("spending-da", 0.9, "defends the disadvantage's link")})
+
+    found = await model_run(
+        tmp_path,
+        repository(taxonomy(positions=SIDED_POSITIONS)),
+        stage(router, prompts),
+        sided(21, team("own", Side.NEG), cards=unplaced),
+        sided(22, team("other", Side.AFF), cards=unplaced),
+        sided(23, team("both-neg", Side.NEG), team("both-aff", Side.AFF), cards=unplaced),
+    )
+
+    assert router.tags == [{"link holds"}]
+    assert router.batches[0][0]["under_an_answer_heading"] is True
+    assert roles(found) == {
+        "21:0": ("spending-da", PositionRole.READS),
+        "22:0": ("spending-da", PositionRole.ANSWERS),
+        "23:0": ("spending-da", PositionRole.ANSWERS),
+    }
+    assert {one.method for one in found.classifications if one.item_kind is ItemKind.CARD} == {
+        ClassificationMethod.MODEL
+    }

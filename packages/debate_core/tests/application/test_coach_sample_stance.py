@@ -1,6 +1,7 @@
 """The coach's stance labels and the model's stanced answers, through the evaluation's path (`v1-e32-t46`).
 
-Two invented sources, one disclosed on the affirmative and one on the negative, six cards labelled by hand,
+Three invented sources, one disclosed on the affirmative, one on the negative and one on both (`v1-e32-t49`),
+seven cards labelled by hand,
 asked about through the real prompt (1.2.0, the stage's default) over a scripted model. Stage one, by hand:
 `States CP` is an alias, placed surely and never sent; `AT: Link turn` is an answer heading; the rest are
 unplaced.
@@ -8,14 +9,18 @@ unplaced.
 | Row | File | Tag | Headings | Label | Model answers | Model alone |
 |---|---|---|---|---|---|---|
 | 1 | aff | Not unique | Politics | at:election-da | election-da reads 0.9 | correct: aff file |
-| 2 | neg | Midterms shift | Politics | election-da | election-da, answers, 0.9 | wrong stance |
+| 2 | neg | Midterms shift | Politics | election-da | election-da, answers, 0.9 | correct: own side |
 | 3 | neg | Link turn wrong | AT: Link turn | election-da | election-da reads 0.8 | correct: by the stance |
 | 4 | aff | Fed key wrong | States CP | at:states-cp | states-cp, reads, 0.9 | correct |
 | 5 | aff | Rural hospitals close | Solvency | rural-adv | rural-adv, reads, 0.9 | correct |
 | 6 | neg | Rural fine | Case | at:rural-adv | medicare-aff, answers, 0.9 | wrong kind |
+| 7 | both | Midterms flip | Politics | election-da | election-da, answers, 0.9 | wrong stance |
 
-The model alone: counted 6, correct 1, 3, 4, 5 (4), wrong stance 2, wrong kind 6. The pipeline: row 4 by the
-headings (states-cp in an aff file: answers, as labelled), the rest by the model: counted 6, correct 4.
+Row 2 was a wrong stance until `v1-e32-t49`: a card in a file disclosed only on its position's own side reads
+it, whatever the model's stance. Row 7, in a file disclosed on both sides, keeps the model's stance.
+
+The model alone: counted 7, correct 1 to 5 (5), wrong kind 6, wrong stance 7. The pipeline: row 4 by the
+headings (states-cp in an aff file: answers, as labelled), the rest by the model: counted 7, correct 5.
 Every school, team, tournament, heading and tag is invented.
 """
 
@@ -69,6 +74,7 @@ from debate_core.testing.fakes.parsed_store import InMemoryParsedStore
 REPOSITORY = Path(__file__).resolve().parents[4]
 AFF_SHA = "a" * 64
 NEG_SHA = "b" * 64
+BOTH_SHA = "c" * 64
 TOPIC = "policy-sample-topic"
 
 TAXONOMY = Taxonomy.model_validate(
@@ -118,6 +124,15 @@ CARDS: tuple[tuple[int, str, str, str, str, Stance, tuple[str, Stance, float]], 
         ("rural-adv", Stance.READS, 0.9),
     ),
     (6, NEG_SHA, "Rural fine", "Case", "rural-adv", Stance.ANSWERS, ("medicare-aff", Stance.ANSWERS, 0.9)),
+    (
+        7,
+        BOTH_SHA,
+        "Midterms flip",
+        "Politics",
+        "election-da",
+        Stance.READS,
+        ("election-da", Stance.ANSWERS, 0.9),
+    ),
 )
 ANSWERS = {tag.lower(): answer for _, _, tag, _, _, _, answer in CARDS}
 
@@ -126,10 +141,18 @@ def index_of(row: int) -> int:
     return 3 * row
 
 
-def source(sha: str, side: Side, identity: str) -> SeedSource:
+def source(sha: str, *sides: Side) -> SeedSource:
     return SeedSource(
         sha256=sha,
-        teams=(SeedTeam(identity=identity, side=side, names=("Birch Hollow", "MN"), tournament=None),),
+        teams=tuple(
+            SeedTeam(
+                identity=f"birch/{side.value.lower()}",
+                side=side,
+                names=("Birch Hollow", "MN"),
+                tournament=None,
+            )
+            for side in sides
+        ),
         cards=tuple(
             SeedCard(tag=tag, section_path=(heading,), first_element_index=index_of(row))
             for row, card_sha, tag, heading, _, _, _ in CARDS
@@ -142,10 +165,14 @@ READING = SeedReading(
     caselist="hspolicy99",
     version="2026.10.20-docx-6",
     topic_id=TOPIC,
-    entries=2,
-    parsed=2,
+    entries=3,
+    parsed=3,
     parsed_off_topic=0,
-    sources=(source(AFF_SHA, Side.AFF, "birch/aff"), source(NEG_SHA, Side.NEG, "birch/neg")),
+    sources=(
+        source(AFF_SHA, Side.AFF),
+        source(NEG_SHA, Side.NEG),
+        source(BOTH_SHA, Side.AFF, Side.NEG),
+    ),
     caselist_names={"Birch Hollow": ("MN",)},
 )
 LABELLED = [
@@ -273,19 +300,20 @@ async def test_a_wrong_stance_is_its_own_outcome_counted_and_wrong(prompts: Prom
 
     assert {row: card.outcome for row, card in by_row.items()} == {
         1: CardOutcome.CORRECT,
-        2: CardOutcome.WRONG_STANCE,
+        2: CardOutcome.CORRECT,
         3: CardOutcome.CORRECT,
         4: CardOutcome.CORRECT,
         5: CardOutcome.CORRECT,
         6: CardOutcome.WRONG_KIND,
+        7: CardOutcome.WRONG_STANCE,
     }
     assert outcome_counts(broken_down.cards)["wrong_stance"] == 1
     evaluation = broken_down.evaluation
-    assert (evaluation.counted, evaluation.correct) == (6, 4)
-    assert (evaluation.model_alone.counted, evaluation.model_alone.correct) == (6, 4)
+    assert (evaluation.counted, evaluation.correct) == (7, 5)
+    assert (evaluation.model_alone.counted, evaluation.model_alone.correct) == (7, 5)
     assert (evaluation.pipeline.counted, evaluation.pipeline.correct, evaluation.pipeline.by_headings) == (
-        6,
-        4,
+        7,
+        5,
         1,
     )
 
@@ -297,13 +325,14 @@ async def test_each_card_carries_its_labels_and_its_answers_stance_as_scored(pro
     )
     by_row = {card.sample_row: card for card in broken_down.cards}
 
-    assert [(by_row[row].stance, by_row[row].answer_stance) for row in range(1, 7)] == [
+    assert [(by_row[row].stance, by_row[row].answer_stance) for row in range(1, 8)] == [
+        (Stance.ANSWERS, Stance.ANSWERS),
+        (Stance.READS, Stance.READS),
+        (Stance.READS, Stance.READS),
+        (Stance.ANSWERS, Stance.ANSWERS),
+        (Stance.READS, Stance.READS),
         (Stance.ANSWERS, Stance.ANSWERS),
         (Stance.READS, Stance.ANSWERS),
-        (Stance.READS, Stance.READS),
-        (Stance.ANSWERS, Stance.ANSWERS),
-        (Stance.READS, Stance.READS),
-        (Stance.ANSWERS, Stance.ANSWERS),
     ]
     placed = by_row[4].deterministic
     assert placed is not None

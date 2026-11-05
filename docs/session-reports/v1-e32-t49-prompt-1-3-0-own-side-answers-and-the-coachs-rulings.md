@@ -278,6 +278,41 @@ show the changed sentence.)
 the synthetic archive's end-to-end cassette is keyed by the default version again, it is rewritten offline
 by its own script, as in t46, and that is outside the packages.
 
+## The PM's ruling (2026-11-05)
+
+1. **The own-side rule: (A).** `side_role` is applied in `PositionClassificationService.classify` to stage
+   one's placements and the model's answers alike, and `scored_stance` is built on the same function, so the
+   report and the evaluation keep one rule. It does not go in the matcher; the fingerprint reasoning is
+   accepted. The 181 sure placements across the snapshot that change role to reads are accepted as a
+   product change: they are a side's cards defending its own position against answers (da 112, advantage
+   57, k 7, theory 4, t 1), which the report has been dropping. The report keeps those counts as the
+   production effect, with the 63 position-and-file pairs it adds. The tests, on invented cards and shown
+   failing first:
+   * own side reads under an answer heading;
+   * own side reads when the model says answers;
+   * the other side still answers;
+   * a file on both sides, and a position either side reads, keep their role;
+   * 1.2.0's recordings replay unchanged.
+2. **Prompt 1.3.0: accepted as written**, all three groups, the generic-confidence clause included, on one
+   condition. The re-record's breakdown counts the answers naming a generic position on their own: how
+   many, how many above the threshold, and how many of those are right and wrong. If generic answers above
+   the threshold are wrong more often than right, the clause comes out in a 1.3.1 follow-up, not in this
+   task. Rows 12 and 55 (`cap-k`, right today) are to be watched: a `cap-k` card turning `generic-k` is
+   the clause's other risk, and the report names any such row.
+3. **Rows 16, 33 and 57: (ii)**, to the coach alongside `v1-e32-t50`. They may not be mislabels: a
+   negative can read an affirmative's advantage (an advantage counterplan claiming to solve it, rows 16 and
+   33), and a kritikal affirmative can read a kritik's theory (row 57). Per row, the coach chooses an `at:`
+   label, a second label, or "the side rule is wrong here". The third becomes a PM-filed follow-up on t46's
+   other-side rule. (iii) is not built now.
+4. **The `generic-k` description change** is a separate follow-up for the coach's review before
+   `v1-e32-t50`'s sitting, filed by the PM. It is not in this re-record.
+5. **The re-record runs on `deep_audit` only.** The operator block reads the cost from
+   `config/model_pricing.yaml`. It guards on a set `DEBATE_` variable, a running caselist pull and the
+   Bedrock profile's sign-in, as t46's did.
+
+The build order: `side_role` and its tests; then 1.3.0 with its version, lock and cassette key; then the
+operator's re-record block. The bar, the threshold and the coach's labels do not change.
+
 ## Files changed
 
 <!-- Group by package or directory; one line on why each group changed. -->

@@ -47,7 +47,10 @@ keeps stage one's result for the card. An accepted answer becomes a MODEL result
 confidence, the role the headings give (ANSWERS under an `AT:` heading, as the matcher's), and the
 rationale it gave, which the review threshold then judges like any other. From prompt 1.2.0 the answer
 carries a stance (:func:`answer_schema`, `v1-e32-t46`), and the stance gives the role instead: the model is
-sent the answer-heading flag, and a card under an answer heading inside its own side's block still reads.
+sent the answer-heading flag, and a card under an answer heading inside its own side's block still reads. The
+model is never sent the card's file side (one fingerprint may stand for cards in files on both sides); the
+service gives a card in a file disclosed only on its position's own side READS afterwards
+(:mod:`~debate_core.arguments.landscape.side_role`, `v1-e32-t49`).
 
 Pure: values in, values out. Nothing here logs, and every value holding card text withholds it from
 its `repr`.

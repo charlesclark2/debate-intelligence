@@ -41,7 +41,8 @@ from typing import Final
 
 from debate_core.arguments.landscape.model_stage import Refusal, places_nothing, refusal_reason
 from debate_core.arguments.landscape.review_queue import needs_review
-from debate_core.domain.landscape import PositionSide, Taxonomy
+from debate_core.arguments.landscape.side_role import OPPOSITE_SIDES, readable_sides, side_role
+from debate_core.domain.landscape import Taxonomy
 from debate_core.domain.landscape_classification import ClassificationResult, PositionRole, Stance
 
 __all__ = [
@@ -210,33 +211,22 @@ def labelled_as(position_id: str, stance: Stance) -> str:
     return f"{ANSWERS_PREFIX}{position_id}" if stance is Stance.ANSWERS else position_id
 
 
-_READABLE_SIDES: Final = {
-    "AFF": PositionSide.AFF,
-    "PRO": PositionSide.AFF,
-    "NEG": PositionSide.NEG,
-    "CON": PositionSide.NEG,
-}
-"""A disclosed file's side as a position's side: PF's pro and con count as aff and neg, as the report counts
-them; `UNKNOWN` is no readable side."""
-
-_OPPOSITE: Final = {PositionSide.AFF: PositionSide.NEG, PositionSide.NEG: PositionSide.AFF}
-
-
 def scored_stance(
     taxonomy: Taxonomy, position_id: str, role: PositionRole | None, file_sides: Collection[str] = ()
 ) -> Stance:
-    """The stance a placement of `position_id` is scored with: the report's (`v1-e32-t46`).
+    """The stance a placement of `position_id` is scored with: the report's (`v1-e32-t46`, `v1-e32-t49`).
 
-    ANSWERS when its `role` is ANSWERS, or when every readable side its file was disclosed on (`file_sides`,
-    the disclosures' :class:`~debate_core.domain.caselist.Side` values) is the side opposite the position's:
-    the landscape report never counts either as a read. READS otherwise, a position either side reads and a
-    file on no readable side among them.
+    Its role first takes its file's own side (:func:`~debate_core.arguments.landscape.side_role.side_role`:
+    READS when every readable side its file was disclosed on, `file_sides`, the disclosures'
+    :class:`~debate_core.domain.caselist.Side` values, is the position's own). Then ANSWERS when that role is
+    ANSWERS, or when every readable side is the side opposite the position's: the landscape report never
+    counts either as a read. READS otherwise, a position either side reads and a file on no readable side
+    among them.
     """
-    if role is PositionRole.ANSWERS:
+    if side_role(taxonomy, position_id, role, file_sides) is PositionRole.ANSWERS:
         return Stance.ANSWERS
-    opposite = _OPPOSITE.get(taxonomy.resolve(position_id).side)
-    readable = {_READABLE_SIDES[side] for side in file_sides if side in _READABLE_SIDES}
-    if opposite is not None and readable == {opposite}:
+    opposite = OPPOSITE_SIDES.get(taxonomy.resolve(position_id).side)
+    if opposite is not None and readable_sides(file_sides) == frozenset({opposite}):
         return Stance.ANSWERS
     return Stance.READS
 

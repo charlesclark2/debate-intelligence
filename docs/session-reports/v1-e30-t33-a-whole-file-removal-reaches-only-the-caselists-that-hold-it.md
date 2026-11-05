@@ -10,8 +10,27 @@
 
 ## Summary
 
-Stopped for the PM's ruling on the proposal below (ac1). No code has been written, and no command has
-run against a bucket.
+The PM ruled on the proposal on 2026-11-05 (below); the build follows the ruling.
+
+## The PM's ruling (2026-11-05), as the build reads it
+
+* **(a)** As proposed, with one addition: a version directory retention has tagged
+  (`debate-retention=superseded`, parsed-store-retention.md) is not rewritten. Its reached aggregates
+  are deleted with their versions, as before, and the plan says so per directory; nothing is rebuilt.
+* **(b)** As proposed, with row counts in the dry run and each table's bytes; tagged directories under
+  their own heading as deleted; the new `--json` key with the smoke pins updated.
+* **(c) Q1** The rewrite in place, under the bucket's run lock (say where it is taken and held); each
+  rewrite checked before it is written (rows after = rows before less the rows naming the removed file,
+  every kept line byte-identical, an unreadable line stops the run `INCOMPLETE` with nothing written);
+  and every file a version directory holds listed first, saying what each carries from one source.
+  **Q2** Withdrawals use the same rewrite, in this task. **Q3** Surviving clusters keep their ids and
+  membership. **Q4** A new record beside the log; residue counts only older versions other than the
+  rewrite, in the directories reached; the runbooks say `caselist status` runs from a build carrying
+  this task. **Q5** Withdrawals stay in; the PM sets the estimate to 8h.
+* **(d)** As proposed; promotion item 8 uses the same check, and prod's removal runs from a build
+  carrying this task.
+* Tests on synthetic stores with moto, shown failing first, covering the eight cases the ruling lists;
+  mutants on the rules. No `--execute` outside tests until the PM's word.
 
 ## Proposal for the PM's ruling (ac1)
 

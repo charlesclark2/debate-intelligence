@@ -201,6 +201,36 @@ no paragraph asking for these two sections).
 * Q3: `bluekey` is held by the round robin's spelling, so it is included with no entry of its own.
 * Q4: the check is below, under the seeding's counts.
 
+## Seeding and the Q4 check (2026-11-05)
+
+Read-only over the second restored copy (restored 2026-11-05: 19 manifests, 7,030 of 7,030 sources,
+0 suppressed, parsed store `2026.10.27-docx-7` with 7,141 objects), from this worktree with the guards
+checked first (no `DEBATE_` variable set, no `caselist pull` running).
+
+**Q4, in counts only** (scratch script, 2.6 s). Florida Blue Key's 2026-11-03 disclosures: 292, from 257
+sources. One-school spellings that hold `bluekey` or `fbk`: 7, with 38 disclosures. By source:
+
+| Reached through | de-extinction words only | both | space words only | neither | not parsed |
+|---|---|---|---|---|---|
+| a shared spelling (the tournament's four, or the round robin's) | 162 | 4 | 2 | 52 | 1 |
+| a one-school spelling only | 22 | 0 | 0 | 14 | 0 |
+
+Neither space-only source comes only through a held spelling, so matching stays **holds**, as ruled.
+Of the 66 with neither topic's words, 14 come only through a held one-school spelling.
+
+**Seeding** (`scripts/seed_landscape_taxonomy.py candidates --topic ld-2026-nov-dec-de-extinction
+--data-dir <copy>`, 2.7 s): 7,030 source entries, 6,889 parsed; **256 sources on the topic** (the 257
+above less the one not parsed), 2,593 cards; 595 headings counted, 251 distinct, 192 used by fewer than
+two teams left out; **59 candidate rows**. The CSV is on the operator's Mac under
+`~/Documents/debate/landscape-seed/`, never committed.
+
+**Drafted** (by kind, from the 59 candidates): the topic file has 14 positions (9 contentions, five
+affirmative and four negative; 1 CP, 1 T, 2 Ks, 1 criterion) with 21 aliases; generic.yaml gains 4 LD
+positions (2 criteria, 2 theory) with 5 aliases. So 26 of the 59 candidates are aliases. The other 33
+are structure labels (overview, framing, contention, offense and the like), a tournament name, round and
+speech names, and 9 one- or two-word headings whose meaning would be a guess; the review sheet lists them
+as unplaced for the coach.
+
 ## Plan nodes
 
 <!-- One row per Plan graph node, in the order they were completed. -->

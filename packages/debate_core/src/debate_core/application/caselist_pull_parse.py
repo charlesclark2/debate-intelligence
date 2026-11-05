@@ -23,7 +23,10 @@ this module does not enumerate.
 
 ## What is logged
 
-Nothing of its own. The pipeline and the publisher each log one line of counts, the caselist and
+Nothing of its own. The run's progress lines (`v1-e40-t43`) are the run's: it hands
+:meth:`PullParseStage.parse_new_sources` a
+:class:`~debate_core.application.caselist.step_lines.SourceProgress`, told the number of sources
+and then each one done, counts only. The pipeline and the publisher each log one line of counts, the caselist and
 the version (and, for an object the bucket did not confirm, its key, which is a caselist, a version
 and a digest). No path, school, team code, file name or card text is in either.
 """
@@ -32,6 +35,7 @@ from __future__ import annotations
 
 from debate_core.application.caselist.parsed_publish import ParsedStorePublisher
 from debate_core.application.caselist.publish_service import SourceResult
+from debate_core.application.caselist.step_lines import SourceProgress
 from debate_core.application.caselist_parse import CaselistParseService
 from debate_core.application.caselist_sync import ParsedCaselist, PublishedParsedStore
 
@@ -53,11 +57,16 @@ class PullParseStage:
         self._parse = parse
         self._publisher = publisher
 
-    async def parse_new_sources(self, caselist: str) -> ParsedCaselist:
+    async def parse_new_sources(
+        self, caselist: str, *, progress: SourceProgress | None = None
+    ) -> ParsedCaselist:
         """Parse every source of `caselist` not yet parsed under the running versions, and rebuild
-        its aggregates."""
+        its aggregates. `progress` hears how many sources there are, then how many are done after
+        each one (`v1-e40-t43`)."""
         plan = await self._parse.plan(caselist)
-        report = await self._parse.run(plan)
+        if progress is not None:
+            progress.start(len(plan.to_parse))
+        report = await self._parse.run(plan, progress=progress)
         return ParsedCaselist(
             version=plan.version,
             attempted=report.attempted,

@@ -110,6 +110,16 @@ failed stage's `hint`. A publish left `pending` by an expired session exits `0` 
 had found first is on its stage as `earlier_findings`, which this command's exit status never
 reads.
 
+## What it logs as it goes (`v1-e40-t43`)
+
+Its result is one line on stdout when it ends, so a run's log said nothing until then. Each step
+of the run now writes a line on stderr as it starts and as it ends, and the parse one every five
+minutes with the sources done and left: `caselist backfile-import`'s lines (`v1-e40-t32`), written
+by :func:`~debate_cli.step_lines.write_step_line`, counts and step names only. The result is still
+the last line, unchanged, and the only one with a `run_record`, which is what the cloud's
+`RunsRecorded` metric filter counts. See "What it logs as it goes" in
+:mod:`debate_core.application.caselist_sync`.
+
 ## What an unreadable file on this machine does
 
 A manifest file the operating system will not open or let be written fails the stage that needed
@@ -135,6 +145,7 @@ from debate_cli.context import cli_context, command_name
 from debate_cli.exit_codes import ExitCode, exit_code_for_failure_codes
 from debate_cli.output import CommandFailure, JsonValue, TableSpec
 from debate_cli.panel_summaries import every_value_in_full, shorten_digests
+from debate_cli.step_lines import write_step_line
 from debate_core.application.caselist_sync import (
     RUN_SUMMARY_DIRECTORY,
     RunSummary,
@@ -218,6 +229,7 @@ def pull(
                     progress=cli.output.detail,
                     full_archive=full_archive,
                     bracket=bracket,
+                    on_line=lambda line: write_step_line(cli.output, command_name(ctx), line),
                 ),
             )
         )

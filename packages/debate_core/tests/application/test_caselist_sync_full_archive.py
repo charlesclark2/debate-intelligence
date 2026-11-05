@@ -279,7 +279,7 @@ class StageThatSaysWhatItWasAsked:
     def __init__(self) -> None:
         self.asked: list[str] = []
 
-    async def parse_new_sources(self, caselist: str) -> ParsedCaselist:
+    async def parse_new_sources(self, caselist: str, *, progress: object = None) -> ParsedCaselist:
         self.asked.append(caselist)
         return ParsedCaselist(version="2026.10.10-docx-2")
 

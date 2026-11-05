@@ -24,7 +24,7 @@ import io
 import json
 import shutil
 import zipfile
-from collections.abc import Iterable, Sequence
+from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from pathlib import Path
@@ -43,6 +43,7 @@ from tests.fixtures.openev.build_synthetic_openev import build_download_zips
 from debate_core.application.caselist.evidence_listing import LocalEvidence, digests_in_earlier_manifests
 from debate_core.application.caselist.import_service import CaselistImportService
 from debate_core.application.caselist.manifest import manifest_key, write_manifest
+from debate_core.application.caselist.memory_high_water import MemoryHighWater, read_memory_high_water
 from debate_core.application.caselist.openev_import_service import OpenEvImportReport, OpenEvImportService
 from debate_core.application.caselist.publish_service import CaselistPublishService
 from debate_core.application.caselist.removal_plan import SourceSelector
@@ -53,6 +54,7 @@ from debate_core.application.caselist_sync import (
     OPENEV_DELIVERIES_FILENAME,
     CaselistParseStage,
     CaselistSyncService,
+    LandscapeStage,
     RunLock,
     RunSummary,
     StageOutcome,
@@ -288,6 +290,9 @@ class Installation:
         status: CaselistStatusService | None = None,
         working_copy_outlives_the_run: bool = True,
         bucket_mode: bool = False,
+        clock: Callable[[], datetime] | None = None,
+        read_memory: Callable[[], MemoryHighWater] | None = None,
+        landscape: LandscapeStage | None = None,
     ) -> CaselistSyncService:
         """The pull.
 
@@ -310,6 +315,9 @@ class Installation:
                 installation is; false for a bucket-mode run's working copy (`v1-e34-t31`).
             bucket_mode: As the composition root sets it for the cloud run's bucket mode
                 (`v1-e40-t18`); off, as here, is local mode.
+            clock: The run's clock, when not :data:`RUN_CLOCK` held still (`v1-e40-t43`).
+            read_memory: The memory high-water marks' reader, when not this machine's (`v1-e40-t43`).
+            landscape: A landscape stage, for a run that has one installed (`v1-e40-t43`).
         """
         listed = self.suppression or empty_suppression_list()
         repository = SqliteCaselistRepository(SqliteDatabase.open(self.data_dir))
@@ -351,12 +359,14 @@ class Installation:
                 else None
             ),
             parse=parse,
-            clock=lambda: RUN_CLOCK,
+            clock=clock or (lambda: RUN_CLOCK),
             bulk_downloads_per_day=(
                 DEFAULT_BULK_DOWNLOADS_PER_DAY if bulk_downloads_per_day is None else bulk_downloads_per_day
             ),
             working_copy_outlives_the_run=working_copy_outlives_the_run,
             bucket_mode=bucket_mode,
+            read_memory=read_memory or read_memory_high_water,
+            landscape=landscape,
         )
 
     async def publish(self, caselist: str = CASELIST) -> None:

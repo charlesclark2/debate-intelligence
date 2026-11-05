@@ -182,7 +182,7 @@ class ScriptedParseWithHints(ScriptedParse):
         self._over_the_rate = frozenset(over_the_rate)
         self._newer_table = frozenset(newer_table)
 
-    async def parse_new_sources(self, caselist: str) -> ParsedCaselist:
+    async def parse_new_sources(self, caselist: str, *, progress: object = None) -> ParsedCaselist:
         if caselist in self._newer_table:
             raise NewerFingerprintTable(
                 caselist=caselist, version=VERSION, store=THE_BUCKET, stamped=NEWER, build=BUILD

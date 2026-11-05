@@ -566,6 +566,31 @@ process's own, read by `v1-e40-t32`'s
 :func:`~debate_core.application.caselist.memory_high_water.read_memory_high_water`
 (:attr:`StageTime.memory`). Both are read on every machine; a figure that cannot be read, as the
 container's on the Mac, is left out of the summary, never written as zero.
+
+## What it logs as it goes (`v1-e40-t43`)
+
+A run's result is one line when it ends, so the hand run of 2026-11-05 left its log empty for over an
+hour, and a run downloading or parsing could not be told from one that had hung. The run now tells
+its `on_line` of each step as it starts and as it ends, in
+:mod:`~debate_core.application.caselist.step_lines`' lines, the ones `caselist backfile-import`
+writes (`v1-e40-t32`):
+
+* in bucket mode, the restore (:data:`RESTORE_STEP`), before any stage;
+* each stage the run times, as `stage_times` records it, with that entry's seconds and memory
+  figures, the stage's counts (:func:`_stage_counts`, under the summary's own names) and its
+  outcome. A landscape stage with no landscape service installed has no lines;
+* in bucket mode, each save of the run-state bundle (:data:`SAVE_BUNDLE_STEP`), after the publish
+  stage and after the run, and the save of the state files at its end
+  (:data:`SAVE_STATE_FILES_STEP`);
+* during the parse, its progress: a line once it knows how many sources a caselist has, then every
+  :data:`~debate_core.application.caselist.step_lines.PARSE_PROGRESS_INTERVAL_SECONDS`, and one
+  when the caselist's last source is done, each with the sources done and left and the caselists
+  done and left.
+
+Step names and counts only: never a caselist, school, team, tournament, file name or path. A stage
+that fails without raising ends `step_ended` with the outcome `failed`, and one that raises (a
+SIGTERM's cancellation, an expired token) ends `step_failed`. Every line comes before the run's
+result, which the CLI writes once this module has returned.
 """
 
 from __future__ import annotations
@@ -578,6 +603,7 @@ import logging
 import os
 import re
 import shutil
+import time
 from collections.abc import Awaitable, Callable, Collection, Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from datetime import UTC, date, datetime, timedelta
@@ -633,6 +659,16 @@ from debate_core.application.caselist.status_service import (
     CaselistStatusService,
     NoCaselistEvidence,
     SnapshotStatus,
+)
+from debate_core.application.caselist.step_lines import (
+    PARSE_PROGRESS_INTERVAL_SECONDS,
+    OpenStep,
+    ParseProgress,
+    SourceProgress,
+    StepEvent,
+    StepLine,
+    logged_step,
+    say_nothing,
 )
 from debate_core.application.caselist.suppression import LocalFallbackSuppressionList, load_suppression_state
 from debate_core.application.caselist_parse import PARSE_FAILURE_RATE_EXCEEDED
@@ -693,7 +729,10 @@ __all__ = [
     "OPENEV_DELIVERIES_FILENAME",
     "PARSE_OWED_FILENAME",
     "PENDING_WORK_FILENAME",
+    "RESTORE_STEP",
     "RUN_SUMMARY_SCHEMA_VERSION",
+    "SAVE_BUNDLE_STEP",
+    "SAVE_STATE_FILES_STEP",
     "SKIP_TODAY_SECONDS",
     "ArchiveReader",
     "ArchiveSelection",
@@ -1923,8 +1962,14 @@ class CaselistParseStage(Protocol):
     copy of the list.
     """
 
-    async def parse_new_sources(self, caselist: str) -> ParsedCaselist:
-        """Parse whatever of `caselist` is not parsed yet, and rebuild its aggregates."""
+    async def parse_new_sources(
+        self, caselist: str, *, progress: SourceProgress | None = None
+    ) -> ParsedCaselist:
+        """Parse whatever of `caselist` is not parsed yet, and rebuild its aggregates.
+
+        `progress`, when given, is told how many sources it will parse, then how many are done after
+        each one: the run's progress lines (`v1-e40-t43`).
+        """
         ...
 
     async def publish(self, caselist: str, version: str) -> PublishedParsedStore:
@@ -3065,6 +3110,8 @@ class _RunTally:
     stage_times: list[StageTime] = field(default_factory=lambda: list[StageTime]())
     data_volume: DataVolumeUsage | None = None
     """The fullest reading so far, when the run reads its volume (`v1-e40-t03`)."""
+    on_line: Callable[[StepLine], None] = say_nothing
+    """Where each stage's start and end lines, and the parse's progress lines, go (`v1-e40-t43`)."""
 
     def count_held(self, held_by_request: Mapping[str, int]) -> None:
         for request_id, count in held_by_request.items():
@@ -3412,8 +3459,12 @@ class CaselistSyncService:
         full_archive: str | None = None,
         owed_for_drift: Collection[PendingSnapshot] = (),
         comparisons_owed: Sequence[PendingSnapshot] = (),
+        on_line: Callable[[StepLine], None] | None = None,
     ) -> RunSummary:
         """One whole pull. Holds the run lock for its duration.
+
+        `on_line` hears each stage's start and end as it happens, and the parse's progress
+        (`v1-e40-t43`; "What it logs as it goes" in the module docstring).
 
         `owed_for_drift` is what earlier runs owed again because the bucket's manifest drifted from
         this machine's, and every run since has still owed; see "What the pending-work file holds"
@@ -3442,7 +3493,9 @@ class CaselistSyncService:
         started = self._clock()
         with RunLock(self._state_dir / LOCK_FILENAME):
             tally = _RunTally(
-                owed_for_drift=frozenset(owed_for_drift), comparisons_owed=tuple(comparisons_owed)
+                owed_for_drift=frozenset(owed_for_drift),
+                comparisons_owed=tuple(comparisons_owed),
+                on_line=on_line or say_nothing,
             )
             fallbacks = self._suppression_fallbacks()
             plan = await self._timed(
@@ -3473,6 +3526,7 @@ class CaselistSyncService:
         *,
         owed_for_drift: Collection[PendingSnapshot] = (),
         comparisons_owed: Sequence[PendingSnapshot] = (),
+        on_line: Callable[[StepLine], None] | None = None,
     ) -> RunSummary:
         """Complete the publishes an earlier run deferred, and the check it was cut short on.
 
@@ -3487,12 +3541,14 @@ class CaselistSyncService:
         because the session expired first (`v1-e34-t28`, the PM's ruling of 2026-10-22). The report
         stage compares exactly those, after what this run publishes, as it compares anything:
         :func:`run_pull` reads them from that run's details, for :meth:`run` as for this. Nothing
-        else is compared again.
+        else is compared again. `on_line` is :meth:`run`'s: its publish and report stages are told.
         """
         started = self._clock()
         with RunLock(self._state_dir / LOCK_FILENAME):
             tally = _RunTally(
-                owed_for_drift=frozenset(owed_for_drift), comparisons_owed=tuple(comparisons_owed)
+                owed_for_drift=frozenset(owed_for_drift),
+                comparisons_owed=tuple(comparisons_owed),
+                on_line=on_line or say_nothing,
             )
             try:
                 selected = f"{len(self._pending.read())} snapshot(s) owed"
@@ -4001,7 +4057,10 @@ class CaselistSyncService:
         self._note_local_copy_only(tally, SyncStage.IMPORT, since=fallbacks)
         await self._timed(SyncStage.PUBLISH, tally, lambda: self._publish_stage(tally))
         if self._after_publish is not None:
-            await self._after_publish()
+            with logged_step(
+                SAVE_BUNDLE_STEP, tally.on_line, monotonic=self._seconds, memory=self._read_memory
+            ):
+                await self._after_publish()
         await self._timed(SyncStage.PARSE, tally, lambda: self._parse_stage(plan, tally))
         await self._timed(SyncStage.SEARCH_INDEX, tally, lambda: self._search_index_stage(plan, tally))
         await self._timed(SyncStage.LANDSCAPE, tally, lambda: self._landscape_stage(plan, tally))
@@ -4013,17 +4072,43 @@ class CaselistSyncService:
 
         By the run's clock, which gives the summary its own start and finish, so a stage's times
         always lie within the run's.
+
+        The stage's start and end are told to the run's `on_line` as they happen (`v1-e40-t43`): the
+        end line with the stage's seconds and memory figures as `stage_times` records them, its
+        counts, and how the stage ended. A stage that raised (a SIGTERM's cancellation, an expired
+        token) ends `step_failed`. A landscape stage with no landscape service installed says nothing.
         """
+        told = stage is not SyncStage.LANDSCAPE or self._landscape is not None
+        if told:
+            tally.on_line(StepLine(StepEvent.STARTED, str(stage)))
         started = self._clock()
+        raised = True
         try:
-            return await work()
+            done = await work()
+            raised = False
+            return done
         finally:
-            tally.stage_times.append(
-                StageTime(
-                    stage=stage, started_at=started, finished_at=self._clock(), memory=self._read_memory()
-                )
+            timed = StageTime(
+                stage=stage, started_at=started, finished_at=self._clock(), memory=self._read_memory()
             )
+            tally.stage_times.append(timed)
             self._read_volume_after(stage, tally)
+            if told:
+                outcome = tally.outcome_of(stage)
+                tally.on_line(
+                    StepLine(
+                        StepEvent.FAILED if raised else StepEvent.ENDED,
+                        str(stage),
+                        timed.duration_seconds,
+                        _stage_counts(stage, tally),
+                        timed.memory,
+                        str(outcome) if outcome is not None else None,
+                    )
+                )
+
+    def _seconds(self) -> float:
+        """The run's clock in seconds, for the lines of the steps that are not stages (`v1-e40-t43`)."""
+        return self._clock().timestamp()
 
     def _read_volume_after(self, stage: SyncStage, tally: _RunTally) -> None:
         """Keep the fullest reading of the data directory's volume, when the run reads it at all."""
@@ -4712,10 +4797,18 @@ class CaselistSyncService:
             publish_only = rebuilt_from_every_copy and self._working_copy_outlives_the_run
             owed.append(ParsedStoreOwed(caselist=caselist, publish_only=publish_only))
 
-        for caselist in caselists:
+        for number, caselist in enumerate(caselists):
             fallbacks = self._suppression_fallbacks()
+            # Counts only, never the caselist's name (`v1-e40-t43`).
+            progress = ParseProgress(
+                tally.on_line,
+                monotonic=self._seconds,
+                memory=self._read_memory,
+                interval=PARSE_PROGRESS_INTERVAL_SECONDS,
+                also={"caselists_done": number, "caselists_left": len(caselists) - number},
+            )
             try:
-                parsed = await self._parse.parse_new_sources(caselist)
+                parsed = await self._parse.parse_new_sources(caselist, progress=progress)
             except Exception as failed:
                 failures.append(self._failure(failed, about=caselist))
                 if publishing:
@@ -5433,6 +5526,31 @@ class PullBracket(Protocol):
     def as_terminated(self, cancelled: asyncio.CancelledError) -> BaseException: ...
 
 
+RESTORE_STEP: Final = "restore"
+"""A bucket-mode run's restore, around :meth:`PullBracket.start`, as its line names it (`v1-e40-t43`)."""
+
+SAVE_BUNDLE_STEP: Final = "save_bundle"
+"""A bucket-mode run's save of the run-state bundle to the bucket: after the publish stage, and after
+the run (`v1-e40-t43`)."""
+
+SAVE_STATE_FILES_STEP: Final = "save_state_files"
+"""A bucket-mode run's save of its state files to the bucket at its end, before the lock is released
+(`v1-e40-t43`)."""
+
+
+def _restore_counts(details: BucketRunDetails | None) -> dict[str, int]:
+    """The restore's counts, from what the run's details record of it: how many, never which."""
+    restored = details.restore if details is not None else None
+    if restored is None:
+        return {}
+    return {
+        "state_files": restored.state_files,
+        "parsed_objects": restored.parsed_objects,
+        "parsed_bytes": restored.parsed_bytes,
+        "parsed_kept": restored.parsed_kept,
+    }
+
+
 @dataclass(frozen=True, slots=True)
 class PulledRun:
     """What one `caselist pull` produced, in whichever mode it ran."""
@@ -5457,6 +5575,9 @@ async def run_pull(
     progress: Callable[[str], None],
     full_archive: str | None = None,
     bracket: PullBracket | None = None,
+    on_line: Callable[[StepLine], None] | None = None,
+    monotonic: Callable[[], float] = time.monotonic,
+    memory: Callable[[], MemoryHighWater] = read_memory_high_water,
 ) -> PulledRun:
     """Run one `caselist pull`: a dry run, a whole run, or `--publish-pending`.
 
@@ -5474,6 +5595,11 @@ async def run_pull(
         bracket: The bucket's run lock and state around the run (:class:`PullBracket`, `v1-e40-t04`).
             It starts inside the monitor, so that a refusal is recorded, and ends after the monitor
             has recorded the run. `None` is local mode without the lock check, as before it.
+        on_line: Hears each step of the run as it starts and ends, and the parse's progress
+            (`v1-e40-t43`; "What it logs as it goes" in the module docstring): in bucket mode the
+            restore and the saves to the bucket, and in every mode each stage of the service.
+        monotonic: Seconds, for the restore's and the saves' lines; the stages' are the run's clock.
+        memory: The memory high-water marks for the restore's and the saves' lines.
 
     Raises :class:`NoCaselistsConfigured` when asked to pull no caselist, and whatever the service
     or the monitor raise; the monitor has recorded and announced it first.
@@ -5481,17 +5607,34 @@ async def run_pull(
     record: SyncRunRecord | None = None
     details: SyncRunDetails | None = None
     caselists = _with_requested(caselists, full_archive)
+    emit = on_line or say_nothing
+    restored = False
     task = asyncio.current_task()
     if bracket is not None and task is not None:
         bracket.watching(task)
+
+    def logged(name: str) -> contextlib.AbstractContextManager[OpenStep]:
+        return logged_step(name, emit, monotonic=monotonic, memory=memory)
+
+    async def start(bracket: PullBracket, *, dry_run: bool, restore_parsed: bool = True) -> None:
+        nonlocal restored
+        if not bracket.bucket_mode:
+            # Local mode restores nothing: it only refuses a seeded bucket, so it has no line.
+            await bracket.start(caselists, dry_run=dry_run, restore_parsed=restore_parsed)
+            return
+        with logged(RESTORE_STEP) as restoring:
+            await bracket.start(caselists, dry_run=dry_run, restore_parsed=restore_parsed)
+            restoring.counts.update(_restore_counts(bracket.details()))
+        restored = True
+
     if dry_run:
         # A dry run writes nothing (v1-e34-t02 ac2), so it leaves no run record either.
         if not caselists:
             raise NoCaselistsConfigured
         if bracket is not None:
-            await bracket.start(caselists, dry_run=True)
+            await start(bracket, dry_run=True)
         progress(f"pulling {', '.join(caselists)} (dry run)")
-        summary = await sync_service().run(caselists, dry_run=True, full_archive=full_archive)
+        summary = await sync_service().run(caselists, dry_run=True, full_archive=full_archive, on_line=emit)
     else:
         watching = monitor()
 
@@ -5503,7 +5646,7 @@ async def run_pull(
                     raise NoCaselistsConfigured
                 if bracket is not None:
                     # The lock and the restore first: the run log read next is the restored one.
-                    await bracket.start(caselists, dry_run=False, restore_parsed=not publish_pending)
+                    await start(bracket, dry_run=False, restore_parsed=not publish_pending)
                 summary = await pulled(
                     # What earlier runs owed again for drift is read from their records (`v1-e34-t26`).
                     watching.snapshots_owed_again_for_drift(),
@@ -5511,7 +5654,10 @@ async def run_pull(
                     # as a drain does (`v1-e34-t28`).
                     watching.comparisons_owed(),
                 )
-                if bracket is not None:
+                if bracket is not None and bracket.bucket_mode:
+                    with logged(SAVE_BUNDLE_STEP):
+                        await bracket.after_run()
+                elif bracket is not None:
                     await bracket.after_run()
                 return summary
             except asyncio.CancelledError as cancelled:
@@ -5525,7 +5671,7 @@ async def run_pull(
             if publish_pending:
                 progress("completing the publishes an earlier run deferred")
                 return await sync_service().publish_pending(
-                    owed_for_drift=owed_for_drift, comparisons_owed=comparisons_owed
+                    owed_for_drift=owed_for_drift, comparisons_owed=comparisons_owed, on_line=emit
                 )
             progress(f"pulling {', '.join(caselists)}")
             return await sync_service().run(
@@ -5533,6 +5679,7 @@ async def run_pull(
                 full_archive=full_archive,
                 owed_for_drift=owed_for_drift,
                 comparisons_owed=comparisons_owed,
+                on_line=emit,
             )
 
         try:
@@ -5543,7 +5690,12 @@ async def run_pull(
                 bucket_run=bracket.details if bracket is not None else lambda: None,
             )
         finally:
-            if bracket is not None:
+            if bracket is not None and restored:
+                # After the monitor has recorded the run, and before the result is written: so the
+                # result stays the last line of the log (`v1-e40-t43`).
+                with logged(SAVE_STATE_FILES_STEP):
+                    await bracket.finish()
+            elif bracket is not None:
                 await bracket.finish()
         summary, record, details = monitored.summary, monitored.record, monitored.details
 
@@ -5653,6 +5805,65 @@ _PARSE_FAILED_SO_NO_INDEX: Final = (
     "the parse stage failed in this run, so the index is not rebuilt from what it left; "
     "the previous index stays current"
 )
+
+
+def _stage_counts(stage: SyncStage, tally: _RunTally) -> dict[str, int]:
+    """What a stage's end line counts (`v1-e40-t43`): numbers from the run's tally, never a name.
+
+    The names are the run summary's own where it has the same count, so a stage line and the
+    result read alike.
+    """
+    match stage:
+        case SyncStage.SELECT:
+            return {
+                "archives_seen": len(tally.archives),
+                "archives_wanted": sum(1 for one in tally.archives if one.wanted or one.deferred_by_cap),
+                "archives_deferred": sum(1 for one in tally.archives if one.deferred_by_cap),
+                "openev_seen": len(tally.openev),
+            }
+        case SyncStage.DOWNLOAD:
+            files = (
+                *(file for _, file in tally.downloaded_archives),
+                *(file for _, file in tally.downloaded_openev),
+            )
+            return {
+                "archives_downloaded": len(tally.downloaded_archives),
+                "openev_downloaded": len(tally.downloaded_openev),
+                "downloaded_bytes": sum(file.byte_size for file in files if not file.already_present),
+            }
+        case SyncStage.IMPORT:
+            return {
+                "snapshots_imported": len(tally.snapshots_imported),
+                "files_imported": tally.files_imported,
+                "files_duplicate": tally.files_duplicate,
+                "files_skipped": tally.files_skipped,
+                "blobs_stored": tally.blobs_stored,
+                "held_by_request": sum(tally.held_by_request.values()),
+            }
+        case SyncStage.PUBLISH:
+            return {
+                "objects_published": tally.objects_published,
+                "manifests_published": tally.manifests_published,
+                "pending_publish": len(tally.pending_publish),
+            }
+        case SyncStage.PARSE:
+            return tally.parse.as_json() if tally.parse is not None else {}
+        case SyncStage.SEARCH_INDEX:
+            index = tally.search_index
+            return {"documents": index.documents, "removed": index.removed} if index is not None else {}
+        case SyncStage.LANDSCAPE:
+            return {"reports_written": tally.reports_written}
+        case SyncStage.REPORT:
+            return {"snapshots_confirmed": len(tally.confirmed)}
+        case SyncStage.RETENTION:
+            kept = tally.inbox_retention
+            if kept is None:
+                return {}
+            return {
+                "files_removed": len(kept.removed),
+                "files_kept": len(kept.kept),
+                "bytes_freed": kept.bytes_freed,
+            }
 
 
 def _check_owed(comparisons_owed: Sequence[PendingSnapshot]) -> str:

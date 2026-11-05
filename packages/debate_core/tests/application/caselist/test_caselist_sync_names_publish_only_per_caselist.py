@@ -131,7 +131,7 @@ class ScriptedParse:
         self._refused = dict(refused or {})
         self.asked: list[tuple[str, str]] = []
 
-    async def parse_new_sources(self, caselist: str) -> ParsedCaselist:
+    async def parse_new_sources(self, caselist: str, *, progress: object = None) -> ParsedCaselist:
         self.asked.append(("parse", caselist))
         if caselist in self._crashes:
             raise RuntimeError("the parse pool died")

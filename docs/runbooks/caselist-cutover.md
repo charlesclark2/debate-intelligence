@@ -493,7 +493,8 @@ at the top in the Mac runs' columns, and its details say `"bundle": "saved, …`
 `dev`. Run those two blocks there, and put the cloud run's id in `RUN_ID` in this shell for step 7.
 
 **Its log: the summary line, and any stop** (the follow-ups of `v1-e40-t05` and `v1-e40-t04`). The run's
-summary is one JSON line, which the late-run alarm's metric filter counts. If the log driver split it
+summary is one JSON line, which the late-run alarm's metric filter counts. The run's step lines
+(`v1-e40-t43`) carry the same `"command"` and an `"event"`, so the read passes over them. If the log driver split it
 into several events, the filter would count nothing and a run that recorded itself would read as
 late, so the line is read whole. And if the run was stopped (its deadline, or `ecs stop-task`), the log
 shows whether a process-pool parse stopped within the 120 seconds ECS gives after SIGTERM.
@@ -507,7 +508,7 @@ import json, sys
 from datetime import datetime
 events = [e for e in json.load(open(sys.argv[1]))["events"] if sys.argv[3] in e.get("logStreamName", "")]
 task = json.load(open(sys.argv[2]))["tasks"][0]
-summaries = [e for e in events if '"command": "caselist pull"' in e["message"]]
+summaries = [e for e in events if '"command": "caselist pull"' in e["message"] and '"event": ' not in e["message"]]
 for e in summaries:
     try:
         json.loads(e["message"])

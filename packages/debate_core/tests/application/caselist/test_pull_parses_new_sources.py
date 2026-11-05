@@ -48,6 +48,7 @@ from debate_core.application.caselist.parse_workers import (
 )
 from debate_core.application.caselist.parsed_publish import ParsedStorePublisher
 from debate_core.application.caselist.publish_service import SourceResult
+from debate_core.application.caselist.step_lines import SourceProgress
 from debate_core.application.caselist.suppression import LocalFallbackSuppressionList
 from debate_core.application.caselist_card_stats import CaselistCardStatsService
 from debate_core.application.caselist_parse import CaselistParseService
@@ -211,9 +212,11 @@ class RecordingStage:
         self._inner = inner
         self.asked: list[tuple[str, str]] = []
 
-    async def parse_new_sources(self, caselist: str) -> ParsedCaselist:
+    async def parse_new_sources(
+        self, caselist: str, *, progress: SourceProgress | None = None
+    ) -> ParsedCaselist:
         self.asked.append(("parse", caselist))
-        return await self._inner.parse_new_sources(caselist)
+        return await self._inner.parse_new_sources(caselist, progress=progress)
 
     async def publish(self, caselist: str, version: str) -> PublishedParsedStore:
         self.asked.append(("publish", caselist))
@@ -557,7 +560,7 @@ class ParsesAndCannotPublish:
         self.error = error
         self.asked: list[tuple[str, str]] = []
 
-    async def parse_new_sources(self, caselist: str) -> ParsedCaselist:
+    async def parse_new_sources(self, caselist: str, *, progress: object = None) -> ParsedCaselist:
         self.asked.append(("parse", caselist))
         return ParsedCaselist(version=DOCX_PARSER_VERSION)
 

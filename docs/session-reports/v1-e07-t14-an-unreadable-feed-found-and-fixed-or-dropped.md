@@ -139,9 +139,37 @@ No feed was substituted for any of them.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-11-05
 
 **Notes:**
+
+The cause was found rather than guessed, and the fix for a broken feed now holds for the next one too.
+
+1. **ac1 passes.** The operator's feed check found Roll Call's body invalid at the publisher (a duplicate
+   attribute, line 5, XML 1.0 section 3.1): our parser was right, and the entry is dropped as ruled. The
+   check's new `why:` line explains a refusal in counts and statuses only, and never quotes the document;
+   red first, 19 failed against the old check.
+2. **ac2 passes,** built as ruled (option C, three days): red first (11 failed against the skeleton, 2 at
+   the footer, 2 in the domain), four planted breaks caught, the failure date kept in the feed's own
+   cache entry and taken from the injected clock, and every standing failure still named in the footer and
+   the JSON's `reasons`, so nothing is hidden.
+3. **The coach's decisions are applied:** the eight starter feeds `coach_reviewed` (Roll Call since
+   dropped), and three of the nine health-policy outlets added after passing the check (Healthcare Dive,
+   KFF, The Hill's health section). Nothing was substituted for the others, and each is listed with the
+   check's reason.
+4. **Deviations accepted.** The packages, under the PM's dated ruling. The coach's reviews and feeds are
+   work the spec's description doesn't name: the PM writes them into the spec in the next batch.
+5. **For the coach, recorded by the PM:** KFF's feed is the whole of kff.org. Because a feed entry must
+   hold every word of a query to match, its breadth adds noise only to plain topic searches, never to an
+   argument's templated ones; the PM recommends keeping it, and the coach decides. Fierce Healthcare
+   answered 403: the publisher refuses the request, and the platform does not disguise its requests to get
+   past that, so it stays out. The Commonwealth Fund is pending the operator's copy of its feed link; a pass
+   adds it as a small follow-up change.
+6. **Closing checks:** the affected set (544 files, because `debate_core.domain` is a hub) is left to `ci`
+   (agreement 10). The changed directories and the always-run list (2,500 passed), the federated search and
+   index tests (794), the stored-search tests (22), ruff, pyright, lint-imports, the specs, command blocks,
+   thin handlers and the docs index are clean.
+7. **Merge:** a plain `scripts/task pr` once `ci` is green. The Goal is `Succeeded`.

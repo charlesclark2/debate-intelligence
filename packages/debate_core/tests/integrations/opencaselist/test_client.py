@@ -83,15 +83,16 @@ IN_2030 = datetime(2030, 1, 1, tzinfo=UTC)
 class SimulatedTime:
     """A monotonic clock that only moves when the client sleeps, and the wall clock beside it.
 
-    The wall clock is what a `Retry-After` date is measured from (`v1-e07-t08`). It starts at the
-    real now, because `test_retry_after_as_an_http_date_is_honoured` writes its date from the real
-    now; a test that wants an exact wait replaces it before building the client.
+    The wall clock is what a `Retry-After` date is measured from (`v1-e07-t08`). It stands at
+    `IN_2030`, and a test writes its date from it, so the wait is exact. It started at the real now
+    until `v1-e07-t16`: `test_retry_after_as_an_http_date_is_honoured` wrote its date from the real
+    now a moment later, and a runner busy for about a second between the two made the wait too long.
     """
 
     def __init__(self) -> None:
         self.now = 10_000.0
         self.sleeps: list[float] = []
-        self.wall_clock: Clock = FixedClock(datetime.now(UTC))
+        self.wall_clock: Clock = FixedClock(IN_2030)
 
     def clock(self) -> float:
         return self.now
@@ -838,17 +839,20 @@ def test_retry_after_is_honoured_in_seconds(
 def test_retry_after_as_an_http_date_is_honoured(
     client: OpenCaselistClient, api: respx.MockRouter, simulated: SimulatedTime
 ) -> None:
-    from datetime import UTC, datetime, timedelta
+    """The date two minutes after the client's wall clock is a two-minute wait, and the second
+    request is sent after it."""
+    from datetime import timedelta
     from email.utils import format_datetime
 
-    when = format_datetime(datetime.now(UTC) + timedelta(seconds=120), usegmt=True)
-    api.get(f"{API}/caselists").mock(
+    when = format_datetime(simulated.wall_clock.now() + timedelta(seconds=120), usegmt=True)
+    route = api.get(f"{API}/caselists").mock(
         side_effect=[httpx.Response(503, headers={"Retry-After": when}), httpx.Response(200, json=[])]
     )
 
     run(client.list_caselists())
 
-    assert any(100 <= s <= 121 for s in simulated.sleeps)
+    assert simulated.sleeps == [120.0]
+    assert route.call_count == 2
 
 
 @pytest.mark.parametrize(

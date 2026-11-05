@@ -239,6 +239,7 @@ def test_the_end_lines_carry_the_seconds_counts_and_memory_the_result_records(wo
         for line in ended(lines, stage):
             assert line["seconds"] == round(seconds, 1), stage
     restored = data["run_details"]["bucket_run"]["restore"]
+    assert len(ended(lines, "restore")) == 1
     [restore] = ended(lines, "restore")
     assert restore["counts"] == {
         "state_files": 6,
@@ -249,7 +250,7 @@ def test_the_end_lines_carry_the_seconds_counts_and_memory_the_result_records(wo
     [parse] = ended(lines, "parse")
     assert parse["counts"] == data["parse"]
     assert parse["counts"]["attempted"] == 1, "week three's one new source"
-    assert parse["outcome"] == "completed"
+    assert parse.get("outcome") == "completed"
     [download] = ended(lines, "download")
     assert download["counts"]["archives_downloaded"] == data["archives_downloaded"] == 1
     [publish] = ended(lines, "publish")
@@ -411,7 +412,7 @@ def test_a_failed_runs_result_is_the_one_line_runs_recorded_counts(world: World)
 
     assert result.exit_code == ExitCode.DOMAIN_FAILURE, result.output
     lines = step_lines(result)
-    assert [line["outcome"] for line in ended(lines, "download")] == ["failed"]
+    assert [line.get("outcome") for line in ended(lines, "download")] == ["failed"]
     stdout = result.stdout.splitlines()
     assert len(stdout) == 1, "stdout holds the result alone"
     [result_line] = stdout

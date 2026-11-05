@@ -657,7 +657,7 @@ The weekly caselist run (pull, import, publish, parse, search index) runs in the
 | [The near-duplicate index and the linker's word lists are held compactly, so a season's rebuild fits with room](plan_specs/v1/e40-cloud-caselist-run/t39-cut-index-and-linker-words-held-compactly.yaml) `v1-e40-t39-cut-index-and-linker-words-held-compactly` | Succeeded | 1 | 4.0 |
 | [In bucket mode a missing or unreadable token, and a download refused for an expired login, give the cloud's cure, not a login by hand](plan_specs/v1/e40-cloud-caselist-run/t40-token-errors-name-the-cloud-cure.yaml) `v1-e40-t40-token-errors-name-the-cloud-cure` | Pending | 1 | 1.0 |
 | [A cloud run's decision about each listed file is kept past the log's 90 days](plan_specs/v1/e40-cloud-caselist-run/t41-cloud-run-keeps-its-per-file-decisions.yaml) `v1-e40-t41-cloud-run-keeps-its-per-file-decisions` | Pending | 1 | 2.0 |
-| [The run's schedule tries again when AWS refuses to launch the task, and never starts a second run](plan_specs/v1/e40-cloud-caselist-run/t42-schedule-retries-a-refused-launch.yaml) `v1-e40-t42-schedule-retries-a-refused-launch` | Pending | 1 | 2.0 |
+| [The run's schedule tries again when AWS refuses to launch the task, and never starts a second run](plan_specs/v1/e40-cloud-caselist-run/t42-schedule-retries-a-refused-launch.yaml) `v1-e40-t42-schedule-retries-a-refused-launch` | InProgress | 1 | 2.0 |
 | [The weekly run logs each stage as it starts and ends, so a run can be read while it runs](plan_specs/v1/e40-cloud-caselist-run/t43-weekly-run-logs-each-stage.yaml) `v1-e40-t43-weekly-run-logs-each-stage` | Pending | 1 | 3.0 |
 
 #### [E41 — Delivery Tooling Upkeep](plan_specs/v1/e41-delivery-tooling-upkeep/epic.yaml)

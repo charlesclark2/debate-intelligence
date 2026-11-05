@@ -84,6 +84,11 @@ def files_to_parts(text: str, parts: int) -> dict[str, int]:
     return part_of_file
 
 
+def collects(test_file: str, part: int, part_of_file: Mapping[str, int]) -> bool:
+    """Skeleton for v1-e41-t18's red run: every part collects every file, as before."""
+    return True
+
+
 def first_part_dealt_to(test_file: str, parts: int) -> int:
     """Where dealing starts for one file, from 0. A checksum, so it is the same on every machine."""
     return zlib.crc32(test_file.encode("utf-8")) % parts

@@ -42,6 +42,7 @@ topics:
     event: LD
     resolution: >-
       Resolved: De-extinction is unethical
+    taxonomy_version: 1.0.0
     caselists:
       - caselist: hsld26
         from: 2026-11-06

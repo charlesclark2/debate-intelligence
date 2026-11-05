@@ -44,6 +44,26 @@ it covers. An LD or PF caselist changes topic during a season, so a snapshot is 
 (caselist, date), and two ranges of one caselist may not overlap: :meth:`TopicMap.resolve` returns
 one topic or none, never a choice. Caselist slugs live in this file and nowhere in code.
 
+## Tournament entries (`v1-e32-t06`)
+
+LD's topic follows the tournament, not the snapshot alone: one weekly snapshot can hold a weekend's
+tournaments on two topics (the PM's ruling of 2026-11-05). A topic may list :class:`TournamentEntry`
+items beside its ranges: a caselist, the tournament's public name, the spellings a disclosure's
+tournament text is matched by, and the snapshots the entry applies in. A disclosure resolves
+(:meth:`TopicMap.resolve_disclosure`) to
+
+1. the topic of an entry whose window covers its snapshot and one of whose spellings its tournament
+   text holds, once reduced by :func:`tournament_key` (lower case, letters and digits only);
+2. otherwise, the topic whose range covers its snapshot;
+3. otherwise, no topic.
+
+A snapshot as a whole (:meth:`TopicMap.resolve`) is on the topic of its range, or with no range on the
+topic of the one entry covering it, flagged :attr:`TopicResolution.tournament_entries_only`, since then
+only the entry's disclosures are on it. The map refuses an entry that would move a snapshot an older
+topic's range already resolves, and two topics' entries covering one snapshot of a caselist. A disclosure
+the stored rounds carry no date for is matched by its tournament text and its snapshot, nothing else:
+the caselist's own paths are all there is to decide by.
+
 Nothing here names a person. A taxonomy describes arguments; the config test refuses an alias or
 label shaped like a team code or a school.
 """
@@ -76,6 +96,9 @@ __all__ = [
     "Topic",
     "TopicMap",
     "TopicResolution",
+    "TournamentEntry",
+    "TournamentEntrySnapshot",
+    "tournament_key",
 ]
 
 GENERIC_TOPIC_ID: Final = "generic"
@@ -372,6 +395,53 @@ class CaselistRange(DomainModel):
         )
 
 
+TOURNAMENT_SPELLING_PATTERN: Final = r"^[a-z0-9]+$"
+"""A tournament spelling as :func:`tournament_key` leaves one: lower-case letters and digits."""
+
+_NOT_A_KEY_CHARACTER: Final = re.compile(r"[^a-z0-9]")
+
+
+def tournament_key(text: str | None) -> str:
+    """A disclosure's tournament text reduced for matching: lower case, letters and digits only."""
+    return _NOT_A_KEY_CHARACTER.sub("", (text or "").casefold())
+
+
+class TournamentEntry(DomainModel):
+    """A tournament on a topic whatever its snapshot's range says, in the snapshots `from` to `to`.
+
+    A disclosure of `caselist` in one of those snapshots whose tournament text, reduced by
+    :func:`tournament_key`, holds one of `spellings` is on the entry's topic.
+    """
+
+    caselist: CaselistSlug = Field(description="The caselist slug the entry applies to.")
+    name: NonEmptyText = Field(description="The tournament's public name, for people; never matched.")
+    spellings: tuple[Annotated[str, StringConstraints(pattern=TOURNAMENT_SPELLING_PATTERN)], ...] = Field(
+        min_length=1,
+        description="Lower-case letters and digits; reduced tournament text holding one matches.",
+    )
+    effective_from: date = Field(alias="from", description="First snapshot date the entry applies in.")
+    effective_to: date = Field(alias="to", description="Last snapshot date the entry applies in, included.")
+
+    @model_validator(mode="after")
+    def _check(self) -> Self:
+        if self.effective_to < self.effective_from:
+            raise ValueError(
+                f"{self.caselist}: the tournament entry {self.name!r} ends ({self.effective_to}) "
+                f"before it starts ({self.effective_from})"
+            )
+        repeated = sorted(spelling for spelling, n in Counter(self.spellings).items() if n > 1)
+        if repeated:
+            raise ValueError(f"the tournament entry {self.name!r} lists {', '.join(repeated)} twice")
+        return self
+
+    def covers_snapshot(self, caselist: str, snapshot: date) -> bool:
+        return caselist == self.caselist and self.effective_from <= snapshot <= self.effective_to
+
+    def matches(self, caselist: str, snapshot: date, tournament: str | None) -> bool:
+        key = tournament_key(tournament)
+        return self.covers_snapshot(caselist, snapshot) and any(one in key for one in self.spellings)
+
+
 def _not_generic(topic_id: str) -> str:
     if topic_id == GENERIC_TOPIC_ID:
         raise ValueError(f"{GENERIC_TOPIC_ID!r} names generic.yaml, not a topic")
@@ -393,6 +463,14 @@ class Topic(DomainModel):
         description="The version of taxonomies/<id>.yaml in force; None for a topic with no taxonomy.",
     )
     caselists: tuple[CaselistRange, ...] = Field(min_length=1, description="The snapshots on this topic.")
+    tournaments: tuple[TournamentEntry, ...] = Field(
+        default=(),
+        description="Tournaments on this topic whatever their snapshot's range says (`v1-e32-t06`).",
+    )
+
+    def range_covering(self, caselist: str, snapshot: date) -> CaselistRange | None:
+        """This topic's range of `caselist` covering `snapshot`, or None."""
+        return next((one for one in self.caselists if one.covers(caselist, snapshot)), None)
 
 
 class TopicResolution(DomainModel):
@@ -401,6 +479,13 @@ class TopicResolution(DomainModel):
     topic_id: PositionId
     event: Event
     taxonomy_version: TaxonomyVersion | None = Field(description="None when the topic has no taxonomy.")
+    tournament_entries_only: bool = Field(
+        default=False,
+        description=(
+            "True when no range covers the snapshot and the topic's tournament entries put it there: only "
+            "the entries' disclosures are on the topic, not the whole week."
+        ),
+    )
 
 
 class TopicMap(DomainModel):
@@ -425,7 +510,45 @@ class TopicMap(DomainModel):
                         f"and {second_topic} ({second.effective_from} to {second.effective_to}) overlap, "
                         "so a snapshot between them would be on two topics"
                     )
+        self._check_tournament_entries()
         return self
+
+    def _check_tournament_entries(self) -> None:
+        """An entry moves no snapshot an older topic's range resolves; no two topics' entries meet."""
+        entries = [(topic, entry) for topic in self.topics for entry in topic.tournaments]
+        for topic, entry in entries:
+            own = [one.effective_from for one in topic.caselists if one.caselist == entry.caselist]
+            start = min([*own, entry.effective_from])
+            for other in self.topics:
+                if other.id == topic.id:
+                    continue
+                for one in other.caselists:
+                    if (
+                        one.caselist == entry.caselist
+                        and one.effective_from < start
+                        and one.effective_from <= entry.effective_to
+                        and entry.effective_from <= one.effective_to
+                    ):
+                        raise ValueError(
+                            f"{entry.caselist}: {topic.id}'s tournament entry {entry.name!r} "
+                            f"({entry.effective_from} to {entry.effective_to}) "
+                            f"reaches into {other.id}'s range ({one.effective_from} to {one.effective_to}), "
+                            f"which began before {topic.id}; "
+                            "it would move snapshots that resolve to the older topic"
+                        )
+        for index, (first_topic, first) in enumerate(entries):
+            for second_topic, second in entries[index + 1 :]:
+                if (
+                    first_topic.id != second_topic.id
+                    and first.caselist == second.caselist
+                    and first.effective_from <= second.effective_to
+                    and second.effective_from <= first.effective_to
+                ):
+                    raise ValueError(
+                        f"{first.caselist}: {first_topic.id}'s tournament entry {first.name!r} and "
+                        f"{second_topic.id}'s {second.name!r} cover the same snapshots, so a disclosure "
+                        "in them could be on two topics"
+                    )
 
     def topic(self, topic_id: str) -> Topic:
         """The topic with this id. `KeyError` when there is none."""
@@ -435,10 +558,53 @@ class TopicMap(DomainModel):
         raise KeyError(topic_id)
 
     def resolve(self, caselist: str, snapshot: date) -> TopicResolution | None:
-        """The one topic `caselist`'s snapshot of `snapshot` is on, or None when no range covers it."""
+        """The topic `caselist`'s snapshot of `snapshot` is on: its range's, or else its tournament entry's.
+
+        None when neither covers it. On an entry's topic, `tournament_entries_only` says that only the
+        entry's disclosures are on it.
+        """
         for topic in self.topics:
-            if any(one.covers(caselist, snapshot) for one in topic.caselists):
-                return TopicResolution(
-                    topic_id=topic.id, event=topic.event, taxonomy_version=topic.taxonomy_version
-                )
+            if topic.range_covering(caselist, snapshot) is not None:
+                return _resolution(topic)
+        for topic in self.topics:
+            if any(entry.covers_snapshot(caselist, snapshot) for entry in topic.tournaments):
+                return _resolution(topic, tournament_entries_only=True)
         return None
+
+    def resolve_disclosure(
+        self, caselist: str, snapshot: date, tournament: str | None
+    ) -> TopicResolution | None:
+        """The topic one disclosure is on: a matching entry's, else its snapshot's range's, else None."""
+        for topic in self.topics:
+            if any(entry.matches(caselist, snapshot, tournament) for entry in topic.tournaments):
+                return _resolution(topic)
+        for topic in self.topics:
+            if topic.range_covering(caselist, snapshot) is not None:
+                return _resolution(topic)
+        return None
+
+
+class TournamentEntrySnapshot(DomainModel):
+    """A snapshot on a topic only through its tournament entries: a report on it reads part of a week."""
+
+    snapshot: date
+    tournaments: tuple[NonEmptyText, ...] = Field(
+        min_length=1, description="The public names of the entries covering the snapshot."
+    )
+    disclosures_on_topic: int = Field(ge=0, description="Its live disclosures the entries put on the topic.")
+    disclosures: int = Field(ge=0, description="Its live disclosures in all, on any topic or none.")
+
+    @model_validator(mode="after")
+    def _check(self) -> Self:
+        if self.disclosures_on_topic > self.disclosures:
+            raise ValueError("a snapshot's disclosures on the topic are some of its disclosures")
+        return self
+
+
+def _resolution(topic: Topic, *, tournament_entries_only: bool = False) -> TopicResolution:
+    return TopicResolution(
+        topic_id=topic.id,
+        event=topic.event,
+        taxonomy_version=topic.taxonomy_version,
+        tournament_entries_only=tournament_entries_only,
+    )

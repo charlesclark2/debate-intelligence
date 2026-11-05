@@ -26,6 +26,11 @@ another topic, there is none: trends never compare two topics (the LD and PF top
 result names the change. A round first seen in a snapshot `snapshot_topics` puts on another topic is
 refused with :class:`TrendsCrossTopics`: it would carry one topic's reads into the other's weeks.
 
+A window `topics.yaml` puts on the topic only through a tournament entry (`v1-e32-t06`) holds only the
+disclosures the entry names, not the week. It is still a window, and the week after it is compared with
+it, but :attr:`~debate_core.domain.landscape_trends.LandscapeTrends.partial_windows` carries its counts
+so the report calls it a partial base (the PM's ruling of 2026-11-05).
+
 ## Labels
 
 NEW when no earlier window on the topic read the position, and for every position when there is no
@@ -38,7 +43,7 @@ weeks a position has no delta and is STEADY.
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from datetime import date
 from decimal import Decimal
 from fractions import Fraction
@@ -46,7 +51,13 @@ from typing import Final
 
 from debate_core.application.errors import DomainError
 from debate_core.application.landscape_counts import AFF_SIDE, NEG_SIDE, CountedReads, CountedRound
-from debate_core.domain.landscape import Position, PositionKind, PositionSide, Taxonomy
+from debate_core.domain.landscape import (
+    Position,
+    PositionKind,
+    PositionSide,
+    Taxonomy,
+    TournamentEntrySnapshot,
+)
 from debate_core.domain.landscape_trends import (
     DEFAULT_TREND_MINIMUM_TEAMS,
     DEFAULT_TREND_THRESHOLD_POINTS,
@@ -77,12 +88,15 @@ def landscape_trends(
     topic_range: tuple[date, date] | None = None,
     threshold_points: Decimal = DEFAULT_TREND_THRESHOLD_POINTS,
     minimum_teams: int = DEFAULT_TREND_MINIMUM_TEAMS,
+    tournament_entry_snapshots: Sequence[TournamentEntrySnapshot] = (),
 ) -> LandscapeTrends:
     """The trends of `snapshot`'s window, from the rounds and reads the report counted.
 
     `snapshot_topics` is each snapshot of the caselist through `snapshot` the store holds, with the
     topic `topics.yaml` puts it on; None takes every round's snapshot to be on the taxonomy's topic.
     `topic_range` is the first and last snapshot date `topics.yaml` gives the topic in this caselist.
+    `tournament_entry_snapshots` are the snapshots on the topic only through a tournament entry: such a
+    window holds part of a week, and the trends name it a partial base (`v1-e32-t06`).
     """
     if threshold_points <= 0:
         raise ValueError(f"the trend threshold is above 0 points; got {threshold_points}")
@@ -141,13 +155,14 @@ def landscape_trends(
             trend, held_back = (TrendLabel.RISING if delta > 0 else TrendLabel.FALLING), False
         rows.append(row.evolve(trend=trend, held_back_by_team_floor=held_back))
     rows.sort(key=lambda row: (_SIDE_ORDER[row.side], _KIND_ORDER[row.kind], row.position_id))
+    on_topic = tuple(day for day in windows if topics.get(day, topic) == topic)
     return LandscapeTrends(
         caselist=caselist,
         topic_id=topic,
         snapshot=snapshot,
         previous_snapshot=before,
         topic_change=change,
-        windows=tuple(day for day in windows if topics.get(day, topic) == topic),
+        windows=on_topic,
         topic_from=topic_range[0] if topic_range else None,
         topic_to=topic_range[1] if topic_range else None,
         threshold_points=threshold_points,
@@ -155,6 +170,7 @@ def landscape_trends(
         weekly=weekly,
         previous=previous,
         rows=tuple(rows),
+        partial_windows=tuple(one for one in tournament_entry_snapshots if one.snapshot in on_topic),
     )
 
 

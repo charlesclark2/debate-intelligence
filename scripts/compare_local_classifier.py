@@ -200,6 +200,7 @@ async def _features(arguments: argparse.Namespace) -> int:
         caselist=arguments.caselist,
         version=arguments.version,
         through=snapshot,
+        topic_map=repository.topic_map(),
     )
     print(
         f"Read {arguments.caselist} {reading.version} through {snapshot}: {reading.entries} source entries, "

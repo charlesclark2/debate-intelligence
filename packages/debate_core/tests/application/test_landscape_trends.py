@@ -22,7 +22,7 @@ from debate_core.application.landscape_counts import CountedReads, CountedRound
 from debate_core.application.landscape_report import LandscapeReportInputs, LandscapeReportService
 from debate_core.application.landscape_trends import TrendsCrossTopics, landscape_trends
 from debate_core.domain.caselist import RoundLabel
-from debate_core.domain.landscape import Taxonomy
+from debate_core.domain.landscape import Taxonomy, TournamentEntrySnapshot
 from debate_core.domain.landscape_trends import LandscapeTrends, TrendLabel, TrendRow, WeeklyTeams
 from debate_core.testing.landscape_report import (
     SYNTHETIC_THIRD_SNAPSHOT,
@@ -354,3 +354,65 @@ def test_snapshot_topics_for_the_report_topic_add_empty_windows() -> None:
     trends = _trends(dataclasses.replace(inputs, snapshot_topics=topics))
     assert trends.windows == (date(2026, 9, 1), FIRST, SECOND, THIRD)
     assert trends.previous_snapshot == SECOND
+
+
+# ------------------------------------------------------------------------------------------------
+# v1-e32-t06: a window only a tournament entry puts on the topic (the PM's ruling of 2026-11-05)
+# ------------------------------------------------------------------------------------------------
+
+
+def _partial(day: date, on_topic: int, disclosures: int) -> TournamentEntrySnapshot:
+    return TournamentEntrySnapshot(
+        snapshot=day,
+        tournaments=("Harbor City Classic",),
+        disclosures_on_topic=on_topic,
+        disclosures=disclosures,
+    )
+
+
+def _report_md(inputs: LandscapeReportInputs) -> str:
+    bundle = LandscapeReportService().bundle(
+        inputs, synthetic_staleness(caselist=inputs.caselist, newest_snapshot=inputs.through)
+    )
+    return " ".join(bundle.files["report.md"].split())
+
+
+def test_the_week_after_a_partial_window_names_it_a_partial_base() -> None:
+    inputs = dataclasses.replace(_through(THIRD), tournament_entry_snapshots=(_partial(SECOND, 292, 902),))
+    trends = _trends(inputs, tournament_entry_snapshots=inputs.tournament_entry_snapshots)
+    assert trends.previous_snapshot == SECOND
+    assert trends.partial(SECOND) == _partial(SECOND, 292, 902)
+    assert trends.partial(THIRD) is None
+    shown = _report_md(inputs)
+    assert (
+        "compared with 2026-09-09 to 2026-09-15, a partial base: only the 292 of its 902 disclosures its "
+        "tournament entry (Harbor City Classic) puts on this topic" in shown
+    )
+    assert (
+        "The previous window, 2026-09-09 to 2026-09-15, is a partial base: it holds only the 292 of its 902 "
+        "disclosures its tournament entry (Harbor City Classic) puts on this topic." in shown
+    )
+    assert "Part of a week." not in shown
+
+
+def test_a_report_on_a_partial_window_says_it_reads_part_of_the_week() -> None:
+    inputs = dataclasses.replace(_through(SECOND), tournament_entry_snapshots=(_partial(SECOND, 292, 902),))
+    shown = _report_md(inputs)
+    assert (
+        "**Part of a week.** topics.yaml puts the 2026-09-15 snapshot on this topic only through its "
+        "tournament entry (Harbor City Classic): this report reads 292 of the snapshot's 902 disclosures, "
+        "those the entry names, not the whole week." in shown
+    )
+    assert "a partial base" not in shown
+
+
+def test_a_whole_week_report_says_nothing_of_partial_weeks() -> None:
+    shown = _report_md(_through(THIRD))
+    assert "Part of a week." not in shown
+    assert "partial base" not in shown
+
+
+def test_a_partial_window_off_the_topic_windows_is_dropped() -> None:
+    later = date(2026, 12, 1)
+    trends = _trends(_through(THIRD), tournament_entry_snapshots=(_partial(later, 1, 2),))
+    assert trends.partial_windows == ()

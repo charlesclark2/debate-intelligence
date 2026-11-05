@@ -1,7 +1,6 @@
 # Format-level positions any topic of an event can be read under: generic Ks, framework, theory.
 # Each names the events it applies to; a topic's taxonomy takes the ones for its event. The same
-# rules as a topic file hold (docs/guides/landscape-taxonomy.md). LD-only positions are added with
-# the LD taxonomy (v1-e32-t06), not before.
+# rules as a topic file hold (docs/guides/landscape-taxonomy.md).
 #
 # 1.1.0 (2026-10-24, the coach's first review-queue pass, v1-e32-t05): added generic-k and
 # generic-theory for Policy, each with the queue headings the coach placed under it as aliases.
@@ -9,9 +8,13 @@
 # position, which the model stage sends; policy-2026-27-nhi moves to 1.4.1 with it.
 # 1.1.2 (2026-11-02, v1-e32-t41): the coach's corrections to the antiblackness-k, psychoanalysis-k and aspec
 # descriptions; policy-2026-27-nhi moves to 1.5.0 with it, for its own new positions.
+# 1.2.0 (2026-11-05, v1-e32-t06, the coach's review of the same day): LD's format-level positions,
+# Kantian ethics and skepticism, each with headings two or more hsld26 teams used on the de-extinction
+# topic as aliases; the two theory positions drafted beside them were dropped by the coach. They name LD only, so no Policy count moves and policy-2026-27-nhi
+# keeps its version.
 schema_version: 1
 topic_id: generic
-taxonomy_version: 1.1.2
+taxonomy_version: 1.2.0
 event: null
 positions:
 
@@ -171,3 +174,19 @@ positions:
     description: A theory argument about the rules of debate that fits no listed theory position, read by either side.
     events: [POLICY]
     aliases: [fiat good, state good]
+
+  # LD frameworks and tricks (v1-e32-t06)
+  - id: kantian-ethics
+    label: Kantian ethics
+    kind: criterion
+    side: both
+    description: Kant's categorical imperative as the standard the round is weighed by.
+    events: [LD]
+    aliases: [categorical imperative]
+  - id: skepticism
+    label: Skepticism
+    kind: criterion
+    side: neg
+    description: Moral skepticism, that no moral claim can be true, so the resolution cannot be affirmed.
+    events: [LD]
+    aliases: [skep, skepticism]

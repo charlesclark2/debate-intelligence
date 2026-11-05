@@ -808,6 +808,7 @@ def test_the_first_window_on_a_topic_is_all_new_and_holds_nothing_back(world: Sy
         "rows_by_label": {"NEW": 4, "RISING": 0, "FALLING": 0, "STEADY": 0},
         "held_back_by_team_floor": 0,
     }
+    assert data["tournament_entry_snapshots"] == []
     assert data["school_view"] == {"schools": 2, "team_codes": 2, "rows": 4}
 
 

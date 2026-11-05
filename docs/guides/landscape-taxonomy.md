@@ -279,6 +279,46 @@ is on one topic or none. LD and PF change topic during a season: a new topic is 
 its own range, and the old one keeps its range so that earlier snapshots still resolve. A topic with
 no `taxonomy_version` has no taxonomy file, and a report on it says so.
 
+### When a weekend holds two topics: tournament entries
+
+LD's topic follows the tournament (`v1-e32-t06`, the PM's ruling of 2026-11-05). The de-extinction
+topic starts with the Florida Blue Key tournament of October 30 to November 1, 2026, while that
+weekend's other tournaments were still on space colonization, so the 2026-11-03 snapshot holds both.
+A topic can list **tournament entries** beside its ranges:
+
+```yaml
+    tournaments:
+      - caselist: hsld26
+        name: Florida Blue Key Speech and Debate Tournament
+        spellings: [bluekey, fbk]
+        from: 2026-11-03
+        to: 2026-11-03
+```
+
+A disclosure is placed by the first of these that applies:
+
+1. **A tournament entry.** Its snapshot is between the entry's `from` and `to`, and the tournament its
+   file name gives, lower-cased with everything but letters and digits taken out, holds one of the
+   spellings: `Florida Blue Key Round Robin` becomes `floridabluekeyroundrobin`, which holds `bluekey`.
+2. **The range** covering its snapshot.
+3. **No topic**, as before.
+
+A file's tournament is all there is to go on: a disclosure carries no tournament or round date. A
+snapshot no range covers is on its entry's topic, and the report on it says it reads only the
+entry's disclosures, with how many of the snapshot's that is. The week after it calls it a partial
+base.
+
+What the check refuses, naming the topics:
+
+* an entry reaching back into the range of a topic that began before its own, which would move a
+  snapshot that already resolves;
+* two topics' entries covering the same snapshot of a caselist;
+* a spelling that is not lower-case letters and digits.
+
+List only spellings two or more schools use, and never one naming a school or a team. Late disclosures
+of earlier tournaments in later snapshots stay on the snapshot's range topic. The PM counts them each
+week, and adds an entry to the older topic only if they turn out to matter.
+
 ## How a card is placed
 
 Matching uses no model. For each card it reads the headings above it, outermost first, each reduced

@@ -95,6 +95,7 @@ async def _candidates(arguments: argparse.Namespace) -> int:
         topic=topic,
         caselist=caselist,
         version=arguments.version,
+        topic_map=topic_map,
     )
     seeding = seed_candidates(
         reading.sources, minimum_teams=arguments.minimum_teams, caselist_names=reading.caselist_names

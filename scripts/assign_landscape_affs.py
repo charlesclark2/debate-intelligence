@@ -168,6 +168,7 @@ async def _read(arguments: argparse.Namespace) -> _Read:
         caselist=arguments.caselist,
         version=arguments.version,
         through=snapshot,
+        topic_map=repository.topic_map(),
     )
     teams = {
         source.sha256: frozenset(

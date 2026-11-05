@@ -1,0 +1,122 @@
+# The positions an LD landscape report counts on the November-December 2026 de-extinction topic.
+# docs/guides/landscape-taxonomy.md says how to add a position or an alias, retire or merge one, and
+# bump taxonomy_version. Every alias is a heading as the normalizer writes it, and came from the
+# seeded candidates (headings at least two teams used) or from the coach. Never delete or reuse an
+# id once released: retire it with deprecated: true, and merged_into when it was renamed or merged.
+# generic.yaml's LD positions are merged in when a report reads this file.
+#
+# The affirmative argues de-extinction is unethical; the negative that it is not. In LD a position's
+# side is the side that reads it in its own case, whatever side the file was disclosed on.
+#
+# 1.0.0 (2026-11-05, v1-e32-t06, awaiting the coach's review): seeded from hsld26's 2026-11-03
+# snapshot, the Florida Blue Key disclosures the tournament entry in topics.yaml puts on this topic
+# (256 parsed sources, 59 candidate headings two or more teams used). Labels and descriptions are
+# drafts from the headings alone until the coach approves or corrects them.
+# The coach's review (2026-11-05, before any release, so still 1.0.0): 15 positions kept as drafted,
+# trade's description his; the Jurassic Park aff added from a heading two teams used; generic.yaml's
+# two LD theory positions dropped. Approved.
+schema_version: 1
+topic_id: ld-2026-nov-dec-de-extinction
+taxonomy_version: 1.0.0
+event: LD
+positions:
+
+  # Affirmative contentions: de-extinction is unethical
+  - id: animal-suffering
+    label: Animal suffering
+    kind: contention
+    side: aff
+    description: Bringing back an extinct species causes suffering to the animals made and raised for it.
+    aliases: [contention animal suffering, advantage animal suffering, c1 animal welfare]
+  - id: ecological-damage
+    label: Ecological damage
+    kind: contention
+    side: aff
+    description: A revived species harms the ecosystems it is released into.
+    aliases: [contention ecological damage, c2 ecological damage]
+  - id: moral-hazard
+    label: Moral hazard
+    kind: contention
+    side: aff
+    description: The promise of bringing species back weakens the will to protect species that are still alive.
+    aliases: [advantage moral hazard]
+  - id: opportunity-cost
+    label: Opportunity cost
+    kind: contention
+    side: aff
+    description: Money and effort spent on de-extinction would do more for conservation spent elsewhere.
+    aliases: [advantage opportunity cost]
+  - id: trade
+    label: Trade
+    kind: contention
+    side: aff
+    description: Trade advantage which likely indicates that de-extinction efforts result in animal trade.
+    aliases: [c3 trade]
+
+  # Affirmative cases
+  - id: jurassic-park-aff
+    label: Jurassic park aff
+    kind: aff
+    side: aff
+    description: A Jurassic Park aff about the negative effects of de-extinction.
+    aliases: [jurassic park]
+
+  # Negative contentions: de-extinction is not unethical
+  - id: biotech-innovation
+    label: Biotech innovation
+    kind: contention
+    side: neg
+    description: De-extinction research drives advances in biotechnology and genetic engineering.
+    aliases: [c1 innovation, biotech innovation, biotech innovation da]
+  - id: healthcare-innovation
+    label: Healthcare innovation
+    kind: contention
+    side: neg
+    description: The techniques de-extinction develops carry over into medicine and health care.
+    aliases: [healthcare innovation]
+  - id: biodiversity
+    label: Biodiversity
+    kind: contention
+    side: neg
+    description: Reviving lost species restores biodiversity and the ecosystem roles they played.
+    aliases: [biodiversity]
+  - id: woolly-mammoth
+    label: Woolly mammoth
+    kind: contention
+    side: neg
+    description: The woolly mammoth case for de-extinction, such as restoring tundra grassland.
+    aliases: [wooly mammoth]
+
+  # Negative counterplans, topicality and kritiks
+  - id: plants-pic
+    label: Plants PIC
+    kind: cp
+    side: neg
+    description: De-extinction of plants alone, leaving out animals.
+    aliases: [plants pic, plant pic]
+  - id: de-extinction-t
+    label: T de-extinction
+    kind: t
+    side: neg
+    description: The affirmative's interpretation of de-extinction is not the topic's.
+    aliases: [t de extinction]
+  - id: ecofascism-k
+    label: Ecofascism K
+    kind: k
+    side: neg
+    description: Saving species or ecosystems ahead of people leads to ecofascism.
+    aliases: [ecofacism k]
+  - id: psychoanalysis-k
+    label: Psychoanalysis K
+    kind: k
+    side: neg
+    description: The wish to undo extinction is driven by desire, read through psychoanalysis; the alternative is psychoanalysis.
+    aliases: [k psychoanalysis]
+
+  # Frameworks read on this topic
+  - id: korsgaard
+    label: Korsgaard
+    kind: criterion
+    side: both
+    description: Korsgaard's constitutivist ethics as the standard, read on this topic by both sides.
+    aliases: [korsgaard aff de extinction, korsgaard nc de extinction]

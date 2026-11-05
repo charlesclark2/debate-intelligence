@@ -183,7 +183,7 @@ import sys
 from datetime import date
 from enum import StrEnum
 from pathlib import Path
-from typing import Annotated, Any, Final, NoReturn
+from typing import Annotated, Any, Final, NoReturn, cast
 
 import typer
 from typer.core import TyperOption
@@ -1200,6 +1200,9 @@ def run_summary(
             "rows_by_label": dict(_trend_counts(result.trends)),
             "held_back_by_team_floor": result.trends.held_back,
         },
+        "tournament_entry_snapshots": [
+            cast("JsonValue", one.model_dump(mode="json")) for one in result.trends.partial_windows
+        ],
         "school_view": {
             "schools": result.schools.schools,
             "team_codes": result.schools.teams,

@@ -85,7 +85,7 @@ spec:
         The coach has reviewed the seeded file, and a `landscape report --caselist hsld26`
         dry run on the newest snapshot resolves the new topic.
 status:
-  phase: Pending
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

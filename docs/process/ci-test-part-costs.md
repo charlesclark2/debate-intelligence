@@ -1,4 +1,4 @@
-<!-- docs-index: What one ci.yml test part costs besides its tests (measured 2026-11-01), how many parts a selection gets, how whole files are dealt to parts by recorded durations (2026-11-02), and the options for making parts cheaper -->
+<!-- docs-index: What one ci.yml test part costs besides its tests (measured 2026-11-01), how many parts a selection gets, how whole files are dealt to parts by recorded durations (2026-11-02), what module fixtures and collection cost a part (2026-11-05), each part collecting only its own files, and the options for making parts cheaper -->
 # What a CI test part costs besides its tests
 
 `ci.yml`'s `test` job runs the selection in parts (working agreement 1): eight until `v1-e41-t16`,
@@ -334,3 +334,58 @@ What follows for `v1-e41-t18`: collecting only a part's own files saves about 6 
 part on the Mac, more on a runner, and it shortens the partition proof, whose part collections become
 an eighth of the suite each. It does not touch the slowest part's real cost, the remove smoke file's
 function-scoped setups, which the session reports to the PM as a follow-up.
+
+## What v1-e41-t18 changed
+
+The costs page's option 1, as the deal now allows: each part collects only the test files the deal
+gives it, and any file the deal does not name. `tests/pytest_plugins/run_in_parts.py`'s `collects`
+is the rule. The paths a part's command names (an affected set's `@FILE`, or node ids) are trimmed
+to its own when pytest is configured, in the controller and in every xdist worker; files pytest finds
+walking `testpaths` (the whole selection) are skipped by `pytest_ignore_collect`, which pytest does
+not ask about the paths a command names. `test-selection` still hands every part the one deal, so
+the deal is each part's list of files.
+
+* **A file the deal does not name** (a new file the record has not seen counts as the median and is
+  named; a file heavier than a part's share is not, and a file pytest finds that the selection's
+  list does not hold is not) is collected by every part and dealt test by test, as before.
+* **No deal, or an empty one** (a record missing or stale) collects everything in every part, as
+  before. A missing deal still fails no run.
+* **The partition** holds for the same reason as before: `parts_dealt` puts every test in exactly
+  one part, and the part it gives a test is always one that collects the test's file. The partition
+  proof now also bounds what each part collects before it keeps its share, and checks at every size
+  from one part to eight that each test is dealt to a part that collects its file.
+* **Each part says how long it took to collect**, in a line of its summary (`part 1 of 8 collected in
+  2.9 s, the last of 4 workers`), because a runner's log cannot show it.
+
+### Before and after, on the operator's Mac
+
+On 2026-11-05, load average 7 to 14 from other work, so both columns are high; they were run
+alternately, part by part. The deal is the one `test-selection` makes for the whole selection from
+the seven part records `6db251b`'s push run kept (part 5's was lost with its failure, so its files
+count as the median): 697 files, 696 dealt whole, the remove smoke file spread. Each part was run as
+CI runs it, `-n 4` and the parts' markers, with `-k` matching no test, so the time is starting up and
+collecting:
+
+| Part | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 |
+|---|---|---|---|---|---|---|---|---|
+| Before: whole selection collected, wall (s) | 15.0, 19.3 | 15.8 | 14.5 | 14.1 | 12.9 | 12.5 | 12.6 | 12.5 |
+| After: own files collected, wall (s) | 10.8, 10.1 | 5.0 | 5.1 | 4.4 | 3.9 | 4.9 | 4.0 | 7.2 |
+| After: the part's own line, "collected in" (s) | 8.8, 7.5 | 2.9 | 3.2 | 2.3 | 2.3 | 3.1 | 2.4 | 5.1 |
+
+Part 1 was measured twice. It holds 84 files, among them the slowest to collect on their own
+(`tests/scripts/test_task_restart.py` 2.8 s, against about 1 s for pytest starting up), so its
+collection is the longest of the eight; no one file sets it.
+
+The partition proof, run as its job runs it (`pytest -n auto -m "partition_proof and not slow and
+not live" tests/scripts/test_ci_workflow_test_job.py`), before and after: the whole-selection proof
+25.0 s and 14.7 s, the affected-set proof 5.0 s and 3.8 s. Its eight part collections are now about
+an eighth of the suite each.
+
+### What it does not change
+
+The slowest part, 298 s on the dispatch against 179 to 229 s for the others, is the part that held
+`tests/smoke/test_caselist_remove_smoke.py` whole, whose function-scoped setups are rebuilt for every
+test. Collecting less takes a few seconds off every part, that one included. The slowest part's
+pytest step on this task's pull request, a whole-selection run in eight parts dealt by dev's record
+like the dispatch of `440f797`, is read after it runs, and on three task pull requests after the
+merge (the task's ac2).

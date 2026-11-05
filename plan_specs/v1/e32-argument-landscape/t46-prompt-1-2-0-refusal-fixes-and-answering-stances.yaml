@@ -60,7 +60,7 @@ spec:
         The operator's re-record of the 47 under 1.2.0 on the PM's route, its breakdown and
         scans, is recorded in docs/data beside 1.1.0's (operator, recorded by the PM).
 status:
-  phase: Pending
+  phase: InProgress
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

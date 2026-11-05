@@ -227,9 +227,9 @@ two teams left out; **59 candidate rows**. The CSV is on the operator's Mac unde
 **Drafted** (by kind, from the 59 candidates): the topic file has 14 positions (9 contentions, five
 affirmative and four negative; 1 CP, 1 T, 2 Ks, 1 criterion) with 21 aliases; generic.yaml gains 4 LD
 positions (2 criteria, 2 theory) with 5 aliases. So 26 of the 59 candidates are aliases. The other 33
-are structure labels (overview, framing, contention, offense and the like), a tournament name, round and
-speech names, and 9 one- or two-word headings whose meaning would be a guess; the review sheet lists them
-as unplaced for the coach.
+are 23 structure labels (overview, framing, contention, offense, the speech and advantage numbers and
+the like), 2 that name a tournament or a round, and 8 whose meaning would be a guess; the review sheet
+lists them as unplaced for the coach.
 
 ## Plan nodes
 

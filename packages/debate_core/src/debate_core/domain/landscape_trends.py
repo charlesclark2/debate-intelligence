@@ -37,7 +37,7 @@ from pydantic import Field, model_validator
 
 from debate_core.domain.base import DomainModel, NonEmptyText
 from debate_core.domain.caselist import CaselistSlug
-from debate_core.domain.landscape import PositionId, PositionKind, PositionSide
+from debate_core.domain.landscape import PositionId, PositionKind, PositionSide, TournamentEntrySnapshot
 
 __all__ = [
     "DEFAULT_TREND_MINIMUM_TEAMS",
@@ -173,9 +173,18 @@ class LandscapeTrends(DomainModel):
     weekly: WeeklyTeams
     previous: WeeklyTeams | None
     rows: tuple[TrendRow, ...] = Field(description="Every position read in either window, in report order.")
+    partial_windows: tuple[TournamentEntrySnapshot, ...] = Field(
+        default=(),
+        description=(
+            "The windows on the topic only through a tournament entry (`v1-e32-t06`): each holds only the "
+            "disclosures its entry puts on the topic, a partial base for the week after it."
+        ),
+    )
 
     @model_validator(mode="after")
     def _check_windows(self) -> Self:
+        if any(one.snapshot not in self.windows for one in self.partial_windows):
+            raise ValueError("a partial window is one of the topic's windows")
         if self.windows[-1] != self.snapshot or list(self.windows) != sorted(set(self.windows)):
             raise ValueError("the windows are distinct, in date order, and end with the snapshot")
         if (self.previous_snapshot is None) != (self.previous is None):
@@ -201,6 +210,10 @@ class LandscapeTrends(DomainModel):
             window_start(self.windows[0]) <= self.topic_from
             and self.snapshot + timedelta(days=WINDOW_DAYS) > self.topic_to
         )
+
+    def partial(self, window: date | None) -> TournamentEntrySnapshot | None:
+        """The window's counts when only a tournament entry put it on the topic; None for a whole week."""
+        return next((one for one in self.partial_windows if one.snapshot == window), None)
 
     @property
     def held_back(self) -> int:

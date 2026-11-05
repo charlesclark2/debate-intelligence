@@ -120,7 +120,7 @@ from debate_core.application.review_queue_order import ReviewQueueOrdering
 from debate_core.application.sync_runs import SyncRunLog
 from debate_core.arguments.landscape.analytic_texts import CounterplanActors
 from debate_core.arguments.landscape.review_queue import DEFAULT_REVIEW_THRESHOLD, ReviewRow
-from debate_core.domain.landscape import Taxonomy
+from debate_core.domain.landscape import Taxonomy, Topic
 from debate_core.domain.landscape_classification import OverrideRules, PositionClassification
 from debate_core.domain.landscape_report import LandscapeCard, LandscapeReport
 from debate_core.domain.landscape_schools import SchoolView
@@ -574,14 +574,7 @@ class LandscapeRunService:
             objects=self._objects, run_log=self._run_log, stale_after_days=self._stale_after_days
         ).check(request.caselist, report_date=self._today())
         snapshot_topics = await self._snapshot_topics(request.caselist, snapshot)
-        topic_range = next(
-            (
-                (one.effective_from, one.effective_to)
-                for one in resolved.topic.caselists
-                if one.covers(request.caselist, snapshot)
-            ),
-            None,
-        )
+        topic_range = _topic_range(resolved.topic, request.caselist, snapshot)
         cards = landscape_cards(
             reading.sources,
             await self._parsed.read_occurrences(request.caselist, reading.version) or (),
@@ -608,6 +601,7 @@ class LandscapeRunService:
                 transition_plans=affs.transition,
                 snapshot_topics=snapshot_topics,
                 topic_range=topic_range,
+                tournament_entry_snapshots=reading.tournament_entry_snapshots,
             ),
             staleness,
         )
@@ -848,3 +842,16 @@ class _ReadOnlyClassifications:
         self, caselist: str, topic_id: str, rows: Sequence[ReviewRow], *, suggestions: bool = False
     ) -> str:
         return DRY_RUN_QUEUE_LOCATION
+
+
+def _topic_range(topic: Topic, caselist: str, snapshot: date) -> tuple[date, date] | None:
+    """The topic's range of `caselist` covering `snapshot`; for a snapshot only a tournament entry puts on
+    the topic (`v1-e32-t06`), the first range the topic has in the caselist after it; else None."""
+    covering = topic.range_covering(caselist, snapshot)
+    if covering is None:
+        covering = min(
+            (one for one in topic.caselists if one.caselist == caselist and one.effective_from > snapshot),
+            key=lambda one: one.effective_from,
+            default=None,
+        )
+    return (covering.effective_from, covering.effective_to) if covering is not None else None

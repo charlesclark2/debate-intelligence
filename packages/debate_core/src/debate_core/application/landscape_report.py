@@ -188,7 +188,13 @@ from debate_core.arguments.landscape.source_headings import (
     normalize_source_heading,
 )
 from debate_core.domain.caselist import Disclosure
-from debate_core.domain.landscape import Position, PositionKind, PositionSide, Taxonomy
+from debate_core.domain.landscape import (
+    Position,
+    PositionKind,
+    PositionSide,
+    Taxonomy,
+    TournamentEntrySnapshot,
+)
 from debate_core.domain.landscape_classification import (
     DETERMINISTIC_PROMPT_VERSION,
     ItemKind,
@@ -362,6 +368,9 @@ class LandscapeReportInputs:
     transition_plans: TransitionPlanInputs | None = field(default=None, repr=False)
     """`v1-e32-t24`'s K-aff carries refused for a plan text under a transition label, and the rounds
     identified another way against one; None when the run read none, and the method table has no such rows."""
+    tournament_entry_snapshots: Sequence[TournamentEntrySnapshot] = ()
+    """The snapshots on the topic only through a tournament entry, with their counts (`v1-e32-t06`), so the
+    report says when it reads part of a week and the trends call such a week a partial base."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -442,6 +451,7 @@ class LandscapeReportService:
             topic_range=inputs.topic_range,
             threshold_points=self._trend_threshold,
             minimum_teams=self._trend_minimum,
+            tournament_entry_snapshots=inputs.tournament_entry_snapshots,
         )
         schools = school_view(
             caselist=inputs.caselist, snapshot=snapshot, disclosures=inputs.disclosures, counted=counted

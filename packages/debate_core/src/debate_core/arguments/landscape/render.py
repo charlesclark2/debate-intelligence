@@ -442,6 +442,7 @@ def _header_section(report: LandscapeReport, trends: LandscapeTrends | None = No
         "the platform has verified. No school, team or debater is named.",
         "",
         *_short_history(trends),
+        *_part_of_a_week(trends),
         "## About this report",
         "",
         "| | |",
@@ -993,6 +994,35 @@ def _short_history(trends: LandscapeTrends | None) -> list[str]:
     ]
 
 
+def _part_of_a_week(trends: LandscapeTrends | None) -> list[str]:
+    """The notice on the report's face when only a tournament entry puts its own snapshot on the topic."""
+    partial = trends.partial(trends.snapshot) if trends is not None else None
+    if partial is None:
+        return []
+    return [
+        f"**Part of a week.** topics.yaml puts the {partial.snapshot.isoformat()} snapshot on this topic "
+        f"only through its tournament entry ({_names(partial.tournaments)}): this report reads "
+        f"{partial.disclosures_on_topic:,} of the snapshot's {partial.disclosures:,} disclosures, those the "
+        "entry names, not the whole week.",
+        "",
+    ]
+
+
+def _partial_base(trends: LandscapeTrends) -> str:
+    """The words a comparison adds when the previous window is a partial base; empty for a whole week."""
+    partial = trends.partial(trends.previous_snapshot)
+    if partial is None:
+        return ""
+    return (
+        f", a partial base: only the {partial.disclosures_on_topic:,} of its {partial.disclosures:,} "
+        f"disclosures its tournament entry ({_names(partial.tournaments)}) puts on this topic"
+    )
+
+
+def _names(names: Sequence[str]) -> str:
+    return ", ".join(names)
+
+
 def _windows_cell(trends: LandscapeTrends) -> str:
     first = _window(trends.windows[0])
     on_topic = f"{len(trends.windows):,} on this topic, the first {first}"
@@ -1011,7 +1041,10 @@ def _windows_cell(trends: LandscapeTrends) -> str:
         if days == WINDOW_DAYS
         else f" (not the week before: {days - WINDOW_DAYS:,} day(s) between them are in no window)"
     )
-    return f"{on_topic}; this week's {this_week}, compared with {_window(trends.previous_snapshot)}{gap}"
+    return (
+        f"{on_topic}; this week's {this_week}, compared with {_window(trends.previous_snapshot)}"
+        f"{_partial_base(trends)}{gap}"
+    )
 
 
 def _window(snapshot: date) -> str:
@@ -1052,6 +1085,14 @@ def _trend_sections(trends: LandscapeTrends) -> list[str]:
         lines += [
             "This is the caselist's first weekly window on this topic: every position read is NEW and none "
             "has a delta.",
+            "",
+        ]
+    elif (partial := trends.partial(trends.previous_snapshot)) is not None:
+        lines += [
+            f"The previous window, {_window(partial.snapshot)}, is a partial base: it holds only the "
+            f"{partial.disclosures_on_topic:,} of its {partial.disclosures:,} disclosures its tournament "
+            f"entry ({_names(partial.tournaments)}) puts on this topic. Every delta below compares this "
+            "week with that part of a week, not with a whole one.",
             "",
         ]
     if new:

@@ -22,6 +22,7 @@ from __future__ import annotations
 import hashlib
 import os
 import tempfile
+from datetime import datetime
 from pathlib import Path
 from typing import Final, Protocol, runtime_checkable
 
@@ -52,6 +53,10 @@ class CachedFeed(BaseModel):
     etag: str | None = Field(default=None, description="The `ETag` the feed sent, verbatim.")
     last_modified: str | None = Field(default=None, description="The `Last-Modified` it sent, verbatim.")
     entries: tuple[FeedEntry, ...] = Field(default=(), description="Its entries, already reduced.")
+    failing_since: datetime | None = Field(
+        default=None,
+        description="When the feed first failed after its last successful read; cleared by the next one.",
+    )
 
     @property
     def conditional_headers(self) -> dict[str, str]:

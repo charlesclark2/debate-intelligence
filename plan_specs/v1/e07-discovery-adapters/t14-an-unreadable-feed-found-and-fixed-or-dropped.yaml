@@ -28,7 +28,13 @@ spec:
     how the footer says which feed failed; the PM rules before it is built.
   priority: 3
   constraints:
-    packages: [debate_core.integrations, debate_core.application, config, packages/debate_core/tests, docs/guides]
+    # PM ruling 2026-11-05 (ac2, option C): a feed failing on every read for 3 days stops marking the
+    # search partial and is named in the footer as failing since its first failure. ProviderResponse
+    # gains `notes` (empty by default) and the CLI footer prints them, so debate_core.domain and the
+    # CLI's presenters and tests are added.
+    packages: [debate_core.integrations, debate_core.application, debate_core.domain, config,
+      packages/debate_core/tests, packages/debate_cli/src/debate_cli/presenters, packages/debate_cli/tests,
+      docs/guides]
     forbidden:
       - A live network call in a test
       - Hiding a failed feed from the provider's reasons
@@ -47,7 +53,7 @@ spec:
         What the PM rules for a failing feed's effect on a search's outcome is built with
         tests shown failing first.
 status:
-  phase: Pending
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

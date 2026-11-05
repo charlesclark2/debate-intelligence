@@ -173,6 +173,10 @@ class ProviderResponse(DomainModel):
     :attr:`~debate_core.domain.SearchStatus.PARTIAL`; it never fails the search. That is only
     possible if a partial answer is representable, which is what `partial` and `error` are for.
 
+    A shortfall that should be reported but not make the answer partial goes in `notes`: today, only
+    a feed that has failed on every read for days, which a retry will not fix (PM ruling 2026-11-05).
+    A search record stored before `notes` existed reads with none.
+
     Every result names the provider that answered. A response carrying another provider's result
     is refused, because deduplication (E08) and the health footer both attribute results by that
     name.
@@ -186,6 +190,13 @@ class ProviderResponse(DomainModel):
     )
     error: str | None = Field(
         default=None, description="Human-readable reason the provider fell short, when it did."
+    )
+    notes: tuple[str, ...] = Field(
+        default=(),
+        description=(
+            "Shortfalls reported without making the answer partial: a feed that has failed on every "
+            "read for days, named with when it started failing (v1-e07-t14)."
+        ),
     )
 
     @model_validator(mode="after")

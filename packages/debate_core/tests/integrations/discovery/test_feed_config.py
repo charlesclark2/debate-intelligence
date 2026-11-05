@@ -42,12 +42,35 @@ def test_every_committed_feed_list_loads() -> None:
     assert {topic.topic for topic in topics} >= {"politics", "health-insurance"}
 
 
-def test_the_starter_set_is_awaiting_the_coachs_review_and_google_news_is_off() -> None:
-    """Nothing committed claims a review the coach has not given (PM ruling 2026-10-22)."""
+COACH_REVIEWED_FEEDS: Final = {
+    ("politics", "https://feeds.npr.org/1014/rss.xml", "NPR"),
+    ("politics", "https://www.pbs.org/newshour/feeds/rss/politics", "PBS NewsHour"),
+    ("politics", "https://rss.politico.com/politics-news.xml", "Politico"),
+    ("politics", "https://thehill.com/homenews/feed/", "The Hill"),
+    ("health-insurance", "https://kffhealthnews.org/feed/", "KFF Health News"),
+    ("health-insurance", "https://feeds.npr.org/1128/rss.xml", "NPR"),
+    ("health-insurance", "https://www.statnews.com/feed/", "STAT"),
+    ("health-insurance", "https://www.healthcaredive.com/feeds/news/", "Healthcare Dive"),
+    ("health-insurance", "https://www.kff.org/feed/", "KFF"),
+    ("health-insurance", "https://thehill.com/policy/healthcare/feed/", "The Hill"),
+}
+"""The feeds the coach reviewed or chose on 2026-11-04 (v1-e07-t14's PM context).
+
+Seven of the eight starter feeds, kept: Roll Call was the eighth, and the PM dropped it on
+2026-11-05 because its dates carry no time zone. Then the three health-policy outlets the coach
+asked for whose feeds passed the operator's feed check of 2026-11-05.
+"""
+
+
+def test_the_coach_reviewed_every_committed_feed_and_google_news_is_off() -> None:
+    """Every committed feed is one the coach kept; nothing claims a review the coach has not given."""
+    committed: set[tuple[str, str, str]] = set()
     for topic in load_feed_directory(CONFIG_FEEDS):
         assert topic.feeds, f"{topic.topic} lists no feeds"
-        assert all(feed.review is FeedReview.AWAITING_COACH_REVIEW for feed in topic.feeds), topic.topic
+        assert all(feed.review is FeedReview.COACH_REVIEWED for feed in topic.feeds), topic.topic
         assert topic.google_news.enabled is False, topic.topic
+        committed |= {(topic.topic, feed.url, feed.publisher) for feed in topic.feeds}
+    assert committed == COACH_REVIEWED_FEEDS
 
 
 def test_a_valid_file_loads(tmp_path: Path) -> None:

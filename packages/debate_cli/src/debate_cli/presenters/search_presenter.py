@@ -11,6 +11,9 @@ search's status. Every provider is named whatever happened to it, so a partial r
 
 * `openalex: ok, 12 results` (and `from 7 queries` when the query was expanded);
 * `rss: partial, 4 results: 2 of 10 feeds failed: …`, a provider that answered only part of the search;
+* `rss: ok, 4 results: not counted as partial: Roll Call failing since 2026-11-02: …`, a shortfall the
+  provider names without making its answer partial: a feed that has failed on every read for days
+  (`v1-e07-t14`). It goes after the provider's other reasons, in the JSON's `reasons` too;
 * `openalex: timeout: no answer within 10s`, or `error`, `rate limited`, `breaker open`,
   `not configured`, each with the provider's own reason, and `on 2 of 7 queries` when only some of
   its calls failed.
@@ -32,6 +35,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import dataclass
+from typing import Final
 
 from debate_cli.exit_codes import ExitCode
 from debate_cli.output import CliOutput, CommandFailure, JsonValue, TableSpec
@@ -119,6 +123,10 @@ class ProviderSummary:
         }
 
 
+NOT_PARTIAL: Final = "not counted as partial:"
+"""What precedes a shortfall the provider reported without making its answer partial (v1-e07-t14)."""
+
+
 def _reason(provider: str, text: str | None) -> str | None:
     if not text:
         return None
@@ -145,6 +153,8 @@ def provider_summaries(statuses: Sequence[ProviderStatus]) -> tuple[ProviderSumm
             outcome = "ok"
             texts = []
         reasons = tuple(dict.fromkeys(reason for text in texts if (reason := _reason(provider, text))))
+        notes = (note for call in answered if call.response is not None for note in call.response.notes)
+        reasons += tuple(dict.fromkeys(f"{NOT_PARTIAL} {note}" for note in notes))
         summaries.append(
             ProviderSummary(
                 provider=provider,

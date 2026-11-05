@@ -1,8 +1,9 @@
 # Topic feed lists
 
 One YAML file per topic names the publisher RSS and Atom feeds the `rss` discovery provider reads
-for that topic, and whether Google News may be searched for it. The lists are the coach's. The files
-committed here are a small starter set: every feed in them says `review: awaiting_coach_review`.
+for that topic, and whether Google News may be searched for it. The lists are the coach's: on
+2026-11-04 the coach reviewed the starter set and chose more health-policy outlets, so every feed
+committed here says `review: coach_reviewed`.
 
 The LD and PF topics change on 2026-11-01, so they are left for the coach to add.
 
@@ -51,12 +52,21 @@ listed twice, a provider in `government_providers` that is not a government one 
 does not match the file name stops the load with the file and the problem named. `packages/debate_core/tests/integrations/discovery/test_feed_config.py` loads every
 file here on every pull request.
 
+## A feed that fails
+
+A search that reads the feeds names every feed that failed in its provider footer. A feed failing for
+the first time makes the search partial (`PARTIAL`, exit 6), because trying again may reach it. One
+that has failed on every read for three days, with no successful read between, no longer does: the
+footer still names it, `rss: ok, 14 results: not counted as partial: <publisher> failing since
+<date>: <reason>`, and the search exits as it would without it. Its next successful read clears the
+date. A feed named that way is one to run the feed check on, and then to fix or remove here.
+
 ## Checking that the feeds answer
 
 A URL listed here has not been shown to work by being listed. The operator's feed check fetches each
-configured feed once and prints, per feed, the status, the number of entries and how many of them
-carried a date. It prints nothing from an entry. Run it from the repository root, on a machine with
-network access:
+configured feed once and prints, per feed, the status, the number of entries, how many of them
+carried a date and the newest of those dates. It prints nothing from an entry. Run it from the
+repository root, on a machine with network access:
 
 ```bash
 uv run python -m debate_core.integrations.discovery.feed_check --feeds-dir config/feeds
@@ -64,3 +74,17 @@ uv run python -m debate_core.integrations.discovery.feed_check --feeds-dir confi
 
 It exits with status 1 when any feed failed. A feed that answers `HTTP 200` with dated entries is
 ready for the coach's review; one that fails or carries no dates is worth replacing.
+
+A feed that answers but cannot be parsed gets a second line, `why:`, in counts and statuses only:
+the content type and encoding the server declared, the body's size, what comes before its first
+markup and what kind of markup that is (an XML declaration, an HTML page), the XML parser's error
+with its line and column, how many control characters XML forbids and how many bare `&` the body
+holds, whether it is UTF-8, and whether it would parse with leading whitespace removed. That tells a
+publisher serving broken XML or a web page from a parser refusing a valid feed.
+
+To check a feed before it is added, give its URL instead; `--url` may be repeated, and the rows say
+`candidate` for the topic and the URL's host for the publisher:
+
+```bash
+uv run python -m debate_core.integrations.discovery.feed_check --url https://publisher.example.org/feed.xml
+```

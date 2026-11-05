@@ -2,10 +2,12 @@
 
 The recorded tier cannot reach a provider: the network guard refuses, and logs, every connection, and
 a check fails on any attempt even when the command carried on. So the end-to-end check names a provider
-the `dev` profile does not enable. The build then does everything a search does but call a provider:
-it loads the dev profile's providers (OpenAlex and the feeds, over the bundled `config/feeds/`),
-expands the query with the bundled `config/argument_taxonomy.yaml`, loads the bundled ranking table,
-fans out to nothing, stores the search, and reports the provider it could not ask. A build whose
+the `dev` profile does not enable, or one it cannot configure on this machine (GovInfo, with no
+api.data.gov key in the run's environment). The build then does everything a search does but call a
+provider: it loads the dev profile's providers (since v1-e07-t13 OpenAlex, Crossref, the feeds over the
+bundled `config/feeds/`, the Federal Register and GovInfo), expands the query with the bundled
+`config/argument_taxonomy.yaml`, loads the bundled ranking table, fans out to nothing, stores the
+search, and reports the provider it could not ask. A build whose
 profile enables a provider it has no adapter for stops earlier, with a configuration error, which is
 why the check reads the error code and not only the exit code.
 """
@@ -126,8 +128,11 @@ def test_a_need_outside_the_arguments_family_exits_2_listing_its_needs(installed
     assert "internal-link" not in run.stderr
 
 
-def test_a_topic_alone_names_the_government_providers_it_could_not_ask(installed_cli: InstalledCli) -> None:
-    """v1-e07-t07: `--topic` stands alone, and the dev profile enables neither government provider."""
+def test_a_topic_alone_names_the_government_provider_it_could_not_ask(installed_cli: InstalledCli) -> None:
+    """v1-e07-t07: `--topic` stands alone. Since v1-e07-t13 the dev profile enables both government
+    providers, so the reason is GovInfo's missing key, not "not enabled in settings": the build's own
+    profile enables it. The Federal Register takes no key, so asking it would leave the machine, and this
+    offline tier does not."""
     run = installed_cli.run(
         "--json",
         "search",
@@ -135,7 +140,7 @@ def test_a_topic_alone_names_the_government_providers_it_could_not_ask(installed
         "--topic",
         "policy-2026-27-nhi",
         "--providers",
-        "federal_register,govinfo",
+        "govinfo",
     )
 
     assert run.exit_code == ExitCode.DOMAIN_FAILURE, run.output
@@ -144,9 +149,8 @@ def test_a_topic_alone_names_the_government_providers_it_could_not_ask(installed
     assert (error["code"], error["exit_code"]) == ("NO_PROVIDER_ENABLED", 1)
     details = error["details"]
     assert isinstance(details, dict)
-    assert [(entry["provider"], entry["outcome"]) for entry in details["providers"]] == [
-        ("federal_register", "not configured"),
-        ("govinfo", "not configured"),
+    assert [(entry["provider"], entry["outcome"], entry["reasons"]) for entry in details["providers"]] == [
+        ("govinfo", "not configured", ["no api.data.gov key (DEBATE_PROVIDERS__API_DATA_GOV_KEY)"]),
     ]
     assert "expansion" not in details or details["expansion"] is None
 

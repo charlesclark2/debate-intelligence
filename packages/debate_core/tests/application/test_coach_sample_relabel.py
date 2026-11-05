@@ -93,6 +93,30 @@ def test_only_the_changed_rows_position_cells_are_written() -> None:
     assert written.splitlines()[0] == SAMPLE.splitlines()[0]
 
 
+def test_every_unchanged_row_keeps_its_bytes_whatever_its_quoting() -> None:
+    quoted = (
+        '"sample_row","tag","headings","position","note","also"\r\n'
+        '"1","An invented tag","Off case","politics-da","",""\r\n'
+        '"2","A tag over\r\ntwo lines","Case","rural-adv","",""\r\n'
+        '"3","A third invented tag","Answers","unsure","",""\r\n'
+    )
+
+    written = relabelled_sample(quoted, {3: "at:politics-da"})
+
+    before, after = quoted.splitlines(keepends=True), written.splitlines(keepends=True)
+    assert after[:4] == before[:4]
+    assert list(csv.reader(io.StringIO(after[4])))[0] == [
+        "3",
+        "A third invented tag",
+        "Answers",
+        "at:politics-da",
+        "",
+        "",
+    ]
+    assert after[4].endswith("\r\n")
+    assert len(after) == len(before)
+
+
 def test_no_change_writes_the_sample_as_it_was() -> None:
     assert relabelled_sample(SAMPLE, {}) == SAMPLE
 
@@ -220,3 +244,93 @@ def test_each_card_shows_its_tag_headings_side_and_label_and_nothing_of_the_list
         < shown.index("An invented tag")
         < shown.index("Another invented tag")
     )
+
+
+# ------------------------------------------------------------------------------------------------
+# What the sitting reads: the coach's own CSV, and each labelled row's disclosed sides from the store
+# ------------------------------------------------------------------------------------------------
+
+import hashlib  # noqa: E402
+import json  # noqa: E402
+from datetime import date  # noqa: E402
+
+from debate_core.application.caselist.evidence_listing import LocalEvidence  # noqa: E402
+from debate_core.application.caselist.suppression import RecordedSuppressionList  # noqa: E402
+from debate_core.application.coach_sample_relabel import shown_rows  # noqa: E402
+from debate_core.application.landscape_model_evaluation import LandscapeModelEvaluationService  # noqa: E402
+from debate_core.application.ports.parsed_store import OCCURRENCES_NAME, PARSED_PREFIX  # noqa: E402
+from debate_core.domain.landscape_classification import card_item_id  # noqa: E402
+from debate_core.integrations.landscape.yaml_taxonomy_repository import YamlTaxonomyRepository  # noqa: E402
+from debate_core.integrations.local import BLOB_DIRECTORY, FsEvidenceObjectStore  # noqa: E402
+from debate_core.integrations.local.parsed_store import LocalParsedStore  # noqa: E402
+from debate_core.integrations.local.suppression_list import local_suppression_list_file  # noqa: E402
+from debate_core.testing.landscape_run import SYNTHETIC_RUN_CASELIST, plant_synthetic_run  # noqa: E402
+from debate_core.testing.landscape_store import PARSER_VERSION  # noqa: E402
+
+
+def test_each_row_shows_the_coach_s_own_tag_headings_and_labels_and_its_file_s_side() -> None:
+    shown = shown_rows(SAMPLE, {1: frozenset({"AFF"}), 2: frozenset({"NEG", "AFF"})})
+
+    assert shown == {
+        1: ShownRow(
+            tag="An invented tag, with a comma",
+            headings="Off case > Politics",
+            side="affirmative",
+            label="politics-da",
+        ),
+        2: ShownRow(tag='A tag with "quotes"', headings="Case", side="both sides", label="rural-adv"),
+        3: ShownRow(tag="A third invented tag", headings="Answers", side="no readable side", label="unsure"),
+    }
+
+
+@pytest.fixture
+def anyio_backend() -> str:
+    return "asyncio"
+
+
+@pytest.mark.anyio
+async def test_the_service_gives_each_labelled_row_the_sides_its_file_was_disclosed_on(
+    tmp_path: Path,
+) -> None:
+    """synthetic26, by hand: the costs card is in the affirmative files, the framing card in `neg-two`."""
+    world = plant_synthetic_run(tmp_path / "world")
+    table = world.data_dir / PARSED_PREFIX / SYNTHETIC_RUN_CASELIST / PARSER_VERSION / OCCURRENCES_NAME
+    item_ids: dict[str, str] = {}
+    for line in table.read_text(encoding="utf-8").splitlines():
+        record = json.loads(line)
+        item_ids[record["exact_fingerprint"]] = card_item_id(
+            record["source_sha256"], record["first_element_index"]
+        )
+    labelled = (
+        ("Premiums are rising fast", "Delacroix 25", "costs-advantage"),
+        ("Probability first", "Szabo 24", "none"),
+    )
+    rows = [json.dumps({"schema": "local-classifier-sample-1"})]
+    for row, (tag, cite, _) in enumerate(labelled, start=1):
+        rows.append(
+            json.dumps(
+                {"sample_row": row, "item_id": item_ids[hashlib.sha256(f"{tag}|{cite}".encode()).hexdigest()]}
+            )
+        )
+    sample = "sample_row,position\n1,costs-advantage\n2,none\n"
+    objects = FsEvidenceObjectStore(world.data_dir)
+    blobs = FsEvidenceObjectStore(world.data_dir, subdirectory=BLOB_DIRECTORY.parent)
+    service = LandscapeModelEvaluationService(
+        taxonomies=YamlTaxonomyRepository.load(world.config_dir),
+        parsed_store=LocalParsedStore(world.data_dir),
+        local=LocalEvidence(
+            objects=objects, blobs=blobs, object_path_for=objects.path_for, blob_path_for=blobs.path_for
+        ),
+        suppression=RecordedSuppressionList(local_suppression_list_file(world.data_dir)),
+        objects=objects,
+        stage=lambda max_items: (_ for _ in ()).throw(AssertionError("the sitting asks no model")),
+        cassette_texts=lambda: (),
+    )
+
+    found = await service.sample_sides(
+        SYNTHETIC_RUN_CASELIST, io.StringIO(sample), rows, snapshot=date(2026, 9, 15)
+    )
+
+    assert found.sides == {1: frozenset({"AFF"}), 2: frozenset({"NEG"})}
+    assert [one.sample_row for one in found.labelled] == [1, 2]
+    assert found.taxonomy.taxonomy_version == "1.0.0"

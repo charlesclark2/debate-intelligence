@@ -20,7 +20,7 @@ from __future__ import annotations
 import csv
 import io
 import random
-from collections.abc import Callable, Collection, Iterable, Mapping, Sequence
+from collections.abc import Callable, Collection, Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Final
@@ -43,6 +43,7 @@ __all__ = [
     "relabel_counts",
     "relabelled_sample",
     "run_sitting",
+    "shown_rows",
     "sitting_rows",
 ]
 
@@ -102,28 +103,40 @@ def disclosed_side(sides: Collection[str]) -> str:
 def relabelled_sample(text: str, labels: Mapping[int, str]) -> str:
     """The coach's CSV `text` with the `position` cell of each row of `labels` set to its new label.
 
-    Every other cell keeps its value, and the header and row order stay. With no change, `text` comes back
-    as it was. Raises `ValueError` for a row the sample does not have.
+    Every other row keeps its bytes, quoting and line ending included, and a changed row keeps its other
+    cells' values and its line ending. With no change, `text` comes back as it was. Raises `ValueError` for
+    a row the sample does not have.
     """
     if not labels:
         return text
-    records = list(csv.reader(io.StringIO(text, newline="")))
-    header = records[0]
-    row_column, position_column = header.index("sample_row"), header.index("position")
+    consumed: list[str] = []
+
+    def lines() -> Iterator[str]:
+        for line in text.splitlines(keepends=True):
+            consumed.append(line)
+            yield line
+
+    written: list[str] = []
     found: set[int] = set()
-    for record in records[1:]:
-        if not record:
-            continue
-        row = int(record[row_column])
-        if row in labels:
+    row_column = position_column = -1
+    for number, record in enumerate(csv.reader(lines())):
+        raw = "".join(consumed)
+        consumed.clear()
+        if number == 0:
+            row_column, position_column = record.index("sample_row"), record.index("position")
+        elif record and int(record[row_column]) in labels:
+            row = int(record[row_column])
             record[position_column] = labels[row]
             found.add(row)
+            ending = raw[len(raw.rstrip("\r\n")) :]
+            out = io.StringIO(newline="")
+            csv.writer(out, lineterminator=ending or "\n").writerow(record)
+            raw = out.getvalue()
+        written.append(raw)
     missing = sorted(set(labels) - found)
     if missing:
         raise ValueError(f"row {missing[0]} is not in the coach's sample")
-    written = io.StringIO(newline="")
-    csv.writer(written, lineterminator="\r\n" if "\r\n" in text else "\n").writerows(records)
-    return written.getvalue()
+    return "".join(written)
 
 
 def relabel_counts(rows: Sequence[SittingRow], changed: Collection[int]) -> dict[str, dict[str, int]]:
@@ -205,3 +218,20 @@ def _as_written(label: str, taxonomy: Taxonomy) -> str:
     except ValueError:
         return label.strip()
     return read.written if read is not None else UNSURE_LABEL
+
+
+def shown_rows(text: str, sides: Mapping[int, Collection[str]]) -> dict[int, ShownRow]:
+    """What the sitting shows of each row of the coach's CSV `text`, with its file's `sides`: the coach's own
+    `tag`, `headings`, `position` and `also` cells as written, and the sides in words
+    (:func:`disclosed_side`). A row with no sides given shows no readable side."""
+    found: dict[int, ShownRow] = {}
+    for line in csv.DictReader(io.StringIO(text, newline="")):
+        row = int(line["sample_row"])
+        found[row] = ShownRow(
+            tag=(line.get("tag") or "").strip(),
+            headings=(line.get("headings") or "").strip(),
+            side=disclosed_side(sides.get(row, ())),
+            label=(line.get("position") or "").strip(),
+            also=(line.get("also") or "").strip(),
+        )
+    return found

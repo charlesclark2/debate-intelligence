@@ -112,6 +112,7 @@ __all__ = [
     "LabelledAnswers",
     "LabelledCard",
     "LandscapeModelEvaluationService",
+    "SampleSides",
     "ask_labelled_cards",
     "break_down_labelled_cards",
     "coach_label",
@@ -966,6 +967,24 @@ class LandscapeModelEvaluationService:
             second_labels=second_labels,
         )
 
+    async def sample_sides(
+        self, caselist: str, sample: TextIO, rows: Iterable[str], *, snapshot: date | None = None
+    ) -> SampleSides:
+        """The coach's labelled rows, read as :meth:`evaluate` reads them, and the sides each one's file was
+        disclosed on, from the snapshot's reading: what the relabelling sitting shows beside a card
+        (`v1-e32-t46`). Asks no model; a row whose card the store no longer holds has no side."""
+        prepared = await self._prepared(caselist, sample, rows, snapshot)
+        by_source = {
+            source.sha256: frozenset(team.side.value for team in source.teams)
+            for source in prepared.reading.sources
+        }
+        sides = {
+            one.sample_row: by_source.get(one.item_id.split(":", 1)[0], frozenset())
+            for one in prepared.labelled
+            if one.sample_row is not None
+        }
+        return SampleSides(taxonomy=prepared.taxonomy, labelled=prepared.labelled, sides=sides)
+
     async def _resolved(self, caselist: str, snapshot: date | None) -> tuple[Topic, Taxonomy, date]:
         """The topic the caselist's snapshot is on and its taxonomy, and the snapshot: the given one or the
         newest."""
@@ -995,6 +1014,16 @@ class LandscapeModelEvaluationService:
             through=through,
         )
         return _Prepared(reading=reading, taxonomy=taxonomy, labelled=labelled, through=through)
+
+
+@dataclass(frozen=True, slots=True)
+class SampleSides:
+    """The coach's labelled rows, read against the taxonomy, and the sides each one's file was disclosed on
+    (:class:`~debate_core.domain.caselist.Side` values), by sample row (`v1-e32-t46`)."""
+
+    taxonomy: Taxonomy
+    labelled: tuple[LabelledCard, ...]
+    sides: Mapping[int, frozenset[str]]
 
 
 def _labelled(sample: TextIO, rows: Iterable[str], taxonomy: Taxonomy) -> tuple[LabelledCard, ...]:

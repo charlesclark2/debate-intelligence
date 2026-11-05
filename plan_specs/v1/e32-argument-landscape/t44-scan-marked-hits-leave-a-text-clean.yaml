@@ -24,9 +24,12 @@ spec:
     JSON key's name or a taxonomy word count toward `clean` no longer, while still listing it
     and counting it by mark. A hit with no mark, or marked as naming a team, still makes the
     text unclean. The scan's lists and the terminal listing are unchanged.
+    (PM amendment 2026-11-05, from the PM's review.) The PM's rulings of 2026-11-05 needed
+    `debate_cli`'s source (the `set_aside` count in the JSON), the smoke check's pin and
+    docs/data (the trusted marks); the three are added to the packages.
   priority: 3
   constraints:
-    packages: [debate_core.application, debate_core.arguments, packages/debate_core/tests, packages/debate_cli/tests, docs/runbooks]
+    packages: [debate_core.application, debate_core.arguments, debate_cli, packages/debate_core/tests, packages/debate_cli/tests, tests/smoke, docs/runbooks, docs/data]
     forbidden:
       - A school, team code or debater name in a fixture
       - Hiding a hit from the counts or the terminal listing

@@ -23,6 +23,9 @@ spec:
     narrower follow-up queries from the first page's subjects or concepts (OpenAlex's own
     fields, never a model), and a way to search within a saved search. Say what each costs in
     provider requests and what a student types. The PM rules on the proposal before any code.
+    (PM amendment 2026-11-05, from v1-e07-t13's deviation 2.) There is no search guide under
+    docs/guides: "the search guide" is the `debate-research search` section of
+    `packages/debate_cli/README.md`, inside the `debate_cli` package.
   priority: 3
   constraints:
     packages: [debate_core.application, debate_core.domain, debate_cli, packages/debate_core/tests, packages/debate_cli/tests, docs/guides]

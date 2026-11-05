@@ -1,0 +1,73 @@
+# TASK v1-e08-t21-a-shared-doi-overrules-differing-openalex-ids - Two results sharing a DOI are one work, even under two OpenAlex work ids
+# Epic: E08 Federated Research Workflows | Release: v1.4 (Federated research from the CLI) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e08-t21-a-shared-doi-overrules-differing-openalex-ids
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.4
+    debate/epic: v1-e08-research-workflows
+  annotations:
+    debate/title: "Two results sharing a DOI are one work, even under two OpenAlex work ids"
+spec:
+  # Filed by the PM, 2026-11-05, from v1-e08-t10's question 4 (the PM's ruling: A).
+  description: >-
+    ac6's saved results held one DOI under two different OpenAlex work ids, one at a
+    repository's PDF and one at its `doi.org` page: OpenAlex's own duplicate, which dedupe keeps
+    as two works because their ids differ. A shared normalized DOI overrules differing OpenAlex
+    ids: the two merge into one work, keeping the fuller record and both locations, with the
+    provider agreement counted once. Tests on recorded fixtures, including two works that share
+    no DOI and stay two.
+  priority: 3
+  constraints:
+    packages: [debate_core.application, debate_core.domain, packages/debate_core/tests]
+    forbidden:
+      - Merging two works that share no DOI
+      - A live provider call in a test
+  context:
+    - kind: TaskRef
+      name: v1-e08-t10-search-asks-each-provider-once
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        Two results with one normalized DOI and differing OpenAlex ids merge into one work
+        with both locations, and works without a shared DOI stay apart, by tests on recorded
+        fixtures shown failing first.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e08-t21-a-shared-doi-overrules-differing-openalex-ids-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.4
+    debate/epic: v1-e08-research-workflows
+spec:
+  description: >-
+    Two results sharing a DOI are one work, even under two OpenAlex work ids.
+  goalRef:
+    name: v1-e08-t21-a-shared-doi-overrules-differing-openalex-ids
+  graph:
+    nodes:
+      - id: a-shared-doi-overrules-differing-openale
+        kind: Task
+        name: Shared DOI
+        description: >-
+          Two results sharing a DOI are one work, even under two OpenAlex work ids.
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Shared DOI tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests, -k, dedupe or doi]
+status:
+  phase: Pending

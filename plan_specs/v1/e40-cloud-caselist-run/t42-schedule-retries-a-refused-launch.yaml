@@ -1,0 +1,101 @@
+# TASK v1-e40-t42-schedule-retries-a-refused-launch - The run's schedule tries again when AWS refuses to launch the task, and never starts a second run
+# Epic: E40 — Weekly Caselist Run in the Cloud | Release: v1.8 (Weekly caselist run in the cloud) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e40-t42-schedule-retries-a-refused-launch
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.8
+    debate/epic: v1-e40-cloud-caselist-run
+  annotations:
+    debate/title: "The run's schedule tries again when AWS refuses to launch the task, and never starts a second run"
+spec:
+  # Filed by the PM, 2026-11-05, from the weekly run of 2026-11-04, which AWS refused to launch, and Charlie's hand run of 2026-11-05.
+  description: >-
+    On Wednesday 2026-11-04 the 09:00 UTC login ran and stored its token, and at 12:00 UTC the
+    run's schedule fired, but ECS refused the launch: CloudTrail's RunTask at 12:00:28Z answered
+    ServerException "Internal Error", an AWS-side fault, with task definition
+    debate-dev-caselist-run:11 active. The schedule's retry_policy has maximum_retry_attempts =
+    0 (run_task.tf, "never twice in a week"), so nothing tried again, and the week's run
+    happened only because the operator started the same task definition by hand (run
+    20261105T034547Z, completed). A refused launch starts no container, downloads nothing and
+    takes no lock, so retrying it cannot give a second run; the rule "never twice in a week" is
+    about a run that started. First propose, and stop for the PM's ruling: the attempts and the
+    event age for the run's schedule (and whether the login's schedule gets the same, given that
+    a refused login is a container that exits, not a refused launch); what EventBridge Scheduler
+    counts as a failed invocation for an ECS RunTask target, including a RunTask answer that
+    carries `failures`, with the AWS documentation page named so the PM reads it; and why no
+    retry can start after a run has started (the bucket's run lock is the backstop: say what a
+    second start would meet). Then build what is ruled, with the comments in run_task.tf (and
+    login_task.tf if ruled) saying why a retry cannot make a second run, and the runbook's
+    troubleshooting saying what a refused launch looks like and that the schedule now retries
+    it. The operator also reads the run's dead-letter queue for the 2026-11-04 message before
+    2026-11-18 (the queue keeps 14 days) and says whether the schedule-failed alarm emailed the
+    coach.
+  priority: 1
+  constraints:
+    packages: [infrastructure, docs/runbooks, tests/docs]
+    forbidden:
+      - A retry that can start a run after a run has started
+      - A plan that destroys or replaces an account assignment or a permission set
+      - AWS credentials in a workflow
+      - An apply by the session
+  context:
+    - kind: TaskRef
+      name: v1-e40-t05-run-alerts
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        The proposal (attempts, event age, the login's schedule, what Scheduler counts as a
+        failed invocation, and the lock as backstop) is ruled on by the PM before any
+        change.
+    - id: ac2
+      description: >-
+        The run's schedule (and the login's if ruled) retries a refused launch as ruled, by
+        Terraform checks shown failing first, with the comments and the runbook saying why a
+        retry cannot make a second run.
+    - id: ac3
+      description: >-
+        The operator reads the 2026-11-04 dead-letter message and whether the alarm emailed
+        the coach (before 2026-11-18), and applies dev after the PM reads the plan, the plan
+        after it saying No changes (operator, recorded by the PM).
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e40-t42-schedule-retries-a-refused-launch-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.8
+    debate/epic: v1-e40-cloud-caselist-run
+spec:
+  description: >-
+    The run's schedule tries again when AWS refuses to launch the task, and never starts a
+    second run.
+  goalRef:
+    name: v1-e40-t42-schedule-retries-a-refused-launch
+  graph:
+    nodes:
+      - id: schedule-retries-a-refused-launch
+        kind: Task
+        name: Retry a refused launch
+        description: >-
+          The run's schedule tries again when AWS refuses to launch the task, and never
+          starts a second run.
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Retry a refused launch tests pass
+            command: bash
+            args: [scripts/terraform_checks.sh]
+status:
+  phase: Pending

@@ -504,5 +504,83 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e08-t18-auto-cut-report-names-per-run
+    - id: t19
+      kind: Task
+      name: 'A batching provider''s footer counts the distinct works it returned, not one per query'
+      description: >-
+        A batching provider's footer counts the distinct works it returned, not one per
+        query.
+      inputs:
+        specRef: plan_specs/v1/e08-research-workflows/t19-a-batching-providers-footer-counts-distinct-works.yaml
+        goalRef: v1-e08-t19-a-batching-providers-footer-counts-distinct-works
+      dependsOn:
+      - t10
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e08-t19-a-batching-providers-footer-counts-distinct-works reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e08-t19-a-batching-providers-footer-counts-distinct-works
+    - id: t20
+      kind: Task
+      name: 'A typed query with an unbalanced parenthesis or a bare operator cannot change or break the joined search'
+      description: >-
+        A typed query with an unbalanced parenthesis or a bare operator cannot change or
+        break the joined search.
+      inputs:
+        specRef: plan_specs/v1/e08-research-workflows/t20-a-typed-query-that-would-break-the-joined-search.yaml
+        goalRef: v1-e08-t20-a-typed-query-that-would-break-the-joined-search
+      dependsOn:
+      - t10
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e08-t20-a-typed-query-that-would-break-the-joined-search reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e08-t20-a-typed-query-that-would-break-the-joined-search
+    - id: t21
+      kind: Task
+      name: 'Two results sharing a DOI are one work, even under two OpenAlex work ids'
+      description: >-
+        Two results sharing a DOI are one work, even under two OpenAlex work ids.
+      inputs:
+        specRef: plan_specs/v1/e08-research-workflows/t21-a-shared-doi-overrules-differing-openalex-ids.yaml
+        goalRef: v1-e08-t21-a-shared-doi-overrules-differing-openalex-ids
+      dependsOn:
+      - t10
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e08-t21-a-shared-doi-overrules-differing-openalex-ids reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e08-t21-a-shared-doi-overrules-differing-openalex-ids
+    - id: t22
+      kind: Task
+      name: 'The auto-cut report states the whole command''s spend beside its own calls'' cost'
+      description: >-
+        The auto-cut report states the whole command's spend beside its own calls' cost.
+      inputs:
+        specRef: plan_specs/v1/e08-research-workflows/t22-auto-cut-report-states-the-commands-whole-cost.yaml
+        goalRef: v1-e08-t22-auto-cut-report-states-the-commands-whole-cost
+      dependsOn:
+      - t17
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e08-t22-auto-cut-report-states-the-commands-whole-cost reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e08-t22-auto-cut-report-states-the-commands-whole-cost
 status:
   phase: Pending

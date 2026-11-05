@@ -1,0 +1,86 @@
+# TASK v1-e40-t43-weekly-run-logs-each-stage - The weekly run logs each stage as it starts and ends, so a run can be read while it runs
+# Epic: E40 — Weekly Caselist Run in the Cloud | Release: v1.8 (Weekly caselist run in the cloud) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e40-t43-weekly-run-logs-each-stage
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.8
+    debate/epic: v1-e40-cloud-caselist-run
+  annotations:
+    debate/title: "The weekly run logs each stage as it starts and ends, so a run can be read while it runs"
+spec:
+  # Filed by the PM, 2026-11-05, from the hand run of 2026-11-05, whose log stream stayed empty until its end.
+  description: >-
+    The weekly run (`caselist pull` in the cloud task) writes its result as one line when it
+    ends, so for the whole of the hand run of 2026-11-05 (20261105T034547Z, over an hour) its
+    log stream was empty, and nobody could tell a run that was downloading or parsing from one
+    that had hung. v1-e40-t32 gave `caselist backfile-import` a line as each step starts and
+    ends, with the step, its seconds, its counts and the memory high-water marks, and parse
+    progress lines. Give the weekly run the same, reusing that code rather than copying it: a
+    line as each stage starts and ends (restore, select, download, import, parse, upload,
+    publish, and the landscape stage when installed), and during the parse a progress line every
+    few minutes with sources done and left. Counts and stage names only: never a school, a team,
+    a file name or a path. The run's last line, the one the RunsRecorded metric filter counts,
+    keeps its form exactly, by test against the filter's pattern, so no stage line is counted as
+    a recorded run. The runbook's watch block gains a read of the last stage line.
+  priority: 2
+  constraints:
+    packages: [debate_core.application, debate_core.integrations, debate_cli, packages/debate_core/tests, packages/debate_cli/tests, docs/runbooks, tests/docs]
+    forbidden:
+      - A school, a team, a file name or a path in a log line
+      - A stage line the RunsRecorded filter counts
+      - A change to the run's final record line
+      - A live network call in a test
+  context:
+    - kind: TaskRef
+      name: v1-e40-t32-backfile-import-logs-each-step
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        Each stage of the weekly run logs its start and end with seconds and counts, the
+        parse logs its progress, and no line names a school, team, file or path, by tests
+        shown failing first.
+    - id: ac2
+      description: >-
+        The final record line is unchanged and is still the only line the RunsRecorded
+        metric filter's pattern matches, by test, and the runbook reads the last stage line.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e40-t43-weekly-run-logs-each-stage-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.8
+    debate/epic: v1-e40-cloud-caselist-run
+spec:
+  description: >-
+    The weekly run logs each stage as it starts and ends, so a run can be read while it runs.
+  goalRef:
+    name: v1-e40-t43-weekly-run-logs-each-stage
+  graph:
+    nodes:
+      - id: weekly-run-logs-each-stage
+        kind: Task
+        name: Stage lines
+        description: >-
+          The weekly run logs each stage as it starts and ends, so a run can be read while
+          it runs.
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Stage lines tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests, packages/debate_cli/tests, -k, pull and (stage or step)]
+status:
+  phase: Pending

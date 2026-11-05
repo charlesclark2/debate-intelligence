@@ -390,3 +390,14 @@ explained before anyone reads it.
    side by side is wanted again.
 8. **Merge:** `scripts/task pr --partial` once `ci` is green. The Goal stays `InProgress` until the
    sitting (ac1) and the re-record (ac3) are recorded.
+
+## Operator records (recorded by the PM, 2026-11-05)
+
+Added by the PM. Nothing above is changed, and this section is not a review.
+
+| Criterion | Was | Now | Record |
+|---|---|---|---|
+| ac1: the stance label's format and the relabelling ruled by the PM, and the coach's relabelled sample reads with `--check-sample` (operator) | NOT RUN (operator) | PASS | The coach's sitting, 2026-11-04, from this worktree: `Done. Listed: 9 changed, 4 unchanged. Control: 1 changed, 5 unchanged`. `--check-sample` exit 0: labelled 47 (advantage 15, cp 7, da 6, k 10, none 2, t 7), `by_stance` answers 10, reads 35, two rows with a second label (both advantages). The rows now labelled `at:` are 5, 11, 20, 21, 25, 26, 31, 40, 41 and 59; row 40 is the changed control; rows 13, 16, 33 and 57 were kept |
+| ac3: the operator's re-record of the 47 under 1.2.0 on the PM's route, its breakdown and scans, recorded in docs/data (operator, recorded by the PM) | NOT RUN (operator) | PASS | Both routes, 2026-11-05, prompt 1.2.0, taxonomy 1.5.0, 47 found and asked in 3 calls each. Pipeline: Claude Haiku 4.5 (`high_volume`) 21 of 37, 0.568; Claude Sonnet 4.6 (`deep_audit`) 23 of 33, 0.697; neither meets 0.85. Prompt-input scans clean; cassette hits 23 and 44, every one marked a JSON key's name or a taxonomy word, none naming a team or in the cards sent; the operator read them in the terminal and judged all 67 ordinary words, so the cassettes are kept. Recorded in [the evaluation's record](../data/landscape-model-evaluation.md#the-sitting-and-the-re-record-under-120-v1-e32-t46-2026-11-05) |
+
+Both operator criteria pass, so the Goal is `Succeeded`. Neither route meets the bar, and the hold on live model runs stands. The coach's sitting kept row 13 reading, so stage one's role under an answer heading inside its own side's block (review note 7) is filed with prompt 1.3.0 as `v1-e32-t49`, beside the coach's rulings of 2026-11-05; a second labelled sample held out from tuning is `v1-e32-t50`.

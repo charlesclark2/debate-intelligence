@@ -947,5 +947,45 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e40-t41-cloud-run-keeps-its-per-file-decisions
+    - id: t42
+      kind: Task
+      name: 'The run''s schedule tries again when AWS refuses to launch the task, and never starts a second run'
+      description: >-
+        The run's schedule tries again when AWS refuses to launch the task, and never starts
+        a second run.
+      inputs:
+        specRef: plan_specs/v1/e40-cloud-caselist-run/t42-schedule-retries-a-refused-launch.yaml
+        goalRef: v1-e40-t42-schedule-retries-a-refused-launch
+      dependsOn:
+      - t05
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e40-t42-schedule-retries-a-refused-launch reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e40-t42-schedule-retries-a-refused-launch
+    - id: t43
+      kind: Task
+      name: 'The weekly run logs each stage as it starts and ends, so a run can be read while it runs'
+      description: >-
+        The weekly run logs each stage as it starts and ends, so a run can be read while it
+        runs.
+      inputs:
+        specRef: plan_specs/v1/e40-cloud-caselist-run/t43-weekly-run-logs-each-stage.yaml
+        goalRef: v1-e40-t43-weekly-run-logs-each-stage
+      dependsOn:
+      - t32
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e40-t43-weekly-run-logs-each-stage reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e40-t43-weekly-run-logs-each-stage
 status:
   phase: Pending

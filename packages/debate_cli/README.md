@@ -529,8 +529,9 @@ nowhere else (`.env.example` lists the variables).
   second instead of three. A search of one query looks the same either way. An expanded search sends
   its queries one a second, and any it cannot send before its timeout come back not asked. The footer
   then says, for example, `crossref: partial, 9 results from 12 queries: not asked: the public pool
-  allows 1 query a second; set a contact email for the polite pool`, and the search exits `6`. On the recorded fixtures the twelve-query NHI link search sends nine of its twelve
-  Crossref queries in about 9 seconds without an email, and all twelve in about 4 seconds with one.
+  allows 1 query a second; set a contact email for the polite pool`, and the search exits `6`. On the
+  recorded fixtures the twelve-query NHI link search sends nine of its twelve Crossref queries in about
+  9 seconds without an email, and all twelve in about 4 seconds with one.
 * GovInfo without `DEBATE_PROVIDERS__API_DATA_GOV_KEY` is `not configured` on a topic that lists it,
   as below, and that search exits `6` too.
 

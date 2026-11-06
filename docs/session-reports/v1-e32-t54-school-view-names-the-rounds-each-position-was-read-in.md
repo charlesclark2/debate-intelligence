@@ -30,8 +30,9 @@ The PM should look first at two things:
 - **The removal credential's grant.** The grant had to name the new file, which takes the change
   outside the spec's packages (Deviations). `evidence-store.md` still records `v1-e32-t13`'s grant
   as not applied in either environment (Operator follow-ups).
-- **The page-size measurement.** It runs over the real copy and is still pending. Its result decides
-  whether the largest school page stays under ADR-0019's page budget.
+- **The page-size margin.** The largest real school page fits ADR-0019's 150 KB, with about 5 KB
+  to spare (Operator follow-ups, item 1). Later snapshots add rounds, so it may not fit for long. A
+  question for the PM is in that item.
 
 ac3 is the operator's republish after the merge, so the Goal stays `InProgress`.
 
@@ -78,6 +79,12 @@ ac3 is the operator's republish after the merge, so the Goal stays `InProgress`.
 - **The pilot page** (`packages/debate_api/tests/test_landscape_pages.py`): `schools.md` as
   `debate_core` renders it, served by the pilot, puts the lists on the school's own page. The front
   page lists the four schools and no team.
+- **The page budget** (same file, after the operator's measurement): the synthetic bundle's largest
+  school now carries hspolicy26's largest school page: 151 rows and 1,158 round lines, with a body of
+  at least 121,739 bytes (122,605 rendered). The test checks all three and holds the page, script and
+  stylesheet under 150 KB: **149,208 bytes of 153,600**. Two longer drafts of the same lines (bodies
+  of 154,267 and 135,067 bytes) failed on the budget assertion itself, at 180,870 and 161,670 bytes.
+  The file then ran **148 passed**.
 - **The removal, the residue count and the purge:**
   - `test_removal_reaches_landscape_school_views.py`: the bundles carry the eight files; the plan
     lists and `--execute` deletes all three school-view files on both sides, every version; the
@@ -252,9 +259,40 @@ agreement says, it is left to the pull request's CI. I ran these myself:
 
 1. **Before the merge: the page-size measurement.** This needs the copy, and the operator block is in
    this session's last message. It renders the real `schools.md` through the pilot's renderer and
-   prints byte and line counts only. *Result: pending.* If the largest school page is near
-   ADR-0019's 150 KB, the page-budget test should carry a school that large, and a collapsed view
-   becomes this task's business rather than a follow-up.
+   prints byte and line counts only.
+
+   *Result (2026-11-06, snapshot 2026-11-03).* Exit 0, 79.0 s, no file in the copy changed, added or
+   removed.
+
+   | Figure | Value |
+   |---|---|
+   | Round lines | 16,000: 8,632 reads, 7,368 AT; 5,063 under positions answered only |
+   | Lines marked "one file for N rounds" | 2,801, largest N 8 |
+   | Lines with no tournament or no round | 0 and 0 |
+   | Teams and schools with lines | 610 and 185 (the rows hold 591 and 180) |
+   | Lines per team | median 10, max 257 |
+   | `schools.md`, `schools.csv`, `school_rounds.csv` | 1,541,850, 262,065 and 2,193,663 bytes |
+   | School pages | 185; one over 100 KB, none over 150 KB |
+   | Largest five page bodies (bytes, rows, lines) | 121,739/151/1,158; 73,380/99/791; 67,795/101/569; 65,469/77/657; 64,380/77/633 |
+   | Scan hits | 75 in all, counted before earlier acceptances apply, and not counted by file. The school-view files are scanned for paths only. The republish's dry run (step 3) lists any hit not yet accepted, and step 4's digest block covers it. |
+
+   The pilot adds 26,603 bytes to a school page's body: 2,020 of page chrome and 24,583 of script and
+   stylesheet, as measured on the synthetic page. So the largest real page is about **148,342 bytes of
+   153,600**, which is 96.6% of the budget and leaves 5,258 bytes. The page-budget test now carries a
+   school that large (Tests, "The page budget"). Nothing refuses an oversized page at run time; the
+   budget is held by that test alone. A larger page would still be served, just slower to load on a
+   Chromebook.
+
+   **For the PM.** The newest snapshot leaves that school about 5 KB of room. Each tournament weekend
+   adds round lines, so a later snapshot may push the page past 150 KB. I have not estimated how
+   many weekends that takes. The options:
+   - (a) Ship as built for this weekend, and schedule the collapsed view (Follow-up work) next, before
+     the following snapshot is republished. Recommended: the page fits today, and the ruling kept the
+     collapsed view out of scope.
+   - (b) Add the collapsed view to this task before the merge. That means re-asking the ruling, and the
+     coach misses this weekend.
+   - (c) Accept a page over budget for the season's largest school, and amend ADR-0019's per-page
+     figure for school pages.
 2. **The removal credential's grant, in dev and then prod.** `docs/runbooks/evidence-store.md`,
    **Later applies**, records `v1-e32-t13`'s grant (deleting `schools.csv` and `schools.md`) as "not
    applied yet" in both environments, and this task adds `school_rounds.csv` to it. Until it is
@@ -265,7 +303,9 @@ agreement says, it is left to the pull request's CI. I ran these myself:
 
 ## Follow-up work
 
-- **A collapsed view for long teams** (v1-e32): one team has 257 lines, and the median is 10.
+- **A collapsed view for long teams** (v1-e32): one team has 257 lines, and the median is 10. The
+  largest school page is at 96.6% of the page budget (Operator follow-ups, item 1), so this is due
+  before a later snapshot pushes that page past it.
 - **Filters on the pilot's school page** (v1-e39 or v1-e32): by side, stance or tournament. The PM
   ruled both of these out of scope for this weekend.
 - **The spec's `constraints.packages`** (this spec): see Deviation 1.

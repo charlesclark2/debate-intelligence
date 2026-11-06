@@ -31,8 +31,8 @@ The PM should look first at two things:
   outside the spec's packages (Deviations). `evidence-store.md` still records `v1-e32-t13`'s grant
   as not applied in either environment (Operator follow-ups).
 - **The page-size margin.** The largest real school page fits ADR-0019's 150 KB, with about 5 KB
-  to spare (Operator follow-ups, item 1). Later snapshots add rounds, so it may not fit for long. A
-  question for the PM is in that item.
+  (50 to 76 round lines) to spare. That is about one snapshot at the season's rate. The PM ruled to
+  ship as built and filed the collapsed view as a p1 follow-up (Operator follow-ups, item 1).
 
 ac3 is the operator's republish after the merge, so the Goal stays `InProgress`.
 
@@ -219,9 +219,10 @@ agreement says, it is left to the pull request's CI. I ran these myself:
 
    The spec's `constraints.packages` may want `infrastructure/modules/evidence_bucket`, `tests/docs`,
    `tests/smoke` and `tests/fixtures/landscape` added; that is the PM's to amend.
+   The PM approved the grant file being outside the task's packages on 2026-11-06.
 2. **The grant needs an apply.** The code reaches the new file at once. The bucket deletion by the
-   removal credential needs the module applied in each environment (Operator follow-ups). Nothing in
-   the spec named it.
+   removal credential needs the module applied in each environment (Operator follow-ups, item 2,
+   which has dev's plan). Nothing in the spec named it.
 
 ## Decisions and assumptions
 
@@ -283,29 +284,190 @@ agreement says, it is left to the pull request's CI. I ran these myself:
    budget is held by that test alone. A larger page would still be served, just slower to load on a
    Chromebook.
 
-   **For the PM.** The newest snapshot leaves that school about 5 KB of room. Each tournament weekend
-   adds round lines, so a later snapshot may push the page past 150 KB. I have not estimated how
-   many weekends that takes. The options:
-   - (a) Ship as built for this weekend, and schedule the collapsed view (Follow-up work) next, before
-     the following snapshot is republished. Recommended: the page fits today, and the ruling kept the
-     collapsed view out of scope.
-   - (b) Add the collapsed view to this task before the merge. That means re-asking the ruling, and the
-     coach misses this weekend.
-   - (c) Accept a page over budget for the season's largest school, and amend ADR-0019's per-page
-     figure for school pages.
-2. **The removal credential's grant, in dev and then prod.** `docs/runbooks/evidence-store.md`,
-   **Later applies**, records `v1-e32-t13`'s grant (deleting `schools.csv` and `schools.md`) as "not
-   applied yet" in both environments, and this task adds `school_rounds.csv` to it. Until it is
-   applied, a `caselist remove --execute` that reaches a landscape bundle is refused in the bucket.
-   This was already true for `schools.csv` before this task. The PM should confirm whether that
-   record is current, and schedule the apply (evidence-store.md Steps 3 and 6) before the next
-   removal in an environment that holds a bundle.
+   **The PM's ruling (2026-11-06): (a).** Ship as built for this weekend. The collapsed view stays out
+   of scope. The PM files it as a p1 follow-up, wanted before the hspolicy26 report is republished
+   from the snapshot after the 2026-11-11 run. It includes a check at report time that names any school
+   page over ADR-0019's budget, so such a page is never published silently. ADR-0019's figure stands.
+
+   **How fast the largest page grows (an estimate).**
+   - *Round lines per snapshot.* The page holds 1,158 round lines after 17 snapshots: **68.1 per
+     snapshot** over the season. That is a season average. The lines of that one school were not
+     counted snapshot by snapshot, so the recent rate may differ. `school_rounds.csv`'s `snapshot`
+     column holds it, on the operator's machine.
+   - *Bytes per round line.* Two figures, from the measured body of 121,739 bytes:
+     - an upper bound of **105.1**, which counts the whole body as round lines (121,739 / 1,158);
+     - an estimate of **69.4**, which takes out the table. In the pilot's renderer, a school-view
+       table row costs 272.7 bytes (measured on an invented row with a team-page link) and the page's
+       empty frame 198 bytes. That leaves (121,739 − 151 × 272.7 − 198) / 1,158 = 69.4 bytes per line,
+       counting each line's share of the position and team lines.
+   - *Room left.* 5,258 bytes is about **50 to 76 round lines**: 0.73 to 1.11 snapshots at the season
+     average. So the snapshot after the 2026-11-11 run may be the first to take the page over, which
+     is the PM's deadline for the collapsed view.
+
+2. **The removal credential's grant, dev first, then prod before promotion item 9.**
+
+   *Confirmed in this branch.* `infrastructure/modules/evidence_bucket/operator_access.tf` line 101
+   reads `school_view_files = ["schools.csv", "school_rounds.csv", "schools.md"]`. In
+   `test_removal_school_view_selection.py`, both
+   `test_it_names_exactly_the_school_view_files_the_code_deletes` (the list equals
+   `SCHOOL_VIEW_FILES`) and `test_it_grants_the_school_rounds_file_a_removal_deletes` pass. The file
+   ran 22 passed on 2026-11-06. The PM approved the file being outside the task's packages
+   (Deviation 1). This session ran no plan and no apply.
+
+   *What is waiting.* `docs/runbooks/evidence-store.md`, **Later applies**, records `v1-e32-t13`'s
+   statement as not applied in either environment, as well as this task's addition to it. Until both
+   are applied, a `caselist remove --execute` that reaches a landscape bundle is refused in the
+   bucket. That record also shows `v1-e40-t07`'s bucket-policy statement not applied in either
+   environment. If that is still so, this plan shows the bucket policy too, and stops (below).
+
+   *What the dev plan should show.* `Plan: 0 to add, 1 to change, 0 to destroy.`, and exactly one
+   resource line: `module.evidence_store.aws_ssoadmin_permission_set_inline_policy.evidence_removal[0]
+   will be updated in-place`. Nothing created, destroyed or replaced, and no account assignment or
+   permission set. Inside that one inline policy:
+   - the statement `DeleteLandscapeSchoolViews` allows exactly `s3:DeleteObject` and
+     `s3:DeleteObjectVersion` on three ARNs, `arn:aws:s3:::debate-dev-evidence-a7508de8/reports/landscape/*/`
+     followed by `schools.csv`, `school_rounds.csv` and `schools.md`, with no condition;
+   - `ListEvidenceObjectVersionsForTakedown` gains at most the prefixes `reports/landscape/` and
+     `reports/landscape/*`, and loses none;
+   - no other statement changes.
+
+   If `v1-e32-t13` really is unapplied, the statement and the two prefixes are new. If it was applied
+   after all, the statement only gains `school_rounds.csv`. The checker below accepts either shape
+   and says which it found. Any other change stops. It was tested on eight synthetic plan files:
+   - both OK shapes print `PLAN OK`;
+   - each of these prints `PLAN STOP`: a bucket-policy change alongside, a replace, a grant missing
+     `school_rounds.csv`, another statement changing, the listing gaining `reports/`, and no change
+     at all.
+
+   *Its guards.* Never on a Wednesday, the cloud run's day. No `DEBATE_` variable set, no caselist
+   pull or backfile import running, and no Terraform override. The checkout must be on `origin/dev`
+   with this task merged. It must hold the `owner.auto.tfvars` of the checkout that last applied dev:
+   without it, the plan proposes destroying every account assignment. The plan runs as
+   `debate-admin`, as evidence-store.md Step 3 does, and is saved to a file so that what is applied is
+   what the PM read.
+
+   **The PM reads the plan and the checker's line before any apply, dev first.** The apply, and
+   prod's plan and apply (the same blocks with `ENVIRONMENT=prod` and `debate-prod-evidence-a7508de8`),
+   come after the PM's word. Prod's apply comes before promotion item 9 (`v1-e39-t07`'s prod removal
+   exercise, [evidence-search.md](../runbooks/evidence-search.md)). After each apply, the record's
+   `v1-e32-t13` and `v1-e32-t54` rows in evidence-store.md take that day's date.
+
+   **Operator command, the checkout** (expected runtime a few seconds)
+   Where: your Mac, in a new terminal window, after this task has merged into `dev`. Replace
+   `/path/to/your/apply/checkout` with the checkout that last applied dev, the one holding its
+   `owner.auto.tfvars`.
+   ```bash
+   WT=/path/to/your/apply/checkout
+   ENVIRONMENT=dev
+   BUCKET="debate-${ENVIRONMENT}-evidence-a7508de8"
+   cd "$WT" || echo "WT does not exist: $WT"
+   git fetch origin
+   git switch --detach origin/dev
+   grep -c '^  school_view_files = \["schools.csv", "school_rounds.csv", "schools.md"\]' infrastructure/modules/evidence_bucket/operator_access.tf
+   grep -c -E '^(evidence_operator_user_names|evidence_removal_user_names) ' "infrastructure/envs/${ENVIRONMENT}/owner.auto.tfvars"
+   date +%A
+   ```
+   Success looks like `1` (this task is in the checkout), `2` (the file names the evidence operator
+   and the removal user) and a day that is not Wednesday. On a `0`, stop. On a `0` or `1` on the
+   second line, copy the tfvars from the checkout that last applied dev, and do not plan.
+
+   **Operator command, sign in** (expected runtime ~1 min)
+   Where: your Mac, the same window
+   ```bash
+   aws sso login --sso-session debate
+   aws sts get-caller-identity --profile debate-admin --query Arn --output text
+   ```
+   Success looks like an ARN containing `AWSReservedSSO_DebateBreakGlassAdmin`.
+
+   **Operator command, the plan** (expected runtime ~2 min; plans only, applies nothing)
+   Where: your Mac, the same window
+   ```bash
+   cd "$WT"
+   if [ "$(date +%A)" = "Wednesday" ]; then echo "STOP: it is Wednesday, the cloud run's day; plan on another day"; elif env | grep -q '^DEBATE_'; then echo "STOP: a DEBATE_ variable is set in this shell; open a new window"; elif pgrep -fl 'debate-research( --json)? caselist (pull|backfile-import)'; then echo "STOP: a caselist pull or backfile import is running on this Mac (above)"; elif env | grep -qE '^(TF_VAR_|TF_WORKSPACE=|TF_DATA_DIR=|TF_CLI_ARGS)'; then echo "STOP: a Terraform override is set in this shell"; else AWS_PROFILE=debate-admin terraform -chdir="infrastructure/envs/${ENVIRONMENT}" init -input=false >/dev/null && AWS_PROFILE=debate-admin terraform -chdir="infrastructure/envs/${ENVIRONMENT}" plan -input=false -no-color -out=school-rounds-grant.tfplan | tee "/tmp/school-rounds-grant-${ENVIRONMENT}-plan.txt" | tail -5; fi
+   grep -E '^Plan:|must be replaced|will be destroyed|will be created' "/tmp/school-rounds-grant-${ENVIRONMENT}-plan.txt"
+   grep -E '^  # ' "/tmp/school-rounds-grant-${ENVIRONMENT}-plan.txt"
+   ```
+   Success looks like `Plan: 0 to add, 1 to change, 0 to destroy.`, with no line saying that a
+   resource is replaced, destroyed or created. Then exactly one resource line, for
+   `module.evidence_store.aws_ssoadmin_permission_set_inline_policy.evidence_removal[0]`, updated in
+   place. No `Plan:` line at all means the plan failed: read the end of the file.
+
+   **Operator command, the plan checked against that shape** (expected runtime a few seconds)
+   Where: your Mac, the same window
+   ```bash
+   cd "$WT"
+   AWS_PROFILE=debate-admin terraform -chdir="infrastructure/envs/${ENVIRONMENT}" show -json school-rounds-grant.tfplan > "/tmp/school-rounds-grant-${ENVIRONMENT}-plan.json"
+   python3 -I - "/tmp/school-rounds-grant-${ENVIRONMENT}-plan.json" "$BUCKET" <<'GRANTPLAN'
+   import json, sys
+   plan = json.load(open(sys.argv[1]))
+   bucket = sys.argv[2]
+   target = "module.evidence_store.aws_ssoadmin_permission_set_inline_policy.evidence_removal[0]"
+   views = sorted("arn:aws:s3:::" + bucket + "/reports/landscape/*/" + name for name in ("schools.csv", "school_rounds.csv", "schools.md"))
+   listing, deleting = "ListEvidenceObjectVersionsForTakedown", "DeleteLandscapeSchoolViews"
+   landscape = {"reports/landscape/", "reports/landscape/*"}
+   def as_list(value):
+       return sorted(value) if isinstance(value, list) else [value]
+   def by_sid(policy):
+       return {s.get("Sid"): s for s in json.loads(policy or "{}").get("Statement", [])}
+   def prefixes(statement):
+       return set(as_list(((statement or {}).get("Condition") or {}).get("StringLike", {}).get("s3:prefix", [])))
+   def without_prefixes(statement):
+       copy = json.loads(json.dumps(statement or {}))
+       copy.get("Condition", {}).get("StringLike", {}).pop("s3:prefix", None)
+       return copy
+   changes = [c for c in plan.get("resource_changes", []) if c["change"]["actions"] not in (["no-op"], ["read"])]
+   problems, shape = [], ""
+   others = sorted(c["address"] + " " + "/".join(c["change"]["actions"]) for c in changes if c["address"] != target)
+   if others:
+       problems.append("changes other than the removal set's inline policy: " + str(others))
+   found = [c["change"] for c in changes if c["address"] == target]
+   if not found:
+       problems.append("the removal set's inline policy does not change: is v1-e32-t54 merged in this checkout, or applied already?")
+   for change in found:
+       if change["actions"] != ["update"]:
+           problems.append(target + " is " + "/".join(change["actions"]) + ", expected an update in place")
+       before, after = change["before"] or {}, change["after"] or {}
+       unknown = change.get("after_unknown") or {}
+       changed = sorted(k for k in set(before) | set(after) if before.get(k) != after.get(k) or unknown.get(k))
+       if changed != ["inline_policy"]:
+           problems.append(target + " changes " + str(changed) + ", expected only inline_policy")
+           continue
+       old, new = by_sid(before.get("inline_policy")), by_sid(after.get("inline_policy"))
+       for sid in sorted(set(old) | set(new), key=str):
+           if sid not in (listing, deleting) and old.get(sid) != new.get(sid):
+               problems.append("statement " + str(sid) + " changes too")
+       grant = new.get(deleting) or {}
+       if (grant.get("Effect"), as_list(grant.get("Action")), as_list(grant.get("Resource")), "Condition" in grant) != ("Allow", ["s3:DeleteObject", "s3:DeleteObjectVersion"], views, False):
+           problems.append(deleting + " is not exactly the delete of the three school-view files: " + json.dumps(grant, sort_keys=True))
+       gained, lost = prefixes(new.get(listing)) - prefixes(old.get(listing)), prefixes(old.get(listing)) - prefixes(new.get(listing))
+       if lost or not gained <= landscape or without_prefixes(old.get(listing)) != without_prefixes(new.get(listing)):
+           problems.append(listing + " changes beyond gaining the landscape prefix: lost " + str(sorted(lost)) + ", gained " + str(sorted(gained)))
+       if deleting in old:
+           shape = "school_rounds.csv added to v1-e32-t13's statement, which was applied already"
+       else:
+           shape = "v1-e32-t13's statement and listing prefix arrive with it, as evidence-store.md's record says"
+   if problems:
+       print("PLAN STOP: " + "; ".join(problems))
+   else:
+       print("PLAN OK: 0 to add, 1 to change, 0 to destroy; only the removal set's inline policy changes, in place; " + shape)
+       print(json.dumps({"before": old.get(deleting), "after": new.get(deleting), "listing prefixes gained": sorted(gained)}, indent=2, sort_keys=True))
+   GRANTPLAN
+   ```
+   Success looks like a `PLAN OK: 0 to add, 1 to change, 0 to destroy; …` line that names the shape
+   it found, followed by the `DeleteLandscapeSchoolViews` statement before and after. Send the PM the
+   `PLAN` line and `/tmp/school-rounds-grant-dev-plan.txt`, and wait for the PM's word before applying.
+   **A `PLAN STOP` line, or any other resource in the plan, stops everything.** Never apply that plan;
+   send the line and the plan to the PM. The usual causes are:
+   - `v1-e40-t07`'s bucket policy still waiting for its own apply, which the PM sequences;
+   - an `owner.auto.tfvars` that is not the one the last apply used.
 
 ## Follow-up work
 
-- **A collapsed view for long teams** (v1-e32): one team has 257 lines, and the median is 10. The
-  largest school page is at 96.6% of the page budget (Operator follow-ups, item 1), so this is due
-  before a later snapshot pushes that page past it.
+- **A collapsed view for long teams** (v1-e32, p1, filed by the PM): one team has 257 lines, and the
+  median is 10. The largest school page is at 96.6% of the page budget, which is 50 to 76 round
+  lines of room against 68.1 a snapshot (Operator follow-ups, item 1). It is wanted before the
+  hspolicy26 report is republished from the snapshot after the 2026-11-11 run, with a check at report
+  time that names any school page over ADR-0019's budget.
 - **Filters on the pilot's school page** (v1-e39 or v1-e32): by side, stance or tournament. The PM
   ruled both of these out of scope for this weekend.
 - **The spec's `constraints.packages`** (this spec): see Deviation 1.

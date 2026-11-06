@@ -776,59 +776,242 @@ directory, which no longer holds the weeks the cloud ran. `caselist restore-run-
 (`v1-e40-t10`) makes that copy: the run's manifests, database, state and parsed store, and the raw
 sources of the weeks you name, each checked against the digest its manifest names, all into a new
 directory beside the data directory and nowhere else. The publish then reads the copy, one caselist at
-a time, and the copy is deleted at the end of the step: it is a copy of the corpus that a removal does
-not reach, kept for the length of the step and no longer
+a time, and the copy is deleted at the end of the step, after a stop too: it is a copy of the corpus
+that a removal does not reach, kept for the length of the step and no longer
 ([data-use policy](../policies/caselist-data-use.md), version 1.18).
 
-Not while a cloud run is going: the restore holds the dev lock, and is refused with `RUN_LOCK_HELD`
-while a run does. Wednesday after the run has recorded, or any day after, is the time. Everything below
-runs in one terminal window on your Mac, which keeps `WEEK` from the first block to the last.
+**What one hand publish sends** (`v1-e40-t16`, the PM's ruling of 2026-11-06), all from the one copy:
 
-**Which weeks prod lacks.** The cloud runs' records say which snapshots each imported. Read the last
-three:
+1. **The week's raw sources and manifests**, every time.
+2. **The parsed store and the search index**, when three parser versions agree: the installed
+   build's, dev's current index's and prod's function's. This can also be the function about to be
+   deployed from `main` in the same sitting. The restore brings back the installed build's version
+   directory alone. Download works only when the index's parser version equals the function's
+   (`CardDownloadService`). Prod's parsed store is dev's directory as the restore brought it,
+   published with `caselist parse --publish-only`. **It is never parsed in the copy**: prod then
+   equals dev by construction, each object checked against its publisher's digest. Prod's index is
+   built from the copy and checked against dev's current index before anything goes to prod.
+
+A week after a parser bump is an ordinary week: the restore brings the new version's directory, which
+dev's first weekly run on the new image parsed in full
+([A new image with a new parser version](caselist-cloud-run.md#a-new-image-with-a-new-parser-version)),
+and `--publish-only` uploads a whole directory instead of one week's files. The bump's prod session
+also deploys prod's function from a `main` that carries the new parser, just before the index (step
+7). That waits for the promotion that carries it, [promotion item 6](evidence-search.md#promoting-the-pilot-to-prod).
+
+Each hand publish restores the whole current parsed store, not the week's part of it. That was
+11,147,679,654 bytes in 18,345 objects at `2026.10.27-docx-7` for `hsld26`, `hspolicy26`, `hspf26` and
+`openev` (read 2026-11-06), plus the weeks' sources. A store of another version is expected to be
+about the same. This ends when the run's home moves to prod
+([At the pilot's promotion](#at-the-pilots-promotion-the-runs-home-moves-to-prod)), and the run then
+publishes prod itself.
+
+**When.** Not while a cloud run is going: the restore holds the dev lock, and is refused with
+`RUN_LOCK_HELD` while a run does. **Never on a Wednesday**, the run's day: Thursday after the run has
+recorded, or any later day before the next Wednesday. **Never between the journey's J5 and J9**
+([evidence-search.md](evidence-search.md#the-signed-in-journey-on-dev)), while dev's index holds the
+`testcl26` seed, which never goes to prod: the checks below stop on it. Not during a backfile
+rebuild in dev ([caselist-backfiles.md](caselist-backfiles.md#a-parser-bump-the-rebuild-in-the-cloud)),
+which takes the same lock. Everything below runs in one terminal window on your Mac, which keeps
+`WT`, `WEEK` and `COPY` from the first block to the last. `WT` is the dev worktree that
+[Before you start](#before-you-start) sets, on `origin/dev`.
+
+Every block refuses a shell with a `DEBATE_` override, a `caselist pull` running on this Mac, and a
+Wednesday. A stop at any step goes to [step 8](#8-delete-the-copy) before anything else.
+
+### 1. Which weeks prod lacks, and the checks
+
+The cloud runs' records say which snapshots each imported. Read the last three:
 
 **Operator command** (expected runtime ~1 min)
 Where: your Mac
 ```bash
-aws sso login --profile debate-dev-evidence
-cd "$HOME" && env -u DEBATE_STORAGE__DATA_DIR DEBATE_ENV=dev debate-research --json caselist runs --remote --last 3 | python3 -I -c 'import json, sys; [print(r["run_id"], r["outcome"], "imported:", ", ".join(r.get("snapshots_imported") or ["nothing"])) for r in json.load(sys.stdin)["data"]["runs"]]'
+PULL=$(pgrep -fl 'debate-research( --json)? caselist pull')
+OVERRIDES=$(env | grep '^DEBATE_' | cut -d= -f1 | tr '\n' ' ')
+if [[ -n "$PULL" || -n "$OVERRIDES" || "$(TZ=America/Chicago date +%u)" = 3 ]]; then
+  echo "STOP: a pull is running, a DEBATE_ override is set, or it is Wednesday"
+else
+  aws sso login --profile debate-dev-evidence
+  cd "$HOME" && env DEBATE_ENV=dev debate-research --json caselist runs --remote --last 3 | python3 -I -c 'import json, sys; [print(r["run_id"], r["outcome"], "imported:", ", ".join(r.get("snapshots_imported") or ["nothing"])) for r in json.load(sys.stdin)["data"]["runs"]]'
+fi
 ```
 Success looks like one line per run, newest first, such as `20261104T110002Z completed imported:
 hsld26 2026-11-04, hspolicy26 2026-11-04, hspf26 2026-11-04`. The date after each caselist is the
-week's snapshot. Every week imported since the last hand publish is owed to prod. Below, `WEEK` is one
-of them; for two weeks, do this whole section once per week, or add a second `--snapshot <date>` to the
-restore and a publish per week.
+week's snapshot. Every week imported since the last hand publish is owed to prod. Below, `WEEK` is the
+newest of them, and the restore names each owed week with its own `--snapshot`. On 2026-11-06 prod's
+newest weekly manifests were of 2026-10-13, so three weeks were owed.
 
-**Room for the copy.** About 10 GB for the restored parsed store and database, and the week's sources,
-which the restore states before it fetches and refuses to fetch without room for, with 1 GiB to spare.
+**The checks**, which read and write nothing in either bucket. They read:
+
+* the installed build's tag, and the parser version that tag's code writes;
+* the parser version `origin/main` carries;
+* the commit prod's function runs, from the image's tag, and its parser version;
+* dev's last run and the parses it still owes;
+* dev's current index manifest and when it was written;
+* dev's removal log.
+
+Then they say what this session may send.
 
 **Operator command** (expected runtime ~1 min)
-Where: your Mac
+Where: `$WT`, in the window that keeps `WT`
 ```bash
-df -g "$HOME" | awk 'NR == 2 { print $4 " GB free" }'
+cd "$WT"
+PULL=$(pgrep -fl 'debate-research( --json)? caselist pull')
+OVERRIDES=$(env | grep '^DEBATE_' | cut -d= -f1 | tr '\n' ' ')
+if [[ -n "$PULL" || -n "$OVERRIDES" || "$(TZ=America/Chicago date +%u)" = 3 ]]; then
+  echo "STOP: a pull is running, a DEBATE_ override is set, or it is Wednesday"
+else
+  aws sso login --sso-session debate
+  git fetch --quiet origin
+  PARSER_FILE=packages/debate_core/src/debate_core/integrations/docx_parser/parser.py
+  DEV=$(python3 -I -c 'import tomllib; print(tomllib.load(open("config/profiles/dev.toml", "rb"))["storage"]["s3"]["bucket"])')
+  TAG=$(cd "$HOME" && debate-research --json --version | python3 -I -c 'import json, sys; print(json.load(sys.stdin)["data"]["tag"] or "untagged")')
+  git fetch --quiet origin tag "$TAG"
+  INSTALLED=$(git show "${TAG}:${PARSER_FILE}" | sed -n 's/^DOCX_PARSER_VERSION: Final = "\(.*\)"$/\1/p')
+  MAIN=$(git show "origin/main:${PARSER_FILE}" | sed -n 's/^DOCX_PARSER_VERSION: Final = "\(.*\)"$/\1/p')
+  URI=$(AWS_PROFILE=debate-admin aws lambda get-function --region us-east-1 --function-name debate-prod-tub --query Code.ImageUri --output text)
+  FUNCTION_TAG=$(AWS_PROFILE=debate-admin aws ecr describe-images --region us-east-1 --repository-name debate-prod-tub --image-ids "imageDigest=${URI##*@}" --query 'imageDetails[0].imageTags[0]' --output text)
+  FUNCTION=$(git show "${FUNCTION_TAG%%-uncommitted-*}:${PARSER_FILE}" | sed -n 's/^DOCX_PARSER_VERSION: Final = "\(.*\)"$/\1/p')
+  KEY=$(aws s3 cp "s3://${DEV}/reports/tub/search/current.json" - --profile debate-dev-evidence | python3 -I -c 'import json, sys; print(json.load(sys.stdin)["manifest_key"])')
+  WRITTEN=$(aws s3api head-object --bucket "$DEV" --key "$KEY" --profile debate-dev-evidence --query LastModified --output text)
+  echo "installed ${TAG}"
+  python3 -I - "$INSTALLED" "$MAIN" "$FUNCTION" "$WRITTEN" \
+    <(cd "$HOME" && env DEBATE_ENV=dev debate-research --json caselist runs --remote --last 1) \
+    <(aws s3 cp "s3://${DEV}/${KEY}" - --profile debate-dev-evidence) \
+    <(aws s3 cp "s3://${DEV}/manifests/_suppression/removal-log.jsonl" - --profile debate-dev-evidence) <<'PRODCHECKS'
+import json, sys
+from datetime import datetime
+installed, main, function, written = sys.argv[1:5]
+runs_text, manifest_text, log_text = (open(path, encoding="utf-8").read() for path in sys.argv[5:8])
+FOLLOWED = ["hsld26", "hspf26", "hspolicy26", "openev"]
+def when(text):
+    return datetime.fromisoformat(text.strip().replace("Z", "+00:00"))
+def read(text):
+    try:
+        return json.loads(text)
+    except ValueError:
+        return None
+stops, waits, deploy = [], [], False
+print("parser: installed", installed or "unread", "/ origin/main", main or "unread", "/ prod's function", function or "unread")
+if not installed:
+    waits.append("the installed build's parser version could not be read")
+elif function != installed:
+    if main == installed:
+        deploy = True
+    else:
+        waits.append("prod's function parses at " + (function or "an unread version") + " and main at " + (main or "an unread version") + ", not " + installed + ": the promotion first")
+runs = read(runs_text)
+if runs is None or not runs.get("data", {}).get("runs"):
+    waits.append("dev's last run could not be read")
+else:
+    last = runs["data"]["runs"][0]
+    owed = runs["data"].get("parses_owed")
+    full = None if owed is None else len(owed.get("full_parses") or [])
+    print("dev's last run:", last["run_id"], last["outcome"], "/ full parses owed:", "unread" if full is None else full)
+    if last["outcome"] != "completed":
+        waits.append("dev's last run is " + last["outcome"] + ", not completed")
+    if full != 0:
+        waits.append("dev's run owes a full parse, or its record of them could not be read")
+manifest = read(manifest_text)
+if manifest is None:
+    stops.append("dev's current index manifest could not be read")
+else:
+    stores = sorted(one["caselist"] for one in manifest["stores"])
+    print("dev's index:", manifest["index_id"], "parser", manifest["parser_version"], "stores", " ".join(stores))
+    if "testcl26" in stores:
+        stops.append("dev's index holds testcl26: the journey is between J5 and J9, and no prod session runs then")
+    elif stores != FOLLOWED:
+        waits.append("dev's index holds " + " ".join(stores) + ", not the four stores step 6 publishes")
+    if manifest["parser_version"] != installed:
+        waits.append("dev's index is at parser " + manifest["parser_version"] + ", not the installed " + (installed or "unread"))
+    for one in manifest["stores"]:
+        if one["version_directory"] != installed:
+            waits.append(one["caselist"] + " is " + one["version_directory"] + " in dev's index, not " + (installed or "unread"))
+lines = [read(line) for line in log_text.splitlines() if line.strip()]
+if not lines or None in lines or not written.strip():
+    waits.append("dev's removal log or the index's write time could not be read")
+else:
+    newer = sum(when(line["recorded_at"]) > when(written) for line in lines)
+    print("removals recorded after dev's index was written:", newer)
+    if newer:
+        waits.append("a removal is newer than dev's index: wait for the next weekly run's index")
+for one in stops:
+    print("STOP: " + one)
+if stops:
+    print("STOP: nothing goes to prod in this session")
+else:
+    print("RAW SOURCES AND MANIFESTS: go on")
+    for one in waits:
+        print("PARSED STORE AND INDEX: not in this session: " + one)
+    if not waits:
+        print("PARSED STORE AND INDEX: go on" + (", with prod's function deployed from main first (step 7)" if deploy else ""))
+PRODCHECKS
+  df -g "$HOME" | awk 'NR == 2 { print $4 " GB free" }'
+fi
 ```
-Success looks like 20 GB free or more. Less: make room first.
+Success looks like the `installed` tag, the parser line, dev's last run `completed` with `0` full
+parses owed, dev's index with the four stores `hsld26 hspf26 hspolicy26 openev`, `removals recorded
+after dev's index was written: 0`, then `RAW SOURCES AND MANIFESTS: go on`, and the free space.
 
-**The copy, with the week's sources.** Set `WEEK` to the snapshot date read above. The block refuses a
-shell with a `DEBATE_` override, a pull running on this Mac, a `WEEK` that is not a date and a copy
-that exists already; then it signs in to dev and restores. It runs for 15 to 25 minutes over the home
-connection, under `caffeinate`.
+* `PARSED STORE AND INDEX: go on`: steps 2 to 8 in full.
+* `... go on, with prod's function deployed from main first (step 7)`: the same, and step 7 deploys
+  the function before the index.
+* `PARSED STORE AND INDEX: not in this session: ...`, one line per reason: steps 2, 5 and 8 only, the
+  raw sources and manifests, as before `v1-e40-t16`. The reason says what to wait for: the promotion
+  carrying the installed parser, a completed weekly run, the next weekly run's index after a
+  removal, or the installed build of the run's image.
+* `STOP: ...`: nothing goes to prod in this session; tell the PM. A failed `aws` or `git` call
+  prints its own error above, and the line it fed reads `unread`.
+
+The installed build should be the release the run's image was built from
+([A new image, later](caselist-cloud-run.md#a-new-image-later)): the comparison in step 4 stops on any
+count that build would make differently.
+
+**Room for the copy.** The parsed store as above, about 11 GB, and the weeks' sources: at most
+4,983,016,785 bytes, every raw source of the four stores in dev on 2026-11-06, since a weekly
+manifest names every stored source and not only the week's new ones. The restore states the sources'
+bytes before it fetches, and refuses to fetch without room for them plus 1 GiB to spare. Success in
+the checks looks like 20 GB free or more. Less: make room first. On 2026-11-06 the Mac had 56 GB
+free.
+
+### 2. The copy, with the weeks' sources
+
+Set `WEEK` to the newest owed snapshot date, and `SNAPSHOTS` to one `--snapshot` for each owed week.
+For example, three weeks would be `(--snapshot 2026-11-11 --snapshot 2026-11-04 --snapshot 2026-10-27)`.
+The block refuses a `WEEK` that is not a date, and stops when the copy already exists. Then it
+signs in to dev and restores. It runs for 15 to 25 minutes over the home connection, under
+`caffeinate`, longer with several weeks.
 
 **Operator command** (expected runtime ~15 to 25 min)
-Where: your Mac, in the window that keeps `WEEK`
+Where: your Mac, in the window that keeps `WT`
 ```bash
 WEEK=2026-11-04
+SNAPSHOTS=(--snapshot "$WEEK")
 COPY="$HOME/.debate-research/prod-publish-${WEEK}"
-if env | grep -q '^DEBATE_'; then echo "STOP: DEBATE_ overrides are set in this shell"; elif pgrep -fl 'debate-research( --json)? caselist pull'; then echo "STOP: a caselist pull is running (above)"; elif ! printf '%s' "$WEEK" | grep -qE '^20[0-9]{2}-[0-9]{2}-[0-9]{2}$'; then echo "STOP: WEEK is not a snapshot date"; elif [ -e "$COPY" ]; then echo "STOP: ${COPY} exists already"; else aws sso login --profile debate-dev-evidence && cd "$HOME" && caffeinate -i env DEBATE_ENV=dev debate-research --json caselist restore-run-state --into "$COPY" --with-sources --snapshot "$WEEK" > /tmp/prod-publish-restore.json; echo "exit $?"; grep -oE '"(named|fetched|fetched_bytes|suppressed)": [0-9]+|"code": "[A-Z_]+"' /tmp/prod-publish-restore.json; fi
+PULL=$(pgrep -fl 'debate-research( --json)? caselist pull')
+OVERRIDES=$(env | grep '^DEBATE_' | cut -d= -f1 | tr '\n' ' ')
+if [[ -n "$PULL" || -n "$OVERRIDES" || "$(TZ=America/Chicago date +%u)" = 3 ]]; then
+  echo "STOP: a pull is running, a DEBATE_ override is set, or it is Wednesday"
+elif ! printf '%s' "$WEEK" | grep -qE '^20[0-9]{2}-[0-9]{2}-[0-9]{2}$'; then
+  echo "STOP: WEEK is not a snapshot date"
+elif [[ -e "$COPY" ]]; then
+  echo "STOP: ${COPY} exists already; delete it with step 8 first"
+else
+  aws sso login --profile debate-dev-evidence && cd "$HOME" && caffeinate -i env DEBATE_ENV=dev debate-research --json caselist restore-run-state --into "$COPY" --with-sources "${SNAPSHOTS[@]}" > /tmp/prod-publish-restore.json
+  echo "exit $?"
+  grep -oE '"(named|fetched|fetched_bytes|suppressed|parsed_objects|parsed_bytes)": [0-9]+|"(parsed_version|index_id)": "[^"]+"|"code": "[A-Z_]+"' /tmp/prod-publish-restore.json
+fi
 ```
 Before it fetches it prints `Fetching <n> raw source(s), <bytes> bytes, that <m> restored manifest(s)
 name; <s> skipped as the suppression list holds them.` Success looks like `exit 0`, then `"named"`,
 `"fetched"`, `"fetched_bytes"` and `"suppressed"`, with `fetched` equal to `named` less `suppressed`,
-and above zero: a week the cloud imported names sources. A `WEEK` no restored manifest holds stops
-instead, with `SNAPSHOTS_NOT_RESTORED`.
+and above zero: a week the cloud imported names sources. Also `"parsed_version"`, which is the
+installed parser the checks printed, `"parsed_objects"` and `"parsed_bytes"` near step 1's figures,
+and dev's `"index_id"`. A `WEEK` no restored manifest holds stops instead, with
+`SNAPSHOTS_NOT_RESTORED`.
 
-A stop says what the directory holds and that it is not a copy to publish from. Delete it with the last
-block of this section before anything else, and:
+A stop says what the directory holds and that it is not a copy to publish from. Delete it with step 8
+before anything else, and:
 
 * `RESTORED_SOURCES_INCOMPLETE` with `missing`: a source a manifest names is not in the dev bucket and
   not on the suppression list. Stop and tell the PM; do not publish. With `mismatched`: bytes arrived
@@ -837,53 +1020,315 @@ block of this section before anything else, and:
 * `SNAPSHOTS_NOT_RESTORED`: no restored manifest is of `WEEK`; read the runs again.
 * `RUN_LOCK_HELD`: a cloud run holds the lock; wait for it to record, then run the block again.
 
-**Publish, one caselist at a time.** For each caselist the run imported in `WEEK`: `hsld26`,
-`hspolicy26` and `hspf26` while those are the run's caselists. Each caselist is two blocks, and the
-first signs in to prod again, so that a long publish of one caselist never leaves the next without a
-session. Set `CASELIST` in the first.
+### 3. The parse check in the copy
+
+Only when the checks said `PARSED STORE AND INDEX: go on`. For each of the four stores, `caselist
+parse --dry-run` in the copy: it must find every source parsed already in the restored directory,
+`to_parse` 0, so that nothing is parsed here. It writes nothing but its answers, into the copy, and
+`parse-checked.txt` when every store passes.
+
+**Operator command** (expected runtime ~1 to 3 min)
+Where: your Mac, in the window that keeps `WEEK`
+```bash
+COPY="$HOME/.debate-research/prod-publish-${WEEK}"
+PULL=$(pgrep -fl 'debate-research( --json)? caselist pull')
+OVERRIDES=$(env | grep '^DEBATE_' | cut -d= -f1 | tr '\n' ' ')
+if [[ -n "$PULL" || -n "$OVERRIDES" || "$(TZ=America/Chicago date +%u)" = 3 ]]; then
+  echo "STOP: a pull is running, a DEBATE_ override is set, or it is Wednesday"
+elif [[ ! -f "${COPY}/debate-research-restored-copy.json" ]]; then
+  echo "STOP: no restored copy at ${COPY}"
+else
+  VERSION=$(python3 -I -c 'import json, sys; print(json.load(open(sys.argv[1]))["data"]["parsed_version"])' /tmp/prod-publish-restore.json)
+  for STORE in hsld26 hspolicy26 hspf26 openev; do
+    (cd "$HOME" && env DEBATE_ENV=dev DEBATE_STORAGE__DATA_DIR="$COPY" debate-research --json caselist parse --caselist "$STORE" --dry-run) > "${COPY}/parse-check-${STORE}.json"
+  done
+  python3 -I - "$VERSION" "${COPY}/parse-checked.txt" "${COPY}/parse-check-hsld26.json" "${COPY}/parse-check-hspolicy26.json" "${COPY}/parse-check-hspf26.json" "${COPY}/parse-check-openev.json" <<'PARSECHECK'
+import json, sys
+version, passed, paths = sys.argv[1], sys.argv[2], sys.argv[3:]
+problems = []
+for path in paths:
+    try:
+        answer = json.load(open(path, encoding="utf-8"))
+    except ValueError:
+        problems.append(path.rsplit("parse-check-", 1)[-1] + ": no answer")
+        continue
+    data = answer.get("data")
+    if answer.get("status") != "ok" or not data:
+        problems.append(path.rsplit("parse-check-", 1)[-1] + ": " + str((answer.get("error") or {}).get("code")))
+        continue
+    store = data["caselist"]
+    print(store, data["version"], "parser", data["parser_version"], "sources", data["sources"], "to_parse", data["to_parse"])
+    if data["to_parse"] != 0:
+        problems.append(store + ": " + str(data["to_parse"]) + " to parse; dev's directory lacks them")
+    if data["new_version"] or data["version"] != version or data["parser_version"] != version:
+        problems.append(store + ": the directory is not the restored " + version)
+    if data["sources"] == 0:
+        problems.append(store + ": no sources")
+if problems:
+    print("\n".join("STOP: " + one for one in problems))
+else:
+    open(passed, "w", encoding="utf-8").write(version + "\n")
+    print("OK: every store's sources are parsed in the restored " + version + "; nothing is parsed here")
+PARSECHECK
+fi
+```
+Success looks like one line a store, each `to_parse 0` with its sources above zero and its version the
+restored one, then `OK: ...`. **Any `STOP` line: never parse in the copy**, since prod would then
+differ from dev. Delete the copy (step 8) and send the PM the lines. `to_parse` above zero means dev's
+directory lacks sources its manifests name.
+
+### 4. The comparison with dev's index
+
+The restore brought dev's current index manifest into the copy, under the same lock as the parsed
+store (`tub-index/<index id>/manifest.json`). The build indexes the stores that manifest names, from
+the copy, into `prod-index/` inside it, and the check compares the two:
+
+* **Must match, for each store:** `version_directory`, `occurrence_rows`, `occurrences_sha256`, and
+  its documents (`documents_by_store`).
+* **Must match, overall:** `parser_version`, `fingerprint_version`, the suppression list's `entries`,
+  `path_holds` and `sha256`, the document count, and the stores themselves.
+* **Reported, not required:** the index id and the SQLite version. The id is the start of the SQLite
+  file's digest, and the Mac's SQLite may not be the image's.
+
+It writes `prod-index-compared.txt` in the copy only on a match, and steps 6 and 7 refuse without it.
+A difference anywhere is a stop: nothing goes to prod, the copy is deleted, and the PM gets the lines,
+which are counts and digest prefixes only. A copy behind dev's bucket is the likely cause, such as a
+run, a removal or a retirement between dev's index and the restore. So is another installed build.
+Restore again once dev's index has caught up.
+
+**Operator command** (expected runtime a few minutes, a build of the full corpus)
+Where: your Mac, in the same window
+```bash
+COPY="$HOME/.debate-research/prod-publish-${WEEK}"
+PULL=$(pgrep -fl 'debate-research( --json)? caselist pull')
+OVERRIDES=$(env | grep '^DEBATE_' | cut -d= -f1 | tr '\n' ' ')
+if [[ -n "$PULL" || -n "$OVERRIDES" || "$(TZ=America/Chicago date +%u)" = 3 ]]; then
+  echo "STOP: a pull is running, a DEBATE_ override is set, or it is Wednesday"
+elif [[ ! -f "${COPY}/parse-checked.txt" ]]; then
+  echo "STOP: no OK from step 3 in ${COPY}"
+else
+  DEV_INDEX=$(python3 -I -c 'import json, sys; print(json.load(open(sys.argv[1]))["data"]["index_id"])' /tmp/prod-publish-restore.json)
+  BEFORE="${COPY}/tub-index/${DEV_INDEX}/manifest.json"
+  STORES=$(python3 -I -c 'import json, sys; print(" ".join("--caselist " + one["caselist"] for one in json.load(open(sys.argv[1]))["stores"]))' "$BEFORE")
+  echo "dev's index ${DEV_INDEX} holds: ${STORES}"
+  cd "$HOME" && env DEBATE_ENV=dev DEBATE_STORAGE__DATA_DIR="$COPY" debate-research --json tub index build ${=STORES} --out "${COPY}/prod-index" > "${COPY}/prod-index-build.json"
+  echo "build exit $?"
+  python3 -I - "$BEFORE" "${COPY}/prod-index-build.json" "${COPY}/prod-index-compared.txt" <<'COMPARE'
+import json, sys
+before = json.load(open(sys.argv[1], encoding="utf-8"))
+built = json.load(open(sys.argv[2], encoding="utf-8"))["data"]["manifest"]
+def shown(value):
+    return value[:12] if isinstance(value, str) and len(value) == 64 else str(value)
+problems = []
+for name in ("parser_version", "fingerprint_version"):
+    if built[name] != before[name]:
+        problems.append(name + ": " + built[name] + " built, " + before[name] + " in dev's index")
+old = {one["caselist"]: one for one in before["stores"]}
+new = {one["caselist"]: one for one in built["stores"]}
+if sorted(new) != sorted(old):
+    problems.append("stores: " + " ".join(sorted(new)) + " built, " + " ".join(sorted(old)) + " in dev's index")
+for name in sorted(set(new) & set(old)):
+    for field in ("version_directory", "occurrence_rows", "occurrences_sha256"):
+        if new[name][field] != old[name][field]:
+            problems.append(name + " " + field + ": " + shown(new[name][field]) + " built, " + shown(old[name][field]) + " in dev's index")
+    built_documents = built["counts"]["documents_by_store"].get(name)
+    dev_documents = before["counts"]["documents_by_store"].get(name)
+    if built_documents != dev_documents:
+        problems.append(name + " documents: " + str(built_documents) + " built, " + str(dev_documents) + " in dev's index")
+for field in ("entries", "path_holds", "sha256"):
+    if built["suppression"][field] != before["suppression"][field]:
+        problems.append("suppression " + field + ": " + shown(built["suppression"][field]) + " built, " + shown(before["suppression"][field]) + " in dev's index")
+if built["counts"]["documents"] != before["counts"]["documents"]:
+    problems.append("documents: " + str(built["counts"]["documents"]) + " built, " + str(before["counts"]["documents"]) + " in dev's index")
+print("built", built["index_id"], "sqlite", built["sqlite_version"], "/ dev's", before["index_id"], "sqlite", before["sqlite_version"], "(reported, not compared)")
+for name in sorted(new):
+    one = new[name]
+    print(" ", name, one["version_directory"], one["occurrence_rows"], shown(one["occurrences_sha256"]), built["counts"]["documents_by_store"].get(name))
+if problems:
+    print("\n".join("STOP: " + one for one in problems))
+else:
+    open(sys.argv[3], "w", encoding="utf-8").write(built["index_id"] + "\n")
+    print("OK: every store, count and digest equals dev's index")
+COMPARE
+fi
+```
+Success looks like `build exit 0`, the two index ids, one line a store, and `OK: ...`.
+
+### 5. The weeks' raw sources and manifests, one caselist at a time
+
+Every hand publish, whatever the checks said of the parsed store. For each caselist the run imported
+in an owed week: `hsld26`, `hspolicy26` and `hspf26` while those are the run's caselists, each week
+by its own `SNAPSHOT`. An `openev` week in the runs' list is published the same way, with
+`CASELIST=openev` and `SNAPSHOT` set to its `<year>-<event>` name. Each caselist and week takes two
+blocks, and the first signs in to prod again, so that a long publish of one never leaves the next
+without a session. Set `CASELIST` and `SNAPSHOT` in the first.
 
 **Operator command** (expected runtime ~1 min)
 Where: your Mac, in the window that keeps `WEEK`
 ```bash
 CASELIST=hsld26
+SNAPSHOT="$WEEK"
 COPY="$HOME/.debate-research/prod-publish-${WEEK}"
-if env | grep -q '^DEBATE_'; then echo "STOP: DEBATE_ overrides are set in this shell"; elif [ ! -d "$COPY" ]; then echo "STOP: no copy at ${COPY}"; else aws sso login --profile debate-prod-evidence && cd "$HOME" && env DEBATE_ENV=prod DEBATE_STORAGE__DATA_DIR="$COPY" debate-research --json caselist publish --caselist "$CASELIST" --snapshot "$WEEK" --dry-run > /tmp/prod-publish-plan-${CASELIST}.json; echo "exit $?"; grep -oE '"(upload|verify|uploaded_earlier|mismatched|missing_locally|suppressed)": [0-9]+|"manifest": "[a-z]+"|"code": "[A-Z_]+"' /tmp/prod-publish-plan-${CASELIST}.json; fi
+PULL=$(pgrep -fl 'debate-research( --json)? caselist pull')
+OVERRIDES=$(env | grep '^DEBATE_' | cut -d= -f1 | tr '\n' ' ')
+if [[ -n "$PULL" || -n "$OVERRIDES" || "$(TZ=America/Chicago date +%u)" = 3 ]]; then
+  echo "STOP: a pull is running, a DEBATE_ override is set, or it is Wednesday"
+elif [[ ! -d "$COPY" ]]; then
+  echo "STOP: no copy at ${COPY}"
+else
+  aws sso login --profile debate-prod-evidence && cd "$HOME" && env DEBATE_ENV=prod DEBATE_STORAGE__DATA_DIR="$COPY" debate-research --json caselist publish --caselist "$CASELIST" --snapshot "$SNAPSHOT" --dry-run > /tmp/prod-publish-plan-${CASELIST}.json
+  echo "exit $?"
+  grep -oE '"(upload|verify|uploaded_earlier|mismatched|missing_locally|suppressed)": [0-9]+|"manifest": "[a-z]+"|"code": "[A-Z_]+"' /tmp/prod-publish-plan-${CASELIST}.json
+fi
 ```
 Read the plan before the next block. Success looks like `exit 0`, `"missing_locally": 0`,
 `"mismatched": 0` and `"manifest": "upload"`, with `"upload"` above zero in an ordinary week (a week
 whose every source prod already holds plans `0` uploads and its manifest alone). **Stop** on
 `missing_locally` or `mismatched` above zero, or `"manifest": "blocked"`: the copy does not hold what
 the publish needs, or prod holds other bytes under a source's key. `"manifest": "verify"` means prod
-has this week's manifest already: nothing is owed for this caselist, so go on to the next. Send the PM
-the file for any stop; it holds counts, digests and keys only.
+has this week's manifest already: nothing is owed for this caselist and week, so go on to the next.
+Send the PM the file for any stop; it holds counts, digests and keys only.
 
 **Operator command** (expected runtime ~2 to 10 min)
 Where: your Mac, in the same window, straight after the dry run
 ```bash
 COPY="$HOME/.debate-research/prod-publish-${WEEK}"
-if env | grep -q '^DEBATE_'; then echo "STOP: DEBATE_ overrides are set in this shell"; elif [ ! -d "$COPY" ]; then echo "STOP: no copy at ${COPY}"; else cd "$HOME" && env DEBATE_ENV=prod DEBATE_STORAGE__DATA_DIR="$COPY" debate-research --json caselist publish --caselist "$CASELIST" --snapshot "$WEEK" --confirm-prod > /tmp/prod-publish-${CASELIST}.json; echo "exit $?"; grep -oE '"(uploaded|skipped|suppressed|failed)": [0-9]+|"manifest": "[a-z]+"|"code": "[A-Z_]+"' /tmp/prod-publish-${CASELIST}.json; fi
+PULL=$(pgrep -fl 'debate-research( --json)? caselist pull')
+OVERRIDES=$(env | grep '^DEBATE_' | cut -d= -f1 | tr '\n' ' ')
+if [[ -n "$PULL" || -n "$OVERRIDES" || "$(TZ=America/Chicago date +%u)" = 3 ]]; then
+  echo "STOP: a pull is running, a DEBATE_ override is set, or it is Wednesday"
+elif [[ ! -d "$COPY" ]]; then
+  echo "STOP: no copy at ${COPY}"
+else
+  cd "$HOME" && env DEBATE_ENV=prod DEBATE_STORAGE__DATA_DIR="$COPY" debate-research --json caselist publish --caselist "$CASELIST" --snapshot "$SNAPSHOT" --confirm-prod > /tmp/prod-publish-${CASELIST}.json
+  echo "exit $?"
+  grep -oE '"(uploaded|skipped|suppressed|failed)": [0-9]+|"manifest": "[a-z]+"|"code": "[A-Z_]+"' /tmp/prod-publish-${CASELIST}.json
+fi
 ```
 Success looks like `exit 0`, `"failed": 0`, `"uploaded"` equal to the dry run's `"upload"`, and
 `"manifest": "uploaded"`: the publisher confirms each object's digest in prod before it writes the
 manifest, and writes the manifest last. `"failed"` above zero or a `"code"`: the week is not complete
 in prod, and its manifest was not written. `STORE_CREDENTIALS_EXPIRED` means sign in to prod and run
 the caselist's two blocks again, which upload only what is still missing; anything else, send the PM
-the file. Then the next caselist, from its dry run.
+the file. Then the next caselist or week, from its dry run.
 
-**Deleting the copy**, once every caselist of `WEEK` is published, or after a stop.
+### 6. The parsed store, one store at a time
 
-**Operator command** (expected runtime ~1 min)
+Only after step 4's `OK`. Each of `hsld26`, `hspolicy26`, `hspf26` and `openev`, as restored:
+`--publish-only` parses nothing. It checks the directory is whole and written by this build's
+parser and fingerprint versions, and that its aggregates name nothing prod's suppression list stops
+or holds. Then it publishes the files prod lacks, the aggregates last. It takes no `--dry-run`
+(`v1-e31-t30`), so steps 3 and 4 are its plan. Each block signs in to prod first. Set `CASELIST`.
+
+**Operator command** (expected runtime not yet measured: a store's share of the parsed store goes up from the Mac, the whole store in a bump's week)
+Where: your Mac, in the window that keeps `WEEK`
+```bash
+CASELIST=hsld26
+COPY="$HOME/.debate-research/prod-publish-${WEEK}"
+PULL=$(pgrep -fl 'debate-research( --json)? caselist pull')
+OVERRIDES=$(env | grep '^DEBATE_' | cut -d= -f1 | tr '\n' ' ')
+if [[ -n "$PULL" || -n "$OVERRIDES" || "$(TZ=America/Chicago date +%u)" = 3 ]]; then
+  echo "STOP: a pull is running, a DEBATE_ override is set, or it is Wednesday"
+elif [[ ! -f "${COPY}/prod-index-compared.txt" ]]; then
+  echo "STOP: no OK from step 4 in ${COPY}"
+else
+  VERSION=$(cat "${COPY}/parse-checked.txt")
+  echo "${CASELIST} ${VERSION}: $(find "${COPY}/parsed/${CASELIST}/${VERSION}" -type f | wc -l | tr -d ' ') objects in the copy"
+  aws sso login --profile debate-prod-evidence && cd "$HOME" && caffeinate -i env DEBATE_ENV=prod DEBATE_STORAGE__DATA_DIR="$COPY" debate-research --json caselist parse --caselist "$CASELIST" --publish-only --confirm-prod > /tmp/prod-publish-parsed-${CASELIST}.json
+  echo "exit $?"
+  grep -oE '"(version|aggregates)": "[^"]+"|"(uploaded|skipped|suppressed|failed)": [0-9]+|"code": "[A-Z_]+"' /tmp/prod-publish-parsed-${CASELIST}.json
+fi
+```
+Success looks like the copy's object count, `exit 0`, `"version"` the restored one, `"failed": 0`,
+`"aggregates": "published"`, and `"uploaded"` plus `"skipped"` equal to the copy's count. In a bump's
+week `"uploaded"` is the whole directory; in other weeks it is the week's new files and the rewritten
+aggregates. Then:
+
+* `PARSED_PUBLISH_INCOMPLETE` or `STORE_CREDENTIALS_EXPIRED`: run the block again, which uploads only
+  what prod does not confirm.
+* A code naming prod's suppression list: the aggregates name a source prod has removed and dev has
+  not. Stop and tell the PM; never rebuild in the copy.
+* **`STORE_ACCESS_DENIED`**, or any refusal of access: prod's first `--publish-only` is untried
+  (`v1-e40-t16`). Stop and send the PM the code. A cure that needs a Terraform change is the PM's
+  to read as a plan first; none is applied here.
+
+Then the next store.
+
+### 7. Prod's function, then prod's index
+
+Only after step 6 published all four stores. If the checks said `with prod's function deployed from
+main first (step 7)`, deploy it now from the `main` worktree, as
+[evidence-search.md step 11e](evidence-search.md#step-11--prod) does (`scripts/tub_deploy.sh prod`
+and its checks), in another window, and come back to this one. Prod has no accounts before the coach's
+beta. Later, in a bump's week, the minutes between the deploy and the index are minutes with Download
+off.
+
+The index block reads prod's function's parser version first, as the checks did, and refuses if it is
+not the restored version. Then it publishes the index step 4 built and compared, and reads prod's
+`current.json` back.
+
+**Operator command** (expected runtime ~2 to 5 min, most of it the upload of the index)
+Where: your Mac, in the window that keeps `WT` and `WEEK`
+```bash
+COPY="$HOME/.debate-research/prod-publish-${WEEK}"
+PULL=$(pgrep -fl 'debate-research( --json)? caselist pull')
+OVERRIDES=$(env | grep '^DEBATE_' | cut -d= -f1 | tr '\n' ' ')
+if [[ -n "$PULL" || -n "$OVERRIDES" || "$(TZ=America/Chicago date +%u)" = 3 ]]; then
+  echo "STOP: a pull is running, a DEBATE_ override is set, or it is Wednesday"
+elif [[ ! -f "${COPY}/prod-index-compared.txt" ]]; then
+  echo "STOP: no OK from step 4 in ${COPY}"
+else
+  cd "$WT" && git fetch --quiet origin
+  VERSION=$(cat "${COPY}/parse-checked.txt")
+  URI=$(AWS_PROFILE=debate-admin aws lambda get-function --region us-east-1 --function-name debate-prod-tub --query Code.ImageUri --output text)
+  FUNCTION_TAG=$(AWS_PROFILE=debate-admin aws ecr describe-images --region us-east-1 --repository-name debate-prod-tub --image-ids "imageDigest=${URI##*@}" --query 'imageDetails[0].imageTags[0]' --output text)
+  FUNCTION=$(git show "${FUNCTION_TAG%%-uncommitted-*}:packages/debate_core/src/debate_core/integrations/docx_parser/parser.py" | sed -n 's/^DOCX_PARSER_VERSION: Final = "\(.*\)"$/\1/p')
+  PROD=$(python3 -I -c 'import tomllib; print(tomllib.load(open("config/profiles/prod.toml", "rb"))["storage"]["s3"]["bucket"])')
+  echo "prod's function at ${FUNCTION_TAG}, parser ${FUNCTION:-unread}; the index is at ${VERSION}"
+  if [[ "$FUNCTION" != "$VERSION" ]]; then
+    echo "STOP: prod's function does not parse at ${VERSION}; deploy it from main first"
+  else
+    INDEX_DIR=$(python3 -I -c 'import json, sys; print(json.load(open(sys.argv[1]))["data"]["directory"])' "${COPY}/prod-index-build.json")
+    aws sso login --profile debate-prod-evidence && cd "$HOME" && env DEBATE_ENV=prod DEBATE_STORAGE__DATA_DIR="$COPY" debate-research --json tub index publish --env prod --index "$INDEX_DIR" --confirm-prod > /tmp/prod-publish-index.json
+    echo "exit $?"
+    grep -oE '"index_id": "[0-9a-f]+"|"replaced": (null|"[0-9a-f]+")|"code": "[A-Z_]+"' /tmp/prod-publish-index.json
+    aws s3 cp "s3://${PROD}/reports/tub/search/current.json" - --profile debate-prod-evidence | python3 -I -c 'import json, sys; p = json.load(sys.stdin); print("prod current.json:", p["index_id"], "format", p["format_version"])'
+    echo "compared in step 4: $(cat "${COPY}/prod-index-compared.txt")"
+  fi
+fi
+```
+Success looks like the function's commit with the restored parser version, `exit 0`, the `"index_id"`
+step 4 built, `"replaced": null` on prod's first index (the one it replaced afterwards), and `prod
+current.json:` naming that same id, which is also the id `compared in step 4:` prints. Prod's
+function loads it within five minutes, and Download is on: the two parser versions are equal. A
+`"code"` instead: `SEARCH_INDEX_WOULD_SHRINK` means the index holds fewer of a store's documents than prod's
+current one, so stop and tell the PM, and never pass `--allow-shrink` here without the PM's word.
+`STORE_ACCESS_DENIED` on prod's first index publish is a stop like step 6's: send the PM the code.
+
+### 8. Delete the copy
+
+At the end of every path: after step 7, after the raw sources alone, and after any stop. This also
+deletes this section's files under `/tmp`, which hold counts and keys. Then it looks for any restored
+copy left on this Mac, by the marker `caselist restore-run-state` writes, as the annual purge's
+[step 1](annual-purge.md#step-1--no-working-copy-left-on-this-mac) does: about a minute.
+
+**Operator command** (expected runtime about a minute)
 Where: your Mac, in the window that keeps `WEEK`
 ```bash
 COPY="$HOME/.debate-research/prod-publish-${WEEK}"
 case "$COPY" in "$HOME/.debate-research/prod-publish-2"*) rm -rf "$COPY" && echo "removed ${COPY}" ;; *) echo "STOP: ${COPY} is not a prod publish's copy" ;; esac
+rm -f /tmp/prod-publish-restore.json /tmp/prod-publish-plan-*.json /tmp/prod-publish-hsld26.json /tmp/prod-publish-hspolicy26.json /tmp/prod-publish-hspf26.json /tmp/prod-publish-openev.json /tmp/prod-publish-parsed-*.json /tmp/prod-publish-index.json
 ls -d "$HOME"/.debate-research/prod-publish-* 2>/dev/null | wc -l
+find -H "$HOME" /tmp \( -path "$HOME/Library" -o -path "$HOME/.Trash" \) -prune -o -type f -name debate-research-restored-copy.json -print 2>/dev/null | sed 's|/debate-research-restored-copy.json$||' | grep -vxF -e "$HOME/.debate-research/dev" -e "$HOME/.debate-research/prod" | awk '{ print } END { print "restored copies: " NR }'
+find -H "$HOME" /tmp -maxdepth 3 \( -path "$HOME/Library" -o -path "$HOME/.Trash" \) -prune -o -name debate.sqlite3 -print 2>/dev/null | sed 's|/debate.sqlite3$||' | grep -vxF -e "$HOME/.debate-research/dev" -e "$HOME/.debate-research/prod" | while IFS= read -r FOUND; do [ -f "$FOUND/debate-research-restored-copy.json" ] || echo "$FOUND"; done | awk '{ print } END { print "restored before the marker: " NR }'
 ```
-Success looks like `removed …` and `0`.
+Success looks like `removed …`, `0`, then `restored copies: 0` and `restored before the marker: 0`. A
+directory listed above a count is a copy left behind. A `prod-publish-` copy is deleted by setting
+`WEEK` to its date and running this block again. Any other copy is deleted with the deleting block of
+the runbook that restored it, as the annual purge's step 1 says.
 
-This step publishes the week's raw sources and manifests to prod. It publishes no parsed store and no
-search index from the copy; the prod re-parse being split out of `v1-e31-t31` depends on this copy too,
-and adds its blocks here.
+Record each session in the session report or the PM's record, counts only: the run ids, the checks'
+verdict lines, step 4's two index ids and its store lines, and each publish's counts.
 
 ## At the pilot's promotion: the run's home moves to prod
 

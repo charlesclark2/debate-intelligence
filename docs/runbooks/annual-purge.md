@@ -279,7 +279,7 @@ find -H "$HOME" /tmp -maxdepth 3 \( -path "$HOME/Library" -o -path "$HOME/.Trash
 Success looks like `restored copies: 0` and `restored before the marker: 0`. Each line above a count is
 a directory a step left behind; the marker in a restored copy says which environment and bucket it came
 from, and when (`cat <directory>/debate-research-restored-copy.json`). A `prod-publish-<date>` copy is deleted with the cutover runbook's block,
-[Deleting the copy](caselist-cutover.md#until-the-promotion-prod-is-published-by-hand); a copy another
+[8. Delete the copy](caselist-cutover.md#8-delete-the-copy); a copy another
 runbook restored, with that runbook's own deleting block. A directory no runbook names: stop, and tell
 the PM its last path part only. Run the block again until it prints `0`, then go on.
 

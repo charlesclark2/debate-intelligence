@@ -811,11 +811,27 @@ elif function < image:
     print("STOP: the image writes index format " + str(image) + " and dev's function, at " + sys.argv[2] + ", reads " + str(function) + " at most: deploy dev's function first (evidence-search.md, Moving the index to format " + str(image) + ")")
 else:
     print("OK: the image writes index format " + str(image) + " and dev's function, at " + sys.argv[2] + ", reads it")
+def parses(commit):
+    shown = subprocess.run(["git", "show", commit + ":packages/debate_core/src/debate_core/integrations/docx_parser/parser.py"], capture_output=True, text=True)
+    found = re.search(r'^DOCX_PARSER_VERSION: Final = "([^"]+)"$', shown.stdout, re.MULTILINE)
+    return found.group(1) if found else None
+image_parser, function_parser = parses(sys.argv[1]), parses(sys.argv[2])
+if image_parser is None or function_parser is None:
+    print("PARSER: cannot read the parser version of " + (sys.argv[1] if image_parser is None else "dev's function at " + sys.argv[2]) + "; take this to the PM")
+elif image_parser == function_parser:
+    print("PARSER: the image and dev's function both parse at " + image_parser + "; Download stays on")
+else:
+    print("PARSER: the image parses at " + image_parser + " and dev's function at " + function_parser + ": Download in dev is off from this image's first run until dev's function is deployed at " + image_parser + ", the day after that run records its index")
 FORMAT
 fi
 ```
-Success looks like `OK: the image writes index format 3 and dev's function, at <commit>, reads it`.
-A `STOP` line stops this section: do not replace the digest line. Deploy dev's function as the line
+Success looks like `OK: the image writes index format 3 and dev's function, at <commit>, reads it`,
+then a `PARSER:` line (`v1-e40-t16`). The `PARSER:` line never stops the section. `both parse at` means
+Download stays on. `the image parses at <new> and dev's function at <old>` is a parser bump. Dev's
+function is not deployed with the image, which would turn Download off until the run: the run's index
+is still the old version until then. It is deployed at the new version the day after the image's
+first run records its index
+([A new image with a new parser version](#a-new-image-with-a-new-parser-version)). A `STOP` line stops this section: do not replace the digest line. Deploy dev's function as the line
 says, run this block again, and go on only after `OK`. A failed `aws` call prints its own error and
 no `OK`. For prod at the promotion the same check reads `debate-prod-tub`.
 
@@ -1139,6 +1155,22 @@ task. The index stays at the old version until a run parses and publishes every 
 index stage is skipped after a failed parse, and the old index stays current meanwhile.
 `caselist runs --remote` on the Mac ends with `Full parse owed under parser version <version>:` and
 the caselists still owed.
+
+**Dev's function, the day after** (the PM's ruling of 2026-11-06, `v1-e40-t16`). Download works only
+when the index's parser version equals the function's (`CardDownloadService`). So dev's function stays
+on the old version while the image is pushed and applied, and is deployed at the new one, by
+[evidence-search.md step 8](evidence-search.md#step-8--deploy-dev-as-tubdeployer-and-check-it-through-cloudfront)'s
+`scripts/tub_deploy.sh dev`, on the Thursday after the image's first run has recorded an index of the
+new version (`caselist runs --remote --last 1`: `completed`, and no `Full parse owed`). Download is off
+in dev from that run's index to the deploy, a day at most. For `2026.11.03-docx-9` that run is
+Wednesday 2026-11-11, and the deploy Thursday 2026-11-12. Then
+[A new image, later](#a-new-image-later)'s check, run again, prints `both parse at`.
+
+**The backfiles and prod follow separately.** A backfile's parsed store is rebuilt by its import run
+again, in this cloud, after that run ([caselist-backfiles.md](caselist-backfiles.md#a-parser-bump-the-rebuild-in-the-cloud)).
+Prod's parsed store and index follow by the cutover runbook's hand publish
+([Until the promotion](caselist-cutover.md#until-the-promotion-prod-is-published-by-hand)), after a
+promotion to `main` that carries the new parser.
 
 ## A run that found no AWS session
 
@@ -1808,6 +1840,11 @@ PM before the second import, with its log's last lines.
 removal's plan listed ([caselist-removal.md](caselist-removal.md), step 5): imported already, it
 downloads nothing and spends no budget, so `"already_imported": true` and `"downloaded_bytes": 0` are
 its success. The window still applies.
+
+**A rebuild after a parser bump** is the same again, on the run's task definition that carries the new
+parser, after the bump's first weekly run
+([caselist-backfiles.md](caselist-backfiles.md#a-parser-bump-the-rebuild-in-the-cloud)): `"already_imported":
+true`, `"downloaded_bytes": 0`, and `"parsed"` and `"parsed_uploaded"` near the whole archive's.
 
 ## A camp table change: the OpenEv metadata re-import
 

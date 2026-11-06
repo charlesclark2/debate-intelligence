@@ -1433,35 +1433,47 @@ real run, in a window with no leftover `DEBATE_*` override.
    cover it.
 5. **Prod's suppression list exists** in the prod bucket, by the check `v1-e39-t07`'s runbook
    section gives. If it does not, create it as that section says before anything is published.
-6. **Prod's parsed store is current.** Not from the Mac's dev data directory, which since the
-   cutover no longer holds the weeks the cloud ran (PM ruling 2026-11-01, `v1-e39-t10` Q3): from a
-   working copy restored from the dev bucket, published to prod as
+6. **A second promotion of `dev` to `main`, carrying the installed parser.** Item 1's promotion
+   (#810, `main` at `3f827613`) carries `2026.10.27-docx-7`, and dev's parsed store and index move to
+   `2026.11.03-docx-9` with Wednesday 2026-11-11's run. Download works only when prod's function and
+   prod's index are at the same parser version, so prod's function is deployed from a `main` that
+   carries the parser of the parsed store item 7 publishes (the PM's ruling of 2026-11-06,
+   `v1-e40-t16`). Promote as item 1 does, after dev's run at the new version has recorded. Prod has
+   no accounts yet, so nothing is gained by publishing before it with Download off.
+7. **Prod's parsed store is current**: `2026.11.03-docx-9` for `hsld26`, `hspolicy26`, `hspf26` and
+   `openev`. It is published by
    [the cutover runbook's "Until the promotion"](caselist-cutover.md#until-the-promotion-prod-is-published-by-hand)
-   publishes by hand. It refuses if prod's suppression list stops anything the aggregates name, and
-   then the store is rebuilt with `--publish` instead. **Only after the bucket holds the installed
-   build's parser version** for every weekly caselist: a restore brings back that version alone. On
-   2026-11-03 a restore under `2026.10.27-docx-7` held 0 parsed objects, because the cloud run's first
-   full re-parse under it was the next day's (Wednesday 2026-11-04, revision 11). Read
-   `caselist runs --remote --last 1` first: no `Full parse owed` caption.
-7. **Prod's first index**, built by `tub index build` from that same restored copy, checked against
-   dev's current manifest as [the journey's J5](#the-signed-in-journey-on-dev) checks it (each
-   store's `occurrences_sha256`, the suppression list's sha256), then published against prod, and its
-   `current.json` read back. The copy is deleted afterwards (data-use policy 1.18).
-8. **`v1-e39-t07`'s prod removal exercise**, with a synthetic source, from a build carrying
+   (`v1-e40-t16`), from a working copy restored from the dev bucket after dev's first weekly run at
+   that version. It is dev's directory as restored, sent with `caselist parse --publish-only` and
+   never parsed on the Mac. Each store's occurrence digest equals dev's index's, by that section's
+   step 4. Not from the Mac's dev data directory, which since the cutover no longer holds the weeks
+   the cloud ran (PM ruling 2026-11-01, `v1-e39-t10` Q3). A restore brings back the installed build's
+   parser version alone, so this waits until dev's bucket holds it for every weekly caselist: that
+   section's checks say `PARSED STORE AND INDEX: go on`. Prod never holds `docx-7`. A refusal from
+   prod's suppression list is a stop for the PM, never a rebuild in the copy.
+8. **Prod's first index**, built by `tub index build` from that same restored copy in the same session,
+   and checked against dev's current manifest (that section's step 4: each store's
+   `occurrences_sha256` and counts, the suppression list's sha256). It is published straight after
+   prod's function is deployed from item 6's `main`, by [step 11e](#step-11--prod), and its
+   `current.json` is read back (that section's step 7). The copy is deleted afterwards (data-use
+   policy 1.18).
+9. **`v1-e39-t07`'s prod removal exercise**, with a synthetic source, from a build carrying
    `v1-e30-t33`: no aggregate is rebuilt afterwards. The check is the removal runbook's
    [P1b](caselist-removal.md#p1b--right-after-done-the-aggregates-were-rewritten-and-nothing-is-rebuilt),
    with prod's names: the `DONE` line's count of rewritten aggregates equals the plan's, and each
    rewritten table names the file in no row.
-9. **Retire the superseded parsed directories in prod** (`2026.09.20-docx-1`, `2026.10.10-docx-2`,
+10. **Retire the superseded parsed directories in prod** (`2026.09.20-docx-1`, `2026.10.10-docx-2`,
    `2026.10.12-docx-3`, `2026.10.18-docx-5` and `2026.10.20-docx-6`) by
-   [the retention runbook](parsed-store-retention.md)'s step 3, and record the counts in
-   `docs/data/parsed-card-store.md`. **After item 6**: a directory is superseded only when the bucket
-   holds the installed build's version for that caselist, so before item 6 every directory reads
-   `not yet superseded` (prod's dry run of 2026-11-03, on `docx-7`, with `docx-6` the newest there).
-10. **Step 12**, the request to school IT, with prod's hostnames only.
-11. **The coach creates the beta's prod accounts.** The two debaters who used dev on 2026-10-22 get
+   [the retention runbook](parsed-store-retention.md)'s step 3, judged by a build at
+   `2026.11.03-docx-9`, and record the counts in `docs/data/parsed-card-store.md`. **After item 7**: a
+   directory is superseded only when the bucket holds the installed build's version for that
+   caselist, so before item 7 every directory reads `not yet superseded` (prod's dry run of
+   2026-11-03, on `docx-7`, with `docx-6` the newest there). These are the five versions, 20
+   directories, of that dry run.
+11. **Step 12**, the request to school IT, with prod's hostnames only.
+12. **The coach creates the beta's prod accounts.** The two debaters who used dev on 2026-10-22 get
     new prod accounts; dev accounts are never carried over.
-12. **Ask AWS for a higher Lambda bandwidth quota** for the prod function, as ADR-0019 (c) 7's
+13. **Ask AWS for a higher Lambda bandwidth quota** for the prod function, as ADR-0019 (c) 7's
     revisit trigger says, before the gzipped index reaches 400,000,000 bytes (about 5 s of cold
     start at the 625 Mbps cap). On 2026-10-22 it was 314,054,035 bytes and growing about 11.6% a
     week, so about three weeks out. AWS takes time to answer, so the request goes in at the
@@ -1471,7 +1483,7 @@ real run, in a window with no leftover `DEBATE_*` override.
     prod; AWS opened a support case for it. The gzip object was 318,115,067 bytes that day. Check
     it with `aws service-quotas get-requested-service-quota-change --request-id <id>`, the id in
     `v1-e39-t10`'s report, and tick this item when it reads `APPROVED`.
-13. **The weekly run's home moves to prod**, by
+14. **The weekly run's home moves to prod**, by
     [the cutover runbook's "At the pilot's promotion"](caselist-cutover.md#at-the-pilots-promotion-the-runs-home-moves-to-prod),
     once prod's run is applied and prod's lock is seeded. Dev's lock is then held for good by
     `DEBATE_ENV=dev debate-research caselist move-run-home --execute` (`v1-e40-t11`), after its dry run
@@ -1486,9 +1498,9 @@ real run, in a window with no leftover `DEBATE_*` override.
 
 On prod, after every item of [Promoting the pilot to prod](#promoting-the-pilot-to-prod) is ticked in
 [docs/data/evidence-search-pilot.md](../data/evidence-search-pilot.md), `v1-e39-t07`'s prod removal
-exercise (item 8) and prod's suppression list (item 5) among them. Not before: the beta is the
+exercise (item 9) and prod's suppression list (item 5) among them. Not before: the beta is the
 first time anyone but the maintainer uses prod. The coach runs it with the beta's testers, in prod
-accounts the coach made (item 11); the two debaters who used dev on 2026-10-22 get new prod accounts,
+accounts the coach made (item 12); the two debaters who used dev on 2026-10-22 get new prod accounts,
 never their dev ones.
 
 The record is counts and yes or no, never a name, a username, a screenshot with a name in it, or a
@@ -1882,7 +1894,7 @@ matched exactly as typed until format 2 is published again. Nothing breaks, beca
 reads both, but the move is undone.
 
 **In prod** the order is the same, at the promotion: the prod function (step 11's deploy) before
-prod's first format 2 index ([Promoting the pilot to prod](#promoting-the-pilot-to-prod), item 7).
+prod's first format 2 index ([Promoting the pilot to prod](#promoting-the-pilot-to-prod), item 8).
 
 ## Moving the index to format 3
 
@@ -1952,8 +1964,8 @@ one, open its page signed in, and once it lists the camp's files add the word to
 `openev` section in a task.
 
 **In prod** the order is the same, at the promotion: the prod function (step 11's deploy) before
-prod's first format 3 index ([Promoting the pilot to prod](#promoting-the-pilot-to-prod), item 7),
-and before the weekly run's home moves to prod with an image that builds one (item 13).
+prod's first format 3 index ([Promoting the pilot to prod](#promoting-the-pilot-to-prod), item 8),
+and before the weekly run's home moves to prod with an image that builds one (item 14).
 
 ## Download .docx and the cart
 

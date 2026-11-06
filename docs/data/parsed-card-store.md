@@ -26,6 +26,7 @@ parsed/hsld26/2026.09.20-docx-1/
     index.jsonl                        every source's entry, sorted by sha256
     failures.jsonl                     the entries of the sources that did not parse
     occurrences.jsonl                  every card, once per disclosure
+    placement-state.sqlite             what placing each card reads of it (v1-e31-t10), below
 parsed/openev/2026.09.20-docx-1/
     camp_paths.jsonl                   each camp row's live camp paths, as digests (v1-e33-t07)
 ```
@@ -472,9 +473,9 @@ already holds the whole file.
 ## How the aggregates are kept
 
 `index.jsonl`, `failures.jsonl` and `occurrences.jsonl`, and `camp_paths.jsonl` in `openev`, are
-rebuilt from scratch at the end of every run, from the per-source files of the current directory, the
-local manifests and the removal suppression list. Nothing is carried forward from the previous
-aggregate. Each aggregate leaves out a source the suppression list stops, and `occurrences.jsonl`
+rebuilt from scratch at the end of every run, from the per-source files of the current directory (or
+the placement state's copy of what placing reads of them, [above](#the-placement-state)), the local
+manifests and the removal suppression list. Nothing is carried forward from the previous aggregate. Each aggregate leaves out a source the suppression list stops, and `occurrences.jsonl`
 also leaves out each withdrawn disclosure, and each camp release whose every camp path is withdrawn
 (`v1-e33-t07`), whether or not this machine's release manifest has been rewritten yet.
 
@@ -491,6 +492,35 @@ run again deletes it.
 A source's file is written as its parse finishes, and every file is written to a temporary name and
 renamed into place. A run stopped part-way leaves whole per-source files that the next run skips,
 and aggregates that are either the previous run's or the next one's.
+
+## The placement state
+
+`placement-state.sqlite`, beside the aggregates since `v1-e31-t10`, holds what placing a card reads of
+it, so that a weekly rebuild reads the documents of only the sources it added and signs only their new
+bodies with MinHash. Every card is still placed again on every run, so the occurrence table is the
+full rebuild's, byte for byte.
+
+| Table | One row per | What it holds |
+|---|---|---|
+| `meta` | stamp | the layout (`schema_version` 1), the parser, profile and fingerprint versions, a digest of the rules that decide its contents (the ellipsis markers, the fewest anchor words, the shingle size, the MinHash permutations and seed), and the vocabulary, each word once |
+| `sources` | source it was built from, by SHA-256 | each card in the order the rebuild takes it: paragraph range, completeness, exact fingerprint, a full card's short-cite key, an abbreviated or cite-only card's link key, the words as numbers in the vocabulary |
+| `bodies` | distinct full body, by exact fingerprint | its words as numbers, and its 128 MinHash values, little-endian 32-bit |
+
+It holds card words, short-cite keys and digests only: no path, school, team, tag or full cite, nothing
+`parsed/` does not already hold (the PM's ruling of 2026-11-06). Its sources are the ones the rebuild
+places, so a source the suppression list stops is in no state written after the stop.
+
+**When it is used.** Only when it can be read whole, its versions and rules are the run's, and its
+sources are exactly the ones placed less the ones the run added. Anything else (no state, a damaged
+one, another version, a source stopped, reinstated or removed since) is a full rebuild, which writes a
+new state, and the run's log line names the reason. So deleting it is always safe. The setting
+`parse.incremental_rebuild`, on by default, turns the state's use off; a rebuild then reads every
+document and still writes a new state. For a by-hand full rebuild, set
+`DEBATE_PARSE__INCREMENTAL_REBUILD=false` for that one command.
+
+It is written fresh on every rebuild, never edited, so no deleted row survives in a free page. Its
+measured sizes on synthetic stores, and the estimate for the real ones, are in `v1-e31-t10`'s session
+report.
 
 ## A directory this machine refuses
 
@@ -517,8 +547,14 @@ bucket:
   reader already sees it right after a removal;
 * deletes, instead, the aggregates of a reached directory retention has tagged, with every version,
   since a rewrite would be a new version the lifecycle never expires;
+* deletes the placement state of each directory it reaches, here and in the bucket with every
+  version, and never edits one (`v1-e31-t10`): it holds the removed source's words. The next
+  `caselist parse` of that directory rebuilds it in full and writes a new one;
 * records the aggregates it left clean or deleted beside the removal log, in
-  `removal-aggregates.jsonl`, which `caselist status` counts residue by.
+  `removal-aggregates.jsonl`, which `caselist status` counts residue by. A deleted placement state is
+  recorded there too, so a build that carries `v1-e30-t33` but not `v1-e31-t10` refuses a record
+  written after such a removal: run `caselist remove` and `caselist status --residue` from a build
+  carrying `v1-e31-t10`.
 
 Nothing is rebuilt afterwards, a backfile's tables included: the current directory always has its
 aggregates. A removal by a build from before `v1-e30-t33` deleted every aggregate of every caselist it
@@ -534,7 +570,9 @@ gets none of its digests.
 files go first and the aggregates last, so the bucket never holds an index naming a file it does
 not hold. An object already in the bucket with the same SHA-256 is skipped, so a re-run uploads
 nothing. A per-source file the bucket holds with a different checksum is reported and left alone; an
-aggregate is replaced. Only the current version directory is ever published.
+aggregate is replaced. The placement state goes with the aggregates and is replaced as one is, by
+`--publish` and by `--publish-only` alike; `caselist restore-run-state` brings it back with the rest of
+the directory, through the same digest check. Only the current version directory is ever published.
 
 A per-source file is never sent when the suppression list stops its source, or when only paths a
 removal holds disclose it (`v1-e31-t26`), read from this machine's manifests by the rule the

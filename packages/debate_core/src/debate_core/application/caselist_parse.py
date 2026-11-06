@@ -18,7 +18,27 @@
    result arrives, so a run stopped part-way keeps what it finished.
 5. **Rebuilds the three aggregates** from every per-source file in the directory: the index, the
    failures file and the occurrence table, with fingerprints and clusters from the `v1-e31-t04`
-   service (:class:`~debate_core.application.caselist_card_stats.CardPlacer`).
+   service (:class:`~debate_core.application.caselist_card_stats.CardPlacer`), placing the cards
+   from the placement state where it may be used (below), and writes a new placement state.
+
+## The placement state (`v1-e31-t10`)
+
+Every rebuild places every card of the directory again, because a new card can move an older one to
+another cluster, join two, split one, or take an abbreviated card's link away. What it no longer does
+every week is read every document and sign every distinct full body with MinHash: about 30% and 50
+to 80% of a rebuild. Beside the aggregates it keeps the placement state
+(:mod:`debate_core.application.ports.placement_state`): what placing a card reads of it, each
+distinct full body's words as numbers in one vocabulary, and each body's MinHash signature. A run
+places the cards of the sources the state holds from it, reads the documents of the others, and signs
+only bodies it has not signed; the cards, words and signatures are the same, so the table is the
+full rebuild's, byte for byte.
+
+It is used only when it is readable, its parser, profile and fingerprint versions and its rules are
+this run's, and its sources are exactly the ones the rebuild places less the ones this run added
+(:class:`FullRebuildReason` names each other case). Anything else is a full rebuild, which writes a
+new state, so deleting the state is always safe: a removal does (`caselist remove`), and a new
+version directory starts without one. `parse.incremental_rebuild` off makes every rebuild a full one.
+The run logs which way it placed the cards and why, in counts.
 
 ## The rebuild reads cards source by source (`v1-e40-t36`)
 
@@ -27,8 +47,8 @@ about 1.3 GB in the main process for 250 `hspolicy26` sources, growing with ever
 (`docs/data/caselist-parse-memory.md`). It now reads one source's document at a time, gives each
 card to a :class:`~debate_core.application.caselist_card_stats.CardPlacer` and keeps of it only its
 place in the table: its source, its paragraph range and its completeness. What must stay whole is
-what a cluster spanning sources needs, which the placer holds: a fingerprint per card, and the text of
-each distinct full body for the clusterer. The rows are then ordered by a key per row and built one
+what a cluster spanning sources needs, which the placer holds: a fingerprint per card, and the words of
+each distinct full body for the clusterer, as numbers (`v1-e31-t10`). The rows are then ordered by a key per row and built one
 at a time as the store writes them, so no list of rows is held either. The aggregates are the same
 bytes as before for the same store: cards are given in the order the one list was sorted into, by
 source and then first paragraph, and the rows are written in the same order.
@@ -56,11 +76,12 @@ The setting's description gives the measured reasons for its default.
 The aggregates are rebuilt from scratch on every run and never read back, and each of them consults
 the suppression list itself, which is a required constructor argument with no default. A source the
 list stops, or a disclosure of it, is in none of them after the next run, whether the removal was
-made on this machine or on another. `caselist remove` deletes the removed source's per-source files
-and every aggregate of the caselists it touches (`v1-e30-t07`, extended by this task), so between a
-removal and the next run there is no aggregate holding the source either; the runbook's next step
-is this command. The session report for this task gives the reasons for rebuilding rather than
-filtering on read.
+made on this machine or on another. The placement state is not an aggregate read back either: it
+holds only the sources the rebuild places, so a stopped source is in no state written after the stop,
+and a state built before it no longer matches the sources placed, which makes the run a full one. A
+removal rewrites the aggregates it reaches without the removed rows (`v1-e30-t33`) and deletes their
+directories' placement states (`v1-e31-t10`). The session report of `v1-e31-t06` gives the reasons for
+rebuilding rather than filtering on read.
 
 ## A table a newer build stamped
 

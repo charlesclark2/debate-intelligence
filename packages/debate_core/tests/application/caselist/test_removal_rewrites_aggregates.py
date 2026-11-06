@@ -588,6 +588,21 @@ async def test_a_run_stopped_after_the_aggregates_is_found_again_by_the_per_sour
     assert bucket_versions(world, per_source) == []
 
 
+async def test_a_per_source_file_left_only_as_an_older_version_still_reaches_its_directory(
+    world: RemovalWorld,
+) -> None:
+    """A delete with no version id hid the bucket's per-source file under a marker: its version is still
+    restorable, so its directory's tables may still hold its rows, and are reached."""
+    per_source = f"parsed/{source_object_key(CASELIST, CURRENT, digest('only'))}"
+    world.client.delete_object(Bucket=world.bucket_name, Key=per_source)
+    assert world.client.list_objects_v2(Bucket=world.bucket_name, Prefix=per_source).get("KeyCount") == 0
+
+    plan = await plan_removal(world, "only")
+
+    assert (Side.BUCKET, CASELIST, CURRENT) in directories(plan)
+    assert reached(plan)[(Side.BUCKET, bucket_key(CASELIST, CURRENT, "occurrences.jsonl"))].rows_dropped == 2
+
+
 async def test_a_rerun_finds_rows_an_earlier_build_left_by_the_caselists_its_scope_recorded(
     world: RemovalWorld,
 ) -> None:

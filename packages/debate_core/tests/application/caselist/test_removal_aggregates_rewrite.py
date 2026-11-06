@@ -88,9 +88,12 @@ def test_the_check_refuses_a_kept_line_that_is_not_the_tables_bytes(tmp_path: Pa
     target = tmp_path / "written" / "index.jsonl"
     result = rewrite_table("index.jsonl", source, target, WHOLE, table="t")
     target.write_bytes(line(source_sha256=KEPT, n=2))
+    # As if the writer itself had written these bytes and reported them: only the comparison with the
+    # table's own lines can refuse it.
+    reported = replace(result, rewritten_sha256=hashlib.sha256(target.read_bytes()).hexdigest())
 
     with pytest.raises(AggregateRewriteRefused):
-        check_rewrite(source, target, WHOLE, result, table="t")
+        check_rewrite(source, target, WHOLE, reported, table="t")
 
 
 def test_the_check_refuses_a_rewrite_holding_a_line_the_table_did_not(tmp_path: Path) -> None:
@@ -98,9 +101,10 @@ def test_the_check_refuses_a_rewrite_holding_a_line_the_table_did_not(tmp_path: 
     target = tmp_path / "written" / "index.jsonl"
     result = rewrite_table("index.jsonl", source, target, WHOLE, table="t")
     target.write_bytes(line(source_sha256=KEPT) + line(source_sha256=KEPT))
+    reported = replace(result, rewritten_sha256=hashlib.sha256(target.read_bytes()).hexdigest())
 
     with pytest.raises(AggregateRewriteRefused):
-        check_rewrite(source, target, WHOLE, result, table="t")
+        check_rewrite(source, target, WHOLE, reported, table="t")
 
 
 def test_the_check_refuses_a_rewrite_whose_count_is_not_the_one_reported(tmp_path: Path) -> None:
@@ -232,4 +236,34 @@ def test_a_camp_row_is_asked_by_the_camp_paths_its_table_gives_it(tmp_path: Path
     assert {name: getattr(result, "rows_dropped", None) for name, result in done.items()} == {
         "occurrences.jsonl": 1,
         "camp_paths.jsonl": 2,
+    }
+
+
+def test_a_camp_row_whose_every_camp_path_is_stopped_goes_though_no_release_was_emptied(
+    tmp_path: Path,
+) -> None:
+    """The row's own rule: every camp path its table gives it is one the list stops."""
+    rule = withdrawn()
+    occurrences = table(
+        tmp_path, "occurrences.jsonl", line(source_sha256=KEPT, snapshot="2026-policy", disclosure=None)
+    )
+    old = hashlib.sha256(occurrences.read_bytes()).hexdigest()
+    beside = table(
+        tmp_path,
+        "camp_paths.jsonl",
+        line(
+            source_sha256=KEPT,
+            snapshot="2026-policy",
+            camp_path_disclosure=WITHDRAWN_PATH,
+            occurrence_table_sha256=old,
+        ),
+    )
+
+    done = rewrite_directory(
+        {"occurrences.jsonl": occurrences, "camp_paths.jsonl": beside}, rule, label="openev"
+    )
+
+    assert {name: getattr(result, "rows_dropped", None) for name, result in done.items()} == {
+        "occurrences.jsonl": 1,
+        "camp_paths.jsonl": 1,
     }

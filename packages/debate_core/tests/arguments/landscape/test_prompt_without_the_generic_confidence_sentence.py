@@ -88,7 +88,8 @@ def test_the_inserted_lines_are_one_changelog_entry_for_1_3_1_and_the_rest_of_th
 
     assert new.changelog[:-1] == old.changelog
     assert new.changelog[-1].version == "1.3.1"
-    assert new.model_dump(exclude={"version", "changelog"}) == old.model_dump(exclude={"version", "changelog"})
+    kept = {"version", "changelog"}
+    assert new.model_dump(exclude=kept) == old.model_dump(exclude=kept)
 
 
 def test_1_3_1_s_body_is_1_3_0_s_less_the_sentence(prompts: PromptRegistry) -> None:

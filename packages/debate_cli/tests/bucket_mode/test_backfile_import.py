@@ -277,11 +277,19 @@ def test_a_backfile_import_is_not_a_weekly_run_and_leaves_the_run_log_alone(
     assert world.object_keys("reports/sync-runs/") == runs_before
 
 
-def test_running_it_again_rebuilds_the_aggregates_after_a_removal_with_no_second_download(
+def occurrence_table(world: World) -> str:
+    [occurrences] = [
+        key for key in world.object_keys(f"parsed/{BACKFILE}/") if key.endswith("/occurrences.jsonl")
+    ]
+    return world.body(occurrences).decode("utf-8")
+
+
+def test_a_removal_rewrites_the_aggregates_in_the_bucket_and_running_it_again_leaves_them_without_the_rows(
     backfiles: tuple[World, Site], tmp_path: Path
 ) -> None:
-    """The removal runbook's rebuild for a backfile: run the import again. It restores the backfile's
-    parsed store, rebuilds its aggregates without what the removal took out, and publishes them."""
+    """A whole-file removal rewrites a backfile's aggregates in the bucket without the removed rows,
+    and nothing is rebuilt (`v1-e30-t33`). Running the import again anyway downloads nothing a second
+    time and publishes aggregates still without what the removal took out."""
     world, site = backfiles
     assert execute(world)["exit_code"] == ExitCode.OK
     world.use(tmp_path / "the-macs-copy")
@@ -290,9 +298,9 @@ def test_running_it_again_rebuilds_the_aggregates_after_a_removal_with_no_second
         "--request", "RM-2026-07", "--execute",
     )  # fmt: skip
     assert removed["exit_code"] == ExitCode.OK, removed
-    assert not [
-        key for key in world.object_keys(f"parsed/{BACKFILE}/") if key.endswith("/occurrences.jsonl")
-    ], "a whole-file removal deletes the aggregates of every caselist it touches"
+    rewritten = occurrence_table(world)
+    assert digest_of("direct") not in rewritten, "the removal rewrites the table without its rows"
+    assert digest_of("verbatim") in rewritten and digest_of("wiki") in rewritten
     world.use(tmp_path / "a-later-task")
 
     planned = dry_run(world)
@@ -303,10 +311,7 @@ def test_running_it_again_rebuilds_the_aggregates_after_a_removal_with_no_second
     assert planned["data"]["space"]["estimate_bytes"] == 5 * len(zipped(MEMBERS))
     assert rebuilt["exit_code"] == ExitCode.OK, rebuilt
     assert len(site.fetched) == 1
-    [occurrences] = [
-        key for key in world.object_keys(f"parsed/{BACKFILE}/") if key.endswith("/occurrences.jsonl")
-    ]
-    table = world.body(occurrences).decode("utf-8")
+    table = occurrence_table(world)
     assert digest_of("direct") not in table
     assert digest_of("verbatim") in table and digest_of("wiki") in table
 

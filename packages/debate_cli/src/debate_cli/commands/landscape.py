@@ -13,13 +13,14 @@ Every decision is :class:`~debate_core.application.landscape_run.LandscapeRunSer
 
 ## The bundle
 
-The run writes seven files, under `<data dir>/reports/landscape/<caselist>/<snapshot>/` unless
+The run writes eight files, under `<data dir>/reports/landscape/<caselist>/<snapshot>/` unless
 `--out` names a directory (`v1-e32-t12-landscape-cli-seven-files`):
 
 * **circuit-wide**, naming no school, team or debater: `v1-e32-t03`'s `report.md`, `positions.csv`
   and `top_cards.csv`, `v1-e32-t10`'s `impact_cards.csv`, and `v1-e32-t04`'s `trends.csv`;
 * **school view**, naming each disclosing school and team code as disclosed: `v1-e32-t04`'s
-  `schools.csv` and `schools.md`.
+  `schools.csv` and `schools.md`, and `v1-e32-t54`'s `school_rounds.csv`, which with `schools.md`
+  names the tournament, round and side of each round under each team's positions.
 
 `--help`, the human output and `--json`'s `bundle` mark each file one or the other, read from
 :data:`~debate_core.application.landscape_report.CIRCUIT_WIDE_FILES` and

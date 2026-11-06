@@ -45,6 +45,7 @@ class TestIsSchoolView:
         [
             "reports/landscape/hsld26/2026-10-19/schools.csv",
             "reports/landscape/hsld26/2026-10-19/schools.md",
+            "reports/landscape/hsld26/2026-10-19/school_rounds.csv",
         ],
     )
     def test_a_school_view_of_a_caselist_reached_is_one(self, key: str) -> None:
@@ -204,6 +205,14 @@ class TestTheRemovalCredentialsGrant:
     def test_it_names_exactly_the_school_view_files_the_code_deletes(self) -> None:
         """If v1-e32-t04's list or the module's changes alone, this fails here and not at a takedown."""
         assert json.loads(self._local("school_view_files")) == list(SCHOOL_VIEW_FILES)
+
+    def test_it_grants_the_school_rounds_file_a_removal_deletes(self) -> None:
+        """`v1-e32-t54`: the third school-view file, spelled out, so a takedown may delete it."""
+        assert json.loads(self._local("school_view_files")) == [
+            "schools.csv",
+            "school_rounds.csv",
+            "schools.md",
+        ]
 
     def test_it_is_under_the_prefix_the_bundles_are_published_to(self) -> None:
         assert json.loads(self._local("landscape_prefix")) == LANDSCAPE_PREFIX

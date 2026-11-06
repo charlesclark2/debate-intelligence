@@ -20,5 +20,9 @@ REPORTS_PREFIX: Final = "reports/landscape"
 CIRCUIT_WIDE_FILES: Final = ("report.md", "positions.csv", "top_cards.csv", "impact_cards.csv", "trends.csv")
 """The bundle's files that name no school, team or debater: the circuit-wide report and its trends."""
 
-SCHOOL_VIEW_FILES: Final = ("schools.csv", "schools.md")
-"""The bundle's per-school view (`v1-e32-t04`): school and team code as disclosed, never more."""
+SCHOOL_VIEW_FILES: Final = ("schools.csv", "school_rounds.csv", "schools.md")
+"""The bundle's per-school view (`v1-e32-t04`): school and team code as disclosed, and since policy 1.23
+the tournament, round and side of each round under its positions (`v1-e32-t54`'s `school_rounds.csv`,
+and its lists in `schools.md`). A removal, the annual purge and the season window delete each of them,
+`caselist status` counts each left behind, and the bundle's scan reads them for paths only.
+`infrastructure/modules/evidence_bucket/operator_access.tf` grants the removal credential these names."""

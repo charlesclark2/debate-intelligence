@@ -1827,7 +1827,8 @@ def test_an_upload_refused_at_a_held_path_is_owed_after_its_archive_has_gone_unt
 # The landscape bundles' school views (v1-e32-t13)
 # ------------------------------------------------------------------------------------------------
 
-SCHOOL_VIEWS = ("schools.csv", "schools.md")
+SCHOOL_VIEWS = ("school_rounds.csv", "schools.csv", "schools.md")
+"""In the order the plan lists a bundle's keys; `school_rounds.csv` is `v1-e32-t54`'s."""
 CIRCUIT_WIDE = ("report.md", "positions.csv", "top_cards.csv", "impact_cards.csv", "trends.csv")
 
 
@@ -1835,8 +1836,8 @@ def test_a_removal_takes_its_caselists_school_views_and_leaves_every_other_lands
     installation: Path, bucket: S3Client, published: Any
 ) -> None:
     """Two snapshots' bundles of the team's caselist, and one of another's, on this machine and in the
-    bucket, each with the seven files v1-e32-t04 names (written out here by hand). The plan lists the
-    team's caselist's four school-view files on each side and the newest bundle to republish; the
+    bucket, each with the eight files v1-e32-t04 and v1-e32-t54 name (written out here by hand). The plan
+    lists the team's caselist's six school-view files on each side and the newest bundle to republish; the
     execution deletes those and nothing else; and `caselist status` then has nothing to report."""
     data_dir = installation / "dev"
     bundles = [
@@ -1871,7 +1872,7 @@ def test_a_removal_takes_its_caselists_school_views_and_leaves_every_other_lands
     done = run(*REMOVE, "--execute")
 
     assert done["exit_code"] == ExitCode.OK, done
-    assert done["data"]["school_views_deleted"] == {"local_files": 4, "bucket_versions": 4}
+    assert done["data"]["school_views_deleted"] == {"local_files": 6, "bucket_versions": 6}
     left_here = {key for key in keys if (data_dir / key).exists()}
     left_there = {key for key, _ in versions(bucket) if key.startswith("reports/landscape/")}
     assert left_here == left_there == set(keys) - set(taken)

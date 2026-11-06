@@ -1,6 +1,6 @@
 # Positions by school: synthpolicy26 through 2026-09-15
 
-This page names schools and team codes exactly as they were disclosed, and links each team's public openCaselist page, and nothing more: no debater, and no text from anyone's files. It is for the team only, and stays on this machine and in the private bucket.
+This page names schools and team codes exactly as they were disclosed, links each team's public openCaselist page, and names under each team's positions the tournament, round and side of each round whose file holds it, as disclosed, and nothing more: no debater, and no text from anyone's files. It is for the team only, and stays on this machine and in the private bucket.
 
 Every count comes from files teams disclosed to the caselist (FILE_IMPORT), not from evidence the platform has verified. A row is a team's rounds on one side that the landscape report counts as reading the position.
 
@@ -13,9 +13,12 @@ Every count comes from files teams disclosed to the caselist (FILE_IMPORT), not 
 | Coach's overrides | 1789afec01f8e1417460965e050263e11df2d4128ca0ed9604d1643f430639a0 |
 | Schools | 4, with 8 team codes |
 | Team pages | 2 of 8 team codes link to their openCaselist page; 6 do not: 6 whose school is not one address word |
+| Round lines | 36: 29 reads, 7 AT |
 | Left out | 1 round on no readable side; 0 rounds whose path named no school or team code |
 
 ## By school
+
+Under each school's table, each team's rounds, one line per round under each position: the positions the team reads first, in the table's order, then those it only answers. Lines are newest snapshot first, and give the tournament and round exactly as the team's filename gave them, the round's side, and `reads`, or `AT` where the round's file answers the position. "One file for N rounds" marks a round whose file holding the position the team disclosed for N of its rounds, so those rounds may be one file disclosed again rather than N rounds that each read it.
 
 ### Ashgrove Fictional
 
@@ -28,6 +31,33 @@ Every count comes from files teams disclosed to the caselist (FILE_IMPORT), not 
 | YY | neg | `hospital-closures-da` | 1 | none |
 | YY | neg | `spending-da` | 1 | none |
 | YY | neg | `states-cp` | 1 | none |
+
+**XX, round by round** (newest snapshot first)
+
+- `costs-advantage`
+  - Imaginary Classic, R1, aff, reads (one file for 2 rounds)
+  - Fictional Invitational, R1, aff, reads (one file for 2 rounds)
+- `single-payer-aff`
+  - Imaginary Classic, R1, aff, reads (one file for 2 rounds)
+  - Fictional Invitational, R1, aff, reads (one file for 2 rounds)
+- `spending-da` (answers only)
+  - Imaginary Classic, R1, aff, AT (one file for 2 rounds)
+  - Fictional Invitational, R1, aff, AT (one file for 2 rounds)
+
+**YY, round by round** (newest snapshot first)
+
+- `cap-k`
+  - Imaginary Classic, R1, neg, reads
+- `election-da`
+  - Imaginary Classic, R1, neg, reads
+- `hospital-closures-da`
+  - Imaginary Classic, R1, neg, reads
+- `spending-da`
+  - Fictional Invitational, R1, neg, reads
+- `states-cp`
+  - Fictional Invitational, R1, neg, reads
+- `costs-advantage` (answers only)
+  - Fictional Invitational, R1, neg, AT
 
 ### Birchmoor
 
@@ -42,6 +72,28 @@ Every count comes from files teams disclosed to the caselist (FILE_IMPORT), not 
 | ZZ | neg | `spending-da` | 1 | [openCaselist](https://opencaselist.com/synthpolicy26/Birchmoor/ZZ) |
 | ZZ | neg | `states-cp` | 1 | [openCaselist](https://opencaselist.com/synthpolicy26/Birchmoor/ZZ) |
 
+**QQ, round by round** (newest snapshot first)
+
+- `condo-bad`
+  - Imaginary Classic, R2, aff, reads
+- `costs-advantage`
+  - Imaginary Classic, R2, aff, reads
+- `cap-k`
+  - Fictional Invitational, R2, neg, reads
+- `spending-da`
+  - Fictional Invitational, R2, neg, reads
+
+**ZZ, round by round** (newest snapshot first)
+
+- `costs-advantage`
+  - Fictional Invitational, R2, aff, reads
+- `innovation-advantage`
+  - Fictional Invitational, R2, aff, reads
+- `spending-da`
+  - Imaginary Classic, R2, neg, reads
+- `states-cp`
+  - Imaginary Classic, R2, neg, reads
+
 ### Cedarvale Fictional
 
 | Team code | Side | Position | Rounds | Team page |
@@ -51,6 +103,23 @@ Every count comes from files teams disclosed to the caselist (FILE_IMPORT), not 
 | WW | neg | `nhi-t` | 2 | none |
 | WW | neg | `election-da` | 1 | none |
 | WW | neg | `provider-strikes-da` | 1 | none |
+
+**VV, round by round** (newest snapshot first)
+
+- `costs-advantage`
+  - Fictional Invitational, R3, aff, reads
+- `public-option-aff`
+  - Fictional Invitational, R3, aff, reads
+
+**WW, round by round** (newest snapshot first)
+
+- `nhi-t`
+  - Imaginary Classic, R3, neg, reads
+  - Fictional Invitational, R3, neg, reads
+- `election-da`
+  - Fictional Invitational, R3, neg, reads
+- `provider-strikes-da`
+  - Imaginary Classic, R3, neg, reads
 
 ### Driftwood Fictional
 
@@ -62,6 +131,31 @@ Every count comes from files teams disclosed to the caselist (FILE_IMPORT), not 
 | JJ | neg | `states-cp` | 1 | none |
 | KK | aff | `costs-advantage` | 1 | none |
 | KK | aff | `innovation-advantage` | 1 | none |
+
+**JJ, round by round** (newest snapshot first)
+
+- `innovation-advantage`
+  - Imaginary Classic, R3, aff, reads
+- `single-payer-aff`
+  - Imaginary Classic, R3, aff, reads
+- `spending-da`
+  - Imaginary Classic, R3, aff, AT
+  - Fictional Invitational, R4, neg, reads
+- `states-cp`
+  - Fictional Invitational, R4, neg, reads
+- `costs-advantage` (answers only)
+  - Fictional Invitational, R4, neg, AT
+- `election-da` (answers only)
+  - Imaginary Classic, R3, aff, AT
+
+**KK, round by round** (newest snapshot first)
+
+- `costs-advantage`
+  - Imaginary Classic, R1, aff, reads
+- `innovation-advantage`
+  - Imaginary Classic, R1, aff, reads
+- `pics-bad` (answers only)
+  - Imaginary Classic, R4, neg, AT
 
 ## By position
 

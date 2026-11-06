@@ -184,11 +184,11 @@ it prints the counts, one line per snapshot that differs, with digests by prefix
 every field.
 
 One since `v1-e32-t13`. Per caselist a completed removal run's own scope names, the landscape
-school-view files (`schools.csv`, `schools.md`) written before that run completed: in the bucket by a
-plain listing of `reports/landscape/`, which the everyday profile may make (it lists no versions
-there), and on this machine under `<data dir>/reports/landscape/`. They are residue, `1`, and the same
-removal run again deletes them. A view written after the run, such as the newest bundle republished
-without the removed rounds, is not counted. JSON gives them as `school_views` and
+school-view files (`schools.csv`, `school_rounds.csv`, `schools.md`) written before that run completed:
+in the bucket by a plain listing of `reports/landscape/`, which the everyday profile may make (it lists
+no versions there), and on this machine under `<data dir>/reports/landscape/`. They are residue, `1`,
+and the same removal run again deletes them. A view written after the run, such as the newest bundle
+republished without the removed rounds, is not counted. JSON gives them as `school_views` and
 `school_views_older_than` beside `older_versions`.
 """
 

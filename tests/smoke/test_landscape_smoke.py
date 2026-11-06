@@ -5,9 +5,10 @@ directory with its own `config/landscape/`: two weekly manifests, four parsed so
 invented teams, and their occurrence table. The installed build then writes the report with
 `--model-mode none` (the PM's amendment of 2026-10-22: no model, no Bedrock) and `--no-publish`, so
 it needs no bucket and no stand-in. The counts below are the fixture table's, worked out by hand in
-that module's docstring: nine cards, seven under a heading an alias names. The bundle is seven files,
-five circuit-wide and two school view, and the command marks each (`v1-e32-t12`); the trend and
-school-view counts are worked out by hand in `packages/debate_cli/tests/test_landscape_command.py`.
+that module's docstring: nine cards, seven under a heading an alias names. The bundle is eight files,
+five circuit-wide and three school view (`v1-e32-t54` added `school_rounds.csv`), and the command
+marks each (`v1-e32-t12`); the trend and school-view counts are worked out by hand in
+`packages/debate_cli/tests/test_landscape_command.py`.
 
 Unmarked, like the other offline caselist smoke checks. Every school, team code and card is
 invented, and none of them may appear in what the command prints.
@@ -43,6 +44,7 @@ BUNDLE = (
     ("impact_cards.csv", "circuit_wide"),
     ("trends.csv", "circuit_wide"),
     ("schools.csv", "school_view"),
+    ("school_rounds.csv", "school_view"),
     ("schools.md", "school_view"),
     ("report.md", "circuit_wide"),
 )

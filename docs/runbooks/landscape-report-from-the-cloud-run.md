@@ -154,7 +154,8 @@ Success looks like:
 * `stale False`;
 * `sources`, `cards` and `counted` above zero;
 * `would_ask 0`, `held_back 0` and `model_calls 0`;
-* `not_yet_accepted 0`, and `planned` seven entries, each `UPLOAD` or `UNCHANGED`;
+* `not_yet_accepted 0`, and `planned` eight entries (seven from a build before `v1-e32-t54`), each
+  `UPLOAD` or `UNCHANGED`;
 * `text_caches_read` two numbers, above zero the first time this build reports the caselist (`[None,
   None]` from a build before `v1-e32-t30`).
 
@@ -199,7 +200,9 @@ Where: your Mac, in the same window
 if [ "$(date +%u)" = 3 ]; then echo "STOP: it is Wednesday, the cloud run's day"; elif env | grep -q '^DEBATE_'; then echo "STOP: DEBATE_ overrides are set in this shell"; elif [ ! -d "$COPY" ]; then echo "STOP: no copy at ${COPY}"; elif [ ! -f "$CFG/topics.yaml" ]; then echo "STOP: no topics.yaml in ${CFG}"; else aws sso login --profile debate-dev-evidence && cd "$HOME" && caffeinate -i env DEBATE_ENV=dev debate-research --json landscape report --caselist "$CASELIST" --restored-copy "$COPY" --config-dir "$CFG" --model-mode none --publish > /tmp/landscape-publish.json; echo "exit $?"; python3 -I -c 'import json, sys; e = json.load(open(sys.argv[1])); d = e.get("data") or (e.get("error") or {}).get("details") or {}; p = d.get("publish") or {}; print("code", (e.get("error") or {}).get("code"), "cause", ((e.get("error") or {}).get("details") or {}).get("cause_code"), "retry_after", ((e.get("error") or {}).get("details") or {}).get("retry_after_seconds")); print("snapshot", d.get("snapshot"), "model_calls", d.get("model_calls"), "cards", (d.get("counts") or {}).get("cards")); print("uploaded", len(p.get("uploaded") or []), "unchanged", len(p.get("unchanged") or []), "refused", p.get("refused"))' /tmp/landscape-publish.json; fi
 ```
 Success looks like `exit 0`, `code None cause None retry_after None`, the dry run's `snapshot` and `cards`, `model_calls 0`, and
-`uploaded` plus `unchanged` equal to 7, with `uploaded` above zero for a week not published before.
+`uploaded` plus `unchanged` equal to 8 (7 from a build before `v1-e32-t54`), with `uploaded` above zero
+for a week not published before, and above zero the first time a build carrying `v1-e32-t54` publishes
+a week published before it: `school_rounds.csv` is new, and `schools.md` holds the round lists.
 `RUN_LOCK_HELD`: a run holds the lock; wait and run this block again. In a model run, `MODEL_STAGE_INTERRUPTED`
 with exit `3` means the model was throttled or did not answer (`error.details.cause_code` says which): the
 cards it answered are cached, so run the same block again later and it asks only about the rest

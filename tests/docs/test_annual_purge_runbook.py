@@ -285,6 +285,36 @@ def test_school_views_before_the_window_go_every_version_and_circuit_wide_files_
     )
 
 
+def test_the_purge_and_the_season_window_reach_school_rounds_csv_as_they_reach_the_other_views(
+    tmp_path: Path,
+) -> None:
+    """`v1-e32-t54`: the per-school view's third file goes with its season, every version, here and in
+    the bucket; inside the window it stays, as the other two do."""
+    old, new = f"reports/landscape/{CURRENT}/2026-07-28", f"reports/landscape/{CURRENT}/2026-08-04"
+    for bundle in (old, new):
+        (tmp_path / "data" / bundle).mkdir(parents=True)
+        (tmp_path / "data" / bundle / "school_rounds.csv").write_text("synthetic")
+    ran = school_views(
+        tmp_path,
+        [
+            version(f"{old}/school_rounds.csv", "r2"),
+            version(f"{old}/school_rounds.csv", "r1", latest=False),
+            version(f"{old}/positions.csv", "p1"),
+            version(f"{new}/school_rounds.csv", "r3"),
+        ],
+        [version(f"{old}/school_rounds.csv", "m1")],
+    )
+    assert ran.returncode == 0, ran.stderr
+    assert requested(tmp_path) == [
+        (f"{old}/school_rounds.csv", "m1"),
+        (f"{old}/school_rounds.csv", "r1"),
+        (f"{old}/school_rounds.csv", "r2"),
+    ]
+    assert (tmp_path / "views" / "local.txt").read_text().splitlines() == [
+        str(tmp_path / "data" / old / "school_rounds.csv")
+    ]
+
+
 def test_school_views_stop_on_a_file_neither_list_names_and_write_nothing(tmp_path: Path) -> None:
     ran = school_views(
         tmp_path,

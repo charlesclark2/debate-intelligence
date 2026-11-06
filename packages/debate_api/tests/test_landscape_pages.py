@@ -16,11 +16,14 @@ by part, its largest part leaving at least a quarter of the line free.
 from __future__ import annotations
 
 import re
+from pathlib import Path
 from typing import Any, Final
 
 import pytest
 
 from debate_api.app import PRIVATE_NO_STORE
+from debate_core.application.landscape_report import LandscapeReportService
+from debate_core.testing.landscape_report import read_synthetic_caselist, synthetic_staleness
 
 PAGE_BUDGET: Final = 150 * 1024
 """ADR-0019 (b) 1, as `test_search_pages.py` holds every search page to it: the page, its script and
@@ -249,6 +252,51 @@ def test_a_school_page_links_each_team_page_in_a_new_tab_and_shows_none_as_text(
     assert "opencaselist.com" not in hollow
 
 
+SYNTHETIC_CASELIST: Final = (
+    Path(__file__).resolve().parents[3] / "tests" / "fixtures" / "landscape" / "synthetic_caselist"
+)
+
+
+def test_a_school_page_lists_each_teams_rounds_under_its_positions_as_the_report_writes_them(
+    make_world: Any, landscape_store: Any
+) -> None:
+    """`v1-e32-t54`: schools.md as debate_core renders the synthetic caselist. The rounds are lists under
+    the school's table, on the school's own page, and no team's heading becomes a page of its own."""
+    files = (
+        LandscapeReportService()
+        .bundle(read_synthetic_caselist(SYNTHETIC_CASELIST), synthetic_staleness())
+        .files
+    )
+    world = make_world(
+        landscape_objects=landscape_store(
+            {
+                f"reports/landscape/synthpolicy26/2026-09-15/{name}": files[name].encode()
+                for name in ("report.md", "schools.md")
+            }
+        )
+    )
+    world.signed_in_student()
+
+    front = main_of(page(world, SCHOOL_VIEW))
+    ashgrove = main_of(page(world, "/landscape/synthpolicy26/schools/ashgrove-fictional"))
+
+    assert [words for href, words in links_in(front) if "/schools/" in href] == [
+        "Ashgrove Fictional",
+        "Birchmoor",
+        "Cedarvale Fictional",
+        "Driftwood Fictional",
+    ]
+    assert "<p><strong>XX, round by round</strong> (newest snapshot first)</p>" in ashgrove
+    assert (
+        "<li><code>spending-da</code> (answers only)\n<ul>\n"
+        "<li>Imaginary Classic, R1, aff, AT (one file for 2 rounds)</li>\n"
+        "<li>Fictional Invitational, R1, aff, AT (one file for 2 rounds)</li>\n</ul>\n</li>"
+    ) in ashgrove
+    assert "<li>Fictional Invitational, R1, neg, AT</li>" in ashgrove, "YY answers the Costs advantage"
+    assert "round by round" not in front, "the front page holds no school's rounds"
+    world.services.search_index.close()
+
+
 def test_a_position_page_links_each_team_page_in_a_new_tab_and_shows_none_as_text(member: Any) -> None:
     position = main_of(page(member, "/landscape/synthpolicy26/positions/invented-da"))
 
@@ -367,7 +415,12 @@ PART_ROWS: Final = {"Affirmative": 100, "Negative": 126, "Neither side": 18}
 """Rows per section that size each synthetic part just above its hspolicy26 figure."""
 HEADROOM: Final = 0.25
 """The PM's review of 2026-10-26: the largest part leaves at least a quarter of the line free."""
-HSPOLICY26_LARGEST_SCHOOL_ROWS: Final = 117
+HSPOLICY26_LARGEST_SCHOOL_ROWS: Final = 151
+HSPOLICY26_LARGEST_SCHOOL_LINES: Final = 1_158
+HSPOLICY26_LARGEST_SCHOOL_HTML: Final = 121_739
+"""The largest school page in hspolicy26 with `v1-e32-t54`'s rounds under each position: its table's
+rows, its round lines and its body's bytes, measured over the operator's landscape copy (snapshot
+2026-11-03) through `render_bundle` on 2026-11-06. One school page of 185 was over 100 KB."""
 HSPOLICY26_LARGEST_POSITION_ROWS: Final = 260
 """Above the largest position's rows in hspolicy26 (Affirmative side: Advantages held 810 over 16)."""
 SCHOOLS: Final = 155
@@ -404,6 +457,8 @@ def large_school_view() -> str:
             for row in range(rows)
         ]
         lines.append("")
+        if school == 0:
+            lines += large_school_rounds()
     lines += ["## By position", "", "### Disadvantages", "", "#### `invented-position-0`", ""]
     lines += ["| School | Team code | Side | Rounds | Team page |", "|---|---|---|---|---|"]
     lines += [
@@ -412,6 +467,25 @@ def large_school_view() -> str:
         for row in range(HSPOLICY26_LARGEST_POSITION_ROWS)
     ]
     return "\n".join(lines) + "\n"
+
+
+def large_school_rounds() -> list[str]:
+    """The largest school's round lines, as schools.md writes them: up to six rounds under each position."""
+    lines: list[str] = []
+    for line in range(HSPOLICY26_LARGEST_SCHOOL_LINES):
+        team, position, nth = line // 60, line // 6 % 10, line % 6
+        if line % 60 == 0:
+            lines += ["", f"**T{team:03d}, round by round** (newest snapshot first)", ""]
+        if nth == 0:
+            lines.append(
+                f"- `invented-position-{team}-{position}`" + (" (answers only)" if position > 4 else "")
+            )
+        lines.append(
+            f"  - Invented {team:02d}-{position}-{nth}, Quarters, neg, "
+            + ("AT" if position > 4 else "reads")
+            + (" (one file for 3 rounds)" if nth % 2 else "")
+        )
+    return [*lines, ""]
 
 
 def test_every_landscape_page_of_a_bundle_as_large_as_hspolicy26s_is_under_the_page_budget(
@@ -446,6 +520,10 @@ def test_every_landscape_page_of_a_bundle_as_large_as_hspolicy26s_is_under_the_p
     for part, response in parts.items():
         body = main_of(response.text).split('<div class="landscape-body">', 1)[1]
         assert len(body.encode()) >= HSPOLICY26_PART_HTML[part], part
+    largest = main_of(world.browser.get("/landscape/synthpolicy26/schools/invented000").text)
+    assert largest.count("<li>") - largest.count("<li><code>") >= HSPOLICY26_LARGEST_SCHOOL_LINES
+    body = largest.split('<div class="landscape-body">', 1)[1]
+    assert len(body.encode()) >= HSPOLICY26_LARGEST_SCHOOL_HTML
     assert world.browser.get("/landscape/synthpolicy26/positions/invented-position-0").text.count(
         "noopener"
     ) == (HSPOLICY26_LARGEST_POSITION_ROWS)

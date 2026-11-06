@@ -2,8 +2,8 @@
 
 Configuration comes from six places — a flag, the environment, `.env`, the per-user credentials file
 `~/.debate-research/<env>.env` (`v1-e41-t22`), the environment profile, the built-in profile — and
-the question that follows every surprise is which of them supplied the value in front of you. This command answers it: one row per setting, with the value and its
-source, in either output mode.
+the question that follows every surprise is which of them supplied the value in front of you. This
+command answers it: one row per setting, with the value and its source, in either output mode.
 
 Every secret is replaced with `***` before it reaches either surface, and that is not this
 command's decision to make: it renders

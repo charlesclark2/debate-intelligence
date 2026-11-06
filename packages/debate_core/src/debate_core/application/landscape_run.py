@@ -160,13 +160,15 @@ BUNDLE_FILES: Final = (
     "impact_cards.csv",
     "trends.csv",
     "schools.csv",
+    "school_rounds.csv",
     "schools.md",
     "report.md",
 )
 """The bundle's files, in the order they are uploaded: the page a person opens goes last.
 
-`schools.csv` and `schools.md` are `v1-e32-t04`'s per-school view, the only files naming schools and
-team codes: like the rest, they go to the local `reports/` directory and the private bucket only."""
+`schools.csv`, `school_rounds.csv` (`v1-e32-t54`) and `schools.md` are `v1-e32-t04`'s per-school view,
+the only files naming schools and team codes, and the only ones naming tournaments and rounds: like the
+rest, they go to the local `reports/` directory and the private bucket only."""
 
 DRY_RUN_QUEUE_LOCATION: Final = "(not written: dry run)"
 

@@ -26,8 +26,10 @@ filed under, as `v1-e32-t03`'s preview scanned:
 
 ## The per-school view
 
-`v1-e32-t04`'s `schools.csv` and `schools.md` name schools, team codes and tournaments by design: the
-data-use policy allows school plus team code, as disclosed, in that view and nowhere else. A scan
+`v1-e32-t04`'s `schools.csv` and `schools.md`, and `v1-e32-t54`'s `school_rounds.csv`, name schools,
+team codes and tournaments by design: the data-use policy allows school plus team code, as disclosed,
+and since version 1.23 the tournament, round and side of each round under its positions, in that view
+and nowhere else. A scan
 that listed them would stop every week on every team until accepting meant nothing, so in the files
 named as `school_view_files` it looks for paths only, which no file of the bundle may hold. Every
 other file is scanned for everything.

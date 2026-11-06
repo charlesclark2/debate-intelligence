@@ -208,7 +208,11 @@ class TestTheRemovalCredentialsGrant:
 
     def test_it_grants_the_school_rounds_file_a_removal_deletes(self) -> None:
         """`v1-e32-t54`: the third school-view file, spelled out, so a takedown may delete it."""
-        assert json.loads(self._local("school_view_files")) == ["schools.csv", "school_rounds.csv", "schools.md"]
+        assert json.loads(self._local("school_view_files")) == [
+            "schools.csv",
+            "school_rounds.csv",
+            "schools.md",
+        ]
 
     def test_it_is_under_the_prefix_the_bundles_are_published_to(self) -> None:
         assert json.loads(self._local("landscape_prefix")) == LANDSCAPE_PREFIX

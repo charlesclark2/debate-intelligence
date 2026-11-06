@@ -1,10 +1,10 @@
 """A removal reaches the landscape bundles' school views, and nothing else of them (`v1-e32-t13`).
 
 The plan lists, and `--execute` deletes, the `schools.csv`, `school_rounds.csv` (`v1-e32-t54`) and
-`schools.md` of every landscape bundle of the caselist the removal touches, on this machine and in the bucket, every version
-included; every circuit-wide file and every other caselist's bundle stay byte for byte (ac1). And
-`caselist status` reports a school view a removal should have deleted as residue, until it is gone
-(ac2).
+`schools.md` of every landscape bundle of the caselist the removal touches, on this machine and in the
+bucket, every version included; every circuit-wide file and every other caselist's bundle stay byte for
+byte (ac1). And `caselist status` reports a school view a removal should have deleted as residue, until
+it is gone (ac2).
 
 Every bucket is moto's, versioned, and every removal is the real one, with its clock fixed at
 :data:`~.conftest.REMOVAL_TIME`. The bundles are written here by hand beside the synthetic store,
@@ -356,7 +356,7 @@ class TestTheExecution:
         assert bucket_reports(bundles) == {
             (key, version): data for (key, version), data in bucket_before.items() if key not in REMOVED_VIEWS
         }
-        assert report.school_view_versions_deleted == 9, "eight versions and the marker"
+        assert report.school_view_versions_deleted == 13, "twelve versions and the marker"
 
     async def test_it_lists_again_after_deleting_and_a_view_still_there_leaves_the_removal_incomplete(
         self, bundles: RemovalWorld

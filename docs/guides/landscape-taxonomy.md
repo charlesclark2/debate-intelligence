@@ -627,9 +627,23 @@ alone, as the student search's card page builds it, so a team whose school or te
 of the page's address (a school with a space in it, say) has no link, and the view's **Team pages** row
 counts them. On hspolicy26 through 2026-10-20, all 475 team codes at 155 schools had one.
 
-The report itself, `report.md` and its CSVs, names no school or team and carries no link out of the
-page: report.md's contents list links only to its own headings. The view stays
-on this machine and in the private bucket, like the report.
+**Round by round** (`v1-e32-t54`, policy 1.23). Under each school's table, `schools.md` lists each
+team's rounds under each of its positions: first the positions the team reads, in the table's order,
+then those it only answers, marked *(answers only)*. Each line is one round, newest snapshot first,
+then by tournament and by round, latest first (elimination rounds before prelims, a higher prelim
+before a lower one, a label the platform does not recognise after those it does). A line gives the
+tournament and the round exactly as the team's filename gave them, the round's side, and `reads`, or
+`AT` where the round's file answers the position. *One file for N rounds* marks a round whose file
+holding the position the team disclosed for N of its rounds: a team that discloses one file for every
+round of a tournament shows that file under each of them, so the mark says those lines may be one file
+disclosed again rather than N rounds that each read it. `school_rounds.csv` holds the same lines, one
+row each, with the round's first-seen snapshot and the count in `rounds_in_file`; `schools.csv` is
+unchanged. No line holds a tag, cite or any other text of a card.
+
+The report itself, `report.md` and its CSVs, names no school or team, no tournament and no round, and
+carries no link out of the page: report.md's contents list links only to its own headings. The view
+stays on this machine, in the private bucket and on the pilot's landscape pages for the team's
+signed-in members, like the report.
 
 ## Scenarios and link chains
 

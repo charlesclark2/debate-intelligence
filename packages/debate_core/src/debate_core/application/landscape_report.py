@@ -175,6 +175,7 @@ from debate_core.arguments.landscape.render import (
     render_impact_cards_csv,
     render_markdown,
     render_positions_csv,
+    render_school_rounds_csv,
     render_schools_csv,
     render_schools_markdown,
     render_top_cards_csv,
@@ -466,6 +467,7 @@ class LandscapeReportService:
                 "impact_cards.csv": render_impact_cards_csv(report, metadata),
                 "trends.csv": render_trends_csv(trends, metadata),
                 "schools.csv": render_schools_csv(schools, metadata),
+                "school_rounds.csv": render_school_rounds_csv(schools, metadata),
                 "schools.md": with_stale_banner(render_schools_markdown(schools, report), staleness),
             },
             trends=trends,
@@ -498,6 +500,10 @@ class LandscapeReportService:
         """Position id to each card counted for it, with the rounds it was counted in."""
         other_side: defaultdict[str, set[str]] = defaultdict(set)
         """Position id to the rounds on the other side that placed a card under it."""
+        answers: defaultdict[str, set[str]] = defaultdict(set)
+        """Position id to the rounds answering it, for the per-school view (`v1-e32-t54`)."""
+        holding: defaultdict[tuple[str, str], set[str]] = defaultdict(set)
+        """(position id, round id) to the files whose cards were counted there, as a read or an answer."""
         cards = unplaced = below = decided = placed = 0
         prompt_versions: set[str] = set()
         for item in inputs.classifications:
@@ -522,16 +528,25 @@ class LandscapeReportService:
                 continue
             placed += 1
             if item.role is not PositionRole.READS:
+                answered = _answered_position(taxonomy, item.position_id)
+                if answered is not None:
+                    answers[answered.id] |= in_rounds
+                    for one in in_rounds:
+                        holding[(answered.id, one)].add(item.source_sha256)
                 continue
             position = _counted_position(taxonomy, item.position_id)
             opposite = _OPPOSITE.get(position.side)
-            other_side[position.id] |= {one for one in in_rounds if rounds[one].side == opposite}
+            answering = {one for one in in_rounds if rounds[one].side == opposite}
+            other_side[position.id] |= answering
+            answers[position.id] |= answering
             counted = {
                 one
                 for one in in_rounds
                 if rounds[one].side != opposite
                 and (position.kind is not PositionKind.AFF or one not in assigned)
             }
+            for one in answering | counted:
+                holding[(position.id, one)].add(item.source_sha256)
             if not counted:
                 continue
             reads[position.id] |= counted
@@ -612,6 +627,8 @@ class LandscapeReportService:
                 for one, stated in rounds.items()
             },
             reads={position_id: frozenset(read) for position_id, read in reads.items()},
+            answers={position_id: frozenset(found) for position_id, found in answers.items()},
+            holding={key: frozenset(found) for key, found in holding.items()},
         )
         report = LandscapeReport(
             header=ReportHeader(
@@ -1365,6 +1382,19 @@ def _counted_position(taxonomy: Taxonomy, position_id: str) -> Position:
     if position.deprecated:
         raise ReportCannotShip(f"{position_id} is retired with no position to count under")
     return position
+
+
+def _answered_position(taxonomy: Taxonomy, position_id: str) -> Position | None:
+    """The active position an ANSWERS card answers, for the school view alone; None when there is none.
+
+    An answer is never counted in the report, so unlike :func:`_counted_position` an unknown or retired
+    position refuses nothing: the round simply lists no answer to it.
+    """
+    try:
+        position = taxonomy.resolve(position_id)
+    except KeyError:
+        return None
+    return None if position.deprecated else position
 
 
 def _stats(

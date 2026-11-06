@@ -169,10 +169,10 @@ version directory's `index.jsonl`, `failures.jsonl` and `occurrences.jsonl`, and
 ## The landscape bundles' school views (`v1-e32-t13`)
 
 Each landscape bundle, `reports/landscape/<caselist>/<snapshot>/`, holds a per-school view
-(`schools.csv`, `schools.md`) naming schools and team codes as disclosed. The plan lists every one of
-every caselist it touches (:attr:`RemovalPlan.touched_caselists`), on this machine and in the bucket
-(:attr:`RemovalPlan.school_views`), and, for a re-run, those of each caselist an earlier completed run
-of the request touched that were written before that run completed
+(`schools.csv`, `school_rounds.csv`, `schools.md`) naming schools and team codes as disclosed. The plan
+lists every one of every caselist it touches (:attr:`RemovalPlan.touched_caselists`), on this machine
+and in the bucket (:attr:`RemovalPlan.school_views`), and, for a re-run, those of each caselist an
+earlier completed run of the request touched that were written before that run completed
 (:attr:`RemovalPlan.school_view_reach`). Never a circuit-wide file, never another caselist's bundle:
 :mod:`~debate_core.application.caselist.removal_school_views` says how, and `caselist status` counts
 what a removal left by the same selection. The everyday profile may list `reports/` but not its

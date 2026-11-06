@@ -285,7 +285,7 @@ the PM its last path part only. Run the block again until it prints `0`, then go
 
 ## Step 2 — Landscape school views
 
-The school views (`schools.csv` and `schools.md`) of every landscape bundle whose snapshot is dated
+The school views (`schools.csv`, `school_rounds.csv` and `schools.md`) of every landscape bundle whose snapshot is dated
 before `WINDOW_START` are deleted, locally and in the bucket, every version included, under the
 removal profile: the season leaving the window, and any earlier one a past purge missed. This is the
 same whether the season is now a backfile or not, and it is the one deletion every September has.
@@ -313,7 +313,7 @@ from pathlib import Path
 
 purge, data_dir = Path(sys.argv[1]), Path(sys.argv[2])
 window = date.fromisoformat(sys.argv[3])
-views = {"schools.csv", "schools.md"}
+views = {"schools.csv", "school_rounds.csv", "schools.md"}
 circuit_wide = {"report.md", "positions.csv", "top_cards.csv", "impact_cards.csv", "trends.csv"}
 
 def purged(key):
@@ -339,8 +339,9 @@ print(f"{len(doomed)} bucket version(s) and {len(local)} local file(s) to delete
 SCHOOLVIEWS
 fi
 ```
-Success looks like one `would delete` line per key and per local file, each a `schools.csv` or
-`schools.md` of a snapshot dated before `WINDOW_START`, then the counts. The number of bundles listed
+Success looks like one `would delete` line per key and per local file, each a `schools.csv`,
+`school_rounds.csv` (since `v1-e32-t54`) or `schools.md` of a snapshot dated before `WINDOW_START`,
+then the counts. The number of bundles listed
 is above zero wherever a landscape report was ever published: `0 bundle(s)` with nothing to delete
 means the listing found nothing at all, so check the bucket name before going on (in prod, where no
 report may have been published yet, it can be right). `0 bucket version(s) and 0 local file(s)` with

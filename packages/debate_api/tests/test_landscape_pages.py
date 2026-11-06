@@ -252,7 +252,9 @@ def test_a_school_page_links_each_team_page_in_a_new_tab_and_shows_none_as_text(
     assert "opencaselist.com" not in hollow
 
 
-SYNTHETIC_CASELIST: Final = Path(__file__).resolve().parents[3] / "tests" / "fixtures" / "landscape" / "synthetic_caselist"
+SYNTHETIC_CASELIST: Final = (
+    Path(__file__).resolve().parents[3] / "tests" / "fixtures" / "landscape" / "synthetic_caselist"
+)
 
 
 def test_a_school_page_lists_each_teams_rounds_under_its_positions_as_the_report_writes_them(
@@ -260,7 +262,11 @@ def test_a_school_page_lists_each_teams_rounds_under_its_positions_as_the_report
 ) -> None:
     """`v1-e32-t54`: schools.md as debate_core renders the synthetic caselist. The rounds are lists under
     the school's table, on the school's own page, and no team's heading becomes a page of its own."""
-    files = LandscapeReportService().bundle(read_synthetic_caselist(SYNTHETIC_CASELIST), synthetic_staleness()).files
+    files = (
+        LandscapeReportService()
+        .bundle(read_synthetic_caselist(SYNTHETIC_CASELIST), synthetic_staleness())
+        .files
+    )
     world = make_world(
         landscape_objects=landscape_store(
             {

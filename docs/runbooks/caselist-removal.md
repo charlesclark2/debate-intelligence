@@ -778,7 +778,9 @@ index id P3 published, and P4's counts. No cluster id, path, tag or card text go
 
 Since `v1-e32-t04`, a landscape bundle under `reports/landscape/<caselist>/<snapshot>/`, in the
 private bucket and in the operator's local `<data dir>/reports/landscape/`, holds a per-school view:
-`schools.csv` and `schools.md`, with schools and team codes as disclosed. The data-use policy keeps
+`schools.csv`, `school_rounds.csv` (since `v1-e32-t54`) and `schools.md`, with schools and team codes
+as disclosed, and in the last two the tournament, round and side of each round under its positions. The
+data-use policy keeps
 per-school views on the same clock as their sources and removes them with their sources. The
 circuit-wide files (`report.md` and its CSVs) name no school or team: a removal never touches them,
 and reaches them in the next report, as policy 1.13 says for quoted texts.
@@ -787,7 +789,7 @@ Since `v1-e32-t13`, `caselist remove` reaches the school views itself; the manua
 here on 2026-10-24 are gone. What to read and do, in the steps above:
 
 - **Step 4, the dry run.** Under *LANDSCAPE SCHOOL VIEWS* the plan lists, by side and key, every
-  `schools.csv` and `schools.md` of every bundle of each caselist the removal touches, on this
+  `schools.csv`, `school_rounds.csv` and `schools.md` of every bundle of each caselist the removal touches, on this
   machine and in the bucket. A key is a caselist, a snapshot and a file's name, nothing else. No
   circuit-wide file and no other caselist's bundle is ever listed. In dev and prod the bucket lines
   say *versions not counted*: the everyday profile may list `reports/` but not its versions, and
@@ -795,8 +797,8 @@ here on 2026-10-24 are gone. What to read and do, in the steps above:
   the section says *(none: …)*.
 - **A dry run that stops with `UNKNOWN_LANDSCAPE_FILE`.** A bundle of a caselist the removal touches
   holds a file that is neither a school view nor a circuit-wide file, and the error names its key.
-  Nothing was planned or changed. Look at the file. A `.schools.csv.incoming` or
-  `.schools.md.incoming` is a school view an interrupted `landscape report` left half-written:
+  Nothing was planned or changed. Look at the file. A `.schools.csv.incoming`,
+  `.school_rounds.csv.incoming` or `.schools.md.incoming` is a school view an interrupted `landscape report` left half-written:
   delete it on this machine and run the dry run again. Anything else, stop and tell the PM the key.
 - **Step 5, `--execute`.** It deletes them, every version, under the removal profile, after the
   `raw/` and `parsed/` objects and before the records. The `DONE` line says how many of the local
@@ -1347,7 +1349,7 @@ removal rewrote, and no more. The AWS CLI check in step 6 is still there for one
 
 ### Landscape school views
 
-A removal deletes the `schools.csv` and `schools.md` of every landscape bundle of each caselist it
+A removal deletes the `schools.csv`, `school_rounds.csv` and `schools.md` of every landscape bundle of each caselist it
 touches, here and in the bucket (`v1-e32-t13`, [Argument landscape bundles](#argument-landscape-bundles-e32)).
 So a school view of such a caselist written before the removal is one it should have taken. Status
 compares each with the latest completed removal **run** whose own scope names the caselist, by the

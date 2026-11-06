@@ -298,7 +298,11 @@ def test_the_school_view_lists_each_teams_rounds_under_its_positions_as_worked_o
 
 def test_school_round_lines_hold_exactly_the_reads_the_rows_count() -> None:
     view = _view()
-    reads = Counter((one.team_code, one.side.value, one.position_id) for one in view.round_lines if one.stance.value == "reads")
+    reads = Counter(
+        (one.team_code, one.side.value, one.position_id)
+        for one in view.round_lines
+        if one.stance.value == "reads"
+    )
     assert reads == Counter({(code, side, position): rounds for _, code, side, position, rounds in EXPECTED})
 
 
@@ -392,12 +396,21 @@ def _hand_view(
         answers={key: frozenset(map(round_id, found)) for key, found in (answers or {}).items()},
         holding=held,
     )
-    return school_view(caselist=disclosures[0].caselist, snapshot=NEWER, disclosures=disclosures, counted=counted)
+    return school_view(
+        caselist=disclosures[0].caselist, snapshot=NEWER, disclosures=disclosures, counted=counted
+    )
 
 
 def _shown(view: SchoolView) -> list[tuple[object, ...]]:
     return [
-        (one.team_code, one.position_id, one.stance.value, one.tournament, one.round_label, one.rounds_in_file)
+        (
+            one.team_code,
+            one.position_id,
+            one.stance.value,
+            one.tournament,
+            one.round_label,
+            one.rounds_in_file,
+        )
         for one in view.round_lines
     ]
 
@@ -414,10 +427,10 @@ def test_school_round_lines_are_newest_snapshot_first_then_tournament_then_lates
         _disclosure("c7", ALDER, "Round 1"),
         _disclosure("c8", BIRCHWATER, "Doubles"),
         _disclosure("c9", BIRCHWATER, "Finals"),
-        _disclosure("ca", BIRCHWATER, "R2", snapshot=NEWER),
+        _disclosure("ca", BIRCHWATER, "R7", snapshot=NEWER),
     ]
     expected = [
-        (BIRCHWATER, "R2"),
+        (BIRCHWATER, "R7"),
         (ALDER, "Round 1"),
         (BIRCHWATER, "Finals"),
         (BIRCHWATER, "Quarters"),
@@ -463,7 +476,9 @@ def test_a_file_disclosed_for_several_school_rounds_marks_them_by_this_teams_rou
         _disclosure("e4", ALDER, "Round 4"),
     ]
     reads = [disclosures[index] for index in (0, 1, 2, 3, 4, 6, 7)]
-    view = _hand_view(disclosures, reads={POSITION: reads}, holding={(POSITION, 4): {"e2", "e3"}, (POSITION, 7): {"e5"}})
+    view = _hand_view(
+        disclosures, reads={POSITION: reads}, holding={(POSITION, 4): {"e2", "e3"}, (POSITION, 7): {"e5"}}
+    )
     assert _shown(view) == [
         (QX, POSITION, "reads", ALDER, "Round 5", 2),
         (QX, POSITION, "reads", ALDER, "Round 3", 1),

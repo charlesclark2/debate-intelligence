@@ -856,9 +856,10 @@ run "removal_permission_set_deletes_disclosed_material_and_nothing_else" {
       "${aws_s3_bucket.evidence.arn}/quarantine/*",
       "${aws_s3_bucket.evidence.arn}/reports/tub/search/*",
       "${aws_s3_bucket.evidence.arn}/reports/landscape/*/schools.csv",
+      "${aws_s3_bucket.evidence.arn}/reports/landscape/*/school_rounds.csv",
       "${aws_s3_bucket.evidence.arn}/reports/landscape/*/schools.md",
     ])
-    error_message = "A takedown deletes under the five prefixes of disclosed material and reports/tub/search/, and the landscape bundles' two school-view files, exactly. Nothing else under reports/ gains a delete (v1-e39-t07, v1-e32-t13)."
+    error_message = "A takedown deletes under the five prefixes of disclosed material and reports/tub/search/, and the landscape bundles' three school-view files, exactly. Nothing else under reports/ gains a delete (v1-e39-t07, v1-e32-t13, v1-e32-t54)."
   }
 
   assert {
@@ -870,6 +871,7 @@ run "removal_permission_set_deletes_disclosed_material_and_nothing_else" {
         || startswith(resource, "${aws_s3_bucket.evidence.arn}/reports/tub/search/")
         || contains([
           "${aws_s3_bucket.evidence.arn}/reports/landscape/*/schools.csv",
+          "${aws_s3_bucket.evidence.arn}/reports/landscape/*/school_rounds.csv",
           "${aws_s3_bucket.evidence.arn}/reports/landscape/*/schools.md",
         ], resource)
       ])
@@ -878,9 +880,9 @@ run "removal_permission_set_deletes_disclosed_material_and_nothing_else" {
   }
 
   # v1-e32-t13: the landscape bundles' school views, which name schools and team codes, go with a
-  # removal. Exactly the two file names v1-e32-t04 gives them, in one statement of their own that
-  # may delete and do nothing else; no circuit-wide file (report.md, positions.csv, top_cards.csv,
-  # impact_cards.csv, trends.csv) and no bundle as a whole.
+  # removal. Exactly the three file names v1-e32-t04 and v1-e32-t54 give them, in one statement of
+  # their own that may delete and do nothing else; no circuit-wide file (report.md, positions.csv,
+  # top_cards.csv, impact_cards.csv, trends.csv) and no bundle as a whole.
   assert {
     condition = [
       for statement in jsondecode(aws_ssoadmin_permission_set_inline_policy.evidence_removal[0].inline_policy).Statement : {
@@ -892,10 +894,11 @@ run "removal_permission_set_deletes_disclosed_material_and_nothing_else" {
         actions = toset(["s3:DeleteObject", "s3:DeleteObjectVersion"])
         resources = toset([
           "${aws_s3_bucket.evidence.arn}/reports/landscape/*/schools.csv",
+          "${aws_s3_bucket.evidence.arn}/reports/landscape/*/school_rounds.csv",
           "${aws_s3_bucket.evidence.arn}/reports/landscape/*/schools.md",
         ])
     }]
-    error_message = "One statement reaches reports/landscape/ objects: it deletes schools.csv and schools.md, every version, and nothing else of a bundle (v1-e32-t13)."
+    error_message = "One statement reaches reports/landscape/ objects: it deletes schools.csv, school_rounds.csv and schools.md, every version, and nothing else of a bundle (v1-e32-t13, v1-e32-t54)."
   }
 
   assert {

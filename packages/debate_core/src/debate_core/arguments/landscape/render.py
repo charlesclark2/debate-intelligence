@@ -48,6 +48,11 @@ id; cards by rank). Nothing here computes a count; the service did.
   schools.md in a **Team page** column of both its **By school** tables (`v1-e32-t23`) and its
   **By position** section, which lists under each position, by kind, the teams that read it; a team's
   cell is the same in both. No circuit-wide file carries a link.
+* Since policy 1.23 (`v1-e32-t54`) the school view also names, under each team's positions, the
+  tournament, round and side of each round whose file holds it, as disclosed: in schools.md as a list
+  under each school's table (bold lines and nested bullets, never headings, so the pilot's pages keep
+  one page per school), and in **school_rounds.csv**, one row per team, position and round. schools.csv's
+  columns are unchanged, and no circuit-wide file names a tournament or a round.
 
 ## What is written exactly, and what is escaped
 
@@ -98,7 +103,7 @@ from debate_core.domain.landscape_report import (
     TableTagsWithheld,
     TopCard,
 )
-from debate_core.domain.landscape_schools import SchoolRound, SchoolRow, SchoolView
+from debate_core.domain.landscape_schools import RoundStance, SchoolRound, SchoolRow, SchoolView
 from debate_core.domain.landscape_texts import (
     QUOTED_KINDS,
     AnalyticTextKind,
@@ -204,6 +209,11 @@ position and round, the tournament and round as disclosed (empty when the filena
 or `AT`, the snapshot the round was first seen in, and how many of the team's rounds the file holding
 the position was disclosed for."""
 
+_SCHOOL_ROUNDS_SHOWS: Final = (
+    "school and team code as disclosed, the team's public openCaselist page, and beside each position the "
+    "tournament, round and side of each round whose file holds it, as disclosed, never more "
+    "(docs/policies/caselist-data-use.md, version 1.23); for the team only"
+)
 _SCHOOL_VIEW_SHOWS: Final = (
     "school and team code as disclosed, and the team's public openCaselist page, never more "
     "(docs/policies/caselist-data-use.md, version 1.14); for the team only"
@@ -1266,7 +1276,26 @@ def render_schools_csv(view: SchoolView, metadata: Mapping[str, str]) -> str:
 
 def render_school_rounds_csv(view: SchoolView, metadata: Mapping[str, str]) -> str:
     """school_rounds.csv: the header block, then one row per team, position and round (`v1-e32-t54`)."""
-    return _csv(metadata, "school_rounds", SCHOOL_ROUND_COLUMNS, ())
+    return _csv(
+        {**metadata, "shows": _SCHOOL_ROUNDS_SHOWS},
+        "school_rounds",
+        SCHOOL_ROUND_COLUMNS,
+        (
+            (
+                line.school,
+                line.team_code,
+                line.position_id,
+                line.stance.value,
+                line.side.value,
+                line.tournament or "",
+                line.round_label or "",
+                line.snapshot.isoformat(),
+                str(line.rounds_in_file),
+                view.team_page(line) or "",
+            )
+            for line in view.round_lines
+        ),
+    )
 
 
 def render_schools_markdown(view: SchoolView, report: LandscapeReport) -> str:
@@ -1279,9 +1308,10 @@ def render_schools_markdown(view: SchoolView, report: LandscapeReport) -> str:
     lines = [
         f"# Positions by school: {view.caselist} through {view.snapshot.isoformat()}",
         "",
-        "This page names schools and team codes exactly as they were disclosed, and links each team's "
-        "public openCaselist page, and nothing more: no debater, and no text from anyone's files. It is for "
-        "the team only, and stays on this machine and in the private bucket.",
+        "This page names schools and team codes exactly as they were disclosed, links each team's public "
+        "openCaselist page, and names under each team's positions the tournament, round and side of each "
+        "round whose file holds it, as disclosed, and nothing more: no debater, and no text from anyone's "
+        "files. It is for the team only, and stays on this machine and in the private bucket.",
         "",
         "Every count comes from files teams disclosed to the caselist (FILE_IMPORT), not from evidence the "
         "platform has verified. A row is a team's rounds on one side that the landscape report counts as "
@@ -1296,29 +1326,96 @@ def render_schools_markdown(view: SchoolView, report: LandscapeReport) -> str:
         f"| Coach's overrides | {header.overrides_digest} |",
         f"| Schools | {view.schools:,}, with {_count(view.teams, 'team code')} |",
         f"| Team pages | {_team_pages(view)} |",
+        f"| Round lines | {_round_lines_count(view)} |",
         f"| Left out | {left_out} |",
         "",
         "## By school",
         "",
+        _ROUND_LINES_LEAD,
+        "",
     ]
-    if not view.rows:
+    if not view.rows and not view.round_lines:
         lines += ["No team read a counted position in this range.", ""]
-    for _, rows in groupby(view.rows, key=lambda row: row.school.casefold()):
-        listed = list(rows)
-        lines += [
-            f"### {_cell(listed[0].school)}",
-            "",
-            "| Team code | Side | Position | Rounds | Team page |",
-            "|---|---|---|---|---|",
-        ]
-        lines += [
-            f"| {_cell(row.team_code)} | {row.side.value} | `{row.position_id}` | {row.rounds:,} | "
-            f"{_team_page_cell(view.team_page(row))} |"
-            for row in listed
-        ]
+    rows_of = {
+        school: list(rows) for school, rows in groupby(view.rows, key=lambda row: row.school.casefold())
+    }
+    lines_of = {
+        school: list(found)
+        for school, found in groupby(view.round_lines, key=lambda line: line.school.casefold())
+    }
+    for school in sorted(
+        rows_of.keys() | lines_of.keys(), key=lambda school: _school_order(school, rows_of, lines_of)
+    ):
+        listed = rows_of.get(school, [])
+        shown = listed[0].school if listed else lines_of[school][0].school
+        lines += [f"### {_cell(shown)}", ""]
+        if listed:
+            lines += ["| Team code | Side | Position | Rounds | Team page |", "|---|---|---|---|---|"]
+            lines += [
+                f"| {_cell(row.team_code)} | {row.side.value} | `{row.position_id}` | {row.rounds:,} | "
+                f"{_team_page_cell(view.team_page(row))} |"
+                for row in listed
+            ]
+        else:
+            lines.append("No team of this school read a counted position.")
         lines.append("")
+        lines += _school_round_lists(lines_of.get(school, []))
     lines += _by_position_section(view, report)
     return "\n".join(lines).rstrip("\n") + "\n"
+
+
+_ROUND_LINES_LEAD: Final = (
+    "Under each school's table, each team's rounds, one line per round under each position: the positions "
+    "the team reads first, in the table's order, then those it only answers. Lines are newest snapshot "
+    "first, and give the tournament and round exactly as the team's filename gave them, the round's side, "
+    'and `reads`, or `AT` where the round\'s file answers the position. "One file for N rounds" marks a '
+    "round whose file holding the position the team disclosed for N of its rounds, so those rounds may be "
+    "one file disclosed again rather than N rounds that each read it."
+)
+_NOT_DISCLOSED: Final = {"tournament": "no tournament disclosed", "round": "no round disclosed"}
+_LINE_START: Final = re.compile(r"^(\d+)([.)])|^([#+=-])")
+"""What, starting a list item's text, CommonMark reads as a list marker or a heading."""
+
+
+def _school_order(
+    school: str, rows_of: Mapping[str, list[SchoolRow]], lines_of: Mapping[str, list[SchoolRound]]
+) -> tuple[str, str]:
+    shown = rows_of[school][0].school if school in rows_of else lines_of[school][0].school
+    return (school, shown)
+
+
+def _round_lines_count(view: SchoolView) -> str:
+    at = sum(line.stance is RoundStance.AT for line in view.round_lines)
+    return f"{len(view.round_lines):,}: {len(view.round_lines) - at:,} reads, {at:,} AT"
+
+
+def _school_round_lists(lines: Sequence[SchoolRound]) -> list[str]:
+    """One school's teams, each its positions with a line per round (`v1-e32-t54`)."""
+    out: list[str] = []
+    for _, team in groupby(lines, key=lambda line: line.team_code):
+        listed = list(team)
+        out += [f"**{_cell(listed[0].team_code)}, round by round** (newest snapshot first)", ""]
+        for (position_id, answers_only), under in groupby(
+            listed, key=lambda line: (line.position_id, line.answers_only)
+        ):
+            out.append(f"- `{position_id}`" + (" (answers only)" if answers_only else ""))
+            out += [f"  - {_round_line(line)}" for line in under]
+        out.append("")
+    return out
+
+
+def _round_line(line: SchoolRound) -> str:
+    tournament = _item(line.tournament) if line.tournament else _NOT_DISCLOSED["tournament"]
+    played = _item(line.round_label) if line.round_label else _NOT_DISCLOSED["round"]
+    mark = f" (one file for {line.rounds_in_file:,} rounds)" if line.rounds_in_file > 1 else ""
+    return f"{tournament}, {played}, {line.side.value}, {line.stance.value}{mark}"
+
+
+def _item(text: str) -> str:
+    """`text` as a list item shows it: escaped as a cell is, and never read as a marker or a heading."""
+    return _LINE_START.sub(
+        lambda found: f"{found[1]}\\{found[2]}" if found[1] else f"\\{found[3]}", _cell(text)
+    )
 
 
 def _team_pages(view: SchoolView) -> str:

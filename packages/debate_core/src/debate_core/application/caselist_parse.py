@@ -48,10 +48,10 @@ about 1.3 GB in the main process for 250 `hspolicy26` sources, growing with ever
 card to a :class:`~debate_core.application.caselist_card_stats.CardPlacer` and keeps of it only its
 place in the table: its source, its paragraph range and its completeness. What must stay whole is
 what a cluster spanning sources needs, which the placer holds: a fingerprint per card, and the words of
-each distinct full body for the clusterer, as numbers (`v1-e31-t10`). The rows are then ordered by a key per row and built one
-at a time as the store writes them, so no list of rows is held either. The aggregates are the same
-bytes as before for the same store: cards are given in the order the one list was sorted into, by
-source and then first paragraph, and the rows are written in the same order.
+each distinct full body for the clusterer, as numbers (`v1-e31-t10`). The rows are then ordered by
+a key per row and built one at a time as the store writes them, so no list of rows is held either.
+The aggregates are the same bytes as before for the same store: cards are given in the order the one
+list was sorted into, by source and then first paragraph, and the rows are written in the same order.
 
 ## A failing source is an outcome
 

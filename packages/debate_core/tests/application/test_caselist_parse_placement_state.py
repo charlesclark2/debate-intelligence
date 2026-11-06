@@ -19,7 +19,7 @@ import json
 import logging
 import sqlite3
 import tempfile
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Coroutine
 from pathlib import Path
 from typing import Final
 
@@ -87,7 +87,9 @@ def week_one(world: PlacementWorld) -> None:
     )
 
 
-def in_a_world(test: Callable[[PlacementWorld], Awaitable[None]], *, incremental: bool = True) -> None:
+def in_a_world(
+    test: Callable[[PlacementWorld], Coroutine[object, object, None]], *, incremental: bool = True
+) -> None:
     with tempfile.TemporaryDirectory(prefix="placement-") as scratch:
         asyncio.run(test(PlacementWorld(Path(scratch), incremental=incremental)))
 

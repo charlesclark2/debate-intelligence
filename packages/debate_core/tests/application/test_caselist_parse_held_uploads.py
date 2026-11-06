@@ -24,7 +24,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-from collections.abc import Sequence
 from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Final
@@ -41,8 +40,9 @@ from tests.fixtures.parse_pipeline.build_parse_world import (
 )
 
 from debate_core.application.caselist.publish_service import SourceResult
-from debate_core.application.caselist_card_stats import CaselistCardStatsService, ClusterPlacement
+from debate_core.application.caselist_card_stats import CardPlacer
 from debate_core.application.ports.parsed_store import AGGREGATE_NAMES
+from debate_core.application.ports.placement_state import PlacedCard
 from debate_core.application.ports.suppression import (
     PathHoldEntry,
     ReasonCode,
@@ -51,9 +51,9 @@ from debate_core.application.ports.suppression import (
     disclosure_digest,
 )
 from debate_core.domain.debate_files import ParsedCard
+from debate_core.evidence.near_duplicates import NearDuplicateThresholds
 from debate_core.integrations.docx_parser import DOCX_PARSER_VERSION
 from debate_core.integrations.s3 import S3EvidenceObjectStore
-from debate_core.testing.fakes.caselist import build_fake_caselist_repository
 
 from .test_caselist_parse import THROUGH_0908, CountingParser, World, publisher, put_requests
 
@@ -180,18 +180,14 @@ async def test_a_held_uploads_cards_are_never_clustered_with_the_live_ones(world
     await world.run()
     await hold(world, HELD_ONLY_PATH)
     placed: list[str] = []
-    new_placer = CaselistCardStatsService(build_fake_caselist_repository()).placer
 
-    class Recording:
+    class Recording(CardPlacer):
         def __init__(self) -> None:
-            self._inner = new_placer()
+            super().__init__(NearDuplicateThresholds(), None)
 
-        def add(self, card: ParsedCard) -> None:
+        def add(self, card: ParsedCard) -> PlacedCard:
             placed.append(card.provenance.source_sha256)
-            self._inner.add(card)
-
-        def placements(self) -> Sequence[ClusterPlacement]:
-            return self._inner.placements()
+            return super().add(card)
 
     service = world.service()
     service._card_placer = Recording  # pyright: ignore[reportPrivateUsage]

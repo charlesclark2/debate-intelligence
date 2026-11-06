@@ -525,11 +525,16 @@ def test_a_school_round_by_no_team_or_on_no_side_is_no_line() -> None:
 
 
 def test_a_school_round_spelled_two_ways_shows_its_commonest_spelling() -> None:
+    """The commonest is the spelling that sorts first here, so neither the last nor the first in text
+    order would pass for it; first seen is the round's earliest snapshot, whatever it was spelled."""
+    shouted = "QUILLFEATHER INVITATIONAL"
     disclosures = [
         _disclosure("81", QUILL, "Round 4"),
-        _disclosure("81", "QUILLFEATHER INVITATIONAL", "R4", snapshot=NEWER),
-        _disclosure("81", QUILL, "Round 4", snapshot=NEWER),
+        _disclosure("81", shouted, "R4", snapshot=NEWER),
+        _disclosure("82", shouted, "R4", snapshot=NEWER),
     ]
     view = _hand_view(disclosures, reads={POSITION: disclosures[:1]})
-    assert _shown(view) == [(QX, POSITION, "reads", QUILL, "Round 4", 1)]
+    assert _shown(view) == [(QX, POSITION, "reads", shouted, "R4", 1)]
     assert view.round_lines[0].snapshot == WEEK
+    tie = _hand_view(disclosures[:2], reads={POSITION: disclosures[:1]})
+    assert _shown(tie) == [(QX, POSITION, "reads", shouted, "R4", 1)], "a tie goes to the first in text order"

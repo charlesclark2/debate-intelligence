@@ -737,8 +737,9 @@ async def test_rows_put_back_after_a_completed_removal_are_taken_again_with_the_
     assert reached(plan)[(Side.BUCKET, key)].action is AggregateAction.REWRITE
     assert (await world.service().execute(plan)).completed
 
-    (only_version,) = bucket_versions(world, key)
-    assert digest("only").encode() not in only_version[1]
+    left = bucket_versions(world, key)
+    assert len(left) == 1, "every version but the rewrite is deleted"
+    assert digest("only").encode() not in left[0][1]
 
 
 async def test_a_table_changed_since_the_plan_stops_the_run_with_nothing_written(world: RemovalWorld) -> None:

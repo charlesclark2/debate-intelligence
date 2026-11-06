@@ -142,12 +142,14 @@ __all__ = [
     "HELD_DIGESTS_FILENAME",
     "PATH_HOLDS_FILENAME",
     "REINSTATEMENT_REASONS",
+    "REMOVAL_AGGREGATES_FILENAME",
     "REMOVAL_REASONS",
     "REMOVAL_SCOPES_FILENAME",
     "REQUEST_ID_PATTERN",
     "SUPPRESSION_SCHEMA_VERSION",
     "TOUCHED_CASELIST_PATTERN",
     "AppendOnlyRecord",
+    "AggregateRewriteRecord",
     "AppendOnlyViolation",
     "HeldDigestEntry",
     "HeldDigestList",
@@ -159,6 +161,8 @@ __all__ = [
     "ReasonCode",
     "RemovalLog",
     "RemovalLogEntry",
+    "RemovalAggregatesEntry",
+    "RemovalAggregatesLog",
     "RemovalLogKind",
     "RemovalOutcome",
     "RemovalScopeEntry",
@@ -189,6 +193,10 @@ HELD_DIGESTS_FILENAME: Final = "held-digests.jsonl"
 """The held-digest record's file name, beside the path holds in both places (`v1-e30-t23`)."""
 REMOVAL_SCOPES_FILENAME: Final = "removal-scopes.jsonl"
 """The removal-scope record's file name, beside the removal log in both places (`v1-e30-t15`)."""
+REMOVAL_AGGREGATES_FILENAME: Final = "removal-aggregates.jsonl"
+"""The aggregate record's file name, beside the removal log in both places (`v1-e30-t33`): a record of
+its own, not more fields of a scope line, because every installed build reads `removal-scopes.jsonl`
+with a model that refuses a key it does not know."""
 WITHDRAWALS_FILENAME: Final = "withdrawals.jsonl"
 """The withdrawal record's file name, beside the list and the log in both places (`v1-e30-t16`)."""
 
@@ -663,6 +671,60 @@ class RemovalScopeEntry(DomainModel):
         return cls.model_validate_json(line)
 
 
+_AGGREGATE_KEY_PATTERN: Final = (
+    r"^parsed/([a-z]+[0-9]{2}|openev)/[A-Za-z0-9][A-Za-z0-9._-]*/"
+    r"(index|failures|occurrences|camp_paths)\.jsonl$"
+)
+
+
+class AggregateRewriteRecord(DomainModel):
+    """One aggregate a removal reached in the bucket, and the version of it that is now clean (`v1-e30-t33`).
+
+    The removal rewrote it without the removed rows, or found it holding none and kept it, and purged
+    every other version older than its completion: so any such version is one it should have taken.
+    The key is a caselist, a version directory and a file name: never a school, a team code or a path.
+    """
+
+    key: Annotated[str, StringConstraints(pattern=_AGGREGATE_KEY_PATTERN)]
+    version_id: Annotated[str, StringConstraints(pattern=_VERSION_ID_PATTERN)] | None
+    """The clean version's id, or `None` where the bucket keeps no versions."""
+
+
+class RemovalAggregatesEntry(DomainModel):
+    """What one removal execution did to the parsed store's aggregates in the bucket (`v1-e30-t33`).
+
+    Written beside the log, just before its entry and joined to it as a scope is (:meth:`joins`), by a
+    build carrying `v1-e30-t33`. `caselist status` counts an aggregate version older than the removal
+    as residue only in what this names, and never the clean version itself; a removal without one was
+    made by a build that deleted every aggregate of every caselist, and is compared as before.
+    """
+
+    schema_version: Literal[1] = SUPPRESSION_SCHEMA_VERSION
+    recorded_at: UtcDatetime
+    """The removal-log entry's own `recorded_at`."""
+    request_id: RequestId | None
+    environment: Annotated[str, StringConstraints(pattern=r"^(dev|prod|test)$")]
+    kept: tuple[AggregateRewriteRecord, ...]
+    """Each aggregate rewritten, or kept because it held no removed row, with its clean version."""
+    deleted: tuple[Annotated[str, StringConstraints(pattern=_AGGREGATE_KEY_PATTERN)], ...]
+    """Each aggregate of a directory retention had tagged, deleted with every version."""
+
+    def joins(self, entry: RemovalLogEntry) -> bool:
+        """Whether this is `entry`'s record: the same environment, request and moment."""
+        return (self.environment, self.request_id, self.recorded_at) == (
+            entry.environment,
+            entry.request_id,
+            entry.recorded_at,
+        )
+
+    def to_line(self) -> str:
+        return canonical_line(self)
+
+    @classmethod
+    def from_line(cls, line: str) -> RemovalAggregatesEntry:
+        return cls.model_validate_json(line)
+
+
 class UnreadableAppendOnlyRecord(DomainError):
     """A copy of the suppression list or removal log holds a line this build cannot read.
 
@@ -796,6 +858,15 @@ class RemovalScopeLog(Protocol):
 
     async def scopes(self) -> tuple[RemovalScopeEntry, ...]:
         """Every scope entry on every copy, deduplicated. A record that does not exist has none."""
+        ...
+
+
+@runtime_checkable
+class RemovalAggregatesLog(Protocol):
+    """A removal log that keeps the aggregate record beside it (`v1-e30-t33`)."""
+
+    async def aggregate_records(self) -> tuple[RemovalAggregatesEntry, ...]:
+        """Every aggregate record on every copy, deduplicated. A record that does not exist has none."""
         ...
 
 

@@ -142,12 +142,29 @@ what it says about a team is read from its manifest alone.
 
 ## The parsed card store's aggregates
 
-A source parsed by `caselist parse` (`v1-e31-t06`) is in more than its own per-source file: the
-caselist's `index.jsonl`, `failures.jsonl` and `occurrences.jsonl` hold rows derived from it, and
-from each of its disclosures. Every one of those files, in every version directory of every
-caselist the removal removes or withdraws anything from, is planned for deletion with its versions,
-here and in the bucket (:attr:`ObjectKind.PARSED_AGGREGATE`). They hold nothing that cannot be
-rebuilt, and the next `caselist parse` rebuilds the current directory's without what was removed.
+A source parsed by `caselist parse` (`v1-e31-t06`) is in more than its own per-source file: its
+version directory's `index.jsonl`, `failures.jsonl` and `occurrences.jsonl`, and OpenEv's
+`camp_paths.jsonl`, hold rows derived from it and from each of its disclosures. The PM's ruling of
+2026-11-05 (`v1-e30-t33`) is what the plan does with them (:attr:`RemovalPlan.aggregates`):
+
+* **Which.** On each side, the aggregates of exactly the version directories where that side holds a
+  per-source file of something the plan removes or withdraws, current or in any version. A
+  directory's aggregates are built from its own per-source files alone, and a publish sends those
+  first, so no other directory holds a row of it. A re-run also reads the current aggregates of every
+  version directory of each caselist an earlier run of the request recorded in its scope, or the
+  withdrawal record names, and takes the directories still holding a row to take out, or where a
+  table the request reached before keeps an older version its purge should have taken.
+* **What.** Each is rewritten without the rows a rebuild after the removal would not write
+  (:class:`~debate_core.application.caselist.removal_aggregates.RowsRemoved`), every other line kept
+  byte for byte, and in the bucket every other version is purged. The dry run downloads each to count
+  its rows. One holding no such row is kept, its older versions purged, or left alone. Nothing is
+  rebuilt afterwards. :mod:`~debate_core.application.caselist.removal_aggregates` lists every file a
+  version directory holds and what each carries from one source.
+* **A retired directory**, one retention has tagged for the lifecycle (`v1-e31-t16`), is not rewritten,
+  since the rewrite would be a new version without the tag and never expire: its reached aggregates
+  are deleted with every version, as before, and nothing is rebuilt, since nothing reads it.
+* **A line it cannot read** makes the table :attr:`AggregateAction.UNREADABLE`, and the execution
+  stops before it writes anything.
 
 ## The landscape bundles' school views (`v1-e32-t13`)
 
@@ -253,6 +270,12 @@ from debate_core.application.caselist.publish_plan import (
     manifest_prefix,
     snapshot_of_manifest_key,
 )
+from debate_core.application.caselist.removal_aggregates import (
+    RowsRemoved,
+    TableRewrite,
+    UnreadableAggregateLine,
+    rewrite_directory,
+)
 from debate_core.application.caselist.removal_path_versions import (
     PathHolding,
     PathVersion,
@@ -261,6 +284,7 @@ from debate_core.application.caselist.removal_path_versions import (
     path_identity,
     snapshot_date,
 )
+from debate_core.application.caselist.removal_residue import CLOCK_SKEW_MARGIN as _SKEW
 from debate_core.application.caselist.removal_school_views import (
     LANDSCAPE_PREFIX,
     SchoolViewReach,
@@ -272,9 +296,9 @@ from debate_core.application.caselist.suppression import read_held_digests, read
 from debate_core.application.errors import DomainError, StoreAccessDenied
 from debate_core.application.ports.caselist import CaselistRepository
 from debate_core.application.ports.caselist_source import openev_id_of_inbox_name
-from debate_core.application.ports.evidence_store import EvidenceObjectStore, ObjectKey
+from debate_core.application.ports.evidence_store import EvidenceObjectStore, ObjectInfo, ObjectKey
 from debate_core.application.ports.evidence_versions import EvidenceVersionStore, ObjectVersion
-from debate_core.application.ports.parsed_store import REBUILT_NAMES
+from debate_core.application.ports.parsed_store import PARSED_PREFIX, REBUILT_NAMES, source_digest_of_key
 from debate_core.application.ports.providers import Clock
 from debate_core.application.ports.suppression import (
     REMOVAL_REASONS,
@@ -282,8 +306,12 @@ from debate_core.application.ports.suppression import (
     HeldDigestEntry,
     PathHoldEntry,
     ReasonCode,
+    RemovalAggregatesEntry,
+    RemovalAggregatesLog,
     RemovalLogEntry,
+    RemovalLogKind,
     RemovalLogWithScopes,
+    RemovalOutcome,
     RemovalScopeEntry,
     RemovalSelectorKind,
     SuppressionAction,
@@ -295,10 +323,13 @@ from debate_core.application.ports.suppression import (
     camp_path_scope,
     disclosure_digest,
 )
+from debate_core.application.ports.version_directories import RetirementTags
 from debate_core.domain import SHA256_HEX_PATTERN, Sha256Hex
 from debate_core.domain.caselist import CASELIST_SLUG_PATTERN, CampFile, Disclosure, Event
 
 __all__ = [
+    "AggregateAction",
+    "AggregateChange",
     "Disposition",
     "Inclusion",
     "InvalidRemovalRequest",
@@ -453,8 +484,6 @@ class ObjectKind(StrEnum):
     """The bucket's copy: `raw/caselist/<slug>/…` or `raw/openev/<year>/…`."""
     PARSED = "parsed"
     """Cards derived from it, under `parsed/` locally and in the bucket (E31)."""
-    PARSED_AGGREGATE = "parsed_aggregate"
-    """An index, failures or occurrence file of a caselist the removal touches (`v1-e31-t06`)."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -564,6 +593,58 @@ class ObjectRemoval:
     """Every version the store listed, or `None` when this credential cannot list versions."""
 
 
+class AggregateAction(StrEnum):
+    """What a removal does to one aggregate it reaches (`v1-e30-t33`)."""
+
+    REWRITE = "rewrite"
+    """Rewritten without the rows that name what is removed; every other version purged."""
+    PURGE = "purge"
+    """It holds no such row now: kept as it is, its older versions purged (or every version, when no
+    current one is left to keep)."""
+    LEFT = "left"
+    """It holds no such row and has no older version to purge: nothing is done to it."""
+    DELETE = "delete"
+    """Its version directory is retired (tagged for the lifecycle): deleted with every version, not
+    rewritten, since a rewrite would be a new version without the tag that expires it."""
+    UNREADABLE = "unreadable"
+    """A line of it cannot be read: `--execute` stops before writing anything, and says which line."""
+
+
+@dataclass(frozen=True, slots=True)
+class AggregateChange:
+    """One aggregate of a version directory that holds a parsed file of what the removal takes out.
+
+    On this machine the key is the store's, `<caselist>/<version>/<name>`; in the bucket it is
+    `parsed/<caselist>/<version>/<name>`. A caselist, a parser version and a file name: never a path
+    of a disclosure.
+    """
+
+    key: ObjectKey
+    side: Side
+    caselist: str
+    version: str
+    name: str
+    action: AggregateAction
+    rows: int | None = None
+    """Rows in the current table as the plan read it; `None` when it was not read."""
+    rows_dropped: int | None = None
+    """Rows of it that name what the removal takes out; `None` when it was not read."""
+    bytes: int | None = None
+    """The current table's size, or `None` when no current version is left."""
+    sha256: Sha256Hex | None = None
+    """The digest of the current bytes the plan read: the execution rewrites only those bytes."""
+    versions: tuple[ObjectVersion, ...] | None = ()
+    """In the bucket, the versions the execution deletes besides the current one it rewrites: the older
+    ones, or for :attr:`AggregateAction.DELETE` every one. `None` when they could not be listed."""
+    unreadable_line: int | None = None
+    retirement_read: bool = True
+    """False when the bucket's retirement tags could not be read, so the directory was taken as live."""
+
+    @property
+    def acts(self) -> bool:
+        return self.action is not AggregateAction.LEFT
+
+
 @dataclass(frozen=True, slots=True)
 class SchoolViewRemoval:
     """One landscape school-view file a removal deletes (`v1-e32-t13`).
@@ -638,6 +719,17 @@ class RemovalPlan:
     school_views: tuple[SchoolViewRemoval, ...] = ()
     """The school-view files :attr:`school_view_reach` takes, on this machine and in the bucket, as the
     dry run's credential sees them."""
+    aggregates: tuple[AggregateChange, ...] = ()
+    """Each aggregate of each version directory, here and in the bucket, that holds a parsed file of
+    what the removal takes out (`v1-e30-t33`): see "The parsed card store's aggregates"."""
+    aggregate_cutoff: datetime | None = None
+    """When this request's latest earlier run completed, if one did: an older version of an aggregate
+    written after it is not one the removal has to purge again."""
+    aggregate_clean: frozenset[tuple[ObjectKey, str | None]] = frozenset()
+    """The aggregate versions this request's earlier runs left clean, by their records."""
+    aggregates_reached_before: frozenset[ObjectKey] = frozenset()
+    """Every aggregate this request's earlier runs reached in the bucket, by their records: where a
+    re-run purges an older version their purges should have taken, as `caselist status` counts it."""
     school_view_versions_counted: bool = True
     """Whether the bucket's school-view versions were listed. The everyday profile may list
     `reports/` but not its versions, so in dev and prod they are not: kept apart from
@@ -727,19 +819,61 @@ class RemovalPlan:
     def manifests_on(self, side: Side) -> tuple[ManifestRewrite, ...]:
         return tuple(rewrite for rewrite in self.manifests if rewrite.side is side)
 
+    def aggregates_on(self, side: Side) -> tuple[AggregateChange, ...]:
+        return tuple(change for change in self.aggregates if change.side is side)
+
+    def rows_removed(self, caselist: str) -> RowsRemoved:
+        """Which rows of `caselist`'s aggregates this plan takes out (:class:`RowsRemoved`).
+
+        A file removed whole loses every row; a withdrawn file every row in a caselist it takes the copy
+        from, and elsewhere the rows the list will stop, asked of each row; a camp file the rows of a
+        release it leaves no live camp path of.
+        """
+        whole: set[str] = set()
+        asked: set[str] = set()
+        emptied: set[tuple[str, str]] = set()
+        for source in self.sources:
+            if source.disposition is Disposition.REMOVE:
+                whole.add(source.sha256)
+            elif source.disposition is Disposition.WITHDRAW:
+                if caselist in _copies_taken(source):
+                    whole.add(source.sha256)
+                elif caselist in _rows_asked_in(source):
+                    asked.add(source.sha256)
+                if caselist == OPENEV:
+                    emptied |= {
+                        (source.sha256, openev_release_name(ref.year, ref.event)) for ref in source.camp_files
+                    }
+        return RowsRemoved(
+            whole=frozenset(whole),
+            asked=frozenset(asked - whole),
+            emptied_releases=frozenset(emptied),
+            state=self.suppression_after,
+        )
+
+    def purges(self, version: ObjectVersion) -> bool:
+        """Whether an older aggregate version is one the execution deletes: any, on a first run; on a
+        re-run of a request that completed, one written before that completion and not left clean."""
+        if (version.key, version.version_id) in self.aggregate_clean:
+            return False
+        if self.aggregate_cutoff is None:
+            return True
+        return version.last_modified is not None and version.last_modified < self.aggregate_cutoff - _SKEW
+
     @property
     def touched_caselists(self) -> tuple[str, ...]:
         """The caselists that hold a file this plan removes or withdraws (`v1-e30-t15`).
 
         Where a manifest it rewrites is filed, where an object it deletes under `raw/` or `parsed/`
         is named for the file, where a record it deletes was disclosed, and where it withdraws a
-        copy from; OpenEv for a camp file. Not every caselist whose aggregates it deletes: a removal
-        deletes those of every caselist, and only one that held the file can hold a row of it.
+        copy from; OpenEv for a camp file; and where it rewrites an aggregate, which only a caselist that
+        held the file has (`v1-e30-t33`).
         """
         touched: set[str] = {rewrite.key.split("/")[1] for rewrite in self.manifests}
         for planned in self.objects:
-            if planned.side is Side.BUCKET and planned.kind is not ObjectKind.PARSED_AGGREGATE:
+            if planned.side is Side.BUCKET:
                 touched.add(_caselist_of_bucket_key(planned.key))
+        touched.update(change.caselist for change in self.aggregates if change.acts)
         for source in self.sources:
             if source.disposition is Disposition.SKIP_SHARED:
                 continue
@@ -762,6 +896,7 @@ class RemovalPlan:
             and not self.inbox
             and self.superseded_versions == ()
             and not self.school_views
+            and not any(change.acts for change in self.aggregates)
         )
 
     def school_views_on(self, side: Side) -> tuple[SchoolViewRemoval, ...]:
@@ -874,12 +1009,16 @@ class _BucketIndex:
     def __init__(self, remote: EvidenceObjectStore, versions: EvidenceVersionStore) -> None:
         self._remote = remote
         self._versions = versions
-        self._current: dict[str, set[str]] = {}
+        self._current: dict[str, dict[str, ObjectInfo]] = {}
         self._listed: dict[str, dict[str, list[ObjectVersion]] | None] = {}
 
     async def current(self, prefix: str) -> set[str]:
+        return set(await self.infos(prefix))
+
+    async def infos(self, prefix: str) -> dict[str, ObjectInfo]:
+        """The current objects under `prefix` by key, with their sizes."""
         if prefix not in self._current:
-            self._current[prefix] = {info.key for info in await self._remote.list_objects(prefix)}
+            self._current[prefix] = {info.key: info for info in await self._remote.list_objects(prefix)}
         return self._current[prefix]
 
     async def versions(self, prefix: str) -> dict[str, list[ObjectVersion]] | None:
@@ -905,6 +1044,10 @@ class RemovalPlanner:
         local: This machine's manifests (and blobs, as named objects).
         local_blobs: This machine's blob tree, as the takedown sees it (one version per file).
         local_parsed: This machine's parsed-card tree (E31), likewise. Empty until E31 writes one.
+        local_parsed_objects: The same tree as named objects, keyed as `local_parsed` keys it, from
+            which the plan reads the aggregates it reaches to count their rows (`v1-e30-t33`).
+        retirement: Reads the bucket's retirement tags, so a retired directory's aggregates are
+            deleted and not rewritten (`v1-e30-t33`). `None` reads none: every directory is live.
         local_reports: The data directory as the takedown sees it, keyed as the bucket is, for the
             landscape bundles under `reports/landscape/` (`v1-e32-t13`). Required, like the inbox.
         remote: The environment's bucket through the everyday profile: listings, heads, manifests.
@@ -932,6 +1075,7 @@ class RemovalPlanner:
         local: LocalEvidence,
         local_blobs: EvidenceVersionStore,
         local_parsed: EvidenceVersionStore,
+        local_parsed_objects: EvidenceObjectStore,
         local_reports: EvidenceVersionStore,
         remote: EvidenceObjectStore,
         remote_versions: EvidenceVersionStore,
@@ -941,11 +1085,14 @@ class RemovalPlanner:
         clock: Clock,
         environment: str,
         bucket: str,
+        retirement: RetirementTags | None = None,
     ) -> None:
         self._caselists = caselists
         self._local = local
         self._local_blobs = local_blobs
         self._local_parsed = local_parsed
+        self._local_parsed_objects = local_parsed_objects
+        self._retirement = retirement
         self._local_reports = local_reports
         self._remote = remote
         self._remote_versions = remote_versions
@@ -1159,6 +1306,17 @@ class RemovalPlanner:
             path_holds=path_holds,
             earlier_rewrites=earlier_rewrites,
         )
+        cutoff, clean, reached_before = await self._earlier_aggregate_runs(log_entries, request_id)
+        plan = replace(
+            plan, aggregate_cutoff=cutoff, aggregate_clean=clean, aggregates_reached_before=reached_before
+        )
+        earlier_caselists = {
+            caselist
+            for scope in scopes
+            if scope.request_id == request_id and scope.environment == self._environment
+            for caselist in scope.caselists
+        }
+        plan = replace(plan, aggregates=await self._aggregates(plan, caselists, index, earlier_caselists))
         reach = self._school_view_reach(plan, log_entries, scopes)
         school_views, school_versions_counted = await self._school_views(reach)
         return replace(
@@ -1168,6 +1326,212 @@ class RemovalPlanner:
             school_views=school_views,
             school_view_versions_counted=school_versions_counted,
         )
+
+    # -- the parsed store's aggregates (v1-e30-t33) ------------------------------------------------
+
+    async def _earlier_aggregate_runs(
+        self, entries: Sequence[RemovalLogEntry], request_id: str
+    ) -> tuple[datetime | None, frozenset[tuple[ObjectKey, str | None]], frozenset[ObjectKey]]:
+        """When this request's latest earlier run completed, the aggregate versions its runs left
+        clean, which a re-run need not purge again, and every aggregate they reached."""
+        completed = [
+            entry.recorded_at
+            for entry in entries
+            if entry.kind is RemovalLogKind.REMOVAL
+            and entry.environment == self._environment
+            and entry.request_id == request_id
+            and entry.outcome is RemovalOutcome.COMPLETED
+        ]
+        records: tuple[RemovalAggregatesEntry, ...] = (
+            await self._removal_log.aggregate_records()
+            if isinstance(self._removal_log, RemovalAggregatesLog)
+            else ()
+        )
+        mine = [
+            record
+            for record in records
+            if record.request_id == request_id and record.environment == self._environment
+        ]
+        clean = frozenset((one.key, one.version_id) for record in mine for one in record.kept)
+        keys = frozenset(
+            key for record in mine for key in (*(one.key for one in record.kept), *record.deleted)
+        )
+        return (max(completed) if completed else None), clean, keys
+
+    async def _aggregates(
+        self,
+        plan: RemovalPlan,
+        caselists: Sequence[str],
+        index: _BucketIndex,
+        earlier_caselists: Collection[str],
+    ) -> tuple[AggregateChange, ...]:
+        """Every aggregate of every version directory that holds a parsed file of what `plan` takes out.
+
+        On each side, the directories where that side holds the per-source file of a removed or
+        withdrawn digest, current or in any version: a directory's aggregates are built from its own
+        per-source files alone, and a publish sends those before the aggregates, so no other directory
+        can hold a row of it. A re-run also reads the current aggregates of every version directory of
+        each caselist an earlier run of the request recorded, or the withdrawal record names, and takes
+        a directory one of whose tables still holds a row to take out (what a run by an earlier build,
+        which deleted the per-source files first, could leave), or where a table the request reached
+        before has an older version its purge should have taken (what `caselist status` counts).
+        """
+        acting = [source for source in plan.sources if source.disposition is not Disposition.SKIP_SHARED]
+        if not acting:
+            return ()
+        digests = {source.sha256 for source in acting}
+        scanned: set[str] = set()
+        for source in acting:
+            scanned |= set(caselists) if source.disposition is Disposition.REMOVE else _rows_asked_in(source)
+        reached: set[tuple[Side, str, str]] = set()
+        for caselist in sorted(scanned):
+            reached |= await self._directories_holding(caselist, digests, index)
+        again = set(earlier_caselists) | {name for source in acting for name in source.withdrawn_earlier_from}
+        changes: list[AggregateChange] = []
+        for side, caselist, version in sorted(reached):
+            changes += await self._directory_changes(side, caselist, version, plan, index)
+        for caselist in sorted(again):
+            for side, version in await self._version_directories(caselist, index):
+                if (side, caselist, version) in reached:
+                    continue
+                found = await self._directory_changes(side, caselist, version, plan, index)
+                if any(_still_to_take(change, plan) for change in found):
+                    changes += found
+        return tuple(changes)
+
+    async def _directories_holding(
+        self, caselist: str, digests: Collection[str], index: _BucketIndex
+    ) -> set[tuple[Side, str, str]]:
+        """`(side, caselist, version)` of each directory holding a per-source file of one of `digests`."""
+        found: set[tuple[Side, str, str]] = set()
+        prefix = f"{PARSED_PREFIX}/{caselist}/"
+        listed = await index.versions(prefix)
+        for key in (await index.current(prefix)) | set(listed or {}):
+            if source_digest_of_key(key.removeprefix(f"{PARSED_PREFIX}/")) in digests:
+                found.add((Side.BUCKET, caselist, key.split("/")[2]))
+        for version in await self._local_parsed.list_versions(f"{caselist}/"):
+            if source_digest_of_key(version.key) in digests:
+                found.add((Side.LOCAL, caselist, version.key.split("/")[1]))
+        return found
+
+    async def _version_directories(self, caselist: str, index: _BucketIndex) -> list[tuple[Side, str]]:
+        """Every version directory of `caselist` holding an aggregate, on each side."""
+        found: set[tuple[Side, str]] = set()
+        prefix = f"{PARSED_PREFIX}/{caselist}/"
+        listed = await index.versions(prefix)
+        for key in (await index.current(prefix)) | set(listed or {}):
+            if _is_parsed_aggregate(key, prefix):
+                found.add((Side.BUCKET, key.split("/")[2]))
+        for version in await self._local_parsed.list_versions(f"{caselist}/"):
+            if _is_parsed_aggregate(version.key, f"{caselist}/"):
+                found.add((Side.LOCAL, version.key.split("/")[1]))
+        return sorted(found)
+
+    async def _directory_changes(
+        self, side: Side, caselist: str, version: str, plan: RemovalPlan, index: _BucketIndex
+    ) -> list[AggregateChange]:
+        """What the removal does to each aggregate of one version directory on one side."""
+        rows_removed = plan.rows_removed(caselist)
+        if side is Side.LOCAL:
+            base = f"{caselist}/{version}/"
+            present = {one.key for one in await self._local_parsed.list_versions(base)}
+            names = [name for name in REBUILT_NAMES if f"{base}{name}" in present]
+            counted = await self._counted(
+                names,
+                rows_removed,
+                base,
+                self._local_parsed_objects,
+                label=f"{base.rstrip('/')} on this machine",
+            )
+            return [
+                _change(Side.LOCAL, caselist, version, name, f"{base}{name}", counted[name], ())
+                for name in names
+            ]
+        base = f"{PARSED_PREFIX}/{caselist}/{version}/"
+        infos = await index.infos(f"{PARSED_PREFIX}/{caselist}/")
+        listed = await index.versions(f"{PARSED_PREFIX}/{caselist}/")
+        names = [
+            name for name in REBUILT_NAMES if f"{base}{name}" in infos or f"{base}{name}" in (listed or {})
+        ]
+        current = [name for name in names if f"{base}{name}" in infos]
+        retired, read = await self._retired([f"{base}{name}" for name in current])
+        changes: list[AggregateChange] = []
+        counted = (
+            {}
+            if retired
+            else await self._counted(
+                current, rows_removed, base, self._remote, label=f"{base.rstrip('/')} in the bucket"
+            )
+        )
+        for name in names:
+            key = f"{base}{name}"
+            every = None if listed is None else tuple(listed.get(key, ()))
+            info = infos.get(key)
+            if retired:
+                changes.append(
+                    AggregateChange(
+                        key=key,
+                        side=Side.BUCKET,
+                        caselist=caselist,
+                        version=version,
+                        name=name,
+                        action=AggregateAction.DELETE,
+                        bytes=None if info is None else info.size,
+                        versions=every,
+                    )
+                )
+                continue
+            older = (
+                None
+                if every is None
+                else tuple(one for one in every if not _is_current(one) and plan.purges(one))
+            )
+            changes.append(
+                _change(
+                    Side.BUCKET,
+                    caselist,
+                    version,
+                    name,
+                    key,
+                    counted.get(name),
+                    older,
+                    retirement_read=read,
+                )
+            )
+        return changes
+
+    async def _counted(
+        self,
+        names: Sequence[str],
+        rows_removed: RowsRemoved,
+        base: str,
+        store: EvidenceObjectStore,
+        *,
+        label: str,
+    ) -> dict[str, TableRewrite | UnreadableAggregateLine]:
+        """Each current table of a directory, downloaded and counted, then let go."""
+        if not names:
+            return {}
+        with tempfile.TemporaryDirectory(prefix="debate-removal-aggregates-") as directory:
+            tables: dict[str, Path] = {}
+            for name in names:
+                tables[name] = Path(directory) / name
+                await store.get_file(f"{base}{name}", tables[name])
+            return rewrite_directory(tables, rows_removed, label=label)
+
+    async def _retired(self, keys: Sequence[str]) -> tuple[bool, bool]:
+        """Whether retention has tagged the directory these current aggregates are in, and whether the
+        tags could be read. Any of them tagged is the directory retired: retiring tags one object at a
+        time, and a rewrite of a tagged one would drop its tag."""
+        if self._retirement is None or not keys:
+            return False, self._retirement is not None
+        try:
+            for key in keys:
+                if await self._retirement.retired(key):
+                    return True, True
+        except StoreAccessDenied:
+            return False, False
+        return False, True
 
     def _earlier_rewrites(
         self, entries: Sequence[RemovalLogEntry], scopes: Sequence[RemovalScopeEntry], request_id: str
@@ -1698,7 +2062,6 @@ class RemovalPlanner:
     ) -> tuple[list[ObjectRemoval], bool]:
         counted = True
         objects: list[ObjectRemoval] = []
-        aggregates_planned: set[tuple[Side, str]] = set()
         disclosing = [name for name in caselists if name != OPENEV]
         openev_years = sorted({copy.release[:4] for copy in copies if copy.caselist == OPENEV})
         for source in sources:
@@ -1726,10 +2089,7 @@ class RemovalPlanner:
                 # year's copy goes only when no other release of that year holds it (v1-e30-t14).
                 # A re-run also takes the caselists the withdrawal record names, whose paths the
                 # first run's deletions left nothing to show (v1-e30-t19).
-                withdrawn_from = {name for name, _ in source.requester_paths} | set(
-                    source.withdrawn_earlier_from
-                )
-                parsed_caselists = sorted(withdrawn_from - set(source.kept_in))
+                parsed_caselists = _copies_taken(source)
                 raw_prefixes = [
                     f"{CASELIST_SOURCE_PREFIX}/{name}/" for name in parsed_caselists if name != OPENEV
                 ]
@@ -1777,44 +2137,6 @@ class RemovalPlanner:
                     for version in await self._local_parsed.list_versions(f"{caselist}/")
                     if _names_digest(version.key, digest)
                 )
-            # Every caselist with a row derived from this source or one of the withdrawn disclosures,
-            # including one where another team keeps the file: its occurrence rows still go.
-            touched = {
-                *parsed_caselists,
-                *(name for name, _ in source.requester_paths),
-                *source.withdrawn_earlier_from,
-            }
-            for caselist in sorted(touched):
-                prefix = f"parsed/{caselist}/"
-                listed = await index.versions(prefix)
-                keys = {key for key in await index.current(prefix) if _is_parsed_aggregate(key, prefix)}
-                keys |= {key for key in (listed or {}) if _is_parsed_aggregate(key, prefix)}
-                for key in sorted(keys - {key for side, key in aggregates_planned if side is Side.BUCKET}):
-                    aggregates_planned.add((Side.BUCKET, key))
-                    objects.append(
-                        ObjectRemoval(
-                            key=key,
-                            side=Side.BUCKET,
-                            kind=ObjectKind.PARSED_AGGREGATE,
-                            sha256=digest,
-                            versions=None if listed is None else tuple(listed.get(key, [])),
-                        )
-                    )
-                for version in await self._local_parsed.list_versions(f"{caselist}/"):
-                    if (
-                        _is_parsed_aggregate(version.key, f"{caselist}/")
-                        and (Side.LOCAL, version.key) not in aggregates_planned
-                    ):
-                        aggregates_planned.add((Side.LOCAL, version.key))
-                        objects.append(
-                            ObjectRemoval(
-                                key=version.key,
-                                side=Side.LOCAL,
-                                kind=ObjectKind.PARSED_AGGREGATE,
-                                sha256=digest,
-                                versions=(version,),
-                            )
-                        )
         return objects, counted
 
 
@@ -2268,6 +2590,77 @@ def _with_its_recorded_withdrawals(
     if source.disposition is not Disposition.WITHDRAW or source.sha256 not in recorded:
         return source
     return replace(source, withdrawn_earlier_from=recorded[source.sha256])
+
+
+def _still_to_take(change: AggregateChange, plan: RemovalPlan) -> bool:
+    """Whether a re-run takes a directory it reads by its scope: a table there still holds a row to take
+    out, or one an earlier run of the request reached has an older version its purge should have taken."""
+    if change.rows_dropped or change.action is AggregateAction.UNREADABLE:
+        return True
+    return change.key in plan.aggregates_reached_before and change.versions != ()
+
+
+def _is_current(version: ObjectVersion) -> bool:
+    return version.is_latest and not version.is_delete_marker
+
+
+def _change(
+    side: Side,
+    caselist: str,
+    version: str,
+    name: str,
+    key: ObjectKey,
+    counted: TableRewrite | UnreadableAggregateLine | None,
+    older: tuple[ObjectVersion, ...] | None,
+    *,
+    retirement_read: bool = True,
+) -> AggregateChange:
+    """One aggregate's change from what counting its current table found and its older versions."""
+    base = AggregateChange(
+        key=key,
+        side=side,
+        caselist=caselist,
+        version=version,
+        name=name,
+        action=AggregateAction.LEFT,
+        versions=older,
+        retirement_read=retirement_read,
+    )
+    if isinstance(counted, UnreadableAggregateLine):
+        return replace(base, action=AggregateAction.UNREADABLE, unreadable_line=counted.line)
+    purge = older is None or bool(older)
+    if counted is None:
+        return replace(base, action=AggregateAction.PURGE if purge else AggregateAction.LEFT)
+    if counted.rows_dropped or counted.rewritten_sha256 != counted.sha256:
+        # A camp path file is rewritten whenever its table is, to carry the new table's digest.
+        action = AggregateAction.REWRITE
+    else:
+        action = AggregateAction.PURGE if purge else AggregateAction.LEFT
+    return replace(
+        base,
+        action=action,
+        rows=counted.rows,
+        rows_dropped=counted.rows_dropped,
+        bytes=counted.bytes,
+        sha256=counted.sha256,
+    )
+
+
+def _withdrawn_from(source: PlannedSource) -> set[str]:
+    """The caselists a withdrawal takes a copy from: the requester's paths', and those the withdrawal
+    record names for a re-run (`v1-e30-t19`)."""
+    return {name for name, _ in source.requester_paths} | set(source.withdrawn_earlier_from)
+
+
+def _copies_taken(source: PlannedSource) -> list[str]:
+    """The caselists whose copy of a withdrawn file goes: no other holder there keeps it."""
+    return sorted(_withdrawn_from(source) - set(source.kept_in))
+
+
+def _rows_asked_in(source: PlannedSource) -> set[str]:
+    """The caselists where a withdrawal's rows are asked of the list: every one it withdraws a path
+    in, a held path an import refused it at included (`v1-e30-t23`), and every one keeping a copy."""
+    return _withdrawn_from(source) | {name for name, _ in source.held_at_import} | set(source.kept_in)
 
 
 async def _left_in_the_bucket(digest: str, caselists: Sequence[str], index: _BucketIndex) -> bool:

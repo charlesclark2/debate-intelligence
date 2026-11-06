@@ -108,6 +108,10 @@ SCHOOL_VIEW_KEYS = frozenset({"school_views"})
 """What `v1-e32-t13` added to every plan: the landscape school views, by key (`school_views`)."""
 SCHOOL_VIEW_EXECUTION_KEYS = frozenset({"school_views_deleted"})
 """And to an execution's: how many of the deletions were school views."""
+AGGREGATE_KEYS = frozenset({"aggregates"})
+"""What `v1-e30-t33` added to every plan: the aggregates it rewrites, keeps or deletes, by key."""
+AGGREGATE_EXECUTION_KEYS = frozenset({"aggregates_done"})
+"""And to an execution's: how many it rewrote, without how many rows, and deleted."""
 
 
 def suppressed(sha256: str, path: str | None = None) -> SuppressionEntry:
@@ -243,15 +247,19 @@ def test_a_plan_that_withdraws_nothing_has_an_empty_list() -> None:
 def test_the_plans_keys_are_t11s_and_the_two_this_task_adds() -> None:
     plan = a_team_removal_that_withdraws()
 
-    assert set(plan_summary(plan, SETTINGS, None)) == PLAN_KEYS_BEFORE_THIS_TASK | SCHOOL_VIEW_KEYS | {
-        "withdrawals",
-        "manifest_versions_swept",
-    }
+    assert set(plan_summary(plan, SETTINGS, None)) == (
+        PLAN_KEYS_BEFORE_THIS_TASK
+        | SCHOOL_VIEW_KEYS
+        | AGGREGATE_KEYS
+        | {"withdrawals", "manifest_versions_swept"}
+    )
     assert set(plan_summary(plan, SETTINGS, executed(plan))) == (
         PLAN_KEYS_BEFORE_THIS_TASK
         | EXECUTION_KEYS
         | SCHOOL_VIEW_KEYS
         | SCHOOL_VIEW_EXECUTION_KEYS
+        | AGGREGATE_KEYS
+        | AGGREGATE_EXECUTION_KEYS
         | {"withdrawals", "manifest_versions_swept"}
     )
 

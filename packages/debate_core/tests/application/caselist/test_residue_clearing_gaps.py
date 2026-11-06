@@ -53,7 +53,6 @@ from debate_core.application.caselist.manifest import manifest_key, write_manife
 from debate_core.application.caselist.publish_service import CaselistPublishService
 from debate_core.application.caselist.removal_plan import (
     Disposition,
-    ObjectKind,
     RemovalPlan,
     Side,
     SourceSelector,
@@ -62,6 +61,7 @@ from debate_core.application.caselist.removal_plan import (
 from debate_core.application.caselist.removal_residue import OlderVersions, RemovalCompletion
 from debate_core.application.caselist.removal_service import TakedownAccess
 from debate_core.application.ports.evidence_versions import EvidenceVersionStore, ObjectVersion
+from debate_core.application.ports.parsed_store import source_object_key
 from debate_core.application.ports.suppression import (
     ManifestRewriteRecord,
     ReasonCode,
@@ -418,7 +418,8 @@ async def withdraw_oak_ridge(world: RemovalWorld) -> RemovalPlan:
 
 
 def aggregates_planned(plan: RemovalPlan) -> list[str]:
-    return [one.key for one in plan.objects_on(Side.BUCKET) if one.kind is ObjectKind.PARSED_AGGREGATE]
+    """The bucket's aggregates the plan does something to (`v1-e30-t33`): rewrites, purges or deletes."""
+    return [one.key for one in plan.aggregates_on(Side.BUCKET) if one.acts]
 
 
 def shared_copy_in_the_caselist() -> str:
@@ -434,6 +435,12 @@ async def withdrawn_only(removal_world: RemovalWorld, tmp_path: Path) -> Removal
     """
     world = removal_world
     await import_and_publish_oak_ridges_week(world, tmp_path / "oak-ridge")
+    # The shared file parsed in the caselist's directory, so the withdrawal reaches its aggregates and
+    # records them (`v1-e30-t33`): the per-source file stays, since other teams hold the file.
+    put(world, f"parsed/{source_object_key(SYNTHETIC_CASELIST, PARSER_VERSIONS[0], SHARED)}", b'{"x":1}\n')
+    put(
+        world, AGGREGATE, f'{{"source_sha256":"{SHARED}"}}\n'.encode(), written=COMPLETED - timedelta(hours=1)
+    )
     first = await withdraw_oak_ridge(world)
     assert first.of(Disposition.REMOVE) == ()
     assert [one.sha256 for one in first.of(Disposition.WITHDRAW)] == [SHARED]
@@ -459,11 +466,13 @@ class TestAWithdrawalOnlyRequest:
         # Maple Grove/QX and Cedar Hollow/ZaLu still hold it in testcl26: its copy there stays.
         assert world.client.head_object(Bucket=world.bucket_name, Key=shared_copy_in_the_caselist())
 
-    async def test_without_a_withdrawal_record_the_rerun_has_no_caselist_to_plan_aggregates_for(
+    async def test_without_a_withdrawal_record_the_rerun_still_finds_the_directory_by_its_parsed_file(
         self, withdrawn_only: RemovalWorld
     ) -> None:
         """What a first run by a build from before `v1-e30-t16` leaves: the list's disclosure entry,
-        with no record beside it of the caselist the copy was taken from."""
+        with no record beside it of the caselist the copy was taken from. Before `v1-e30-t33` the re-run
+        then had no caselist to plan aggregates for; now the per-source file the other teams' copy keeps
+        says where the rows are, record or not."""
         world = withdrawn_only
         (world.data_dir / "suppression" / "withdrawals.jsonl").unlink()
         world.client.delete_object(Bucket=world.bucket_name, Key=WITHDRAWALS_KEY)
@@ -472,7 +481,7 @@ class TestAWithdrawalOnlyRequest:
             parse_team_selector(OAK_RIDGE), request_id=WITHDRAWAL_ONLY, reason=ReasonCode.REQUESTED_BY_TEAM
         )
 
-        assert aggregates_planned(rerun) == []
+        assert aggregates_planned(rerun) == [AGGREGATE]
         assert [one.sha256 for one in rerun.of(Disposition.WITHDRAW)] == [SHARED]
 
     async def test_another_requests_withdrawal_of_the_same_file_is_not_this_requests(

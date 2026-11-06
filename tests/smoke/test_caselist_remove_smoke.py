@@ -690,7 +690,16 @@ def status_as_a_person_reads_it() -> str:
 
 @pytest.fixture
 def removed_with_its_later_upload(installation: Path, bucket: S3Client, published: Any) -> None:
-    """The first version removed by `--source`, and the revision with it as a later upload."""
+    """The first version removed by `--source`, and the revision with it as a later upload.
+
+    The first version is parsed in the bucket's `2026.10.10-docx-2` directory, so the removal reaches
+    that directory and rewrites its index without the file's row (`v1-e30-t33`)."""
+    sha = FIRST_VERSION
+    bucket.put_object(
+        Bucket=BUCKET, Key=f"{PARSED_DIRECTORY}/sha256/{sha[:2]}/{sha[2:4]}/{sha}.jsonl", Body=b"{}\n"
+    )
+    rows = "".join(json.dumps({"source_sha256": one}) + "\n" for one in (sha, "0" * 64)).encode()
+    bucket.put_object(Bucket=BUCKET, Key=AGGREGATE, Body=rows)
     environment(DEBATE_REMOVAL_PROFILE=REMOVAL_PROFILE)
     done = run(*REMOVE_FIRST_VERSION, "--execute")
     assert done["exit_code"] == ExitCode.OK, done
@@ -911,7 +920,8 @@ def test_residue_a_completed_removal_left_is_cleared_by_naming_the_file_under_th
 # Manifest and aggregate versions older than a removal (v1-e30-t15)
 # ------------------------------------------------------------------------------------------------
 
-AGGREGATE = f"parsed/{SYNTHETIC_CASELIST}/2026.10.10-docx-2/index.jsonl"
+PARSED_DIRECTORY = f"parsed/{SYNTHETIC_CASELIST}/2026.10.10-docx-2"
+AGGREGATE = f"{PARSED_DIRECTORY}/index.jsonl"
 REMOVAL_LOG = "manifests/_suppression/removal-log.jsonl"
 SCOPES = "manifests/_suppression/removal-scopes.jsonl"
 
@@ -1028,8 +1038,8 @@ def test_versions_older_than_a_removal_are_cleared_by_running_it_again_under_the
 ) -> None:
     """The runbook's instruction: name a file the request removed, same request and reason, execute.
 
-    The plan lists the old index with every aggregate, and the execution's sweep reads the manifest
-    version, finds the removed row and deletes it.
+    The plan lists the old index, whose directory the first run reached and recorded (`v1-e30-t33`), and
+    the execution purges it; the sweep reads the manifest version, finds the removed row and deletes it.
     """
     shown = invoke(*REMOVE_FIRST_VERSION, width=200).stdout
     assert AGGREGATE in shown

@@ -52,6 +52,7 @@ from debate_core.application.caselist.suppression import (
 )
 from debate_core.application.errors import StoreAccessDenied
 from debate_core.application.ports.evidence_versions import EvidenceVersionStore, ObjectVersion
+from debate_core.application.ports.parsed_store import source_object_key
 from debate_core.application.ports.suppression import (
     REMOVAL_SCOPES_FILENAME,
     ManifestRewriteRecord,
@@ -165,16 +166,32 @@ def of(report: CaselistStatusReport, caselist: str) -> CaselistResidue:
     return found
 
 
+def plant_the_removed_files_parsed_store(world: RemovalWorld) -> None:
+    """The removed file parsed in both of the caselist's version directories, in the bucket: its
+    per-source file, and each aggregate with a row of it and a row of a source nothing removes. So the
+    removal reaches both directories and rewrites every aggregate (`v1-e30-t33`)."""
+    rows = (f'{{"source_sha256":"{REMOVED}"}}\n{{"source_sha256":"{"0" * 64}"}}\n').encode()
+    for version in PARSER_VERSIONS:
+        put(world, f"parsed/{source_object_key(SYNTHETIC_CASELIST, version, REMOVED)}", b'{"x":1}\n')
+        for name in AGGREGATES:
+            put(world, aggregate_key(SYNTHETIC_CASELIST, version, name), rows, written=LONG_BEFORE)
+
+
 @pytest.fixture
 async def removed(removal_world: RemovalWorld) -> RemovalWorld:
     """The removal completed, and its rewrites put back at a plausible time inside the run.
 
     moto stamps each rewrite with the time the test runs, which is after the fixed completion
     time. A real rewrite is written during the run, before its completion is logged: two minutes
-    before, here.
+    before, here. Since `v1-e30-t33` the rewrites include the aggregates of each version directory
+    holding the removed file's parsed file, which the removal reaches and records.
     """
+    plant_the_removed_files_parsed_store(removal_world)
     await remove(removal_world)
-    for key in REWRITTEN:
+    reached = [
+        aggregate_key(SYNTHETIC_CASELIST, version, name) for version in PARSER_VERSIONS for name in AGGREGATES
+    ]
+    for key in (*REWRITTEN, *reached):
         (only,) = versions_of(removal_world, key)
         backdate(removal_world, key, only, COMPLETED - timedelta(minutes=2))
     return removal_world
@@ -203,22 +220,47 @@ class TestWhatTheTakedownLeaves:
             assert len(versions_of(world, key)) == 1, key
             assert REMOVED.encode() not in current_bytes(world, key)
 
-    async def test_it_deletes_every_version_of_every_aggregate_in_every_version_directory(
+    async def test_it_leaves_every_aggregate_of_a_directory_holding_no_parsed_file_of_it(
         self, removal_world: RemovalWorld
     ) -> None:
-        """Two versions of each aggregate, in both version directories, of both caselists."""
+        """Two versions of each aggregate, in both version directories, of both caselists, and no parsed
+        file of the removed source anywhere: no directory holds a row of it, so none is read or touched
+        (`v1-e30-t33`). Before that task the removal deleted every one of them."""
         world = removal_world
         for caselist in (SYNTHETIC_CASELIST, "openev"):
             for version in PARSER_VERSIONS:
                 for name in AGGREGATES:
                     put(world, aggregate_key(caselist, version, name), b"first build\n")
                     put(world, aggregate_key(caselist, version, name), b"second build\n")
+        before = world.client.list_object_versions(Bucket=world.bucket_name, Prefix="parsed/")
 
         await remove(world)
 
         left = world.client.list_object_versions(Bucket=world.bucket_name, Prefix="parsed/")
-        assert [one.get("Key") for one in left.get("Versions", [])] == []
-        assert [one.get("Key") for one in left.get("DeleteMarkers", [])] == []
+        assert [one.get("VersionId") for one in left.get("Versions", [])] == [
+            one.get("VersionId") for one in before.get("Versions", [])
+        ]
+
+    async def test_it_rewrites_every_aggregate_of_a_directory_holding_its_parsed_file_to_one_version(
+        self, removal_world: RemovalWorld
+    ) -> None:
+        world = removal_world
+        plant_the_removed_files_parsed_store(world)
+        for version in PARSER_VERSIONS:
+            put(
+                world,
+                aggregate_key(SYNTHETIC_CASELIST, version, "index.jsonl"),
+                b'{"source_sha256":"' + REMOVED.encode() + b'"}\n',
+                written=LONG_BEFORE - timedelta(hours=1),
+            )
+
+        await remove(world)
+
+        for version in PARSER_VERSIONS:
+            for name in AGGREGATES:
+                key = aggregate_key(SYNTHETIC_CASELIST, version, name)
+                assert len(versions_of(world, key)) == 1, key
+                assert current_bytes(world, key) == f'{{"source_sha256":"{"0" * 64}"}}\n'.encode(), key
 
     async def test_a_manifest_it_did_not_rewrite_keeps_a_version_that_never_named_the_file(
         self, removal_world: RemovalWorld

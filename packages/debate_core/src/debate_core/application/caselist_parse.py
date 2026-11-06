@@ -304,7 +304,8 @@ class FailureListing:
     caselist: str
     version: str | None
     present: bool
-    """False when there is no failures file: never parsed, or deleted by a removal until the next run."""
+    """False when there is no failures file: never parsed, or deleted by a removal made by a build from
+    before `v1-e30-t33`, which deleted the aggregates until the next run instead of rewriting them."""
     rows: tuple[FailureRow, ...] = ()
 
 

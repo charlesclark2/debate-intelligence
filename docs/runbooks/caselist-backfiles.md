@@ -141,31 +141,18 @@ second download, and so without the day's budget.
 | `NOT_ENOUGH_FREE_SPACE` | The volume cannot hold the estimate plus 25% | Run it where it can: the cloud task |
 | `CONFIRMATION_REQUIRED` | `--execute` in prod without `--confirm-prod` | Prod receives backfiles with dev's hand publish |
 
-## A removal adds a rebuild for each backfile
+## A removal rewrites a backfile's aggregates in the bucket, and nothing is rebuilt
 
-A whole-file removal deletes the parsed store's aggregates (`index.jsonl`, `failures.jsonl`,
-`occurrences.jsonl`) of every caselist it touches, backfiles included ([removal runbook, step
-5](caselist-removal.md#step-5--execute-in-dev)). A backfile's parsed store is not on the Mac, so
-`caselist parse --caselist <slug> --publish` there cannot rebuild it. **The rebuild is the import run
-again**, dry run first, then `--execute`, where the import runs: in the cloud, the same task an import
-is, started the same way ([caselist-cloud-run.md, "Backfile imports"](caselist-cloud-run.md#backfile-imports)). Imported already, it downloads
-nothing and spends no budget. It restores the backfile's parsed store, rebuilds the aggregates
-without what the removal took out, and publishes them. The window applies as to any import.
-
-What each rebuild adds, estimated from the rebuild-only rates measured on the dev store (LD 0.069 s
-and Policy 0.151 s per source, `docs/data/caselist-parse-report.md`) and the sources each archive is
-estimated to hold:
-
-| Caselist | Sources (est.) | Rebuild (est.) | Parsed store restored (est.) |
-|---|---|---|---|
-| `hspolicy25` | 13,300 | 34 min | 14.7 GB |
-| `hsld25` | 32,200 | 37 min | 16.6 GB |
-| `hspolicy24` | 8,600 | 22 min | 9.5 GB |
-| `hsld24` | 29,300 | 34 min | 15.1 GB |
-| **All four** | 83,500 | about 2 h 10 min | 55.9 GB |
-
-So once all four are imported, a whole-file removal is followed by four backfile rebuilds as well as
-the current season's. Until a backfile is imported there is nothing of it to rebuild.
+Until `v1-e30-t33` a whole-file removal deleted the parsed store's aggregates of every caselist,
+backfiles included, and each backfile then needed its import run again in the cloud to rebuild them
+(estimated at about 2 h 10 min and 55.9 GB restored for all four). Since that task (the PM's ruling of
+2026-11-05) a removal reaches only the version directories that hold a parsed file of what it removes,
+and rewrites each of their aggregates in place without those rows, purging the older versions
+([removal runbook, step 5](caselist-removal.md#step-5--execute-in-dev)). A backfile's parsed store is
+in the bucket only, so its tables are rewritten there, and the removal's plan lists them with the
+`bucket` side alone. Nothing is rebuilt: no import is run again for a removal, and the backfile
+no-import window does not apply to one. A backfile that holds no parsed file of the removed file is
+not touched at all.
 
 ## What it adds to every weekly run
 

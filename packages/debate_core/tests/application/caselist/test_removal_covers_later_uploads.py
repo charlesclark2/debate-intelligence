@@ -167,11 +167,21 @@ async def import_revised_path_archives(data_dir: Path, downloads: Path) -> None:
         write_manifest(report, objects.path_for(full_archive_manifest_key(caselist, day)))
 
 
+PLACEHOLDER_ROWS = (
+    '{{"placeholder": {marker}, "source_sha256": "' + LATER_REVISION + '"}}\n'
+    '{{"placeholder": {marker}, "source_sha256": "' + "0" * 64 + '"}}\n'
+)
+"""An aggregate's placeholder: a row of the later revision, and a row of a source nothing removes."""
+
+
 def plant_parsed_files(world: RemovalWorld) -> None:
     """A parsed file for two of the later uploads and the caselist's aggregates, here and in the bucket.
 
     Written at the parsed store's own keys (`v1-e31-t06`), twice in the bucket so each has a
-    noncurrent version. Their contents are placeholders: a removal deletes these by key.
+    noncurrent version. Their contents are placeholders: a removal deletes the per-source files by key.
+    Each aggregate's placeholder is two rows, one naming the later revision and one naming nothing
+    removed, since a removal rewrites an aggregate row by row and refuses a line naming no source
+    (`v1-e30-t33`).
     """
     names = [
         *(source_object_key(CASELIST, PARSED_VERSION, one) for one in (LATER_REVISION, LATER_SHARED)),
@@ -180,8 +190,9 @@ def plant_parsed_files(world: RemovalWorld) -> None:
     for name in names:
         local = world.data_dir / "parsed" / name
         local.parent.mkdir(parents=True, exist_ok=True)
-        local.write_text('{"placeholder": true}\n', encoding="utf-8")
-        for body in (b'{"placeholder": 1}\n', b'{"placeholder": 2}\n'):
+        local.write_text(PLACEHOLDER_ROWS.format(marker="true"), encoding="utf-8")
+        for marker in ("1", "2"):
+            body = PLACEHOLDER_ROWS.format(marker=marker).encode()
             world.client.put_object(Bucket=world.bucket_name, Key=f"parsed/{name}", Body=body)
 
 
@@ -397,18 +408,26 @@ async def test_each_manifest_loses_the_rows_the_table_says_on_both_sides(world: 
         assert not [digest for digest in removed if digest in text]
 
 
-async def test_its_parsed_file_and_the_caselists_aggregates_are_deleted_here_and_in_the_bucket(
+async def test_its_parsed_file_is_deleted_and_the_caselists_aggregates_rewritten_here_and_in_the_bucket(
     world: RemovalWorld,
 ) -> None:
+    """The parsed file goes by key. The aggregates of its directory are rewritten without its row, here and
+    in the bucket, and keep one version, the rewrite (`v1-e30-t33`): the placeholder's other row stays."""
     parsed = source_object_key(CASELIST, PARSED_VERSION, LATER_REVISION)
     aggregates = [f"{CASELIST}/{PARSED_VERSION}/{name}" for name in AGGREGATE_NAMES]
     assert len(versions_of(world, f"parsed/{parsed}")) == 2
 
     await remove_the_named_file(world)
 
-    for name in (parsed, *aggregates):
-        assert not (world.data_dir / "parsed" / name).exists(), name
-        assert versions_of(world, f"parsed/{name}") == [], name
+    assert not (world.data_dir / "parsed" / parsed).exists()
+    assert versions_of(world, f"parsed/{parsed}") == []
+    kept = '{"placeholder": true, "source_sha256": "' + "0" * 64 + '"}\n'
+    for name in aggregates:
+        assert (world.data_dir / "parsed" / name).read_text() == kept, name
+        (version,) = versions_of(world, f"parsed/{name}")
+        body = world.client.get_object(Bucket=world.bucket_name, Key=f"parsed/{name}")["Body"].read().decode()
+        assert body == kept.replace("true", "2"), f"{name}: the newer version less the revision's row"
+        assert version
 
 
 async def test_the_imported_weekly_in_the_inbox_that_holds_it_is_deleted(world: RemovalWorld) -> None:

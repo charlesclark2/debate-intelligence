@@ -46,9 +46,11 @@ statistics at all. Nothing in this module logs.
 
 from __future__ import annotations
 
+import hashlib
 import json
+from array import array
 from collections import Counter, defaultdict
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
@@ -58,14 +60,17 @@ from pydantic import ValidationError
 
 from debate_core.application.errors import DomainError
 from debate_core.application.ports.caselist import CaselistRepository
+from debate_core.application.ports.placement_state import PlacedAnchor, PlacedCard
 from debate_core.application.settings import CardFingerprintSettings
 from debate_core.domain.card_occurrence import CardOccurrence, ClusterMembership, OccurrenceKey
 from debate_core.domain.caselist import Disclosure
 from debate_core.domain.debate_files import CardCompleteness, ParsedCard, ParsedDocument
 from debate_core.evidence.abbreviated_links import (
+    MIN_ANCHOR_WORDS,
     AbbreviationAnchor,
     FullCardWords,
     abbreviation_anchor,
+    default_ellipsis_markers,
     group_unmatched_abbreviations,
     link_abbreviated,
     matching_full_cards,
@@ -73,9 +78,13 @@ from debate_core.evidence.abbreviated_links import (
 )
 from debate_core.evidence.fingerprints import FINGERPRINT_VERSION, card_fingerprint, extract_cutter_mark
 from debate_core.evidence.near_duplicates import (
+    MINHASH_PERMUTATIONS,
+    MINHASH_SEED,
+    SHINGLE_SIZE,
     BodyWords,
     NearDuplicateThresholds,
     cluster_near_duplicates,
+    matching_words,
 )
 
 __all__ = [
@@ -88,6 +97,7 @@ __all__ = [
     "ClusterSummary",
     "UnreadableParsedCards",
     "fingerprint_thresholds",
+    "placement_rules",
     "read_parsed_cards",
 ]
 
@@ -322,14 +332,25 @@ class CardPlacer:
     """:meth:`CaselistCardStatsService.place`, given the cards one at a time (`v1-e40-t36`).
 
     No card can be placed before every card of the caselist has been seen, because a cluster spans
-    sources, but placing them reads little of each card. :meth:`add` keeps, of every card, its
-    fingerprint, and of an abbreviated or cite-only card its link key
-    (:func:`~debate_core.evidence.abbreviated_links.abbreviation_anchor`); of the full cards, the
-    body of the first with each fingerprint, which the clusterer reads, and a count of copies per
-    fingerprint and short cite, which the linker weighs. Never a cite, a tag or a formatting span.
-    So what it holds grows by a fingerprint per card and by the text of each distinct full body,
-    and the parse pipeline (`v1-e31-t06`) can read a caselist's cards source by source and keep
-    none of them.
+    sources, but placing them reads little of each card. :meth:`add` keeps, of every card, a
+    :class:`~debate_core.application.ports.placement_state.PlacedCard`: its fingerprint, its range
+    and completeness, the short-cite key a full card's copies are counted under, an abbreviated or
+    cite-only card's link key (:func:`~debate_core.evidence.abbreviated_links.abbreviation_anchor`);
+    and of the full cards, the words of the first body with each fingerprint, which the clusterer
+    reads. Never a cite, a tag or a formatting span. So what it holds grows by a fingerprint per card
+    and by the words of each distinct full body, and the parse pipeline (`v1-e31-t06`) can read a
+    caselist's cards source by source and keep none of them.
+
+    **Words are numbers in one vocabulary** (`v1-e40-t39`), :attr:`vocabulary`, and so are the words of
+    the keys. The clusterer's :class:`~debate_core.evidence.near_duplicates.BodyWords` is numbered
+    again from them in its own order (:meth:`~debate_core.evidence.near_duplicates.BodyWords.numbered`),
+    the order it numbers bodies' text in, so nothing it does depends on the order cards came in.
+
+    **From the placement state** (`v1-e31-t10`). What :meth:`add` keeps of a card is exactly what the
+    rebuild's placement state keeps of it. A placer begun from a state (:meth:`adopt`) takes its cards
+    by :meth:`add_placed`, with the stored words of each body and the stored MinHash signatures, and
+    places every card as a placer given the same cards' documents would: each card is the same
+    :class:`PlacedCard`, each body the same words, each signature the same function of them.
 
     The linker compares an abbreviated card with a full card's body words. Those are taken from the
     first body with the full card's fingerprint, which is the SHA-256 of the body under the
@@ -348,25 +369,118 @@ class CardPlacer:
         """Each fingerprint seen, to itself: the cards that share one hold one string."""
         self._anchors: dict[int, AbbreviationAnchor | None] = {}
         """The link key of each card that is not full, by its position; `None` when it has none."""
-        self._bodies: dict[str, str] = {}
+        self._words: dict[str, array[int]] = {}
+        """The words of each distinct full body, as numbers in :attr:`vocabulary`."""
         self._copies: Counter[tuple[str, str | None]] = Counter()
+        self._numbers: dict[str, int] = {}
+        self._spelled: list[str] = []
+        self.signatures: dict[str, array[int]] = {}
+        """MinHash signatures by fingerprint: those a placement state held, and every body signed by
+        :meth:`placements`."""
 
-    def add(self, card: ParsedCard) -> None:
-        """Take the next card, keeping only what placing it reads."""
+    @property
+    def rules(self) -> str:
+        """The digest a placement state made by this placer is stamped with (:func:`placement_rules`)."""
+        return placement_rules(self._markers)
+
+    @property
+    def vocabulary(self) -> tuple[str, ...]:
+        """Each word this placer has numbered, at its number."""
+        return tuple(self._spelled)
+
+    @property
+    def body_words(self) -> Mapping[str, array[int]]:
+        """Each distinct full body's words, as numbers in :attr:`vocabulary`."""
+        return self._words
+
+    def adopt(self, vocabulary: Sequence[str], signatures: Mapping[str, array[int]]) -> None:
+        """Begin from a placement state's vocabulary and signatures, before any card is given."""
+        if self._fingerprints or self._spelled:
+            raise ValueError("a placer adopts a state before it is given any card")
+        self._spelled = list(vocabulary)
+        self._numbers = {word: number for number, word in enumerate(self._spelled)}
+        self.signatures = dict(signatures)
+
+    def add(self, card: ParsedCard) -> PlacedCard:
+        """Take the next card, keeping only what placing it reads; what was kept."""
         fingerprint = card_fingerprint(card).exact_fingerprint
-        fingerprint = self._known.setdefault(fingerprint, fingerprint)
         if card.completeness is CardCompleteness.FULL:
-            self._bodies.setdefault(fingerprint, card.evidence_text)
-            self._copies[(fingerprint, short_cite_key(card.short_cite))] += 1
+            known = fingerprint in self._words
+            key = short_cite_key(card.short_cite)
+            placed = PlacedCard(
+                first_element=card.provenance.first_element_index,
+                last_element=card.provenance.last_element_index,
+                completeness=card.completeness,
+                fingerprint=fingerprint,
+                short_cite_key=None if key is None else self._number(key.split(" ")),
+                anchor=None,
+            )
+            self.add_placed(
+                placed, None if known else array("I", self._number(matching_words(card.evidence_text)))
+            )
+            return placed
+        anchor = abbreviation_anchor(card, self._markers)
+        placed = PlacedCard(
+            first_element=card.provenance.first_element_index,
+            last_element=card.provenance.last_element_index,
+            completeness=card.completeness,
+            fingerprint=fingerprint,
+            short_cite_key=None,
+            anchor=None
+            if anchor is None
+            else PlacedAnchor(
+                short_cite_key=self._number(anchor.short_cite_key.split(" ")),
+                opening_words=self._number(anchor.opening_words),
+                closing_words=self._number(anchor.closing_words),
+                from_cite_line=anchor.from_cite_line,
+            ),
+        )
+        self.add_placed(placed, None)
+        return placed
+
+    def add_placed(self, card: PlacedCard, words: array[int] | None) -> None:
+        """Take the next card as :meth:`add` kept it. `words` are its body's words, as numbers in
+        :attr:`vocabulary`, for a full card whose fingerprint this placer has not seen."""
+        fingerprint = self._known.setdefault(card.fingerprint, card.fingerprint)
+        if card.completeness is CardCompleteness.FULL:
+            if fingerprint not in self._words:
+                if words is None:
+                    raise ValueError("a full card's body is given with the first card of its fingerprint")
+                self._words[fingerprint] = words
+            key = None if card.short_cite_key is None else " ".join(self._spell(card.short_cite_key))
+            self._copies[(fingerprint, key)] += 1
         else:
-            self._anchors[len(self._fingerprints)] = abbreviation_anchor(card, self._markers)
+            anchor = card.anchor
+            self._anchors[len(self._fingerprints)] = (
+                None
+                if anchor is None
+                else AbbreviationAnchor(
+                    short_cite_key=" ".join(self._spell(anchor.short_cite_key)),
+                    opening_words=self._spell(anchor.opening_words),
+                    closing_words=self._spell(anchor.closing_words),
+                    from_cite_line=anchor.from_cite_line,
+                )
+            )
         self._fingerprints.append(fingerprint)
+
+    def _number(self, words: Iterable[str]) -> tuple[int, ...]:
+        numbered: list[int] = []
+        for word in words:
+            number = self._numbers.get(word)
+            if number is None:
+                number = self._numbers[word] = len(self._spelled)
+                self._spelled.append(word)
+            numbered.append(number)
+        return tuple(numbered)
+
+    def _spell(self, numbers: Iterable[int]) -> tuple[str, ...]:
+        return tuple(map(self._spelled.__getitem__, numbers))
 
     def placements(self) -> list[ClusterPlacement]:
         """One placement per card given, in the order given: steps 1 to 3 of this module's docstring."""
         # One word list for the clusterer and the linker, held as numbers (`v1-e40-t39`).
-        words = BodyWords(self._bodies)
-        clusters = cluster_near_duplicates(self._bodies, self._thresholds, words=words)
+        words = BodyWords.numbered(self._words, self._spelled)
+        clusters = cluster_near_duplicates(None, self._thresholds, words=words, signatures=self.signatures)
         full_by_cite: defaultdict[str | None, dict[str, FullCardWords]] = defaultdict(dict)
         for (fingerprint, key), copies in self._copies.items():
             full_by_cite[key][fingerprint] = FullCardWords(
@@ -417,6 +531,27 @@ class CardPlacer:
             else:
                 placed.append(ClusterPlacement(fingerprint, fingerprint, ClusterMembership.UNLINKED))
         return placed
+
+
+def placement_rules(markers: tuple[str, ...] | None) -> str:
+    """The digest a placement state is stamped with beside the fingerprint version (`v1-e31-t10`).
+
+    Of what decides what the state holds of a card: the ellipsis markers an abbreviated card's link
+    key is read at and the fewest anchor words it needs, the clusterer's shingle size, and the MinHash
+    permutations and seed its signatures are taken under. The clusterer's other limits are not in it:
+    every card is placed again on every run, so they decide nothing the state holds.
+    """
+    described = json.dumps(
+        {
+            "ellipsis_markers": list(markers if markers is not None else default_ellipsis_markers()),
+            "min_anchor_words": MIN_ANCHOR_WORDS,
+            "shingle_size": SHINGLE_SIZE,
+            "minhash_permutations": MINHASH_PERMUTATIONS,
+            "minhash_seed": MINHASH_SEED,
+        },
+        sort_keys=True,
+    )
+    return hashlib.sha256(described.encode("utf-8")).hexdigest()
 
 
 def _card_order(card: ParsedCard) -> tuple[str, int, date, str]:

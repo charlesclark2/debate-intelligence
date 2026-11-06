@@ -12,6 +12,7 @@ from debate_core.application.ports.parsed_store import (
     SourceEntry,
     parse_version_directory,
 )
+from debate_core.application.ports.placement_state import PlacementState
 
 __all__ = ["InMemoryParsedStore", "build_fake_parsed_store"]
 
@@ -31,6 +32,8 @@ class InMemoryParsedStore:
             tuple[tuple[SourceEntry, ...], tuple[SourceEntry, ...], tuple[OccurrenceRecord, ...]],
         ] = {}
         """`(caselist, version)` to its index, failures and occurrences."""
+        self.placement_states: dict[tuple[str, str], PlacementState] = {}
+        """`(caselist, version)` to its placement state (`v1-e31-t10`)."""
 
     async def version_directories(self, caselist: str) -> tuple[str, ...]:
         names = {version for name, version, _ in self.sources if name == caselist}
@@ -49,6 +52,12 @@ class InMemoryParsedStore:
     async def read_document(self, caselist: str, version: str, sha256: str) -> DocumentRecord | None:
         held = self.sources.get((caselist, version, sha256))
         return held[1] if held is not None else None
+
+    async def read_placement_state(self, caselist: str, version: str) -> PlacementState | None:
+        return self.placement_states.get((caselist, version))
+
+    async def write_placement_state(self, caselist: str, version: str, state: PlacementState) -> None:
+        self.placement_states[(caselist, version)] = state
 
     async def write_source(
         self, caselist: str, version: str, entry: SourceEntry, document: DocumentRecord | None

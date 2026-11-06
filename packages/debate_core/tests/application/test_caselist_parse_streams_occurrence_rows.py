@@ -54,7 +54,7 @@ from debate_core.application.caselist.parse_sources import (
 )
 from debate_core.application.caselist.parse_workers import InProcessParseRunner
 from debate_core.application.caselist.suppression import RecordedSuppressionList
-from debate_core.application.caselist_card_stats import CaselistCardStatsService, ClusterPlacement
+from debate_core.application.caselist_card_stats import CardPlacer, CaselistCardStatsService, ClusterPlacement
 from debate_core.application.caselist_parse import CaselistParseService, ParsePlan, PlacesCards
 from debate_core.application.ports.parsed_store import (
     CAMP_PATHS_NAME,
@@ -96,6 +96,7 @@ from debate_core.evidence.abbreviated_links import (
     short_cite_key,
 )
 from debate_core.evidence.fingerprints import FINGERPRINT_VERSION, card_fingerprint, fingerprint_text
+from debate_core.evidence.near_duplicates import NearDuplicateThresholds as PlacerThresholds
 from debate_core.integrations.local import FsEvidenceObjectStore
 from debate_core.integrations.local.parsed_store import LocalParsedStore
 from debate_core.integrations.local.suppression_list import local_suppression_list_file
@@ -828,21 +829,16 @@ def memory_store(world: SyntheticStore, sources: int) -> set[str]:
     }
 
 
-class CountingPlacer:
+class CountingPlacer(CardPlacer):
     """The real placer, counting the store's cards still alive when it is asked to place them."""
 
     store: frozenset[str] = frozenset()
     alive_at_placing: list[int] = []
 
     def __init__(self) -> None:
-        self._inner = CaselistCardStatsService(
-            build_fake_caselist_repository(), ellipsis_markers=MARKERS
-        ).placer()
+        super().__init__(PlacerThresholds(), MARKERS)
 
-    def add(self, card: ParsedCard) -> None:
-        self._inner.add(card)
-
-    def placements(self) -> Sequence[ClusterPlacement]:
+    def placements(self) -> list[ClusterPlacement]:
         gc.collect()
         CountingPlacer.alive_at_placing.append(
             sum(
@@ -851,7 +847,7 @@ class CountingPlacer:
                 if isinstance(held, ParsedCard) and held.provenance.source_sha256 in CountingPlacer.store
             )
         )
-        return self._inner.placements()
+        return super().placements()
 
 
 async def test_no_card_but_the_last_read_is_alive_when_the_rebuild_places_them(tmp_path: Path) -> None:

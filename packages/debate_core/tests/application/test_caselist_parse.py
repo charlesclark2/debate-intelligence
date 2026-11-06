@@ -62,12 +62,13 @@ from debate_core.application.caselist.parse_workers import (
 from debate_core.application.caselist.parsed_publish import ParsedStorePublisher
 from debate_core.application.caselist.publish_service import SourceResult
 from debate_core.application.caselist.suppression import RecordedSuppressionList
-from debate_core.application.caselist_card_stats import CaselistCardStatsService, ClusterPlacement
+from debate_core.application.caselist_card_stats import CardPlacer, CaselistCardStatsService, ClusterPlacement
 from debate_core.application.caselist_parse import CaselistParseService, ParseRunReport
 from debate_core.application.errors import StoreProfileNotConfigured
 from debate_core.application.ports.debate_files import DebateFileParser
 from debate_core.application.ports.parsed_store import (
     AGGREGATE_NAMES,
+    PLACEMENT_STATE_NAME,
     SourceOutcome,
     version_directory_name,
 )
@@ -79,8 +80,9 @@ from debate_core.application.ports.suppression import (
 )
 from debate_core.domain.card_occurrence import ClusterMembership
 from debate_core.domain.caselist import SnapshotDate, SourceDocument
-from debate_core.domain.debate_files import CardCompleteness, ParsedCard, ParsedDocument, ParseFailure
-from debate_core.evidence.fingerprints import FINGERPRINT_VERSION, card_fingerprint
+from debate_core.domain.debate_files import ParsedDocument, ParseFailure
+from debate_core.evidence.fingerprints import FINGERPRINT_VERSION
+from debate_core.evidence.near_duplicates import NearDuplicateThresholds
 from debate_core.integrations.docx_parser import DOCX_PARSER_VERSION, DebateDocxParser
 from debate_core.integrations.local import FsEvidenceObjectStore
 from debate_core.integrations.local.parsed_store import LocalParsedStore
@@ -635,30 +637,26 @@ class RewritingParser(CountingParser):
         return result.model_copy(update={"cards": (rewritten,)})
 
 
-class PlacedAsCardFingerprintV1Did:
+class PlacedAsCardFingerprintV1Did(CardPlacer):
     """What `card-fingerprint-v1` did with this test's cards, written out: each its own cluster.
 
     The two full cards differ by one word in 33, under v1's containment threshold, and the wiki
-    file's abbreviated cards match neither.
+    file's abbreviated cards match neither. The real placer keeps the cards (`v1-e31-t10`), and only
+    its placing is v1's.
     """
 
     def __init__(self) -> None:
-        self._placed: list[ClusterPlacement] = []
+        super().__init__(NearDuplicateThresholds(), None)
 
-    def add(self, card: ParsedCard) -> None:
-        fingerprint = card_fingerprint(card).exact_fingerprint
-        self._placed.append(
+    def placements(self) -> list[ClusterPlacement]:
+        return [
             ClusterPlacement(
                 fingerprint,
                 fingerprint,
-                ClusterMembership.NEAR_DUPLICATE
-                if card.completeness is CardCompleteness.FULL
-                else ClusterMembership.UNLINKED,
+                ClusterMembership.UNLINKED if position in self._anchors else ClusterMembership.NEAR_DUPLICATE,
             )
-        )
-
-    def placements(self) -> list[ClusterPlacement]:
-        return self._placed
+            for position, fingerprint in enumerate(self._fingerprints)
+        ]
 
 
 def names_a_fingerprint_or_a_cluster(value: object) -> bool:
@@ -719,8 +717,14 @@ async def test_a_rebuild_after_the_fingerprint_version_changed_leaves_no_old_sta
     assert {row["exact_fingerprint"] for row in new_rows} == {row["exact_fingerprint"] for row in old_rows}
 
     now = world.tree()
+    # The placement state is not lines of records: it is stamped as a whole, and the v1 run's, stamped
+    # v1, was not used (`v1-e31-t10`).
+    stored = await world.store.read_placement_state(CASELIST, DOCX_PARSER_VERSION)
+    assert stored is not None and stored.fingerprint_version == FINGERPRINT_VERSION
     carrying_a_cluster_id = still_stamped_v1 = 0
     for name, content in now.items():
+        if name == PLACEMENT_STATE_NAME:
+            continue
         for line in content.decode("utf-8").splitlines():
             record = json.loads(line)
             if "cluster_id" in record:
@@ -733,7 +737,7 @@ async def test_a_rebuild_after_the_fingerprint_version_changed_leaves_no_old_sta
     assert carrying_a_cluster_id == len(new_rows) == len(old_rows) > 0
     assert still_stamped_v1 > 0
 
-    per_source = {name for name in now if name not in AGGREGATE_NAMES}
+    per_source = {name for name in now if name not in {*AGGREGATE_NAMES, PLACEMENT_STATE_NAME}}
     assert per_source
     assert {name: now[name] for name in per_source} == {name: as_v1_left_it[name] for name in per_source}
     assert now["occurrences.jsonl"] != as_v1_left_it["occurrences.jsonl"]
@@ -1194,9 +1198,10 @@ async def test_publish_uploads_every_object_of_the_current_version_under_its_pre
     assert sorted(puts) == sorted(local)
     assert report.succeeded
     assert report.count(SourceResult.UPLOADED) == len(local)
-    assert puts[-3:] == sorted(puts[-3:]) and {key.rsplit("/", 1)[1] for key in puts[-3:]} == set(
-        AGGREGATE_NAMES
-    )
+    assert puts[-4:] == sorted(puts[-4:]) and {key.rsplit("/", 1)[1] for key in puts[-4:]} == {
+        *AGGREGATE_NAMES,
+        PLACEMENT_STATE_NAME,
+    }
     for key in local:
         head = s3_client.head_object(Bucket=evidence_bucket, Key=key, ChecksumMode="ENABLED")
         assert head["Metadata"]["sha256"] == hashlib.sha256(world.tree()[key.split("/", 3)[3]]).hexdigest()
@@ -1230,8 +1235,9 @@ async def test_publish_after_a_new_snapshot_uploads_only_the_new_source_and_the_
 
     await publisher(world, bucket).publish(CASELIST, DOCX_PARSER_VERSION)
 
-    # The new source's file, and the two aggregates it changes. The failures file is unchanged,
-    # because the new source parsed, so its bytes match the bucket's and it is skipped.
+    # The new source's file, the two aggregates it changes and the placement state, which now holds
+    # it (`v1-e31-t10`). The failures file is unchanged, because the new source parsed, so its bytes
+    # match the bucket's and it is skipped.
     sha = digest_of("direct")
     prefix = f"parsed/{CASELIST}/{DOCX_PARSER_VERSION}"
     assert sorted(puts) == sorted(
@@ -1239,6 +1245,7 @@ async def test_publish_after_a_new_snapshot_uploads_only_the_new_source_and_the_
             f"{prefix}/sha256/{sha[0:2]}/{sha[2:4]}/{sha}.jsonl",
             f"{prefix}/index.jsonl",
             f"{prefix}/occurrences.jsonl",
+            f"{prefix}/{PLACEMENT_STATE_NAME}",
         ]
     )
 

@@ -168,10 +168,10 @@ from __future__ import annotations
 
 import hashlib
 import re
-import struct
+import sys
 from array import array
 from collections import OrderedDict, defaultdict
-from collections.abc import Callable, Hashable, Iterable, Iterator, Mapping, Sequence
+from collections.abc import Callable, Hashable, Iterable, Iterator, Mapping, MutableMapping, Sequence
 from dataclasses import dataclass
 from typing import Final, overload
 
@@ -250,7 +250,8 @@ SHINGLE_SETS_KEPT: Final = 1 << 18
 sets of the bodies compared most recently. A set larger than this is made each time it is asked for."""
 
 _SIGNATURE_BYTES: Final = 4 * MINHASH_PERMUTATIONS
-_SIGNATURE_LAYOUT: Final = struct.Struct(f"<{MINHASH_PERMUTATIONS}I")
+#: One value of a signature: an unsigned 32-bit integer, read little-endian from the digest.
+_SIGNATURE_VALUE: Final = "I"
 _EMPTY_SLOT: Final = 0xFFFFFFFF
 
 #: A word's number in :class:`BodyWords`: an unsigned 32-bit integer.
@@ -265,6 +266,7 @@ _WORD: Final = re.compile(r"\w+")
 
 assert LSH_BANDS * LSH_ROWS_PER_BAND == MINHASH_PERMUTATIONS  # noqa: S101 - a module invariant
 assert array(_WORD_NUMBER).itemsize == _WORD_NUMBER_BYTES  # noqa: S101 - a module invariant
+assert array(_SIGNATURE_VALUE).itemsize == 4  # noqa: S101 - a module invariant
 
 
 class NearDuplicateThresholds(DomainModel):
@@ -301,14 +303,21 @@ def minhash_signature(shingle_set: Iterable[str], seed: str = MINHASH_SEED) -> t
 
     One SHAKE-128 digest per shingle, keyed by the seed, supplies all
     :data:`MINHASH_PERMUTATIONS` 32-bit values at once, read little-endian so the result does not
-    depend on the machine's byte order.
+    depend on the machine's byte order. The digests are laid end to end in one array of 32-bit values,
+    and each hash function's minimum is taken over its column (`v1-e31-t10`): the same values as
+    taking the minimum shingle by shingle, which made a list per shingle, in about a third of the time.
     """
     key = seed.encode("utf-8") + b"\x00"
-    minimums = [_EMPTY_SLOT] * MINHASH_PERMUTATIONS
-    for shingle in shingle_set:
-        digest = hashlib.shake_128(key + shingle.encode("utf-8")).digest(_SIGNATURE_BYTES)
-        minimums = list(map(min, minimums, _SIGNATURE_LAYOUT.unpack(digest)))
-    return tuple(minimums)
+    shake = hashlib.shake_128
+    values = array(
+        _SIGNATURE_VALUE,
+        b"".join([shake(key + shingle.encode("utf-8")).digest(_SIGNATURE_BYTES) for shingle in shingle_set]),
+    )
+    if not values:
+        return (_EMPTY_SLOT,) * MINHASH_PERMUTATIONS
+    if sys.byteorder != "little":
+        values.byteswap()
+    return tuple(min(values[column::MINHASH_PERMUTATIONS]) for column in range(MINHASH_PERMUTATIONS))
 
 
 def jaccard(left: frozenset[Hashable], right: frozenset[Hashable]) -> float:
@@ -434,6 +443,27 @@ class BodyWords(Mapping[str, "array[int]"]):
         self.vocabulary: tuple[str, ...] = tuple(numbered)
         """Each word once, at its number."""
 
+    @classmethod
+    def numbered(cls, words: Mapping[str, array[int]], vocabulary: Sequence[str]) -> BodyWords:
+        """The bodies' words from their numbers in another vocabulary, numbered again as
+        :class:`BodyWords` numbers them from the bodies' text: in order of first appearance, bodies
+        taken by fingerprint (`v1-e31-t10`). So the numbers are the same whichever way the words came,
+        from a card or from the placement state, and nothing downstream can tell the two apart."""
+        renumbered = [-1] * len(vocabulary)
+        spelled: list[str] = []
+        numbers: dict[str, array[int]] = {}
+        for fingerprint in sorted(words):
+            held = words[fingerprint]
+            for number in dict.fromkeys(held):
+                if renumbered[number] < 0:
+                    renumbered[number] = len(spelled)
+                    spelled.append(vocabulary[number])
+            numbers[fingerprint] = array(_WORD_NUMBER, map(renumbered.__getitem__, held))
+        made = cls.__new__(cls)
+        made._numbers = numbers
+        made.vocabulary = tuple(spelled)
+        return made
+
     def __getitem__(self, fingerprint: str) -> array[int]:
         return self._numbers[fingerprint]
 
@@ -497,12 +527,16 @@ class CutIndex:
 
     def __init__(
         self,
-        bodies: Mapping[str, str],
+        bodies: Mapping[str, str] | None,
         thresholds: NearDuplicateThresholds | None = None,
         *,
         words: BodyWords | None = None,
     ) -> None:
         self.limits = thresholds or NearDuplicateThresholds()
+        if bodies is None:
+            if words is None:
+                raise ValueError("an index needs the bodies or their words")
+            bodies = dict.fromkeys(words, "")
         self.fingerprints: list[str] = sorted(bodies)
         if words is not None and list(words) != self.fingerprints:
             raise ValueError("the words given are not of the bodies given")
@@ -738,18 +772,25 @@ class _Clusters:
 
 
 def cluster_near_duplicates(
-    bodies: Mapping[str, str],
+    bodies: Mapping[str, str] | None,
     thresholds: NearDuplicateThresholds | None = None,
     *,
     seed: str = MINHASH_SEED,
     words: BodyWords | None = None,
+    signatures: MutableMapping[str, array[int]] | None = None,
 ) -> dict[str, str]:
     """Group card bodies into near-duplicate clusters.
 
     `bodies` maps each exact fingerprint to one body with that fingerprint (which body does not
     matter: they normalize identically). The result maps every fingerprint to its cluster id, the
     smallest fingerprint in its cluster; a body that matched nothing is its own cluster. `words`,
-    when given, are the bodies' :class:`BodyWords`, for a caller that reads them afterwards.
+    when given, are the bodies' :class:`BodyWords`, for a caller that reads them afterwards, and then
+    `bodies` may be `None`.
+
+    `signatures`, when given, holds MinHash signatures under `seed` by fingerprint, as a run before
+    signed them (`v1-e31-t10`'s placement state): a body found there is not signed again, and a body
+    signed now is added, as an array of 32-bit values (512 bytes, where a tuple of ints takes nine
+    times that). A signature is the same function of a body's words whenever it is taken.
     """
     index = CutIndex(bodies, thresholds, words=words)
     shingle_sets = index.sets
@@ -758,9 +799,13 @@ def cluster_near_duplicates(
     for fingerprint in index.fingerprints:
         if not index.size(fingerprint):
             continue
-        signature = minhash_signature(index.shingle_texts(fingerprint), seed)
+        signature: Sequence[int] | None = signatures.get(fingerprint) if signatures is not None else None
+        if signature is None:
+            signature = minhash_signature(index.shingle_texts(fingerprint), seed)
+            if signatures is not None:
+                signatures[fingerprint] = array(_SIGNATURE_VALUE, signature)
         for band in range(LSH_BANDS):
-            rows = signature[band * LSH_ROWS_PER_BAND : (band + 1) * LSH_ROWS_PER_BAND]
+            rows = tuple(signature[band * LSH_ROWS_PER_BAND : (band + 1) * LSH_ROWS_PER_BAND])
             buckets[(band, rows)].append(fingerprint)
 
     candidates: set[tuple[str, str]] = set()

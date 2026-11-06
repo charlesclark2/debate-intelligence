@@ -36,6 +36,7 @@ import functools
 import hashlib
 import itertools
 import json
+import logging
 import random
 import resource
 import sys
@@ -63,6 +64,7 @@ from debate_core.application.ports.parsed_store import (
     SourceEntry,
     parse_version_directory,
 )
+from debate_core.application.ports.placement_state import PlacedCard, PlacementState
 from debate_core.domain.caselist import SnapshotDate, SourceDocument, SourceOrigin
 from debate_core.domain.debate_files import (
     CardCompleteness,
@@ -76,6 +78,7 @@ from debate_core.evidence.abbreviated_links import default_ellipsis_markers
 from debate_core.evidence.near_duplicates import NearDuplicateThresholds
 from debate_core.integrations.local import FsEvidenceObjectStore
 from debate_core.integrations.local.parsed_store import LocalParsedStore
+from debate_core.integrations.local.placement_state_file import write_placement_state_file
 from debate_core.integrations.local.suppression_list import local_suppression_list_file
 
 #: A short body whose both-end holders span at least this many components is too common whatever
@@ -134,6 +137,9 @@ class PhaseClock:
 
     def __enter__(self) -> PhaseClock:
         self._wrap(LocalParsedStore, "read_document", "read_document")
+        self._wrap(LocalParsedStore, "write_aggregates", "write")
+        self._wrap(LocalParsedStore, "read_placement_state", "state_read")
+        self._wrap(LocalParsedStore, "write_placement_state", "state_write")
         self._wrap(DocumentRecord, "to_parsed_document", "to_parsed")
         self._wrap(CardPlacer, "add", "placer_add")
         self._wrap(CardPlacer, "placements", "placements")
@@ -170,6 +176,8 @@ class PhaseClock:
             "cut_step": s["cut_step"],
             "linking": s["placements"] - s["body_words"] - s["cluster_total"],
             "writing": write,
+            "state_read": s["state_read"],
+            "state_write": s["state_write"],
         }
         phases["plan_ordering_and_rest"] = total - sum(phases.values())
         return {name: round(seconds, 2) for name, seconds in phases.items()}
@@ -194,10 +202,11 @@ class RecordingPlacer(CardPlacer):
         super().__init__(thresholds, markers)
         self._captured = captured
 
-    def add(self, card: ParsedCard) -> None:
-        super().add(card)
+    def add(self, card: ParsedCard) -> PlacedCard:
+        placed = super().add(card)
         if card.completeness is CardCompleteness.FULL:
             self._captured.holders[self._fingerprints[-1]].add(card.provenance.source_sha256)
+        return placed
 
 
 @contextlib.contextmanager
@@ -237,9 +246,23 @@ class ReadOnlyParsedStore(LocalParsedStore):
         self.occurrences_sha256: str | None = None
         self.rows = 0
         self.writing_seconds = 0.0
+        self.state_bytes = 0
+        self.state_seconds = 0.0
 
     async def write_source(self, *args: object, **kwargs: object) -> None:
         raise RuntimeError("the measurement writes no per-source file")
+
+    async def read_placement_state(self, caselist: str, version: str) -> PlacementState | None:
+        return None  # the store's own state, if any, is not read: the rebuild timed is a full one
+
+    async def write_placement_state(self, caselist: str, version: str, state: PlacementState) -> None:
+        """Written to a temporary file outside the data directory, to measure its size, and deleted."""
+        started = time.perf_counter()
+        with tempfile.TemporaryDirectory(prefix="placement-state-size-") as scratch:
+            path = Path(scratch) / "placement-state.sqlite"
+            write_placement_state_file(path, state)
+            self.state_bytes = path.stat().st_size
+        self.state_seconds = time.perf_counter() - started
 
     async def write_aggregates(
         self,
@@ -362,6 +385,8 @@ async def timed_rebuild(
         "rebuild_seconds": round(total, 2),
         "phases_seconds": clock.phases(total, store.writing_seconds),
         "table_equals_the_stores": stored == store.occurrences_sha256 if stored is not None else None,
+        "placement_state_bytes": store.state_bytes,
+        "placement_state_write_seconds": round(store.state_seconds, 2),
         "_plan": plan,
     }
 
@@ -681,16 +706,29 @@ class _SyntheticParser:
         )
 
 
-async def build_synthetic_store(data_dir: Path, sources: int, seed: int, *, aggregates: bool = False) -> None:
-    """A parsed synthetic store of `sources` sources over twelve weeks; with `aggregates`, rebuilt."""
+def synthetic_service(
+    data_dir: Path,
+    sources: int,
+    seed: int,
+    *,
+    new_share: float = 0.0,
+    with_the_new_week: bool = True,
+    incremental: bool = True,
+) -> CaselistParseService:
+    """A synthetic store of `sources` sources over twelve weeks, and the parse service over it.
+
+    With `new_share`, the last share of the sources by number are a thirteenth week's, listed only when
+    `with_the_new_week`: the week an incremental rebuild is timed on. The corpus is drawn from `seed`
+    alone, so the same call in another process makes the same sources."""
     corpus = SyntheticCorpus(seed)
     documents: dict[str, list[_Card]] = {}
     manifests: defaultdict[str, list[dict[str, object]]] = defaultdict(list)
     first = date(2026, 8, 4)
-    weeks = [(first + timedelta(days=7 * week)).isoformat() for week in range(SYNTHETIC_WEEKS)]
-    per_week = -(-sources // SYNTHETIC_WEEKS)
+    weeks = [(first + timedelta(days=7 * week)).isoformat() for week in range(SYNTHETIC_WEEKS + 1)]
+    first_new = sources - round(sources * new_share)
+    per_week = -(-first_new // SYNTHETIC_WEEKS)
     for number in range(sources):
-        week = number // per_week
+        week = number // per_week if number < first_new else SYNTHETIC_WEEKS
         content = f"synthetic source {seed}-{number}".encode()
         sha = hashlib.sha256(content).hexdigest()
         blob = data_dir / "blobs" / "sha256" / sha[0:2] / sha[2:4] / sha
@@ -703,6 +741,8 @@ async def build_synthetic_store(data_dir: Path, sources: int, seed: int, *, aggr
             listed.append((weeks[week + 1], path))
         if corpus.rng.random() < 0.03:
             listed.append((weeks[week], f"Invented School/Team {number}b/copy-{number}.docx"))
+        if number >= first_new and not with_the_new_week:
+            continue
         for snapshot, at in listed:
             manifests[snapshot].append(
                 {
@@ -720,7 +760,7 @@ async def build_synthetic_store(data_dir: Path, sources: int, seed: int, *, aggr
         manifest.write_text("".join(json.dumps(row) + "\n" for row in rows), encoding="utf-8")
     objects = FsEvidenceObjectStore(data_dir)
     blobs = FsEvidenceObjectStore(data_dir, subdirectory=Path("blobs"))
-    service = CaselistParseService(
+    return CaselistParseService(
         local=LocalEvidence(
             objects=objects, blobs=blobs, object_path_for=objects.path_for, blob_path_for=blobs.path_for
         ),
@@ -731,16 +771,100 @@ async def build_synthetic_store(data_dir: Path, sources: int, seed: int, *, aggr
         card_placer=lambda: CardPlacer(NearDuplicateThresholds(), SYNTHETIC_MARKERS),
         failure_rate_threshold=1.0,
         failure_rate_minimum_sources=1,
+        incremental_rebuild=incremental,
     )
 
+
+async def build_synthetic_store(data_dir: Path, sources: int, seed: int, *, aggregates: bool = False) -> None:
+    """A parsed synthetic store of `sources` sources over twelve weeks; with `aggregates`, rebuilt."""
+    service = synthetic_service(data_dir, sources, seed)
     if not aggregates:
 
-        async def parse_only(plan: ParsePlan) -> None:
+        async def parse_only(plan: ParsePlan, added: frozenset[str] = frozenset()) -> None:
             return None
 
         service._rebuild = parse_only  # type: ignore[method-assign]  # noqa: SLF001 - the rebuild is what is timed after
-
     await service.run(await service.plan(SYNTHETIC_CASELIST))
+
+
+class _Paths(logging.Handler):
+    """The rebuild's own line: placed from the state, or rebuilt in full and why."""
+
+    def __init__(self) -> None:
+        super().__init__(logging.INFO)
+        self.lines: list[str] = []
+
+    def emit(self, record: logging.LogRecord) -> None:
+        message = record.getMessage()
+        if "placement state" in message or "in full" in message:
+            self.lines.append(message.split(": ", 1)[1])
+
+
+async def incremental_step(
+    data_dir: Path, sources: int, seed: int, new_share: float, step: str
+) -> dict[str, Any]:
+    """One step of the incremental measurement over a kept data directory (`v1-e31-t10`, ac3):
+
+    * `prepare`: the store without its last week, parsed and rebuilt in full, which writes the state;
+    * `week`: the last week listed, its sources parsed and the rebuild placed from the state;
+    * `full`: the same store rebuilt in full, the setting off, the table compared with the week's.
+    """
+    if step == "prepare" and data_dir.exists() and any(data_dir.iterdir()):
+        raise SystemExit("prepare wants an empty or absent data directory")
+    data_dir.mkdir(parents=True, exist_ok=True)
+    service = synthetic_service(
+        data_dir,
+        sources,
+        seed,
+        new_share=new_share,
+        with_the_new_week=step != "prepare",
+        incremental=step != "full",
+    )
+    timed: dict[str, float] = {}
+    rebuild = service._rebuild  # noqa: SLF001 - the rebuild is what is timed
+
+    async def timed_rebuild(plan: ParsePlan, added: frozenset[str] = frozenset()) -> Any:
+        started = time.perf_counter()
+        try:
+            return await rebuild(plan, added)
+        finally:
+            timed["rebuild"] = time.perf_counter() - started
+
+    service._rebuild = timed_rebuild  # type: ignore[method-assign]  # noqa: SLF001
+    paths = _Paths()
+    logger = logging.getLogger("debate_core.application.caselist_parse")
+    logger.addHandler(paths)
+    logger.setLevel(logging.INFO)
+    clock = PhaseClock()
+    started = time.perf_counter()
+    with clock:
+        report = await service.run(await service.plan(SYNTHETIC_CASELIST))
+    run_seconds = time.perf_counter() - started
+    logger.removeHandler(paths)
+    directory = data_dir / "parsed" / SYNTHETIC_CASELIST / SYNTHETIC_PARSER_VERSION
+    table = hashlib.sha256((directory / OCCURRENCES_NAME).read_bytes()).hexdigest()
+    state = directory / "placement-state.sqlite"
+    noted = data_dir / "week-table.sha256"
+    if step == "week":
+        noted.write_text(table)
+    totals = report.store
+    assert totals is not None
+    result: dict[str, Any] = {
+        "step": step,
+        "sources": totals.sources,
+        "parsed_this_run": report.parsed,
+        "cards": totals.cards,
+        "distinct_full_bodies_signed": clock.calls["minhash"],
+        "rebuild_seconds": round(timed["rebuild"], 2),
+        "run_seconds": round(run_seconds, 2),
+        "phases_seconds": clock.phases(timed["rebuild"], clock.seconds["write"]),
+        "path": paths.lines,
+        "state_bytes": state.stat().st_size,
+        "occurrences_bytes": (directory / OCCURRENCES_NAME).stat().st_size,
+    }
+    if step == "full" and noted.is_file():
+        result["table_equals_the_weeks"] = noted.read_text() == table
+    return result
 
 
 SYNTHETIC_MARKERS = ("…",)
@@ -783,6 +907,14 @@ def main(argv: Sequence[str] | None = None) -> int:
     synthetic.add_argument("--seed", type=int, default=SYNTHETIC_SEED)
     synthetic.add_argument("--components", action="store_true", help="Count the dependency components too.")
     synthetic.add_argument("--new-share", type=float, default=0.05)
+    incremental = modes.add_parser(
+        "incremental", help="One step of timing an incremental rebuild over a kept synthetic store (ac3)."
+    )
+    incremental.add_argument("step", choices=("prepare", "week", "full"))
+    incremental.add_argument("--sources", type=int, required=True)
+    incremental.add_argument("--data-dir", type=Path, required=True)
+    incremental.add_argument("--seed", type=int, default=SYNTHETIC_SEED)
+    incremental.add_argument("--new-share", type=float, default=0.05)
     real = modes.add_parser("real", help="Time a store's rebuild read-only, and count its components.")
     real.add_argument("--data-dir", type=Path, required=True)
     real.add_argument("--caselist", required=True)
@@ -790,6 +922,21 @@ def main(argv: Sequence[str] | None = None) -> int:
     real.add_argument("--new-share", type=float, default=0.05)
     arguments = parser.parse_args(argv)
 
+    if arguments.mode == "incremental":
+        print(
+            json.dumps(
+                asyncio.run(
+                    incremental_step(
+                        arguments.data_dir.expanduser(),
+                        arguments.sources,
+                        arguments.seed,
+                        arguments.new_share,
+                        arguments.step,
+                    )
+                )
+            )
+        )
+        return 0
     if arguments.mode == "real":
         data_dir = arguments.data_dir.expanduser()
         result = asyncio.run(

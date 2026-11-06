@@ -54,10 +54,7 @@ def test_real_mode_reads_the_store_and_writes_nothing(
     before = tree(built_store)
     assert any(name.endswith("occurrences.jsonl") for name in before)
 
-    assert (
-        script.main(["real", "--data-dir", str(built_store), "--caselist", script.SYNTHETIC_CASELIST])
-        == 0
-    )
+    assert script.main(["real", "--data-dir", str(built_store), "--caselist", script.SYNTHETIC_CASELIST]) == 0
 
     assert tree(built_store) == before
     printed = capsys.readouterr()
@@ -83,6 +80,8 @@ def test_the_phases_add_up_to_the_rebuild(built_store: Path, capsys: pytest.Capt
         "cut_step",
         "linking",
         "writing",
+        "state_read",
+        "state_write",
         "plan_ordering_and_rest",
     }
     assert sum(phases.values()) == pytest.approx(result["rebuild_seconds"], abs=0.1)
@@ -157,3 +156,37 @@ def test_nine_holders_are_not_a_stock_phrase() -> None:
     members = {"s", *holders}
     bounded = script.components(edges, members, bound_stock_phrases=True)
     assert len({bounded.find(member) for member in members}) == 1
+
+
+def test_the_incremental_steps_place_a_week_from_the_state_and_its_table_is_the_full_rebuilds(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """`v1-e31-t10`, ac3's measurement: forty sources, the last two a new week."""
+    data_dir = tmp_path / "store"
+    for step in ("prepare", "week", "full"):
+        assert (
+            script.main(
+                [
+                    "incremental",
+                    step,
+                    "--sources",
+                    "40",
+                    "--seed",
+                    str(SEED),
+                    "--new-share",
+                    "0.05",
+                    "--data-dir",
+                    str(data_dir),
+                ]
+            )
+            == 0
+        )
+    prepare, week, full = (json.loads(line) for line in capsys.readouterr().out.splitlines())
+
+    assert prepare["path"] == ["rebuilt in full (NO_STATE), 38 placed sources read"]
+    assert week["parsed_this_run"] == 2
+    assert week["path"] == ["placed from the placement state, 2 of 40 placed sources read"]
+    assert full["path"] == ["rebuilt in full (TURNED_OFF), 40 placed sources read"]
+    assert full["table_equals_the_weeks"] is True
+    assert week["distinct_full_bodies_signed"] < full["distinct_full_bodies_signed"]
+    assert week["state_bytes"] > 0

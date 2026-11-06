@@ -10,18 +10,72 @@
 
 ## Summary
 
-Proposal stage: nothing is built yet. The scaling is measured on four synthetic stores, set beside
-every recorded real figure, and the proposal below waits for the PM's ruling. Look first at (b): the
-clustering rules are not monotone, so a new card can split an older cluster as well as join or
-rename one, and the only exact incremental placement re-clusters every dependency component a
-new body reaches. Also (c): this needs a new file beside the aggregates, which a removal must
-delete. Then (f): the spec's estimate of 6h does not cover it.
+**This task does not merge until dev's `docx-9` run image is built**, which is before Tuesday
+2026-11-10 06:00 Chicago (the PM's ruling Q5). So the 2026-11-11 full re-parse runs the rebuild that
+ran on 2026-11-05, and this task's rebuild first runs in the image built after that.
+
+Where it stands:
+
+* The scaling is measured on four synthetic stores, beside every recorded real figure.
+* The proposal below was ruled on by the PM on 2026-11-06.
+* The measurement script is committed (`scripts/measure_rebuild_scaling.py`, Q6). Its read-only
+  operator block is under Operator follow-ups.
+
+**Stage 1 waits on one question to the PM.** As proposed, Stage 1 *is* the placement state, and
+the ruling's Q2 and Q3 keep the state out of this task (see "Open question" below). Look first at
+(b) of the proposal: the clustering rules are not monotone, so a new card can split an older
+cluster as well as join one.
+
+## The PM's ruling (2026-11-06), as read here
+
+* **Q1.** Stage 1 is in this task, and Stage 2 is a follow-up the PM files from this report's
+  Follow-up work. Stage 1's occurrence table must equal today's full rebuild's, byte for byte, with
+  today's rebuild as the oracle. That is proved by Hypothesis property tests on synthetic stores,
+  shown failing first, with mutants on the rules Stage 1 changes, and agreement 8's database rule
+  stated. The estimate becomes Stage 1's own figure.
+* **Q2, Q3.** Ruled with Stage 2, not now. In principle a placement state beside the aggregates is
+  acceptable if it holds only what `parsed/` already holds and `v1-e30-t33`'s removal reaches it
+  wherever it reaches an aggregate, counted as residue. *Nothing of it is in this task.*
+* **Q4.** No switch in Stage 1: it replaces the rebuild with an equivalent one, and today's
+  implementation stays reachable only from the tests, as the oracle.
+* **Q5.** The image does not wait, and this task does not merge before it (the Summary's first
+  lines).
+* **Q6.** The script is committed now. It is read-only and prints timings, counts and component
+  sizes only, and its block runs over `~/.debate-research/dev`. Done: see Operator follow-ups.
+
+### Open question: Stage 1 without a placement state
+
+Stage 1 as proposed in (f) was "the state, with every body re-clustered from it each run". The state
+is what lets a run skip what a past run already did:
+
+* the stored documents, 30% of the real rebuild;
+* the MinHash signatures of the stored bodies, 76 to 83% of the synthetic rebuild.
+
+With no file kept between runs, every run must read every document and sign every body again. A run
+then cannot cost less than the work the full rebuild does on the same store. ac2 ("an incremental
+rebuild after a week's new sources") and ac3 (under a quarter of the full rebuild's time) cannot be
+met in this task. The ruling's Q1 and its Q2/Q3 point different ways, so I have not started Stage 1.
+
+What a stateless Stage 1 could still be: a faster rebuild with the same output. The largest piece
+is MinHash computed by column minima over one array of digests, giving the same signatures as
+today's. Measured on 40 synthetic bodies of 900 words, scratch benchmark, 2026-11-06:
+
+| MinHash | Seconds | Same signatures |
+|---|---|---|
+| Today's | 0.354 | |
+| Column minima over one array | 0.121 | yes, all 40 |
+| The SHAKE-128 digests alone | 0.047 | |
+
+That is 2.9 times faster for the part that is 76 to 83% of the synthetic rebuild: roughly half the
+rebuild off on synthetic stores, and less on real ones, where reading documents is a larger share.
+It changes no matching rule, but it is not incremental.
 
 ## Proposal for the PM's ruling (before any code)
 
 Everything here is measured on synthetic stores of invented words, or read from records already in
 `docs/`. No real card text was read. The scratch scripts and their raw output are kept, uncommitted,
-in the worktree's ignored `.task/measurements/`.
+in the worktree's ignored `.task/measurements/`. The measurement is now committed as
+`scripts/measure_rebuild_scaling.py`, which gives the same figures (its `synthetic` mode).
 
 ### (a) How the rebuild scales, and where its time goes
 
@@ -347,38 +401,80 @@ None.
 <!-- Commands the operator must run (anything over ~2 minutes), with where to run them, the exact
 command, expected runtime and what success looks like. Also GitHub/AWS settings to change. -->
 
-**The real phase split and dependency components (read-only, after the weekend).** This waits for the
-PM's word to commit `scripts/measure_rebuild_scaling.py`. The script reads the Mac's dev store and
-writes nothing: the rebuild's aggregates are rendered to a digest in memory.
+**The real phase split and dependency components (read-only, after the weekend).** The script runs
+over this Mac's own dev data directory, `~/.debate-research/dev`. It times a full rebuild of
+`hspolicy26`'s newest version directory (`2026.10.27-docx-7`, the store `v1-e40-t36` and
+`v1-e40-t39` measured), then counts the clusterer's dependency components. Nothing is written: the
+aggregates it makes are rendered to a SHA-256 in memory and dropped
+(`test_real_mode_reads_the_store_and_writes_nothing` holds it to that).
 
-The block takes about 25 minutes. It measures two things:
+**Expected runtime: about 15 minutes, up to 30 on a busy Mac.** The rebuild is the bulk: 741 s when
+`v1-e40-t39` measured this store. Counting components reuses the rebuild's own index and signatures,
+which took 1.3 s against a 63 s rebuild at 1,000 synthetic sources. It needs about 1 GB of memory.
 
-* the phase split of a full `hspolicy26` rebuild on today's code;
-* the dependency components (confirmed edges, with and without the stock-phrase bound) that the
-  newest week's sources reach, and those reached by the last 5% of sources.
-
-The Mac's copy is stale since the cutover, but what is measured is the store's shape. The block stops
-with a plain message if:
-
-* a `DEBATE_` variable is set in the shell;
-* a `caselist pull` is running;
-* it is Wednesday in Chicago.
+The block stops with a plain message if a `DEBATE_` variable is set in the shell, or if a
+`caselist pull` is running.
 
 ```bash
 cd /Users/charlesclark/Documents/debate/debate-intelligence-tool/debate-intelligence-worktrees/v1-e31-t10-incremental-aggregate-rebuild
-if env | grep -q '^DEBATE_'; then echo 'STOP: a DEBATE_ variable is set in this shell; open a new terminal'; elif pgrep -f 'caselist pull' > /dev/null; then echo 'STOP: a caselist pull is running'; elif [ "$(TZ=America/Chicago date +%u)" = 3 ]; then echo 'STOP: it is Wednesday in Chicago, the weekly run day'; else .venv/bin/python scripts/measure_rebuild_scaling.py real --data-dir ~/.debate-research/dev --caselist hspolicy26; fi
+if env | grep -q '^DEBATE_'; then echo 'STOP: a DEBATE_ variable is set in this shell; open a new terminal'; elif pgrep -f 'caselist pull' > /dev/null; then echo 'STOP: a caselist pull is running'; else .venv/bin/python scripts/measure_rebuild_scaling.py real --data-dir ~/.debate-research/dev --caselist hspolicy26; fi
 ```
 
-Success looks like exit 0 and one JSON line: the version directory, sources, cards, distinct full
-bodies, the rebuild's seconds by phase, and the components' counts. Every value is a count, a number
-of seconds or a share. Paste the JSON line back.
+**What success looks like:**
+
+* After the rebuild, one line on stderr: `{"rebuild_seconds": ...}`.
+* Then exit 0 and one JSON line on stdout. It holds the version directory, sources, cards, distinct
+  full bodies and their words, the rebuild's seconds by phase, `table_equals_the_stores`, the
+  component counts for the newest snapshot's sources and for the last 5%, and the peak memory.
+* Every value is a count, a number of seconds, a share or `true`/`false`.
+
+Paste both lines back. If `table_equals_the_stores` is `false`, the store's table was written by
+other code than this checkout's; the timings still stand.
 
 ## Follow-up work
 
 <!-- Bugs, gaps or ideas outside this task's scope, each with the task or epic it belongs to.
 The PM decides whether they become spec changes or new tasks. -->
 
-None.
+1. **Stage 2: the placement re-clusters only what a week reaches (E31, by the PM's ruling Q1).**
+   Placement is not monotone (proposal (b)), so the only exact incremental placement re-clusters
+   every dependency component a new body reaches. Three kinds of edge join two distinct full bodies:
+   * a band-candidate pair with Jaccard at the threshold;
+   * a confirmed containment, either way;
+   * for a short body, a body holding both its ends.
+
+   The clusterer on the whole store, restricted to one component, equals the clusterer on that
+   component alone. Edges from a short body whose both-end holders span ten or more components are
+   dropped, and the restricted run is told it is too common. Linking is partitioned by short-cite
+   keys, tied together where one abbreviated text appears under two keys.
+
+   **What a run reads.** A placement state beside the aggregates, meeting the conditions of Q2 and
+   Q3:
+   * per live source: each card's range, completeness, fingerprint, short-cite key, link key and
+     placement;
+   * per distinct full body: its words as numbers in one vocabulary, its signature and its component;
+   * stamps: the fingerprint version, the clusterer's constants, the thresholds, the markers, and
+     the SHA-256 of the table it was written beside.
+
+   It also reads the week's new per-source files, the manifests and the list. It reads no stored
+   document and no aggregate.
+
+   **What a run does.** It signs only the new bodies and finds their edges. It re-clusters the new
+   bodies, the stored components they reach, and the stored short bodies a new body holds both ends
+   of. It re-links the key groups those changes reach. Then it makes every row and writes the table
+   and the state whole.
+
+   **When it rebuilds in full:** no state, or a stamp that differs, or the table's digest differing
+   from the stamp. A `v1-e30-t33` removal deletes the state everywhere it reaches an aggregate,
+   recorded and counted as residue, so the next run is a full rebuild.
+
+   **The test.** A Hypothesis property over generated weeks, removals between weeks included:
+   incremental against full, every aggregate and the state byte-equal.
+
+   **The size of it.** On synthetic stores a 5% week reaches 10 to 13% of distinct bodies, and the
+   estimate is about 12% of a full rebuild at 2,000 sources. The operator block's component counts
+   say what it reaches on a real store. About 9h on top of Stage 1 as proposed; more if Stage 1
+   carries no state (the open question).
 
 ## PM review
 

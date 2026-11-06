@@ -342,9 +342,48 @@ Never on a Wednesday.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-11-06
 
 **Notes:**
+
+Written to the ruling. The steps cannot run out of order, because the files the checks leave in the copy
+gate every prod write, and the checks are tested where they live: in the runbook's own text, against
+ten breaks planted there.
+
+1. **ac1 passes.** "Until the promotion" is one eight-step section. Prod's parsed store is dev's
+   directory as restored, sent with `--publish-only`, and never parsed on the Mac. The comparison
+   uses the must-match set, with index_id reported but not required. testcl26 in dev's index, or a
+   removal newer than the manifest, stops the parsed store. Each step says where it runs and what
+   success looks like. The command blocks, links and `tests/docs` (230) pass, and the 101-file
+   affected set is the pull request's `ci` under the ruling of 2026-10-19.
+2. **The measurements settle Q6 and size the session.** Dev's function and dev's index are both at
+   docx-7 (image `e9769533f50c`, deployed 2026-11-03), so Download is on in dev today and the ruling's
+   order stands: dev's function goes to docx-9 on 2026-11-12, after the 11-11 run. Prod is three weeks
+   behind (newest manifests 2026-10-13, the `full/2026-10-20` archives missing) and holds no docx-7.
+   The first prod session therefore covers three weeks and a whole new directory. About 11.1 GB of
+   parsed store plus at most 5.0 GB of sources against 56 GB free fits. So does Q4 (i)'s 17.4 GB.
+3. **Deviations accepted.** The tests in `tests/docs` follow `test_cutover_plan_checks.py`. The
+   promotion list is renumbered with the docx-9 promotion as item 6: prod's parsed store is now 7,
+   the index 8, removal 9 and retirement 10. Past reports keep the old numbers. "Never on a
+   Wednesday" covers the whole section.
+4. **Decisions accepted.** A failed check holds back the parsed store and index, not the weekly raw
+   publish, because that has to go on until the docx-9 promotion. The comparison reads the manifest
+   restored under the same lock, which is the same moment as the copy. Step 7 re-reads prod's
+   function's parser before the index publish. The deletion block has no guards, so it deletes on
+   every path. Q6 (2) needed no code.
+5. **Operator follow-up 1 runs from the main clone**, not this worktree, which may be gone by then:
+   replace its first line with `cd ~/Documents/debate/debate-intelligence-tool/debate-intelligence`.
+   Run it after the weekend, never on a Wednesday, and paste it back as it is (counts, keys and digests
+   only). Follow-up 2 has run, and its result is above.
+6. **Follow-ups, which the PM files in the next batch:**
+   - the `--publish-only` dry run, p2, wanted before the prod session (E31, beside v1-e31-t30);
+   - a backfile with no directory at the running parser version is named, p3 (E40);
+   - prod's one-time backfile publish, p3, tied to the promotion (E40).
+   The openev object that differs between dev and prod waits for follow-up 1's digest line. The
+   PM updates `evidence-search-pilot.md`'s stale row in the same batch.
+7. **Merge:** `scripts/task pr --partial` once `ci` is green. The Goal stays `InProgress` until ac2 is
+   recorded, after dev's 2026-11-11 run at docx-9, dev's function on 2026-11-12, promotion item 6 and
+   the PM's word.

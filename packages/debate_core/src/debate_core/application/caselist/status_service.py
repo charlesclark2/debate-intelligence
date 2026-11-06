@@ -224,6 +224,8 @@ from debate_core.application.ports.evidence_store import EvidenceObjectStore, Ob
 from debate_core.application.ports.evidence_versions import EvidenceVersionStore
 from debate_core.application.ports.parsed_store import PARSED_PREFIX, source_digest_of_key
 from debate_core.application.ports.suppression import (
+    RemovalAggregatesEntry,
+    RemovalAggregatesLog,
     RemovalLog,
     RemovalLogEntry,
     RemovalScopeEntry,
@@ -640,7 +642,7 @@ class CaselistStatusService:
         if residue and self._versions is not None:
             entries, scopes = await self._removal_records()
             removals = (
-                completed_removals(entries, scopes, self._environment)
+                completed_removals(entries, scopes, self._environment, await self._aggregate_records())
                 if self._environment is not None
                 else CompletedRemovals()
             )
@@ -765,6 +767,13 @@ class CaselistStatusService:
         log = self._removal_log
         scopes = await log.scopes() if isinstance(log, RemovalScopeLog) else ()
         return tuple(await log.entries()), tuple(scopes)
+
+    async def _aggregate_records(self) -> tuple[RemovalAggregatesEntry, ...]:
+        """Both copies of the aggregate record beside the log (`v1-e30-t33`); none without a log."""
+        log = self._removal_log
+        if log is None or self._environment is None or not isinstance(log, RemovalAggregatesLog):
+            return ()
+        return await log.aggregate_records()
 
     async def _school_views_left(
         self, residue: CaselistResidue, cutoff: RemovalCompletion | None

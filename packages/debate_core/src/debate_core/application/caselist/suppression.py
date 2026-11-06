@@ -72,6 +72,7 @@ from debate_core.application.ports.evidence_store import EvidenceObjectStore, Ob
 from debate_core.application.ports.suppression import (
     HELD_DIGESTS_FILENAME,
     PATH_HOLDS_FILENAME,
+    REMOVAL_AGGREGATES_FILENAME,
     REMOVAL_SCOPES_FILENAME,
     WITHDRAWALS_FILENAME,
     AppendOnlyRecord,
@@ -81,6 +82,7 @@ from debate_core.application.ports.suppression import (
     KeepsRecordsBesideIt,
     PathHoldEntry,
     PathHoldList,
+    RemovalAggregatesEntry,
     RemovalLogEntry,
     RemovalScopeEntry,
     SuppressionEntry,
@@ -127,6 +129,7 @@ run appends to it under its lock at each save of the run-state bundle (`v1-e40-t
 _PATH_HOLDS_CALLED: Final = "path-hold list"
 _HELD_DIGESTS_CALLED: Final = "held-digest record"
 _REMOVAL_SCOPES_CALLED: Final = "removal-scope record"
+_REMOVAL_AGGREGATES_CALLED: Final = "removal aggregate record"
 _WITHDRAWALS_CALLED: Final = "withdrawal record"
 
 
@@ -473,6 +476,7 @@ class RecordedRemovalLog:
         ]
         self._scope_lines = _MergedLines(beside) if beside else None
         self._withdrawal_lines = _beside(records, WITHDRAWALS_FILENAME, _WITHDRAWALS_CALLED)
+        self._aggregate_lines = _beside(records, REMOVAL_AGGREGATES_FILENAME, _REMOVAL_AGGREGATES_CALLED)
 
     @property
     def records(self) -> tuple[AppendOnlyRecord, ...]:
@@ -491,22 +495,37 @@ class RecordedRemovalLog:
             return ()
         return tuple(_parse(RemovalScopeEntry, *read) for read in await self._scope_lines.read())
 
-    async def append(
-        self, entries: Sequence[RemovalLogEntry], *, scopes: Sequence[RemovalScopeEntry] = ()
-    ) -> None:
-        """Append `scopes` to every copy's scope record, then `entries` to every copy of the log.
+    async def aggregate_records(self) -> tuple[RemovalAggregatesEntry, ...]:
+        """Every aggregate record on every copy, deduplicated (`v1-e30-t33`); none where none is kept."""
+        if self._aggregate_lines is None:
+            return ()
+        return tuple(_parse(RemovalAggregatesEntry, *read) for read in await self._aggregate_lines.read())
 
-        The scopes go first, so a log entry is never on a copy without its scope beside it: a scope
-        alone is joined to nothing and read by nothing. Where no copy keeps a scope record, scopes
-        are refused rather than dropped.
+    async def append(
+        self,
+        entries: Sequence[RemovalLogEntry],
+        *,
+        scopes: Sequence[RemovalScopeEntry] = (),
+        aggregates: Sequence[RemovalAggregatesEntry] = (),
+    ) -> None:
+        """Append `scopes` to every copy's scope record and `aggregates` to its aggregate record, then
+        `entries` to every copy of the log.
+
+        Both go first, so a log entry is never on a copy without them beside it: either alone is joined
+        to nothing and read by nothing. Where no copy keeps such a record, they are refused rather than
+        dropped.
         """
-        if scopes:
-            if self._scope_lines is None:
+        for lines, records, called in (
+            (self._scope_lines, scopes, "a removal-scope record"),
+            (self._aggregate_lines, aggregates, "a removal aggregate record"),
+        ):
+            if not records:
+                continue
+            if lines is None:
                 raise AppendOnlyViolation(
-                    self._lines.records[0].location,
-                    "no copy of this log keeps a removal-scope record beside it",
+                    self._lines.records[0].location, f"no copy of this log keeps {called} beside it"
                 )
-            await self._scope_lines.append([scope.to_line() for scope in scopes])
+            await lines.append([record.to_line() for record in records])
         await self._lines.append([entry.to_line() for entry in entries])
 
 
@@ -534,6 +553,7 @@ def _parse[
         RemovalScopeEntry,
         WithdrawalEntry,
         HeldDigestEntry,
+        RemovalAggregatesEntry,
     )
 ](kind: type[EntryT], line: str, location: str, number: int) -> EntryT:
     try:

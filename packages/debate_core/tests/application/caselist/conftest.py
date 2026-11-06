@@ -221,6 +221,7 @@ class RemovalWorld:
             local=self.local,
             local_blobs=FsEvidenceVersionStore(self.data_dir / "blobs"),
             local_parsed=FsEvidenceVersionStore(self.data_dir / "parsed"),
+            **self._aggregates_reach(RemovalPlanner),
             remote=self.bucket,
             remote_versions=versions or S3EvidenceVersionStore(bucket=self.bucket_name, client=self.client),
             inbox=self.inbox,
@@ -232,6 +233,19 @@ class RemovalWorld:
             # The landscape bundles under reports/ are the planner's since v1-e32-t13, likewise.
             **self._local_reports(RemovalPlanner),
         )
+
+    def _aggregates_reach(self, built: type) -> dict[str, Any]:
+        """The parsed tree as named objects, and the bucket's retirement tags, for a build whose planner
+        and service rewrite aggregates (`v1-e30-t33`): the older builds' sources take neither."""
+        parameters = signature(built).parameters
+        given: dict[str, Any] = {}
+        if "local_parsed_objects" in parameters:
+            given["local_parsed_objects"] = FsEvidenceObjectStore(self.data_dir, subdirectory=Path("parsed"))
+        if "retirement" in parameters:
+            from debate_core.integrations.s3.version_directories import S3VersionDirectories
+
+            given["retirement"] = S3VersionDirectories(bucket=self.bucket_name, client=self.client)
+        return given
 
     def _local_reports(self, built: type) -> dict[str, Any]:
         """The data directory keyed as the bucket is, for a build whose planner and service take it."""
@@ -257,6 +271,7 @@ class RemovalWorld:
             local=self.local,
             local_blobs=FsEvidenceVersionStore(self.data_dir / "blobs"),
             local_parsed=FsEvidenceVersionStore(self.data_dir / "parsed"),
+            **self._aggregates_reach(CaselistRemovalService),
             inbox=self.inbox,
             remote=self.bucket,
             suppression=self.suppression(),

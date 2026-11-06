@@ -93,7 +93,15 @@ from debate_core.application.caselist.evidence_listing import LocalEvidence
 from debate_core.application.caselist.inbox_purge import CaselistInbox, InboxPurge, purge_inbox
 from debate_core.application.caselist.publish_plan import snapshot_of_manifest_key
 from debate_core.application.caselist.publish_service import error_code_of
+from debate_core.application.caselist.removal_aggregates import (
+    AggregateRewriteRefused,
+    TableRewrite,
+    UnreadableAggregateLine,
+    rewrite_directory,
+)
 from debate_core.application.caselist.removal_plan import (
+    AggregateAction,
+    AggregateChange,
     Disposition,
     InvalidRemovalRequest,
     ManifestRewrite,
@@ -131,10 +139,12 @@ from debate_core.application.ports.providers import Clock
 from debate_core.application.ports.suppression import (
     REINSTATEMENT_REASONS,
     REQUEST_ID_PATTERN,
+    AggregateRewriteRecord,
     AppendOnlyRecord,
     InboxRewriteRecord,
     ManifestRewriteRecord,
     ReasonCode,
+    RemovalAggregatesEntry,
     RemovalLogEntry,
     RemovalLogKind,
     RemovalOutcome,
@@ -536,6 +546,12 @@ class _Counts:
     inbox: InboxPurge = field(default_factory=InboxPurge)
     rewrites: list[ManifestRewriteRecord] = field(default_factory=lambda: [])
     """Each manifest rewritten in the bucket so far, with the version its rewrite is."""
+    aggregates_rewritten: int = 0
+    aggregate_rows_dropped: int = 0
+    aggregates_deleted: int = 0
+    aggregates_kept: list[AggregateRewriteRecord] = field(default_factory=lambda: [])
+    """Each aggregate in the bucket left clean so far, rewritten or kept, with its clean version."""
+    aggregate_keys_deleted: list[str] = field(default_factory=lambda: [])
 
 
 @dataclass(frozen=True, slots=True)
@@ -560,6 +576,11 @@ class RemovalReport:
     command's output only: a removal-log line's keys are pinned, so the log counts them with the rest."""
     school_view_versions_deleted: int = 0
     """Of :attr:`s3_versions_deleted`, the versions of landscape school-view files."""
+    aggregates_rewritten: int = 0
+    """Parsed-store aggregates rewritten without the removed rows, here and in the bucket (`v1-e30-t33`)."""
+    aggregate_rows_dropped: int = 0
+    aggregates_deleted: int = 0
+    """Aggregates of retired version directories deleted with every version, in the bucket."""
 
     @property
     def completed(self) -> bool:
@@ -632,6 +653,38 @@ async def on_the_working_copy[T](run_state: RemovalRunState | None, work: Callab
     return await work()
 
 
+class AggregatesLeft(DomainError):
+    """After rewriting or deleting, the removal credential still lists aggregate versions it should
+    have taken (`v1-e30-t33`). The run stops `INCOMPLETE`; running it again takes them. Counts only."""
+
+    def __init__(self, versions: int) -> None:
+        self.versions = versions
+        super().__init__(
+            f"{versions} version(s) of the parsed store's aggregates the removal reached are still in the "
+            "bucket; run the same removal again"
+        )
+
+
+def _doomed(
+    version: ObjectVersion, change: AggregateChange, plan: RemovalPlan, kept: str | None, keeping: bool
+) -> bool:
+    """Whether the execution deletes this version of an aggregate: every version of a retired
+    directory's, every one but the rewrite's, or the older ones a re-run has still to purge."""
+    if keeping and version.version_id == kept:
+        return False
+    if change.action in (AggregateAction.DELETE, AggregateAction.REWRITE):
+        return True
+    return plan.purges(version)
+
+
+def _directory_label(side: Side, caselist: str, version: str) -> str:
+    return f"parsed/{caselist}/{version}" + (" on this machine" if side is Side.LOCAL else " in the bucket")
+
+
+def _aggregate_label(change: AggregateChange) -> str:
+    return f"{_directory_label(change.side, change.caselist, change.version)}: {change.name}"
+
+
 class SchoolViewsLeft(DomainError):
     """After deleting, the removal credential still lists versions of school views the removal reached.
 
@@ -688,6 +741,8 @@ class CaselistRemovalService:
     local: LocalEvidence
     local_blobs: EvidenceVersionStore
     local_parsed: EvidenceVersionStore
+    local_parsed_objects: EvidenceObjectStore
+    """The same parsed tree as named objects, which an aggregate's rewrite here goes to (`v1-e30-t33`)."""
     local_reports: EvidenceVersionStore
     """The data directory, keyed as the bucket is, for the landscape bundles' school views (`v1-e32-t13`)."""
     inbox: CaselistInbox
@@ -772,7 +827,12 @@ class CaselistRemovalService:
         counts = _Counts()
         failure: BaseException | None = None
         suppressed = False
+        staging = tempfile.TemporaryDirectory(prefix="debate-removal-aggregates-")
         try:
+            # Every aggregate rewrite, downloaded, rewritten and checked before anything is written:
+            # a line that cannot be read, or a table that changed since the plan, stops the run with
+            # nothing written (the PM's ruling of 2026-11-05, (c)).
+            staged = await self._stage_aggregates(plan, Path(staging.name))
             # What this machine's imports held at a held path, given to the bucket's copy, which
             # only the takedown credential writes (v1-e30-t23). Nothing new is appended.
             await suppression.append_held_digests(())
@@ -780,10 +840,14 @@ class CaselistRemovalService:
             await suppression.append(plan.suppression_entries)
             await suppression.append_path_holds(plan.path_holds)
             suppressed = True
+            # Each directory's aggregates before its per-source file, so a run that stops between them
+            # leaves the file a re-run finds the directory by (v1-e30-t33).
+            await self._bucket_aggregates(plan, staged, access, counts)
             await self._delete_bucket_objects(plan, access, counts)
             await self._delete_bucket_school_views(plan, access, counts)
             await self._rewrite_bucket_manifests(plan, access, counts)
             await self._sweep_superseded_manifests(plan, access, counts)
+            await self._local_aggregates(plan, staged, counts)
             await self._delete_local_files(plan, counts)
             await self._delete_local_school_views(plan, counts)
             await self._rewrite_local_manifests(plan, counts)
@@ -793,6 +857,8 @@ class CaselistRemovalService:
             await self._rewrite_run_state(access, counts)
         except (DomainError, OSError) as stopped:
             failure = stopped
+        finally:
+            staging.cleanup()
         entry = self._log_entry(plan, counts, failure)
         scope = RemovalScopeEntry(
             recorded_at=entry.recorded_at,
@@ -801,10 +867,17 @@ class CaselistRemovalService:
             caselists=plan.touched_caselists,
             manifest_rewrites=tuple(sorted(counts.rewrites, key=lambda rewrite: rewrite.key)),
         )
+        aggregates = RemovalAggregatesEntry(
+            recorded_at=entry.recorded_at,
+            request_id=entry.request_id,
+            environment=entry.environment,
+            kept=tuple(sorted(counts.aggregates_kept, key=lambda one: one.key)),
+            deleted=tuple(sorted(counts.aggregate_keys_deleted)),
+        )
         log = RecordedRemovalLog(self.local_removal_log, self._bucket_record(access, REMOVAL_LOG_KEY))
         unlogged: DomainError | OSError | None = None
         try:
-            await log.append([entry], scopes=[scope])
+            await log.append([entry], scopes=[scope], aggregates=[aggregates])
         except (DomainError, OSError) as refused:
             unlogged = refused  # reported with the run's own failure, or as a completed removal unlogged
         report = RemovalReport(
@@ -820,6 +893,9 @@ class CaselistRemovalService:
             preflight_probes_left=probes_left,
             school_view_files_deleted=counts.school_view_files_deleted,
             school_view_versions_deleted=counts.school_view_versions_deleted,
+            aggregates_rewritten=counts.aggregates_rewritten,
+            aggregate_rows_dropped=counts.aggregate_rows_dropped,
+            aggregates_deleted=counts.aggregates_deleted,
         )
         if failure is not None:
             raise RemovalIncomplete(report, failure, suppressed=suppressed, unlogged=unlogged) from failure
@@ -827,6 +903,111 @@ class CaselistRemovalService:
             holding, missing = await _copies_holding(log.records, entry.to_line())
             raise RemovalCompletedUnlogged(report, unlogged, holding=holding, missing=missing) from unlogged
         return report
+
+    # -- the parsed store's aggregates (v1-e30-t33) ------------------------------------------------
+
+    async def _stage_aggregates(self, plan: RemovalPlan, into: Path) -> dict[tuple[Side, ObjectKey], Path]:
+        """Each aggregate the plan rewrites, rewritten and checked under `into`, by side and key.
+
+        Downloads every current table of each directory with a rewrite, since a camp path file is asked
+        with its table's digest, and refuses a table whose bytes are not the ones the plan counted.
+        Raises before anything is written: :class:`UnreadableAggregateLine` for a line the plan or this
+        reading could not read, :class:`AggregateRewriteRefused` for a changed table or a failed check.
+        """
+        for change in plan.aggregates:
+            if change.action is AggregateAction.UNREADABLE:
+                raise UnreadableAggregateLine(_aggregate_label(change), change.unreadable_line or 0)
+        staged: dict[tuple[Side, ObjectKey], Path] = {}
+        directories: dict[tuple[Side, str, str], list[AggregateChange]] = {}
+        for change in plan.aggregates:
+            directories.setdefault((change.side, change.caselist, change.version), []).append(change)
+        for number, ((side, caselist, version), changes) in enumerate(sorted(directories.items())):
+            rewrites = [change for change in changes if change.action is AggregateAction.REWRITE]
+            if not rewrites:
+                continue
+            store = self.remote if side is Side.BUCKET else self.local_parsed_objects
+            read = into / f"{number}-read"
+            written = into / f"{number}-written"
+            read.mkdir()
+            written.mkdir()
+            tables: dict[str, Path] = {}
+            for change in changes:
+                if change.sha256 is not None:
+                    tables[change.name] = read / change.name
+                    await store.get_file(change.key, tables[change.name])
+            done = rewrite_directory(
+                tables,
+                plan.rows_removed(caselist),
+                label=_directory_label(side, caselist, version),
+                into=written,
+            )
+            for change in rewrites:
+                result = done.get(change.name)
+                if isinstance(result, UnreadableAggregateLine):
+                    raise result
+                if not isinstance(result, TableRewrite) or result.sha256 != change.sha256:
+                    raise AggregateRewriteRefused(
+                        _aggregate_label(change), "it changed since the plan read it"
+                    )
+                staged[(side, change.key)] = written / change.name
+        return staged
+
+    async def _bucket_aggregates(
+        self,
+        plan: RemovalPlan,
+        staged: dict[tuple[Side, ObjectKey], Path],
+        access: TakedownAccess,
+        counts: _Counts,
+    ) -> None:
+        """Each aggregate in the bucket as planned: rewritten and confirmed, then every other version
+        purged; kept with its older versions purged; or, in a retired directory, deleted with every
+        version. Then each is listed again, and a version the removal should have taken still there
+        stops the run :class:`AggregatesLeft`."""
+        for change in plan.aggregates_on(Side.BUCKET):
+            if change.action is AggregateAction.LEFT:
+                continue
+            kept: str | None = None
+            keeping = False
+            if change.action is AggregateAction.REWRITE:
+                written = await self.remote.put_file(change.key, staged[(Side.BUCKET, change.key)])
+                confirmed = (await self.remote.head(change.key)).sha256
+                if confirmed != written.sha256:
+                    raise AggregateRewriteRefused(
+                        _aggregate_label(change), "the bucket did not confirm the rewrite"
+                    )
+                kept, keeping = written.version_id, True
+                counts.aggregates_rewritten += 1
+                counts.aggregate_rows_dropped += change.rows_dropped or 0
+            listed = await self._bucket_versions(access, change.key)
+            if change.action is AggregateAction.PURGE:
+                current = next((one for one in listed if one.is_latest and not one.is_delete_marker), None)
+                kept, keeping = (None, False) if current is None else (current.version_id, True)
+            doomed = tuple(one for one in listed if _doomed(one, change, plan, kept, keeping))
+            refuse_protected_versions(doomed)
+            counts.s3_versions_deleted += await access.versions.delete_versions(doomed)
+            left = [
+                one
+                for one in await self._bucket_versions(access, change.key)
+                if _doomed(one, change, plan, kept, keeping)
+            ]
+            if left:
+                raise AggregatesLeft(len(left))
+            if keeping:
+                counts.aggregates_kept.append(AggregateRewriteRecord(key=change.key, version_id=kept))
+            else:
+                counts.aggregate_keys_deleted.append(change.key)
+                counts.aggregates_deleted += int(change.action is AggregateAction.DELETE)
+
+    async def _local_aggregates(
+        self, plan: RemovalPlan, staged: dict[tuple[Side, ObjectKey], Path], counts: _Counts
+    ) -> None:
+        """Each aggregate on this machine the plan rewrites, replaced atomically by its checked rewrite."""
+        for change in plan.aggregates_on(Side.LOCAL):
+            if change.action is not AggregateAction.REWRITE:
+                continue
+            await self.local_parsed_objects.put_file(change.key, staged[(Side.LOCAL, change.key)])
+            counts.aggregates_rewritten += 1
+            counts.aggregate_rows_dropped += change.rows_dropped or 0
 
     async def _delete_bucket_objects(
         self, plan: RemovalPlan, access: TakedownAccess, counts: _Counts

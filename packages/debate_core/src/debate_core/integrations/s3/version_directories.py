@@ -104,6 +104,10 @@ class S3VersionDirectories:
     async def restore(self, caselist: str, version: str) -> int:
         return await asyncio.to_thread(self._retag, self._prefix(caselist, version), _without_retirement_tag)
 
+    async def retired(self, key: str) -> bool:
+        """Whether `key`'s current object carries the retirement tag: what a removal asks (`v1-e30-t33`)."""
+        return await asyncio.to_thread(lambda: _is_retired(self._tags(key)))
+
     # ------------------------------------------------------------------------------------------
     # The blocking implementations, each run in a worker thread by the methods above
     # ------------------------------------------------------------------------------------------

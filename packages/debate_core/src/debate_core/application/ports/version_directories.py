@@ -32,6 +32,7 @@ __all__ = [
     "RETIREMENT_TAG_VALUE",
     "DirectoryContents",
     "RetirementMethod",
+    "RetirementTags",
     "VersionDirectoryPlace",
 ]
 
@@ -109,4 +110,19 @@ class VersionDirectoryPlace(Protocol):
 
         Raises `NotImplementedError` in a place that deletes: there is nothing left to restore.
         """
+        ...
+
+
+@runtime_checkable
+class RetirementTags(Protocol):
+    """Whether one object in the bucket carries the retirement tag (`v1-e30-t33`).
+
+    A removal asks it of the aggregates it reaches: a directory retention has tagged is not rewritten,
+    because the rewrite would be a new version without the tag, which the lifecycle never expires. The
+    everyday set may read tags under `parsed/` (`v1-e31-t16`). Raises
+    :class:`~debate_core.application.errors.StoreAccessDenied` where it may not.
+    """
+
+    async def retired(self, key: str) -> bool:
+        """Whether `key`'s current object has :data:`RETIREMENT_TAG_KEY` = :data:`RETIREMENT_TAG_VALUE`."""
         ...

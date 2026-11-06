@@ -151,6 +151,7 @@ from debate_core.application.ports.evidence_versions import EvidenceVersionStore
 from debate_core.application.ports.parsed_store import PARSED_PREFIX, REBUILT_NAMES
 from debate_core.application.ports.suppression import (
     ManifestRewriteRecord,
+    RemovalAggregatesEntry,
     RemovalLogEntry,
     RemovalLogKind,
     RemovalOutcome,
@@ -162,6 +163,7 @@ from debate_core.domain import SHA256_HEX_PATTERN, Sha256Hex
 __all__ = [
     "CLOCK_SKEW_MARGIN",
     "MANIFEST_ROLE",
+    "AggregateReach",
     "RESIDUE_DIGEST_PREFIX_LENGTH",
     "CaselistResidue",
     "CompletedRemovals",
@@ -245,6 +247,16 @@ class RemovalCompletion:
 
 
 @dataclass(frozen=True, slots=True)
+class AggregateReach:
+    """The aggregates one completed request reached in the bucket, by its aggregate records (`v1-e30-t33`)."""
+
+    keys: frozenset[ObjectKey] = frozenset()
+    """Every aggregate it rewrote, kept or deleted."""
+    clean: frozenset[tuple[ObjectKey, str | None]] = frozenset()
+    """`(key, version id)` of each version it left clean: never residue."""
+
+
+@dataclass(frozen=True, slots=True)
 class CompletedRemovals:
     """This environment's completed removals, as the residue check compares versions with them."""
 
@@ -254,6 +266,10 @@ class CompletedRemovals:
     """Each manifest a completed removal rewrote, with that removal's completion."""
     not_checked: tuple[str, ...] = ()
     """Request ids of completed removals no scope says the reach of: made by an older build."""
+    aggregate_reach: dict[str | None, AggregateReach] = field(default_factory=lambda: {})
+    """For each request whose every run kept an aggregate record (a build carrying `v1-e30-t33`), the
+    aggregates it reached. A request not here was made by a build that deleted every aggregate of every
+    caselist it touched, and its aggregates are compared by that rule."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -397,7 +413,11 @@ def _older_versions(
         if version.is_delete_marker:
             continue
         role = _aggregate_role(version.key, aggregates)
-        if role is not None and _before(version, completion.completed_at):
+        if (
+            role is not None
+            and _before(version, completion.completed_at)
+            and _should_have_taken(version, removals.aggregate_reach.get(completion.request_id))
+        ):
             older.setdefault(role, set()).add((version.key, version.version_id))
         if any(
             purge_should_have_taken(version, rewrite, completed_at)
@@ -443,6 +463,17 @@ def _before(version: ObjectVersion, completed_at: datetime) -> bool:
     return version.last_modified is not None and version.last_modified < completed_at - CLOCK_SKEW_MARGIN
 
 
+def _should_have_taken(version: ObjectVersion, reach: AggregateReach | None) -> bool:
+    """Whether an aggregate version older than the removal is one the removal should have taken.
+
+    By a build carrying `v1-e30-t33`: a version of an aggregate it reached, other than the clean one it
+    left (the PM's ruling, Q4). By an earlier build, which deleted every aggregate, any version.
+    """
+    if reach is None:
+        return True
+    return version.key in reach.keys and (version.key, version.version_id) not in reach.clean
+
+
 def _aggregate_role(key: ObjectKey, aggregates: str) -> str | None:
     """The aggregate's file name for `<aggregates><version>/<name>`, or `None` for any other key."""
     if not key.startswith(aggregates):
@@ -452,7 +483,10 @@ def _aggregate_role(key: ObjectKey, aggregates: str) -> str | None:
 
 
 def completed_removals(
-    entries: Sequence[RemovalLogEntry], scopes: Sequence[RemovalScopeEntry], environment: str
+    entries: Sequence[RemovalLogEntry],
+    scopes: Sequence[RemovalScopeEntry],
+    environment: str,
+    aggregate_records: Sequence[RemovalAggregatesEntry] = (),
 ) -> CompletedRemovals:
     """What the removal log says of `environment`'s completed removals, request by request.
 
@@ -462,6 +496,9 @@ def completed_removals(
     with any entry no scope joins was run by a build that recorded none, so which caselists it
     touched is unknown: it is named in :attr:`CompletedRemovals.not_checked` and compared with
     nothing. Another environment's entries are left out: its completion says nothing of this bucket.
+
+    A request each of whose runs has an aggregate record beside it (`v1-e30-t33`) reached the
+    aggregates those records name, and no others (:attr:`CompletedRemovals.aggregate_reach`).
     """
     by_request: dict[str | None, list[RemovalLogEntry]] = {}
     for entry in entries:
@@ -470,6 +507,7 @@ def completed_removals(
     by_caselist: dict[str, RemovalCompletion] = {}
     rewrites: list[tuple[ManifestRewriteRecord, datetime]] = []
     not_checked: list[str] = []
+    reach: dict[str | None, AggregateReach] = {}
     for request_id, runs in by_request.items():
         completed = [run for run in runs if run.outcome is RemovalOutcome.COMPLETED]
         if not completed:
@@ -492,8 +530,24 @@ def completed_removals(
             for scope in found
             for rewrite in scope.manifest_rewrites
         )
+        records = [[record for record in aggregate_records if record.joins(run)] for run in runs]
+        if all(records):
+            reach[request_id] = AggregateReach(
+                keys=frozenset(
+                    key
+                    for found in records
+                    for record in found
+                    for key in (*(one.key for one in record.kept), *record.deleted)
+                ),
+                clean=frozenset(
+                    (one.key, one.version_id) for found in records for record in found for one in record.kept
+                ),
+            )
     return CompletedRemovals(
-        by_caselist=by_caselist, rewrites=tuple(rewrites), not_checked=tuple(sorted(not_checked))
+        by_caselist=by_caselist,
+        rewrites=tuple(rewrites),
+        not_checked=tuple(sorted(not_checked)),
+        aggregate_reach=reach,
     )
 
 

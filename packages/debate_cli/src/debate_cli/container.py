@@ -1985,7 +1985,7 @@ class ServiceContainer:
         return self.singleton("caselist_removal", self._build_caselist_removal)
 
     def _build_caselist_removal(self) -> CaselistRemovalService:
-        from debate_core.integrations.local import BLOB_DIRECTORY
+        from debate_core.integrations.local import BLOB_DIRECTORY, FsEvidenceObjectStore
         from debate_core.integrations.local.fs_version_store import FsEvidenceVersionStore
         from debate_core.integrations.local.sqlite_caselist_repository import SqliteCaselistRepository
         from debate_core.integrations.local.suppression_list import (
@@ -1993,18 +1993,22 @@ class ServiceContainer:
             local_suppression_list_file,
         )
         from debate_core.integrations.s3 import S3EvidenceVersionStore
+        from debate_core.integrations.s3.version_directories import S3VersionDirectories
 
         settings = self.settings
         storage = settings.storage
         bucket = self._evidence_bucket()
         data_dir = storage.data_dir
         suppression = self.suppression_list()
+        # The parsed tree as named objects, which a removal rewrites aggregates in (v1-e30-t33).
+        parsed_objects = FsEvidenceObjectStore(data_dir, subdirectory=PARSED_DIRECTORY)
         clock = _PortClock(self.clock())
         planner = RemovalPlanner(
             caselists=SqliteCaselistRepository(self.database),
             local=self._local_evidence(),
             local_blobs=FsEvidenceVersionStore(data_dir / BLOB_DIRECTORY.parent),
             local_parsed=FsEvidenceVersionStore(data_dir / PARSED_DIRECTORY),
+            local_parsed_objects=parsed_objects,
             # The data directory keyed as the bucket is, for reports/landscape/ (v1-e32-t13).
             local_reports=FsEvidenceVersionStore(data_dir),
             remote=bucket,
@@ -2032,6 +2036,17 @@ class ServiceContainer:
             clock=clock,
             environment=settings.environment.value,
             bucket=str(storage.s3.bucket),
+            # The retirement tags, read with the everyday profile, which may read them under parsed/
+            # (v1-e31-t16): a retired directory's aggregates are deleted, not rewritten (v1-e30-t33).
+            retirement=S3VersionDirectories(
+                bucket=str(storage.s3.bucket),
+                client=self._s3_client(
+                    profile=storage.s3.aws_profile, profile_setting=_EVERYDAY_PROFILE_SETTING
+                ),
+                profile=storage.s3.aws_profile,
+                profile_setting=_EVERYDAY_PROFILE_SETTING,
+                login_hint=self._s3_login_hint,
+            ),
         )
         return CaselistRemovalService(
             planner=planner,
@@ -2039,6 +2054,7 @@ class ServiceContainer:
             local=self._local_evidence(),
             local_blobs=FsEvidenceVersionStore(data_dir / BLOB_DIRECTORY.parent),
             local_parsed=FsEvidenceVersionStore(data_dir / PARSED_DIRECTORY),
+            local_parsed_objects=parsed_objects,
             local_reports=FsEvidenceVersionStore(data_dir),
             inbox=self.caselist_inbox(),
             remote=bucket,

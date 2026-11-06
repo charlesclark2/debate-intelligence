@@ -5,14 +5,15 @@ these belong in a literal somewhere in the call stack, and none of them belong i
 module reads at import time. They are loaded here, once, into a :class:`Settings` object that the
 composition root hands to the services that need it (architecture proposal §6, §10, §11, §14).
 
-This module is the **only** place in the platform that reads `os.environ` or a `.env` file. A
+This module is the **only** place in the platform that reads `os.environ`, a `.env` file or the
+per-user credentials file. A
 service that wants the crawl delay takes it as a constructor argument; it does not reach for the
 environment, which is what keeps the same service usable from the CLI, the API, a worker and a
 test without any of them agreeing on process-wide state.
 
 ## Where a value comes from
 
-Five layers, highest priority first. Every layer is optional; a field that no layer sets keeps its
+Six layers, highest priority first. Every layer is optional; a field that no layer sets keeps its
 declared default.
 
 | Layer | Source label | Set by |
@@ -20,14 +21,37 @@ declared default.
 | Explicit override | `cli` | `load_settings(overrides=...)` — a command-line flag |
 | Process environment | `env:DEBATE_HTTP__MAX_RETRIES` | `DEBATE_`-prefixed variables, `__` to nest |
 | `.env` file | `dotenv:.env` | the operator's own machine; never committed |
+| Per-user credentials | `user-env:~/.debate-research/dev.env` | four provider credentials, any folder |
 | Environment profile | `profile:config/profiles/dev.toml` | committed per-environment defaults |
 | Built-in profile | `built-in:dev` | :data:`BUILTIN_PROFILES`, so dev/prod/test differ even with no files |
 | Field default | `default` | the declarations below |
 
 :meth:`Settings.field_sources` reports the label for every field, which is what
 `debate-research config show` prints in its `Source` column. It is there because the first
-question about surprising behaviour is "which of the six places did that value come from", and
+question about surprising behaviour is "which of the seven places did that value come from", and
 answering it by reading code and guessing at shell state wastes an afternoon.
+
+There is one `.env`: the checkout root's when the working folder is inside a checkout, otherwise the
+working folder's own. A working folder that no longer exists (a removed worktree) is no checkout and
+no `.env`, never a crash (:func:`working_folder`, `v1-e41-t22`).
+
+## The per-user credentials file (`v1-e41-t22`)
+
+`~/.debate-research/<env>.env`, for the environment this run resolved to, beside its data directory:
+the provider keys and the contact email, read whatever folder a command runs in, so that live
+searches no longer have to be run from the one folder whose `.env` holds them. It is below the
+variables and the `.env`, so a key exported for one command, or left in a checkout's `.env`, wins
+over it (`config show` names the winner), and above the profile, which never holds a credential.
+Its rules are the PM's ruling of 2026-11-05:
+
+* It holds only :data:`USER_CREDENTIAL_VARIABLES`. Any other name, `DEBATE_ENV` and the caselist
+  token among them, is refused by file and line number; a line with no `=`, or whose name is not a
+  setting name, by its line number alone, since it could be a pasted key. A name given twice is
+  refused with both lines. No refusal quotes a value.
+* It is not read at all when its group or others have any permission on it (:data:`OWNER_ONLY_MODE_MASK`),
+  judged with `fstat` on the open file before any byte is read, and the refusal gives the `chmod`. A
+  system whose file modes say nothing (Windows) refuses it too.
+* The `test` environment reads none, and nothing in the platform writes it.
 
 ## Environments
 
@@ -60,7 +84,8 @@ reaches for one gets a refusal rather than somebody's real store.
 
 ## Secrets
 
-Anything sensitive is a :class:`~pydantic.SecretStr`, comes from the environment or `.env`, and is
+Anything sensitive is a :class:`~pydantic.SecretStr`, comes from the environment, `.env` or the
+per-user credentials file, and is
 never read from a committed profile file — `.toml` files under `config/profiles/` are in the
 repository, so a secret written into one is a secret published. :meth:`Settings.redacted_dict` is
 the only supported way to render settings for a human or a log, and it replaces every
@@ -79,6 +104,7 @@ from __future__ import annotations
 
 import os
 import re
+import stat
 import tempfile
 import tomllib
 from collections.abc import Callable, Iterator, Mapping, Sequence
@@ -122,6 +148,11 @@ __all__ = [
     "PROFILE_SUBDIRECTORY",
     "RESERVED_SETTING_PATTERNS",
     "SECRET_PLACEHOLDER",
+    "MISSING_WORKING_FOLDER_WARNING",
+    "USER_CREDENTIALS_FOLDER_NAME",
+    "USER_CREDENTIALS_SOURCE_KIND",
+    "USER_CREDENTIAL_EXCLUSIONS",
+    "USER_CREDENTIAL_VARIABLES",
     "FIRST_BACKFILE_SEASON_START",
     "MAX_CASELIST_BULK_DOWNLOADS_PER_DAY",
     "MAX_CASELIST_DOWNLOADS_PER_MINUTE",
@@ -149,6 +180,10 @@ __all__ = [
     "load_settings",
     "profile_path_for",
     "resolve_environment",
+    "display_user_path",
+    "user_credentials_directory",
+    "user_credentials_file",
+    "working_folder",
 ]
 
 ENV_PREFIX: Final = "DEBATE_"
@@ -168,6 +203,37 @@ PROFILE_SUBDIRECTORY: Final = Path("config") / "profiles"
 
 SECRET_PLACEHOLDER: Final = "***"
 """What a secret renders as. The real value never leaves this module."""
+
+USER_CREDENTIALS_FOLDER_NAME: Final = ".debate-research"
+"""The folder in the home folder that holds the per-user credentials files (`v1-e41-t22`).
+
+The same folder the dev and prod data directories sit in (`~/.debate-research/dev`), so
+`~/.debate-research/dev.env` is beside the data it is for. Fixed: it has to be known before settings
+are loaded, and no setting or variable moves it."""
+
+USER_CREDENTIALS_SOURCE_KIND: Final = "user-env"
+"""The source label's kind for a value from the per-user file: `user-env:~/.debate-research/dev.env`."""
+
+USER_CREDENTIAL_VARIABLES: Final[tuple[str, ...]] = (
+    "DEBATE_PROVIDERS__CONTACT_EMAIL",
+    "DEBATE_PROVIDERS__OPENALEX_API_KEY",
+    "DEBATE_PROVIDERS__SEMANTIC_SCHOLAR_API_KEY",
+    "DEBATE_PROVIDERS__API_DATA_GOV_KEY",
+)
+"""The only names the per-user credentials file may set (the PM's ruling on `v1-e41-t22`, Q2).
+
+The discovery providers' keys and the contact email: what a machine needs to search, and nothing
+that changes what a command does or where it writes. Written out, so that adding one is a decision a
+reviewer sees; `test_settings_user_credentials.py` fails when a new secret provider setting is
+neither here nor in :data:`USER_CREDENTIAL_EXCLUSIONS`."""
+
+USER_CREDENTIAL_EXCLUSIONS: Final[Mapping[str, str]] = {
+    "DEBATE_PROVIDERS__CASELIST_TOKEN": (
+        "The caselist_token is kept by `debate-research caselist auth login`, which knows when it "
+        "expires; a copy here would outlive a logout and win over every later login."
+    ),
+}
+"""Secret provider settings the per-user file refuses by name, each with why and what to do instead."""
 
 OPENCASELIST_API_BASE_URL: Final = "https://api.opencaselist.com/v1"
 """The documented OpenCaselist API, and the only one a prod installation will call (`v1-e01-t21`)."""
@@ -288,6 +354,24 @@ The government sources are worth asking on a policy topic and noise on most othe
 settings is not enough: a topic's feed file names it in `government_providers` (`config/feeds/`), and a
 search with no topic, or on a topic that does not list it, never asks it.
 """
+
+
+def _absolute_path(value: Path) -> Path:
+    """`value` with variables and `~` expanded, made absolute against the working folder.
+
+    A relative path with no working folder (it was removed, `v1-e41-t22`) is relative to nothing, and
+    is refused as a value error, which names the field, rather than raised as `FileNotFoundError`.
+    """
+    expanded = Path(os.path.expandvars(str(value))).expanduser()
+    if expanded.is_absolute():
+        return expanded
+    folder = working_folder()
+    if folder is None:
+        raise ValueError(
+            "is a relative path, and the folder this command was run from no longer exists, so it is "
+            "relative to nothing; give an absolute path"
+        )
+    return folder / expanded
 
 
 class SettingsGroup(BaseModel):
@@ -439,7 +523,7 @@ class StorageSettings(SettingsGroup):
     @classmethod
     def _expand(cls, value: Path) -> Path:
         """Expand `~` and make the path absolute, so two spellings of one directory compare equal."""
-        return Path(os.path.expandvars(str(value))).expanduser().absolute()
+        return _absolute_path(value)
 
 
 class HttpSettings(SettingsGroup):
@@ -1008,7 +1092,7 @@ class CaselistSettings(SettingsGroup):
     def _expand_inbox(cls, value: Path | None) -> Path | None:
         if value is None:
             return None
-        return Path(os.path.expandvars(str(value))).expanduser().absolute()
+        return _absolute_path(value)
 
     @field_validator("downloads_per_minute")
     @classmethod
@@ -1033,7 +1117,7 @@ class CaselistSettings(SettingsGroup):
     def _expand_secret_file(cls, value: Path | None) -> Path | None:
         if value is None:
             return None
-        return Path(os.path.expandvars(str(value))).expanduser().absolute()
+        return _absolute_path(value)
 
     @model_validator(mode="after")
     def _a_backfile_is_never_pulled(self) -> CaselistSettings:
@@ -1501,7 +1585,11 @@ def find_repository_root(start: Path | None = None) -> Path | None:
     That directory is what makes a source checkout recognisable as one, and it is where the
     committed profiles are, so one walk answers both questions.
     """
-    current = (start or Path.cwd()).absolute()
+    begin = start if start is not None else working_folder()
+    if begin is None:
+        # The folder this command was run from no longer exists: there is no checkout around it.
+        return None
+    current = begin if begin.is_absolute() else begin.absolute()
     for candidate in (current, *current.parents):
         if (candidate / PROFILE_SUBDIRECTORY).is_dir():
             return candidate
@@ -1613,10 +1701,78 @@ def _environment_from_dotenv(env_file: Path | None) -> tuple[str | None, Path | 
 
 
 def _default_dotenv_path() -> Path | None:
-    """`.env` beside the repository root, or in the working directory outside a checkout."""
-    root = find_repository_root()
-    candidate = (root or Path.cwd()) / ".env"
+    """`.env` beside the repository root, or in the working directory outside a checkout.
+
+    `None` when the working folder no longer exists: that is no working-folder `.env`, not a crash.
+    """
+    folder = find_repository_root() or working_folder()
+    if folder is None:
+        return None
+    candidate = folder / ".env"
     return candidate if candidate.is_file() else None
+
+
+MISSING_WORKING_FOLDER_WARNING: Final = (
+    "warning: the folder this command was run from no longer exists, so no .env was read from it or "
+    "from a checkout around it; exported variables and ~/.debate-research/<env>.env still apply."
+)
+"""The one line the CLI prints when :func:`working_folder` is `None` (`v1-e41-t22`)."""
+
+
+def working_folder() -> Path | None:
+    """The folder this process runs in, or `None` when it no longer exists or cannot be read.
+
+    Every read of the working folder while settings load goes through here (`v1-e41-t22`). A command
+    run from a worktree that has since been removed got `FileNotFoundError` from `Path.cwd()`, and a
+    folder whose parent cannot be searched gives `PermissionError`; both are "no working folder",
+    which means no checkout around it and no `.env` in it. The CLI says so in one line
+    (:data:`MISSING_WORKING_FOLDER_WARNING`); this module prints nothing.
+    """
+    try:
+        return Path(os.getcwd())
+    except OSError:
+        return None
+
+
+def user_credentials_directory() -> Path | None:
+    """`~/.debate-research`, or `None` on a machine with no home folder to find.
+
+    The one seam the workspace's root `conftest.py` points elsewhere, so that no test process ever
+    reads the operator's real file.
+    """
+    try:
+        return Path.home() / USER_CREDENTIALS_FOLDER_NAME
+    except RuntimeError:
+        return None
+
+
+def user_credentials_file(environment: Environment) -> Path | None:
+    """`~/.debate-research/<env>.env` for `environment`; `None` for `test`, which reads none."""
+    if environment is Environment.TEST:
+        return None
+    directory = user_credentials_directory()
+    return directory / f"{environment.value}.env" if directory is not None else None
+
+
+def _file_modes_are_posix() -> bool:
+    """Whether this system's file modes say who may read a file. Windows' do not."""
+    return os.name != "nt"
+
+
+def _read_open_file(descriptor: int) -> bytes:
+    """Every byte of an open file, read only after its mode has been judged."""
+    chunks: list[bytes] = []
+    while chunk := os.read(descriptor, 65536):
+        chunks.append(chunk)
+    return b"".join(chunks)
+
+
+def display_user_path(path: Path) -> str:
+    """`path` with the home folder written `~`, as a source label and a message show it."""
+    try:
+        return f"~/{path.relative_to(Path.home())}"
+    except (ValueError, RuntimeError):
+        return str(path)
 
 
 # ------------------------------------------------------------------------------------------------
@@ -1655,6 +1811,7 @@ def load_settings(
     repository_root = find_repository_root()
     config_root = bundled_config_root if bundled_config_root is not None else repository_root
     profile_file = profile_path_for(resolved_environment, profile_dir, config_root=config_root)
+    user_file = user_credentials_file(resolved_environment)
 
     layers: list[tuple[str | SourceLabeller, Mapping[str, Any]]] = [
         # The environment was resolved once, above, and that decision is final: a stray
@@ -1664,6 +1821,10 @@ def load_settings(
         ("cli", dict(overrides or {})),
         (_environment_variable_for, _environment_layer()),
         (f"dotenv:{_readable_path(dotenv_path, repository_root)}", _dotenv_layer(dotenv_path)),
+        (
+            f"{USER_CREDENTIALS_SOURCE_KIND}:{display_user_path(user_file) if user_file else 'none'}",
+            _user_credentials_layer(user_file),
+        ),
         (f"profile:{_readable_path(profile_file, repository_root)}", _profile_layer(profile_file)),
         (f"built-in:{resolved_environment.value}", dict(BUILTIN_PROFILES[resolved_environment])),
     ]
@@ -1798,6 +1959,117 @@ def _dotenv_keys(path: Path) -> set[str]:
         if name.startswith(prefix):
             names.add(name[len(prefix) :].split(ENV_NESTED_DELIMITER, 1)[0])
     return names
+
+
+OWNER_ONLY_MODE_MASK: Final = stat.S_IRWXG | stat.S_IRWXO
+"""Any permission for the group or others (0o077): the per-user file is refused with one of them, as the
+caselist token file is (`token_store.py`). The PM's ruling on `v1-e41-t22`, Q3: write without read
+(0o020) is refused too, since a file someone else may change can be given their key."""
+
+_SETTING_NAME: Final = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
+"""What a variable's name looks like. A line whose name does not is named by its line number only."""
+
+
+def _user_credentials_layer(path: Path | None) -> dict[str, Any]:
+    """The four credentials from the per-user file, nested like the model; an empty layer with no file.
+
+    The file is opened once, its mode judged with `fstat` on that open descriptor before any byte is
+    read, and only then read, so a file swapped between a check and a read cannot slip through. A
+    symlink is followed, and its target judged. Every refusal names the file and a line number and
+    never a value: a line whose name is not a setting name, or which has no `=`, could be a pasted key.
+    """
+    if path is None:
+        return {}
+    shown = display_user_path(path)
+    label = f"{USER_CREDENTIALS_SOURCE_KIND}:{shown}"
+    try:
+        descriptor = os.open(path, os.O_RDONLY)
+    except FileNotFoundError:
+        return {}
+    except OSError:
+        raise ConfigurationError(f"could not read {shown}.", source=label) from None
+    try:
+        status = os.fstat(descriptor)
+        if not stat.S_ISREG(status.st_mode):
+            raise ConfigurationError(f"{shown} is not a file.", source=label)
+        if not _file_modes_are_posix():
+            raise ConfigurationError(
+                f"{shown} was not read: this system cannot say who else may read it. Set the "
+                "credentials as environment variables instead.",
+                source=label,
+            )
+        if stat.S_IMODE(status.st_mode) & OWNER_ONLY_MODE_MASK:
+            raise ConfigurationError(
+                f"{shown} has permissions {stat.filemode(status.st_mode)}, so someone other than its owner "
+                f"can read or change it, and it was not read. Run: chmod 600 {shown}",
+                source=label,
+            )
+        try:
+            text = _read_open_file(descriptor).decode("utf-8")
+        except (OSError, UnicodeDecodeError):
+            raise ConfigurationError(f"could not read {shown}.", source=label) from None
+    finally:
+        os.close(descriptor)
+    return _user_credentials_from_text(text, shown, label)
+
+
+def _user_credentials_from_text(text: str, shown: str, label: str) -> dict[str, Any]:
+    """Parse the file's lines as a `.env` is read: comments, blank lines, `export`, quotes.
+
+    Every problem is collected and reported at once, in line order, so one edit fixes them all.
+    """
+    problems: list[str] = []
+    first_line_of: dict[str, int] = {}
+    values: dict[str, str] = {}
+    prefix = f"{ENV_PREFIX}PROVIDERS{ENV_NESTED_DELIMITER}"
+    for number, raw_line in enumerate(text.splitlines(), start=1):
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if line.startswith("export ") or line.startswith("export\t"):
+            line = line[len("export") :].lstrip()
+        if "=" not in line:
+            problems.append(f"{shown} line {number} is not NAME=value.")
+            continue
+        written_name, _, raw_value = line.partition("=")
+        name = written_name.strip()
+        if _SETTING_NAME.fullmatch(name) is None:
+            problems.append(f"{shown} line {number}: its name is not a setting name.")
+            continue
+        variable = name.upper()
+        if variable in USER_CREDENTIAL_EXCLUSIONS:
+            problems.append(
+                f"{shown} line {number}: {variable} is not read from this file. "
+                f"{USER_CREDENTIAL_EXCLUSIONS[variable]}"
+            )
+            continue
+        if variable not in USER_CREDENTIAL_VARIABLES:
+            problems.append(
+                f"{shown} line {number}: {variable} is not a credential; this file holds only "
+                f"{_names_in_prose(USER_CREDENTIAL_VARIABLES)}. Put it in a .env or export it."
+            )
+            continue
+        if variable in first_line_of:
+            problems.append(f"{shown} lines {first_line_of[variable]} and {number} both set {variable}.")
+            continue
+        first_line_of[variable] = number
+        values[variable[len(prefix) :].lower()] = _unquoted(raw_value.strip())
+    if problems:
+        raise ConfigurationError(" ".join(problems), source=label)
+    return {"providers": values} if values else {}
+
+
+def _unquoted(value: str) -> str:
+    """A value with one pair of matching quotes taken off, or an unquoted value's ` #` comment."""
+    if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'":
+        return value[1:-1]
+    comment = value.find(" #")
+    return value[:comment].rstrip() if comment != -1 else value
+
+
+def _names_in_prose(names: Sequence[str]) -> str:
+    """`a, b, c and d`."""
+    return f"{', '.join(names[:-1])} and {names[-1]}" if len(names) > 1 else "".join(names)
 
 
 def _profile_layer(path: Path | None) -> dict[str, Any]:

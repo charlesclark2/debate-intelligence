@@ -98,7 +98,9 @@ uv run debate-research config show
 ```
 
 Values are layered, highest first: a command-line flag, `DEBATE_*` variables in your shell,
-`.env`, `config/profiles/<env>.toml`, then the built-in profile for the environment. `config
+`.env`, the per-user `~/.debate-research/<env>.env` (provider credentials only,
+[docs/guides/provider-credentials.md](docs/guides/provider-credentials.md)),
+`config/profiles/<env>.toml`, then the built-in profile for the environment. `config
 show` prints the source of each one, and redacts every secret. API keys and tokens belong in
 `.env` or the environment and never in a `config/` file, which is committed.
 

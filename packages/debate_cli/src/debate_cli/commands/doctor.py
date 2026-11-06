@@ -79,6 +79,22 @@ would stop with (`v1-e05-t03` ac6), naming the file and the offending key. The c
 Like the options above it is an option because it loads settings, and plain `doctor` must not: a
 bad routing file does not stop plain `doctor`, on purpose. It reads one file and reaches no network.
 
+## The providers' credentials, when asked (`v1-e41-t22`)
+
+`doctor --providers` adds a row for the per-user credentials file, `~/.debate-research/<env>.env`
+(read, not there, or not read in the test environment), and one for each enabled discovery provider:
+whether its key or the contact email is set and which source set it, or what a search does without
+it ("no contact email: Crossref's public pool", "no GovInfo key: GovInfo not asked"). A blank value
+counts as missing, as the adapters treat it. It never fails on a row, and it never prints a value,
+only a source label. The rows are
+:func:`~debate_core.application.provider_credentials.provider_credential_report`'s; this module only
+renders them.
+
+Like the options above it is an option because it loads settings, and plain `doctor` must not: a
+per-user file that is refused (readable by others, or holding a name that is not a credential) stops
+`doctor --providers` as it stops every command that loads settings, and leaves plain `doctor` alone.
+It reaches no network.
+
 ## Exit codes
 
 `doctor` fails on two checks only, the ones it can state precisely, and on three more when asked:
@@ -160,6 +176,7 @@ from debate_cli.output import CommandFailure, JsonValue, TableSpec
 from debate_core.application.errors import StoreProfileNotConfigured, error_code_of_class
 from debate_core.application.evidence_profiles import MODEL_PROFILE_SETTING
 from debate_core.application.ports.model_router import RoutingConfigError
+from debate_core.application.provider_credentials import provider_credential_report
 from debate_core.application.search_index_build import SearchIndexStoreNotReady
 from debate_core.evidence.normalization import NORMALIZER_VERSION, pinned_unicode_version
 
@@ -182,6 +199,8 @@ ROUTING_FILE = "routing_file"
 """The report's key for the routing file check's finding. Absent unless `--routing-file` was given."""
 ROUTING_FILE_DOES_NOT_LOAD_CODE = error_code_of_class(RoutingConfigError)
 """`ROUTING_CONFIG_ERROR`: the code of the error a command stopped by the same routing file reports."""
+PROVIDERS = "providers"
+"""The report's key for each enabled provider's credential. Absent unless `--providers` was given."""
 
 
 def doctor(
@@ -227,6 +246,18 @@ def doctor(
             ),
         ),
     ] = False,
+    providers: Annotated[
+        bool,
+        typer.Option(
+            "--providers",
+            help=(
+                "Also report each enabled discovery provider's key or contact email: whether it is "
+                "set, which source set it (never its value), and what a search does without it, and "
+                "whether ~/.debate-research/<env>.env was read. Never fails on a provider. Loads "
+                "settings; without this option doctor does not."
+            ),
+        ),
+    ] = False,
 ) -> None:
     """Report the versions, interpreter and wiring this installation is running with.
 
@@ -259,6 +290,9 @@ def doctor(
     if search_index:
         cli.output.detail("checking which stores the weekly search index stage would find unparsed")
         report[SEARCH_INDEX] = search_index_store_findings(cli.services)
+    if providers:
+        cli.output.detail("reading which credential each enabled discovery provider has")
+        report[PROVIDERS] = cast("JsonValue", provider_credential_report(cli.services.settings).as_json())
     failure = doctor_failure(report)
     # A program gets one envelope: the report under `data`, or under `error.details` on a failure.
     # A person gets the table either way, then the failure's panel.
@@ -576,9 +610,15 @@ def _rows(report: dict[str, JsonValue]) -> list[list[str]]:
     rows = [
         [labels.get(key, key), _as_text(value)]
         for key, value in report.items()
-        if key not in (EVIDENCE_PROFILES, SEARCH_INDEX, ROUTING_FILE)
+        if key not in (EVIDENCE_PROFILES, SEARCH_INDEX, ROUTING_FILE, PROVIDERS)
     ]
-    return rows + _profile_rows(report) + _search_index_rows(report) + _routing_file_rows(report)
+    return (
+        rows
+        + _profile_rows(report)
+        + _search_index_rows(report)
+        + _routing_file_rows(report)
+        + _provider_rows(report)
+    )
 
 
 def _profile_rows(report: Mapping[str, JsonValue]) -> list[list[str]]:
@@ -649,6 +689,25 @@ def _routing_file_rows(report: Mapping[str, JsonValue]) -> list[list[str]]:
         return [["Routing file", f"{found['routing_file']}: loads; routes {_as_text(found['routes'])}"]]
     where = f" at {found['field']}" if found.get("field") else ""
     return [["Routing file", f"{found['routing_file']}: does not load{where}"]]
+
+
+def _provider_rows(report: Mapping[str, JsonValue]) -> list[list[str]]:
+    """The per-user credentials file, then one row for each enabled provider, when they were asked about."""
+    found = report.get(PROVIDERS)
+    if not isinstance(found, Mapping):
+        return []
+    credentials_file = cast("Mapping[str, JsonValue]", found["credentials_file"])
+    where = credentials_file["path"]
+    rows = [
+        [
+            "Credentials file",
+            f"{where}: {credentials_file['state']}" if where else str(credentials_file["state"]),
+        ]
+    ]
+    enabled = cast("list[Mapping[str, JsonValue]]", found["enabled"])
+    if not enabled:
+        return [*rows, ["Providers", "none enabled (providers.enabled)"]]
+    return rows + [[str(one["label"]), str(one["summary"])] for one in enabled]
 
 
 def _as_text(value: JsonValue) -> str:

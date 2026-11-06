@@ -167,6 +167,16 @@ Bucket listings, counts only:
 * `hspolicy25`'s raw sources: 14,340 objects, 3,672,747,197 bytes.
 * Dev's index `e95f10c1a8fda754`, at `docx-7`, SQLite 3.50.4: 57,760 documents, the list at 6 entries
   and 1 path hold, the four stores and no `testcl26`. Prod has no search index.
+* **The functions (Q6), read 2026-11-06:**
+  * Dev's function runs image `sha256:49f40f11…`, tag `e9769533f50c`, pushed 2026-11-02 22:05 CST
+    and deployed 2026-11-03 04:05:59 UTC. That commit parses at `2026.10.27-docx-7` and writes index
+    format 3, and both `origin/dev` and `origin/main` contain it.
+  * Prod's function runs `sha256:e26ab269…` at `3f8276130`, deployed 2026-11-03 05:33:34 UTC. It
+    parses at `docx-7` and writes index format 3. `origin/main` contains it; `origin/dev` does not,
+    since it is the promotion's own commit.
+  * So dev's function and dev's index (`e95f10c1a8fda754`) are both at `docx-7`, and Download is on
+    in dev today. The ruling's plan stands: dev's function stays at `docx-7` until the 2026-11-11
+    run's docx-9 index, and is deployed at docx-9 on 2026-11-12.
 * Q4 (i) on the Mac: about 17.4 GB (`hspolicy25`'s parsed store and sources, and `openev`'s parsed
   store), against 56 GB free.
 
@@ -276,7 +286,8 @@ Success looks like the bundle's size, then for each store its parsed versions, a
 free bytes, and `owed snapshots`. A `refused:` line names the call and the AWS code. Paste it back
 as it is.
 
-**2. Dev's and prod's functions: the build and parser each runs (Q6)** (expected runtime ~1 min)
+**2. Dev's and prod's functions: the build and parser each runs (Q6)**, run 2026-11-06 (its result
+is under Measured above) (expected runtime ~1 min)
 Where: your Mac, a new window
 ```bash
 cd /Users/charlesclark/Documents/debate/debate-intelligence-tool/debate-intelligence-worktrees/v1-e40-t16-prod-reparse-after-a-parser-bump

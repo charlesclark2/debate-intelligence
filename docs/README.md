@@ -47,6 +47,7 @@ regenerates it on `dev` ([`v1-e01-t16`](../plan_specs/v1/e01-repo-foundation/t16
 | [guides/landscape-taxonomy.md](guides/landscape-taxonomy.md) | For coaches: editing the position taxonomies a landscape report counts against, and seeding a new one |
 | [guides/parent-email-updates.md](guides/parent-email-updates.md) | Parent email updates: the channel chosen and why, how a parent's address travels, who owns the list, how a coach sends an update and what may not go in one about students |
 | [guides/parsed-store-publish-only.md](guides/parsed-store-publish-only.md) | Publishing the parsed card store without rebuilding it: `caselist parse --publish-only`, when to use it and when to rebuild instead |
+| [guides/provider-credentials.md](guides/provider-credentials.md) | Keeping the search providers' keys and the contact email in ~/.debate-research/<env>.env, so live searches run from any folder |
 | [guides/search-index.md](guides/search-index.md) | Building and publishing the student search pilot's index with `debate-research tub index build\|publish` |
 | [policies/caselist-data-use.md](policies/caselist-data-use.md) | Data-use policy for OpenCaselist disclosures and OpenEv camp files |
 | [policies/website-publishing.md](policies/website-publishing.md) | What may be published on the public team website: student names and photos, results, branding, accessibility, third parties, donations, removal on request |

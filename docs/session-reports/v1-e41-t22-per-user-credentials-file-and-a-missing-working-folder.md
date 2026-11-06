@@ -230,9 +230,38 @@ Success: each credential shows `***` and `user-env:~/.debate-research/dev.env`, 
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-11-05
 
 **Notes:**
+
+Built to the ruling, with the integrity rules shown to bite: every refusal checked for no value in its
+message, attributes and chained traceback, and four mutants on the mode, exclusion, folder and duplicate
+rules each caught.
+
+1. **ac1 passes.** The order is the ruled one (flag > `DEBATE_*` > the one `.env` > the per-user file >
+   profile > built-in > default), with a blank higher layer winning and `test` reading no file. The mode
+   is judged with `fstat` before a byte is read, ten refused modes including `0o620`, a symlink by its
+   target, Windows refused. Red was 62 failed and 20 passed against the refuse-nothing skeleton, each
+   failure an assertion or the crash being fixed; green 82 passed.
+2. **ac2 passes.** `config show` names the source with the value masked and no new JSON key;
+   `doctor --providers` never fails, and plain `doctor` still loads no settings, so the installer and
+   `validate-dev` are unchanged. The real console script from a deleted folder went from exit 70 to the
+   one warning line and exit 0.
+3. **Deviations accepted.** 1, the root `conftest.py` fixture, is the PM's ruling on Q6 (A); the audit of
+   every subprocess that starts the CLI or `load_settings` is what makes it safe, and the whole-selection
+   `ci` on this pull request is the expected cost. 2 and 5 are Q7's docs. 3, the smoke check, is
+   agreement 5's. 4 states the real one-`.env` rule. 6 runs the node's command under CI's markers.
+4. **Decisions accepted**, python-dotenv's reading of a line and every problem reported at once in
+   particular. `PROVIDERS_WITHOUT_AN_ADAPTER` stays in `provider_credentials.py`, with the pin below.
+5. **Follow-ups.** The PM files two in the next batch: the adapter set pinned to the container's
+   discovery factories by test (E07, p3), and `.env.example`'s line saying `caselist auth login` writes
+   the token into `.env` (E41, p3). v1-e08-t10's live check gets a PM note: any folder, once an installed
+   build carries this task. The deleted-folder check in `validate-dev` is not filed: the in-process tests
+   and the hand run on the real console script cover it.
+6. **Operator follow-up, deferred.** This Mac keeps dev.342 installed until docx-9 is in the buckets, so
+   the key move and its check run after the first install that carries this task. Until then live
+   searches run from the smoke folder as before.
+7. **Merge:** a plain `scripts/task pr` once `ci` is green. The Goal is `Succeeded`.

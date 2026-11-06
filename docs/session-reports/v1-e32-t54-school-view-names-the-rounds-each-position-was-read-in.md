@@ -530,9 +530,49 @@ shelf reads the bucket.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-11-06
 
 **Notes:**
+
+Built to the coach's question, what evidence a team reads and produces round by round, within version
+1.23 and nothing past it: the circuit-wide files are byte for byte what they were, and the new file is a
+school view everywhere one is reached, the bucket's grant included.
+
+1. **ac1 passes.** The counts were taken over the real copy and changed nothing in it, and the shape
+   was ruled before the build.
+2. **ac2 passes.** Red was 54 failed, each for its own reason, the two self-inflicted digest errors
+   corrected and seen to fail properly. Green on the eight files and the scan's (470), then 1,777 across
+   the 89 nearest affected files and both smoke tests. All 22 mutants on the ruled order, the mark and
+   the stance are caught, and the one that first survived (`max()` for the commonest spelling) was
+   caught by a test rewritten so the two could no longer agree by accident. The 370-file affected set
+   is the pull request's `ci` (agreement 10).
+3. **The page budget is held as ruled.** The largest real page is 148,342 of 153,600 bytes, and the
+   budget test carries a page at least that large. The growth estimate, 50 to 76 lines of room against
+   68.1 a snapshot, confirms the deadline: the collapsed view and a report-time check on the budget are
+   filed as a p1, wanted before the snapshot after the 2026-11-11 run is republished.
+4. **Deviations accepted.** The grant in `operator_access.tf` and its `tftest.hcl` (approved), the
+   purge runbook's test, the smoke tests and the golden fixtures are all where the spec's own
+   criteria live. The PM amends `constraints.packages` in the next batch. The grant needs an apply in
+   each environment, which the spec did not name; see 6.
+5. **Decisions accepted.** The stance follows the report's own "counted as answers, not reads". An
+   ANSWERS card under an unknown position gives no line and refuses nothing. Answered positions go
+   most-answered first, then by id. Reading "unrecognised labels in disclosed order" as the label's
+   own case-folded text is the better reading of the ruling's aim, since a manifest's order is not
+   stable. A missing tournament or round sorts last, and hspolicy26 has none. Team lines stay bullets,
+   never headings.
+6. **The grant's plan is accepted as written:** dev first, never on a Wednesday, saved to a file, and
+   checked by a script that stops on anything beyond the one inline policy updated in place. The PM
+   reads the `PLAN` line and the plan file before any apply. Dev's apply has to come before the
+   journey's rerun (v1-e30-t33 ac3), because a takedown lists every bundle's versions under
+   `reports/landscape/`. Prod's apply comes before promotion item 9. If the checker stops on
+   `v1-e40-t07`'s bucket policy, the PM checks the record first: that statement's dev step 6 passed on
+   2026-11-05, so the row may be stale.
+7. **Follow-ups**, which the PM files in the next batch: the collapsed view and the report-time budget
+   check (E32, p1); filters on the pilot's school page (E39, p3); this spec's packages.
+8. **ac3:** the republish over the existing copy, as the report's last section gives it. The PM reads
+   the dry run's lines before the publish, and deletes the copy with the runbook's step 5 after.
+9. **Merge:** `scripts/task pr --partial` once `ci` is green. The Goal stays `InProgress` until ac3
+   is recorded.

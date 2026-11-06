@@ -13,9 +13,9 @@ here.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import threading
-import time
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
@@ -30,10 +30,11 @@ from debate_core.application.errors import (
     StoreProfileNotConfigured,
     StoreUnavailable,
 )
-from debate_core.application.evidence_profiles import ConfiguredProfile, EvidenceProfileCheck
+from debate_core.application.evidence_profiles import ConfiguredProfile, EvidenceProfileCheck, ProfileFinding
 from debate_core.application.ports.caller_identity import CallerIdentity
 from debate_core.integrations.s3 import StsCallerIdentity, build_sts_client
 from debate_core.integrations.s3.caller_identity import IDENTITY_TIME_LIMIT_SECONDS
+from debate_core.testing.virtual_time import run_in_virtual_time
 
 pytestmark = pytest.mark.anyio
 
@@ -241,25 +242,32 @@ def never_answers() -> Iterator[_NeverAnswers]:
 
 
 class TestAnAccountThatDoesNotAnswer:
-    async def test_the_question_gives_up_after_its_own_time_limit_and_says_aws_did_not_answer(
+    """On virtual time (`VirtualTimeEventLoop`): the time limit is measured on the loop's clock, which
+    moves only while the loop waits, so the instant each question gives up is exact. On the wall clock
+    the tests asserted under 2 and 3 seconds, which a runner busy for that long failed (v1-e07-t16)."""
+
+    def test_the_question_gives_up_after_its_own_time_limit_and_says_aws_did_not_answer(
         self, never_answers: _NeverAnswers
     ) -> None:
         caller = StsCallerIdentity(
             bucket=BUCKET, profile=TAKEDOWN_PROFILE, client=never_answers, time_limit_seconds=0.2
         )
-        started = time.monotonic()
 
-        with pytest.raises(StoreUnavailable) as unanswered:
-            await caller.assumed_role_name()
+        async def ask() -> tuple[StoreUnavailable, float]:
+            with pytest.raises(StoreUnavailable) as unanswered:
+                await caller.assumed_role_name()
+            return unanswered.value, asyncio.get_running_loop().time()
 
-        assert time.monotonic() - started < 2, "gave up at its own limit, not when the client did"
+        unanswered, gave_up_at = run_in_virtual_time(ask())
+
+        assert gave_up_at == 0.2, "gave up at its own limit, not when the client did"
         assert never_answers.asked == 1
-        assert unanswered.value.operation == "GetCallerIdentity"
-        assert str(unanswered.value) == (
+        assert unanswered.operation == "GetCallerIdentity"
+        assert str(unanswered) == (
             f"GetCallerIdentity on s3://{BUCKET} failed: AWS did not answer within 0.2 seconds"
         )
 
-    async def test_the_profile_check_reports_no_answer_for_it_and_asks_the_next_profile(
+    def test_the_profile_check_reports_no_answer_for_it_and_asks_the_next_profile(
         self, never_answers: _NeverAnswers
     ) -> None:
         """What `doctor --evidence-profiles` prints for each profile, through the real adapter."""
@@ -273,10 +281,13 @@ class TestAnAccountThatDoesNotAnswer:
                 bucket=BUCKET, profile=profile.name, client=never_answers, time_limit_seconds=0.2
             )
 
-        started = time.monotonic()
-        found = await EvidenceProfileCheck(profiles=profiles, caller_for=caller_for, environment="dev").run()
+        async def check_every_profile() -> tuple[tuple[ProfileFinding, ...], float]:
+            checked = EvidenceProfileCheck(profiles=profiles, caller_for=caller_for, environment="dev")
+            return await checked.run(), asyncio.get_running_loop().time()
 
-        assert time.monotonic() - started < 3
+        found, finished_at = run_in_virtual_time(check_every_profile())
+
+        assert finished_at == 0.4, "each profile gave up at its own 0.2-second limit, one after the other"
         assert never_answers.asked == 2
         assert [(one.session.value, one.defined) for one in found] == [
             ("no_answer", True),

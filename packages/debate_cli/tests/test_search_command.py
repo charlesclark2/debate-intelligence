@@ -25,7 +25,6 @@ import itertools
 import json
 import os
 import sqlite3
-import time
 from collections.abc import Callable, Iterator, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
@@ -43,6 +42,7 @@ from tests.fixtures.model_routing import EXAMPLE_ROUTING_FILE
 from typer.testing import CliRunner, Result
 
 from debate_cli.app import create_app
+from debate_cli.commands import search as search_command
 from debate_cli.container import ServiceContainer
 from debate_cli.exit_codes import ExitCode, exit_code_for, exit_code_for_search
 from debate_core.application.budget import BudgetExceededError, UnpricedModelError
@@ -82,6 +82,7 @@ from debate_core.integrations.models.routing_policy import RoutingPolicy
 from debate_core.retrieval import canonicalize_url
 from debate_core.testing.fakes.clock_and_ids import FixedClock
 from debate_core.testing.fakes.model_router import ScriptedModelRouter
+from debate_core.testing.virtual_time import run_in_virtual_time
 
 runner = CliRunner()
 
@@ -310,9 +311,6 @@ class Seams:
     itself, through the budget guard and the usage log, over the `bedrock_router_factory` a test
     stands in for; Crossref is answered too."""
     crossref: CrossrefAnswers = field(default_factory=CrossrefAnswers)
-    moving_clock: bool = False
-    """Let the container's clock run on from `NOW` in real time, for Crossref's pacer, which reads it to
-    space its queries and to know when one is too late to send; otherwise it stands still at `NOW`."""
     containers: list[ServiceContainer] = field(default_factory=list[ServiceContainer])
     """Every container the app built, for a test that reads the settings a command left in one."""
 
@@ -330,11 +328,7 @@ def seams(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Seams]:
 
     def with_seams(self: ServiceContainer, **arguments: Any) -> None:
         build(self, **arguments)
-        if seams.moving_clock:
-            started = time.monotonic()
-            self.override("clock", lambda: NOW + timedelta(seconds=time.monotonic() - started))
-        else:
-            self.override("clock", lambda: NOW)
+        self.override("clock", lambda: NOW)
         if seams.live_models is None:
             self.override("search_model_router", seams.router)
         else:
@@ -357,6 +351,14 @@ def seams(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Seams]:
     assert seams.providers.unrecorded == [], "a request no fixture recorded"
     if seams.articles is not None:
         assert seams.articles.unrecorded == [], "an article fetch no cassette recorded"
+
+
+@pytest.fixture
+def on_virtual_time(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Run the command's event loop on virtual time (`VirtualTimeEventLoop`), through the command's own
+    `_run`: the providers' timeouts, the search's deadline and any `asyncio.sleep` a recorded answer takes
+    are measured on a clock that moves only while every task waits, so a busy runner cannot spend them."""
+    monkeypatch.setattr(search_command, "_run", run_in_virtual_time)
 
 
 @pytest.fixture
@@ -549,7 +551,12 @@ def test_presenter_never_prints_an_abstract_or_a_feed_description(seams: Seams) 
 # ------------------------------------------------------------------------------------------------
 
 
-def test_a_provider_that_times_out_makes_the_results_partial_and_exits_6(seams: Seams) -> None:
+def test_a_provider_that_times_out_makes_the_results_partial_and_exits_6(
+    seams: Seams, on_virtual_time: None
+) -> None:
+    """OpenAlex answers after 5 seconds and the providers' timeout is 0.2, so OpenAlex times out and the
+    feed, which answers at once, is the search's two results. On virtual time: on the wall clock a runner
+    busy for 0.2 seconds timed the feed out too, and the search failed with exit 3 (v1-e07-t16)."""
     seams.providers.timeout_seconds = 0.2
     seams.providers.openalex_delay_seconds = 5.0
 
@@ -565,7 +572,10 @@ def test_a_provider_that_times_out_makes_the_results_partial_and_exits_6(seams: 
     assert "SEARCH_PARTIAL" in result.stderr
 
 
-def test_a_partial_search_in_json_carries_its_results_and_the_failed_provider(seams: Seams) -> None:
+def test_a_partial_search_in_json_carries_its_results_and_the_failed_provider(
+    seams: Seams, on_virtual_time: None
+) -> None:
+    """The timeout above, in JSON, on virtual time for the same reason."""
     seams.providers.timeout_seconds = 0.2
     seams.providers.openalex_delay_seconds = 5.0
 
@@ -1098,7 +1108,7 @@ class PacerTime:
 
 
 def test_on_the_committed_profile_without_a_contact_email_crossref_names_the_public_pool_in_the_footer(
-    committed_profile: Seams, monkeypatch: pytest.MonkeyPatch
+    committed_profile: Seams, monkeypatch: pytest.MonkeyPatch, on_virtual_time: None
 ) -> None:
     """An expanded search's queries all reach Crossref at once, and the public pool sends one a second, so
     the ones it cannot send before their timeout less a reserve come back not asked, named in the footer
@@ -1108,7 +1118,10 @@ def test_on_the_committed_profile_without_a_contact_email_crossref_names_the_pub
     The pacer runs on the test's time (:class:`PacerTime`), handed to it through `crossref_factory`'s own
     `clock` and `sleep`, which the container leaves at the wall clock and `asyncio.sleep`. On the wall
     clock a busy runner let the second query arrive after the first was sent, and then its turn came
-    inside its deadline: two requests (`v1-e32-t49`, PM ruling of 2026-11-05).
+    inside its deadline: two requests (`v1-e32-t49`, PM ruling of 2026-11-05). The command's own loop runs on
+    virtual time too (`on_virtual_time`), so the wrapper's 2-second timeout and the search's deadline are not
+    the wall clock's either: a runner busy for 2 seconds while the queries waited timed one out
+    (`v1-e07-t16`, PM ruling of 2026-11-05).
 
     Worked by hand, the same under the dev and the prod profile (neither sets a contact email, so both
     are on the public pool, and the environment's 2 seconds replace both profiles' timeout):

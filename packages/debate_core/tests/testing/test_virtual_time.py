@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import time
 from datetime import timedelta
 
 import pytest
@@ -15,8 +14,7 @@ from debate_core.testing.virtual_time import (
     run_in_virtual_time,
 )
 
-#: The most real time any test here may take. A real hour's sleep would blow it by six orders.
-REAL_TIME_BUDGET_SECONDS = 0.1
+from .selector_polls import assert_only_polled, real_selector_timeouts
 
 
 def test_an_hour_of_sleep_passes_instantly_and_is_seen_by_the_loop_clock() -> None:
@@ -24,11 +22,11 @@ def test_an_hour_of_sleep_passes_instantly_and_is_seen_by_the_loop_clock() -> No
         await asyncio.sleep(3600)
         return asyncio.get_running_loop().time()
 
-    started = time.perf_counter()
-    elapsed = run_in_virtual_time(sleep_an_hour())
+    with real_selector_timeouts() as asked:
+        elapsed = run_in_virtual_time(sleep_an_hour())
 
     assert elapsed == 3600.0
-    assert time.perf_counter() - started < REAL_TIME_BUDGET_SECONDS
+    assert_only_polled(asked)
 
 
 def test_concurrent_sleeps_end_at_the_longest_not_the_sum() -> None:
@@ -77,7 +75,6 @@ def test_waiting_on_nothing_raises_instead_of_hanging() -> None:
     async def wait_forever() -> None:
         await asyncio.get_running_loop().create_future()
 
-    started = time.perf_counter()
-    with pytest.raises(VirtualTimeDeadlock):
+    with real_selector_timeouts() as asked, pytest.raises(VirtualTimeDeadlock):
         run_in_virtual_time(wait_forever())
-    assert time.perf_counter() - started < REAL_TIME_BUDGET_SECONDS
+    assert_only_polled(asked)

@@ -77,7 +77,7 @@ spec:
         2026-10-27, rulings Q5 and Deviation 4: prod's re-parse is v1-e40-t16, after
         v1-e40-t10.)
 status:
-  phase: InProgress
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

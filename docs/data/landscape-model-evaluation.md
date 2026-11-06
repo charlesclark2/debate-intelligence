@@ -592,3 +592,29 @@ dropping.
 
 The re-record of the 47 under 1.3.0, on `deep_audit` only as ruled, is recorded here by the PM when the
 operator has it ([the record runbook](../runbooks/landscape-model-evaluation-record.md#prompt-130-the-re-record-on-deep_audit-v1-e32-t49)).
+
+## The re-record under 1.3.0 (`v1-e32-t49` ac3, 2026-11-05)
+
+Recorded by the PM from the operator's JSON. Counts, ids and row numbers only. `deep_audit` only, as ruled.
+
+| Prompt, scored with the own-side rule | Pipeline (bar 0.85) | Below the threshold | Coverage |
+|---|---|---|---|
+| 1.2.0 (the session's replay of the kept cassettes) | 26 of 33, 0.788 | 14 | 0.702 |
+| **1.3.0 (this re-record)** | **24 of 32, 0.750** | 15 | 0.681 |
+
+* **The recording:** Claude Sonnet 4.6, 47 found and asked in 3 calls with no repair, 41,332 input and
+  4,737 output tokens. Weighted by stratum 0.655. The 95% interval on 24 of 32 runs from about 0.58 to
+  0.87, so the two prompts are not told apart on this sample.
+* **What changed, row by row:** row 47 turned right and row 15 is no longer counted wrong; rows 9 and 53
+  were right and fell below the threshold; row 58 was right and is now wrong; rows 41 and 45 went from
+  below the threshold to wrong answers. The rows the coach's rulings aim at (5, 21, 40, 34) did not turn;
+  row 26 moved from the affirmative's own case to `at:generic-k`.
+* **The generic condition** (`breakdown.generic_answers`): 4 answers name a generic position, 1 above the
+  threshold (row 26), right 0, wrong 1. By the PM's ruling the generic-confidence sentence comes out:
+  `v1-e32-t55`, prompt 1.3.1. Rows 12 and 55 stayed right as `cap-k`.
+* **The scans:** prompt inputs clean; cassettes 46 hits (41 a JSON key's name, 5 taxonomy words), none a
+  team's name and none in the cards sent, all 3 texts set aside; the operator judged every hit an ordinary
+  word in the terminal.
+* **What follows:** the bar is not met and the hold on live model runs stands. `v1-e32-t50`'s held-out
+  sample is measured on 1.3.1, chosen now and not on the held-out sample.
+

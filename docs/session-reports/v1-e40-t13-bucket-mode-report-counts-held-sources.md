@@ -302,3 +302,13 @@ Added by the PM. Nothing above is changed, and this section is not a review.
 | ac2, the first dev cloud run on a new image | NOT RUN | NOT RUN (image deployed) | The image carrying this task, `v1.1.0-dev.164`, was deployed to dev on 2026-10-29 (`caselist-new-image.tfplan`, read by the PM: 2 added, 5 changed, 2 destroyed, the fifth `task_stopped["run"]`'s message from `v1-e40-t09`; run task definition revision 8, digest `sha256:81656bbf…0317`, the schedule `ENABLED`). The first scheduled run on it is Wednesday 2026-11-04, after which ac2 is read |
 
 The Goal stays `InProgress` until that run is read.
+
+## Operator records (recorded by the PM, 2026-11-05)
+
+Added by the PM. Nothing above is changed, and this section is not a review.
+
+| Criterion | Was | Now | Record |
+|---|---|---|---|
+| ac2, the first dev cloud run on a new image | NOT RUN (image deployed) | PASS | the hand run `20261105T034547Z` of the weekly run's task definition (revision 11), started after the scheduled launch was refused on 2026-11-04: `completed`, 03:45:47 to 05:12:57 UTC. The first cloud run since this task's image: the restore brought back 5 state files and no raw sources (bucket mode fetches them as a parse needs them), every stage's drift list is empty, earlier findings 0, the report stage completed, and no failure code |
+
+Both criteria pass, so the Goal is `Succeeded`.

@@ -49,6 +49,15 @@ spec:
     caselist-removal.md, and evidence-search.md's J7, rewritten to match. Then build what is
     ruled. The operator then reruns the journey's J4 to J9 in dev (a fresh copy, the seed
     published again) with J7's --execute, and the PM records it before promotion item 8.
+    (PM amendment 2026-11-05, the PM's ruling on the proposal.) Option (c)1: the removal rewrites
+    each reached aggregate table without the removed rows and purges the older versions, as it does for
+    manifests, under the bucket's run lock, each rewrite checked (rows after equal rows before less the
+    removed rows, every kept line byte-identical, an unreadable line stops the run with nothing written);
+    a version directory retention has tagged is not rewritten but has its reached aggregates deleted, so
+    the lifecycle still expires it; withdrawals use the same rewrite (by disclosure digest, and a camp
+    path's lines in camp_paths.jsonl); surviving clusters keep their ids until the next rebuild; each
+    rewrite is recorded beside the log so caselist status counts only older versions as residue; the
+    runbooks as ruled. Withdrawals stay in this task, and the estimate is 8h.
   priority: 1
   constraints:
     packages: [debate_core.application, debate_core.domain, debate_core.integrations, debate_cli, packages/debate_core/tests, packages/debate_cli/tests, docs/runbooks, docs/data]
@@ -105,7 +114,7 @@ spec:
         description: >-
           A whole-file removal deletes only the aggregates of the caselists that hold the
           file, and its rebuild works in bucket mode.
-        estimatedEffort: 4h
+        estimatedEffort: 8h
         acceptanceCriteria:
           - type: test_passes
             name: Removal reaches its caselists tests pass

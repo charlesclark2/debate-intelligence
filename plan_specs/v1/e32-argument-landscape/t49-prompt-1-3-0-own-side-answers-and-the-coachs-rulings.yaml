@@ -72,7 +72,7 @@ spec:
         The operator's re-record of the 47 under 1.3.0 on the ruled routes, its breakdown
         and scans, is recorded in docs/data beside 1.2.0's (operator, recorded by the PM).
 status:
-  phase: InProgress
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

@@ -56,7 +56,7 @@ ticked yes or no with its date, before the coach's beta (`v1-e39-t10` ac7).
 | 9. Superseded parsed directories retired in prod | no | 2026-11-03 | Dry run only: all 20 directories (`docx-1` to `docx-6`, four caselists) `not yet superseded` until item 6; then five directories |
 | 10. The request to school IT | | | |
 | 11. The beta's prod accounts created | | | |
-| 12. The Lambda bandwidth-quota request sent | yes | 2026-10-31 | Case 179348693100944, `CASE_OPENED` on 2026-11-03 |
+| 12. The Lambda bandwidth-quota request sent | yes | 2026-10-31 | Granted: `L-14320ECE` reads 1,250 Mbps (read 2026-11-05); case 179348693100944 closed 2026-11-04 |
 
 ## Dev's checks before the promotion
 

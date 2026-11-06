@@ -486,3 +486,13 @@ I am filing both at p2 so they are worked on together.
 
 **ac5 runs after Wednesday's check closes `v1-e34-t05`.** It is the reinstall that also carries
 `v1-e34-t23`'s follow-up, using your steps 1 to 3.
+
+## Operator records (recorded by the PM, 2026-11-05)
+
+Added by the PM. Nothing above is changed, and this section is not a review.
+
+| Criterion | Was | Now | Record |
+|---|---|---|---|
+| ac5: the first scheduled dev cloud run after this build shows the parse stage's counts and exits as v1-e34-t13's rule says (operator) | NOT RUN | PASS | the hand run `20261105T034547Z` of the weekly run's task definition (revision 11), started after the scheduled launch was refused on 2026-11-04: `completed`, 03:45:47 to 05:12:57 UTC. `caselist runs --remote --last 1` shows the parse stage: 4 caselists, 4 in full, 18,333 attempted, 0 skipped, 2,064 unsupported, 3 failed, 349,977 cards, 18,345 uploaded, 0 not published; the run's outcome `completed`, no failure code. A run started by hand on the schedule's own task definition with no overrides, after the scheduled launch was refused (v1-e40-t42). Its figures are in docs/data/caselist-sync-runs.md |
+
+ac5 passes, so the Goal is `Succeeded`.

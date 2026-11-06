@@ -1,0 +1,70 @@
+# TASK v1-e40-t45-run-lock-offers-a-test-hook-when-a-writer-waits - The run lock tells a test when a writer starts waiting, so the shared-renewal test is not a thread race
+# Epic: E40 — Weekly Caselist Run in the Cloud | Release: v1.8 (Weekly caselist run in the cloud) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e40-t45-run-lock-offers-a-test-hook-when-a-writer-waits
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.8
+    debate/epic: v1-e40-cloud-caselist-run
+  annotations:
+    debate/title: "The run lock tells a test when a writer starts waiting, so the shared-renewal test is not a thread race"
+spec:
+  # Filed by the PM, 2026-11-05, from v1-e07-t16's question 4 (the PM's ruling, 2026-11-05).
+  description: >-
+    `test_writers_waiting_together_share_one_renewal` depends on thread order: with every
+    before_write delayed 50 ms, a writer scheduled after the first renewal finishes asks for a
+    third (`assert 6 == 2`). Give the lock a seam a test can use, a hook called when a writer
+    starts waiting, so the test opens its gate only once all five wait, without reading the
+    lock's private condition. The hook does nothing in production.
+  priority: 3
+  constraints:
+    packages: [debate_core.application, debate_core.integrations, packages/debate_core/tests]
+    forbidden:
+      - A test that reads the lock's private state
+      - A behaviour change to the lock in production
+  context: []
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        The shared-renewal test releases its writers on the lock's hook and gives one answer
+        with writers started late, by a test shown failing first.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e40-t45-run-lock-offers-a-test-hook-when-a-writer-waits-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.8
+    debate/epic: v1-e40-cloud-caselist-run
+spec:
+  description: >-
+    The run lock tells a test when a writer starts waiting, so the shared-renewal test is not a
+    thread race.
+  goalRef:
+    name: v1-e40-t45-run-lock-offers-a-test-hook-when-a-writer-waits
+  graph:
+    nodes:
+      - id: run-lock-offers-a-test-hook-when-a-write
+        kind: Task
+        name: Run lock hook
+        description: >-
+          The run lock tells a test when a writer starts waiting, so the shared-renewal
+          test is not a thread race.
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Run lock hook tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application/test_caselist_sync_run_lock.py]
+status:
+  phase: Pending

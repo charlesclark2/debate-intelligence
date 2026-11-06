@@ -28,6 +28,11 @@ spec:
     (caselist-cutover.md, "Until the promotion") sends raw sources and manifests only. Add the
     new week's parsed store to it, from the same restored copy, so prod's parsed store and
     search index keep up with dev's weeks between re-parses.
+    (PM amendment 2026-11-05.) v1-e31-t31's dev re-parse is recorded (the hand run 20261105T034547Z,
+    docx-7), so this task may start. The docx-9 run image follows this week, so prod's steps are written
+    for the parser version the run image then carries. Also propose how a backfile's parsed store follows
+    a parser bump in dev and prod (hspolicy25 was parsed at docx-7 on 2026-11-02), since the weekly run
+    parses only the caselists it follows.
   priority: 2
   constraints:
     packages: [docs/runbooks, docs/data, ops, tests/scripts]

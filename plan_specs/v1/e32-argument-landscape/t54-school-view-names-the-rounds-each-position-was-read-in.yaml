@@ -1,0 +1,103 @@
+# TASK v1-e32-t54-school-view-names-the-rounds-each-position-was-read-in - The per-school view names, under each position, the rounds whose disclosed file holds it
+# Epic: E32 Argument Landscape Reports | Release: v1.2 (Argument landscape & file building) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e32-t54-school-view-names-the-rounds-each-position-was-read-in
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e32-argument-landscape
+  annotations:
+    debate/title: "The per-school view names, under each position, the rounds whose disclosed file holds it"
+spec:
+  # Filed by the PM, 2026-11-05, from the coach's request and policy version 1.23 (the coach's decision of 2026-11-05).
+  description: >-
+    Round reports on OpenCaselist often name only what a team went for in the last rebuttal,
+    while the files a team discloses carry everything it read. The coach wants to see what
+    evidence a team reads and produces, round by round, before a tournament. Policy version 1.23
+    lets the per-school view show, beside each position a team's disclosures hold, the
+    tournament, round and side of each disclosure whose file holds it, to the team's signed-in
+    members only, as the student search pilot's provenance line already shows them. Build it:
+    (a) in schools.md and on the pilot's per-school landscape page, under each team's position,
+    the disclosures whose file holds a card placed on that position: the tournament and round
+    label as disclosed, the side, and the card's stance (reads, or answers, shown as AT), newest
+    snapshot first; a file disclosed for more than one round is listed once per round, marked as
+    the same file disclosed for N rounds; (b) a new file beside schools.csv, school_rounds.csv
+    (school, team code, position id, stance, side, tournament, round, snapshot, team page), with
+    schools.csv's own columns unchanged because its readers pin them; (c) the new file counts as
+    a per-school view everywhere one is reached: the removal's school-view deletion
+    (v1-e32-t13), the annual purge and the season window, caselist status's residue count, and
+    the bundle scan's exclusions, each by test. First count, in counts only, over the newest
+    hspolicy26 snapshot: disclosures with no readable round label, files disclosed for more than
+    one round, and the positions and rounds per team; and send the PM the page's shape, one
+    example with invented names, before building. The circuit-wide report is unchanged. After
+    the merge the operator republishes the hspolicy26 report
+    (landscape-report-from-the-cloud-run.md) and the PM records it.
+  priority: 1
+  constraints:
+    packages: [debate_core.arguments, debate_core.application, debate_core.domain, debate_core.integrations, debate_api, debate_cli, packages/debate_core/tests, packages/debate_api/tests, packages/debate_cli/tests, docs/runbooks, docs/data, docs/guides]
+    forbidden:
+      - A real school, team code, tournament or debater name in a fixture, test, log, commit or report
+      - A tournament or round in the circuit-wide report
+      - A per-school file a removal, the purge or the season window does not reach
+      - Card text beside a school or team code
+  context:
+    - kind: TaskRef
+      name: v1-e32-t04-trend-and-school-views
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e32-t13-removal-reaches-landscape-school-views
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        The counts and the page's shape (one invented example) are sent to the PM and ruled
+        on before the build.
+    - id: ac2
+      description: >-
+        The per-school view, its page and school_rounds.csv list each team's positions with
+        the rounds whose file holds them, stance and side, a file disclosed for several
+        rounds marked, and the new file reached by the removal, the purge, the season
+        window, status and the scan, by tests on synthetic stores shown failing first.
+    - id: ac3
+      description: >-
+        The operator republishes the hspolicy26 report after the merge and the PM records it
+        (operator).
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e32-t54-school-view-names-the-rounds-each-position-was-read-in-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e32-argument-landscape
+spec:
+  description: >-
+    The per-school view names, under each position, the rounds whose disclosed file holds it.
+  goalRef:
+    name: v1-e32-t54-school-view-names-the-rounds-each-position-was-read-in
+  graph:
+    nodes:
+      - id: school-view-names-the-rounds-each-positi
+        kind: Task
+        name: Rounds per position
+        description: >-
+          The per-school view names, under each position, the rounds whose disclosed file
+          holds it.
+        estimatedEffort: 4h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Rounds per position tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests, -k, school and round]
+status:
+  phase: Pending

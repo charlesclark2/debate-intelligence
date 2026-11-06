@@ -919,3 +919,22 @@ async def test_a_state_written_between_the_plan_and_the_execution_is_deleted_too
     assert (await world.service().execute(plan)).completed
 
     assert bucket_versions(world, bucket_key(CASELIST, CURRENT, STATE)) == []
+
+
+async def test_a_rerun_of_a_completed_removal_deletes_every_version_of_the_state_it_reaches(
+    world: RemovalWorld,
+) -> None:
+    """A table a re-run reaches keeps the versions written since the first run's completion; a state
+    goes with every version, as the ruling says, whenever it was written: the next run rebuilds the
+    directory in full, which is always safe."""
+    await plant_state(world, CASELIST, CURRENT, versions_in_the_bucket=1)
+    await remove(world, "only")
+    path = world.data_dir / "parsed" / local_key(CASELIST, CURRENT, STATE)
+    path.write_bytes(b"the state the next run wrote")
+    await world.bucket.put_file(bucket_key(CASELIST, CURRENT, STATE), path)
+
+    again = await plan_removal(world, "only")
+    assert any(change.key == bucket_key(CASELIST, CURRENT, STATE) for change in again.aggregates)
+    assert (await world.service().execute(again)).completed
+
+    assert bucket_versions(world, bucket_key(CASELIST, CURRENT, STATE)) == []

@@ -965,6 +965,20 @@ class CaselistRemovalService:
         stops the run :class:`AggregatesLeft`."""
         for change in plan.aggregates_on(Side.BUCKET):
             if change.action is AggregateAction.LEFT:
+                # Nothing to do to it, and it is clean: recorded, so a version of it older than the
+                # removal found later is residue the same request run again takes (`v1-e30-t33`).
+                current = next(
+                    (
+                        one
+                        for one in await self._bucket_versions(access, change.key)
+                        if one.is_latest and not one.is_delete_marker
+                    ),
+                    None,
+                )
+                if current is not None:
+                    counts.aggregates_kept.append(
+                        AggregateRewriteRecord(key=change.key, version_id=current.version_id)
+                    )
                 continue
             kept: str | None = None
             keeping = False

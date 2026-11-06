@@ -710,6 +710,9 @@ class RemovalPlan:
     written after it is not one the removal has to purge again."""
     aggregate_clean: frozenset[tuple[ObjectKey, str | None]] = frozenset()
     """The aggregate versions this request's earlier runs left clean, by their records."""
+    aggregates_reached_before: frozenset[ObjectKey] = frozenset()
+    """Every aggregate this request's earlier runs reached in the bucket, by their records: where a
+    re-run purges an older version their purges should have taken, as `caselist status` counts it."""
     school_view_versions_counted: bool = True
     """Whether the bucket's school-view versions were listed. The everyday profile may list
     `reports/` but not its versions, so in dev and prod they are not: kept apart from
@@ -1286,8 +1289,10 @@ class RemovalPlanner:
             path_holds=path_holds,
             earlier_rewrites=earlier_rewrites,
         )
-        cutoff, clean = await self._earlier_aggregate_runs(log_entries, request_id)
-        plan = replace(plan, aggregate_cutoff=cutoff, aggregate_clean=clean)
+        cutoff, clean, reached_before = await self._earlier_aggregate_runs(log_entries, request_id)
+        plan = replace(
+            plan, aggregate_cutoff=cutoff, aggregate_clean=clean, aggregates_reached_before=reached_before
+        )
         earlier_caselists = {
             caselist
             for scope in scopes
@@ -1309,9 +1314,9 @@ class RemovalPlanner:
 
     async def _earlier_aggregate_runs(
         self, entries: Sequence[RemovalLogEntry], request_id: str
-    ) -> tuple[datetime | None, frozenset[tuple[ObjectKey, str | None]]]:
-        """When this request's latest earlier run completed, and the aggregate versions its runs left
-        clean: what a re-run need not purge again."""
+    ) -> tuple[datetime | None, frozenset[tuple[ObjectKey, str | None]], frozenset[ObjectKey]]:
+        """When this request's latest earlier run completed, the aggregate versions its runs left
+        clean, which a re-run need not purge again, and every aggregate they reached."""
         completed = [
             entry.recorded_at
             for entry in entries
@@ -1325,13 +1330,16 @@ class RemovalPlanner:
             if isinstance(self._removal_log, RemovalAggregatesLog)
             else ()
         )
-        clean = frozenset(
-            (one.key, one.version_id)
+        mine = [
+            record
             for record in records
             if record.request_id == request_id and record.environment == self._environment
-            for one in record.kept
+        ]
+        clean = frozenset((one.key, one.version_id) for record in mine for one in record.kept)
+        keys = frozenset(
+            key for record in mine for key in (*(one.key for one in record.kept), *record.deleted)
         )
-        return (max(completed) if completed else None), clean
+        return (max(completed) if completed else None), clean, keys
 
     async def _aggregates(
         self,
@@ -1347,8 +1355,9 @@ class RemovalPlanner:
         per-source files alone, and a publish sends those before the aggregates, so no other directory
         can hold a row of it. A re-run also reads the current aggregates of every version directory of
         each caselist an earlier run of the request recorded, or the withdrawal record names, and takes
-        a directory one of whose tables still holds a row to take out: what a run by an earlier build,
-        which deleted the per-source files first, could leave.
+        a directory one of whose tables still holds a row to take out (what a run by an earlier build,
+        which deleted the per-source files first, could leave), or where a table the request reached
+        before has an older version its purge should have taken (what `caselist status` counts).
         """
         acting = [source for source in plan.sources if source.disposition is not Disposition.SKIP_SHARED]
         if not acting:
@@ -1369,7 +1378,7 @@ class RemovalPlanner:
                 if (side, caselist, version) in reached:
                     continue
                 found = await self._directory_changes(side, caselist, version, plan, index)
-                if any(change.rows_dropped for change in found):
+                if any(_still_to_take(change, plan) for change in found):
                     changes += found
         return tuple(changes)
 
@@ -2564,6 +2573,14 @@ def _with_its_recorded_withdrawals(
     if source.disposition is not Disposition.WITHDRAW or source.sha256 not in recorded:
         return source
     return replace(source, withdrawn_earlier_from=recorded[source.sha256])
+
+
+def _still_to_take(change: AggregateChange, plan: RemovalPlan) -> bool:
+    """Whether a re-run takes a directory it reads by its scope: a table there still holds a row to take
+    out, or one an earlier run of the request reached has an older version its purge should have taken."""
+    if change.rows_dropped or change.action is AggregateAction.UNREADABLE:
+        return True
+    return change.key in plan.aggregates_reached_before and change.versions != ()
 
 
 def _is_current(version: ObjectVersion) -> bool:

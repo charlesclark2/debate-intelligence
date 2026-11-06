@@ -11,8 +11,9 @@ The removed team is Riverbend Academy MnPr of the parse-pipeline fixture
 Two ways a removal reaches this machine, both checked:
 
 * **Made here**, with `caselist remove --execute` against moto: it deletes the per-source files by
-  digest and every aggregate of the caselist, in every version directory, here and in the bucket
-  with every version; the next `caselist parse` rebuilds the aggregates without them.
+  digest, and rewrites the aggregates of each version directory holding one without their rows, here
+  and in the bucket, purging every other version (`v1-e30-t33`); the next `caselist parse` rebuilds
+  them as it always does, and finds nothing of the team.
 * **Made on another machine**: only the suppression list says so. The next run's rebuild consults
   the list for each aggregate.
 """
@@ -208,7 +209,8 @@ async def test_the_next_run_rebuilds_each_aggregate_without_the_team(world: Remo
     for name in AGGREGATE_NAMES:
         assert traces(current[f"{CURRENT}/{name}"]) == [], name
     assert {row["source_sha256"] for row in current[f"{CURRENT}/failures.jsonl"]} == {digest_of("broken")}
-    assert f"{OLDER}/index.jsonl" not in current
+    for name in AGGREGATE_NAMES:
+        assert traces(current[f"{OLDER}/{name}"]) == [], f"{OLDER} rewritten by the removal, not rebuilt"
     assert traces(bucket_aggregate_rows(world)) == []
 
 

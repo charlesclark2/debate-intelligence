@@ -473,9 +473,55 @@ retired directories deleted. Nothing is to be rebuilt.* Then P1b's read-only che
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-11-05
 
 **Notes:**
+
+The defect J7 found is fixed at its root: a removal now reaches a version directory only by the witness
+that it holds the file (a per-source parsed file, in any version), and it repairs what it reaches in
+place instead of leaving every caselist waiting on a rebuild the cloud can no longer do from this Mac.
+
+1. **ac1 passes.** The proposal was committed before any code (`6577c13`), and the ruling is recorded
+   ahead of the first code commit.
+2. **ac2 passes.** All eight cases the ruling listed are tested on moto with synthetic stores, among
+   them a backfile, a retired directory deleted rather than rewritten, a stopped run found again by its
+   per-source file, both withdrawal kinds and an unreadable line stopping the run with nothing written.
+   Red was 25 failed and 1 passed against the refuse-nothing skeleton. The one pass is Q3's
+   cluster-id test, which a drop-nothing rule cannot fail, and the report says so. All 21 mutants are
+   caught, and the 6 that first survived each got the test that was missing. The one masked by a
+   fallback (the byte comparison behind the digest check) is the kind that matters most here.
+3. **The execution order is right.** Each directory's aggregates are handled before its per-source file
+   is deleted, so the witness outlives the rows. Every rewrite is staged and checked before the first
+   write; a table changed since the plan stops the run. In bucket mode the lock is held from the plan to
+   the last write, which keeps the weekly parse publish out.
+4. **Deviations accepted.** The smoke pins and the removal fixture follow the ruling's (b). The existing
+   tests whose expectations changed now pin the ruled behaviour, and `test_residue_clearing_gaps.py`
+   pins a stronger one. `parsed-store-publish-only.md` is left as written because it is still true of an
+   older build's removal. The estimate is already 8h in the PM's batch.
+5. **Decisions accepted.** 2, a re-run purging the older versions of tables its request reached before,
+   is bounded by the residue rule's own window (older than the completion less 15 minutes, never the
+   clean version) and touches no other directory's history. 3, an empty table recorded clean, closes
+   the gap a later stale version would otherwise leave. 5, unreadable tags taken as live, is the safe way
+   round, and the plan says so.
+6. **Follow-up 1, the parse owed a removal clears: keep the entry.** The clearing existed only because
+   the runbook's rebuild parsed whatever was unparsed, and nothing follows a removal now. The next
+   parse stage reads the manifests as the removal rewrote them, so keeping the entry cannot bring a
+   removed file back. The PM files it in the next batch (E30, p2), with this ruling. Its proposal
+   first says whether the next run's parse picks those sources up anyway; if it does, the task is
+   a docstring change and a test. It does not hold up J7, because the seed's caselist owes no parse.
+7. **Follow-ups 2 and 3 accepted.** Older removals keep the old residue rule. The docx-9 run image is
+   built from a `dev` that carries this task, so the weekly agent carries it before its next removal,
+   and promotion item 8 already says prod's removal runs from such a build.
+8. **ac3 is the operator's, and here is the PM's word on `--execute`.** It runs in dev only, for
+   RM-2026-91 and the seed's one file, from `$WT` pulled to a `dev` that carries this merge. It runs
+   only when the dry run reads as the Operator follow-ups say: one file under WILL BE REMOVED; exactly
+   the three `bucket` tables of `parsed/testcl26/2026.10.27-docx-7/` (`-1 of 3`, `holds none`,
+   `-2 of 4`); no retired-directories section; and no `UNREADABLE` line. Anything else stops the
+   journey and comes to the PM. No removal runs in prod under this word. The operator sends each table's
+   bytes from the dry run, and the PM records them, ac3 and the J4–J10 rerun in a batch. The PM's batch
+   also amends ac3's wording: no rebuild follows a removal.
+9. **Merge:** `scripts/task pr --partial` once `ci` is green. The Goal stays `InProgress` until ac3 is
+   recorded.

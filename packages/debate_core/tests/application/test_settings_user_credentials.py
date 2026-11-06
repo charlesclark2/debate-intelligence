@@ -1,4 +1,4 @@
-"""The per-user credentials file, `~/.debate-research/<env>.env` (`v1-e41-t22`, the PM's ruling of 2026-11-05).
+"""The per-user credentials file, `~/.debate-research/<env>.env` (`v1-e41-t22`, the PM's ruling, 2026-11-05).
 
 Its place in the order of sources: below the variables and the one `.env`, above the profile. It
 holds the four credentials in :data:`USER_CREDENTIAL_VARIABLES` and nothing else, and it is not read
@@ -134,7 +134,9 @@ def test_each_environment_has_its_own_file_and_test_has_none(home: Path) -> None
     assert user_credentials_file(Environment.TEST) is None
 
 
-def test_credentials_in_the_per_user_file_are_read_and_named_by_their_source(home: Path, profiles: Path) -> None:
+def test_credentials_in_the_per_user_file_are_read_and_named_by_their_source(
+    home: Path, profiles: Path
+) -> None:
     credentials(home, f"DEBATE_PROVIDERS__CONTACT_EMAIL={EMAIL}", f"DEBATE_PROVIDERS__API_DATA_GOV_KEY={KEY}")
 
     settings = load_settings(environment="dev", profile_dir=profiles)
@@ -226,7 +228,8 @@ def test_the_file_wins_over_the_profile(home: Path, tmp_path: Path) -> None:
     profiles = tmp_path / "profiles-with-a-credential"
     profiles.mkdir()
     (profiles / "dev.toml").write_text(
-        f'[storage]\ndata_dir = "{tmp_path / "dev"}"\n[providers]\ncontact_email = "{OTHER}"\n', encoding="utf-8"
+        f'[storage]\ndata_dir = "{tmp_path / "dev"}"\n[providers]\ncontact_email = "{OTHER}"\n',
+        encoding="utf-8",
     )
     credentials(home, f"DEBATE_PROVIDERS__CONTACT_EMAIL={EMAIL}")
 
@@ -304,7 +307,9 @@ def test_a_name_that_is_not_a_credential_is_refused_by_file_and_line(home: Path,
     assert error.source == DEV_SOURCE
 
 
-def test_debate_env_in_the_file_is_refused_and_never_picks_the_environment(home: Path, profiles: Path) -> None:
+def test_debate_env_in_the_file_is_refused_and_never_picks_the_environment(
+    home: Path, profiles: Path
+) -> None:
     credentials(home, "DEBATE_ENV=prod")
 
     error = refusal(environment="dev", profile_dir=profiles)
@@ -381,7 +386,7 @@ def test_every_problem_in_the_file_is_named_at_once(home: Path, profiles: Path) 
 def test_a_file_its_group_or_others_have_any_permission_on_is_refused_with_the_chmod_fix(
     home: Path, profiles: Path, mode: int
 ) -> None:
-    """The whole of 0o077, as the caselist token file's rule: 0o620 is refused though no one else may read it."""
+    """The whole of 0o077, the caselist token file's rule: 0o620 is refused though no one else may read it."""
     credentials(home, f"DEBATE_PROVIDERS__CONTACT_EMAIL={EMAIL}", mode=mode)
 
     error = refusal(environment="dev", profile_dir=profiles)

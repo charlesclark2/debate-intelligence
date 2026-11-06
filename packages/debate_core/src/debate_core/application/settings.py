@@ -79,6 +79,7 @@ from __future__ import annotations
 
 import os
 import re
+import stat
 import tempfile
 import tomllib
 from collections.abc import Callable, Iterator, Mapping, Sequence
@@ -330,6 +331,24 @@ search with no topic, or on a topic that does not list it, never asks it.
 """
 
 
+def _absolute_path(value: Path) -> Path:
+    """`value` with variables and `~` expanded, made absolute against the working folder.
+
+    A relative path with no working folder (it was removed, `v1-e41-t22`) is relative to nothing, and
+    is refused as a value error, which names the field, rather than raised as `FileNotFoundError`.
+    """
+    expanded = Path(os.path.expandvars(str(value))).expanduser()
+    if expanded.is_absolute():
+        return expanded
+    folder = working_folder()
+    if folder is None:
+        raise ValueError(
+            "is a relative path, and the folder this command was run from no longer exists, so it is "
+            "relative to nothing; give an absolute path"
+        )
+    return folder / expanded
+
+
 class SettingsGroup(BaseModel):
     """Base for the nested groups: frozen, validated, and closed to unknown keys.
 
@@ -479,7 +498,7 @@ class StorageSettings(SettingsGroup):
     @classmethod
     def _expand(cls, value: Path) -> Path:
         """Expand `~` and make the path absolute, so two spellings of one directory compare equal."""
-        return Path(os.path.expandvars(str(value))).expanduser().absolute()
+        return _absolute_path(value)
 
 
 class HttpSettings(SettingsGroup):
@@ -1048,7 +1067,7 @@ class CaselistSettings(SettingsGroup):
     def _expand_inbox(cls, value: Path | None) -> Path | None:
         if value is None:
             return None
-        return Path(os.path.expandvars(str(value))).expanduser().absolute()
+        return _absolute_path(value)
 
     @field_validator("downloads_per_minute")
     @classmethod
@@ -1073,7 +1092,7 @@ class CaselistSettings(SettingsGroup):
     def _expand_secret_file(cls, value: Path | None) -> Path | None:
         if value is None:
             return None
-        return Path(os.path.expandvars(str(value))).expanduser().absolute()
+        return _absolute_path(value)
 
     @model_validator(mode="after")
     def _a_backfile_is_never_pulled(self) -> CaselistSettings:
@@ -1541,7 +1560,11 @@ def find_repository_root(start: Path | None = None) -> Path | None:
     That directory is what makes a source checkout recognisable as one, and it is where the
     committed profiles are, so one walk answers both questions.
     """
-    current = (start or Path.cwd()).absolute()
+    begin = start if start is not None else working_folder()
+    if begin is None:
+        # The folder this command was run from no longer exists: there is no checkout around it.
+        return None
+    current = begin if begin.is_absolute() else begin.absolute()
     for candidate in (current, *current.parents):
         if (candidate / PROFILE_SUBDIRECTORY).is_dir():
             return candidate
@@ -1653,9 +1676,14 @@ def _environment_from_dotenv(env_file: Path | None) -> tuple[str | None, Path | 
 
 
 def _default_dotenv_path() -> Path | None:
-    """`.env` beside the repository root, or in the working directory outside a checkout."""
-    root = find_repository_root()
-    candidate = (root or Path.cwd()) / ".env"
+    """`.env` beside the repository root, or in the working directory outside a checkout.
+
+    `None` when the working folder no longer exists: that is no working-folder `.env`, not a crash.
+    """
+    folder = find_repository_root() or working_folder()
+    if folder is None:
+        return None
+    candidate = folder / ".env"
     return candidate if candidate.is_file() else None
 
 
@@ -1667,8 +1695,18 @@ MISSING_WORKING_FOLDER_WARNING: Final = (
 
 
 def working_folder() -> Path | None:
-    """The folder this process runs in, or `None` when it no longer exists or cannot be read."""
-    return Path.cwd()
+    """The folder this process runs in, or `None` when it no longer exists or cannot be read.
+
+    Every read of the working folder while settings load goes through here (`v1-e41-t22`). A command
+    run from a worktree that has since been removed got `FileNotFoundError` from `Path.cwd()`, and a
+    folder whose parent cannot be searched gives `PermissionError`; both are "no working folder",
+    which means no checkout around it and no `.env` in it. The CLI says so in one line
+    (:data:`MISSING_WORKING_FOLDER_WARNING`); this module prints nothing.
+    """
+    try:
+        return Path(os.getcwd())
+    except OSError:
+        return None
 
 
 def user_credentials_directory() -> Path | None:
@@ -1698,7 +1736,10 @@ def _file_modes_are_posix() -> bool:
 
 def _read_open_file(descriptor: int) -> bytes:
     """Every byte of an open file, read only after its mode has been judged."""
-    return b""
+    chunks: list[bytes] = []
+    while chunk := os.read(descriptor, 65536):
+        chunks.append(chunk)
+    return b"".join(chunks)
 
 
 def display_user_path(path: Path) -> str:
@@ -1745,6 +1786,7 @@ def load_settings(
     repository_root = find_repository_root()
     config_root = bundled_config_root if bundled_config_root is not None else repository_root
     profile_file = profile_path_for(resolved_environment, profile_dir, config_root=config_root)
+    user_file = user_credentials_file(resolved_environment)
 
     layers: list[tuple[str | SourceLabeller, Mapping[str, Any]]] = [
         # The environment was resolved once, above, and that decision is final: a stray
@@ -1754,6 +1796,10 @@ def load_settings(
         ("cli", dict(overrides or {})),
         (_environment_variable_for, _environment_layer()),
         (f"dotenv:{_readable_path(dotenv_path, repository_root)}", _dotenv_layer(dotenv_path)),
+        (
+            f"{USER_CREDENTIALS_SOURCE_KIND}:{display_user_path(user_file) if user_file else 'none'}",
+            _user_credentials_layer(user_file),
+        ),
         (f"profile:{_readable_path(profile_file, repository_root)}", _profile_layer(profile_file)),
         (f"built-in:{resolved_environment.value}", dict(BUILTIN_PROFILES[resolved_environment])),
     ]
@@ -1888,6 +1934,117 @@ def _dotenv_keys(path: Path) -> set[str]:
         if name.startswith(prefix):
             names.add(name[len(prefix) :].split(ENV_NESTED_DELIMITER, 1)[0])
     return names
+
+
+OWNER_ONLY_MODE_MASK: Final = stat.S_IRWXG | stat.S_IRWXO
+"""Any permission for the group or others (0o077): the per-user file is refused with one of them, as the
+caselist token file is (`token_store.py`). The PM's ruling on `v1-e41-t22`, Q3: write without read
+(0o020) is refused too, since a file someone else may change can be given their key."""
+
+_SETTING_NAME: Final = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
+"""What a variable's name looks like. A line whose name does not is named by its line number only."""
+
+
+def _user_credentials_layer(path: Path | None) -> dict[str, Any]:
+    """The four credentials from the per-user file, nested like the model; an empty layer with no file.
+
+    The file is opened once, its mode judged with `fstat` on that open descriptor before any byte is
+    read, and only then read, so a file swapped between a check and a read cannot slip through. A
+    symlink is followed, and its target judged. Every refusal names the file and a line number and
+    never a value: a line whose name is not a setting name, or which has no `=`, could be a pasted key.
+    """
+    if path is None:
+        return {}
+    shown = display_user_path(path)
+    label = f"{USER_CREDENTIALS_SOURCE_KIND}:{shown}"
+    try:
+        descriptor = os.open(path, os.O_RDONLY)
+    except FileNotFoundError:
+        return {}
+    except OSError:
+        raise ConfigurationError(f"could not read {shown}.", source=label) from None
+    try:
+        status = os.fstat(descriptor)
+        if not stat.S_ISREG(status.st_mode):
+            raise ConfigurationError(f"{shown} is not a file.", source=label)
+        if not _file_modes_are_posix():
+            raise ConfigurationError(
+                f"{shown} was not read: this system cannot say who else may read it. Set the "
+                "credentials as environment variables instead.",
+                source=label,
+            )
+        if stat.S_IMODE(status.st_mode) & OWNER_ONLY_MODE_MASK:
+            raise ConfigurationError(
+                f"{shown} has permissions {stat.filemode(status.st_mode)}, so someone other than its owner "
+                f"can read or change it, and it was not read. Run: chmod 600 {shown}",
+                source=label,
+            )
+        try:
+            text = _read_open_file(descriptor).decode("utf-8")
+        except (OSError, UnicodeDecodeError):
+            raise ConfigurationError(f"could not read {shown}.", source=label) from None
+    finally:
+        os.close(descriptor)
+    return _user_credentials_from_text(text, shown, label)
+
+
+def _user_credentials_from_text(text: str, shown: str, label: str) -> dict[str, Any]:
+    """Parse the file's lines as a `.env` is read: comments, blank lines, `export`, quotes.
+
+    Every problem is collected and reported at once, in line order, so one edit fixes them all.
+    """
+    problems: list[str] = []
+    first_line_of: dict[str, int] = {}
+    values: dict[str, str] = {}
+    prefix = f"{ENV_PREFIX}PROVIDERS{ENV_NESTED_DELIMITER}"
+    for number, raw_line in enumerate(text.splitlines(), start=1):
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if line.startswith("export ") or line.startswith("export\t"):
+            line = line[len("export") :].lstrip()
+        if "=" not in line:
+            problems.append(f"{shown} line {number} is not NAME=value.")
+            continue
+        written_name, _, raw_value = line.partition("=")
+        name = written_name.strip()
+        if _SETTING_NAME.fullmatch(name) is None:
+            problems.append(f"{shown} line {number}: its name is not a setting name.")
+            continue
+        variable = name.upper()
+        if variable in USER_CREDENTIAL_EXCLUSIONS:
+            problems.append(
+                f"{shown} line {number}: {variable} is not read from this file. "
+                f"{USER_CREDENTIAL_EXCLUSIONS[variable]}"
+            )
+            continue
+        if variable not in USER_CREDENTIAL_VARIABLES:
+            problems.append(
+                f"{shown} line {number}: {variable} is not a credential; this file holds only "
+                f"{_names_in_prose(USER_CREDENTIAL_VARIABLES)}. Put it in a .env or export it."
+            )
+            continue
+        if variable in first_line_of:
+            problems.append(f"{shown} lines {first_line_of[variable]} and {number} both set {variable}.")
+            continue
+        first_line_of[variable] = number
+        values[variable[len(prefix) :].lower()] = _unquoted(raw_value.strip())
+    if problems:
+        raise ConfigurationError(" ".join(problems), source=label)
+    return {"providers": values} if values else {}
+
+
+def _unquoted(value: str) -> str:
+    """A value with one pair of matching quotes taken off, or an unquoted value's ` #` comment."""
+    if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'":
+        return value[1:-1]
+    comment = value.find(" #")
+    return value[:comment].rstrip() if comment != -1 else value
+
+
+def _names_in_prose(names: Sequence[str]) -> str:
+    """`a, b, c and d`."""
+    return f"{', '.join(names[:-1])} and {names[-1]}" if len(names) > 1 else "".join(names)
 
 
 def _profile_layer(path: Path | None) -> dict[str, Any]:

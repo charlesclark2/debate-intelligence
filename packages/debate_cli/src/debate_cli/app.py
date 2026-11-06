@@ -36,7 +36,11 @@ from debate_cli.exit_codes import ExitCode
 from debate_cli.installation import incomplete_installation_failure
 from debate_cli.output import CliOutput, CommandFailure, OutputMode
 from debate_core.application.errors import DomainError
-from debate_core.application.settings import resolve_environment
+from debate_core.application.settings import (
+    MISSING_WORKING_FOLDER_WARNING,
+    resolve_environment,
+    working_folder,
+)
 
 __all__ = ["APP_NAME", "DebateResearchGroup", "app", "create_app", "main"]
 
@@ -181,6 +185,10 @@ def root_callback(
 ) -> None:
     """Runs before every command: turns the global options into this run's CliContext."""
     output = CliOutput(OutputMode.JSON if json_output else OutputMode.RICH, verbose=verbose)
+    if working_folder() is None:
+        # Run from a folder that has since been removed (v1-e41-t22): settings read it as no .env and
+        # no checkout, and a person is told once, on stderr, so stdout's JSON stays one envelope.
+        output.note(MISSING_WORKING_FOLDER_WARNING)
     # The loader is passed, not called: the container runs it the first time a command asks for
     # settings, so `--help` and `--version` never read a profile file (v1-e02-t05). It knows this
     # build's channel and bundled configuration (v1-e01-t09, debate_cli.build_info), and loads and

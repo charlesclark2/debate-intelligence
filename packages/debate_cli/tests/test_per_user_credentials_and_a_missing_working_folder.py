@@ -90,7 +90,9 @@ def deleted_folder(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Path:
 
 
 def test_config_show_names_the_per_user_file_as_the_source_and_masks_the_value(installation: Path) -> None:
-    per_user_file(installation, f"DEBATE_PROVIDERS__CONTACT_EMAIL={EMAIL}", f"DEBATE_PROVIDERS__API_DATA_GOV_KEY={KEY}")
+    per_user_file(
+        installation, f"DEBATE_PROVIDERS__CONTACT_EMAIL={EMAIL}", f"DEBATE_PROVIDERS__API_DATA_GOV_KEY={KEY}"
+    )
 
     data = envelope_of(runner.invoke(create_app(), ["--json", "config", "show"]))["data"]
 
@@ -124,7 +126,9 @@ def test_config_show_names_only_the_winner_when_a_variable_shadows_the_file(
 
 @pytest.mark.parametrize("mode", MODES)
 def test_no_per_user_value_reaches_either_stream_in_any_mode(installation: Path, mode: list[str]) -> None:
-    per_user_file(installation, f"DEBATE_PROVIDERS__CONTACT_EMAIL={EMAIL}", f"DEBATE_PROVIDERS__API_DATA_GOV_KEY={KEY}")
+    per_user_file(
+        installation, f"DEBATE_PROVIDERS__CONTACT_EMAIL={EMAIL}", f"DEBATE_PROVIDERS__API_DATA_GOV_KEY={KEY}"
+    )
 
     result = runner.invoke(create_app(), [*mode, "config", "show"])
 

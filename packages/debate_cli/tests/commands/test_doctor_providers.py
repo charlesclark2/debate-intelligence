@@ -1,4 +1,4 @@
-"""`debate-research doctor --providers`: each enabled provider's key or email, and never a failure (`v1-e41-t22`).
+"""`doctor --providers`: each enabled provider's key or email, and never a failure (`v1-e41-t22`).
 
 Plain `doctor` loads no settings (`scripts/install_channel.sh` and `validate-dev` run it on machines
 with none), so the provider rows come with an option, as `--routing-file`'s does. A row says whether
@@ -16,6 +16,7 @@ from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
+import boto3  # noqa: F401  # plain doctor's integration check imports it; at module top its urllib3 IPv6 probe runs before pytest-socket
 import pytest
 from tests.fixtures.model_routing import EXAMPLE_ROUTING_FILE
 from typer.testing import CliRunner, Result
@@ -80,9 +81,14 @@ def doctor_json(*arguments: str) -> tuple[int, dict[str, Any], Result]:
 def provider_rows() -> tuple[int, list[str], Result]:
     """The rows from "Credentials file" on, each as `Check Value` with the borders taken off."""
     result = runner.invoke(create_app(), ["doctor", "--providers"])
-    lines = [" ".join(re.sub(r"[│┃┏┓┗┛━─┡┩╇╭╮╰╯┼┬┴├┤┌┐└┘]", " ", line).split()) for line in result.stdout.splitlines()]
+    lines = [
+        " ".join(re.sub(r"[│┃┏┓┗┛━─┡┩╇╭╮╰╯┼┬┴├┤┌┐└┘]", " ", line).split())
+        for line in result.stdout.splitlines()
+    ]
     lines = [line for line in lines if line]
-    start = next((index for index, line in enumerate(lines) if line.startswith("Credentials file")), len(lines))
+    start = next(
+        (index for index, line in enumerate(lines) if line.startswith("Credentials file")), len(lines)
+    )
     return result.exit_code, lines[start:], result
 
 
@@ -137,7 +143,9 @@ def test_a_credential_from_a_variable_is_named_by_its_variable(monkeypatch: pyte
 
 
 def test_a_blank_value_counts_as_missing(installation: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    per_user_file(installation, f"DEBATE_PROVIDERS__CONTACT_EMAIL={EMAIL}", "DEBATE_PROVIDERS__API_DATA_GOV_KEY=  ")
+    per_user_file(
+        installation, f"DEBATE_PROVIDERS__CONTACT_EMAIL={EMAIL}", "DEBATE_PROVIDERS__API_DATA_GOV_KEY=  "
+    )
     monkeypatch.setenv("DEBATE_PROVIDERS__CONTACT_EMAIL", "")
 
     _, rows, _ = provider_rows()
@@ -173,14 +181,19 @@ def test_with_no_provider_enabled_one_row_says_so(monkeypatch: pytest.MonkeyPatc
     ]
 
 
-def test_the_test_environment_reads_no_per_user_file(installation: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_the_test_environment_reads_no_per_user_file(
+    installation: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     per_user_file(installation, f"DEBATE_PROVIDERS__CONTACT_EMAIL={EMAIL}")
     monkeypatch.setenv("DEBATE_ENV", "test")
 
     exit_code, rows, result = provider_rows()
 
     assert exit_code == ExitCode.OK
-    assert rows == ["Credentials file not read in the test environment", "Providers none enabled (providers.enabled)"]
+    assert rows == [
+        "Credentials file not read in the test environment",
+        "Providers none enabled (providers.enabled)",
+    ]
     assert_no_value(result)
 
 

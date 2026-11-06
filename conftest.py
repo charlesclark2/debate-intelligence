@@ -95,7 +95,9 @@ NO_PER_USER_CREDENTIALS_FOLDER = "no-per-user-credentials-folder"
 
 
 @pytest.fixture(autouse=True)
-def no_per_user_credentials(monkeypatch: pytest.MonkeyPatch, tmp_path_factory: pytest.TempPathFactory) -> Path:
+def no_per_user_credentials(
+    monkeypatch: pytest.MonkeyPatch, tmp_path_factory: pytest.TempPathFactory
+) -> Path:
     """Point the per-user credentials folder at one that does not exist, for every test."""
     missing = tmp_path_factory.getbasetemp() / NO_PER_USER_CREDENTIALS_FOLDER
     monkeypatch.setattr(settings_module, "user_credentials_directory", lambda: missing)

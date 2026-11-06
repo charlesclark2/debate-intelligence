@@ -682,7 +682,12 @@ def _provider_rows(report: Mapping[str, JsonValue]) -> list[list[str]]:
         return []
     credentials_file = cast("Mapping[str, JsonValue]", found["credentials_file"])
     where = credentials_file["path"]
-    rows = [["Credentials file", f"{where}: {credentials_file['state']}" if where else str(credentials_file["state"])]]
+    rows = [
+        [
+            "Credentials file",
+            f"{where}: {credentials_file['state']}" if where else str(credentials_file["state"]),
+        ]
+    ]
     enabled = cast("list[Mapping[str, JsonValue]]", found["enabled"])
     if not enabled:
         return [*rows, ["Providers", "none enabled (providers.enabled)"]]

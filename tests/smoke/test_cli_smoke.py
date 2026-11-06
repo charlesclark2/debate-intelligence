@@ -207,6 +207,38 @@ def test_doctor_checks_the_search_index_stores_only_when_asked_and_fails_on_one_
     assert data["search_index"]["applies"] is False
 
 
+def test_the_build_reads_the_per_user_credentials_file_and_doctor_names_its_source(
+    installed_cli: InstalledCli,
+) -> None:
+    """`v1-e41-t22`. The build reads `~/.debate-research/dev.env` in the harness's scratch home, from a
+    working folder with no `.env`: `config show` and `doctor --providers` name the file as the contact
+    email's source and never print it. Made readable by the group, the file stops both, with the fix."""
+    email = f"smoke-{secrets.token_hex(6)}"
+    folder = installed_cli.home / ".debate-research"
+    folder.mkdir()
+    credentials = folder / "dev.env"
+    credentials.write_text(f"DEBATE_PROVIDERS__CONTACT_EMAIL={email}\n", encoding="utf-8")
+    credentials.chmod(0o600)
+    source = "user-env:~/.debate-research/dev.env"
+
+    shown = installed_cli.run("--json", "config", "show")
+    asked = installed_cli.run("--json", "doctor", "--providers")
+
+    assert data_of(shown)["sources"]["providers.contact_email"] == source
+    found = data_of(asked)["providers"]
+    assert found["credentials_file"] == {"path": "~/.debate-research/dev.env", "state": "read"}
+    [crossref] = [row for row in found["enabled"] if row["provider"] == "crossref"]
+    assert crossref["summary"] == f"contact email set ({source}): Crossref's polite pool"
+
+    credentials.chmod(0o640)
+    refused = installed_cli.run("--json", "doctor", "--providers")
+
+    assert refused.exit_code == 1, refused.output
+    assert "Run: chmod 600 ~/.debate-research/dev.env" in refused.output
+    for run in (shown, asked, refused):
+        assert email not in run.output
+
+
 # ------------------------------------------------------------------------------------------------
 # config show: secrets never leave, and the environment decides the rest
 # ------------------------------------------------------------------------------------------------

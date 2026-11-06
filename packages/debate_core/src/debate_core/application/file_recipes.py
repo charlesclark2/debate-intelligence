@@ -594,9 +594,9 @@ def _field_error(issue: Any, lines: Mapping[str, int]) -> RecipeError:
 class OccurrenceStoreNotReady(DomainError):
     """The occurrence store a recipe needs cannot be read as it stands. Never read as empty.
 
-    No version directory of the resolver's parser version, no `occurrences.jsonl` in it (a removal
-    deletes the aggregates until the next `caselist parse`), or rows stamped with a fingerprint
-    version whose exact fingerprints are not today's.
+    No version directory of the resolver's parser version, no `occurrences.jsonl` in it (since
+    `v1-e30-t33` a removal deletes the aggregates only of a directory retention has tagged), or rows
+    stamped with a fingerprint version whose exact fingerprints are not today's.
     """
 
     def __init__(self, caselist: str, reason: str) -> None:

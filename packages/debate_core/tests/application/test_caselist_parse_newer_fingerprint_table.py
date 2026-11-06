@@ -269,8 +269,9 @@ async def test_a_publish_that_sends_no_table_asks_nothing_of_the_buckets(
     evidence_bucket: str,
     tmp_path: Path,
 ) -> None:
-    """A removal deletes the aggregates until the next parse: such a publish sends per-source files
-    only, and replaces nothing, so the newer table the bucket holds stays and nothing is refused."""
+    """A store with no aggregates (before `v1-e30-t33` a removal left one): such a publish sends
+    per-source files only, and replaces nothing, so the newer table the bucket holds stays and nothing
+    is refused."""
     as_build(NEWER)
     newer_machine = await a_world(tmp_path, "newer-machine")
     await newer_machine.run()

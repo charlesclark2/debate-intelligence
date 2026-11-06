@@ -17,8 +17,8 @@ For each store named (a caselist slug, or `openev` for camp files), the newest g
 running parser version's directory, as the recipe resolver reads it. Its rows must all carry the
 running :data:`~debate_core.evidence.fingerprints.FINGERPRINT_VERSION`, since a cluster id means
 something only under the version it was computed by. A store with no such directory, no
-`occurrences.jsonl` (a removal deletes the aggregates until the next `caselist parse`), no rows, or
-rows of another fingerprint version is :class:`SearchIndexStoreNotReady`, never read as empty.
+`occurrences.jsonl` (since `v1-e30-t33` a removal deletes only a retired directory's aggregates), no
+rows, or rows of another fingerprint version is :class:`SearchIndexStoreNotReady`, never read as empty.
 
 **The occurrence table, and nothing else, says what is indexed** (PM amendment 2026-10-20). A
 source's document record is read only for a card an occurrence row names. Since `v1-e31-t26` the

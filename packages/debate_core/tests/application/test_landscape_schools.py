@@ -496,7 +496,7 @@ def test_a_teams_read_positions_come_first_in_row_order_then_those_it_only_answe
     view = _hand_view(
         [*aff, *neg],
         reads={"states-cp": neg[:1], "single-payer-aff": aff, "cap-k": neg},
-        answers={"election-da": aff[:1], "courts-cp": aff, "cap-k": neg[:2], "nhi-t": neg[1:2]},
+        answers={"election-da": aff[:1], "courts-cp": aff, "cap-k": neg[:2], "nhi-t": neg[1:]},
     )
     lines = [(one.position_id, one.stance.value, one.answers_only) for one in view.round_lines]
     assert lines == [
@@ -508,9 +508,10 @@ def test_a_teams_read_positions_come_first_in_row_order_then_those_it_only_answe
         ("states-cp", "reads", False),
         ("courts-cp", "AT", True),
         ("courts-cp", "AT", True),
-        ("election-da", "AT", True),
         ("nhi-t", "AT", True),
-    ]
+        ("nhi-t", "AT", True),
+        ("election-da", "AT", True),
+    ], "answered positions by how many rounds answer them, then by id"
 
 
 def test_a_school_round_by_no_team_or_on_no_side_is_no_line() -> None:

@@ -212,7 +212,7 @@ async def test_the_publish_after_a_dry_run_on_a_new_parser_version_reads_no_sour
     assert (read.sources, read.hits, read.parsed) == (4, 1, 0)
     assert published.publish is not None
     assert {one.action for one in published.publish.planned} == {PublishAction.UPLOAD}
-    assert len(published.publish.uploaded) == 7
+    assert len(published.publish.uploaded) == 8
     # The same report the old parser's run counted: the bump changed which version read the file only.
     assert published.aff_assignments == first.aff_assignments == 1
 

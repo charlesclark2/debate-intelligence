@@ -10,7 +10,9 @@ no model call, card by card ([the replay runbook](landscape-model-evaluation-rep
 recorded under 1.0.0 ([the counts](../data/landscape-model-evaluation.md)). A recording made under one
 prompt version is never served to another: a 1.1.0 request finds no 1.0.0 cassette. Since `v1-e32-t46` a
 checkout runs prompt 1.2.0, whose answers carry a stance: its re-record, on both routes, after the coach's
-relabelling sitting, is [the last section](#prompt-120-the-coachs-relabelling-sitting-then-both-routes-v1-e32-t46).
+relabelling sitting, is [its section](#prompt-120-the-coachs-relabelling-sitting-then-both-routes-v1-e32-t46).
+Since `v1-e32-t55` a checkout runs prompt 1.3.1, re-recorded on `deep_audit` by
+[the last section](#prompt-131-the-re-record-on-deep_audit-v1-e32-t55).
 
 ## Before you start
 
@@ -297,6 +299,72 @@ and sample row numbers.
 If the recording's `scan` counts are above zero, read the hits in the terminal only, with this block.
 **Never paste or copy its output.** For each hit, give its number and whether its words name a team, a
 school or a tournament, or are an ordinary word that shares them.
+
+```bash
+SAMPLE=~/Documents/debate/landscape-review/policy-2026-27-nhi-coach-sample-labelled.csv
+ROWS=~/.debate-research/dev/landscape/local-classifier/hspolicy26/policy-2026-27-nhi-coach-sample.jsonl
+if env | grep -q '^DEBATE_'; then echo "STOP: a DEBATE_ variable is set; unset it and paste again"; else uv run debate-research landscape evaluate --caselist hspolicy26 --snapshot 2026-10-20 --sample "$SAMPLE" --sample-rows "$ROWS" --breakdown --route deep_audit; fi
+```
+
+## Prompt 1.3.1: the re-record on `deep_audit` (`v1-e32-t55`)
+
+Prompt 1.3.1 is 1.3.0 with one sentence taken out, the generic-confidence one ("A generic position is never
+named by a tag or heading: give it 0.9 or more ..."). Every other line of the prompt is 1.3.0's. 1.3.0's
+re-record failed the PM's condition on that sentence: above the threshold, the answers naming a generic
+position were right 0 times and wrong once (row 26)
+([the evaluation's record](../data/landscape-model-evaluation.md#the-re-record-under-130-v1-e32-t49-ac3-2026-11-05)).
+The coach's labels, the bar and the threshold are unchanged since 1.3.0's re-record, so there is no sitting.
+
+One route, `deep_audit` (Claude Sonnet 4.6), as for 1.3.0. The price comes from `config/model_pricing.yaml`
+($0.003 and $0.015 per 1,000 input and output tokens). 1.3.0's re-record took 41,332 input and 4,737 output
+tokens. 1.3.1 sends 215 fewer characters of instructions in each of the 3 calls, about 160 tokens in all.
+That is about 41,170 input and 4,740 output tokens: **about $0.19**. The budget guard prices each call's
+ceiling from its variables, which 1.3.1 leaves as 1.3.0 had them, so the ceiling is the one 1.3.0's section
+gives: $1.106 for the three calls, about $1.50 with a repair, inside dev's $2.00 a day if nothing else spent
+that day. 1.3.1's cassettes go beside 1.3.0's in `model-cassettes-deep_audit/`, under their own keys, and
+nothing is replaced. Nothing is published: `landscape evaluate` writes only those local cassettes and never
+touches the bucket.
+
+Run it from a checkout holding `v1-e32-t55`: its task worktree until it merges, a checkout of `dev` after.
+Go to it:
+
+```bash
+cd /Users/charlesclark/Documents/debate/debate-intelligence-tool/debate-intelligence-worktrees/v1-e32-t55-prompt-1-3-1-without-the-generic-confidence-sentence
+```
+
+One block, in order: the sample check, the Bedrock login check, the recording on `deep_audit`, then the
+breakdown replaying it. Each `STOP:` line stops it before any model call. Expected runtime: 2 to 4
+minutes.
+
+```bash
+SAMPLE=~/Documents/debate/landscape-review/policy-2026-27-nhi-coach-sample-labelled.csv
+ROWS=~/.debate-research/dev/landscape/local-classifier/hspolicy26/policy-2026-27-nhi-coach-sample.jsonl
+if env | grep -q '^DEBATE_'; then echo "STOP: a DEBATE_ variable is set; unset it and paste again"; elif pgrep -f "caselist pull" >/dev/null; then echo "STOP: a caselist pull is running; wait for it to finish"; elif ! uv run debate-research --json landscape evaluate --caselist hspolicy26 --snapshot 2026-10-20 --sample "$SAMPLE" --sample-rows "$ROWS" --check-sample; then echo "STOP: the sample check failed; paste its JSON and record nothing"; elif ! aws sts get-caller-identity --profile debate-dev-bedrock >/dev/null; then echo "STOP: the Bedrock profile is not logged in; log in and paste again"; else uv run debate-research --json landscape evaluate --caselist hspolicy26 --snapshot 2026-10-20 --sample "$SAMPLE" --sample-rows "$ROWS" --model-mode record --route deep_audit; uv run debate-research --json landscape evaluate --caselist hspolicy26 --snapshot 2026-10-20 --sample "$SAMPLE" --sample-rows "$ROWS" --breakdown --route deep_audit; fi
+```
+
+What to read, and paste back: **the three JSON objects, and nothing else.** They hold counts, taxonomy ids
+and sample row numbers.
+
+* **The sample check:** `labelled` 47, `by_stance` answers 10 and reads 35, as 1.3.0's re-record left
+  them.
+* **The recording:**
+  * `prompt_version` `1.3.1`, `route` `deep_audit`; `labelled`, `found` and `asked` 47; `calls` 3 or 4.
+  * `pipeline.accuracy` against `target` 0.85 is the bar. Exit 0 means the pipeline meets it and every
+    scan is clean. Exit 1 `EVALUATION_BELOW_BAR` puts the same counts in `error.details`.
+  * A stop before any answer (`MODEL_ACCESS_DENIED`, or a budget refusal) recorded nothing. Paste it, and
+    do not run the block again before the PM has read it.
+* **The breakdown:**
+  * the same counts with no call made, `breakdown.outcomes` summing to 47, and `breakdown.cards` giving
+    each row's outcome, for the PM's row-by-row comparison with 1.3.0;
+  * `breakdown.generic_answers`: the answers naming a generic position, how many are above the threshold,
+    and how many of those are right and wrong, with `named_label_rows`;
+  * the rows to look at in `breakdown.cards`: 26 (`at:cap-k`, answered `at:generic-k` at 0.62 under
+    1.3.0), 12 and 55 (`cap-k`, right under 1.3.0), and 9 and 53 (right under 1.2.0, below the threshold
+    under 1.3.0).
+
+If the recording's `scan` counts are above zero, read the hits in the terminal only, with this block.
+**Never paste or copy its output.** For each hit, report only its number and whether it is an ordinary
+word.
 
 ```bash
 SAMPLE=~/Documents/debate/landscape-review/policy-2026-27-nhi-coach-sample-labelled.csv

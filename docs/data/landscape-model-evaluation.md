@@ -618,3 +618,23 @@ Recorded by the PM from the operator's JSON. Counts, ids and row numbers only. `
 * **What follows:** the bar is not met and the hold on live model runs stands. `v1-e32-t50`'s held-out
   sample is measured on 1.3.1, chosen now and not on the held-out sample.
 
+
+## Prompt 1.3.1: 1.3.0 less the generic-confidence sentence (`v1-e32-t55`, 2026-11-06)
+
+Filed by the PM from 1.3.0's re-record and the PM's ruling 2 on `v1-e32-t49`. Counts, ids and row numbers
+only.
+
+* **Prompt 1.3.1**, the stage's default, is 1.3.0 with one sentence taken out: "A generic position is never
+  named by a tag or heading: give it 0.9 or more when the card is plainly that kind's and no named position
+  of the kind fits, and less than 0.6 when you are unsure the card is that kind's." Every other line of the
+  prompt is 1.3.0's, byte for byte; a test diffs the two files and allows only that removal, the version line
+  and 1.3.1's changelog entry. The variables, user turn and stanced schema are 1.3.0's.
+* **Why:** above the threshold, 1.3.0's answers naming a generic position were right 0 times and wrong once
+  (row 26, an `at:cap-k` card answered `at:generic-k` at 0.62), so by the ruling the sentence comes out.
+* **What stays:** every other bullet of 1.3.0, the bar (0.85), the threshold and the coach's labels.
+* **Recordings:** 1.3.1's cassettes are keyed by 1.3.1. 1.3.0's keep their keys and replay when 1.3.0 is
+  asked for; a request at 1.3.1 finds none of them.
+* **What follows:** `v1-e32-t50`'s held-out sample is measured on 1.3.1.
+
+The re-record of the 47 under 1.3.1, on `deep_audit` only, is recorded here by the PM when the operator has
+it ([the record runbook](../runbooks/landscape-model-evaluation-record.md#prompt-131-the-re-record-on-deep_audit-v1-e32-t55)).

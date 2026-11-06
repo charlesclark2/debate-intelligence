@@ -6,71 +6,117 @@
 | Spec | [`plan_specs/v1/e31-debate-file-parsing/t10-incremental-aggregate-rebuild.yaml`](../../plan_specs/v1/e31-debate-file-parsing/t10-incremental-aggregate-rebuild.yaml) |
 | Epic / release | `v1-e31-debate-file-parsing` / `v1.1` |
 | Branch | `task/v1-e31-t10-incremental-aggregate-rebuild` |
-| Session status | IN PROGRESS <!-- COMPLETE / PARTIAL / BLOCKED --> |
+| Session status | PARTIAL: Stage 1 built; ac4 is the operator's, after the merge <!-- COMPLETE / PARTIAL / BLOCKED --> |
 
 ## Summary
 
-**This task does not merge until dev's `docx-9` run image is built**, which is before Tuesday
-2026-11-10 06:00 Chicago (the PM's ruling Q5). So the 2026-11-11 full re-parse runs the rebuild that
-ran on 2026-11-05, and this task's rebuild first runs in the image built after that.
+**This task does not merge until dev's `docx-9` run image is built** (before Tuesday 2026-11-10
+06:00 Chicago, the PM's ruling Q5). So the 2026-11-11 full re-parse runs the rebuild that ran on
+2026-11-05. This task's rebuild first runs in the image built after that, where it rebuilds in full
+once, since no directory holds a placement state yet; the run after that is the first placed from one.
 
-Where it stands:
+**What was built (Stage 1, by the PM's second ruling of 2026-11-06).** The rebuild now keeps
+`placement-state.sqlite` beside the aggregates. It holds what placing a card reads of it, each
+distinct full body's words as numbers in one vocabulary, and each body's MinHash signature. A weekly
+rebuild reads the documents of only the sources it added, signs only their new bodies, and places
+every card again, so the occurrence table is today's full rebuild's, byte for byte. MinHash takes
+column minima over one array of digests (the same signatures, 2.9 times faster). A removal deletes
+the state wherever it reaches an aggregate, here and in the bucket, and records it.
+`parse.incremental_rebuild` turns its use off.
 
-* The scaling is measured on four synthetic stores, beside every recorded real figure.
-* The proposal below was ruled on by the PM on 2026-11-06.
-* The measurement script is committed (`scripts/measure_rebuild_scaling.py`, Q6). Its read-only
-  operator block is under Operator follow-ups.
+**What it measures.** On the 2,000-source synthetic store, a week of 5% new sources:
 
-**Stage 1 waits on one question to the PM.** As proposed, Stage 1 *is* the placement state, and
-the ruling's Q2 and Q3 keep the state out of this task (see "Open question" below). Look first at
-(b) of the proposal: the clustering rules are not monotone, so a new card can split an older
-cluster as well as join one.
+* The week rebuilds in 10.6 to 10.9 s, against **76.05 s for today's full rebuild** of the same store
+  (**0.14**, ac3).
+* Against this build's own full rebuild, which got the faster MinHash too (38.8 to 41.7 s), it is
+  **0.26 to 0.28**.
 
-## The PM's ruling (2026-11-06), as read here
+The remaining cost is re-clustering every body, which grows with the store. That is Stage 2's to
+remove (Follow-up 1).
 
-* **Q1.** Stage 1 is in this task, and Stage 2 is a follow-up the PM files from this report's
-  Follow-up work. Stage 1's occurrence table must equal today's full rebuild's, byte for byte, with
-  today's rebuild as the oracle. That is proved by Hypothesis property tests on synthetic stores,
-  shown failing first, with mutants on the rules Stage 1 changes, and agreement 8's database rule
-  stated. The estimate becomes Stage 1's own figure.
-* **Q2, Q3.** Ruled with Stage 2, not now. In principle a placement state beside the aggregates is
-  acceptable if it holds only what `parsed/` already holds and `v1-e30-t33`'s removal reaches it
-  wherever it reaches an aggregate, counted as residue. *Nothing of it is in this task.*
-* **Q4.** No switch in Stage 1: it replaces the rebuild with an equivalent one, and today's
-  implementation stays reachable only from the tests, as the oracle.
-* **Q5.** The image does not wait, and this task does not merge before it (the Summary's first
-  lines).
-* **Q6.** The script is committed now. It is read-only and prints timings, counts and component
-  sizes only, and its block runs over `~/.debate-research/dev`. Done: see Operator follow-ups.
+**The Goal stays `InProgress`.** ac4 is the first weekly run placed from a state and a by-hand full
+rebuild, both after the merge.
 
-### Open question: Stage 1 without a placement state
+**Look first at:**
 
-Stage 1 as proposed in (f) was "the state, with every body re-clustered from it each run". The state
-is what lets a run skip what a past run already did:
+* ac3's two denominators (below), which is the PM's to read.
+* Decision 3: a record line naming a state is refused by an older build.
+* Deviations: the `debate_cli` changes the ruling required.
 
-* the stored documents, 30% of the real rebuild;
-* the MinHash signatures of the stored bodies, 76 to 83% of the synthetic rebuild.
+## The PM's rulings (2026-11-06), as read here
 
-With no file kept between runs, every run must read every document and sign every body again. A run
-then cannot cost less than the work the full rebuild does on the same store. ac2 ("an incremental
-rebuild after a week's new sources") and ac3 (under a quarter of the full rebuild's time) cannot be
-met in this task. The ruling's Q1 and its Q2/Q3 point different ways, so I have not started Stage 1.
+**The first ruling.** Q1: Stage 1 here, Stage 2 a follow-up. Q2/Q3 deferred the state to Stage 2.
+Q4: no switch. Q5: the image does not wait. Q6: commit the measurement script. Its Q1 and Q2/Q3
+pointed different ways, since Stage 1 as proposed *was* the state, and the session asked. The
+question and the stateless option it offered stay in this report's history (commit `670cd80`).
 
-What a stateless Stage 1 could still be: a faster rebuild with the same output. The largest piece
-is MinHash computed by column minima over one array of digests, giving the same signatures as
-today's. Measured on 40 synthetic bodies of 900 words, scratch benchmark, 2026-11-06:
+**The second ruling: (A), with (B)'s MinHash change riding along, estimate about 17h** (now the
+spec's `estimatedEffort`).
 
-| MinHash | Seconds | Same signatures |
-|---|---|---|
-| Today's | 0.354 | |
-| Column minima over one array | 0.121 | yes, all 40 |
-| The SHAKE-128 digests alone | 0.047 | |
+1. The state sits beside the aggregates, published with them. It holds card words as numbers plus a
+   vocabulary and digests only, and records the parser version, the fingerprint version and the set
+   of per-source digests it was built from. Done (Decision 1).
+2. It is used only when its versions, its digest set (less the week's additions) and the file all
+   match. Anything else is a full rebuild that writes a new one. Each case is tested.
+3. A removal deletes it wherever `v1-e30-t33` reaches an aggregate: both sides, every version,
+   recorded in the aggregate record and counted as residue. It never edits it. The removal
+   credential can already delete any key under `parsed/`, so no grant changes (Decision 4).
+4. Restore, `--publish`, `--publish-only` and retention carry it. Confirmed under "What carries the
+   state".
+5. `parse.incremental_rebuild`, default on; off is a full rebuild that still writes a state; no CLI
+   flag. Done.
+6. The oracle is today's rebuild, reachable only from the tests, with Hypothesis properties, red
+   runs, mutants and agreement 8. Below.
+7. The state's size, and the estimates. Below.
+8. ac2 and ac3 close here; Stage 2 is Follow-up 1.
+9. The merge waits for the `docx-9` image, and the measurement block is as ruled before.
 
-That is 2.9 times faster for the part that is 76 to 83% of the synthetic rebuild: roughly half the
-rebuild off on synthetic stores, and less on real ones, where reading documents is a larger share.
-It changes no matching rule, but it is not incremental.
+## What was built
 
-## Proposal for the PM's ruling (before any code)
+* **The state's model**, `debate_core/application/ports/placement_state.py`.
+  * `PlacementState`, `PlacedCard`, `PlacedAnchor`, `PlacedBody` and `UnreadablePlacementState`.
+  * The `ParsedStore` port gains `read_placement_state` and `write_placement_state`, and
+    `PLACEMENT_STATE_NAME` joins `REBUILT_NAMES`. That is how the publisher and the removal's
+    directory listings reach it.
+* **The file**, `integrations/local/placement_state_file.py`.
+  * SQLite in 64 KiB pages, written fresh into a temporary file and renamed into place, never edited.
+  * Read read-only and immutable, so a read leaves no journal beside it.
+  * Checked whole before anything is returned: the layout, the stamps, every number inside the
+    vocabulary, every full card's body present, every signature 128 values. Anything else is
+    `UnreadablePlacementState`.
+  * The in-memory fake keeps the object.
+* **The placer**, `caselist_card_stats.CardPlacer`.
+  * `add(card)` now returns the `PlacedCard` it kept.
+  * `add_placed` takes a card as the state holds it.
+  * `adopt` begins from a state's vocabulary and signatures.
+  * `placements()` gives the clusterer the words as numbers (`BodyWords.from_numbers`) and the
+    stored signatures.
+* **The clusterer**, `evidence/near_duplicates.py`.
+  * `minhash_signature` takes column minima.
+  * `cluster_near_duplicates` takes stored signatures (`signatures=`) and words without text.
+  * No rule changed.
+* **The service**, `caselist_parse.CaselistParseService`.
+  * `run` passes the digests it wrote.
+  * `_rebuild` asks `_usable_state` whether the state may be used, takes each placed source's cards
+    from the state or from its document, writes the aggregates, then the state.
+  * It logs one line saying which way it placed the cards and, for a full rebuild, why
+    (`FullRebuildReason`).
+  * `incremental_rebuild` comes from `parse.incremental_rebuild`.
+* **The removal**, `removal_plan.py` and `removal_service.py`.
+  * `AggregateAction.DISCARD`: the plan lists each reached state on each side without reading it.
+  * The execution deletes it here, and every version in the bucket, a re-run included.
+  * It is recorded under `deleted` in `removal-aggregates.jsonl`, and the record's key pattern admits
+    it.
+  * The command shows the states under a heading of their own and counts them in `aggregates_done`.
+* **The oracle**, under `packages/debate_core/tests`.
+  * `tests/evidence/near_duplicates_at_start.py` is the clusterer as the task found it (`81ed12e`),
+    the whole module.
+  * `tests/application/rebuild_at_start.py` is today's `CardPlacer` and rebuild, giving the bytes
+    of the index, failures file and table.
+* **The measurement script** has an `incremental` mode (prepare, week, full) for ac3, and its `real`
+  mode stays read-only (it now writes the state only to a temporary file, to size it).
+
+## The proposal, as the PM ruled on it (before any code)
 
 Everything here is measured on synthetic stores of invented words, or read from records already in
 `docs/`. No real card text was read. The scratch scripts and their raw output are kept, uncommitted,
@@ -370,47 +416,353 @@ stay `InProgress` at the end of this task.
 
 ## Plan nodes
 
-<!-- One row per Plan graph node, in the order they were completed. -->
-
 | Node | Status | Notes |
 |---|---|---|
-| | | |
+| `incremental-rebuild` (Incremental aggregate rebuild) | Done but for ac4 | Proposal and measurement first (`b24cd37`, no code); Stage 1 as ruled; red runs against two skeletons and the pre-task removal; 26 mutants, all caught |
 
 ## Acceptance criteria
 
-<!-- Goal criteria (ac1…) and every node criterion. Status: PASS / FAIL / NOT RUN. -->
-
 | Criterion | Status | Evidence (command → result) |
 |---|---|---|
-| | | |
+| ac1: the scaling measured on synthetic stores of at least three sizes, with where the time goes, before any change | PASS | Four sizes (250, 500, 1,000, 2,000 sources), timed by phase, beside every recorded real figure: proposal (a), committed in `b24cd37` before any code. Reproducible with `scripts/measure_rebuild_scaling.py synthetic --sources 250 500 1000 2000`. The real phase split is the operator's block below, which adds to it and closes nothing |
+| ac2: an incremental rebuild after a week's new sources gives an occurrence table equal, row for row, to a full rebuild of the same store, by a property over generated weeks, including a week that merges two existing clusters and one a removal shrank | PASS | See "ac2" below |
+| ac3: on the largest synthetic store, an incremental rebuild for a week of 5% new sources takes under a quarter of the full rebuild's time, with the figures | PASS against the full rebuild the task replaces (0.14); **0.26 to 0.28 against this build's own full rebuild** | See "ac3" below. Which full rebuild ac3 means is the PM's to read |
+| ac4: operator-run: the next weekly run's parse stage duration, and a by-hand full rebuild, recorded in `docs/data/caselist-parse-report.md` | NOT RUN | Needs this branch merged, imaged and a weekly run placed from a state, after the `docx-9` re-parse. Operator follow-up B |
+| Node: Card stats tests pass (`uv run pytest packages/debate_core/tests -k "card_stats or rebuild or occurrence"`) | PASS | `.venv/bin/python scripts/hard_stop.py 115 .venv/bin/python -m pytest -q -n auto -p no:warnings packages/debate_core/tests -k "card_stats or rebuild or occurrence"` → `226 passed in 40.49s` |
+
+### ac2: equal to today's full rebuild, byte for byte
+
+* **The oracle.** `tests/application/rebuild_at_start.py` and `tests/evidence/near_duplicates_at_start.py`
+  are the rebuild and clusterer at `81ed12e`, copied whole. They give the index, failures file and
+  occurrence table as bytes, and are reachable only from the tests.
+* **The property.** `test_caselist_parse_incremental_equivalence.py::test_after_every_step_the_table_is_todays_full_rebuilds`.
+  * A first week of two to five sources, then one to six steps.
+  * The steps: weeks of one to three sources, perhaps re-listing an older one; a removal (source
+    stopped, per-source file and state deleted); a source stopped elsewhere with the state left; the
+    state deleted; a parser version change.
+  * The cards come from four invented articles: copies, one, two or three words changed (two changed
+    is a copy only the MinHash bands join), cuts, short cuts, longer extents, abbreviated cards (some
+    under a second cite) and cite-only cards.
+  * After every step, the index, failures file and table equal the oracle's.
+  * Run with a new, empty `HYPOTHESIS_STORAGE_DIRECTORY`, `--hypothesis-show-statistics`: 200
+    passing, 18 invalid, 10.13 s. Events, as shares of all 218 cases:
+
+    | Event | Share of cases |
+    |---|---|
+    | week: placed from the state | 54.59% |
+    | state deleted: placed (NO_STATE) | 35.32% |
+    | version change: placed (NO_STATE) | 33.03% |
+    | remove: placed (NO_STATE) | 31.65% |
+    | stop elsewhere: placed (SOURCES_DIFFER) | 26.61% |
+    | **a week moved an older card to another cluster** | **18.35%** |
+    | nothing new: placed from the state | 8.72% |
+* **A week that merges two existing clusters**:
+  `test_a_week_that_merges_two_existing_clusters_is_placed_as_a_full_rebuild_places_it`, worked by
+  hand.
+  * X and Y, three words apart (Jaccard 81/111 = 0.73), are two clusters.
+  * A cut of X stays out of both, its witnesses being two clusters.
+  * Z, a copy of each (0.81 from X, 0.90 from Y), joins them, and then the cut joins too.
+  * All four take the smallest of the four fingerprints. The week reads one document, and the table
+    equals the oracle's.
+* **A week a removal shrank**: `test_a_week_a_removal_shrank_is_rebuilt_in_full_and_its_state_holds_none_of_the_removed`.
+  Rebuilt in full (`NO_STATE`), reading the two remaining documents. The table equals the oracle's,
+  and the new state holds the two sources only.
+* **At scale**: on the 2,000-source synthetic store, the table the week placed from the state and the
+  table the start commit's rebuild wrote over the same store have the same SHA-256 (clone c below).
+
+### ac3: the figures
+
+All on the operator's Mac, worktree venv, seed 20261106.
+
+| What | How | Figures |
+|---|---|---|
+| The store | | 1,900 sources prepared, then a week of 100 (5%) added: 2,000 sources, 43,518 cards, 20,829 distinct full bodies, 6,582,963 words of them |
+| Its week, placed from the state | `measure_rebuild_scaling.py incremental week`, four clones of one prepared store | **10.92, 10.60, 10.68, 10.84 s.** 100 of 2,000 documents read, 851 bodies signed |
+| This build's full rebuild, setting off | `incremental full` after each week | **39.21, 38.78, 41.74 s**, and 38.87 s in `real` mode. The table equals the week's every time |
+| The full rebuild the task replaces | the start commit's code (`git archive 81ed12e`) first on `PYTHONPATH`, `measure.py rebuild` over clone c after its week | **76.05 s** (MinHash 57.05 s). Its table equals the week's |
+
+* Against the rebuild the task replaces: 10.68 / 76.05 = **0.14**.
+* Against this build's full rebuild, which got the faster MinHash too: **0.26 to 0.28**.
+
+Where the week's 10.84 s goes (clone d):
+
+| Phase | Seconds |
+|---|---|
+| `CutIndex` | 3.26 |
+| Band pairs and Jaccard | 2.88 |
+| Cut step | 1.11 |
+| Joins of copies | 0.58 |
+| MinHash, new bodies only | 0.86 |
+| Writing the table | 0.54 |
+| Reading the state | 0.40 |
+| Linking | 0.29 |
+| Reading documents | 0.26 |
+| Fingerprints | 0.22 |
+| Writing the state | 0.15 |
+
+Re-clustering every body is 72% of it, the same work the full rebuild does.
+
+At the smaller sizes, the same three steps:
+
+| Sources | Week | Full (setting off) | Ratio |
+|---|---|---|---|
+| 250 | 1.08 s | 5.62 s | 0.19 |
+| 500 | 2.32 s | 11.63 s | 0.20 |
+| 1,000 | 4.93 s | 22.16 s | 0.22 |
+| 2,000 | 10.84 s | 41.74 s | 0.26 |
+
+The ratio rises with the store because Stage 1 still re-clusters every body. That is what Stage 2
+removes.
+
+The machine was loaded: other sessions and the editor, load average 4 to 8 during these runs. One
+earlier full run at a load near 100 took 74 s and is not used.
+
+### The state's size (the ruling's item 7)
+
+64 KiB pages; the 2,000-source state was 61.0 MB at the default 4 KiB pages.
+
+| Sources | State | Occurrence table |
+|---|---|---|
+| 250 | 8.4 MB | 3.7 MB |
+| 500 | 14.9 MB | 7.6 MB |
+| 1,000 | 26.3 MB | 15.2 MB |
+| 2,000 | 46.3 MB | 30.7 MB |
+
+At 2,000 sources, 41.3 MB of it is content, and pages and indexes are the rest (12%):
+
+| Content | Size | Per unit |
+|---|---|---|
+| Words | 26.3 MB | 4 B a word |
+| Signatures | 10.7 MB | 512 B a body |
+| Cards | 4.3 MB | 99 B a card |
+| Vocabulary | 46 KB | |
+
+**Estimates** (the operator block's `placement_state_bytes` gives hspolicy26's measured):
+
+* **hspolicy26**, the store `v1-e40-t39` measured: 26,968,420 words in 29,866 distinct bodies,
+  126,681 cards. That is 108 + 15 + 13 MB of content, about **150 MB**.
+* **All four followed stores.** No word count is recorded for the other three. At hspolicy26's
+  213 distinct-body words and 0.24 distinct bodies per card, the 349,977 cards of the 2026-11-05 run
+  give about **420 MB**. That is an upper figure, since LD and PF cards are shorter.
+* **A week.** Each weekly run rewrites the state of each caselist it parses, so the bucket gains one
+  noncurrent version of each: up to about 0.4 GB a week.
+  * Dev keeps noncurrent versions 30 days, about 1.7 GB held.
+  * Prod keeps them 365 days, up to about 20 GB if a state were published there weekly.
+  * Each cloud run's restore downloads the current states, about 0.4 GB.
+
+### What carries the state (the ruling's item 4)
+
+* **`caselist parse --publish`** sends it with the aggregates, through `REBUILT_NAMES`.
+  * `test_publish_uploads_every_object_of_the_current_version_under_its_prefix`: the state is among
+    the last four puts, with its SHA-256 recorded.
+  * `test_publish_after_a_new_snapshot_uploads_only_the_new_source_and_the_aggregates`: the new
+    source, the two changed aggregates and the state.
+  * The pull's parse stage publishes it too (the smoke check counts 23 objects).
+* **`--publish-only`**: `test_publish_only_sends_exactly_what_the_rebuilds_publish_sends_and_reports_it_alike`
+  finds exactly one state in the second bucket, and the partial-publish test sends it again.
+* **`caselist restore-run-state`**: `test_the_copy_holds_the_runs_state_and_the_data_directory_and_the_bucket_are_left_as_they_were`
+  finds the state in the copy, with every parsed file's SHA-256 equal to the live one.
+  * The restore lists every object under the version directory (`run_state._restore_parsed`).
+  * It fetches through `S3EvidenceObjectStore.get_file`, which verifies the SHA-256 the publisher
+    recorded (`integrations/s3/object_store.py`).
+* **Retention's tagging**, guaranteed by the code and not tested here.
+  `S3VersionDirectories._retag(prefix)` tags every object it lists under the directory's prefix
+  (`integrations/s3/version_directories.py`), so the state is tagged with the aggregates. The
+  lifecycle rule expires it with them, and a removal deletes a retired directory's state as `DELETE`
+  with its tables.
+
+### Red runs
+
+Each was run with a new, empty `HYPOTHESIS_STORAGE_DIRECTORY`.
+
+* **R1, checks that refuse nothing**: `_usable_state` returns any readable state.
+  * Result: 7 failed and 10 passed in the directed file: every version, rules and sources case. The
+    property passed.
+  * Why: the table stays exact without the checks, because the rebuild takes from the state only the
+    sources it places. So the checks are pinned by the way each run placed its cards (documents read,
+    log reason), not by the table. Decision 2.
+* **R2, the state plus the week's additions**: every source the state holds is placed.
+  * Result: the property failed at a "stop elsewhere" step, where the stopped source's card moved a
+    live card's cluster id.
+  * The directed tests errored in that run, which disabled pytest's logging plugin; they are not
+    counted.
+* **The removal tests against the removal as it was before this task** (`20119f1`): 4 failed, at
+  `removal_plan.py:1447`, `KeyError: 'placement-state.sqlite'`. That code could not plan a directory
+  holding a state.
+* **The script's read-only test** with a planted write: failed at its tree comparison.
+
+### Mutants
+
+`.task/mutants.py`, uncommitted: one exact replacement per mutant, the named test files under
+`scripts/hard_stop.py 115`, the file restored from `HEAD` after each. **Every run used a new, empty
+`HYPOTHESIS_STORAGE_DIRECTORY`** (agreement 8), so no example was replayed.
+
+The final run, over the final code, caught all 26:
+
+| # | Mutant | Caught by |
+|---|---|---|
+| 1 | the setting off is not honoured | the setting-off test |
+| 2 | an unreadable state is not caught | the four unreadable cases (the run raises: the failure the check exists for) |
+| 3–5 | parser, profile or fingerprint version not compared | the full-rebuild cases |
+| 6 | the rules not compared | the full-rebuild cases |
+| 7, 8 | a state of fewer, or of more, sources accepted | the full-rebuild cases |
+| 9 | the week's additions not set aside | the week tests (every document read) |
+| 10 | the state's cards taken in reverse | the week tests and the property |
+| 11 | a stored body's words not given | the week tests and the property, by `add_placed` raising |
+| 12, 13 | a full card's short-cite key dropped; an anchor's ends swapped | 19 to 21 tests each, the property among them |
+| 14 | the words-held check reads every fingerprint | the shared-text test, by raising: the bug itself, found while writing the placer |
+| 15 | the state's signatures not adopted | the test that a week signs only its new bodies |
+| 16 | a stored signature is another body's (rotated) | the merge test, whose X–Z join only the bands make |
+| 17 | the linker spells from another vocabulary | 20 tests |
+| 18, 19 | MinHash's column beside; big-endian | the MinHash property against the old code |
+| 20 | a body's words reversed | 20 tests |
+| 21 | a missing body not refused | the inconsistent-state cases (the run raises) |
+| 22 | the layout not checked | the layout test |
+| 23 | a removal leaves the state here | the removal test |
+| 24 | a removal leaves the state's versions in the bucket | the re-run test |
+| 25 | a removal does not plan the state in the bucket | three removal tests |
+| 26 | the container does not pass the setting | the command test |
+
+**What the first runs changed.** Five survived at first (14, 15, 16, 17, and 24):
+
+* 14, 15 and 24 found missing tests, now written:
+  * a full card sharing its text with an abbreviated card seen first;
+  * a week signs only its new bodies;
+  * a re-run deletes every version.
+* 16 was a weak mutant: it mirrored the signatures, so the middle body kept its own. It now rotates
+  them. The property also gained the band-only copy.
+* 17 removed the renumbering of word numbers and changed nothing. A word's number decides nothing
+  in the clusterer, as the hash seed decides nothing. Under agreement 8 the renumbering was deleted
+  (`58ac0e9`), and its test became the claim it stood for: clusters from numbers in any vocabulary
+  order equal clusters from text, which joins bodies in 51% of examples.
+
+### Before the report
+
+* Ruff: `ruff format --check .` → 1995 files already formatted; `ruff check .` → All checks passed.
+* `uv run pyright packages/debate_core packages/debate_cli` → 0 errors.
+* `uv run lint-imports` → 20 kept, 0 broken.
+* `scripts/check_thin_handlers.py` → 72 handlers within 25 statements.
+* `uv run scripts/validate_specs.py` → OK, 643 files.
+* `scripts/check_command_blocks.py --base origin/dev` and `scripts/check_links.py` → OK.
+
+**The affected set** (`uv run scripts/affected_tests.py`) reaches **717 test files**, far over two
+minutes, so by agreement 10 it is left to the pull request's `ci` check. Run within the limit
+instead, each under `scripts/hard_stop.py 115 … -n auto`:
+
+| Run | Result |
+|---|---|
+| The always-run list (`tests/architecture`, `tests/specs`, `test_app.py`, `test_help_rendering.py`, `test_container_factories.py`) | 378 passed |
+| `packages/debate_core/tests/application/caselist/` | 1903 passed |
+| `packages/debate_core/tests/application` (but caselist) | 3527 passed |
+| `packages/debate_core/tests/evidence/` with `test_local_parsed_store.py` | 1826 passed |
+| `packages/debate_core/tests/integrations` | 3894 passed, 2 xfailed |
+| `packages/debate_cli/tests` (but bucket mode) | 1537 passed |
+| `packages/debate_cli/tests/bucket_mode`, in three parts | 113, 59 and 103 passed |
+| `tests/scripts/test_measure_rebuild_scaling.py` with the fakes-port check | 69 passed |
+| `tests/smoke`: the pull, remove, camp identity, parse, parses owed, restore, retire and store checks | 9, 55 and 14 passed |
 
 ## Files changed
 
-<!-- Group by package or directory; one line on why each group changed. -->
+* **`debate_core.application`**:
+  * `ports/placement_state.py` (new);
+  * `ports/parsed_store.py` (the port's two methods, `REBUILT_NAMES`);
+  * `ports/suppression.py` (the record's key pattern);
+  * `caselist_card_stats.py` (the placer);
+  * `caselist_parse.py` (the rebuild, the checks, the log line, the docstring);
+  * `settings.py` (`parse.incremental_rebuild`);
+  * `caselist/removal_plan.py` and `removal_service.py` (`DISCARD`).
+* **`debate_core.evidence`**: `near_duplicates.py` (MinHash by columns, stored signatures, words
+  without text).
+* **`debate_core.integrations.local`**: `placement_state_file.py` (new), `parsed_store.py`.
+* **`debate_core.testing`**: `fakes/parsed_store.py`.
+* **`packages/debate_core/tests`**:
+  * the oracle modules, `placement_world.py`;
+  * the new placement-state, equivalence and MinHash tests;
+  * removal tests;
+  * the test placers made `CardPlacer` subclasses;
+  * object-count pins (a published directory now holds one object more).
+* **`scripts/`**: `measure_rebuild_scaling.py` (new).
+* **`docs/data/parsed-card-store.md`**: the state, the layout, removal, publishing.
+* **The spec**: `estimatedEffort` 17h, as ruled.
+* **Outside the task's packages** (Deviations): `debate_cli` and its tests; `tests/scripts`,
+  `tests/architecture`, `tests/smoke`.
 
 ## Deviations from the spec
 
-None.
+1. **`debate_cli` changed**, outside `constraints.packages`, because the ruling requires it.
+   * `container.py` passes `parse.incremental_rebuild` (item 5).
+   * `commands/caselist_remove.py` gains the states' heading, the execution line's count, and
+     `aggregates_done.placement_states_deleted` (item 3: the plan's text and the `--json` pins).
+   * Their tests: `test_caselist_parse.py` (the setting through the command),
+     `commands/test_caselist_remove_aggregates_output.py`, and
+     `bucket_mode/test_restore_run_state.py` (item 4).
+2. **Root `tests/` changed**, also outside the packages.
+   * `tests/scripts/test_measure_rebuild_scaling.py` is the script's test.
+   * `tests/architecture/test_fakes_reach_only_their_port.py`: the checker's own self-test pins the
+     ports reached through the parsed-store fake, which now include the placement state's.
+   * `tests/smoke/test_caselist_pull.py`: the published object count.
+3. **ac3's denominator** is ambiguous once the full rebuild itself got faster: 0.14 against the
+   rebuild the task replaces, 0.26 to 0.28 against this build's own. The PM decides which reading
+   closes ac3.
+4. **The state's digest set is the sources the rebuild places**, a refinement of item 1's "the set of
+   per-source digests it was built from". Decision 1 gives the reason.
+5. `git fetch origin dev` was run once, read-only, to diff this spec against dev before setting its
+   estimate. Nothing differed but the phase.
 
 ## Decisions and assumptions
 
-<!-- Choices the spec left open, with the reasoning. -->
+1. **The state holds the sources the rebuild places**: parsed, stored by the manifests, live under
+   the suppression list. It does not hold every per-source file. A stopped source's file is never
+   published (`v1-e31-t26`), so its words must not reach a published file either. A source stopped,
+   reinstated or removed since the state was written changes the placed set, so the run rebuilds in
+   full (`SOURCES_DIFFER`). Failed and unsupported sources have no cards to hold.
+2. **The checks are the ruling's, though the table would be exact without them** (R1). The rebuild
+   asks the state only for sources it places, and each card's projection depends only on its
+   per-source file, which is never rewritten in a directory. The checks keep the rule simple and
+   auditable, make a stale or foreign state a full rebuild rather than a partial reuse, and keep a
+   stopped source out of the next state. Tests pin them by the path a run takes.
+3. **A record naming a state is refused by an older build.** `removal-aggregates.jsonl` validates
+   each key against a pattern, and a build carrying `v1-e30-t33` but not this task knows only the four
+   tables. After a removal by this build, `caselist remove` and `caselist status --residue` must run
+   from a build carrying this task. That is the rule `v1-e30-t33` set for itself; the weekly run's
+   status does not read the record. `parsed-card-store.md` says so, and the removal runbook should
+   (Follow-up 3).
+4. **A removal deletes every version of a reached state**, a re-run included, as a retired
+   directory's aggregates are deleted. That is safe, since the next run rebuilds in full. No grant
+   changes: the takedown credential may delete any key under `parsed/*`, and the run role's everyday
+   policy may put any key (`operator_access.tf`).
+5. **No renumbering of words**: mutant 17 showed it decided nothing (above).
+6. **Signatures are 32-bit arrays**, 512 B a body against 4.6 KB as a tuple of ints.
+   `test_what_linking_holds_grows_by_a_few_bytes_a_word` held the placer to that.
+7. **64 KiB pages**: 24% smaller, written faster, read back identically.
+8. **A state that cannot be read never stops a run**: every failure to read or check it is
+   `UNREADABLE`, a full rebuild.
+9. **A full card can share its fingerprint with an abbreviated card**, the same first-and-last-words
+   text parsed two ways. The placer first checked the wrong map for a body already held, and would
+   have raised. It was found while writing the placer; mutant 14 now pins it.
+10. **The measurement's `real` mode reads no state and writes none.** It times a full rebuild, and it
+    sizes the state by writing it to a temporary file outside the data directory.
 
 ## Operator follow-ups
 
 <!-- Commands the operator must run (anything over ~2 minutes), with where to run them, the exact
 command, expected runtime and what success looks like. Also GitHub/AWS settings to change. -->
 
-**The real phase split and dependency components (read-only, after the weekend).** The script runs
-over this Mac's own dev data directory, `~/.debate-research/dev`. It times a full rebuild of
-`hspolicy26`'s newest version directory (`2026.10.27-docx-7`, the store `v1-e40-t36` and
-`v1-e40-t39` measured), then counts the clusterer's dependency components. Nothing is written: the
-aggregates it makes are rendered to a SHA-256 in memory and dropped
-(`test_real_mode_reads_the_store_and_writes_nothing` holds it to that).
+**A. The real phase split, dependency components and state size (read-only, after the weekend).**
+The script runs over this Mac's own dev data directory, `~/.debate-research/dev`.
 
-**Expected runtime: about 15 minutes, up to 30 on a busy Mac.** The rebuild is the bulk: 741 s when
-`v1-e40-t39` measured this store. Counting components reuses the rebuild's own index and signatures,
-which took 1.3 s against a 63 s rebuild at 1,000 synthetic sources. It needs about 1 GB of memory.
+* It times this branch's full rebuild of `hspolicy26`'s newest version directory
+  (`2026.10.27-docx-7`, the store `v1-e40-t36` and `v1-e40-t39` measured).
+* It counts the clusterer's dependency components (Stage 2's question).
+* It sizes the placement state that store would get.
+* Nothing is written to the data directory: the aggregates are rendered to a SHA-256 in memory, and
+  the state to a temporary file elsewhere. `test_real_mode_reads_the_store_and_writes_nothing` holds
+  it to that.
+
+**Expected runtime: about 10 to 20 minutes, up to 30 on a busy Mac.** The rebuild is the bulk: 741 s
+when `v1-e40-t39` measured this store, less now that MinHash is faster. Counting components reuses
+the rebuild's own index and signatures (2.6 s against a 39 s rebuild at 2,000 synthetic sources). It
+needs about 1 GB of memory.
 
 The block stops with a plain message if a `DEBATE_` variable is set in the shell, or if a
 `caselist pull` is running.
@@ -423,22 +775,48 @@ if env | grep -q '^DEBATE_'; then echo 'STOP: a DEBATE_ variable is set in this 
 **What success looks like:**
 
 * After the rebuild, one line on stderr: `{"rebuild_seconds": ...}`.
-* Then exit 0 and one JSON line on stdout. It holds the version directory, sources, cards, distinct
-  full bodies and their words, the rebuild's seconds by phase, `table_equals_the_stores`, the
-  component counts for the newest snapshot's sources and for the last 5%, and the peak memory.
+* Then exit 0 and one JSON line on stdout. It holds:
+  * the version directory, sources, cards, distinct full bodies and their words;
+  * the rebuild's seconds by phase and `table_equals_the_stores`;
+  * `placement_state_bytes`;
+  * the component counts for the newest snapshot's sources and for the last 5%;
+  * the peak memory.
 * Every value is a count, a number of seconds, a share or `true`/`false`.
 
-Paste both lines back. If `table_equals_the_stores` is `false`, the store's table was written by
-other code than this checkout's; the timings still stand.
+Paste both lines back. If `table_equals_the_stores` is `false`, the store's table was written by a
+build other than this checkout; the timings still stand.
+
+**B. ac4, after the merge.** Not a command yet: it needs this branch in a run image, the 2026-11-11
+`docx-9` re-parse, one full rebuild on the new image (it writes the first states), and then the first
+weekly run placed from a state. Then:
+
+* Record that run's parse stage seconds from its stage lines, and its rebuild line ("placed from the
+  placement state, N of M placed sources read").
+* Make a by-hand full rebuild of a restored copy, by the restore sequence of
+  `docs/runbooks/caselist-cutover.md`.
+  * Take the SHA-256 of `occurrences.jsonl` as restored.
+  * Run `caselist parse --caselist hspolicy26` over the copy with
+    `DEBATE_PARSE__INCREMENTAL_REBUILD=false` for that one command.
+  * Take the SHA-256 again. The two must be equal, and the line must say `rebuilt in full
+    (TURNED_OFF)`.
+* Record both in `docs/data/caselist-parse-report.md`.
+
+The paste-ready block should be written from the runbook when the run exists, with its guards: the
+copy's own `DEBATE_STORAGE__DATA_DIR`, unset afterwards, and no publish.
 
 ## Follow-up work
 
 <!-- Bugs, gaps or ideas outside this task's scope, each with the task or epic it belongs to.
 The PM decides whether they become spec changes or new tasks. -->
 
-1. **Stage 2: the placement re-clusters only what a week reaches (E31, by the PM's ruling Q1).**
-   Placement is not monotone (proposal (b)), so the only exact incremental placement re-clusters
-   every dependency component a new body reaches. Three kinds of edge join two distinct full bodies:
+1. **Stage 2: the placement re-clusters only what a week reaches (E31, by the PM's ruling Q1, about
+   9h).** Stage 1 measured why it is needed: at 2,000 synthetic sources, 72% of a week placed from the
+   state is re-clustering every body, and the ratio to a full rebuild rises with the store (0.19 at
+   250 sources to 0.26 at 2,000).
+
+   **The rule.** Placement is not monotone (proposal (b)), so the only exact incremental placement
+   re-clusters every dependency component a new body reaches. Three kinds of edge join two distinct
+   full bodies:
    * a band-candidate pair with Jaccard at the threshold;
    * a confirmed containment, either way;
    * for a short body, a body holding both its ends.
@@ -448,33 +826,28 @@ The PM decides whether they become spec changes or new tasks. -->
    dropped, and the restricted run is told it is too common. Linking is partitioned by short-cite
    keys, tied together where one abbreviated text appears under two keys.
 
-   **What a run reads.** A placement state beside the aggregates, meeting the conditions of Q2 and
-   Q3:
-   * per live source: each card's range, completeness, fingerprint, short-cite key, link key and
-     placement;
-   * per distinct full body: its words as numbers in one vocabulary, its signature and its component;
-   * stamps: the fingerprint version, the clusterer's constants, the thresholds, the markers, and
-     the SHA-256 of the table it was written beside.
+   **What it adds to Stage 1's state:** each body's component and each card's placement. It already
+   has each body's words and signature, the cards' keys and the stamps.
 
-   It also reads the week's new per-source files, the manifests and the list. It reads no stored
-   document and no aggregate.
-
-   **What a run does.** It signs only the new bodies and finds their edges. It re-clusters the new
+   **What a run does.** It signs only the new bodies, finds their edges, and re-clusters the new
    bodies, the stored components they reach, and the stored short bodies a new body holds both ends
-   of. It re-links the key groups those changes reach. Then it makes every row and writes the table
-   and the state whole.
+   of. It re-links the key groups those changes reach, then makes every row and writes the table and
+   the state whole.
 
-   **When it rebuilds in full:** no state, or a stamp that differs, or the table's digest differing
-   from the stamp. A `v1-e30-t33` removal deletes the state everywhere it reaches an aggregate,
-   recorded and counted as residue, so the next run is a full rebuild.
+   **The rest is Stage 1's:** the same checks give a full rebuild, the same removal handling, and the
+   same oracle with a property over generated weeks.
 
-   **The test.** A Hypothesis property over generated weeks, removals between weeks included:
-   incremental against full, every aggregate and the state byte-equal.
-
-   **The size of it.** On synthetic stores a 5% week reaches 10 to 13% of distinct bodies, and the
-   estimate is about 12% of a full rebuild at 2,000 sources. The operator block's component counts
-   say what it reaches on a real store. About 9h on top of Stage 1 as proposed; more if Stage 1
-   carries no state (the open question).
+   **The size of it.** On synthetic stores a 5% week reaches 10 to 13% of distinct bodies (12.7% at
+   2,000 sources by the script's `real` mode), against today's 100%. Operator block A gives the real
+   store's figure.
+2. **A cheaper Stage 1 week, if ac3 is read against this build's own full rebuild (E31, under 1h).**
+   Keep each body's shingle count in the state. It is a function of its words, as the signature is.
+   `CutIndex` then skips its first pass over every body, about 1.5 of the week's 10.8 s at 2,000
+   sources, which would bring the week to about 0.23 of this build's full rebuild. Not done: beyond
+   the ruling.
+3. **The removal runbook (E30).** `docs/runbooks/caselist-removal.md` should say that after a
+   removal by a build carrying this task, `caselist remove` and `caselist status --residue` run from
+   such a build (Decision 3). The runbook is outside this task's packages.
 
 ## PM review
 

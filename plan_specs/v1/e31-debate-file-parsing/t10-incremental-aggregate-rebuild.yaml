@@ -82,7 +82,7 @@ spec:
         description: >-
           The measurement, the incremental placement, its equivalence proof and the
           operator figures.
-        estimatedEffort: 6h
+        estimatedEffort: 17h
         acceptanceCriteria:
           - type: test_passes
             name: Card stats tests pass

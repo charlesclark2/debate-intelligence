@@ -605,5 +605,22 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e41-t23-the-remove-smoke-file-no-longer-decides-the-slowest-part
+    - id: t24
+      kind: Task
+      name: 'The cluster comparison''s key test does not race a 0.3-second timer'
+      description: >-
+        The cluster comparison's key test does not race a 0.3-second timer.
+      inputs:
+        specRef: plan_specs/v1/e41-delivery-tooling-upkeep/t24-the-cluster-comparison-key-test-without-a-timer-race.yaml
+        goalRef: v1-e41-t24-the-cluster-comparison-key-test-without-a-timer-race
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e41-t24-the-cluster-comparison-key-test-without-a-timer-race reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e41-t24-the-cluster-comparison-key-test-without-a-timer-race
 status:
   phase: Pending

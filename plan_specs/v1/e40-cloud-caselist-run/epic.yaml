@@ -1007,5 +1007,23 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e40-t44-a-scheduled-run-refuses-a-second-run-within-hours
+    - id: t45
+      kind: Task
+      name: 'The run lock tells a test when a writer starts waiting, so the shared-renewal test is not a thread race'
+      description: >-
+        The run lock tells a test when a writer starts waiting, so the shared-renewal test
+        is not a thread race.
+      inputs:
+        specRef: plan_specs/v1/e40-cloud-caselist-run/t45-run-lock-offers-a-test-hook-when-a-writer-waits.yaml
+        goalRef: v1-e40-t45-run-lock-offers-a-test-hook-when-a-writer-waits
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e40-t45-run-lock-offers-a-test-hook-when-a-writer-waits reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e40-t45-run-lock-offers-a-test-hook-when-a-writer-waits
 status:
   phase: Pending

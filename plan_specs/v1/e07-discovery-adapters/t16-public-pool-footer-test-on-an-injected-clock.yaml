@@ -26,6 +26,11 @@ spec:
     injected clock in this test, so the count is fixed, and say what the test now proves. Then
     list, by test name and count only, any other test whose outcome waits on a provider's real
     pace or a real deadline, and fix each the same way, or name it for the PM.
+    (PM amendment 2026-11-05, the narrowing and rulings it was built to.) The footer test's pacer
+    was put on PacerTime by v1-e32-t49 (def4453) to unblock dev; this task removed the unused moving_clock
+    field, put the footer test's loop on virtual time, swept every test whose outcome can wait on real
+    time (by reading and by recording every timer armed on a real loop), and fixed eleven functions;
+    three tests became v1-e31-t38, v1-e40-t45 and v1-e41-t24.
   priority: 2
   constraints:
     packages: [debate_cli, debate_core.application, debate_core.integrations, packages/debate_cli/tests, packages/debate_core/tests]

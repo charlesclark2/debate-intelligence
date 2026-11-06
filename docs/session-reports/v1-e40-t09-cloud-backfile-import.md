@@ -349,3 +349,13 @@ Added by the PM. Nothing above is changed, and this section is not a review.
 | ac3: the first of the four imports | NOT RUN (operator) | PASS for hspolicy25; three imports and the weekly run after remain | 2026-11-02, task 13db05e9…, revision 13 (`v1.1.0-dev.323`, 8 vCPU, 32 GB), started 03:20 Chicago, STOPPED exit 0: status ok, applied true, downloaded_bytes 3,958,272,657, members 16,059, stored 14,340, suppressed 0, held none, sources uploaded 14,340, skipped 0, parsed 14,163, unsupported 176, failed 1, cards 408,460, parsed objects uploaded 14,343, archive left in the inbox; steps restore 4.0 s, download 65.8, import 207.3, parse 4,882.3 (every source parsed by 2,125 s, then the aggregate rebuild), publish 196.4, publish parsed 366.6, about 95 minutes; memory at the end: main process 2.5 GB (VmHWM), container 24.4 GB on cgroup v1 (page cache counted) |
 
 The Goal stays `InProgress`: hsld25, hspolicy24 and hsld24 remain, at most one a day and never in the window before a Wednesday run, and ac3's weekly run after the first import is read on Thursday 2026-11-05. The main process held 3.2 times hspolicy26's cards in 2.4 times its memory, so the largest archive fits the 32 GB task.
+
+## Operator records (recorded by the PM, 2026-11-05)
+
+Added by the PM. Nothing above is changed, and this section is not a review.
+
+| Criterion | Was | Now | Record |
+|---|---|---|---|
+| ac3, the next weekly cloud run after the first import | NOT RUN | PASS | the hand run `20261105T034547Z` of the weekly run's task definition (revision 11), started after the scheduled launch was refused on 2026-11-04: `completed`, 03:45:47 to 05:12:57 UTC: its restore took 3.8 s (5 state files, the run-state bundle 11,751,521 bytes), and the run's 87 minutes are the full docx-7 re-parse (parse 73.8 min, search index 11.4 min), not hspolicy25's state |
+
+Three imports remain (hsld25, hspolicy24, hsld24), at most one a day outside the window. The PM orders hsld25 after the docx-9 run image is applied, so it is parsed once, into docx-9. The Goal stays `InProgress`.

@@ -1,0 +1,68 @@
+# TASK v1-e41-t24-the-cluster-comparison-key-test-without-a-timer-race - The cluster comparison's key test does not race a 0.3-second timer
+# Epic: E41 — Delivery Tooling Upkeep | Release: v1.8 (Weekly caselist run in the cloud) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e41-t24-the-cluster-comparison-key-test-without-a-timer-race
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.8
+    debate/epic: v1-e41-delivery-tooling-upkeep
+  annotations:
+    debate/title: "The cluster comparison's key test does not race a 0.3-second timer"
+spec:
+  # Filed by the PM, 2026-11-05, from v1-e07-t16's question 6 (the PM's ruling, 2026-11-05).
+  description: >-
+    `tests/scripts/test_compare_card_clusters.py::test_one_key_answers_and_a_key_pressed_before_
+    the_question_is_discarded` writes its answer key `d` from a threading.Timer at 0.3 s; if
+    `scripts/compare_card_clusters.py`'s read_key flushes after the timer fires, the key written
+    at 3.0 s answers instead. Make the test write its keys after the script says it is waiting
+    (a line or a seam the test can read), not on a timer.
+  priority: 3
+  constraints:
+    packages: [scripts, tests/scripts]
+    forbidden:
+      - A longer timer in place of the fix
+      - A behaviour change to the script beyond the seam
+  context: []
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        The key test writes its keys after the script is waiting, and gives one answer under
+        a slow start, by a test shown failing first.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e41-t24-the-cluster-comparison-key-test-without-a-timer-race-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.8
+    debate/epic: v1-e41-delivery-tooling-upkeep
+spec:
+  description: >-
+    The cluster comparison's key test does not race a 0.3-second timer.
+  goalRef:
+    name: v1-e41-t24-the-cluster-comparison-key-test-without-a-timer-race
+  graph:
+    nodes:
+      - id: the-cluster-comparison-key-test-without
+        kind: Task
+        name: Key test
+        description: >-
+          The cluster comparison's key test does not race a 0.3-second timer.
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Key test tests pass
+            command: uv
+            args: [run, pytest, tests/scripts/test_compare_card_clusters.py]
+status:
+  phase: Pending

@@ -985,3 +985,13 @@ script is unchanged since this task). The sample is `coach-sample-20261031.csv`,
   **19 cite, 1 not cite, 0 unsure**. The bar (18 of 20) is met, so rule (2) stays and a run image
   carrying `docx-7` may be applied. The one `not cite` was a pointer to another card
   (`<<AUTHOR 'YY FOR REFERENCE>>`), which v1-e31-t33 takes out of rule (2).
+
+## Operator records (recorded by the PM, 2026-11-05)
+
+Added by the PM. Nothing above is changed, and this section is not a review.
+
+| Criterion | Was | Now | Record |
+|---|---|---|---|
+| ac4, second half: dev's re-parse, read from the first dev cloud run on an image carrying docx-7 and v1-e40-t08 (the PM amendment of 2026-11-01) | NOT RUN (operator) | PASS | the hand run `20261105T034547Z` of the weekly run's task definition (revision 11), started after the scheduled launch was refused on 2026-11-04: `completed`, 03:45:47 to 05:12:57 UTC: the parse stage parsed all 4 caselists in full into `2026.10.27-docx-7` (18,333 attempted, 2,064 unsupported, 3 failed, 349,977 cards, 18,345 objects uploaded) in 73.8 minutes, and the search index (`4ea9299f633c6594`, 57,760 documents) was built from those stores, which the journey's J5 confirmed store by store on 2026-11-05 |
+
+Every criterion passes, so the Goal is `Succeeded`, and v1-e40-t16 (prod's re-parse) may start.

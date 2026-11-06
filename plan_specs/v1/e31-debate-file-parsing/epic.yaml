@@ -869,5 +869,23 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e31-t37-parser-evaluation-baseline-refreshed
+    - id: t38
+      kind: Task
+      name: 'A parse worker''s time limit starts when the worker reports ready, not when it is spawned'
+      description: >-
+        A parse worker's time limit starts when the worker reports ready, not when it is
+        spawned.
+      inputs:
+        specRef: plan_specs/v1/e31-debate-file-parsing/t38-a-parse-workers-time-limit-starts-when-it-is-ready.yaml
+        goalRef: v1-e31-t38-a-parse-workers-time-limit-starts-when-it-is-ready
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e31-t38-a-parse-workers-time-limit-starts-when-it-is-ready reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e31-t38-a-parse-workers-time-limit-starts-when-it-is-ready
 status:
   phase: Pending

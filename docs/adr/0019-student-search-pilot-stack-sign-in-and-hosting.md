@@ -236,6 +236,10 @@ This record covers release v1.7 and its two environments. It decides the pilot o
    the gzipped index above 400 MB, about 5 s at the cap, `v1-e39-t04` asks for a higher bandwidth
    quota. The quotas page says functions outside a VPC can request one, scaling from 2,048 MB of
    memory. Only if that is refused does it weigh one provisioned environment.
+   *(PM note 2026-11-05.)* The quota was raised to 1,250 Mbps on 2026-11-04 (`L-14320ECE`, read
+   2026-11-05), so the same 5 s is now about 800 MB of gzip, and the trigger moves there. The gzipped
+   index was 350,958,220 bytes on 2026-11-05, 32,843,153 bytes (9.4%) above the week before; each
+   weekly run's `search_index` record carries `gzip_bytes`.
 
 ### (d) Sign-in: Cognito managed login, coach-created accounts, TOTP required
 

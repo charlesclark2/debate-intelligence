@@ -1,0 +1,71 @@
+# TASK v1-e31-t38-a-parse-workers-time-limit-starts-when-it-is-ready - A parse worker's time limit starts when the worker reports ready, not when it is spawned
+# Epic: E31 Debate File Parsing | Release: v1.1 | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e31-t38-a-parse-workers-time-limit-starts-when-it-is-ready
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e31-debate-file-parsing
+  annotations:
+    debate/title: "A parse worker's time limit starts when the worker reports ready, not when it is spawned"
+spec:
+  # Filed by the PM, 2026-11-05, from v1-e07-t16's question 3 (the PM's ruling, 2026-11-05).
+  description: >-
+    `test_a_parse_past_the_time_limit_is_stopped_and_the_run_carries_on` runs real spawned
+    workers with a 1.5 s limit counted from dispatch, which includes the worker's start: with
+    every spawned interpreter's start slowed to 1.5 s, every source timed out (`{'TIMEOUT': 6}`
+    for `{'NOT_A_ZIP': 1, 'TIMEOUT': 1}`). On a busy runner, or a cold task, a slow spawn should
+    not time out a source. Start each worker's limit when it reports ready, so the limit
+    measures the parse alone; show it by the test above made deterministic and by a test with a
+    slow-starting worker.
+  priority: 3
+  constraints:
+    packages: [debate_core.integrations, debate_core.application, packages/debate_core/tests]
+    forbidden:
+      - A longer limit in place of the fix
+      - A sleep added to make a test pass
+  context: []
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        A worker's limit starts when it reports ready, so a slow spawn times out no source
+        while a parse past the limit still stops, by tests shown failing first.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e31-t38-a-parse-workers-time-limit-starts-when-it-is-ready-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e31-debate-file-parsing
+spec:
+  description: >-
+    A parse worker's time limit starts when the worker reports ready, not when it is spawned.
+  goalRef:
+    name: v1-e31-t38-a-parse-workers-time-limit-starts-when-it-is-ready
+  graph:
+    nodes:
+      - id: a-parse-workers-time-limit-starts-when-i
+        kind: Task
+        name: Limit from ready
+        description: >-
+          A parse worker's time limit starts when the worker reports ready, not when it is
+          spawned.
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Limit from ready tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application/test_caselist_parse.py, -k, time_limit]
+status:
+  phase: Pending

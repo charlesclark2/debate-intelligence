@@ -441,3 +441,13 @@ Added by the PM. Nothing above is changed, and this section is not a review.
 | Step 6, the next Wednesday's run | NOT RUN | NOT RUN | Read on Thursday 2026-11-05 from Wednesday 2026-11-04's run on `v1.1.0-dev.164` |
 
 ac2's dev half passes. The Goal stays `InProgress` until step 6 is read on Thursday; prod follows with the pilot's promotion.
+
+## Operator records (recorded by the PM, 2026-11-05)
+
+Added by the PM. Nothing above is changed, and this section is not a review.
+
+| Criterion | Was | Now | Record |
+|---|---|---|---|
+| Step 6, the next Wednesday's run | NOT RUN | PASS | the hand run `20261105T034547Z` of the weekly run's task definition (revision 11), started after the scheduled launch was refused on 2026-11-04: `completed`, 03:45:47 to 05:12:57 UTC; its bucket_run read held_by none, took_over none, lock_lost false: the run took and released the lock under the deny policy. The image was revision 11's, not dev.164's; the deny is the bucket's policy, the same for any image |
+
+ac2's dev half is complete. The Goal stays `InProgress`: prod follows with the pilot's promotion.

@@ -656,3 +656,13 @@ failing rather than argued around.
    which fails on the real clock (v1-e07-t16): if `ci` fails on it alone, re-run the failed job.
 10. **Merge:** `scripts/task pr --partial` once `ci` is green. The Goal stays `InProgress` until the PM
     records ac3 in docs/data.
+
+## Operator records (recorded by the PM, 2026-11-05)
+
+Added by the PM. Nothing above is changed, and this section is not a review.
+
+| Criterion | Was | Now | Record |
+|---|---|---|---|
+| ac3: the operator's re-record of the 47 under 1.3.0 on the ruled routes, its breakdown and scans, recorded in docs/data beside 1.2.0's (operator, recorded by the PM) | NOT RUN (operator) | PASS | deep_audit, 2026-11-05, prompt 1.3.0, taxonomy 1.5.0: 47 found and asked in 3 calls, 41,332 input and 4,737 output tokens. Pipeline 24 of 32 (0.750, bar 0.85), below the threshold 15, coverage 0.681, weighted 0.655; against 1.2.0 under the same rule 26 of 33 (0.788), within what the sample separates. Scans clean: prompt inputs 0 hits; cassettes 46 hits (41 a JSON key, 5 taxonomy words), all set aside, and the operator judged every one an ordinary word. The generic condition failed (above the threshold: 0 right, 1 wrong, row 26), so the clause comes out in v1-e32-t55. Recorded in docs/data |
+
+ac3 passes, so the Goal is `Succeeded`. A scope addition the PM ruled after the review: commit def4453 on this branch put `test_on_the_committed_profile_without_a_contact_email_crossref_names_the_public_pool_in_the_footer` on PacerTime, through crossref_factory's own clock and sleep, which unblocked dev's push runs; no production code changed, and v1-e07-t16 finished the sweep.

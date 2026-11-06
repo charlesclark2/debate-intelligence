@@ -296,3 +296,13 @@ line that matters to the alarm held against the filter read out of Terraform its
    `test_on_the_committed_profile_without_a_contact_email_crossref_names_the_public_pool_in_the_footer`
    (the real clock, v1-e07-t16), re-run the failed job.
 8. **Merge:** a plain `scripts/task pr` once `ci` is green. The Goal is `Succeeded`.
+
+## Operator records (recorded by the PM, 2026-11-05)
+
+Added by the PM. Nothing above is changed, and this section is not a review.
+
+| Criterion | Was | Now | Record |
+|---|---|---|---|
+| The optional AWS check of the RunsRecorded pattern | not run | PASS | 2026-11-05: `aws logs test-metric-filter` with the pattern from alerts.tf over a step line, a recorded success and a recorded failure answered `2 3`: the two results match and the step line does not |
+
+The Goal stays `Succeeded`.

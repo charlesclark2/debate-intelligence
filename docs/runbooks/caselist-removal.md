@@ -130,7 +130,10 @@ bucket objects with their version counts), **SHARED, KEPT** (for `--team`, files
 camp file also holds: only this team's copies are withdrawn; for `--source`, only what a stopped run
 left withdrawn, and only its copies at the removed paths), **LATER UPLOADS AT A REMOVED PATH** and
 **EARLIER VERSIONS AT A REMOVED PATH** (other files the store holds at the same paths; read them as described
-below), **MANIFESTS REWRITTEN**, **DOWNLOAD INBOX** (every
+below), **MANIFESTS REWRITTEN**, **AGGREGATES REWRITTEN WITHOUT THE REMOVED ROWS** (each
+parsed-store aggregate of each version directory holding a parsed file of what is removed, apart
+from the file's own objects: read them as described below), **AGGREGATES DELETED IN RETIRED VERSION
+DIRECTORIES** when there are any, **DOWNLOAD INBOX** (every
 file `caselist pull` downloaded that holds a removed file, and whether it is deleted or rewritten
 without it; see step 8), the **SUPPRESSION ENTRIES** exactly as they will be written, the
 **WITHDRAWALS** (when the plan withdraws a copy: the caselist each is withdrawn from, by slug,
@@ -228,6 +231,15 @@ Read the plan before going further. Confirm:
       holds a camp path (step 8).
 - [ ] The listed disclosure records, manifest rows, local blobs and S3 objects (with their version
       counts) look right.
+- [ ] **The parsed store's aggregates** (`v1-e30-t33`). *AGGREGATES REWRITTEN WITHOUT THE REMOVED
+      ROWS* lists only the version directories that hold a parsed file of what is removed, on each
+      side: *here* is this machine's store, *bucket* the environment's. Each line is one table, with
+      the rows it holds and those that go (`-N of M row(s)`), its bytes, and the older versions the
+      execution purges. A directory of a caselist that never held the file must not be there; if one
+      is, stop and take the plan to the PM. A table that *holds none* has no row of it and is kept.
+      A line that says *UNREADABLE at line N* stops `--execute` before it writes anything: take the
+      plan to the PM. *AGGREGATES DELETED IN RETIRED VERSION DIRECTORIES* lists the tables of a
+      directory retention has tagged, which are deleted with every version, not rewritten.
 - [ ] **Other holders.** A file's line ends *also held by N other team(s)* or *N camp file(s)* only
       when someone besides the holder being removed has it (`v1-e30-t16`): for `--team` that is
       every other team and every camp file, and for `--source` every holder but one, the team whose
@@ -322,36 +334,20 @@ the profile, does three things more, and nothing in what you type changes:
   `RUN_STATE_BUNDLE_NOT_REWRITTEN`: run the same command again. The count of versions deleted in the
   `DONE` output includes the bundle's.
 
-The parse in the next block runs in bucket mode too, with the same variable. It fetches from the
-bucket's `raw/` any source it has to parse and this machine lacks.
-
-**Then rebuild the parsed card store's aggregates.** The removal deletes the removed file's parsed
-cards and, for every caselist it touches, the store's `index.jsonl`, `failures.jsonl` and
-`occurrences.jsonl` (`v1-e31-t06`), here and in the bucket, because each of them can name the
-file or one of the team's disclosures. Nothing else rebuilds them until the next parse, and until
-then anything that reads the store finds no aggregates at all. The caselists to rebuild are the
-ones whose `parsed/<caselist>/<version>/index.jsonl` the plan listed under *WILL BE REMOVED*; if it
-listed none, the store was never built here and there is nothing to do. For each, with the everyday
-profile (a few minutes each; nothing is parsed again, only the aggregates are rebuilt and
-published):
-
-```bash
-aws sso login --profile debate-dev-evidence
-DEBATE_ENV=dev uv run debate-research caselist parse --caselist hsld26 --publish
-```
-
-It exits 0 and prints the rebuilt counts. The new aggregates leave out every source and disclosure
-the suppression list stops, which now includes this removal's.
-
-**A backfile listed there is rebuilt differently** (`v1-e34-t34`). A caselist in
-`caselist.backfile_caselists` (`hspolicy25`, `hsld25`, `hspolicy24`, `hsld24`) keeps its parsed store
-in the bucket, not on this Mac, so the parse above cannot rebuild it. Its rebuild is `caselist
-backfile-import` run again where backfile imports run, dry run first: the cloud task that
-`ops/caselist_run/start_backfile_import.py` starts, as
-[caselist-cloud-run.md, "Backfile imports"](caselist-cloud-run.md#backfile-imports) says (`v1-e40-t09`): it downloads nothing, restores
-the parsed store, and publishes the aggregates without this removal's file. It obeys the backfile
-no-import window, Tuesday 06:00 to Thursday 00:00 Chicago. That is about 2 h 10 min and 56 GB restored
-for all four ([caselist-backfiles.md, "A removal adds a rebuild"](caselist-backfiles.md#a-removal-adds-a-rebuild-for-each-backfile)).
+**It rewrites the parsed card store's aggregates in place, and nothing is rebuilt afterwards**
+(`v1-e30-t33`, the PM's ruling of 2026-11-05). Each table the plan listed under *AGGREGATES
+REWRITTEN WITHOUT THE REMOVED ROWS* is downloaded, rewritten without the rows that name what is
+removed, every other line kept byte for byte, and checked before anything is written: a line it
+cannot read, or a table that changed since the plan read it, stops the run `INCOMPLETE` with nothing
+written. In the bucket each rewrite is confirmed and every other version of it purged, with the
+takedown profile; on this machine it replaces the file. A directory's tables are rewritten before its
+per-source file is deleted, so a run that stops between them is found again by that file. The tables
+of a retired directory are deleted with every version instead. This is the same in bucket mode, under
+the run lock `--execute` holds, for a backfile such as `hspolicy25` (its tables are in the bucket
+only), and in prod. Nothing else is to do for the parsed store: no `caselist parse --publish`, no
+restored copy, no backfile import. The `DONE` output says *Parsed store: N aggregate(s) rewritten
+without M row(s); K in retired directories deleted. Nothing is to be rebuilt.* N is the number of
+lines the plan marked *rewritten*.
 
 ## Step 6 — Verify dev
 
@@ -375,8 +371,9 @@ DEBATE_ENV=dev uv run debate-research caselist import <archive> --caselist hsld2
       (`v1-e30-t10`, `v1-e30-t15`). It lists the bucket's object versions with the everyday profile
       and counts what is left of every file on the suppression list, the later uploads this removal
       took down included, and the versions of the parsed store's aggregates and of the manifests
-      this removal rewrote that are older than it. The aggregates the parse in step 5 rebuilt are
-      newer, and are not counted. If it says *REMOVAL RESIDUE* or *NOT CHECKED* instead, go to
+      this removal rewrote that are older than it, in the directories it reached. The tables it
+      rewrote or kept are its own, and are not counted. Run it from a build carrying `v1-e30-t33`:
+      an older build counts those as residue. If it says *REMOVAL RESIDUE* or *NOT CHECKED* instead, go to
       [When `caselist status` reports removal residue](#when-caselist-status-reports-removal-residue).
 - [ ] The `DONE` line counts the inbox files deleted and rewritten, and the dry run run again says
       *DOWNLOAD INBOX (…): nothing in it holds a removed file.*
@@ -384,7 +381,8 @@ DEBATE_ENV=dev uv run debate-research caselist import <archive> --caselist hsld2
       *school view file(s)* as residue, and the PM has the caselist and snapshot of the *REPUBLISH*
       line ([Argument landscape bundles](#argument-landscape-bundles-e32)).
 - [ ] The re-import counts the file as `SUPPRESSED`.
-- [ ] The parse in step 5 exited 0, and each `index.jsonl` key the plan listed is back:
+- [ ] The `DONE` line's *N aggregate(s) rewritten* equals the number of lines the plan marked
+      *rewritten*, and each `index.jsonl` key the plan listed is still there:
       `DEBATE_ENV=dev uv run debate-research store ls <that key>` lists 1 object.
 - [ ] No `raw/` or `parsed/` object for those sha256 values remains — **including noncurrent
       versions**. The line above is that check for every removed file at once. For one key, with
@@ -426,18 +424,9 @@ the bucket holds. The line under the table about removal residue is right either
       removals only: the dev data directory's copy of the removal log holds dev's, and those are
       left out.
 
-Then rebuild prod's parsed aggregates, for the same caselists as in step 5. The parsed store is
-built on this machine in the dev data directory and published to both buckets from there, so this
-runs against the dev data directory with the prod bucket, after the dev removal has put the entries
-on that directory's suppression list:
-
-```bash
-aws sso login --profile debate-prod-evidence
-DEBATE_ENV=prod DEBATE_STORAGE__DATA_DIR="$HOME/.debate-research/dev" uv run debate-research caselist parse --caselist hsld26 --publish --confirm-prod
-```
-
-- [ ] It exits 0. Each variable is set on the command line only, so nothing is left pointing the
-      shell at prod.
+Nothing is rebuilt in prod either: the prod removal rewrites prod's aggregates itself, as step 5
+says, and its `DONE` line counts them. Run it from a build carrying `v1-e30-t33`. An older build
+deletes every caselist's aggregates in prod, and nothing on this machine can rebuild them.
 
 ## Step 8 — Suppression and built files
 
@@ -615,42 +604,33 @@ Signed in to the pilot (in dev, as your own synthetic account), search for words
 card's tag, open it, and write down its path, `/cards/<caselist>/<cluster id>`, and the sha256 the
 dry run names. Nothing here is copied into the register: a cluster id and a sha256 are digests.
 
-### P1b — Right after `DONE`: rebuild the parsed store's aggregates
+### P1b — Right after `DONE`: the aggregates were rewritten, and nothing is rebuilt
 
-Step 5's rebuild, and not optional here. A whole-file removal deletes every caselist's
-`index.jsonl`, `failures.jsonl` and `occurrences.jsonl` in the bucket, every version directory, and
-until they are rebuilt anything that reads the bucket's parsed store finds none. That holds for any
-removal or exercise that touches dev, a synthetic one included, and the same in prod: a prod removal
-leaves prod's aggregates gone until they are rebuilt. Do not wait for the weekly run: it rebuilds a
-caselist's aggregates only when it imported something into that caselist that week, and a run that
-imported nothing rebuilds nothing ([scheduled sync, the parse stage](caselist-scheduled-sync.md#the-parse-stage)).
-Rebuild each caselist whose `parsed/<caselist>/<version>/index.jsonl` the plan listed, `openev`
-included, from this Mac's own store for the environment (not a scratch store), with the everyday
-profile. A backfile the plan listed is not rebuilt here but by `caselist backfile-import` run again in its
-cloud task, as step 5 says.
+Since `v1-e30-t33` a removal rewrites the parsed store's aggregates it reaches itself (step 5), and
+nothing is rebuilt afterwards: no `caselist parse --publish`, from this Mac or anywhere, and no
+backfile import. This step is the check, here and in prod, a synthetic exercise included.
 
-**Operator command** (expected runtime a few minutes per caselist; nothing is parsed again)
-Where: a new terminal window, so no `DEBATE_STORAGE__DATA_DIR` from another step is set
+- [ ] The `DONE` output's *Parsed store: N aggregate(s) rewritten without M row(s)* has N equal to the
+      number of lines the dry run's *AGGREGATES REWRITTEN WITHOUT THE REMOVED ROWS* marked
+      *rewritten*, and M equal to the sum of their `-N of M row(s)` counts. A difference: stop, and
+      take both outputs to the PM.
+- [ ] The removal ran from a build carrying `v1-e30-t33`, and so does the `caselist status` that
+      checks it (step 6): an older build deletes every caselist's aggregates, and an older status
+      reports a rewrite as residue.
+
+To see it for one table, set `KEY` to a `bucket` key the plan listed and `REMOVED` to the sha256 the
+dry run named. It reads one object with the everyday profile and writes nothing.
+
+**Operator command** (expected runtime seconds; reads only)
+Where: your Mac, in the repository's checkout, any window
 ```bash
-PULL=$(pgrep -fl 'debate-research( --json)? caselist pull')
-echo "running pull: ${PULL:-none}"
-echo "data dir override: ${DEBATE_STORAGE__DATA_DIR:-none}"
-if [[ -n "$PULL" || -n "${DEBATE_STORAGE__DATA_DIR:-}" ]]; then
-  echo "STOP: the line above that is not none says why. Wait for the pull to finish, or open a new window."
-else
-  aws sso login --profile debate-dev-evidence
-  for SLUG in hsld26 hspf26 hspolicy26 openev; do
-    env -u DEBATE_STORAGE__DATA_DIR DEBATE_ENV=dev debate-research caselist parse --caselist "$SLUG" --publish
-  done
-fi
+KEY=put-a-bucket-key-the-plan-listed-here
+REMOVED=put-the-removed-sha256-here
+BUCKET=$(python3 -c 'import tomllib; print(tomllib.load(open("config/profiles/dev.toml", "rb"))["storage"]["s3"]["bucket"])')
+aws sso login --profile debate-dev-evidence
+aws s3 cp "s3://${BUCKET}/${KEY}" - --profile debate-dev-evidence | grep -c "${REMOVED}"
 ```
-Success looks like, for each caselist, a table whose **Sources** and **Skipped (already parsed)**
-are the store's full count, equal and not zero, with **Parsed 0** and **Published 3 uploaded**. A
-`Sources 0` means the parse read a store that does not hold the caselist, such as a scratch one:
-stop, because what it uploaded is empty aggregates. Name only the caselists the plan listed. The
-first two lines name any running `debate-research caselist pull` (the CLI only, not a test or an
-editor whose command line holds those words) and any data directory override; a `STOP` line means
-one of them is not `none`, and nothing ran.
+Success looks like `0`: no row of the table names the file. Anything else: stop and tell the PM.
 
 ### P2 — Five minutes after `DONE`: the card is gone
 
@@ -691,8 +671,8 @@ a removal from a small store, a synthetic one in dev included, may not. Compare 
 cards the dry run listed for that store. If they agree, publish the same index with the request id as
 the reason, by the block in [the scheduled sync runbook's shrink guard](caselist-scheduled-sync.md#the-shrink-guard).
 If they do not, stop: something besides the removal emptied the store. A refusal that a store's
-`aggregates hold no occurrence rows` means P1b has not rebuilt it: run P1b for that store, then P3
-again.
+`aggregates hold no occurrence rows` means the removal took the store's only rows, which a rebuild would
+leave empty too: the store has nothing to index. Tell the PM, who decides whether the index drops it.
 
 **Then confirm the rebuilt index no longer holds the removed source.** Set `REMOVED` to the sha256
 the dry run named. The index is the newest directory under the data directory's `tub-index`.
@@ -1256,19 +1236,21 @@ would say `CASELIST_DRIFT` and none would exit 0.
          manifest or aggregate version is older than a removal that touched its caselist*. With
          `--json`, every entry of `removal_residue` has `"checked": true`, `"files": []` and
          `"older_versions": []`.
-   - [ ] If the plan you executed listed a `parsed/<caselist>/<version>/index.jsonl`, rebuild that
-         caselist's aggregates as in step 5. Any executed removal deletes them.
    - [ ] The register entry for the request records that residue was found and cleared, with the
          counts and the date. Counts and codes only.
 
 ### Versions older than a removal
 
-A removal deletes every version of the parsed store's `index.jsonl`, `failures.jsonl` and
-`occurrences.jsonl`, in every version directory, and it rewrites each manifest that held the file
-and purges every other version of it. So in a caselist the removal touched, a version of one of
-those older than the removal is something it should have taken: an old manifest version can hold
-the removed row, and an old aggregate a removed card's tag. A newer one is an ordinary later write,
-such as the aggregates the parse in step 5 rebuilt.
+A removal rewrites each parsed-store aggregate of each version directory holding a parsed file of
+what it removes, and each manifest that held the file, and purges every other version of each
+(`v1-e30-t33`). So a version of one of those older than the removal, other than the one it left, is
+something it should have taken: an old manifest version can hold the removed row, and an old
+aggregate a removed card's row. A newer one is an ordinary later write, such as the next parse's.
+Which aggregates it reached, and the version it left of each, it records beside its log entry in
+`removal-aggregates.jsonl`, and status counts aggregate versions only there. A removal made by a
+build from before `v1-e30-t33` deleted every aggregate of every caselist it touched, has no such
+record, and is compared as before: any aggregate version older than it counts. Run `caselist status`
+from a build carrying `v1-e30-t33`: an older one counts the tables a newer removal rewrote as residue.
 
 The command finds them from the listing's times and the removal log, downloading nothing. Each
 removal records, beside its log entry in `removal-scopes.jsonl`, the caselists it touched and the
@@ -1280,7 +1262,7 @@ S3 refuses a request from a machine whose clock is more than 15 minutes out.
 | Role | What the bucket holds | How it gets there |
 |---|---|---|
 | manifest | A version of a manifest the removal rewrote, other than the rewrite, written before it | A purge that did not finish: the run stopped between writing the manifest and purging it, or something put the version back |
-| index.jsonl, failures.jsonl, occurrences.jsonl | A version of an aggregate, current or not, written before the removal | A takedown that stopped before the aggregates, or a version put back |
+| index.jsonl, failures.jsonl, occurrences.jsonl, camp_paths.jsonl | A version of an aggregate the removal reached, other than the one it left, written before the removal | A run that stopped before its purge, or a version put back |
 
 **Clearing it.** Run the removal again under the same request: name one file the request removed,
 by `--source`, with the same `--request` and `--reason`. The request id is the one the line names.
@@ -1299,9 +1281,10 @@ step 2 above shows for a file:
 DEBATE_ENV=dev uv run debate-research caselist remove --source <sha256> --request RM-2026-01 --reason REQUESTED_BY_TEAM
 ```
 
-- **Aggregates.** The plan lists every aggregate under *WILL BE REMOVED*, the old versions with
-  the new ones, because a removal of a whole file deletes every caselist's. `--execute` deletes
-  them all. Rebuild them afterwards as in step 5.
+- **Aggregates.** The plan lists each table the request reached before under *AGGREGATES REWRITTEN
+  WITHOUT THE REMOVED ROWS*, with the older versions its purge should have taken, or a table still
+  holding a removed row. `--execute` purges those versions and rewrites such a table. Nothing is
+  rebuilt afterwards.
 - **A manifest version alone.** The plan prints *MANIFEST VERSIONS SWEPT from the bucket by
   --execute: N noncurrent version(s) of N manifest(s)*, each manifest with its count, and the
   command under *TO CARRY IT OUT* (`v1-e30-t19`). Until then it read current manifests only and said
@@ -1319,8 +1302,9 @@ DEBATE_ENV=dev uv run debate-research caselist remove --source <sha256> --reques
 - **A request that removed no whole file** (its `removed_sha256` is empty, only `withdrawn_sha256`).
   Run the request's own command again: the same `--team`, `--request` and `--reason`. Its first run
   deleted the team's records and rows, so nothing shows the team's paths any more; the plan names
-  each file *withdrawn earlier from `<caselist>`, as the withdrawal record says*, and lists that
-  caselist's aggregates, and the copy in the caselist when no other holder there keeps it. A
+  each file *withdrawn earlier from `<caselist>`, as the withdrawal record says*, and lists the
+  aggregates of that caselist's directories that still need it, and the copy in the caselist when no
+  other holder there keeps it. A
   `--source` request's withdrawn later upload is planned again the same way when its copy is still
   in such a caselist.
 

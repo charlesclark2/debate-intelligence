@@ -383,8 +383,8 @@ other rows has other bytes, so its rows get none. An earlier build's rebuild of 
 the same bytes (the rows carry no digest), so they keep the digests: a camp path withdrawn after it
 still stops its release for this build's readers. A line this build cannot read (a later build's
 shape) makes it give none at all. No earlier build opens the file. Like the
-other aggregates it is rebuilt by every run, published after the per-source files and deleted by a
-removal.
+other aggregates it is rebuilt by every run and published after the per-source files; a removal
+rewrites it with the rewritten table's digest (`v1-e30-t33`).
 
 **What the span means.** A weekly archive is a window of about a week's editing activity, not the
 whole caselist (`docs/data/caselist-backfill-2026-09.md`), so a manifest lists a path in the weeks
@@ -502,20 +502,30 @@ filed there as never parsed (`v1-e31-t09`). Another caselist's unreadable direct
 
 ## After a removal
 
-`caselist remove --execute` deletes, locally and in the bucket with every noncurrent version:
+`caselist remove --execute` (since `v1-e30-t33`, the PM's ruling of 2026-11-05), locally and in the
+bucket:
 
-* every per-source file named for a removed digest, in every version directory;
-* `index.jsonl`, `failures.jsonl` and `occurrences.jsonl`, and `camp_paths.jsonl` where there is
-  one, in every version directory of each caselist the removal touched, because each may hold rows
-  derived from the removed source or disclosure. A removal by a build from before `v1-e33-t07` leaves
-  `camp_paths.jsonl`. It was written for the table that removal deleted, so a table rebuilt without
-  the removed rows has other bytes and gets none of its digests; this build's next run or removal
-  replaces or deletes it.
+* deletes every per-source file named for a removed digest, in every version directory, with every
+  version;
+* reaches, on each side, the version directories holding such a per-source file (or a withdrawn
+  copy's), and nothing else: a directory's aggregates are built from its own per-source files alone.
+  It rewrites each of their aggregates without the rows a rebuild after the removal would not write,
+  every other line kept byte for byte, checked before it is written, and in the bucket purges every
+  other version of it. `camp_paths.jsonl` is re-stamped with the rewritten table's digest. The
+  survivors' `cluster_id` and `membership` stay as they were (the ruling's Q3): a cluster whose
+  smallest fingerprint was a removed card's keeps that id until the caselist's next rebuild, as every
+  reader already sees it right after a removal;
+* deletes, instead, the aggregates of a reached directory retention has tagged, with every version,
+  since a rewrite would be a new version the lifecycle never expires;
+* records the aggregates it left clean or deleted beside the removal log, in
+  `removal-aggregates.jsonl`, which `caselist status` counts residue by.
 
-Until the next `caselist parse` the current directory has no aggregates, and readers treat that as
-"not built yet". The next run rebuilds them without the removed source, and `--publish` uploads
-them again. Older version directories keep their per-source files but are not rebuilt, because
-nothing writes to them again.
+Nothing is rebuilt afterwards, a backfile's tables included: the current directory always has its
+aggregates. A removal by a build from before `v1-e30-t33` deleted every aggregate of every caselist it
+touched, in every version directory, and left them absent until the next `caselist parse`, which readers
+treat as "not built yet". A removal by a build from before `v1-e33-t07` leaves `camp_paths.jsonl`,
+written for the table it deleted, so a table rebuilt without the removed rows has other bytes and
+gets none of its digests.
 
 ## Publishing
 

@@ -1226,26 +1226,62 @@ Record the result in the session report or `docs/data/evidence-search-pilot.md`.
 
 The removal runbook's procedure, with `--source` and the exercise id `RM-2026-91` (exercise ids run
 from 90, [the register](../data/caselist-removal-requests.md)), on this Mac's own data directory: in
-bucket mode the removal restores the run's state first. **The dry run decides whether to go on.** The
-run's state was saved by the cloud run, which never saw the seed's week (the seed went in through the
-copy), so read the plan before anything else.
+bucket mode the removal restores the run's state first. Run it from a build carrying `v1-e30-t33`
+(`$WT` on `dev` after it merged): since that task a whole-file removal reaches only the version
+directories that hold the file's parsed file, and rewrites their aggregates in place, so nothing is
+rebuilt afterwards. **The dry run decides whether to go on.** The run's state was saved by the cloud
+run, which never saw the seed's week (the seed went in through the copy), so read the plan before
+anything else.
 
-**Operator command** (expected runtime seconds)
+**Operator command** (expected runtime seconds; reads only)
 Where: `$WT`, a new window, so `COPY` and no other variable is set
 ```bash
 REMOVE_SHA=b3afe1c4f57df962b3200ec08b3d1efe023c0243a9b31154f787348864036fa8
-if env | grep -q '^DEBATE_'; then
-  echo "STOP: DEBATE_ overrides are set in this shell"
+PULL=$(pgrep -fl 'debate-research( --json)? caselist pull')
+OVERRIDES=$(env | grep '^DEBATE_' | cut -d= -f1 | tr '\n' ' ')
+if [[ -n "$PULL" || -n "$OVERRIDES" || "$(date +%u)" = 3 ]]; then
+  echo "STOP: a pull is running, a DEBATE_ override is set, or it is Wednesday"
 else
+  aws sso login --profile debate-dev-evidence
   cd "$WT" && DEBATE_ENV=dev uv run debate-research caselist remove --source "$REMOVE_SHA" --request RM-2026-91 --reason POLICY
 fi
 ```
-Go on only if **WILL BE REMOVED** lists that one file, with its object under `raw/caselist/testcl26/`
-and its parsed files under `parsed/testcl26/`, and **SHARED, KEPT** nothing. If the plan does not
-find the file, stop: publish the teardown (J9), delete the copy (J10), and take the plan to the PM.
-Then the removal runbook's [step 5](caselist-removal.md#step-5--execute-in-dev), the same flags with
-`--execute`, and its [P1b](caselist-removal.md#p1b--right-after-done-rebuild-the-parsed-stores-aggregates)
-for each caselist the plan listed, `testcl26` among them. Note the time `DONE` printed. Add
+Go on only if all of these hold:
+
+- **WILL BE REMOVED** lists that one file, with its object under `raw/caselist/testcl26/` and its
+  parsed file under `parsed/testcl26/2026.10.27-docx-7/`, and **SHARED, KEPT** lists nothing.
+- **AGGREGATES REWRITTEN WITHOUT THE REMOVED ROWS** lists exactly three tables, all `bucket`, all
+  under `parsed/testcl26/2026.10.27-docx-7/`: `index.jsonl` *rewritten (-1 of 3 row(s), ...)*,
+  `failures.jsonl` *holds none: left as it is*, and `occurrences.jsonl` *rewritten (-2 of 4 row(s),
+  ...)*. Those counts are the seed's: three files, and four occurrence rows, two of them the removed
+  file's. No `here` line, since this Mac's own store never held the seed, and no other caselist or
+  version directory. Write down each table's bytes: the PM records them.
+- No *AGGREGATES DELETED IN RETIRED VERSION DIRECTORIES* section, and no *UNREADABLE* line.
+
+If the plan does not find the file, or lists any other aggregate, stop: publish the teardown (J9),
+delete the copy (J10), and take the plan to the PM. Otherwise the execution, the same flags with
+`--execute`, which is the removal runbook's [step 5](caselist-removal.md#step-5--execute-in-dev):
+
+**Operator command** (expected runtime about a minute; removes, and cannot be undone)
+Where: the same window as the dry run
+```bash
+REMOVE_SHA=b3afe1c4f57df962b3200ec08b3d1efe023c0243a9b31154f787348864036fa8
+PULL=$(pgrep -fl 'debate-research( --json)? caselist pull')
+OVERRIDES=$(env | grep '^DEBATE_' | cut -d= -f1 | tr '\n' ' ')
+if [[ -n "$PULL" || -n "$OVERRIDES" || "$(date +%u)" = 3 ]]; then
+  echo "STOP: a pull is running, a DEBATE_ override is set, or it is Wednesday"
+else
+  aws sso login --profile debate-dev-evidence
+  aws sso login --profile debate-dev-evidence-removal
+  cd "$WT" && DEBATE_ENV=dev DEBATE_REMOVAL_PROFILE=debate-dev-evidence-removal uv run debate-research caselist remove --source "$REMOVE_SHA" --request RM-2026-91 --reason POLICY --execute
+fi
+```
+Success looks like `DONE in dev`, then *Parsed store: 2 aggregate(s) rewritten without 3 row(s); 0
+in retired directories deleted. Nothing is to be rebuilt.* Then the removal runbook's
+[P1b](caselist-removal.md#p1b--right-after-done-the-aggregates-were-rewritten-and-nothing-is-rebuilt),
+the check, with no parse: its block for `parsed/testcl26/2026.10.27-docx-7/occurrences.jsonl`
+prints `0`. `RUN_LOCK_HELD`: a cloud run is going; wait for it and run the execution again. Any
+`INCOMPLETE`: run the same execution again, and tell the PM. Note the time `DONE` printed. Add
 `RM-2026-91` to the register as an operator exercise, as `RM-2026-90` is.
 
 ### J8 — Five minutes after `DONE`: the card is gone
@@ -1411,8 +1447,11 @@ real run, in a window with no leftover `DEBATE_*` override.
    dev's current manifest as [the journey's J5](#the-signed-in-journey-on-dev) checks it (each
    store's `occurrences_sha256`, the suppression list's sha256), then published against prod, and its
    `current.json` read back. The copy is deleted afterwards (data-use policy 1.18).
-8. **`v1-e39-t07`'s prod removal exercise**, with a synthetic source, then the aggregate rebuild its
-   runbook section gives, judged by `Sources` equal to `Skipped` and above zero.
+8. **`v1-e39-t07`'s prod removal exercise**, with a synthetic source, from a build carrying
+   `v1-e30-t33`: no aggregate is rebuilt afterwards. The check is the removal runbook's
+   [P1b](caselist-removal.md#p1b--right-after-done-the-aggregates-were-rewritten-and-nothing-is-rebuilt),
+   with prod's names: the `DONE` line's count of rewritten aggregates equals the plan's, and each
+   rewritten table names the file in no row.
 9. **Retire the superseded parsed directories in prod** (`2026.09.20-docx-1`, `2026.10.10-docx-2`,
    `2026.10.12-docx-3`, `2026.10.18-docx-5` and `2026.10.20-docx-6`) by
    [the retention runbook](parsed-store-retention.md)'s step 3, and record the counts in

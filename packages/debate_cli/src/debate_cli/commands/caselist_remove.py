@@ -408,11 +408,12 @@ def render_plan(plan: RemovalPlan, report: RemovalReport | None) -> str:
             f"{report.manifest_rows_dropped} row(s); {report.inbox_files_deleted} inbox file(s) deleted and "
             f"{report.inbox_files_rewritten} rewritten."
         )
-        if report.aggregates_rewritten or report.aggregates_deleted:
+        if report.aggregates_rewritten or report.aggregates_deleted or report.placement_states_deleted:
             lines.append(
                 f"Parsed store: {report.aggregates_rewritten} aggregate(s) rewritten without "
                 f"{report.aggregate_rows_dropped} row(s); {report.aggregates_deleted} in retired "
-                "directories deleted. Nothing is to be rebuilt."
+                f"directories deleted; {report.placement_states_deleted} placement state(s) deleted, so "
+                "the next parse rebuilds those directories in full. Nothing is to be rebuilt by hand."
             )
         if report.school_view_files_deleted or report.school_view_versions_deleted:
             lines.append(
@@ -1231,6 +1232,7 @@ def plan_summary(plan: RemovalPlan, settings: Settings, report: RemovalReport | 
             "rewritten": report.aggregates_rewritten,
             "rows_dropped": report.aggregate_rows_dropped,
             "deleted": report.aggregates_deleted,
+            "placement_states_deleted": report.placement_states_deleted,
         }
     return data
 
@@ -1240,6 +1242,7 @@ _AGGREGATE_ACTION_TEXT: Final = {
     AggregateAction.PURGE: "holds none now: older versions purged",
     AggregateAction.LEFT: "holds none: left as it is",
     AggregateAction.UNREADABLE: "UNREADABLE",
+    AggregateAction.DISCARD: "deleted, every version",
 }
 
 
@@ -1250,8 +1253,13 @@ def _aggregate_lines(plan: RemovalPlan) -> list[str]:
     side, key, rows and those that go, the table's bytes, and the older versions purged. Apart from the
     file's own objects, because these are rewritten, not deleted, and nothing rebuilds them afterwards.
     """
-    live = [change for change in plan.aggregates if change.action is not AggregateAction.DELETE]
+    live = [
+        change
+        for change in plan.aggregates
+        if change.action not in (AggregateAction.DELETE, AggregateAction.DISCARD)
+    ]
     retired = [change for change in plan.aggregates if change.action is AggregateAction.DELETE]
+    states = [change for change in plan.aggregates if change.action is AggregateAction.DISCARD]
     lines: list[str] = []
     if live:
         rewritten = sum(change.action is AggregateAction.REWRITE for change in live)
@@ -1285,6 +1293,21 @@ def _aggregate_lines(plan: RemovalPlan) -> list[str]:
             )
             size = "" if change.bytes is None else f", {change.bytes} bytes"
             lines.append(f"  bucket {change.key}  ({versions}{size})")
+    if states:
+        lines += [
+            "",
+            f"PLACEMENT STATES DELETED: {len(states)} file(s), every version, never edited",
+            "  Each holds the words of the sources it was built from. The next parse of each directory",
+            "  rebuilds it in full and writes a new one.",
+        ]
+        for change in states:
+            versions = (
+                ""
+                if change.versions is None or change.side is Side.LOCAL
+                else f", {len(change.versions)} version(s)"
+            )
+            size = "" if change.bytes is None else f", {change.bytes} bytes"
+            lines.append(f"  {_side_word(change.side):6} {change.key}  (deleted{versions}{size})")
     return lines
 
 

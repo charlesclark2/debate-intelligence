@@ -174,8 +174,8 @@ async def test_each_stage_logs_its_start_and_its_end_in_order_with_its_seconds_c
     """A first pull of 09-01 and 09-08, parsed: the fixture's table gives the counts.
 
     Two weeklies listed, both wanted and fetched; six distinct sources, of which three parse
-    (`verbatim` 1 card, `wiki` 2, `cardmirror` 1), two are unsupported and one fails; nine objects
-    of the parsed store uploaded. The run's clock ticks, so every stage takes some seconds.
+    (`verbatim` 1 card, `wiki` 2, `cardmirror` 1), two are unsupported and one fails; ten objects
+    of the parsed store uploaded: six per-source files, three aggregates and the placement state. The run's clock ticks, so every stage takes some seconds.
     """
     heard = Heard()
     clock = TickingClock()
@@ -235,7 +235,7 @@ async def test_each_stage_logs_its_start_and_its_end_in_order_with_its_seconds_c
         "unsupported": 2,
         "failed": 1,
         "cards": 4,
-        "uploaded": 9,
+        "uploaded": 10,
         "not_published": 0,
     }
     assert ends["search_index"].counts == {}, "no search index stage is wired in here"

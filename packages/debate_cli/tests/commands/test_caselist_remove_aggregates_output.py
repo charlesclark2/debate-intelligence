@@ -136,14 +136,69 @@ def test_the_json_carries_each_aggregate_by_key_with_its_counts() -> None:
 def test_the_execution_says_how_many_it_rewrote_and_that_nothing_is_rebuilt() -> None:
     plan = a_plan()
     report = dataclasses.replace(
-        executed(plan), aggregates_rewritten=2, aggregate_rows_dropped=3, aggregates_deleted=1
+        executed(plan),
+        aggregates_rewritten=2,
+        aggregate_rows_dropped=3,
+        aggregates_deleted=1,
+        placement_states_deleted=2,
     )
 
     text = render_plan(plan, report)
     data = json.loads(json.dumps(plan_summary(plan, SETTINGS, report)))
 
     assert (
-        "Parsed store: 2 aggregate(s) rewritten without 3 row(s); 1 in retired directories deleted. "
-        "Nothing is to be rebuilt."
+        "Parsed store: 2 aggregate(s) rewritten without 3 row(s); 1 in retired directories deleted; "
+        "2 placement state(s) deleted, so the next parse rebuilds those directories in full. Nothing is "
+        "to be rebuilt by hand."
     ) in text.splitlines()
-    assert data["aggregates_done"] == {"rewritten": 2, "rows_dropped": 3, "deleted": 1}
+    assert data["aggregates_done"] == {
+        "rewritten": 2,
+        "rows_dropped": 3,
+        "deleted": 1,
+        "placement_states_deleted": 2,
+    }
+
+
+def test_the_placement_states_are_under_their_own_heading_as_deleted_on_each_side() -> None:
+    """`v1-e31-t10`: a removal deletes each placement state it reaches, here and in the bucket with every
+    version, and never edits one. The line says which side, the key, and in the bucket how many versions."""
+    state = f"parsed/testcl26/{CURRENT}/placement-state.sqlite"
+    plan = dataclasses.replace(
+        a_plan(),
+        aggregates=(
+            *a_plan().aggregates,
+            AggregateChange(
+                key=state,
+                side=Side.BUCKET,
+                caselist="testcl26",
+                version=CURRENT,
+                name="placement-state.sqlite",
+                action=AggregateAction.DISCARD,
+                bytes=4096,
+                versions=(older(state), older(state)),
+            ),
+            AggregateChange(
+                key=f"testcl26/{CURRENT}/placement-state.sqlite",
+                side=Side.LOCAL,
+                caselist="testcl26",
+                version=CURRENT,
+                name="placement-state.sqlite",
+                action=AggregateAction.DISCARD,
+            ),
+        ),
+    )
+
+    text = render_plan(plan, None)
+    data = json.loads(json.dumps(plan_summary(plan, SETTINGS, None)))
+
+    shown = section(text, "PLACEMENT STATES DELETED").splitlines()
+    assert shown == [
+        "PLACEMENT STATES DELETED: 2 file(s), every version, never edited",
+        "  Each holds the words of the sources it was built from. The next parse of each directory",
+        "  rebuilds it in full and writes a new one.",
+        f"  bucket {state}  (deleted, 2 version(s), 4096 bytes)",
+        f"  here   testcl26/{CURRENT}/placement-state.sqlite  (deleted)",
+    ]
+    assert "placement-state" not in section(text, "AGGREGATES REWRITTEN WITHOUT THE REMOVED ROWS")
+    assert [one["action"] for one in data["aggregates"]][-2:] == ["discard", "discard"]
+    new_lines_name_no_one("\n".join(shown))

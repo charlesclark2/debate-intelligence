@@ -240,7 +240,9 @@ EXPECTED_DETAILS: dict[str, list[dict[str, Any]]] = {
             "stages": [],
             "failure_codes": [],
             "hint": None,
-            # The nine counts `v1-e34-t17` wrote by hand for a first pull of these two weeks.
+            # The nine counts `v1-e34-t17` wrote by hand for a first pull of these two weeks, with
+            # the placement state uploaded too (`v1-e31-t10`): six per-source files, three aggregates
+            # and the state.
             "parse": {
                 "caselists": 1,
                 "full_parses": 1,
@@ -249,7 +251,7 @@ EXPECTED_DETAILS: dict[str, list[dict[str, Any]]] = {
                 "unsupported": 2,
                 "failed": 1,
                 "cards": 4,
-                "uploaded": 9,
+                "uploaded": 10,
                 "not_published": 0,
             },
             "search_index": None,
@@ -339,7 +341,19 @@ them with these words in place of those, and with nothing else changed."""
 def as_this_build_words_it(text: str) -> str:
     for theirs, ours in WORDS_THIS_BUILD_KEEPS.items():
         text = text.replace(theirs, ours)
-    return text
+    return A_PARSED_STORE_PUBLISH_AS_THE_START_COMMIT_COUNTED_IT.sub(
+        lambda found: f"{int(found['objects']) + 1} object(s) of the parsed store uploaded", text
+    )
+
+
+A_PARSED_STORE_PUBLISH_AS_THE_START_COMMIT_COUNTED_IT: Final = re.compile(
+    r"(?P<objects>\d+) object\(s\) of the parsed store uploaded"
+)
+"""The parse stage's count of the parsed store's objects it published, as the start commit wrote it:
+per-source files and aggregates. Since `v1-e31-t10` every published directory also holds its
+placement state, so in the one stored scenario that publishes one (one directory, published once)
+this build's count is the start commit's plus one. The reason is a string, so the record's shape is
+unchanged."""
 
 
 SEARCH_INDEX_STAGE_THIS_BUILD_ADDS: Final = {

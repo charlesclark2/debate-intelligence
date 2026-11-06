@@ -721,6 +721,27 @@ async def test_an_unreadable_line_stops_the_run_incomplete_with_nothing_written(
     } | {key for key, _ in everything_under(world, "manifests/_suppression/preflight/")}
 
 
+async def test_a_table_changed_since_the_plan_stops_the_run_with_nothing_written(world: RemovalWorld) -> None:
+    """A publish between the dry run and the execution: the rewrite is of the bytes the plan counted only."""
+    plan = await plan_removal(world, "only")
+    table = world.data_dir / "parsed" / local_key(CASELIST, CURRENT, "index.jsonl")
+    changed = world.data_dir.parent / "changed-index.jsonl"
+    changed.write_bytes(table.read_bytes() + table.read_bytes().splitlines(keepends=True)[0])
+    await world.bucket.put_file(bucket_key(CASELIST, CURRENT, "index.jsonl"), changed)
+
+    with pytest.raises(RemovalIncomplete) as stopped:
+        await world.service().execute(plan)
+
+    assert error_code_of(stopped.value.__cause__ or stopped.value) == "AGGREGATE_REWRITE_REFUSED"
+    assert await world.suppression().entries() == ()
+    still_there = [
+        line
+        for line in local_lines(world, CASELIST, CURRENT, "occurrences.jsonl")
+        if digest("only").encode() in line
+    ]
+    assert len(still_there) == 2, "this machine's table is as it was"
+
+
 # ------------------------------------------------------------------------------------------------
 # The residue check after a rewrite: the ruling's Q4
 # ------------------------------------------------------------------------------------------------

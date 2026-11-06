@@ -95,6 +95,7 @@ THE_LOG = "removal-log.jsonl"
 THE_PATH_HOLDS = "path-holds.jsonl"
 THE_REMOVAL_SCOPES = "removal-scopes.jsonl"
 THE_WITHDRAWALS = "withdrawals.jsonl"
+THE_REMOVAL_AGGREGATES = "removal-aggregates.jsonl"
 PLACES = ("local", "bucket")
 
 #: What the stored history leaves suppressed, written from `suppression_list_scenario.py`'s
@@ -200,15 +201,21 @@ def test_a_path_entry_is_a_line_an_older_build_would_refuse_which_is_why_it_is_n
         jsonschema.validate(json.loads(entry), schemas_of(build)["suppression_list_line"])
 
 
-def test_what_this_build_adds_is_three_files_beside_the_list_and_the_log_in_each_place() -> None:
-    """The path holds (`v1-e30-t13`), the removal scopes (`v1-e30-t15`) and the withdrawals (`v1-e30-t16`)."""
+def test_what_this_build_adds_is_four_files_beside_the_list_and_the_log_in_each_place() -> None:
+    """The path holds (`v1-e30-t13`), the removal scopes (`v1-e30-t15`), the withdrawals (`v1-e30-t16`)
+    and the aggregate record (`v1-e30-t33`)."""
     for place in PLACES:
         ours = {path.name for path in (THIS_BUILD / place).iterdir()}
         for build, directory in OLDER_BUILDS.items():
             theirs = {path.name for path in (directory / place).iterdir()}
             assert theirs == {THE_LIST, THE_LOG}, build
-            assert ours - theirs == {THE_PATH_HOLDS, THE_REMOVAL_SCOPES, THE_WITHDRAWALS}, build
-    for added in (THE_PATH_HOLDS, THE_REMOVAL_SCOPES, THE_WITHDRAWALS):
+            assert ours - theirs == {
+                THE_PATH_HOLDS,
+                THE_REMOVAL_SCOPES,
+                THE_WITHDRAWALS,
+                THE_REMOVAL_AGGREGATES,
+            }, build
+    for added in (THE_PATH_HOLDS, THE_REMOVAL_SCOPES, THE_WITHDRAWALS, THE_REMOVAL_AGGREGATES):
         assert (THIS_BUILD / "local" / added).read_bytes() == (THIS_BUILD / "bucket" / added).read_bytes()
 
 

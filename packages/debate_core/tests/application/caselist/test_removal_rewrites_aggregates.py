@@ -685,6 +685,29 @@ async def test_a_team_withdrawal_drops_its_disclosures_rows_and_keeps_the_entry_
         assert local_lines(world, SECOND, CURRENT, name) == second[name], name
 
 
+async def test_a_rerun_of_a_completed_withdrawal_leaves_the_version_it_left_clean(
+    world: RemovalWorld,
+) -> None:
+    """`team`'s per-source file stays, since Bravo holds it, so the same request run again reaches the
+    directory again. Its rewrite, written well inside the first run and since replaced by a rebuild, is
+    the version that run left clean: status never counts it, and the re-run does not purge it."""
+    remover = world.service()
+    selector = parse_team_selector(f"{CASELIST}/{ALPHA[0]}/{ALPHA[1]}")
+    asked = {"request_id": REQUEST, "reason": ReasonCode.REQUESTED_BY_TEAM}
+    assert (await remover.execute(await remover.plan(selector, **asked))).completed
+    key = bucket_key(CASELIST, CURRENT, "occurrences.jsonl")
+    ((rewrite, body),) = bucket_versions(world, key)
+    backdate(world, key, rewrite, REMOVAL_TIME - timedelta(minutes=20))
+    rebuilt = world.data_dir.parent / "rebuilt-occurrences.jsonl"
+    rebuilt.write_bytes(body)
+    await world.bucket.put_file(key, rebuilt)
+
+    again = await world.service().plan(selector, **asked)
+
+    assert reached(again)[(Side.BUCKET, key)].action is AggregateAction.LEFT
+    assert again.nothing_to_do
+
+
 # ------------------------------------------------------------------------------------------------
 # A line the removal cannot read stops it with nothing written
 # ------------------------------------------------------------------------------------------------

@@ -333,13 +333,15 @@ cd /Users/charlesclark/Documents/debate/debate-intelligence-tool/debate-intellig
 ```
 
 One block, in order: the sample check, the Bedrock login check, the recording on `deep_audit`, then the
-breakdown replaying it. Each `STOP:` line stops it before any model call. Expected runtime: 2 to 4
-minutes.
+breakdown replaying it. Each `STOP:` line stops it before any model call. The sample check must show the
+labels 1.3.0 was scored on (by kind advantage 15, cp 7, da 6, k 10, none 2, t 7; by stance answers 10, reads
+35), or the block stops: the first run of this block, on 2026-11-06, recorded against an older labels file
+because it checked those counts only in the prose below. Expected runtime: 2 to 4 minutes.
 
 ```bash
 SAMPLE=~/Documents/debate/landscape-review/policy-2026-27-nhi-coach-sample-labelled.csv
 ROWS=~/.debate-research/dev/landscape/local-classifier/hspolicy26/policy-2026-27-nhi-coach-sample.jsonl
-if env | grep -q '^DEBATE_'; then echo "STOP: a DEBATE_ variable is set; unset it and paste again"; elif pgrep -f "caselist pull" >/dev/null; then echo "STOP: a caselist pull is running; wait for it to finish"; elif ! uv run debate-research --json landscape evaluate --caselist hspolicy26 --snapshot 2026-10-20 --sample "$SAMPLE" --sample-rows "$ROWS" --check-sample; then echo "STOP: the sample check failed; paste its JSON and record nothing"; elif ! aws sts get-caller-identity --profile debate-dev-bedrock >/dev/null; then echo "STOP: the Bedrock profile is not logged in; log in and paste again"; else uv run debate-research --json landscape evaluate --caselist hspolicy26 --snapshot 2026-10-20 --sample "$SAMPLE" --sample-rows "$ROWS" --model-mode record --route deep_audit; uv run debate-research --json landscape evaluate --caselist hspolicy26 --snapshot 2026-10-20 --sample "$SAMPLE" --sample-rows "$ROWS" --breakdown --route deep_audit; fi
+if env | grep -q '^DEBATE_'; then echo "STOP: a DEBATE_ variable is set; unset it and paste again"; elif pgrep -f "caselist pull" >/dev/null; then echo "STOP: a caselist pull is running; wait for it to finish"; elif ! CHECK=$(uv run debate-research --json landscape evaluate --caselist hspolicy26 --snapshot 2026-10-20 --sample "$SAMPLE" --sample-rows "$ROWS" --check-sample); then echo "$CHECK"; echo "STOP: the sample check failed; paste its JSON and record nothing"; elif ! printf '%s\n' "$CHECK" | grep -qF '"by_label_kind": {"advantage": 15, "cp": 7, "da": 6, "k": 10, "none": 2, "t": 7}' || ! printf '%s\n' "$CHECK" | grep -qF '"by_stance": {"answers": 10, "reads": 35}'; then echo "$CHECK"; echo "STOP: these are not the labels 1.3.0 was scored on; paste this JSON and nothing else"; elif ! aws sts get-caller-identity --profile debate-dev-bedrock >/dev/null; then echo "STOP: the Bedrock profile is not logged in; log in and paste again"; else uv run debate-research --json landscape evaluate --caselist hspolicy26 --snapshot 2026-10-20 --sample "$SAMPLE" --sample-rows "$ROWS" --model-mode record --route deep_audit; uv run debate-research --json landscape evaluate --caselist hspolicy26 --snapshot 2026-10-20 --sample "$SAMPLE" --sample-rows "$ROWS" --breakdown --route deep_audit; fi
 ```
 
 What to read, and paste back: **the three JSON objects, and nothing else.** They hold counts, taxonomy ids
@@ -361,6 +363,22 @@ and sample row numbers.
   * the rows to look at in `breakdown.cards`: 26 (`at:cap-k`, answered `at:generic-k` at 0.62 under
     1.3.0), 12 and 55 (`cap-k`, right under 1.3.0), and 9 and 53 (right under 1.2.0, below the threshold
     under 1.3.0).
+
+### Re-scoring the recording on the right labels, with no model call
+
+The recording's answers do not depend on the labels: the model is sent the cards, never the coach's labels.
+So a recording scored against the wrong labels file is re-scored by replaying it, once the right file is
+back at `$SAMPLE`. This block checks the labels' counts first and makes no model call. Expected runtime:
+about a minute.
+
+```bash
+SAMPLE=~/Documents/debate/landscape-review/policy-2026-27-nhi-coach-sample-labelled.csv
+ROWS=~/.debate-research/dev/landscape/local-classifier/hspolicy26/policy-2026-27-nhi-coach-sample.jsonl
+if env | grep -q '^DEBATE_'; then echo "STOP: a DEBATE_ variable is set; unset it and paste again"; elif pgrep -f "caselist pull" >/dev/null; then echo "STOP: a caselist pull is running; wait for it to finish"; elif ! CHECK=$(uv run debate-research --json landscape evaluate --caselist hspolicy26 --snapshot 2026-10-20 --sample "$SAMPLE" --sample-rows "$ROWS" --check-sample); then echo "$CHECK"; echo "STOP: the sample check failed; paste its JSON and record nothing"; elif ! printf '%s\n' "$CHECK" | grep -qF '"by_label_kind": {"advantage": 15, "cp": 7, "da": 6, "k": 10, "none": 2, "t": 7}' || ! printf '%s\n' "$CHECK" | grep -qF '"by_stance": {"answers": 10, "reads": 35}'; then echo "$CHECK"; echo "STOP: these are not the labels 1.3.0 was scored on; paste this JSON and nothing else"; else echo "$CHECK"; uv run debate-research --json landscape evaluate --caselist hspolicy26 --snapshot 2026-10-20 --sample "$SAMPLE" --sample-rows "$ROWS" --breakdown --route deep_audit; fi
+```
+
+Paste back the two JSON objects, nothing else: the sample check, and the breakdown with `prompt_version`
+`1.3.1` and `calls` 5 (the 3 calls and 2 repairs recorded on 2026-11-06).
 
 If the recording's `scan` counts are above zero, read the hits in the terminal only, with this block.
 **Never paste or copy its output.** For each hit, report only its number and whether it is an ordinary

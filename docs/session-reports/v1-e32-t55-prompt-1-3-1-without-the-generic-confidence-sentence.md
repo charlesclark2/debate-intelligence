@@ -14,6 +14,11 @@
 `deep_audit` under 1.3.1, which the PM records beside 1.3.0's. Its block is under
 [Operator follow-ups](#operator-follow-ups). ac1 passes.
 
+**The re-record came back on 2026-11-06 scored against the wrong labels file**, which had been replaced
+with its 2026-11-02 copy. The recording is sound, but it has to be re-scored once the coach's stance-labelled
+file is back. The repair cassettes' scan also failed on a rule gap. See
+[the re-record, as returned](#the-re-record-as-the-operator-returned-it-2026-11-06) and the PM's questions.
+
 **What was built:**
 
 * **Prompt 1.3.1** (`prompts/landscape/classify_position@1.3.1.md`): 1.3.0 with one sentence taken out of
@@ -230,10 +235,139 @@ ROWS=~/.debate-research/dev/landscape/local-classifier/hspolicy26/policy-2026-27
 if env | grep -q '^DEBATE_'; then echo "STOP: a DEBATE_ variable is set; unset it and paste again"; else uv run debate-research landscape evaluate --caselist hspolicy26 --snapshot 2026-10-20 --sample "$SAMPLE" --sample-rows "$ROWS" --breakdown --route deep_audit; fi
 ```
 
+## The re-record, as the operator returned it (2026-11-06)
+
+The operator ran the block above from this worktree and pasted the three JSON objects. **It is not a
+result the PM can record yet, and ac2 stays NOT RUN.** The recording is good, but it was scored against the
+wrong labels file. The figures below come from the pasted JSON, and the file facts from read-only checks
+of metadata and checksums (no label or card was read).
+
+**1. The labels file is not the one 1.3.0 was scored on.**
+
+* The sample check gave by kind advantage 14, cp 4, da 5, k 10, none 7, t 7, and by stance answers 0 and
+  reads 40, with no second labels. The block's success line expected answers 10 and reads 35, as the PM
+  recorded after the coach's stance sitting: advantage 15, cp 7, da 6, k 10, none 2, t 7, two second labels.
+* `policy-2026-27-nhi-coach-sample-labelled.csv` was last written on 2026-11-05 at 19:15, after 1.3.0's
+  re-record. It is byte for byte `policy-2026-27-nhi-coach-sample-labelled.before-relabel.csv` (SHA-256
+  `cf35398e…`): the copy from 2026-11-02, before the coach's review (`v1-e32-t41`) and before the stance
+  sitting (`v1-e32-t46`). No repository command writes or restores that copy. The stance-labelled file is
+  not in that folder or anywhere else under the home folder by that name.
+* The block did not stop on it. It stopped only on a failed sample check, and gave the expected counts in
+  the prose alone. That was this session's gap. The runbook's block now refuses any other counts before a
+  model call, and so does the re-score block below.
+* What still holds: the rows file (`policy-2026-27-nhi-coach-sample.jsonl`) is unchanged since 2026-10-25,
+  so the same 47 cards were sent. The model is never sent a label, so the 5 new cassettes are a sound 1.3.1
+  recording. Re-scoring is a replay with no model call, once the right file is back.
+
+**2. The repair cassettes' scan was not clean, and the reason is the scan rule.**
+
+* Two of the three batches were repaired, each for `string_too_long` (a rationale over 280 characters), so
+  there were 5 calls. 1.3.0's recording had none.
+* Prompt inputs: clean, 0 hits. Cassettes: 50 hits (44 a JSON key's name, 6 taxonomy words), all 3 texts
+  set aside, clean.
+* Repair cassettes: 63 hits (repaired prompt 45, model rationale 17, cassette metadata 1). Every one carries
+  a trusted mark (53 a JSON key's name, 10 a taxonomy word), and none is a team's name. But every one also
+  carries `in_input`, which `MARKS_THAT_KEEP_A_HIT` keeps whatever else a hit carries. So neither text is
+  set aside and `clean` is false.
+* Why every hit is `in_input`: a repair cassette's input is the failed call, and that includes the model's own
+  failed answer. So each word of its rationales is "in the input", although the mark is meant for words the
+  cards sent. t44's marks were ruled on the kept 1.1.0 recordings, which had no repairs, so this is the first
+  repaired recording they meet. It is the PM's rule, and this session did not change it (question 2 below).
+* The scan's hits have not yet been judged in the terminal.
+
+**What the pasted figures say, for the record only (scored against the 2026-11-02 labels):**
+
+* Pipeline 22 of 38 (0.579, bar 0.85), below the threshold 9, placed though labelled none 6, coverage
+  0.809, weighted 0.481. These are not comparable with 1.3.0's 24 of 32, which was scored against the stance
+  labels.
+* Tokens: 43,165 input and 5,235 output over the 5 calls, which is **$0.208** at `config/model_pricing.yaml`'s
+  $0.003 and $0.015 per 1,000 (estimated about $0.19 before the two repairs).
+
+**Answers that do not depend on the labels** (the model's answer, stance and confidence, against 1.3.0's in
+v1-e32-t49's report):
+
+* Row 26 is now `kritikal-aff`, reads, 0.72. Under 1.3.0 it was `at:generic-k` at 0.62, the wrong generic
+  answer that removed the sentence.
+* The answers naming a generic position: 4 (rows 16, 37, 50 and 60), 1 above the threshold (row 60,
+  `generic-k`, 0.62). In both label files row 60 is labelled `generic-k`, and it is not one of the stance
+  file's `at:` rows, so on the right labels it should count right. The replay will say.
+* Rows 12 and 55 are still `cap-k`, reads (0.82 and 0.72).
+* Row 53 is `single-payer-t` at 0.72, above the threshold again (0.55 under 1.3.0). Row 9 is `rates-da` at
+  0.55, still below.
+
+### For the PM (a relay)
+
+```text
+v1-e32-t55: the operator's 1.3.1 re-record on deep_audit came back, but it cannot be recorded yet.
+
+1. The labels file. On 2026-11-05 at 19:15 (after 1.3.0's re-record) the live
+   policy-2026-27-nhi-coach-sample-labelled.csv became byte for byte the .before-relabel.csv copy of
+   2026-11-02: no t41 review, no t46 stance sitting (sample check: none 7, answers 0, reads 40, no
+   second labels; expected none 2, answers 10, reads 35, two second labels). The stance-labelled file is not
+   on disk under that name. The 1.3.1 recording is sound (same 47 cards; the model never sees labels), so it
+   needs re-scoring, not re-recording.
+   Options:
+   (A) The operator restores the stance-labelled file from a backup, and runs the re-score block (no model
+       call, about a minute; it refuses any other counts).
+   (B) Re-sit the stance rows with the coach from .before-stance-relabel.csv, through
+       scripts/relabel_coach_sample.py as in t46.
+   (C) Rebuild the file by hand from the recorded sittings. Not recommended: that changes the coach's
+       labels outside a sitting.
+   Recommendation: (A), and (B) if no backup has it. Why: the labels are the coach's, and only a copy
+   of his own file or his own sitting keeps them his.
+
+2. The repair cassettes' scan. Two batches were repaired (string_too_long), and the repair cassettes'
+   63 hits each carry a trusted mark (53 JSON key, 10 taxonomy word, 0 a team's name). But all 63 are
+   also in_input, which keeps a hit, because a repair cassette's input includes the model's own failed
+   answer. So clean is false, a first since t44's marks (the 1.1.0 recordings had no repairs).
+   Options:
+   (A) A follow-up that marks a repair cassette's hit in_input only when its words come from the cards
+       the failed call sent, not from the failed answer.
+   (B) Keep the rule, and the operator judges each repaired recording's hits in the terminal.
+   Recommendation: (A), filed under E32, with (B) for this recording in the meantime. Why: in_input exists
+   to keep copied card text, and here it keeps the model's own words.
+
+3. For the record: 43,165 input and 5,235 output tokens in 5 calls, $0.208 at config/model_pricing.yaml.
+   On the wrong labels, pipeline 22 of 38, not comparable with 1.3.0's 24 of 32. Answers, whatever
+   the labels: row 26 left at:generic-k (now kritikal-aff, 0.72); 1 generic answer above the threshold
+   (row 60, generic-k, 0.62, labelled generic-k in both files); rows 12 and 55 still cap-k; row 53
+   above the threshold again.
+   The Goal stays InProgress, ac2 NOT RUN.
+```
+
+### The blocks, once the labels file is back
+
+Go to the worktree:
+
+```bash
+cd /Users/charlesclark/Documents/debate/debate-intelligence-tool/debate-intelligence-worktrees/v1-e32-t55-prompt-1-3-1-without-the-generic-confidence-sentence
+```
+
+The re-score: it replays the 1.3.1 recording with no model call, and stops unless the labels show the stance
+sitting's counts. Expected runtime: about a minute. Paste back the two JSON objects, nothing else. Success
+is the sample check with by stance answers 10 and reads 35, and the breakdown with `prompt_version` `1.3.1`,
+`calls` 5 and `outcomes` summing to 47.
+
+```bash
+SAMPLE=~/Documents/debate/landscape-review/policy-2026-27-nhi-coach-sample-labelled.csv
+ROWS=~/.debate-research/dev/landscape/local-classifier/hspolicy26/policy-2026-27-nhi-coach-sample.jsonl
+if env | grep -q '^DEBATE_'; then echo "STOP: a DEBATE_ variable is set; unset it and paste again"; elif pgrep -f "caselist pull" >/dev/null; then echo "STOP: a caselist pull is running; wait for it to finish"; elif ! CHECK=$(uv run debate-research --json landscape evaluate --caselist hspolicy26 --snapshot 2026-10-20 --sample "$SAMPLE" --sample-rows "$ROWS" --check-sample); then echo "$CHECK"; echo "STOP: the sample check failed; paste its JSON and record nothing"; elif ! printf '%s\n' "$CHECK" | grep -qF '"by_label_kind": {"advantage": 15, "cp": 7, "da": 6, "k": 10, "none": 2, "t": 7}' || ! printf '%s\n' "$CHECK" | grep -qF '"by_stance": {"answers": 10, "reads": 35}'; then echo "$CHECK"; echo "STOP: these are not the labels 1.3.0 was scored on; paste this JSON and nothing else"; else echo "$CHECK"; uv run debate-research --json landscape evaluate --caselist hspolicy26 --snapshot 2026-10-20 --sample "$SAMPLE" --sample-rows "$ROWS" --breakdown --route deep_audit; fi
+```
+
+The scan's hits, label-independent, to read in the terminal only. **Never paste or copy its output.**
+Report only each hit's number and whether it is an ordinary word:
+
+```bash
+SAMPLE=~/Documents/debate/landscape-review/policy-2026-27-nhi-coach-sample-labelled.csv
+ROWS=~/.debate-research/dev/landscape/local-classifier/hspolicy26/policy-2026-27-nhi-coach-sample.jsonl
+if env | grep -q '^DEBATE_'; then echo "STOP: a DEBATE_ variable is set; unset it and paste again"; else uv run debate-research landscape evaluate --caselist hspolicy26 --snapshot 2026-10-20 --sample "$SAMPLE" --sample-rows "$ROWS" --breakdown --route deep_audit; fi
+```
+
 ## Follow-up work
 
 * `test_coach_sample_stance.py`'s module docstring still calls 1.2.0 the stage's default (stale since
   t49). It is harmless and was left alone. A one-word fix for whoever next touches the file.
+* The repair cassettes' `in_input` mark (question 2 of [the relay](#for-the-pm-a-relay)): the PM's to file, under E32.
 * As the PM ruled on t49: `v1-e32-t50`'s held-out sample is measured on 1.3.1, with rows 9 and 53 the ones
   to watch in its breakdown.
 

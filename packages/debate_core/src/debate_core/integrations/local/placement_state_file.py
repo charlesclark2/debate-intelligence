@@ -54,6 +54,7 @@ __all__ = ["read_placement_state_file", "write_placement_state_file"]
 
 _SHA256: Final = re.compile(r"^[0-9a-f]{64}$")
 _COMPLETENESS: Final = {str(completeness): completeness for completeness in CardCompleteness}
+_PAGE_SIZE: Final = 65536
 _STAMPS: Final = ("parser_version", "profile_version", "fingerprint_version", "rules")
 
 
@@ -62,6 +63,10 @@ def write_placement_state_file(path: Path, state: PlacementState) -> None:
     if any("\n" in word for word in state.vocabulary):
         raise ValueError("a vocabulary word holds a line break")
     with closing(sqlite3.connect(path)) as database:
+        # Rows of a body's words and signature run to a few kilobytes: at the default 4 KiB page two fit
+        # a page and a third of the file was page overhead (61.0 MB at 2,000 synthetic sources, 46.3 MB
+        # at 64 KiB, `v1-e31-t10`'s report).
+        database.execute(f"PRAGMA page_size = {_PAGE_SIZE}")
         database.execute("PRAGMA journal_mode = OFF")
         database.execute("CREATE TABLE meta (name TEXT PRIMARY KEY, value TEXT NOT NULL)")
         database.execute("CREATE TABLE sources (sha256 TEXT PRIMARY KEY, cards TEXT NOT NULL)")

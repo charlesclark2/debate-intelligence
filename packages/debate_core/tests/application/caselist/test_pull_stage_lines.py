@@ -175,7 +175,8 @@ async def test_each_stage_logs_its_start_and_its_end_in_order_with_its_seconds_c
 
     Two weeklies listed, both wanted and fetched; six distinct sources, of which three parse
     (`verbatim` 1 card, `wiki` 2, `cardmirror` 1), two are unsupported and one fails; ten objects
-    of the parsed store uploaded: six per-source files, three aggregates and the placement state. The run's clock ticks, so every stage takes some seconds.
+    of the parsed store uploaded: six per-source files, three aggregates and the placement state.
+    The run's clock ticks, so every stage takes some seconds.
     """
     heard = Heard()
     clock = TickingClock()

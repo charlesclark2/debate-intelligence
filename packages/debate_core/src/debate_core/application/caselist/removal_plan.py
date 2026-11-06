@@ -142,12 +142,29 @@ what it says about a team is read from its manifest alone.
 
 ## The parsed card store's aggregates
 
-A source parsed by `caselist parse` (`v1-e31-t06`) is in more than its own per-source file: the
-caselist's `index.jsonl`, `failures.jsonl` and `occurrences.jsonl` hold rows derived from it, and
-from each of its disclosures. Every one of those files, in every version directory of every
-caselist the removal removes or withdraws anything from, is planned for deletion with its versions,
-here and in the bucket (:attr:`ObjectKind.PARSED_AGGREGATE`). They hold nothing that cannot be
-rebuilt, and the next `caselist parse` rebuilds the current directory's without what was removed.
+A source parsed by `caselist parse` (`v1-e31-t06`) is in more than its own per-source file: its
+version directory's `index.jsonl`, `failures.jsonl` and `occurrences.jsonl`, and OpenEv's
+`camp_paths.jsonl`, hold rows derived from it and from each of its disclosures. The PM's ruling of
+2026-11-05 (`v1-e30-t33`) is what the plan does with them (:attr:`RemovalPlan.aggregates`):
+
+* **Which.** On each side, the aggregates of exactly the version directories where that side holds a
+  per-source file of something the plan removes or withdraws, current or in any version. A
+  directory's aggregates are built from its own per-source files alone, and a publish sends those
+  first, so no other directory holds a row of it. A re-run also reads the current aggregates of every
+  version directory of each caselist an earlier run of the request recorded in its scope, or the
+  withdrawal record names, and takes the directories still holding a row to take out, or where a
+  table the request reached before keeps an older version its purge should have taken.
+* **What.** Each is rewritten without the rows a rebuild after the removal would not write
+  (:class:`~debate_core.application.caselist.removal_aggregates.RowsRemoved`), every other line kept
+  byte for byte, and in the bucket every other version is purged. The dry run downloads each to count
+  its rows. One holding no such row is kept, its older versions purged, or left alone. Nothing is
+  rebuilt afterwards. :mod:`~debate_core.application.caselist.removal_aggregates` lists every file a
+  version directory holds and what each carries from one source.
+* **A retired directory**, one retention has tagged for the lifecycle (`v1-e31-t16`), is not rewritten,
+  since the rewrite would be a new version without the tag and never expire: its reached aggregates
+  are deleted with every version, as before, and nothing is rebuilt, since nothing reads it.
+* **A line it cannot read** makes the table :attr:`AggregateAction.UNREADABLE`, and the execution
+  stops before it writes anything.
 
 ## The landscape bundles' school views (`v1-e32-t13`)
 

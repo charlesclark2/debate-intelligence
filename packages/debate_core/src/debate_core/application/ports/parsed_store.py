@@ -596,7 +596,8 @@ class ParsedStore(Protocol):
         ...
 
     async def read_index(self, caselist: str, version: str) -> tuple[SourceEntry, ...] | None:
-        """`index.jsonl`, or `None` when it is absent (a removal deletes it until the next run)."""
+        """`index.jsonl`, or `None` when it is absent (a removal by a build from before `v1-e30-t33`
+        deleted it until the next run; since then a removal rewrites it without the removed rows)."""
         ...
 
     async def read_failures(self, caselist: str, version: str) -> tuple[SourceEntry, ...] | None:

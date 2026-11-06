@@ -41,11 +41,16 @@ digest and an extension (`parsed/…/<sha256>.jsonl`).
 A removal also cleans two things no key names a file in, and this check reaches them by time alone,
 from the listing and the removal log, with nothing downloaded. Under each completed removal:
 
-* **The parsed store's aggregates.** It deletes every version of `index.jsonl`, `failures.jsonl` and
-  `occurrences.jsonl`, in every version directory, of every caselist for a file it removes whole and
-  of each caselist it withdraws a copy from (`removal_plan`, "The parsed card store's aggregates").
-  `caselist_card_stats` writes card tags into them, so any version of one older than the removal can
-  hold a removed card's row.
+* **The parsed store's aggregates.** Since `v1-e30-t33` it rewrites each aggregate of each version
+  directory holding a parsed file of what it removes or withdraws, without those rows, and purges
+  every other version of it; in a retired directory it deletes them with every version
+  (`removal_plan`, "The parsed card store's aggregates"). It records what it reached beside the log
+  (:class:`~debate_core.application.ports.suppression.RemovalAggregatesEntry`): each aggregate with
+  the version it left clean, and each it deleted. So any version of one of those older than the
+  removal, other than the clean one, can hold a removed row, and is counted
+  (:class:`AggregateReach`); an aggregate it did not reach holds none, and is not. A removal made by
+  a build from before that task has no such record: it deleted every aggregate of every caselist it
+  touched, and any version of one older than it is counted, as before.
 * **The manifests it rewrote.** It writes each one without the removed rows and purges every other
   version of it. Any version of that key older than the removal but the rewrite itself is one the
   purge should have taken.
@@ -72,8 +77,8 @@ never named it stays, older than the removal, and holds nothing removed: a camp 
 re-published by `caselist reimport-openev-metadata` keeps one by design. Its age says nothing, so it
 is not counted, and the sweep run again is what covers those.
 
-**Only a caselist the removal touched**, one that held a file it removed or withdrew. A removal of a
-whole file deletes every caselist's aggregates, but only one that held the file can hold a row of it.
+**Only a caselist the removal touched**, one that held a file it removed or withdrew: only one that
+held the file can hold a row of it, and since `v1-e30-t33` only in the directories the record names.
 
 Both facts come from the scope a removal records beside its log entry
 (:class:`~debate_core.application.ports.suppression.RemovalScopeEntry`). A completed removal with no

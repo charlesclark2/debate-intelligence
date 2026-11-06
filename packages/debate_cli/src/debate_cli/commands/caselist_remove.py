@@ -89,6 +89,14 @@ profile may not list or read them it says they were not counted. `--json` carrie
 the withdrawal record, with no path left to show, says which caselist the record names, or that
 none does.
 
+## The parsed store's aggregates (`v1-e30-t33`)
+
+Under *AGGREGATES REWRITTEN WITHOUT THE REMOVED ROWS*, apart from the file's own objects, each
+aggregate of each version directory holding a parsed file of what is removed, by side and key: the
+rows it holds and those that go, the table's bytes, and the older versions purged. Under *AGGREGATES
+DELETED IN RETIRED VERSION DIRECTORIES*, those of a directory retention tagged. `--json` carries
+both as `aggregates`, and an execution's counts as `aggregates_done`. Nothing is rebuilt afterwards.
+
 ## Landscape school views (`v1-e32-t13`)
 
 Under *LANDSCAPE SCHOOL VIEWS* the plan lists each `schools.csv` and `schools.md` of the touched

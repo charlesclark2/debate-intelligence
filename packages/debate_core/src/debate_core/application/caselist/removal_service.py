@@ -1144,9 +1144,11 @@ class CaselistRemovalService:
     def _clear_parses_owed(self, plan: RemovalPlan) -> None:
         """The parse owed for each snapshot whose manifest the removal rewrote (`v1-e40-t08`).
 
-        A removal is followed by the rebuild of each caselist it touched, `caselist parse --publish`
-        (`caselist-removal.md`), which parses whatever of the caselist is unparsed. A file that cannot
-        be read is left as it is, for the parse stage to fail on: it never stops a removal.
+        It was cleared because the rebuild `caselist-removal.md` asked for after a removal, `caselist
+        parse --publish`, parsed whatever of the caselist was unparsed. Since `v1-e30-t33` no rebuild
+        follows a removal; whether the entry should now stay for the next parse stage is a question for
+        the PM (that task's session report), and until it is ruled this clears it as before. A file that
+        cannot be read is left as it is, for the parse stage to fail on: it never stops a removal.
         """
         if self.parse_owed is None:
             return

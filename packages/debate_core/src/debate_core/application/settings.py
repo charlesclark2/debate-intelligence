@@ -1221,6 +1221,14 @@ class ParseSettings(SettingsGroup):
             "fewer than `1/t` sources fails on one file."
         ),
     )
+    incremental_rebuild: bool = Field(
+        default=True,
+        description=(
+            "Whether the aggregate rebuild may place cards from the version directory's placement "
+            "state, reading the documents of only the sources a run added (v1-e31-t10). The table is "
+            "the same either way. Off, every rebuild reads every document, and still writes a new state."
+        ),
+    )
 
     def worker_count(self, cpu_count: int | None) -> int:
         """`workers` when set; otherwise `cpu_count` minus one, at least one and at most `worker_cap`."""

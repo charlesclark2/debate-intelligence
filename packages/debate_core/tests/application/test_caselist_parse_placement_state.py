@@ -17,6 +17,7 @@ import asyncio
 import dataclasses
 import json
 import logging
+import sqlite3
 import tempfile
 from collections.abc import Awaitable, Callable
 from pathlib import Path
@@ -26,7 +27,7 @@ import pytest
 
 from debate_core.application.caselist_parse import FullRebuildReason
 from debate_core.application.ports.parsed_store import PLACEMENT_STATE_NAME
-from debate_core.application.ports.placement_state import PlacementState
+from debate_core.application.ports.placement_state import PlacementState, UnreadablePlacementState
 from debate_core.domain.debate_files import CardCompleteness
 from debate_core.evidence.fingerprints import FINGERPRINT_VERSION, fingerprint_text
 
@@ -370,5 +371,73 @@ def test_the_state_holds_no_path_school_team_tag_or_cite_beyond_its_short_cite()
         assert sorted(path.name for path in world.directory.iterdir() if path.is_file()) == sorted(
             ["index.jsonl", "failures.jsonl", "occurrences.jsonl", PLACEMENT_STATE_NAME]
         ), "a read or a write leaves no journal beside the state"
+
+    in_a_world(test)
+
+
+def _inconsistent(
+    change: Callable[[PlacementState], PlacementState],
+) -> Callable[[PlacementWorld], Awaitable[None]]:
+    async def tamper(world: PlacementWorld) -> None:
+        stored = await world.store.read_placement_state(CASELIST, PARSER_VERSION)
+        assert stored is not None
+        world.state_path.unlink()
+        await world.store.write_placement_state(CASELIST, PARSER_VERSION, change(stored))
+
+    return tamper
+
+
+def _without_a_body(stored: PlacementState) -> PlacementState:
+    gone = min(stored.bodies)
+    return dataclasses.replace(
+        stored, bodies={key: body for key, body in stored.bodies.items() if key != gone}
+    )
+
+
+def _a_word_outside_the_vocabulary(stored: PlacementState) -> PlacementState:
+    return dataclasses.replace(stored, vocabulary=stored.vocabulary[:-1])
+
+
+def _a_short_signature(stored: PlacementState) -> PlacementState:
+    fingerprint, body = next((key, body) for key, body in sorted(stored.bodies.items()) if body.signature)
+    assert body.signature is not None
+    short = dataclasses.replace(body, signature=body.signature[:100])
+    return dataclasses.replace(stored, bodies={**stored.bodies, fingerprint: short})
+
+
+@pytest.mark.parametrize(
+    "change",
+    [_without_a_body, _a_word_outside_the_vocabulary, _a_short_signature],
+    ids=lambda one: one.__name__,
+)
+def test_a_state_that_does_not_hold_together_is_unreadable_and_rebuilt_in_full(
+    change: Callable[[PlacementState], PlacementState], caplog: pytest.LogCaptureFixture
+) -> None:
+    async def test(world: PlacementWorld) -> None:
+        week_one(world)
+        await world.run()
+        await _inconsistent(change)(world)
+        caplog.set_level(logging.INFO)
+
+        await world.run()
+
+        (line,) = rebuild_lines(caplog.records)
+        assert "rebuilt in full (UNREADABLE)" in line
+        assert len(world.store.documents_read) == 3
+        assert world.written() == await world.at_start()
+
+    in_a_world(test)
+
+
+def test_a_state_of_another_layout_is_unreadable() -> None:
+    async def test(world: PlacementWorld) -> None:
+        week_one(world)
+        await world.run()
+        with sqlite3.connect(world.state_path) as database:
+            database.execute("UPDATE meta SET value = '2' WHERE name = 'schema_version'")
+        database.close()
+
+        with pytest.raises(UnreadablePlacementState):
+            await world.store.read_placement_state(CASELIST, PARSER_VERSION)
 
     in_a_world(test)

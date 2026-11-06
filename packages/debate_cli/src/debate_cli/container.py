@@ -1207,6 +1207,7 @@ class ServiceContainer:
             failure_rate_minimum_sources=parse.failure_rate_minimum_sources,
             # Bucket mode (`v1-e40-t04`): raw sources a restored copy lacks come from the bucket.
             fetch_missing=self.run_state().fetch_sources if self._in_bucket_mode else None,
+            incremental_rebuild=parse.incremental_rebuild,
         )
 
     def parsed_publisher(self) -> ParsedStorePublisher:

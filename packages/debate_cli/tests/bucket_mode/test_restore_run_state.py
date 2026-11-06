@@ -188,6 +188,9 @@ def test_the_copy_holds_the_runs_state_and_the_data_directory_and_the_bucket_are
     assert files(copy / "objects" / "manifests") == files(live / "objects" / "manifests")
     assert rows(copy / "debate.sqlite3") == live_rows
     assert world.parsed_digests(copy) == world.parsed_digests(live)
+    # The placement state comes with the directory (`v1-e31-t10`), fetched through the bucket's digest
+    # check as every object of it is.
+    assert [name for name in world.parsed_digests(copy) if name.endswith("/placement-state.sqlite")]
     for name in STATE_FILES:
         assert (copy / name).exists() == (live / name).exists(), name
         if (live / name).exists():

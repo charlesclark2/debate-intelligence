@@ -8,6 +8,7 @@ process. Expected counts are the fixture's hand-written :data:`EXPECTED`. The bu
 from __future__ import annotations
 
 import json
+import logging
 import os
 from collections.abc import Iterator
 from pathlib import Path
@@ -220,6 +221,39 @@ def test_the_rate_is_judged_from_the_minimum_number_of_sources_tried_and_not_bel
     data = envelope["data"] if exit_code is ExitCode.OK else envelope["error"]["details"]
     assert data["failure_rate_judged"] is judged
     assert data["failed"] == EXPECTED["after_0908"]["failed"]
+
+
+def rebuild_lines(caplog: pytest.LogCaptureFixture) -> list[str]:
+    return [
+        record.getMessage()
+        for record in caplog.records
+        if record.name == "debate_core.application.caselist_parse"
+        and ("placement state" in record.getMessage() or "in full" in record.getMessage())
+    ]
+
+
+def test_the_rebuild_places_from_the_state_unless_parse_incremental_rebuild_is_off(
+    imported: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    """`v1-e31-t10`: through the command and its container. A second run places from the placement state
+    the first wrote; with the setting off it rebuilds in full, and the table is the same bytes."""
+    caplog.set_level(logging.INFO)
+    invoke("caselist", "parse", "--caselist", CASELIST)
+    table = imported / "parsed" / CASELIST / DOCX_PARSER_VERSION / "occurrences.jsonl"
+    first = table.read_bytes()
+    caplog.clear()
+
+    assert invoke("caselist", "parse", "--caselist", CASELIST).exit_code == ExitCode.OK
+    (placed,) = rebuild_lines(caplog)
+    assert "placed from the placement state, 0 of" in placed
+    assert table.read_bytes() == first
+
+    caplog.clear()
+    monkeypatch.setenv("DEBATE_PARSE__INCREMENTAL_REBUILD", "false")
+    assert invoke("caselist", "parse", "--caselist", CASELIST).exit_code == ExitCode.OK
+    (rebuilt,) = rebuild_lines(caplog)
+    assert "rebuilt in full (TURNED_OFF)" in rebuilt
+    assert table.read_bytes() == first
 
 
 def test_a_dry_run_counts_and_writes_nothing(imported: Path) -> None:

@@ -199,6 +199,8 @@ async def test_publish_only_sends_exactly_what_the_rebuilds_publish_sends_and_re
     assert published.count(SourceResult.UPLOADED) == len(before)
     assert parser.parsed == []
     assert written(world) == before
+    states = [key for key in await contents(second) if key.endswith("/placement-state.sqlite")]
+    assert len(states) == 1, "publish-only carries the placement state, as the rebuild's publish does"
 
 
 async def test_publish_only_after_a_partial_publish_sends_what_the_rebuilds_publish_would_have(
@@ -217,10 +219,11 @@ async def test_publish_only_after_a_partial_publish_sends_what_the_rebuilds_publ
 
     assert await contents(second) == await contents(first)
     assert outcomes(published) == outcomes(rebuilt)
-    # The new source's file, and the two aggregates it changes: the failures file is unchanged, as
+    # The new source's file, the two aggregates it changes and the placement state, which now holds it
+    # (`v1-e31-t10`): the failures file is unchanged, as
     # `test_publish_after_a_new_snapshot_uploads_only_the_new_source_and_the_aggregates` says.
     assert published.count(SourceResult.SKIPPED) == rebuilt.count(SourceResult.SKIPPED) > 0
-    assert published.count(SourceResult.UPLOADED) == rebuilt.count(SourceResult.UPLOADED) == 3
+    assert published.count(SourceResult.UPLOADED) == rebuilt.count(SourceResult.UPLOADED) == 4
 
 
 async def test_publish_only_over_an_unchanged_bucket_uploads_nothing(world: World, tmp_path: Path) -> None:

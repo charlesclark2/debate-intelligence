@@ -721,6 +721,26 @@ async def test_an_unreadable_line_stops_the_run_incomplete_with_nothing_written(
     } | {key for key, _ in everything_under(world, "manifests/_suppression/preflight/")}
 
 
+async def test_rows_put_back_after_a_completed_removal_are_taken_again_with_the_version_that_held_them(
+    world: RemovalWorld,
+) -> None:
+    """A publish from a store that still held the file, after the removal completed: the same request run
+    again rewrites the table and deletes every version but its rewrite, the one it replaced included."""
+    key = bucket_key(CASELIST, CURRENT, "occurrences.jsonl")
+    held = world.data_dir.parent / "held-occurrences.jsonl"
+    held.write_bytes(b"".join(local_lines(world, CASELIST, CURRENT, "occurrences.jsonl")))
+    await remove(world, "only")
+    await world.bucket.put_file(key, held)
+    assert len(bucket_versions(world, key)) == 2
+
+    plan = await plan_removal(world, "only")
+    assert reached(plan)[(Side.BUCKET, key)].action is AggregateAction.REWRITE
+    assert (await world.service().execute(plan)).completed
+
+    (only_version,) = bucket_versions(world, key)
+    assert digest("only").encode() not in only_version[1]
+
+
 async def test_a_table_changed_since_the_plan_stops_the_run_with_nothing_written(world: RemovalWorld) -> None:
     """A publish between the dry run and the execution: the rewrite is of the bytes the plan counted only."""
     plan = await plan_removal(world, "only")

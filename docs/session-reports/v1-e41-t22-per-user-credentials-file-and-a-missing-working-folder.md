@@ -42,8 +42,28 @@ README's search section, `.env.example` and the root README's precedence paragra
   run it on machines with no configuration (doctor.py module docstring). Provider rows need
   settings.
 
-The relay block in this session's message to the operator carries the proposal and its questions;
-the ruling is recorded here when it comes back.
+The relay block in this session's message to the operator carried the proposal and its questions.
+
+### The PM's ruling (2026-11-05)
+
+1. **Order: yes**, flag > `DEBATE_*` variables > the one `.env` > `~/.debate-research/<env>.env` >
+   profile > built-in > default. `<env>` is the resolved environment, `DEBATE_ENV` is never read
+   from the file, the path is fixed, `test` reads no per-user file, the higher layer wins outright
+   and a blank counts, `config show` prints only the winner, masked, with no new JSON key. The guide
+   says plainly that a key left in a checkout's or folder's `.env` wins, and how to see which won.
+2. **The four names, as a constant**; the caselist token refused with the `caselist auth login`
+   hint; the completeness test accepted; refusals name the file and line, never a value; a line
+   without `=` or with an invalid name by its line number only; a name given twice refused with both.
+3. **`0o077`**, one rule with the token file; `fstat` on the open file before any byte is read; a
+   symlink judged by its target; no ownership check; refused on Windows; a file the owner cannot
+   read gives "could not read". A `0o620` file is refused too, by test.
+4. **Yes**: one `working_folder()`, every startup read through it, relative-path validators a
+   `ConfigurationError` naming the field, the one warning line from the root callback.
+   `--version` from a deleted folder exits 0 with the warning, red first against exit 70.
+5. **`doctor --providers`**, rows as proposed, except OpenAlex's: "with a key" / "keyless (a lower
+   daily allowance)", because the daily figures are not this build's.
+6. **A**: an autouse fixture in the root `conftest.py`; a Deviation.
+7. **All three docs**; the guide uses placeholders only, and its move-the-keys block prints no value.
 
 ## Plan nodes
 

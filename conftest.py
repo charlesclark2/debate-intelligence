@@ -26,6 +26,7 @@ from pathlib import Path
 import pytest
 import typer.rich_utils
 
+from debate_core.application import settings as settings_module
 from debate_core.application.ports.model_router import ModelRouter
 from debate_core.integrations.models.fake_router import DEFAULT_FIXTURE_DIRECTORY, FakeModelRouter
 from debate_core.testing.fakes.clock_and_ids import FixedClock
@@ -76,6 +77,29 @@ def plain_fixed_width_rendering(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(typer.rich_utils, "FORCE_TERMINAL", False)
     monkeypatch.setattr(typer.rich_utils, "COLOR_SYSTEM", None)
     monkeypatch.setattr(typer.rich_utils, "MAX_WIDTH", RENDER_WIDTH)
+
+
+# --------------------------------------------------------------------------------------------
+# The per-user credentials file: never the operator's real one
+# --------------------------------------------------------------------------------------------
+#
+# v1-e41-t22. Settings read `~/.debate-research/<env>.env` for dev and prod, wherever a command runs.
+# On the operator's Mac that file holds real provider keys, and any test that loads dev or prod
+# settings in-process would read them: a real credential in a test process, and tests that pass
+# differently there than on CI, which has no such file. So every test's per-user folder is one that
+# does not exist. A test that needs a per-user file builds one in its own tmp_path and points
+# `debate_core.application.settings.user_credentials_directory` at it with monkeypatch.
+
+NO_PER_USER_CREDENTIALS_FOLDER = "no-per-user-credentials-folder"
+"""The name of the folder, never created, that every test's per-user credentials are looked for in."""
+
+
+@pytest.fixture(autouse=True)
+def no_per_user_credentials(monkeypatch: pytest.MonkeyPatch, tmp_path_factory: pytest.TempPathFactory) -> Path:
+    """Point the per-user credentials folder at one that does not exist, for every test."""
+    missing = tmp_path_factory.getbasetemp() / NO_PER_USER_CREDENTIALS_FOLDER
+    monkeypatch.setattr(settings_module, "user_credentials_directory", lambda: missing)
+    return missing
 
 
 # --------------------------------------------------------------------------------------------

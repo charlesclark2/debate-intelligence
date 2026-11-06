@@ -122,6 +122,11 @@ __all__ = [
     "PROFILE_SUBDIRECTORY",
     "RESERVED_SETTING_PATTERNS",
     "SECRET_PLACEHOLDER",
+    "MISSING_WORKING_FOLDER_WARNING",
+    "USER_CREDENTIALS_FOLDER_NAME",
+    "USER_CREDENTIALS_SOURCE_KIND",
+    "USER_CREDENTIAL_EXCLUSIONS",
+    "USER_CREDENTIAL_VARIABLES",
     "FIRST_BACKFILE_SEASON_START",
     "MAX_CASELIST_BULK_DOWNLOADS_PER_DAY",
     "MAX_CASELIST_DOWNLOADS_PER_MINUTE",
@@ -149,6 +154,10 @@ __all__ = [
     "load_settings",
     "profile_path_for",
     "resolve_environment",
+    "display_user_path",
+    "user_credentials_directory",
+    "user_credentials_file",
+    "working_folder",
 ]
 
 ENV_PREFIX: Final = "DEBATE_"
@@ -168,6 +177,37 @@ PROFILE_SUBDIRECTORY: Final = Path("config") / "profiles"
 
 SECRET_PLACEHOLDER: Final = "***"
 """What a secret renders as. The real value never leaves this module."""
+
+USER_CREDENTIALS_FOLDER_NAME: Final = ".debate-research"
+"""The folder in the home folder that holds the per-user credentials files (`v1-e41-t22`).
+
+The same folder the dev and prod data directories sit in (`~/.debate-research/dev`), so
+`~/.debate-research/dev.env` is beside the data it is for. Fixed: it has to be known before settings
+are loaded, and no setting or variable moves it."""
+
+USER_CREDENTIALS_SOURCE_KIND: Final = "user-env"
+"""The source label's kind for a value from the per-user file: `user-env:~/.debate-research/dev.env`."""
+
+USER_CREDENTIAL_VARIABLES: Final[tuple[str, ...]] = (
+    "DEBATE_PROVIDERS__CONTACT_EMAIL",
+    "DEBATE_PROVIDERS__OPENALEX_API_KEY",
+    "DEBATE_PROVIDERS__SEMANTIC_SCHOLAR_API_KEY",
+    "DEBATE_PROVIDERS__API_DATA_GOV_KEY",
+)
+"""The only names the per-user credentials file may set (the PM's ruling on `v1-e41-t22`, Q2).
+
+The discovery providers' keys and the contact email: what a machine needs to search, and nothing
+that changes what a command does or where it writes. Written out, so that adding one is a decision a
+reviewer sees; `test_settings_user_credentials.py` fails when a new secret provider setting is
+neither here nor in :data:`USER_CREDENTIAL_EXCLUSIONS`."""
+
+USER_CREDENTIAL_EXCLUSIONS: Final[Mapping[str, str]] = {
+    "DEBATE_PROVIDERS__CASELIST_TOKEN": (
+        "The caselist_token is kept by `debate-research caselist auth login`, which knows when it "
+        "expires; a copy here would outlive a logout and win over every later login."
+    ),
+}
+"""Secret provider settings the per-user file refuses by name, each with why and what to do instead."""
 
 OPENCASELIST_API_BASE_URL: Final = "https://api.opencaselist.com/v1"
 """The documented OpenCaselist API, and the only one a prod installation will call (`v1-e01-t21`)."""
@@ -1617,6 +1657,56 @@ def _default_dotenv_path() -> Path | None:
     root = find_repository_root()
     candidate = (root or Path.cwd()) / ".env"
     return candidate if candidate.is_file() else None
+
+
+MISSING_WORKING_FOLDER_WARNING: Final = (
+    "warning: the folder this command was run from no longer exists, so no .env was read from it or "
+    "from a checkout around it; exported variables and ~/.debate-research/<env>.env still apply."
+)
+"""The one line the CLI prints when :func:`working_folder` is `None` (`v1-e41-t22`)."""
+
+
+def working_folder() -> Path | None:
+    """The folder this process runs in, or `None` when it no longer exists or cannot be read."""
+    return Path.cwd()
+
+
+def user_credentials_directory() -> Path | None:
+    """`~/.debate-research`, or `None` on a machine with no home folder to find.
+
+    The one seam the workspace's root `conftest.py` points elsewhere, so that no test process ever
+    reads the operator's real file.
+    """
+    try:
+        return Path.home() / USER_CREDENTIALS_FOLDER_NAME
+    except RuntimeError:
+        return None
+
+
+def user_credentials_file(environment: Environment) -> Path | None:
+    """`~/.debate-research/<env>.env` for `environment`; `None` for `test`, which reads none."""
+    if environment is Environment.TEST:
+        return None
+    directory = user_credentials_directory()
+    return directory / f"{environment.value}.env" if directory is not None else None
+
+
+def _file_modes_are_posix() -> bool:
+    """Whether this system's file modes say who may read a file. Windows' do not."""
+    return os.name != "nt"
+
+
+def _read_open_file(descriptor: int) -> bytes:
+    """Every byte of an open file, read only after its mode has been judged."""
+    return b""
+
+
+def display_user_path(path: Path) -> str:
+    """`path` with the home folder written `~`, as a source label and a message show it."""
+    try:
+        return f"~/{path.relative_to(Path.home())}"
+    except (ValueError, RuntimeError):
+        return str(path)
 
 
 # ------------------------------------------------------------------------------------------------

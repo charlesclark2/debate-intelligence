@@ -6,11 +6,25 @@
 | Spec | [`plan_specs/v1/e30-caselist-ingestion/t33-a-whole-file-removal-reaches-only-the-caselists-that-hold-it.yaml`](../../plan_specs/v1/e30-caselist-ingestion/t33-a-whole-file-removal-reaches-only-the-caselists-that-hold-it.yaml) |
 | Epic / release | `v1-e30-caselist-ingestion` / `v1.1` |
 | Branch | `task/v1-e30-t33-a-whole-file-removal-reaches-only-the-caselists-that-hold-it` |
-| Session status | IN PROGRESS <!-- COMPLETE / PARTIAL / BLOCKED --> |
+| Session status | COMPLETE, with the Goal left `InProgress`: ac3 is the operator's run in dev, after merge and the PM's word <!-- COMPLETE / PARTIAL / BLOCKED --> |
 
 ## Summary
 
-The PM ruled on the proposal on 2026-11-05 (below); the build follows the ruling.
+Built as the PM ruled on 2026-11-05. A whole-file removal, and now a withdrawal too, reaches only
+the version directories, on each side, that hold a per-source parsed file of what it takes out.
+It rewrites each of their aggregates in place without those rows, keeping every other line byte for
+byte, and checks each rewrite before writing it. In the bucket it purges every other version. A
+retired (tagged) directory's aggregates are deleted instead. Nothing is rebuilt afterwards, from
+the Mac or in the cloud, backfiles included. The plan shows the aggregates in a section of their own,
+with row counts and bytes, and `--json` carries them. Each execution records the aggregates it left
+clean beside the log, and `caselist status` counts residue only there. The runbooks follow: step 5
+and P1b, J7, the backfile runbook and the parsed-store doc. Every session-runnable criterion passed:
+the red run was 25 failed and 1 passed against a refuse-nothing skeleton, and all 21 mutants were
+caught, 6 of them after adding five tests and strengthening one. The Goal stays `InProgress`
+because ac3 is the operator's rerun of J4 to J9 in dev, which waits for this branch to merge and for
+the PM's word on `--execute`. Look first at Decisions 2 and 3 (a re-run purges older versions of
+tables its request reached before; a table that held no row is recorded clean), Follow-up 1 (the
+parse owed a removal still clears) and the files outside the task's packages under Deviations.
 
 ## The PM's ruling (2026-11-05), as the build reads it
 
@@ -187,45 +201,272 @@ rewrite, order and purge, the rewrite record and the residue rule, the CLI text,
 
 ## Plan nodes
 
-<!-- One row per Plan graph node, in the order they were completed. -->
-
 | Node | Status | Notes |
 |---|---|---|
-| | | |
+| `a-whole-file-removal-reaches-only-the-ca`: Removal reaches its caselists | Done | Its criterion passes (468 tests); red run against a refuse-nothing skeleton, then 21 mutants |
 
 ## Acceptance criteria
 
-<!-- Goal criteria (ac1…) and every node criterion. Status: PASS / FAIL / NOT RUN. -->
-
 | Criterion | Status | Evidence (command → result) |
 |---|---|---|
-| | | |
+| ac1: the proposal ((a) which aggregates, (b) the plan's text, (c) the rebuild in bucket mode, backfiles included, (d) the runbooks) is ruled on by the PM before any code | PASS | The proposal was committed (`6577c13`) before any code. The PM's ruling of 2026-11-05 is recorded above (`98aba1c`), and the first code commit (`260dcf1`) follows it |
+| ac2: one caselist's file plans only that caselist's aggregates, in the version directories holding its parsed file; two caselists plan both; a re-run plans what a first run left; the ruled rebuild restores the aggregates without the removed rows; on synthetic stores, shown failing first | PASS | `test_removal_rewrites_aggregates.py` (17 tests), `test_removal_rewrites_camp_path_aggregates.py` (1) and `test_removal_aggregates_rewrite.py` (14), on moto with synthetic stores. Against the skeleton: `25 failed, 1 passed in 5.42s` (below). Against the build: `.venv/bin/python scripts/hard_stop.py 100 .venv/bin/python -m pytest <the three files> -q -n 4` → `31 passed in 8.85s`. Coverage, by the ruling's list: one caselist (`test_a_file_one_caselist_holds_reaches_only_the_directories_holding_its_parsed_file`), two (`..._two_caselists_hold_reaches_both`), a backfile (`test_a_backfile_held_only_in_the_bucket_...`), a tagged directory deleted, not rewritten (`test_a_retired_directory_...`), a stopped run found again by its per-source file (`test_a_run_stopped_after_the_aggregates_...`), a team withdrawal and a camp-path withdrawal (`test_a_team_withdrawal_...`, the camp-path module), an unreadable line stopping the run with nothing written (`test_an_unreadable_line_...`), and the residue check after a rewrite (`test_status_counts_...`, two tests) |
+| ac3: the operator reruns J4 to J9 in dev with J7's `--execute` and the ruled rebuild, the card gone in J8, and the PM records it (operator) | NOT RUN | Needs this branch merged into `dev`, a dev build carrying it installed, the AWS profiles, and the PM's word on `--execute` (the ruling's last line). The blocks are evidence-search.md's J2 to J10, with J7 as rewritten (Operator follow-ups) |
+| Node: Removal reaches its caselists tests pass (`uv run pytest packages/debate_core/tests -k removal`) | PASS | `.venv/bin/python scripts/hard_stop.py 115 .venv/bin/python -m pytest packages/debate_core/tests -k removal -q -p no:cacheprovider -W ignore` → `468 passed in 103.02s` (468 of 14,682 collected) |
+
+### The red run
+
+The skeleton took every rule out:
+
+* every version directory of every caselist was reached;
+* no row of any table was dropped;
+* a line that could not be read was read as a row;
+* the check before a write passed anything;
+* no directory was ever retired;
+* residue used the old rule.
+
+The API and wiring were as built. Script: the scratchpad's `skeleton.py`, applied to the committed
+build `260dcf1` and restored with `git checkout HEAD --`.
+
+Against it: `25 failed, 1 passed in 5.42s`. By kind:
+
+* 13 failed an `assert`, 8 raised `DID NOT RAISE`, and 2 failed on an `index.jsonl` comparison and 1
+  on an "after the aggregates" assertion.
+* 1 is a `KeyError`. It is the skeleton's own artifact: reading an unreadable `{"no_source": ...}` line
+  as a row let it reach the row rule, which indexes `source_sha256`. The real code refuses that line
+  first.
+* The one pass is `test_a_surviving_cluster_keeps_the_id_a_removed_card_gave_it`. A rule that drops
+  nothing keeps every id, so that test guards Q3, not a rule.
+
+### Mutants
+
+21 mutants on the rules, in `removal_aggregates.py`, `removal_plan.py`, `removal_service.py` and
+`removal_residue.py`. Script: the scratchpad's `mutants.py`. Each run used a fresh
+`HYPOTHESIS_STORAGE_DIRECTORY`, though none of these tests uses Hypothesis. Each ran `-x` against the
+new test files, plus the residue files for residue mutants. All 21 are caught.
+
+15 were caught at once, each by an assertion or a `DID NOT RAISE`:
+
+* every directory reached;
+* an index row dropped for a withdrawal;
+* an emptied release ignored;
+* a camp path line's own path ignored;
+* no re-stamp;
+* a row without a source accepted;
+* the count check skipped;
+* never retired;
+* aggregates written after the per-source deletes;
+* an unreadable plan not refused;
+* residue by the old rule;
+* residue counting the clean version;
+* a withdrawn copy never taken whole;
+* a re-run skipping older versions of tables reached before;
+* a table that held no row not recorded.
+
+6 survived or were masked, each fixed by a test, then caught:
+
+| Mutant | Why it survived | Now caught by |
+|---|---|---|
+| reach by current per-source files only | no test hid a per-source file under a delete marker | `test_a_per_source_file_left_only_as_an_older_version_still_reaches_its_directory` |
+| camp rows asked by disclosure only | no camp row had every camp path stopped without its release emptied | `test_a_camp_row_whose_every_camp_path_is_stopped_goes_though_no_release_was_emptied` |
+| the check's byte comparison skipped | the digest check refused the tampered file first (a fallback masking it) | `test_the_check_refuses_a_kept_line_that_is_not_the_tables_bytes`, now given a report whose digest matches the tampered file |
+| no changed-since-plan check | no table changed between the plan and the execution | `test_a_table_changed_since_the_plan_stops_the_run_with_nothing_written` |
+| a rewrite purging only what a re-run purges | the two rules agree on a first run | `test_rows_put_back_after_a_completed_removal_are_taken_again_with_the_version_that_held_them` |
+| the purge ignoring clean versions | no re-run of a completed request reached its directory again | `test_a_rerun_of_a_completed_withdrawal_leaves_the_version_it_left_clean` |
+
+### Before the report
+
+The affected set selects **491 test files**. The root conftest imports
+`debate_core.application.ports.parsed_store` (a docstring changed) and `ports.version_directories`
+(the new `RetirementTags` protocol), through `cassette_filing`. That is far over two minutes, so
+under agreement 10 it is left to the pull request's `ci` check, and it was not handed to the
+operator. What ran instead, each bounded with `scripts/hard_stop.py 115`:
+
+| Run | Result |
+|---|---|
+| The changed test directory, `packages/debate_core/tests/application/caselist/`, in two runs: the removal, residue, status, parsed-store, withdrawal and sweep files, then the rest | `472 passed in 66.99s`; `1427 passed in 51.33s` |
+| The always-run list (`tests/architecture`, `tests/specs`, the CLI's `test_app.py`, `test_help_rendering.py`, `test_container_factories.py`) and `tests/docs` | `562 passed in 44.16s` |
+| `packages/debate_cli/tests/commands` and `bucket_mode/test_bucket_mode_removal.py` | `560 passed in 39.34s` |
+| The parsed-store and S3 integration tests, `test_search_index_store_check.py`, `test_caselist_parse*.py`, `test_camp_path_on_occurrence_rows.py` | `334 passed in 7.28s` |
+| `tests/smoke/test_caselist_remove_smoke.py` | `42 passed in 76.30s` |
+| `uv run ruff format --check .`; `uv run ruff check .` | `1973 files already formatted`; `All checks passed!` |
+| `uv run pyright packages/debate_core packages/debate_cli` | `0 errors, 0 warnings, 0 informations` |
+| `uv run lint-imports`; `uv run python scripts/check_thin_handlers.py` | `Contracts: 20 kept, 0 broken.`; `OK: 72 ... handlers within 25 statements` |
+| `uv run python scripts/check_command_blocks.py`; `uv run python scripts/check_links.py` | `OK: no # comments in 678 shell code blocks`; `OK: 3615 relative links and anchors` |
+| `uv run scripts/validate_specs.py` | `OK: 637 files, 41 epics, 574 tasks, 22 releases` |
+| The installed build's own code (`v1.1.0-dev.342`, `git archive` to the scratchpad) reading what this build writes beside the log: `CHECK_AN_OLDER_BUILD_READS=this-builds-files PYTHONPATH=... pytest check_an_older_build_reads_this_builds_files.py` | `5 passed`. *status with the residue check: completed; caselists checked: openev, testcl26*, *removals not checked: 0*: the new `removal-aggregates.jsonl` is ignored by that build, as designed |
 
 ## Files changed
 
-<!-- Group by package or directory; one line on why each group changed. -->
+* **`debate_core/application/caselist/removal_aggregates.py`** (new). The inventory of a version
+  directory, the row rule (`RowsRemoved`), the streaming rewrite (`rewrite_table`,
+  `rewrite_directory`) and the check before a write (`check_rewrite`).
+* **`removal_plan.py`**. `AggregateAction` and `AggregateChange`, the plan's `aggregates`, the reach,
+  and `rows_removed` and `purges`. `ObjectKind.PARSED_AGGREGATE` is gone: aggregates are no longer
+  objects the plan deletes. The constructor takes `local_parsed_objects` and `retirement`.
+* **`removal_service.py`**. Aggregates are staged and checked before anything is written. Bucket
+  aggregates are handled before the per-source deletes, local ones before the local files.
+  `AggregatesLeft`. The record beside the log. The report's counts.
+* **`removal_residue.py` and `status_service.py`**. `AggregateReach`: residue is counted within a
+  build-carrying-this-task removal's record, and by the old rule for older ones.
+* **`ports/suppression.py` and `caselist/suppression.py`**. `RemovalAggregatesEntry` and
+  `AggregateRewriteRecord`, `removal-aggregates.jsonl` beside the log, read and appended with the
+  scopes.
+* **`ports/version_directories.py` and `integrations/s3/version_directories.py`**. `RetirementTags`,
+  and `S3VersionDirectories.retired`.
+* **`ports/parsed_store.py` and `caselist_parse.py`**. Docstrings only.
+* **`debate_cli`**. The plan's sections, the `DONE` line, the `aggregates` and `aggregates_done`
+  JSON keys, and the container's wiring.
+* **Tests.** Three new core files and one new CLI file. The shared world passes the two new
+  constructor arguments only to a build that takes them. Tests that pinned the old behaviour now pin
+  the ruled one (Deviations). The stored records `written_by_this_build/` gained
+  `removal-aggregates.jsonl`, written by `write_stored_suppression_lists.py`.
+* **Docs.** `caselist-removal.md` (step 4's plan sections and checklist; step 5; step 6; step 7's
+  prod rebuild removed; P1b; P3's sentence; the residue section), `evidence-search.md` (J7 and
+  promotion item 8), `caselist-backfiles.md`, `caselist-scheduled-sync.md` (one table row) and
+  `docs/data/parsed-card-store.md`.
 
 ## Deviations from the spec
 
-None.
+1. **Files outside `constraints.packages`.**
+   * `tests/smoke/test_caselist_remove_smoke.py`: the ruling's (b) asked for the smoke pins to be
+     updated. Its removal fixture now parses the removed file, so the removal reaches a directory as
+     in production.
+   * `docs/runbooks/caselist-scheduled-sync.md`: one table row linked to the old P1b heading. It is
+     `docs/runbooks`, so inside; listed for completeness.
+   * `docs/guides/parsed-store-publish-only.md` says an aggregate can be *gone: a removal*. That is
+     still true of a removal by an older build, so I left it.
+2. **Existing tests whose expectations changed with the ruling.**
+   * `test_parsed_store_removal.py`: the older directory's tables are rewritten, not deleted.
+   * `test_removal_covers_later_uploads.py`: its placeholder aggregates are now readable rows, and
+     its aggregates test checks the rewrite.
+   * `test_manifest_and_aggregate_residue.py`: its `removed` fixture parses the removed file in both
+     directories. "Deletes every version of every aggregate" became "leaves every aggregate of a
+     directory holding no parsed file of it", and a test of the rewrite to one version was added.
+   * `test_residue_clearing_gaps.py`: its fixture parses the shared file. "Without a withdrawal
+     record the re-run has no caselist to plan aggregates for" became "still finds the directory by
+     its parsed file". That is stronger than the record, because the per-source file stays while
+     other teams hold the file.
+   * `test_caselist_remove_output_loose_ends.py`: the pinned JSON key sets gained `aggregates` and
+     `aggregates_done`.
+   * `test_suppression_list_is_read_by_every_build.py`: this build adds four files beside the list
+     and log, not three.
+3. **The estimate.** The work took more than the spec's 4h; the PM said the next batch sets it to 8h.
 
 ## Decisions and assumptions
 
-<!-- Choices the spec left open, with the reasoning. -->
+1. **The row rule** is a rebuild's own rule, asked of each row alone, and only of a source the plan
+   names:
+   * A source removed whole, or a withdrawn copy no other holder in the caselist keeps, loses every
+     row.
+   * A withdrawal whose copy stays loses the occurrence rows the list will stop
+     (`occurrence_is_stopped`, with the row's camp paths from `camp_paths.jsonl`).
+   * A camp file loses a release's rows when the plan deletes that release's camp-file record, which
+     it does only when no other row of the release holds the file.
+
+   The caselists a withdrawal's rows are asked in include a held path an import refused it at
+   (`v1-e30-t23`). The raw-copy rule is unchanged.
+2. **A re-run purges older versions of tables its request reached before.** The runbook says running
+   the same request again clears residue. After a completed run the per-source file may be gone and
+   the current table clean, so a re-run reading a directory by its scope also takes it when a table
+   the request's records name has an older version its purge should have taken. Those are the
+   versions `caselist status` counts: older than the run's completion less 15 minutes, and not the
+   version the run left clean. It never touches other directories' history.
+3. **A table of a reached directory that held no row is recorded clean** (its current version), so a
+   stale version of it found later is residue, and the same request run again takes it.
+4. **What is written, and how.**
+   * The rewrite goes up with the everyday profile's `put_file`, as the manifests' do, so the SHA-256
+     is recorded where a restore's check reads it.
+   * The bucket must confirm it by `head` before any version is deleted.
+   * Deletes use the takedown profile, and a version still listed afterwards stops the run
+     `INCOMPLETE` (`AGGREGATES_LEFT`).
+5. **Retirement tags.**
+   * A directory is retired when any of its current aggregates carries the tag, because retiring
+     tags one object at a time.
+   * Tags that cannot be read (`StoreAccessDenied`) leave the directory taken as live and rewritten,
+     and the plan says so.
+   * A directory with no current aggregate has its versions purged.
+6. **Nothing written before the checks.** Every rewrite is downloaded, rewritten and checked into a
+   temporary directory before the suppression entries are appended. An `UNREADABLE` line in the plan,
+   one found then, or a table whose bytes are not the ones the plan counted stops the run `INCOMPLETE`
+   with nothing written but the log entry, its scope and its aggregate record.
+7. **The run lock.** `caselist remove --execute` takes the bucket's run lock in
+   `caselist_remove.remove` (`run_holding_the_bucket_lock(cli, "caselist remove", ...)`, which
+   enters `BucketWriteGuard.held`). It holds it across `plan_and_execute`, the plan, the staging and
+   every write. The weekly run's parse publish takes the same lock, so they never write a table at
+   once. In local mode the guard takes no lease (ruling 3(a) of 2026-10-24); a table changed between
+   the plan and the staging is refused by its digest, as Decision 6 says.
+
+8. **Test data.** Every school, team code and file in the new tests is invented (`Alpha School`/`AlOn`,
+   `Bravo School`/`BrTw`, synthetic PDF bytes), as the existing fixtures' are. The parsed stores are
+   planted from the store's own record models; no real disclosure is in any of them.
 
 ## Operator follow-ups
 
-<!-- Commands the operator must run (anything over ~2 minutes), with where to run them, the exact
-command, expected runtime and what success looks like. Also GitHub/AWS settings to change. -->
+Nothing is to be run until this branch has merged into `dev`, a dev build carrying it is installed,
+and the PM has said `--execute` may run (the ruling: *No --execute outside tests until the PM's
+word*). Then the operator reruns the signed-in journey, `docs/runbooks/evidence-search.md`, "The
+signed-in journey on dev". That is J2 to J6 as written, from a fresh copy with the seed published
+again; then J7 as rewritten here; then J8, J9 and J10. Expected runtime is J2's several minutes and
+J5's few, the rest seconds. J7's two blocks, as the runbook now has them:
 
-None.
+```bash
+REMOVE_SHA=b3afe1c4f57df962b3200ec08b3d1efe023c0243a9b31154f787348864036fa8
+PULL=$(pgrep -fl 'debate-research( --json)? caselist pull')
+OVERRIDES=$(env | grep '^DEBATE_' | cut -d= -f1 | tr '\n' ' ')
+if [[ -n "$PULL" || -n "$OVERRIDES" || "$(date +%u)" = 3 ]]; then
+  echo "STOP: a pull is running, a DEBATE_ override is set, or it is Wednesday"
+else
+  aws sso login --profile debate-dev-evidence
+  cd "$WT" && DEBATE_ENV=dev uv run debate-research caselist remove --source "$REMOVE_SHA" --request RM-2026-91 --reason POLICY
+fi
+```
+
+The dry run is correct only if:
+
+* *WILL BE REMOVED* lists the one file, its object under `raw/caselist/testcl26/` and its parsed
+  file under `parsed/testcl26/2026.10.27-docx-7/`.
+* *AGGREGATES REWRITTEN WITHOUT THE REMOVED ROWS* lists exactly those three tables, all `bucket`:
+  `index.jsonl` *-1 of 3*, `failures.jsonl` *holds none*, `occurrences.jsonl` *-2 of 4*. Those counts
+  are worked out by hand from the seed: three files, and four occurrence rows, two of them the
+  removed file's.
+* There is no retired-directories section and no *UNREADABLE* line.
+
+The operator writes down each table's bytes; the PM records them, as the ruling's (b) asks. Then, in
+the same window:
+
+```bash
+REMOVE_SHA=b3afe1c4f57df962b3200ec08b3d1efe023c0243a9b31154f787348864036fa8
+PULL=$(pgrep -fl 'debate-research( --json)? caselist pull')
+OVERRIDES=$(env | grep '^DEBATE_' | cut -d= -f1 | tr '\n' ' ')
+if [[ -n "$PULL" || -n "$OVERRIDES" || "$(date +%u)" = 3 ]]; then
+  echo "STOP: a pull is running, a DEBATE_ override is set, or it is Wednesday"
+else
+  aws sso login --profile debate-dev-evidence
+  aws sso login --profile debate-dev-evidence-removal
+  cd "$WT" && DEBATE_ENV=dev DEBATE_REMOVAL_PROFILE=debate-dev-evidence-removal uv run debate-research caselist remove --source "$REMOVE_SHA" --request RM-2026-91 --reason POLICY --execute
+fi
+```
+
+Success looks like `DONE in dev` and *Parsed store: 2 aggregate(s) rewritten without 3 row(s); 0 in
+retired directories deleted. Nothing is to be rebuilt.* Then P1b's read-only check prints `0` for
+`parsed/testcl26/2026.10.27-docx-7/occurrences.jsonl`, and J8 passes.
 
 ## Follow-up work
 
-<!-- Bugs, gaps or ideas outside this task's scope, each with the task or epic it belongs to.
-The PM decides whether they become spec changes or new tasks. -->
-
-None.
+1. **The parse owed a removal clears** (`removal_service._clear_parses_owed`, `v1-e40-t08`). It was
+   cleared because the runbook's rebuild after a removal parsed whatever was unparsed. No rebuild
+   follows a removal now, so a snapshot that was owed a parse when a removal rewrote its manifest may
+   wait for the caselist's next import. Unchanged here, and its docstring says so. For the PM: keep
+   the entry, or keep clearing it.
+2. **Other removals in dev's log.** Removals made by older builds (`RM-2026-90` among them) have no
+   aggregate record, so status compares them by the old rule. Nothing changes for them. A re-run of
+   one by this build reads its scope's caselists and takes any directory still holding a row.
+3. **An installed build older than this one** reads `removal-aggregates.jsonl` as an unknown file and
+   ignores it (checked against `v1.1.0-dev.342`), so its `caselist status` counts a newer removal's
+   rewrites as residue. The runbooks say status runs from a build carrying this task. Both the
+   weekly agent and prod need such a build before their next removal, which promotion item 8 now
+   says.
 
 ## PM review
 

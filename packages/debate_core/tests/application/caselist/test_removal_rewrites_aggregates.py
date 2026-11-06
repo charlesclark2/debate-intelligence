@@ -693,8 +693,11 @@ async def test_a_rerun_of_a_completed_withdrawal_leaves_the_version_it_left_clea
     the version that run left clean: status never counts it, and the re-run does not purge it."""
     remover = world.service()
     selector = parse_team_selector(f"{CASELIST}/{ALPHA[0]}/{ALPHA[1]}")
-    asked = {"request_id": REQUEST, "reason": ReasonCode.REQUESTED_BY_TEAM}
-    assert (await remover.execute(await remover.plan(selector, **asked))).completed
+    assert (
+        await remover.execute(
+            await remover.plan(selector, request_id=REQUEST, reason=ReasonCode.REQUESTED_BY_TEAM)
+        )
+    ).completed
     key = bucket_key(CASELIST, CURRENT, "occurrences.jsonl")
     ((rewrite, body),) = bucket_versions(world, key)
     backdate(world, key, rewrite, REMOVAL_TIME - timedelta(minutes=20))
@@ -702,7 +705,7 @@ async def test_a_rerun_of_a_completed_withdrawal_leaves_the_version_it_left_clea
     rebuilt.write_bytes(body)
     await world.bucket.put_file(key, rebuilt)
 
-    again = await world.service().plan(selector, **asked)
+    again = await world.service().plan(selector, request_id=REQUEST, reason=ReasonCode.REQUESTED_BY_TEAM)
 
     assert reached(again)[(Side.BUCKET, key)].action is AggregateAction.LEFT
     assert again.nothing_to_do

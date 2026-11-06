@@ -593,9 +593,36 @@ nothing for them.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-11-05
 
 **Notes:**
+
+A sweep that measured instead of guessing: every timer armed on a real loop recorded per test, so the
+waits a grep cannot see behind a default argument were found too, and every fix tightened its assertion.
+
+1. **ac1 passes, both halves.** The footer test now runs its whole loop on virtual time (ruling 1): red
+   at the 2.1 s stall without the fixture, 40 of 40 per state with it, at both profiles. The sweep names
+   every test with a real-time exposure by name and count, with a verdict for each.
+2. **Eleven functions fixed (twelve cases), each red first under a simulated busy runner and stable over
+   20 repetitions.** The fixes are checked against the breaks they exist to catch: the selector check
+   fails all five tests against a virtual clock that really sleeps, where the old bounds caught two; a
+   planted doubled time limit fails both new STS tests and passed the old ones. Assertions only got
+   tighter (`== [120.0]`, `== 0.2`, `== 0.4`, "the real selector never waited").
+3. **No production code changed**, and `moving_clock` is gone with its one branch.
+4. **Deviations accepted:** the scope is the PM's narrowing and rulings, and the PM amends the spec in
+   the next batch; the pty test outside the packages named, not touched.
+5. **Decisions accepted.** The virtual loop for the CLI tests and the STS pair, because their waits are
+   the loop's; the selector check read at the real selector beneath, with a guard that it recorded
+   something; PacerTime left in its one file, since the condition for moving it is not met.
+6. **The six wall-clock performance budgets stay as they are, no task:** they measure elapsed real time
+   by design, two are off the PR path, and none has failed. The 227 evidence-search cases stay under
+   ruling 5.
+7. **Follow-ups:** the three the PM files in the next batch (E31, the worker's limit from ready; E40, the
+   run lock's test hook; E41, the pty timer).
+8. **Closing checks:** the selection less `tests/scripts` (1,044 passed), ruff, pyright, lint-imports,
+   the specs, command blocks, links and the docs index are clean; the 57-file affected set is the pull
+   request's `ci` (agreement 10), and with this task the footer test is no longer the one to watch.
+9. **Merge:** a plain `scripts/task pr` once `ci` is green. The Goal is `Succeeded`.

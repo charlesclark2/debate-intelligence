@@ -12,6 +12,39 @@
 
 <!-- 3-6 sentences: what was built, how it fits the epic, anything the PM should look at first. -->
 
+## Proposal for the PM's ruling (written before any code)
+
+Read for it: `debate_core.application.settings` (every layer and every `cwd` read), `config show`,
+`doctor`, v1-e07-t13's report (Q2 and the PM's ruling), `docs/runbooks`, `docs/guides`, the CLI
+README's search section, `.env.example` and the root README's precedence paragraph.
+
+### What is true today, and where it differs from the spec's wording
+
+* **There is one `.env`, not two layers.** The spec lists "the working folder's `.env`, the
+  checkout's `.env`". `_default_dotenv_path` (settings.py line 1615) reads exactly one file: the
+  checkout root's `.env` when the working folder is inside a checkout (`find_repository_root`), and
+  the working folder's own `.env` only outside one. The order today is: flag, `DEBATE_*` variables,
+  that one `.env`, the profile, the built-in profile, the field default.
+* **A blank exported variable already wins.** Measured with invented values: an exported
+  `DEBATE_PROVIDERS__CONTACT_EMAIL=` (empty) over a `.env` that sets an email leaves the setting
+  blank, with source `env:DEBATE_PROVIDERS__CONTACT_EMAIL`, and Crossref uses its public pool.
+* **The crash, traced.** `debate-research --version` run from a deleted folder exits 70 with
+  `FileNotFoundError` from `root_callback` (app.py line 197) → `resolve_environment` →
+  `_environment_from_dotenv` → `_default_dotenv_path` → `find_repository_root` → `Path.cwd()`.
+  `load_settings` fails the same way.
+* **No runbook or guide names the smoke folder.** `grep -rn crossref-smoke` finds it only in three
+  session reports (v1-e07-t03, v1-e07-t13, and the PM's review of v1-e08-t10, which asks for that
+  task's live check to be run from `~/Documents/debate/crossref-smoke`). What tells a reader where
+  keys are read is the CLI README's search section ("Today a `.env` is read from the checkout a
+  command runs in, or, outside a checkout, from the folder it runs in"), `.env.example`'s precedence
+  comment and the root README's precedence paragraph.
+* **Plain `doctor` loads no settings, on purpose**: `scripts/install_channel.sh` and `validate-dev`
+  run it on machines with no configuration (doctor.py module docstring). Provider rows need
+  settings.
+
+The relay block in this session's message to the operator carries the proposal and its questions;
+the ruling is recorded here when it comes back.
+
 ## Plan nodes
 
 <!-- One row per Plan graph node, in the order they were completed. -->

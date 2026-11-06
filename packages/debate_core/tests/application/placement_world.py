@@ -29,10 +29,10 @@ from debate_core.application.ports.parsed_store import (
     FAILURES_NAME,
     INDEX_NAME,
     OCCURRENCES_NAME,
-    PLACEMENT_STATE_NAME,
     DocumentRecord,
     source_object_key,
 )
+from debate_core.application.ports.placement_state import PLACEMENT_STATE_NAME
 from debate_core.application.ports.suppression import ReasonCode, SuppressionAction, SuppressionEntry
 from debate_core.domain.caselist import SnapshotDate, SourceDocument, SourceOrigin
 from debate_core.domain.debate_files import (

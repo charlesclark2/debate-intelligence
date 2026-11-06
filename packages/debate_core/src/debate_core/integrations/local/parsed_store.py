@@ -56,7 +56,6 @@ from debate_core.application.ports.parsed_store import (
     INDEX_NAME,
     OCCURRENCES_NAME,
     PARSED_PREFIX,
-    PLACEMENT_STATE_NAME,
     CampPathRecord,
     DocumentRecord,
     OccurrenceRecord,
@@ -67,7 +66,7 @@ from debate_core.application.ports.parsed_store import (
     parse_version_directory,
     source_object_key,
 )
-from debate_core.application.ports.placement_state import PlacementState
+from debate_core.application.ports.placement_state import PLACEMENT_STATE_NAME, PlacementState
 from debate_core.integrations.file_streaming import INCOMING_FILE_PREFIX, atomic_replacement
 from debate_core.integrations.local.placement_state_file import (
     read_placement_state_file,

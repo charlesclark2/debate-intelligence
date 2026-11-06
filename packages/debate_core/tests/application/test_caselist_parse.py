@@ -68,10 +68,10 @@ from debate_core.application.errors import StoreProfileNotConfigured
 from debate_core.application.ports.debate_files import DebateFileParser
 from debate_core.application.ports.parsed_store import (
     AGGREGATE_NAMES,
-    PLACEMENT_STATE_NAME,
     SourceOutcome,
     version_directory_name,
 )
+from debate_core.application.ports.placement_state import PLACEMENT_STATE_NAME
 from debate_core.application.ports.suppression import (
     ReasonCode,
     SuppressionAction,

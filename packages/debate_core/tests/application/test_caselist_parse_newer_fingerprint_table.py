@@ -244,8 +244,9 @@ async def test_a_publish_over_the_buckets_equal_or_older_table_replaces_it_as_be
     evidence_bucket: str,
     stamped: str,
 ) -> None:
-    """Published at `stamped`, then 09-15 parsed and published by this build: its source and the
-    two aggregates it changes go up, and the bucket's table is this machine's."""
+    """Published at `stamped`, then 09-15 parsed and published by this build: its source, the two
+    aggregates it changes and the placement state (`v1-e31-t10`) go up, and the bucket's table is this
+    machine's."""
     as_build(stamped)
     await world.run()
     assert (await publisher(world, bucket).publish(CASELIST, DOCX_PARSER_VERSION)).succeeded
@@ -257,7 +258,7 @@ async def test_a_publish_over_the_buckets_equal_or_older_table_replaces_it_as_be
 
     assert report.succeeded
     uploaded = {outcome.key for outcome in report.objects if outcome.result is SourceResult.UPLOADED}
-    assert TABLE in uploaded and len(uploaded) == 3
+    assert TABLE in uploaded and len(uploaded) == 4
     assert bucket_objects(s3_client, evidence_bucket)[TABLE] == world.tree()["occurrences.jsonl"]
 
 

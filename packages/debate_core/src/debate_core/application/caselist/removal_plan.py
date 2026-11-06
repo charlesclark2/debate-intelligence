@@ -300,10 +300,10 @@ from debate_core.application.ports.evidence_store import EvidenceObjectStore, Ob
 from debate_core.application.ports.evidence_versions import EvidenceVersionStore, ObjectVersion
 from debate_core.application.ports.parsed_store import (
     PARSED_PREFIX,
-    PLACEMENT_STATE_NAME,
     REBUILT_NAMES,
     source_digest_of_key,
 )
+from debate_core.application.ports.placement_state import PLACEMENT_STATE_NAME
 from debate_core.application.ports.providers import Clock
 from debate_core.application.ports.suppression import (
     REMOVAL_REASONS,

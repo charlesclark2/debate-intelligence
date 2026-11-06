@@ -27,8 +27,11 @@ import pytest
 
 import debate_core.evidence.near_duplicates as near_duplicates
 from debate_core.application.caselist_parse import FullRebuildReason
-from debate_core.application.ports.parsed_store import PLACEMENT_STATE_NAME
-from debate_core.application.ports.placement_state import PlacementState, UnreadablePlacementState
+from debate_core.application.ports.placement_state import (
+    PLACEMENT_STATE_NAME,
+    PlacementState,
+    UnreadablePlacementState,
+)
 from debate_core.domain.debate_files import CardCompleteness
 from debate_core.evidence.fingerprints import FINGERPRINT_VERSION, fingerprint_text
 

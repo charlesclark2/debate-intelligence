@@ -296,6 +296,24 @@ operator. What ran instead, each bounded with `scripts/hard_stop.py 115`:
 | `uv run scripts/validate_specs.py` | `OK: 637 files, 41 epics, 574 tasks, 22 releases` |
 | The installed build's own code (`v1.1.0-dev.342`, `git archive` to the scratchpad) reading what this build writes beside the log: `CHECK_AN_OLDER_BUILD_READS=this-builds-files PYTHONPATH=... pytest check_an_older_build_reads_this_builds_files.py` | `5 passed`. *status with the residue check: completed; caselists checked: openev, testcl26*, *removals not checked: 0*: the new `removal-aggregates.jsonl` is ignored by that build, as designed |
 
+**After the PM review: the pull request's CI.** Part 3 of 8 failed one test that none of the runs
+above reached: `bucket_mode/test_backfile_import.py`, whose
+`test_running_it_again_rebuilds_the_aggregates_after_a_removal_with_no_second_download` pinned the
+old behaviour (*assert not ['parsed/testcl25/2026.11.03-docx-9/occurrences.jsonl']*). It is renamed
+`test_a_removal_rewrites_the_aggregates_in_the_bucket_and_running_it_again_leaves_them_without_the_rows`.
+It now asserts that the removal leaves the backfile's table without the removed file's rows and with
+the other two sources' rows. It keeps the part where running the import again downloads nothing a
+second time and leaves the rows out. A mutant in which `occurrence_goes` keeps a whole-file row
+fails it at the new assertion. Three docstrings that said a removal deletes the aggregates until the
+next parse now name the retired directory (`file_recipes.py`, `search_index_build.py`,
+`test_caselist_parse_newer_fingerprint_table.py`).
+
+| Run | Result |
+|---|---|
+| `packages/debate_cli/tests/bucket_mode/test_backfile_import.py` | `33 passed in 108.22s` |
+| `test_caselist_parse_newer_fingerprint_table.py` | `13 passed in 2.19s` |
+| ruff format and check, pyright on the two test files | unchanged, `All checks passed!`, `0 errors` |
+
 ## Files changed
 
 * **`debate_core/application/caselist/removal_aggregates.py`** (new). The inventory of a version

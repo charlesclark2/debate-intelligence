@@ -444,24 +444,15 @@ class BodyWords(Mapping[str, "array[int]"]):
         """Each word once, at its number."""
 
     @classmethod
-    def numbered(cls, words: Mapping[str, array[int]], vocabulary: Sequence[str]) -> BodyWords:
-        """The bodies' words from their numbers in another vocabulary, numbered again as
-        :class:`BodyWords` numbers them from the bodies' text: in order of first appearance, bodies
-        taken by fingerprint (`v1-e31-t10`). So the numbers are the same whichever way the words came,
-        from a card or from the placement state, and nothing downstream can tell the two apart."""
-        renumbered = [-1] * len(vocabulary)
-        spelled: list[str] = []
-        numbers: dict[str, array[int]] = {}
-        for fingerprint in sorted(words):
-            held = words[fingerprint]
-            for number in dict.fromkeys(held):
-                if renumbered[number] < 0:
-                    renumbered[number] = len(spelled)
-                    spelled.append(vocabulary[number])
-            numbers[fingerprint] = array(_WORD_NUMBER, map(renumbered.__getitem__, held))
+    def from_numbers(cls, words: Mapping[str, array[int]], vocabulary: Sequence[str]) -> BodyWords:
+        """The bodies' words as numbers in `vocabulary`, held as given (`v1-e31-t10`): the placement
+        state's numbering, not the one :class:`BodyWords` would make from the text. Nothing the
+        clusterer or the linker does depends on which number a word has, only on two words having one
+        number exactly when they are the same string, as nothing depends on the hash seed (this
+        module's docstring, "Why the cluster id cannot depend on input order")."""
         made = cls.__new__(cls)
-        made._numbers = numbers
-        made.vocabulary = tuple(spelled)
+        made._numbers = {fingerprint: words[fingerprint] for fingerprint in sorted(words)}
+        made.vocabulary = tuple(vocabulary)
         return made
 
     def __getitem__(self, fingerprint: str) -> array[int]:

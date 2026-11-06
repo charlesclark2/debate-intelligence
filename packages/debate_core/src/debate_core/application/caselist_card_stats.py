@@ -342,9 +342,9 @@ class CardPlacer:
     caselist's cards source by source and keep none of them.
 
     **Words are numbers in one vocabulary** (`v1-e40-t39`), :attr:`vocabulary`, and so are the words of
-    the keys. The clusterer's :class:`~debate_core.evidence.near_duplicates.BodyWords` is numbered
-    again from them in its own order (:meth:`~debate_core.evidence.near_duplicates.BodyWords.numbered`),
-    the order it numbers bodies' text in, so nothing it does depends on the order cards came in.
+    the keys, numbered as cards come. The clusterer reads them as they are
+    (:meth:`~debate_core.evidence.near_duplicates.BodyWords.from_numbers`): which number a word has
+    decides nothing, only that one word has one number.
 
     **From the placement state** (`v1-e31-t10`). What :meth:`add` keeps of a card is exactly what the
     rebuild's placement state keeps of it. A placer begun from a state (:meth:`adopt`) takes its cards
@@ -479,7 +479,7 @@ class CardPlacer:
     def placements(self) -> list[ClusterPlacement]:
         """One placement per card given, in the order given: steps 1 to 3 of this module's docstring."""
         # One word list for the clusterer and the linker, held as numbers (`v1-e40-t39`).
-        words = BodyWords.numbered(self._words, self._spelled)
+        words = BodyWords.from_numbers(self._words, self._spelled)
         clusters = cluster_near_duplicates(None, self._thresholds, words=words, signatures=self.signatures)
         full_by_cite: defaultdict[str | None, dict[str, FullCardWords]] = defaultdict(dict)
         for (fingerprint, key), copies in self._copies.items():

@@ -25,6 +25,7 @@ from typing import Final
 
 import pytest
 
+import debate_core.evidence.near_duplicates as near_duplicates
 from debate_core.application.caselist_parse import FullRebuildReason
 from debate_core.application.ports.parsed_store import PLACEMENT_STATE_NAME
 from debate_core.application.ports.placement_state import PlacementState, UnreadablePlacementState
@@ -439,5 +440,53 @@ def test_a_state_of_another_layout_is_unreadable() -> None:
 
         with pytest.raises(UnreadablePlacementState):
             await world.store.read_placement_state(CASELIST, PARSER_VERSION)
+
+    in_a_world(test)
+
+
+def test_a_full_card_sharing_its_text_with_an_abbreviated_card_seen_first_is_placed_as_before() -> None:
+    """A body written as first and last words around an ellipsis is a full card in one file and an
+    abbreviated one in another: one fingerprint, the abbreviated card first. The full card's words are
+    still taken, from the state as from the document."""
+    text = f"{' '.join(X[:6])} … {' '.join(X[-6:])}"
+
+    async def test(world: PlacementWorld) -> None:
+        world.add(
+            "both",
+            (Card(0, text, CardCompleteness.ABBREVIATED), Card(3, text), Card(6, " ".join(X))),
+            week=0,
+        )
+        await world.run()
+        assert world.written() == await world.at_start()
+        world.add("later", (Card(0, text),), week=1)
+
+        await world.run()
+
+        assert world.store.documents_read == [world.names["later"]]
+        assert world.written() == await world.at_start()
+
+    in_a_world(test)
+
+
+def test_a_week_signs_only_its_new_bodies(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The point of the state: a stored body's MinHash signature is read, not taken again. The week
+    adds one new body and one copy of a stored one, so one body is signed."""
+    signed: list[int] = []
+    original = near_duplicates.minhash_signature
+
+    def counting(*args: object, **kwargs: object) -> tuple[int, ...]:
+        signed.append(1)
+        return original(*args, **kwargs)  # type: ignore[arg-type]
+
+    async def test(world: PlacementWorld) -> None:
+        week_one(world)
+        await world.run()
+        world.add("fourth", (Card(0, " ".join(passage(4, 70))), Card(3, " ".join(X))), week=1)
+        monkeypatch.setattr(near_duplicates, "minhash_signature", counting)
+
+        await world.run()
+
+        assert len(signed) == 1
+        assert world.written() == await world.at_start()
 
     in_a_world(test)

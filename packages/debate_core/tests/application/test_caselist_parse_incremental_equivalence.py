@@ -42,6 +42,7 @@ KINDS: Final = (
     "copy",
     "copy",
     "one word changed",
+    "two words changed",
     "three words changed",
     "cut",
     "short cut",
@@ -68,6 +69,10 @@ def card_of(drawn: Drawn, element: int) -> Card:
     cite = CITES[drawn.cite]
     if drawn.kind == "one word changed":
         passage_words[length // 2] = "gallimaufry"
+    elif drawn.kind == "two words changed":
+        # A copy only the MinHash bands find: Jaccard about 0.8, under 0.9 of either inside the other.
+        for offset, word in ((length // 3, "hobbledehoy"), (2 * length // 3, "gallimaufry")):
+            passage_words[offset] = word
     elif drawn.kind == "three words changed":
         for offset, word in (
             (length // 4, "hobbledehoy"),

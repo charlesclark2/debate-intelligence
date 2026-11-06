@@ -906,3 +906,16 @@ async def test_status_counts_an_older_version_of_a_placement_state_it_deleted(wo
     assert await aggregate_residue(world) == {STATE: 1}, (
         "the new state is not residue; the stale one still is"
     )
+
+
+async def test_a_state_written_between_the_plan_and_the_execution_is_deleted_too(world: RemovalWorld) -> None:
+    """Every version of a reached state goes, whenever it was written: one written after the dry run
+    holds the removed source's words as much as one written before."""
+    await plant_state(world, CASELIST, CURRENT, versions_in_the_bucket=1)
+    plan = await plan_removal(world, "only")
+    path = world.data_dir / "parsed" / local_key(CASELIST, CURRENT, STATE)
+    await world.bucket.put_file(bucket_key(CASELIST, CURRENT, STATE), path)
+
+    assert (await world.service().execute(plan)).completed
+
+    assert bucket_versions(world, bucket_key(CASELIST, CURRENT, STATE)) == []

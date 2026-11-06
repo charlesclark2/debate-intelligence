@@ -50,13 +50,14 @@ ticked yes or no with its date, before the coach's beta (`v1-e39-t10` ac7).
 | 3. Step 11 in full, nothing destroyed | yes | 2026-11-03 | 105 added, 6 changed, 0 destroyed over two passes, then `No changes`; settings, keys, the deploy and its checks ([the record](../runbooks/evidence-search.md#step-11--prod)) |
 | 4. `v1-e29-t08`'s prod plan | yes | 2026-11-03 | Covered by step 11: the plan after it says `No changes` |
 | 5. Prod's suppression list exists | yes | 2026-11-03 | It did not; created empty by the takedown role, 0 bytes, `aws:kms` |
-| 6. Prod's parsed store current | no | | Dev holds `docx-7` since the hand run of 2026-11-05 (`20261105T034547Z`); the parsed store's steps to prod are `v1-e40-t16`'s to write |
-| 7. Prod's first index published | no | | After item 6, from the same restored copy (`v1-e40-t16`) |
-| 8. `v1-e39-t07`'s prod removal exercise | no | | Not before `v1-e30-t33`: a whole-file removal today plans every caselist's aggregates, and the rebuild reads the Mac's own store |
-| 9. Superseded parsed directories retired in prod | no | 2026-11-03 | Dry run only: all 20 directories (`docx-1` to `docx-6`, four caselists) `not yet superseded` until item 6; then five directories |
-| 10. The request to school IT | | | |
-| 11. The beta's prod accounts created | | | |
-| 12. The Lambda bandwidth-quota request sent | yes | 2026-10-31 | Granted: `L-14320ECE` reads 1,250 Mbps (read 2026-11-05); case 179348693100944 closed 2026-11-04 |
+| 6. A second promotion, carrying `2026.11.03-docx-9` | no | | Added by the PM, 2026-11-06 (`v1-e40-t16`): prod's function and index at the same parser version; after dev's run of 2026-11-11 |
+| 7. Prod's parsed store current | no | | Dev holds `docx-7` since the hand run of 2026-11-05 (`20261105T034547Z`); prod goes straight to `docx-9` by `v1-e40-t16`'s steps, after item 6 |
+| 8. Prod's first index published | no | | After item 7, from the same restored copy, straight after prod's function is deployed at `docx-9` (`v1-e40-t16`) |
+| 9. `v1-e39-t07`'s prod removal exercise | no | | Not before `v1-e30-t33`: a whole-file removal today plans every caselist's aggregates, and the rebuild reads the Mac's own store |
+| 10. Superseded parsed directories retired in prod | no | 2026-11-03 | Dry run only: all 20 directories (`docx-1` to `docx-6`, four caselists) `not yet superseded` until item 7; then five directories, judged by a `docx-9` build |
+| 11. The request to school IT | | | |
+| 12. The beta's prod accounts created | | | |
+| 13. The Lambda bandwidth-quota request sent | yes | 2026-10-31 | Granted: `L-14320ECE` reads 1,250 Mbps (read 2026-11-05); case 179348693100944 closed 2026-11-04 |
 
 ## Dev's checks before the promotion
 

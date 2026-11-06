@@ -1,7 +1,8 @@
 """The runbooks' search for leftover restored copies, run on a synthetic home folder (`v1-e40-t21`).
 
-`docs/runbooks/annual-purge.md`'s step 1 and `docs/runbooks/landscape-report-from-the-cloud-run.md`'s
-last step each end with the same two searches: every directory holding the marker
+`docs/runbooks/annual-purge.md`'s step 1, `docs/runbooks/landscape-report-from-the-cloud-run.md`'s
+last step and `docs/runbooks/caselist-cutover.md`'s hand publish to prod (its step 8, `v1-e40-t16`)
+each end with the same two searches: every directory holding the marker
 `caselist restore-run-state` writes (:data:`RESTORED_COPY_MARKER`), at any depth, and, labelled
 "restored before the marker", a directory holding `debate.sqlite3` three levels down with no marker.
 Each test takes the commands out of the runbook as written and runs them in a shell over a tree under
@@ -34,8 +35,10 @@ from debate_core.application.caselist.run_state_restore import RESTORED_COPY_MAR
 REPO_ROOT: Final = Path(__file__).resolve().parents[2]
 PURGE_RUNBOOK: Final = REPO_ROOT / "docs" / "runbooks" / "annual-purge.md"
 LANDSCAPE_RUNBOOK: Final = REPO_ROOT / "docs" / "runbooks" / "landscape-report-from-the-cloud-run.md"
+CUTOVER_RUNBOOK: Final = REPO_ROOT / "docs" / "runbooks" / "caselist-cutover.md"
 PURGE_SECTION: Final = "## Step 1 — No working copy left on this Mac\n"
 LANDSCAPE_SECTION: Final = "## 5. Delete the copy\n"
+CUTOVER_STEP: Final = "### 8. Delete the copy\n"
 SEARCH_START: Final = 'find -H "$HOME" /tmp '
 SHELLS: Final = [shell for shell in ("bash", "zsh") if shutil.which(shell)]
 """The operator pastes into zsh; CI's runner may have only bash. Each that is here runs the search."""
@@ -45,6 +48,13 @@ def section_block(runbook: Path, heading: str) -> str:
     """The one `bash` block in the runbook's section under `heading`."""
     section = runbook.read_text(encoding="utf-8").split(heading, 1)[1].split("\n## ", 1)[0]
     [block] = re.findall(r"^```bash\n(.*?)^```$", section, re.DOTALL | re.MULTILINE)
+    return block
+
+
+def step_block(runbook: Path, heading: str) -> str:
+    """The one `bash` block under a `###` step, up to the next heading of any depth."""
+    step = re.split(r"\n#{2,3} ", runbook.read_text(encoding="utf-8").split(heading, 1)[1], maxsplit=1)[0]
+    [block] = re.findall(r"^```bash\n(.*?)^```$", step, re.DOTALL | re.MULTILINE)
     return block
 
 
@@ -60,9 +70,15 @@ def the_landscape_search() -> list[str]:
     return search_lines(section_block(LANDSCAPE_RUNBOOK, LANDSCAPE_SECTION))
 
 
+def the_prod_publish_search() -> list[str]:
+    """The cutover runbook's hand publish to prod, whose last step deletes its copy (`v1-e40-t16`)."""
+    return search_lines(step_block(CUTOVER_RUNBOOK, CUTOVER_STEP))
+
+
 RUNBOOK_SEARCHES: Final = {
     "the annual purge's step 1": the_purge_search,
     "the landscape runbook's last step": the_landscape_search,
+    "the cutover runbook's prod publish, step 8": the_prod_publish_search,
 }
 
 
@@ -179,6 +195,7 @@ def test_an_empty_home_folder_lists_nothing(tmp_path: Path, shell: str, runbook:
 
 def test_both_runbooks_search_with_the_same_commands_and_the_purge_block_is_only_the_search() -> None:
     assert the_landscape_search() == the_purge_search()
+    assert the_prod_publish_search() == the_purge_search()
     assert (
         search_lines(section_block(PURGE_RUNBOOK, PURGE_SECTION))
         == section_block(PURGE_RUNBOOK, PURGE_SECTION).splitlines()

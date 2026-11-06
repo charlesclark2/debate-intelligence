@@ -1,4 +1,4 @@
-<!-- docs-index: Importing earlier seasons' complete archives as backfiles (`caselist backfile-import`): when imports may run, the dry run and the import, the order, what each refusal means, and the rebuild a removal adds -->
+<!-- docs-index: Importing earlier seasons' complete archives as backfiles (`caselist backfile-import`): when imports may run, the dry run and the import, the order, what each refusal means, what a removal does to a backfile, and its rebuild in the cloud after a parser bump -->
 # Runbook: earlier seasons as backfiles
 
 How an earlier season's caselist is imported once from its complete archive, parsed and published as
@@ -139,7 +139,7 @@ second download, and so without the day's budget.
 | `NO_COMPLETE_ARCHIVE` | The site lists no complete archive for it | Nothing to import under policy 1.17 |
 | `BACKFILE_BUDGET_SPENT` | A backfile download started in the last 24 hours | Wait until 24 hours after it |
 | `NOT_ENOUGH_FREE_SPACE` | The volume cannot hold the estimate plus 25% | Run it where it can: the cloud task |
-| `CONFIRMATION_REQUIRED` | `--execute` in prod without `--confirm-prod` | Prod receives backfiles with dev's hand publish |
+| `CONFIRMATION_REQUIRED` | `--execute` in prod without `--confirm-prod` | Prod receives each backfile by hand, once, before the run's home moves ([A parser bump](#a-parser-bump-the-rebuild-in-the-cloud)) |
 
 ## A removal rewrites a backfile's aggregates in the bucket, and nothing is rebuilt
 
@@ -153,6 +153,49 @@ in the bucket only, so its tables are rewritten there, and the removal's plan li
 `bucket` side alone. Nothing is rebuilt: no import is run again for a removal, and the backfile
 no-import window does not apply to one. A backfile that holds no parsed file of the removed file is
 not touched at all.
+
+## A parser bump: the rebuild in the cloud
+
+The weekly run re-parses after a parser bump only the caselists it follows (`v1-e40-t08`), so a
+backfile's parsed store stays at the version it was imported under. Nothing fails meanwhile: the
+weekly index leaves backfiles out until `v1-e39-t18`, and a removal reaches every version directory
+that holds a parsed file of what it removes. `hspolicy25` was parsed at `2026.10.27-docx-7` on
+2026-11-02, and is the first case. The PM's ruling of 2026-11-06 (`v1-e40-t16`) says how a backfile follows:
+
+* **In dev: the same import, run again, in the cloud.** On a backfile already imported it is a
+  rebuild. It downloads nothing and spends no budget. The restore brings no parsed store of the new
+  version, so it parses the backfile's sources from `raw/` and publishes the new version's
+  directory under the lock. Start it as [caselist-cloud-run.md, "Backfile imports"](caselist-cloud-run.md#backfile-imports)
+  says, dry run first. Run it on the run's task definition that carries the new parser's image (the
+  dry run's `image digest` is the one `owner.auto.tfvars` names after that image's apply).
+  * **When:** after the bump's first weekly run has recorded, so on Thursday at the earliest
+    (2026-11-12 for `2026.11.03-docx-9`). Outside the no-import window, never on a Wednesday, and
+    never during a prod hand publish ([caselist-cutover.md](caselist-cutover.md#until-the-promotion-prod-is-published-by-hand)):
+    both take the dev lock.
+  * **The dry run's success** is `"already_imported": true` and no `"code"` line. Its
+    `"backfile_downloads_left"` does not matter, since a rebuild downloads nothing.
+  * **The rebuild's success** is `"status": "ok"`, `"downloaded_bytes": 0`, and `"parsed"`, `"cards"`
+    and `"parsed_uploaded"` above zero. For `hspolicy25` expect about 14,163 parsed and 14,343
+    objects uploaded, its import's figures. It takes about 91 minutes, the import's restore, parse,
+    publish and parsed-store publish (4.0, 4,882.3, 196.4 and 366.6 seconds).
+  * **Untried across a bump.** A run again is tested at the same parser version only
+    (`test_backfile_import.py`). The first one's counts go to the PM before the next backfile's, and
+    a parse of the whole archive at the new version is the expected shape: `"parsed"` near the
+    archive's stored sources, not zero.
+  * **Afterwards:** record the counts in
+    [docs/data/caselist-backfile-seasons.md](../data/caselist-backfile-seasons.md), then retire the
+    backfile's old directory in dev by [the retention runbook](parsed-store-retention.md), never
+    before the record.
+* **In prod: once, at the version current then.** Prod receives each backfile by hand, once, before
+  the run's home moves to prod. Its seed needs every manifest in the prod bucket
+  ([At the pilot's promotion](caselist-cutover.md#at-the-pilots-promotion-the-runs-home-moves-to-prod),
+  step 2). After the move, prod follows a bump with this same cloud rebuild. Those one-time steps are
+  a follow-up tied to the promotion, not written yet. Nothing in prod reads a backfile until
+  `v1-e39-t18`. What they need on the Mac, read on 2026-11-06 for `hspolicy25`:
+  * 13,510,680,041 bytes of parsed store at `docx-7` (14,343 objects);
+  * 3,672,747,197 bytes of raw sources (14,340 objects);
+  * 200,800,631 bytes of `openev`'s parsed store, which every restore brings;
+  * about 17.4 GB in all, with 56 GB free on the Mac that day.
 
 ## What it adds to every weekly run
 

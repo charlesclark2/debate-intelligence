@@ -466,7 +466,7 @@ sample become about 1,008 MB (725 MB gzipped), on top of format 2.
 | The same, scaled by documents | about 1,644,000,000 | about 931,000,000 | 97% | **past it, 2.3 times** | about 3,287,000,000 (76.5%) |
 
 Either way the trigram table puts the gzip object far past ADR-0019's 400,000,000-byte revisit
-trigger, which would bring the promotion list's item 12, the Lambda bandwidth quota, forward at
+trigger, which would bring the promotion list's item 13, the Lambda bandwidth quota, forward at
 once: about 13 s of download at the 625 Mbps cap instead of about 4 s. Format 2 itself is a little
 smaller than format 1 on every count.
 

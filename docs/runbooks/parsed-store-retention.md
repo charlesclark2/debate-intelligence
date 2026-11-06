@@ -208,8 +208,9 @@ twice. Record the counts as step 5 says.
 place holds a directory of the installed build's parser version for that caselist; with none, every
 directory reads `not yet superseded` and none reads `current`. Prod's dry run of 2026-11-03, on
 `2026.10.27-docx-7`, found exactly that: 20 directories (`docx-1`, `-2`, `-3`, `-5` and `-6` in four
-caselists), the newest `docx-6`. So prod's step 3 follows the pilot's promotion item 6, which
-publishes `docx-7` to prod, and then names five directories with `--version` five times:
+caselists), the newest `docx-6`. So prod's step 3 follows the pilot's promotion item 7, which
+publishes `2026.11.03-docx-9` to prod (prod never holds `docx-7`, `v1-e40-t16`), and then, judged by a build
+at `docx-9`, names five directories with `--version` five times:
 `2026.09.20-docx-1`, `2026.10.10-docx-2`, `2026.10.12-docx-3`, `2026.10.18-docx-5` and
 `2026.10.20-docx-6`. In dev, `2026.10.20-docx-6` is retired by steps 1, 2 and 4 once the cloud run's
 full re-parse of 2026-11-04 has published `docx-7` for every caselist.

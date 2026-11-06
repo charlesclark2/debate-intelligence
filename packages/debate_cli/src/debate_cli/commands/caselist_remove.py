@@ -140,7 +140,7 @@ import shlex
 from collections import Counter
 from collections.abc import Coroutine
 from datetime import UTC
-from typing import Annotated, Any, TypedDict
+from typing import Annotated, Any, Final, TypedDict
 
 import typer
 
@@ -157,6 +157,8 @@ from debate_core.application.caselist.removal_path_versions import (
     VersionRelation,
 )
 from debate_core.application.caselist.removal_plan import (
+    AggregateAction,
+    AggregateChange,
     Disposition,
     Inclusion,
     InvalidRemovalRequest,
@@ -398,6 +400,12 @@ def render_plan(plan: RemovalPlan, report: RemovalReport | None) -> str:
             f"{report.manifest_rows_dropped} row(s); {report.inbox_files_deleted} inbox file(s) deleted and "
             f"{report.inbox_files_rewritten} rewritten."
         )
+        if report.aggregates_rewritten or report.aggregates_deleted:
+            lines.append(
+                f"Parsed store: {report.aggregates_rewritten} aggregate(s) rewritten without "
+                f"{report.aggregate_rows_dropped} row(s); {report.aggregates_deleted} in retired "
+                "directories deleted. Nothing is to be rebuilt."
+            )
         if report.school_view_files_deleted or report.school_view_versions_deleted:
             lines.append(
                 f"Of those, {report.school_view_files_deleted} local file(s) and "
@@ -436,6 +444,7 @@ def render_plan(plan: RemovalPlan, report: RemovalReport | None) -> str:
         for rewrite in plan.manifests:
             versions = "" if rewrite.versions is None else f", {rewrite.versions} version(s) replaced by one"
             lines.append(f"  {rewrite.side.value:6} {rewrite.key}  -{rewrite.rows_dropped} row(s){versions}")
+    lines += _aggregate_lines(plan)
     lines += _swept_version_lines(plan)
     lines += _school_view_lines(plan, report)
 
@@ -1175,6 +1184,7 @@ def plan_summary(plan: RemovalPlan, settings: Settings, report: RemovalReport | 
             for entry in plan.withdrawals
         ],
         "manifest_versions_swept": _swept_json(plan),
+        "aggregates": _aggregates_json(plan),
         "school_views": _school_views_json(plan),
         "inbox_directory": plan.inbox_directory,
         "inbox_exists": plan.inbox_exists,
@@ -1209,7 +1219,110 @@ def plan_summary(plan: RemovalPlan, settings: Settings, report: RemovalReport | 
             "local_files": report.school_view_files_deleted,
             "bucket_versions": report.school_view_versions_deleted,
         }
+        data["aggregates_done"] = {
+            "rewritten": report.aggregates_rewritten,
+            "rows_dropped": report.aggregate_rows_dropped,
+            "deleted": report.aggregates_deleted,
+        }
     return data
+
+
+_AGGREGATE_ACTION_TEXT: Final = {
+    AggregateAction.REWRITE: "rewritten",
+    AggregateAction.PURGE: "holds none now: older versions purged",
+    AggregateAction.LEFT: "holds none: left as it is",
+    AggregateAction.UNREADABLE: "UNREADABLE",
+}
+
+
+def _aggregate_lines(plan: RemovalPlan) -> list[str]:
+    """*AGGREGATES REWRITTEN WITHOUT THE REMOVED ROWS*, and the retired directories' deletions (`v1-e30-t33`).
+
+    One line per aggregate of each version directory holding a parsed file of what is removed: its
+    side, key, rows and those that go, the table's bytes, and the older versions purged. Apart from the
+    file's own objects, because these are rewritten, not deleted, and nothing rebuilds them afterwards.
+    """
+    live = [change for change in plan.aggregates if change.action is not AggregateAction.DELETE]
+    retired = [change for change in plan.aggregates if change.action is AggregateAction.DELETE]
+    lines: list[str] = []
+    if live:
+        rewritten = sum(change.action is AggregateAction.REWRITE for change in live)
+        lines += [
+            "",
+            f"AGGREGATES REWRITTEN WITHOUT THE REMOVED ROWS: {rewritten} of {len(live)} table(s) in "
+            f"{len({(one.side, one.caselist, one.version) for one in live})} version director(ies) holding "
+            "a parsed file of it",
+            "  Rewritten in place, every other line kept byte for byte; nothing is rebuilt afterwards.",
+        ]
+        for change in live:
+            lines.append(f"  {_side_word(change.side):6} {change.key}  {_aggregate_detail(change)}")
+        unreadable = [change for change in live if change.action is AggregateAction.UNREADABLE]
+        if unreadable:
+            lines += [
+                f"  UNREADABLE: {len(unreadable)} table(s) hold a line that is not a row naming its source.",
+                "  --execute stops before it writes anything. Move each aside or rebuild it, then run again.",
+            ]
+        if any(not change.retirement_read for change in live):
+            lines.append("  Retirement tags not read: every directory was taken as live and is rewritten.")
+    if retired:
+        lines += [
+            "",
+            f"AGGREGATES DELETED IN RETIRED VERSION DIRECTORIES: {len(retired)} table(s), every version",
+            "  Retention has tagged these directories, which nothing reads; a rewrite would be a new version",
+            "  the lifecycle never expires. Nothing is rebuilt.",
+        ]
+        for change in retired:
+            versions = (
+                "versions not counted" if change.versions is None else f"{len(change.versions)} version(s)"
+            )
+            size = "" if change.bytes is None else f", {change.bytes} bytes"
+            lines.append(f"  bucket {change.key}  ({versions}{size})")
+    return lines
+
+
+def _side_word(side: Side) -> str:
+    return "here" if side is Side.LOCAL else "bucket"
+
+
+def _aggregate_detail(change: AggregateChange) -> str:
+    if change.action is AggregateAction.UNREADABLE:
+        return f"UNREADABLE at line {change.unreadable_line}"
+    parts: list[str] = []
+    if change.rows is not None:
+        parts.append(f"-{change.rows_dropped} of {change.rows} row(s)")
+    if change.bytes is not None:
+        parts.append(f"{change.bytes} bytes")
+    if change.side is Side.BUCKET:
+        parts.append(
+            "older versions not counted"
+            if change.versions is None
+            else f"{len(change.versions)} older version(s) purged"
+        )
+    return (
+        f"{_AGGREGATE_ACTION_TEXT[change.action]} ({', '.join(parts)})"
+        if parts
+        else _AGGREGATE_ACTION_TEXT[change.action]
+    )
+
+
+def _aggregates_json(plan: RemovalPlan) -> list[JsonValue]:
+    """The aggregates the plan reaches (`v1-e30-t33`): keys, which hold a caselist, a parser version
+    and a file name, and counts. Never a path."""
+    return [
+        {
+            "key": change.key,
+            "side": change.side.value,
+            "caselist": change.caselist,
+            "version": change.version,
+            "action": change.action.value,
+            "rows": change.rows,
+            "rows_dropped": change.rows_dropped,
+            "bytes": change.bytes,
+            "versions": None if change.versions is None else len(change.versions),
+            "unreadable_line": change.unreadable_line,
+        }
+        for change in plan.aggregates
+    ]
 
 
 def _school_views_json(plan: RemovalPlan) -> dict[str, JsonValue]:

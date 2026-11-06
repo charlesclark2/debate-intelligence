@@ -329,8 +329,8 @@ def test_a_weekly_pull_downloads_imports_publishes_and_then_finds_nothing_new(
     # weeklies', and `openev` for the camp file; the complete archive names none. The synthetic
     # weeks hold fourteen distinct bodies, of which one is a PDF and one a legacy `.doc`, and the
     # camp file is a fifteenth source. Nothing was parsed before, so both are full parses. The
-    # documents are plain paragraphs, which hold no cards. The parsed store is one file per source
-    # and three aggregates per caselist: (14 + 3) + (1 + 3) objects.
+    # documents are plain paragraphs, which hold no cards. The parsed store is one file per source,
+    # three aggregates and a placement state per caselist (`v1-e31-t10`): (14 + 4) + (1 + 4) objects.
     assert stages["parse"]["outcome"] == "completed", stages["parse"]
     assert data["parse"] == {
         "caselists": 2,
@@ -340,13 +340,14 @@ def test_a_weekly_pull_downloads_imports_publishes_and_then_finds_nothing_new(
         "unsupported": 2,
         "failed": 0,
         "cards": 0,
-        "uploaded": 21,
+        "uploaded": 23,
         "not_published": 0,
     }
     parsed = {key for key in keys_in(bucket) if key.startswith("parsed/")}
-    assert len(parsed) == 21
+    assert len(parsed) == 23
     for caselist in (SYNTHETIC_CASELIST, "openev"):
         assert f"parsed/{caselist}/{DOCX_PARSER_VERSION}/index.jsonl" in parsed
+        assert f"parsed/{caselist}/{DOCX_PARSER_VERSION}/placement-state.sqlite" in parsed
 
     keys = {str(item.get("Key")) for item in bucket.list_objects_v2(Bucket=BUCKET).get("Contents", [])}
     for week in SNAPSHOTS:

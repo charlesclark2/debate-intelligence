@@ -5,14 +5,15 @@ these belong in a literal somewhere in the call stack, and none of them belong i
 module reads at import time. They are loaded here, once, into a :class:`Settings` object that the
 composition root hands to the services that need it (architecture proposal §6, §10, §11, §14).
 
-This module is the **only** place in the platform that reads `os.environ` or a `.env` file. A
+This module is the **only** place in the platform that reads `os.environ`, a `.env` file or the
+per-user credentials file. A
 service that wants the crawl delay takes it as a constructor argument; it does not reach for the
 environment, which is what keeps the same service usable from the CLI, the API, a worker and a
 test without any of them agreeing on process-wide state.
 
 ## Where a value comes from
 
-Five layers, highest priority first. Every layer is optional; a field that no layer sets keeps its
+Six layers, highest priority first. Every layer is optional; a field that no layer sets keeps its
 declared default.
 
 | Layer | Source label | Set by |
@@ -20,14 +21,37 @@ declared default.
 | Explicit override | `cli` | `load_settings(overrides=...)` — a command-line flag |
 | Process environment | `env:DEBATE_HTTP__MAX_RETRIES` | `DEBATE_`-prefixed variables, `__` to nest |
 | `.env` file | `dotenv:.env` | the operator's own machine; never committed |
+| Per-user credentials | `user-env:~/.debate-research/dev.env` | four provider credentials, any folder |
 | Environment profile | `profile:config/profiles/dev.toml` | committed per-environment defaults |
 | Built-in profile | `built-in:dev` | :data:`BUILTIN_PROFILES`, so dev/prod/test differ even with no files |
 | Field default | `default` | the declarations below |
 
 :meth:`Settings.field_sources` reports the label for every field, which is what
 `debate-research config show` prints in its `Source` column. It is there because the first
-question about surprising behaviour is "which of the six places did that value come from", and
+question about surprising behaviour is "which of the seven places did that value come from", and
 answering it by reading code and guessing at shell state wastes an afternoon.
+
+There is one `.env`: the checkout root's when the working folder is inside a checkout, otherwise the
+working folder's own. A working folder that no longer exists (a removed worktree) is no checkout and
+no `.env`, never a crash (:func:`working_folder`, `v1-e41-t22`).
+
+## The per-user credentials file (`v1-e41-t22`)
+
+`~/.debate-research/<env>.env`, for the environment this run resolved to, beside its data directory:
+the provider keys and the contact email, read whatever folder a command runs in, so that live
+searches no longer have to be run from the one folder whose `.env` holds them. It is below the
+variables and the `.env`, so a key exported for one command, or left in a checkout's `.env`, wins
+over it (`config show` names the winner), and above the profile, which never holds a credential.
+Its rules are the PM's ruling of 2026-11-05:
+
+* It holds only :data:`USER_CREDENTIAL_VARIABLES`. Any other name, `DEBATE_ENV` and the caselist
+  token among them, is refused by file and line number; a line with no `=`, or whose name is not a
+  setting name, by its line number alone, since it could be a pasted key. A name given twice is
+  refused with both lines. No refusal quotes a value.
+* It is not read at all when its group or others have any permission on it (:data:`OWNER_ONLY_MODE_MASK`),
+  judged with `fstat` on the open file before any byte is read, and the refusal gives the `chmod`. A
+  system whose file modes say nothing (Windows) refuses it too.
+* The `test` environment reads none, and nothing in the platform writes it.
 
 ## Environments
 
@@ -60,7 +84,8 @@ reaches for one gets a refusal rather than somebody's real store.
 
 ## Secrets
 
-Anything sensitive is a :class:`~pydantic.SecretStr`, comes from the environment or `.env`, and is
+Anything sensitive is a :class:`~pydantic.SecretStr`, comes from the environment, `.env` or the
+per-user credentials file, and is
 never read from a committed profile file — `.toml` files under `config/profiles/` are in the
 repository, so a secret written into one is a secret published. :meth:`Settings.redacted_dict` is
 the only supported way to render settings for a human or a log, and it replaces every

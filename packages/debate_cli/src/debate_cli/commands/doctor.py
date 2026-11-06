@@ -79,6 +79,22 @@ would stop with (`v1-e05-t03` ac6), naming the file and the offending key. The c
 Like the options above it is an option because it loads settings, and plain `doctor` must not: a
 bad routing file does not stop plain `doctor`, on purpose. It reads one file and reaches no network.
 
+## The providers' credentials, when asked (`v1-e41-t22`)
+
+`doctor --providers` adds a row for the per-user credentials file, `~/.debate-research/<env>.env`
+(read, not there, or not read in the test environment), and one for each enabled discovery provider:
+whether its key or the contact email is set and which source set it, or what a search does without
+it ("no contact email: Crossref's public pool", "no GovInfo key: GovInfo not asked"). A blank value
+counts as missing, as the adapters treat it. It never fails on a row, and it never prints a value,
+only a source label. The rows are
+:func:`~debate_core.application.provider_credentials.provider_credential_report`'s; this module only
+renders them.
+
+Like the options above it is an option because it loads settings, and plain `doctor` must not: a
+per-user file that is refused (readable by others, or holding a name that is not a credential) stops
+`doctor --providers` as it stops every command that loads settings, and leaves plain `doctor` alone.
+It reaches no network.
+
 ## Exit codes
 
 `doctor` fails on two checks only, the ones it can state precisely, and on three more when asked:

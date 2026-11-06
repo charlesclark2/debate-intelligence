@@ -273,7 +273,15 @@ no AWS config. `ops/launchd/install.sh --check-launchd` runs it under launchd, a
 will run. It names a permission set and never an account, a role's full identifier or the AWS
 config's path.
 
-Without the option it fails on two checks only, the ones it can state precisely:
+With `--providers` it also reports the per-user credentials file, `~/.debate-research/<env>.env`
+(read, not there, or not read in the test environment), and one row for each enabled discovery
+provider: whether its key or the contact email is set and which source set it, never its value, or
+what a search does without it, for example `Crossref | no contact email: Crossref's public pool` and
+`GovInfo | no GovInfo key: GovInfo not asked` (`v1-e41-t22`). A blank value counts as missing. It
+never fails on a row; a per-user file that is refused stops it as it stops every command that loads
+settings. Plain `doctor` loads no settings and reads no per-user file.
+
+Without the options it fails on two checks only, the ones it can state precisely:
 
 * **The Unicode database.** Under any database but the pin, `normalize` refuses to run, so every
   command that touches evidence text would fail on first use.
@@ -521,9 +529,15 @@ the providers whose live smoke has passed on the operator's machine (`v1-e07-t13
 `debate_cli.presenters.search_presenter`'s.
 
 **Without a contact email or a key** a search still runs, and its footer says what is missing. Neither
-goes in a profile: each machine sets its own as an exported variable or in a `.env` file. Today a `.env`
-is read from the checkout a command runs in, or, outside a checkout, from the folder it runs in, and
-nowhere else (`.env.example` lists the variables).
+goes in a profile. Each machine keeps its own in the per-user file `~/.debate-research/<env>.env`
+(`~/.debate-research/dev.env` for dev), which every command reads whatever folder it runs in
+(`v1-e41-t22`): [docs/guides/provider-credentials.md](../../docs/guides/provider-credentials.md) says
+how to write it. It holds only `DEBATE_PROVIDERS__CONTACT_EMAIL`, `DEBATE_PROVIDERS__OPENALEX_API_KEY`,
+`DEBATE_PROVIDERS__SEMANTIC_SCHOLAR_API_KEY` and `DEBATE_PROVIDERS__API_DATA_GOV_KEY`, and it is
+refused unless only its owner can read it (`chmod 600`). An exported variable, or a `.env` in the
+checkout or folder a command runs in, still wins over it. `debate-research config show` names where
+each credential came from, with its value masked, and `debate-research doctor --providers` says, for
+each enabled provider, whether its key or the email is set and what a search does without it.
 
 * Crossref without `DEBATE_PROVIDERS__CONTACT_EMAIL` uses its public pool, which takes one query a
   second instead of three. A search of one query looks the same either way. An expanded search sends

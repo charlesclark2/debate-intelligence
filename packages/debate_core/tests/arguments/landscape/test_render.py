@@ -37,15 +37,19 @@ from debate_core.arguments.landscape.render import (
     IMPACT_CARD_COLUMNS,
     POSITION_COLUMNS,
     SCHOOL_COLUMNS,
+    SCHOOL_ROUND_COLUMNS,
     TOP_CARD_COLUMNS,
     TREND_COLUMNS,
     header_metadata,
     render_impact_cards_csv,
     render_markdown,
+    render_school_rounds_csv,
+    render_schools_markdown,
     render_top_cards_csv,
 )
 from debate_core.domain.landscape import PositionSide
 from debate_core.domain.landscape_report import LandscapeReport, LeadInSource, TopCard
+from debate_core.domain.landscape_schools import RoundStance, SchoolRound, SchoolSide
 from debate_core.testing.landscape_report import (
     SYNTHETIC_REPORT_DATE,
     SYNTHETIC_THIRD_SNAPSHOT,
@@ -65,9 +69,17 @@ FILES = (
     "impact_cards.csv",
     "trends.csv",
     "schools.csv",
+    "school_rounds.csv",
     "schools.md",
 )
-CSV_FILES = ("positions.csv", "top_cards.csv", "impact_cards.csv", "trends.csv", "schools.csv")
+CSV_FILES = (
+    "positions.csv",
+    "top_cards.csv",
+    "impact_cards.csv",
+    "trends.csv",
+    "schools.csv",
+    "school_rounds.csv",
+)
 
 
 def _bundle(
@@ -434,6 +446,87 @@ def test_the_trend_and_school_csv_columns_are_the_specs() -> None:
     assert list(_csv_rows(files["schools.csv"])[0]) == list(SCHOOL_COLUMNS)
 
 
+def test_school_rounds_csv_has_the_rulings_columns_one_row_per_team_position_and_round() -> None:
+    """`v1-e32-t54`, the PM's ruling of 2026-11-06: stance spelled `reads` or `AT` as on the page."""
+    bundle = _bundle()
+    assert SCHOOL_ROUND_COLUMNS == (
+        "school",
+        "team_code",
+        "position_id",
+        "stance",
+        "side",
+        "tournament",
+        "round",
+        "snapshot",
+        "rounds_in_file",
+        "team_page",
+    )
+    rows = _csv_rows(bundle.files["school_rounds.csv"])
+    assert list(rows[0]) == list(SCHOOL_ROUND_COLUMNS)
+    assert len(rows) == len(bundle.schools.round_lines) == 36
+    assert {row["stance"] for row in rows} == {"reads", "AT"}
+    assert rows[4] == {
+        "school": "Ashgrove Fictional",
+        "team_code": "XX",
+        "position_id": "spending-da",
+        "stance": "AT",
+        "side": "aff",
+        "tournament": "Imaginary Classic",
+        "round": "R1",
+        "snapshot": "2026-09-15",
+        "rounds_in_file": "2",
+        "team_page": "",
+    }
+    assert {row["team_page"] for row in rows if row["school"] == "Birchmoor"} == {
+        f"{BIRCHMOOR_PAGE}/QQ",
+        f"{BIRCHMOOR_PAGE}/ZZ",
+    }
+
+
+def _hand_round(**changes: object) -> SchoolRound:
+    line = {
+        "school": "Maple Grove",
+        "team_code": "QX",
+        "position_id": "spending-da",
+        "stance": RoundStance.READS,
+        "side": SchoolSide.NEG,
+        "tournament": "Quillfeather Invitational",
+        "round_label": "Round 4",
+        "snapshot": date(2026, 9, 15),
+        "rounds_in_file": 1,
+        "answers_only": False,
+    }
+    return SchoolRound.model_validate({**line, **changes})
+
+
+def test_a_school_round_line_escapes_what_it_shows_as_disclosed_and_says_what_was_not_disclosed() -> None:
+    """A label that would start a list or emphasis in Markdown shows as written; the CSV holds it raw."""
+    bundle = _bundle()
+    lines = (
+        _hand_round(tournament="2. Birchwater_Open", round_label="*Doubles*"),
+        _hand_round(tournament=None, round_label=None, stance=RoundStance.AT, side=SchoolSide.AFF),
+        _hand_round(position_id="cap-k", rounds_in_file=3, round_label="- Octas"),
+    )
+    view = bundle.schools.model_copy(update={"rows": (), "round_lines": lines})
+    text = render_schools_markdown(view, bundle.report)
+    block = text.split("### Maple Grove\n", 1)[1].split("\n## ", 1)[0]
+    assert block == (
+        "\nNo team of this school read a counted position.\n\n"
+        "**QX, round by round** (newest snapshot first)\n\n"
+        "- `spending-da`\n"
+        "  - 2\\. Birchwater\\_Open, \\*Doubles\\*, neg, reads\n"
+        "  - no tournament disclosed, no round disclosed, aff, AT\n"
+        "- `cap-k`\n"
+        "  - Quillfeather Invitational, \\- Octas, neg, reads (one file for 3 rounds)\n"
+    )
+    rows = _csv_rows(render_school_rounds_csv(view, {}))
+    assert [(row["tournament"], row["round"]) for row in rows] == [
+        ("2. Birchwater_Open", "*Doubles*"),
+        ("", ""),
+        ("Quillfeather Invitational", "- Octas"),
+    ]
+
+
 def test_the_school_view_carries_no_debater_name_tag_cite_or_path() -> None:
     """ac4: names planted where a team's own words could carry them never reach the view's files."""
     inputs = read_synthetic_caselist(FIXTURE)
@@ -452,7 +545,9 @@ def test_the_school_view_carries_no_debater_name_tag_cite_or_path() -> None:
         for planted in (*names, "JordanEllis", ".docx"):
             assert planted not in files[name]
     for card in read_synthetic_caselist(FIXTURE).cards:
-        assert card.tag is None or card.tag not in files["schools.md"]
+        for name in SCHOOL_VIEW_FILES:
+            assert card.tag is None or card.tag not in files[name]
+            assert card.short_cite is None or card.short_cite not in files[name]
 
 
 def test_only_the_school_view_names_schools_and_team_codes() -> None:
@@ -464,8 +559,17 @@ def test_only_the_school_view_names_schools_and_team_codes() -> None:
             re.search(rf"(?<![A-Za-z0-9]){one.team_code}(?![A-Za-z0-9])", files[name]) for one in disclosures
         )
         assert not any(one.source_path in files[name] for one in disclosures)
-        # The PM's ruling of 2026-10-24: school plus team code, never more; no tournament or round.
-        assert not any(one.tournament and one.tournament in files[name] for one in disclosures)
+    # The PM's ruling of 2026-10-24 keeps schools.csv to school plus team code; policy 1.23 adds the
+    # tournament and round beside each position in schools.md and school_rounds.csv (v1-e32-t54) alone.
+    tournaments = {one.tournament for one in disclosures if one.tournament}
+    for name in ("schools.md", "school_rounds.csv"):
+        assert {tournament for tournament in tournaments if tournament in files[name]} == {
+            "Fictional Invitational",
+            "Imaginary Classic",
+        }
+    for name in ("schools.csv", *CIRCUIT_WIDE_FILES):
+        assert not any(tournament in files[name] for tournament in tournaments), name
+        assert "round by round" not in files[name], name
 
 
 def test_a_stale_school_view_starts_with_the_banner() -> None:
@@ -495,6 +599,17 @@ def test_the_scan_still_reads_the_school_view_for_paths_only_and_finds_nothing()
     assert scan_report(files, disclosures, school_view_files=SCHOOL_VIEW_FILES) == ()
     named = scan_report({name: files[name] for name in SCHOOL_VIEW_FILES}, disclosures)
     assert {hit.file for hit in named} == set(SCHOOL_VIEW_FILES)
+
+
+def test_the_scan_takes_school_rounds_csv_as_a_school_view_and_would_flag_its_lines_anywhere_else() -> None:
+    """`v1-e32-t54`: the bundle scan's exclusions reach the new file; renamed, its lines are hits."""
+    files = _bundle().files
+    disclosures = read_synthetic_caselist(FIXTURE).disclosures
+    assert "school_rounds.csv" in SCHOOL_VIEW_FILES
+    assert scan_report(files, disclosures, school_view_files=SCHOOL_VIEW_FILES) == ()
+    elsewhere = {"positions.csv": files["school_rounds.csv"]}
+    hits = scan_report(elsewhere, disclosures, school_view_files=SCHOOL_VIEW_FILES)
+    assert hits and {hit.file for hit in hits} == {"positions.csv"}
 
 
 def test_a_team_code_that_is_not_one_address_word_gets_no_link_and_is_counted() -> None:

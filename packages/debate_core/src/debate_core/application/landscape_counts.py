@@ -106,3 +106,13 @@ class CountedReads:
     reads: Mapping[str, frozenset[str]] = field(repr=False)
     """Position id to the rounds reading it: READS at or above the threshold, on the round's own side
     or on no readable side, with `v1-e32-t09`'s assigned affs in place of the cards' for their rounds."""
+    answers: Mapping[str, frozenset[str]] = field(default_factory=dict[str, frozenset[str]], repr=False)
+    """Position id to the rounds answering it (`v1-e32-t54`): an ANSWERS card at or above the threshold
+    in any of the round's files, or a READS card under a position of the other side. Never a read: the
+    per-school view lists these as `AT`, and a round that also reads the position as a read."""
+    holding: Mapping[tuple[str, str], frozenset[str]] = field(
+        default_factory=dict[tuple[str, str], frozenset[str]], repr=False
+    )
+    """(position id, round id) to the digests of the round's files whose cards were counted under it, as a
+    read or as an answer. A round `v1-e32-t09` assigned its aff has no entry for that aff: its files
+    hold it as a whole."""

@@ -134,7 +134,7 @@ async def _run(service: LandscapeRunService, **request: object) -> LandscapeRunR
 # ------------------------------------------------------------------------------------------------
 
 
-async def test_a_run_writes_the_seven_files_under_the_newest_snapshot_and_counts_the_cards(
+async def test_a_run_writes_the_bundles_files_under_the_newest_snapshot_and_counts_the_cards(
     world: SyntheticRun,
 ) -> None:
     result = await _run(_service(world))
@@ -147,6 +147,7 @@ async def test_a_run_writes_the_seven_files_under_the_newest_snapshot_and_counts
         "impact_cards.csv",
         "positions.csv",
         "report.md",
+        "school_rounds.csv",
         "schools.csv",
         "schools.md",
         "top_cards.csv",

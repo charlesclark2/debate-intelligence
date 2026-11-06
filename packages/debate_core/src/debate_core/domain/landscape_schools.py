@@ -28,9 +28,19 @@ from the caselist, the school and the team code alone. The view does not store i
 row's school and team code, so no other link can be in a row. A team whose school or team code is not
 one address word has none, and :attr:`SchoolView.teams_without_team_page` counts them by reason.
 
-The view is written beside the circuit-wide report in its own files, `schools.csv` and `schools.md`,
-so `report.md` and its CSVs still name nobody. It stays on the operator's machine and in the private
-bucket's `reports/` prefix.
+## The rounds under each position (`v1-e32-t54`)
+
+Policy 1.23 adds, beside each position a team's disclosures hold, the tournament, round and side of
+each disclosure whose file holds it, as disclosed. :attr:`SchoolView.round_lines` holds them, one
+:class:`SchoolRound` per team, position and round: the tournament and the round label exactly as the
+filename gave them, the round's side, whether the round read the position or answered it
+(:class:`RoundStance`), the snapshot the round was first seen in, and how many of the team's rounds
+the file holding it was disclosed for. Still no debater, no path, and no tag, cite or text of a card.
+
+The view is written beside the circuit-wide report in its own files, `schools.csv`,
+`school_rounds.csv` and `schools.md`, so `report.md` and its CSVs still name nobody, and no
+tournament or round. It stays on the operator's machine and in the private bucket's `reports/`
+prefix.
 """
 
 from __future__ import annotations
@@ -49,6 +59,8 @@ from debate_core.domain.search_source_links import NoTeamPage, team_page_url, wh
 
 __all__ = [
     "SCHOOL_VIEW_SIDES",
+    "RoundStance",
+    "SchoolRound",
     "SchoolRow",
     "SchoolSide",
     "SchoolView",
@@ -76,6 +88,41 @@ class SchoolRow(DomainModel):
     rounds: int = Field(ge=1, description="The team's rounds on this side that read the position.")
 
 
+class RoundStance(StrEnum):
+    """Whether a round read a position or answered it, spelled as the page and school_rounds.csv spell it."""
+
+    READS = "reads"
+    """The report counts the round as reading the position."""
+    AT = "AT"
+    """The round's file answers it: under an `AT:` heading, or a read of a position of the other side."""
+
+
+class SchoolRound(DomainModel):
+    """One team's round under one position: a line of schools.md's lists and a row of school_rounds.csv.
+
+    `v1-e32-t54`, under policy 1.23: the tournament and round as disclosed, never normalized, beside
+    the school and team code.
+    """
+
+    school: NonEmptyText = Field(description="The school exactly as the caselist's path disclosed it.")
+    team_code: TeamCodeText = Field(description="The team code exactly as disclosed, e.g. QX.")
+    position_id: PositionId
+    stance: RoundStance
+    side: SchoolSide
+    tournament: NonEmptyText | None = Field(
+        description="The tournament exactly as the filename gave it; None when it gave none."
+    )
+    round_label: NonEmptyText | None = Field(
+        description="The round exactly as the filename gave it, recognised or not; None when it gave none."
+    )
+    snapshot: date = Field(description="The snapshot the round was first seen in.")
+    rounds_in_file: int = Field(
+        ge=1,
+        description="The most of this team's rounds that one file holding the position was disclosed for.",
+    )
+    answers_only: bool = Field(description="The team answers the position and reads it in no round.")
+
+
 class SchoolView(DomainModel):
     """Every disclosing team's positions, through one snapshot."""
 
@@ -88,6 +135,11 @@ class SchoolView(DomainModel):
     rounds_on_no_side: int = Field(
         ge=0, description="Rounds reading a position by a known team on no readable side: left out."
     )
+    round_lines: tuple[SchoolRound, ...] = Field(
+        default=(),
+        description="By school and team code as the rows are; under each team, the positions it reads in "
+        "its rows' order, then those it only answers; under each position, newest snapshot first.",
+    )
 
     @property
     def schools(self) -> int:
@@ -97,7 +149,7 @@ class SchoolView(DomainModel):
     def teams(self) -> int:
         return len({(row.school.casefold(), row.team_code.casefold()) for row in self.rows})
 
-    def team_page(self, row: SchoolRow) -> str | None:
+    def team_page(self, row: SchoolRow | SchoolRound) -> str | None:
         """The row's team's public OpenCaselist page, or `None` when the rule refuses it."""
         return team_page_url(self.caselist, row.school, row.team_code)
 

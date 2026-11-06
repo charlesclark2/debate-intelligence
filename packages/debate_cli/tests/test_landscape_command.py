@@ -108,6 +108,7 @@ BUNDLE = (
     "impact_cards.csv",
     "trends.csv",
     "schools.csv",
+    "school_rounds.csv",
     "schools.md",
     "report.md",
 )
@@ -716,7 +717,7 @@ def test_out_inside_a_checkout_is_refused(world: SyntheticRun) -> None:
 
 
 # ------------------------------------------------------------------------------------------------
-# v1-e32-t12: the seven files, the trends and the school view
+# v1-e32-t12: the bundle's files (eight since v1-e32-t54), the trends and the school view
 #
 # Worked by hand from the fixture table in `debate_core.testing.landscape_run`. The 2026-09-15
 # window's rounds are `neg-two` and `aff-two`, both Harrowgate Prep's; the 2026-09-08 window's are
@@ -733,12 +734,13 @@ def test_out_inside_a_checkout_is_refused(world: SyntheticRun) -> None:
 # advantage and neg spending DA. Seven rows, three schools, three team codes.
 # ------------------------------------------------------------------------------------------------
 
-SEVEN_FILES = [
+BUNDLE_MARKS = [
     ("positions.csv", "circuit_wide"),
     ("top_cards.csv", "circuit_wide"),
     ("impact_cards.csv", "circuit_wide"),
     ("trends.csv", "circuit_wide"),
     ("schools.csv", "school_view"),
+    ("school_rounds.csv", "school_view"),
     ("schools.md", "school_view"),
     ("report.md", "circuit_wide"),
 ]
@@ -758,21 +760,21 @@ def _flat(text: str) -> str:
     return " ".join(text.replace("│", " ").split())
 
 
-def test_json_marks_each_of_the_seven_files_circuit_wide_or_school_view(world: SyntheticRun) -> None:
+def test_json_marks_each_of_the_bundle_files_circuit_wide_or_school_view(world: SyntheticRun) -> None:
     result = landscape(world, "--caselist", CASELIST)
 
     assert result.exit_code == ExitCode.OK, result.output
     directory = world.data_dir / "reports" / "landscape" / CASELIST / "2026-09-15"
     assert _data(result)["bundle"] == [
-        {"name": name, "path": str(directory / name), "view": view} for name, view in SEVEN_FILES
+        {"name": name, "path": str(directory / name), "view": view} for name, view in BUNDLE_MARKS
     ]
 
 
-def test_the_seven_files_are_t04s_constants_not_a_copy() -> None:
+def test_the_bundle_files_are_t04s_constants_not_a_copy() -> None:
     """The hand-written list above is the bundle t04 made, split as t04 splits it."""
-    assert [name for name, _ in SEVEN_FILES] == list(BUNDLE_FILES)
-    assert {name for name, view in SEVEN_FILES if view == "circuit_wide"} == set(CIRCUIT_WIDE_FILES)
-    assert {name for name, view in SEVEN_FILES if view == "school_view"} == set(SCHOOL_VIEW_FILES)
+    assert [name for name, _ in BUNDLE_MARKS] == list(BUNDLE_FILES)
+    assert {name for name, view in BUNDLE_MARKS if view == "circuit_wide"} == set(CIRCUIT_WIDE_FILES)
+    assert {name for name, view in BUNDLE_MARKS if view == "school_view"} == set(SCHOOL_VIEW_FILES)
 
 
 def test_json_counts_the_trend_rows_by_label_and_the_rows_the_team_floor_held_back(
@@ -822,44 +824,44 @@ def test_report_tells_a_person_which_files_name_schools_and_counts_trends_and_sc
     lines = result.stdout.splitlines()
     assert "Trends: NEW 0, RISING 0, FALLING 0, STEADY 4; 1 held back by the team floor." in lines
     assert "School view: 3 school(s), 3 team code(s), 7 row(s)." in lines
-    wrote = lines.index(f"Wrote 7 files to {directory}:")
+    wrote = lines.index(f"Wrote 8 files to {directory}:")
     assert lines[wrote + 1 : wrote + 3] == [
         "  circuit-wide: positions.csv, top_cards.csv, impact_cards.csv, trends.csv, report.md",
-        "  school view, naming schools and team codes: schools.csv, schools.md",
+        "  school view, naming schools and team codes: schools.csv, school_rounds.csv, schools.md",
     ]
     for identity in ("Quillmere", "Brindle", "Harrowgate"):
         assert identity not in result.stdout, identity
 
 
-def test_a_dry_run_tells_a_person_the_seven_files_it_would_write(world: SyntheticRun) -> None:
+def test_a_dry_run_tells_a_person_the_bundle_files_it_would_write(world: SyntheticRun) -> None:
     result = landscape(world, "--caselist", CASELIST, "--dry-run", json_output=False)
 
     assert result.exit_code == ExitCode.OK, result.output
     directory = world.data_dir / "reports" / "landscape" / CASELIST / "2026-09-15"
     lines = result.stdout.splitlines()
-    would = lines.index(f"Dry run: the bundle is not written; its 7 files would go to {directory}:")
+    would = lines.index(f"Dry run: the bundle is not written; its 8 files would go to {directory}:")
     assert lines[would + 1 : would + 3] == [
         "  circuit-wide: positions.csv, top_cards.csv, impact_cards.csv, trends.csv, report.md",
-        "  school view, naming schools and team codes: schools.csv, schools.md",
+        "  school view, naming schools and team codes: schools.csv, school_rounds.csv, schools.md",
     ]
     assert not (world.data_dir / "reports").exists()
 
 
-def test_help_names_the_seven_files_and_which_name_schools() -> None:
+def test_help_names_the_bundle_files_and_which_name_schools() -> None:
     result = runner.invoke(create_app(), ["landscape", "report", "--help"])
 
     assert result.exit_code == ExitCode.OK, result.output
     shown = _flat(result.stdout)
     assert (
         "Circuit-wide: report.md, positions.csv, top_cards.csv, impact_cards.csv, trends.csv. "
-        "School view, naming schools and team codes: schools.csv, schools.md."
+        "School view, naming schools and team codes: schools.csv, school_rounds.csv, schools.md."
     ) in shown
 
 
-def test_the_module_docstring_names_the_seven_files() -> None:
+def test_the_module_docstring_names_the_bundle_files() -> None:
     documented = _flat(landscape_module.__doc__ or "")
 
-    assert "seven files" in documented
+    assert "eight files" in documented
     for name in BUNDLE_FILES:
         assert f"`{name}`" in documented, name
     assert "`report.md`, `positions.csv`, `top_cards.csv` and `impact_cards.csv`, under" not in documented

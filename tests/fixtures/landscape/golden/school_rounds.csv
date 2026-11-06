@@ -1,0 +1,56 @@
+# report=school_rounds
+# caselist=synthpolicy26
+# snapshot=2026-09-15
+# previous_snapshot=2026-09-08
+# topic_id=synthetic-policy-topic
+# taxonomy_version=1.2.0
+# overrides_digest=1789afec01f8e1417460965e050263e11df2d4128ca0ed9604d1643f430639a0
+# parser_version=2026.10.20-docx-6
+# prompt_version=none
+# review_threshold=0.6
+# coverage_cards=45/56
+# coverage_rounds=15/16
+# share_of_teams_over=teams disclosing on the position's side: aff 6, neg 6, either side 8
+# provenance_mode=FILE_IMPORT
+# stale=false
+# newest_snapshot=2026-09-15
+# snapshot_age_days=2
+# archives_awaiting_download=0
+# shows=school and team code as disclosed, the team's public openCaselist page, and beside each position the tournament, round and side of each round whose file holds it, as disclosed, never more (docs/policies/caselist-data-use.md, version 1.23); for the team only
+school,team_code,position_id,stance,side,tournament,round,snapshot,rounds_in_file,team_page
+Ashgrove Fictional,XX,costs-advantage,reads,aff,Imaginary Classic,R1,2026-09-15,2,
+Ashgrove Fictional,XX,costs-advantage,reads,aff,Fictional Invitational,R1,2026-09-08,2,
+Ashgrove Fictional,XX,single-payer-aff,reads,aff,Imaginary Classic,R1,2026-09-15,2,
+Ashgrove Fictional,XX,single-payer-aff,reads,aff,Fictional Invitational,R1,2026-09-08,2,
+Ashgrove Fictional,XX,spending-da,AT,aff,Imaginary Classic,R1,2026-09-15,2,
+Ashgrove Fictional,XX,spending-da,AT,aff,Fictional Invitational,R1,2026-09-08,2,
+Ashgrove Fictional,YY,cap-k,reads,neg,Imaginary Classic,R1,2026-09-15,1,
+Ashgrove Fictional,YY,election-da,reads,neg,Imaginary Classic,R1,2026-09-15,1,
+Ashgrove Fictional,YY,hospital-closures-da,reads,neg,Imaginary Classic,R1,2026-09-15,1,
+Ashgrove Fictional,YY,spending-da,reads,neg,Fictional Invitational,R1,2026-09-08,1,
+Ashgrove Fictional,YY,states-cp,reads,neg,Fictional Invitational,R1,2026-09-08,1,
+Ashgrove Fictional,YY,costs-advantage,AT,neg,Fictional Invitational,R1,2026-09-08,1,
+Birchmoor,QQ,condo-bad,reads,aff,Imaginary Classic,R2,2026-09-15,1,https://opencaselist.com/synthpolicy26/Birchmoor/QQ
+Birchmoor,QQ,costs-advantage,reads,aff,Imaginary Classic,R2,2026-09-15,1,https://opencaselist.com/synthpolicy26/Birchmoor/QQ
+Birchmoor,QQ,cap-k,reads,neg,Fictional Invitational,R2,2026-09-08,1,https://opencaselist.com/synthpolicy26/Birchmoor/QQ
+Birchmoor,QQ,spending-da,reads,neg,Fictional Invitational,R2,2026-09-08,1,https://opencaselist.com/synthpolicy26/Birchmoor/QQ
+Birchmoor,ZZ,costs-advantage,reads,aff,Fictional Invitational,R2,2026-09-08,1,https://opencaselist.com/synthpolicy26/Birchmoor/ZZ
+Birchmoor,ZZ,innovation-advantage,reads,aff,Fictional Invitational,R2,2026-09-08,1,https://opencaselist.com/synthpolicy26/Birchmoor/ZZ
+Birchmoor,ZZ,spending-da,reads,neg,Imaginary Classic,R2,2026-09-15,1,https://opencaselist.com/synthpolicy26/Birchmoor/ZZ
+Birchmoor,ZZ,states-cp,reads,neg,Imaginary Classic,R2,2026-09-15,1,https://opencaselist.com/synthpolicy26/Birchmoor/ZZ
+Cedarvale Fictional,VV,costs-advantage,reads,aff,Fictional Invitational,R3,2026-09-08,1,
+Cedarvale Fictional,VV,public-option-aff,reads,aff,Fictional Invitational,R3,2026-09-08,1,
+Cedarvale Fictional,WW,nhi-t,reads,neg,Imaginary Classic,R3,2026-09-15,1,
+Cedarvale Fictional,WW,nhi-t,reads,neg,Fictional Invitational,R3,2026-09-08,1,
+Cedarvale Fictional,WW,election-da,reads,neg,Fictional Invitational,R3,2026-09-08,1,
+Cedarvale Fictional,WW,provider-strikes-da,reads,neg,Imaginary Classic,R3,2026-09-15,1,
+Driftwood Fictional,JJ,innovation-advantage,reads,aff,Imaginary Classic,R3,2026-09-15,1,
+Driftwood Fictional,JJ,single-payer-aff,reads,aff,Imaginary Classic,R3,2026-09-15,1,
+Driftwood Fictional,JJ,spending-da,AT,aff,Imaginary Classic,R3,2026-09-15,1,
+Driftwood Fictional,JJ,spending-da,reads,neg,Fictional Invitational,R4,2026-09-08,1,
+Driftwood Fictional,JJ,states-cp,reads,neg,Fictional Invitational,R4,2026-09-08,1,
+Driftwood Fictional,JJ,costs-advantage,AT,neg,Fictional Invitational,R4,2026-09-08,1,
+Driftwood Fictional,JJ,election-da,AT,aff,Imaginary Classic,R3,2026-09-15,1,
+Driftwood Fictional,KK,costs-advantage,reads,aff,Imaginary Classic,R1,2026-09-15,1,
+Driftwood Fictional,KK,innovation-advantage,reads,aff,Imaginary Classic,R1,2026-09-15,1,
+Driftwood Fictional,KK,pics-bad,AT,neg,Imaginary Classic,R4,2026-09-15,1,

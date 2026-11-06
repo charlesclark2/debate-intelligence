@@ -16,11 +16,14 @@ by part, its largest part leaving at least a quarter of the line free.
 from __future__ import annotations
 
 import re
+from pathlib import Path
 from typing import Any, Final
 
 import pytest
 
 from debate_api.app import PRIVATE_NO_STORE
+from debate_core.application.landscape_report import LandscapeReportService
+from debate_core.testing.landscape_report import read_synthetic_caselist, synthetic_staleness
 
 PAGE_BUDGET: Final = 150 * 1024
 """ADR-0019 (b) 1, as `test_search_pages.py` holds every search page to it: the page, its script and
@@ -247,6 +250,45 @@ def test_a_school_page_links_each_team_page_in_a_new_tab_and_shows_none_as_text(
     ]
     assert "<td>CD</td>\n<td>neg</td>\n<td><code>invented-da</code></td>\n<td>2</td>\n<td>none</td>" in hollow
     assert "opencaselist.com" not in hollow
+
+
+SYNTHETIC_CASELIST: Final = Path(__file__).resolve().parents[3] / "tests" / "fixtures" / "landscape" / "synthetic_caselist"
+
+
+def test_a_school_page_lists_each_teams_rounds_under_its_positions_as_the_report_writes_them(
+    make_world: Any, landscape_store: Any
+) -> None:
+    """`v1-e32-t54`: schools.md as debate_core renders the synthetic caselist. The rounds are lists under
+    the school's table, on the school's own page, and no team's heading becomes a page of its own."""
+    files = LandscapeReportService().bundle(read_synthetic_caselist(SYNTHETIC_CASELIST), synthetic_staleness()).files
+    world = make_world(
+        landscape_objects=landscape_store(
+            {
+                f"reports/landscape/synthpolicy26/2026-09-15/{name}": files[name].encode()
+                for name in ("report.md", "schools.md")
+            }
+        )
+    )
+    world.signed_in_student()
+
+    front = main_of(page(world, SCHOOL_VIEW))
+    ashgrove = main_of(page(world, "/landscape/synthpolicy26/schools/ashgrove-fictional"))
+
+    assert [words for href, words in links_in(front) if "/schools/" in href] == [
+        "Ashgrove Fictional",
+        "Birchmoor",
+        "Cedarvale Fictional",
+        "Driftwood Fictional",
+    ]
+    assert "<p><strong>XX, round by round</strong> (newest snapshot first)</p>" in ashgrove
+    assert (
+        "<li><code>spending-da</code> (answers only)\n<ul>\n"
+        "<li>Imaginary Classic, R1, aff, AT (one file for 2 rounds)</li>\n"
+        "<li>Fictional Invitational, R1, aff, AT (one file for 2 rounds)</li>\n</ul>\n</li>"
+    ) in ashgrove
+    assert "<li>Fictional Invitational, R1, neg, AT</li>" in ashgrove, "YY answers the Costs advantage"
+    assert "round by round" not in front, "the front page holds no school's rounds"
+    world.services.search_index.close()
 
 
 def test_a_position_page_links_each_team_page_in_a_new_tab_and_shows_none_as_text(member: Any) -> None:

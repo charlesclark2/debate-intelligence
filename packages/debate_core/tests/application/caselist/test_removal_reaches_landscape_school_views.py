@@ -1,14 +1,14 @@
 """A removal reaches the landscape bundles' school views, and nothing else of them (`v1-e32-t13`).
 
-The plan lists, and `--execute` deletes, the `schools.csv` and `schools.md` of every landscape
-bundle of the caselist the removal touches, on this machine and in the bucket, every version
+The plan lists, and `--execute` deletes, the `schools.csv`, `school_rounds.csv` (`v1-e32-t54`) and
+`schools.md` of every landscape bundle of the caselist the removal touches, on this machine and in the bucket, every version
 included; every circuit-wide file and every other caselist's bundle stay byte for byte (ac1). And
 `caselist status` reports a school view a removal should have deleted as residue, until it is gone
 (ac2).
 
 Every bucket is moto's, versioned, and every removal is the real one, with its clock fixed at
 :data:`~.conftest.REMOVAL_TIME`. The bundles are written here by hand beside the synthetic store,
-each with the seven files `v1-e32-t04` names, spelled out below rather than read from the code
+each with the eight files `v1-e32-t04` and `v1-e32-t54` name, spelled out below rather than read from the code
 (working agreements §6):
 
 * `testcl26` 2026-09-15 and 2026-09-29: the synthetic caselist, which every removal here touches;
@@ -59,7 +59,7 @@ WRITTEN = REMOVAL_TIME - timedelta(days=1)
 FIRST_WRITTEN = WRITTEN - timedelta(days=7)
 """When a school view's first, now noncurrent, version was written."""
 
-SCHOOL_VIEW_FILES = ("schools.csv", "schools.md")
+SCHOOL_VIEW_FILES = ("schools.csv", "school_rounds.csv", "schools.md")
 CIRCUIT_WIDE_FILES = ("report.md", "positions.csv", "top_cards.csv", "impact_cards.csv", "trends.csv")
 BUNDLES = (
     ("testcl26", "2026-09-15"),
@@ -69,8 +69,10 @@ BUNDLES = (
 )
 
 REMOVED_VIEWS = (
+    "reports/landscape/testcl26/2026-09-15/school_rounds.csv",
     "reports/landscape/testcl26/2026-09-15/schools.csv",
     "reports/landscape/testcl26/2026-09-15/schools.md",
+    "reports/landscape/testcl26/2026-09-29/school_rounds.csv",
     "reports/landscape/testcl26/2026-09-29/schools.csv",
     "reports/landscape/testcl26/2026-09-29/schools.md",
 )
@@ -257,7 +259,7 @@ class TestThePlan:
             *((Side.LOCAL, key) for key in REMOVED_VIEWS),
             *((Side.BUCKET, key) for key in REMOVED_VIEWS),
         ]
-        assert [len(one.versions or ()) for one in plan.school_views] == [1, 1, 1, 1, 2, 2, 2, 2]
+        assert [len(one.versions or ()) for one in plan.school_views] == [1] * 6 + [2] * 6
         assert plan.school_view_reach == (SchoolViewReach(SYNTHETIC_CASELIST),)
         assert plan.school_view_versions_counted
         assert not plan.nothing_to_do
@@ -307,7 +309,7 @@ class TestThePlan:
 
         plan = await plan_of(bundles)
 
-        assert len(plan.school_views) == 8
+        assert len(plan.school_views) == 12
 
 
 # ------------------------------------------------------------------------------------------------
@@ -335,7 +337,7 @@ class TestTheExecution:
         assert local_reports(bundles) == {
             key: data for key, data in local_before.items() if key not in REMOVED_VIEWS
         }
-        assert (report.school_view_files_deleted, report.school_view_versions_deleted) == (4, 8)
+        assert (report.school_view_files_deleted, report.school_view_versions_deleted) == (6, 12)
 
     async def test_a_version_the_dry_run_could_not_see_goes_by_the_same_rule(
         self, bundles: RemovalWorld
@@ -384,6 +386,7 @@ class TestTheExecution:
         for line in (*lines, *scopes):
             assert "reports/" not in line
             assert "schools" not in line
+            assert "school_rounds" not in line
             assert "Maple Grove" not in line
 
 
@@ -416,12 +419,10 @@ class TestARerun:
         report = await bundles.service().execute(plan)
 
         assert [(one.side, one.key) for one in plan.school_views] == [
-            (Side.LOCAL, REMOVED_VIEWS[0]),
-            (Side.LOCAL, REMOVED_VIEWS[1]),
-            (Side.BUCKET, REMOVED_VIEWS[0]),
-            (Side.BUCKET, REMOVED_VIEWS[1]),
+            *((Side.LOCAL, key) for key in REMOVED_VIEWS[:3]),
+            *((Side.BUCKET, key) for key in REMOVED_VIEWS[:3]),
         ]
-        assert (report.school_view_files_deleted, report.school_view_versions_deleted) == (2, 2)
+        assert (report.school_view_files_deleted, report.school_view_versions_deleted) == (3, 3)
         assert not [key for key in local_reports(bundles) if key in REMOVED_VIEWS]
         assert not [key for key, _ in bucket_reports(bundles) if key in REMOVED_VIEWS]
 
@@ -455,8 +456,8 @@ class TestStatus:
 
         (residue,) = [one for one in report.residue if one.caselist == SYNTHETIC_CASELIST]
         assert residue.school_views == (
-            OlderVersions(role="school view", versions=4),
-            OlderVersions(role="local school view", versions=4),
+            OlderVersions(role="school view", versions=6),
+            OlderVersions(role="local school view", versions=6),
         )
         assert residue.school_views_older_than == RemovalCompletion(REQUEST, REMOVAL_TIME)
         assert residue.found and not report.in_sync

@@ -98,7 +98,7 @@ from debate_core.domain.landscape_report import (
     TableTagsWithheld,
     TopCard,
 )
-from debate_core.domain.landscape_schools import SchoolRow, SchoolView
+from debate_core.domain.landscape_schools import SchoolRound, SchoolRow, SchoolView
 from debate_core.domain.landscape_texts import (
     QUOTED_KINDS,
     AnalyticTextKind,
@@ -121,12 +121,14 @@ __all__ = [
     "PLANK_TABLE_HEADER",
     "POSITION_COLUMNS",
     "SCHOOL_COLUMNS",
+    "SCHOOL_ROUND_COLUMNS",
     "TOP_CARD_COLUMNS",
     "TREND_COLUMNS",
     "header_metadata",
     "render_impact_cards_csv",
     "render_markdown",
     "render_positions_csv",
+    "render_school_rounds_csv",
     "render_schools_csv",
     "render_schools_markdown",
     "render_top_cards_csv",
@@ -184,6 +186,23 @@ TREND_COLUMNS: Final = (
 SCHOOL_COLUMNS: Final = ("school", "team_code", "side", "position_id", "rounds", "team_page")
 """schools.csv's columns, in order (`v1-e32-t04` ac4, as the PM's ruling of 2026-10-24 amended it, and
 `v1-e32-t18`'s `team_page`: the team's openCaselist page, or empty)."""
+
+SCHOOL_ROUND_COLUMNS: Final = (
+    "school",
+    "team_code",
+    "position_id",
+    "stance",
+    "side",
+    "tournament",
+    "round",
+    "snapshot",
+    "rounds_in_file",
+    "team_page",
+)
+"""school_rounds.csv's columns, in order (`v1-e32-t54`, the PM's ruling of 2026-11-06): one row per team,
+position and round, the tournament and round as disclosed (empty when the filename gave none), `reads`
+or `AT`, the snapshot the round was first seen in, and how many of the team's rounds the file holding
+the position was disclosed for."""
 
 _SCHOOL_VIEW_SHOWS: Final = (
     "school and team code as disclosed, and the team's public openCaselist page, never more "
@@ -1243,6 +1262,11 @@ def render_schools_csv(view: SchoolView, metadata: Mapping[str, str]) -> str:
             for row in view.rows
         ),
     )
+
+
+def render_school_rounds_csv(view: SchoolView, metadata: Mapping[str, str]) -> str:
+    """school_rounds.csv: the header block, then one row per team, position and round (`v1-e32-t54`)."""
+    return _csv(metadata, "school_rounds", SCHOOL_ROUND_COLUMNS, ())
 
 
 def render_schools_markdown(view: SchoolView, report: LandscapeReport) -> str:

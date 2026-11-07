@@ -41,7 +41,7 @@ school, addressed by its heading's anchor, and every position under its kind, ad
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Final
 from urllib.parse import quote
@@ -61,6 +61,7 @@ __all__ = [
     "render_report",
     "render_school_view",
     "report_part_href",
+    "team_href",
 ]
 
 _MARKDOWN: Final = MarkdownIt("commonmark", {"html": False, "linkify": False, "typographer": False}).enable(
@@ -71,6 +72,8 @@ _NEW_TAB: Final = '<span class="new-tab"> (opens in a new tab)</span>'
 _CONTENTS_HEADING: Final = "Contents"
 _BY_SCHOOL: Final = "By school"
 _BY_POSITION: Final = "By position"
+_TEAM_LEVEL: Final = 4
+"""A `####` heading inside a school is one of its teams (`v1-e32-t57`)."""
 _UNKINDED: Final = "Positions"
 """The kind a position is listed under when the view names none above it."""
 
@@ -115,6 +118,11 @@ class LandscapePiece:
     body_html: str
     kind: str | None = None
     """A position's kind, as the view's heading names it (`Disadvantages`)."""
+    teams: tuple[LandscapePiece, ...] = ()
+    """A school's teams, each on a page of its own (`v1-e32-t57`): every `####` heading inside it."""
+
+    def team(self, path: str) -> LandscapePiece | None:
+        return next((one for one in self.teams if one.path == path), None)
 
 
 @dataclass(frozen=True, slots=True)
@@ -143,6 +151,11 @@ class RenderedSchoolView:
 
     def school(self, path: str) -> LandscapePiece | None:
         return next((one for one in self.schools if one.path == path), None)
+
+    def team(self, school: str, team: str) -> LandscapePiece | None:
+        """One team's page, by its school's path and its own."""
+        found = self.school(school)
+        return None if found is None else found.team(team)
 
     def position(self, path: str) -> LandscapePiece | None:
         return next((one for kind in self.kinds for one in kind.positions if one.path == path), None)
@@ -227,6 +240,7 @@ def _parts(sections: Sequence[_Section]) -> list[tuple[_Section, list[_Section]]
 def render_school_view(markdown: str, caselist: str) -> RenderedSchoolView:
     """`schools.md` as its pages: the front page, and one page per school and per position."""
     preamble, sections = _split(_MARKDOWN.parse(markdown))
+    in_file = _anchors_in_file(sections)
     title, sections = _title(sections)
     front = Anchors()
     by_school_at = _index_of(sections, 2, _BY_SCHOOL)
@@ -244,7 +258,7 @@ def render_school_view(markdown: str, caselist: str) -> RenderedSchoolView:
     header = _render(header_tokens, caselist=caselist, team_pages=True, anchors=front)
     by_school, by_position = sections[by_school_at], sections[by_position_at]
     by_school_anchor, by_position_anchor = _anchor(by_school, front), _anchor(by_position, front)
-    school_sections = sections[by_school_at + 1 : by_position_at]
+    stray, schools = _cut_schools(sections[by_school_at + 1 : by_position_at])
     rest = sections[by_position_at + 1 :]
     kinds_end = next((index for index, one in enumerate(rest) if one.level <= 2), len(rest))
     return RenderedSchoolView(
@@ -255,8 +269,13 @@ def render_school_view(markdown: str, caselist: str) -> RenderedSchoolView:
             ContentsEntry(by_position.text, f"#{by_position_anchor}"),
         ),
         by_school_anchor=by_school_anchor,
-        by_school_lead_html=_render(by_school.body, caselist=caselist, team_pages=True, anchors=front),
-        schools=_schools(school_sections, caselist),
+        by_school_lead_html=_render(
+            [*by_school.body, *(token for one in stray for token in one.tokens)],
+            caselist=caselist,
+            team_pages=True,
+            anchors=front,
+        ),
+        schools=_schools(schools, caselist, in_file),
         by_position_anchor=by_position_anchor,
         by_position_lead_html=_render(by_position.body, caselist=caselist, team_pages=True, anchors=front),
         kinds=_kinds(rest[:kinds_end], caselist, front),
@@ -269,16 +288,88 @@ def render_school_view(markdown: str, caselist: str) -> RenderedSchoolView:
     )
 
 
-def _schools(sections: Sequence[_Section], caselist: str) -> tuple[LandscapePiece, ...]:
-    paths = Anchors()
-    return tuple(
-        LandscapePiece(
-            heading=section.text,
-            path=paths.add(section.text),
-            body_html=_render(section.body, caselist=caselist, team_pages=True, anchors=Anchors()),
-        )
-        for section in sections
+@dataclass(slots=True)
+class _School:
+    """A school's heading and blocks, and each of its teams: a `####` heading and what is under it."""
+
+    section: _Section
+    teams: list[tuple[_Section, list[_Section]]] = field(
+        default_factory=list[tuple[_Section, list[_Section]]]
     )
+
+
+def _cut_schools(sections: Sequence[_Section]) -> tuple[list[_Section], list[_School]]:
+    """The sections under "By school" as schools: a heading above `####` is a school, a `####` one of the
+    school's teams, and a deeper heading stays inside its team, or its school before any team
+    (`v1-e32-t57`). A `####` or deeper before any school makes no page: it is returned first, for the
+    front page."""
+    stray: list[_Section] = []
+    schools: list[_School] = []
+    for section in sections:
+        if section.level < _TEAM_LEVEL:
+            schools.append(_School(section))
+        elif not schools:
+            stray.append(section)
+        elif section.level == _TEAM_LEVEL:
+            schools[-1].teams.append((section, []))
+        elif schools[-1].teams:
+            schools[-1].teams[-1][1].append(section)
+        else:
+            schools[-1].section.body += section.tokens
+    return stray, schools
+
+
+def _schools(
+    schools: Sequence[_School], caselist: str, in_file: Mapping[int, str]
+) -> tuple[LandscapePiece, ...]:
+    paths = Anchors()
+    pieces: list[LandscapePiece] = []
+    for school in schools:
+        path, team_paths = paths.add(school.section.text), Anchors()
+        teams = tuple(
+            LandscapePiece(
+                heading=team.text,
+                path=team_paths.add(team.text),
+                body_html=_render(
+                    [*team.body, *(token for one in below for token in one.tokens)],
+                    caselist=caselist,
+                    team_pages=True,
+                    anchors=Anchors(),
+                ),
+            )
+            for team, below in school.teams
+        )
+        # A link to one of this school's team headings, by its anchor in the file, goes to its page.
+        team_rounds = {
+            in_file[id(team)]: team_href(caselist, path, piece.path)
+            for (team, _), piece in zip(school.teams, teams, strict=True)
+        }
+        pieces.append(
+            LandscapePiece(
+                heading=school.section.text,
+                path=path,
+                body_html=_render(
+                    school.section.body,
+                    caselist=caselist,
+                    team_pages=True,
+                    anchors=Anchors(),
+                    team_rounds=team_rounds,
+                ),
+                teams=teams,
+            )
+        )
+    return tuple(pieces)
+
+
+def team_href(caselist: str, school: str, team: str) -> str:
+    """Where a team's page is: under its school's (`v1-e32-t57`)."""
+    return f"/landscape/{caselist}/schools/{quote(school)}/{quote(team)}"
+
+
+def _anchors_in_file(sections: Sequence[_Section]) -> dict[int, str]:
+    """Each heading's anchor in the whole file, by the section's identity, as `render.py` links a team."""
+    anchors = Anchors()
+    return {id(section): anchors.add(section.text) for section in sections}
 
 
 def _kinds(sections: Sequence[_Section], caselist: str, front: Anchors) -> tuple[PositionKind, ...]:
@@ -377,30 +468,52 @@ def _plain(inline: Token) -> str:
     return "".join(words).strip()
 
 
-def _render(tokens: Sequence[Token], *, caselist: str, team_pages: bool, anchors: Anchors) -> str:
+def _render(
+    tokens: Sequence[Token],
+    *,
+    caselist: str,
+    team_pages: bool,
+    anchors: Anchors,
+    team_rounds: Mapping[str, str] | None = None,
+) -> str:
     """`tokens` as one page's HTML: each heading not yet anchored gets its anchor, then each link is
-    checked against the page's anchors."""
+    checked against the page's anchors, and `team_rounds`' anchors go to their teams' pages."""
     for index, token in enumerate(tokens):
         if token.type == "heading_open" and token.attrGet("id") is None:
             token.attrSet("id", anchors.add(_plain(tokens[index + 1])))
     for token in tokens:
         if token.type == "inline" and token.children:
             token.children = _checked(
-                token.children, caselist=caselist, team_pages=team_pages, anchors=anchors
+                token.children,
+                caselist=caselist,
+                team_pages=team_pages,
+                anchors=anchors,
+                team_rounds=team_rounds or {},
             )
     return _MARKDOWN.renderer.render(list(tokens), _MARKDOWN.options, {})
 
 
-def _checked(children: Sequence[Token], *, caselist: str, team_pages: bool, anchors: Anchors) -> list[Token]:
-    """An inline run with each link checked: kept, opened in a new tab, or reduced to its text."""
+def _checked(
+    children: Sequence[Token],
+    *,
+    caselist: str,
+    team_pages: bool,
+    anchors: Anchors,
+    team_rounds: Mapping[str, str],
+) -> list[Token]:
+    """An inline run with each link checked: kept, sent to a team's page, opened in a new tab, or
+    reduced to its text."""
     kept: list[Token] = []
     open_links: list[LandscapeLink | None] = []
     for child in children:
         if child.type == "link_open":
+            href = str(child.attrGet("href") or "")
             allowed = landscape_link(
-                str(child.attrGet("href") or ""), caselist=caselist, anchors=anchors, team_pages=team_pages
+                href, caselist=caselist, anchors=anchors, team_pages=team_pages, team_rounds=team_rounds
             )
             open_links.append(allowed)
+            if allowed is LandscapeLink.TEAM_ROUNDS:
+                child.attrSet("href", team_rounds[href.removeprefix("#")])
             if allowed is LandscapeLink.TEAM_PAGE:
                 child.attrSet("target", "_blank")
                 child.attrSet("rel", "noopener noreferrer")

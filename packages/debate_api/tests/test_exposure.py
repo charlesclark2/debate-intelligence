@@ -58,6 +58,10 @@ CONCRETE_PATHS: Final = {
         "/landscape/synthpolicy26/schools/ashgrove",
         "/landscape/synthpolicy26/schools/oldfield",
     ],
+    "/landscape/{caselist}/schools/{school}/{team}": [
+        "/landscape/synthpolicy26/schools/birch-hollow-2/ef",
+        "/landscape/synthpolicy26/schools/birch-hollow-2/no-such-team",
+    ],
     "/landscape/{caselist}/positions/{position_id}": [
         "/landscape/synthpolicy26/positions/invented-da",
         "/landscape/synthpolicy26/positions/no-such-position",

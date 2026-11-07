@@ -44,6 +44,7 @@ LANDSCAPE_PAGES: Final = (
     "/landscape/synthpolicy26/schools/ashgrove",
     "/landscape/synthpolicy26/schools/birch-hollow",
     "/landscape/synthpolicy26/schools/birch-hollow-2",
+    "/landscape/synthpolicy26/schools/birch-hollow-2/ef",
     "/landscape/synthpolicy26/positions/invented-da",
     "/landscape/synthpolicy26/positions/invented-aff",
     "/landscape/synthld26",
@@ -247,6 +248,7 @@ def test_a_school_page_links_each_team_page_in_a_new_tab_and_shows_none_as_text(
     assert re.findall(r"<a [^>]*>", hyphenated) == [
         '<a href="/landscape/synthpolicy26/schools">',
         f'<a href="https://opencaselist.com/synthpolicy26/Birch-Hollow/EF" {new_tab}>',
+        '<a href="/landscape/synthpolicy26/schools/birch-hollow-2/ef">',
     ]
     assert "<td>CD</td>\n<td>neg</td>\n<td><code>invented-da</code></td>\n<td>2</td>\n<td>none</td>" in hollow
     assert "opencaselist.com" not in hollow
@@ -257,11 +259,8 @@ SYNTHETIC_CASELIST: Final = (
 )
 
 
-def test_a_school_page_lists_each_teams_rounds_under_its_positions_as_the_report_writes_them(
-    make_world: Any, landscape_store: Any
-) -> None:
-    """`v1-e32-t54`: schools.md as debate_core renders the synthetic caselist. The rounds are lists under
-    the school's table, on the school's own page, and no team's heading becomes a page of its own."""
+def _core_world(make_world: Any, landscape_store: Any) -> Any:
+    """The pilot over schools.md as debate_core renders the synthetic caselist."""
     files = (
         LandscapeReportService()
         .bundle(read_synthetic_caselist(SYNTHETIC_CASELIST), synthetic_staleness())
@@ -276,9 +275,66 @@ def test_a_school_page_lists_each_teams_rounds_under_its_positions_as_the_report
         )
     )
     world.signed_in_student()
+    return world
 
-    front = main_of(page(world, SCHOOL_VIEW))
+
+def test_a_school_page_lists_its_teams_each_linking_its_openCaselist_page_and_its_own_page(
+    make_world: Any, landscape_store: Any
+) -> None:
+    """`v1-e32-t57` (the PM's ruling of 2026-11-07, Q1): the school's table, less its team page column,
+    then its teams, each with its openCaselist link and a link to its own page. Its rounds are not here."""
+    world = _core_world(make_world, landscape_store)
+    birchmoor = main_of(page(world, "/landscape/synthpolicy26/schools/birchmoor"))
     ashgrove = main_of(page(world, "/landscape/synthpolicy26/schools/ashgrove-fictional"))
+
+    new_tab = 'target="_blank" rel="noopener noreferrer"'
+    assert links_in(birchmoor) == [
+        ("/landscape/synthpolicy26/schools", "Positions by school: synthpolicy26 through 2026-09-15"),
+        ("/landscape/synthpolicy26/schools/birchmoor/qq", "round by round"),
+        ("https://opencaselist.com/synthpolicy26/Birchmoor/QQ", "openCaselist (opens in a new tab)"),
+        ("/landscape/synthpolicy26/schools/birchmoor/zz", "round by round"),
+        ("https://opencaselist.com/synthpolicy26/Birchmoor/ZZ", "openCaselist (opens in a new tab)"),
+    ]
+    assert f'<a href="https://opencaselist.com/synthpolicy26/Birchmoor/QQ" {new_tab}>' in birchmoor
+    assert "<th>Team page</th>" not in birchmoor
+    assert "<td>QQ</td>\n<td>aff</td>\n<td><code>condo-bad</code></td>\n<td>1</td>\n</tr>" in birchmoor
+    assert (
+        '<li>XX: <a href="/landscape/synthpolicy26/schools/ashgrove-fictional/xx">round by round</a>, '
+        "no openCaselist page</li>"
+    ) in ashgrove
+    assert "Imaginary Classic" not in ashgrove and "<h4" not in ashgrove, "the rounds are on the team's page"
+    world.services.search_index.close()
+
+
+def test_a_team_page_lists_that_teams_rounds_under_its_positions_as_the_report_writes_them(
+    make_world: Any, landscape_store: Any
+) -> None:
+    """`v1-e32-t54`'s lines, on the team's own page since `v1-e32-t57`, which links back to its school."""
+    world = _core_world(make_world, landscape_store)
+    xx = main_of(page(world, "/landscape/synthpolicy26/schools/ashgrove-fictional/xx"))
+    yy = main_of(page(world, "/landscape/synthpolicy26/schools/ashgrove-fictional/yy"))
+
+    assert "<h1>XX</h1>" in xx
+    assert links_in(xx) == [
+        ("/landscape/synthpolicy26/schools", "Positions by school: synthpolicy26 through 2026-09-15"),
+        ("/landscape/synthpolicy26/schools/ashgrove-fictional", "Ashgrove Fictional"),
+    ]
+    assert "Ashgrove Fictional's team, in the synthpolicy26 view through 2026-09-15." in xx
+    assert (
+        "<li><code>spending-da</code> (answers only)\n<ul>\n"
+        "<li>Imaginary Classic, R1, aff, AT (one file for 2 rounds)</li>\n"
+        "<li>Fictional Invitational, R1, aff, AT (one file for 2 rounds)</li>\n</ul>\n</li>"
+    ) in xx
+    assert "<li>Fictional Invitational, R1, neg, AT</li>" in yy, "YY answers the Costs advantage"
+    assert "Fictional Invitational, R1, neg, AT" not in xx and "<table>" not in xx
+    world.services.search_index.close()
+
+
+def test_a_team_heading_never_makes_a_school_page_and_a_team_is_found_only_under_its_school(
+    make_world: Any, landscape_store: Any
+) -> None:
+    world = _core_world(make_world, landscape_store)
+    front = main_of(page(world, SCHOOL_VIEW))
 
     assert [words for href, words in links_in(front) if "/schools/" in href] == [
         "Ashgrove Fictional",
@@ -286,14 +342,10 @@ def test_a_school_page_lists_each_teams_rounds_under_its_positions_as_the_report
         "Cedarvale Fictional",
         "Driftwood Fictional",
     ]
-    assert "<p><strong>XX, round by round</strong> (newest snapshot first)</p>" in ashgrove
-    assert (
-        "<li><code>spending-da</code> (answers only)\n<ul>\n"
-        "<li>Imaginary Classic, R1, aff, AT (one file for 2 rounds)</li>\n"
-        "<li>Fictional Invitational, R1, aff, AT (one file for 2 rounds)</li>\n</ul>\n</li>"
-    ) in ashgrove
-    assert "<li>Fictional Invitational, R1, neg, AT</li>" in ashgrove, "YY answers the Costs advantage"
-    assert "round by round" not in front, "the front page holds no school's rounds"
+    assert "round by round" not in front, "the front page holds no school's teams"
+    page(world, "/landscape/synthpolicy26/schools/xx", 404)
+    page(world, "/landscape/synthpolicy26/schools/birchmoor/xx", 404)
+    page(world, "/landscape/synthpolicy26/schools/no-such-school/xx", 404)
     world.services.search_index.close()
 
 

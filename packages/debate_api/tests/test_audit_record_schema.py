@@ -145,6 +145,7 @@ def test_audit_schema_names_every_landscape_page_kind_the_code_has_and_no_other(
         "report-part",
         "school-view",
         "school",
+        "team",
         "position",
     ]
     assert [page.value for page in LandscapePage] == schema()["properties"]["page"]["enum"]

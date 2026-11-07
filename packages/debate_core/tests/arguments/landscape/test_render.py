@@ -21,6 +21,7 @@ import random
 import re
 from datetime import date
 from pathlib import Path
+from typing import Final
 
 import pytest
 
@@ -49,7 +50,7 @@ from debate_core.arguments.landscape.render import (
 )
 from debate_core.domain.landscape import PositionSide
 from debate_core.domain.landscape_report import LandscapeReport, LeadInSource, TopCard
-from debate_core.domain.landscape_schools import RoundStance, SchoolRound, SchoolSide
+from debate_core.domain.landscape_schools import RoundStance, SchoolRound, SchoolRow, SchoolSide
 from debate_core.testing.landscape_report import (
     SYNTHETIC_REPORT_DATE,
     SYNTHETIC_THIRD_SNAPSHOT,
@@ -512,7 +513,9 @@ def test_a_school_round_line_escapes_what_it_shows_as_disclosed_and_says_what_wa
     block = text.split("### Maple Grove\n", 1)[1].split("\n## ", 1)[0]
     assert block == (
         "\nNo team of this school read a counted position.\n\n"
-        "**QX, round by round** (newest snapshot first)\n\n"
+        "Each team's rounds, on a page of its own:\n\n"
+        "- QX: [round by round](#qx), no openCaselist page\n\n"
+        "#### QX\n\n"
         "- `spending-da`\n"
         "  - 2\\. Birchwater\\_Open, \\*Doubles\\*, neg, reads\n"
         "  - no tournament disclosed, no round disclosed, aff, AT\n"
@@ -525,6 +528,59 @@ def test_a_school_round_line_escapes_what_it_shows_as_disclosed_and_says_what_wa
         ("", ""),
         ("Quillfeather Invitational", "- Octas"),
     ]
+
+
+def test_each_team_is_a_heading_under_its_school_listed_with_its_two_links_by_its_anchor_in_the_file() -> (
+    None
+):
+    """`v1-e32-t57`: a team's rounds go under a `####` heading of its own, and its school lists it with a
+    link to that heading and its openCaselist page. The anchor counts every heading of the file in order,
+    as the pilot's does: a team code that repeats another heading's anchor takes `-2`, then `-3`."""
+    bundle = _bundle()
+    lines = (
+        _hand_round(school="Ab", team_code="AB"),
+        _hand_round(school="Larkspur", team_code="AB", side=SchoolSide.AFF, position_id="cap-k"),
+        _hand_round(school="Larkspur", team_code="CD", stance=RoundStance.AT, answers_only=True),
+        _hand_round(school="Marsh End", team_code="AB", stance=RoundStance.AT, answers_only=True),
+    )
+    rows = (
+        SchoolRow(school="Ab", team_code="AB", side=SchoolSide.NEG, position_id="spending-da", rounds=1),
+        SchoolRow(school="Larkspur", team_code="AB", side=SchoolSide.AFF, position_id="cap-k", rounds=1),
+    )
+    view = bundle.schools.model_copy(update={"rows": rows, "round_lines": lines})
+    text = render_schools_markdown(view, bundle.report)
+    by_school = text.split("## By school\n", 1)[1].split("\n## By position", 1)[0]
+    assert by_school.split("\n\n", 1)[1] == (
+        "### Ab\n\n"
+        "| Team code | Side | Position | Rounds |\n|---|---|---|---|\n"
+        "| AB | neg | `spending-da` | 1 |\n\n"
+        "Each team's rounds, on a page of its own:\n\n"
+        "- AB: [round by round](#ab-2), [openCaselist](https://opencaselist.com/synthpolicy26/Ab/AB)\n\n"
+        "#### AB\n\n"
+        "- `spending-da`\n"
+        "  - Quillfeather Invitational, Round 4, neg, reads\n\n"
+        "### Larkspur\n\n"
+        "| Team code | Side | Position | Rounds |\n|---|---|---|---|\n"
+        "| AB | aff | `cap-k` | 1 |\n\n"
+        "Each team's rounds, on a page of its own:\n\n"
+        "- AB: [round by round](#ab-3), [openCaselist](https://opencaselist.com/synthpolicy26/Larkspur/AB)\n"
+        "- CD: [round by round](#cd), [openCaselist](https://opencaselist.com/synthpolicy26/Larkspur/CD)\n\n"
+        "#### AB\n\n"
+        "- `cap-k`\n"
+        "  - Quillfeather Invitational, Round 4, aff, reads\n\n"
+        "#### CD\n\n"
+        "- `spending-da` (answers only)\n"
+        "  - Quillfeather Invitational, Round 4, neg, AT\n\n"
+        "### Marsh End\n\n"
+        "No team of this school read a counted position.\n\n"
+        "Each team's rounds, on a page of its own:\n\n"
+        "- AB: [round by round](#ab-4), no openCaselist page\n\n"
+        "#### AB\n\n"
+        "- `spending-da` (answers only)\n"
+        "  - Quillfeather Invitational, Round 4, neg, AT\n"
+    )
+    assert "Team page" not in by_school, "a school's table has no team page column"
+    assert "| School | Team code | Side | Rounds | Team page |" in text, "a position's table keeps it"
 
 
 def test_the_school_view_carries_no_debater_name_tag_cite_or_path() -> None:
@@ -626,8 +682,9 @@ def test_a_team_code_that_is_not_one_address_word_gets_no_link_and_is_counted() 
     assert f"# team_pages={counted}\n" in files["schools.csv"]
     assert "| Birchmoor | Q-Q | neg | 1 | none |" in files["schools.md"]
     assert f"| Birchmoor | ZZ | neg | 1 | [openCaselist]({BIRCHMOOR_PAGE}/ZZ) |" in files["schools.md"]
-    assert "| Q-Q | neg | `cap-k` | 1 | none |" in files["schools.md"]
-    assert f"| ZZ | neg | `states-cp` | 1 | [openCaselist]({BIRCHMOOR_PAGE}/ZZ) |" in files["schools.md"]
+    assert "| Q-Q | neg | `cap-k` | 1 |\n" in files["schools.md"]
+    assert "- Q-Q: [round by round](#q-q), no openCaselist page\n" in files["schools.md"]
+    assert f"- ZZ: [round by round](#zz), [openCaselist]({BIRCHMOOR_PAGE}/ZZ)\n" in files["schools.md"]
     assert _team_page_cells(files["schools.md"], "## By school") == _team_page_cells(
         files["schools.md"], "## By position"
     )
@@ -639,10 +696,14 @@ def test_a_team_code_that_is_not_one_address_word_gets_no_link_and_is_counted() 
     assert "opencaselist" not in "".join(files[name] for name in CIRCUIT_WIDE_FILES).casefold()
 
 
-def _team_page_cells(text: str, section: str) -> dict[tuple[str, str], set[str]]:
-    """Each team's team page cells in one `##` section of schools.md, keyed by school and team code.
+_TEAM_ITEM: Final = re.compile(r"^- (\S+): \[round by round\]\(#[\w-]+\), (.+)$")
 
-    By school, a row is a team code under its school's `###` heading; by position, a row names both.
+
+def _team_page_cells(text: str, section: str) -> dict[tuple[str, str], set[str]]:
+    """Each team's team page in one `##` section of schools.md, keyed by school and team code.
+
+    By school (`v1-e32-t57`), a team's item in the list under its school's `###` heading, with "no
+    openCaselist page" read as the by-position tables' `none`; by position, a table row names both.
     """
     body = text.split(f"{section}\n", 1)[1].split("\n## ", 1)[0]
     cells: dict[tuple[str, str], set[str]] = {}
@@ -650,16 +711,22 @@ def _team_page_cells(text: str, section: str) -> dict[tuple[str, str], set[str]]
     for line in body.splitlines():
         if line.startswith("### "):
             school = line.removeprefix("### ")
-        if not line.startswith("| ") or line.startswith(("| Team code |", "| School |")):
+        if section == "## By school":
+            item = _TEAM_ITEM.match(line)
+            if item is not None:
+                cell = "none" if item[2] == "no openCaselist page" else item[2]
+                cells.setdefault((school, item[1]), set()).add(cell)
+            continue
+        if not line.startswith("| ") or line.startswith("| School |"):
             continue
         row = [cell.strip() for cell in line.strip("|").split("|")]
-        team = (school, row[0]) if section == "## By school" else (row[0], row[1])
-        cells.setdefault(team, set()).add(row[-1])
+        cells.setdefault((row[0], row[1]), set()).add(row[-1])
     return cells
 
 
 def test_a_team_reads_the_same_team_page_by_school_as_by_position() -> None:
-    """`v1-e32-t23`: the by-school table's team page column is the by-position tables' cell."""
+    """`v1-e32-t23`: a team's team page by school is the by-position tables' cell (since `v1-e32-t57`, in
+    the school's list of teams rather than in a column of its table)."""
     text = _bundle().files["schools.md"]
     by_school = _team_page_cells(text, "## By school")
     assert by_school == _team_page_cells(text, "## By position")

@@ -74,6 +74,11 @@ ROUTE_REQUESTS: list[RouteRequest] = [
     ),
     RouteRequest(
         "GET",
+        "/landscape/{caselist}/schools/{school}/{team}",
+        "/landscape/synthpolicy26/schools/birch-hollow-2/ef",
+    ),
+    RouteRequest(
+        "GET",
         "/landscape/{caselist}/positions/{position_id}",
         "/landscape/synthpolicy26/positions/invented-da",
     ),

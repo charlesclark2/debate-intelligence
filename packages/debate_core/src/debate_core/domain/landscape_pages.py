@@ -4,7 +4,8 @@ The pilot shows the newest published landscape bundle of each caselist, `report.
 view `schools.md`, to signed-in members. What is decided here holds whatever renders the pages:
 
 * **Which pages there are** (:class:`LandscapePage`): the caselists, a caselist's report front page
-  and one page per `#` part of it, its school view's front page, and one page per school and per
+  and one page per `#` part of it, its school view's front page, and one page per school, per team
+  (`v1-e32-t57`: each `####` heading inside a school, the PM's ruling of 2026-11-07) and per
   position (the PM's layout ruling of 2026-10-25, and the parts from the review of 2026-10-26, when one
   report page had reached 92% of ADR-0019's 150 KB). The page kind is all an audit record says of
   where a member was, never which part, school or position.
@@ -24,6 +25,7 @@ view `schools.md`, to signed-in members. What is decided here holds whatever ren
 from __future__ import annotations
 
 import re
+from collections.abc import Container
 from dataclasses import dataclass
 from datetime import date, timedelta
 from enum import StrEnum
@@ -74,6 +76,8 @@ class LandscapePage(StrEnum):
     REPORT_PART = "report-part"
     SCHOOL_VIEW = "school-view"
     SCHOOL = "school"
+    TEAM = "team"
+    """One team's rounds, under its school (`v1-e32-t57`)."""
     POSITION = "position"
 
 
@@ -138,17 +142,31 @@ class LandscapeLink(StrEnum):
     """A heading on the page it is on."""
     TEAM_PAGE = "team-page"
     """A team's openCaselist page, in the school view, opened in a new tab with no opener or referrer."""
+    TEAM_ROUNDS = "team-rounds"
+    """On a school's page, the heading of one of that school's teams, which is the team's own page
+    (`v1-e32-t57`): the link goes to that page instead."""
 
 
-def landscape_link(href: str, *, caselist: str, anchors: Anchors, team_pages: bool) -> LandscapeLink | None:
+def landscape_link(
+    href: str,
+    *,
+    caselist: str,
+    anchors: Anchors,
+    team_pages: bool,
+    team_rounds: Container[str] = frozenset(),
+) -> LandscapeLink | None:
     """What the link to `href` may be on a page of `caselist`'s bundle, or `None` to show it as text.
 
     A team page is allowed only where `team_pages` is (the school view), and only when the rule that
     builds one gives back exactly `href` from the bundle's own caselist and the link's school and team
-    code: another caselist, another origin, a query, a fragment or an extra segment gives `None`.
+    code: another caselist, another origin, a query, a fragment or an extra segment gives `None`. A
+    fragment naming one of `team_rounds`, the anchors in the file of this school's team headings, is the
+    team's page.
     """
     fragment = _FRAGMENT.match(href)
     if fragment is not None:
+        if fragment.group(1) in team_rounds:
+            return LandscapeLink.TEAM_ROUNDS
         return LandscapeLink.SAME_PAGE if fragment.group(1) in anchors else None
     if not team_pages or not href.startswith(_TEAM_PAGE_PREFIX):
         return None

@@ -723,7 +723,10 @@ async def test_the_school_view_is_written_locally_and_its_names_are_not_scan_hit
 
     schools = (result.directory / "schools.md").read_text(encoding="utf-8")
     assert "### Quillmere Academy" in schools
-    assert "| QW | aff | `single-payer-aff` | 1 | none |\n" in schools
+    assert "| QW | aff | `single-payer-aff` | 1 |\n" in schools
+    # `v1-e32-t57`: the team's page is a heading in schools.md, and the scan takes it as the school view.
+    assert "- QW: [round by round](#qw), no openCaselist page\n" in schools
+    assert "\n#### QW\n" in schools
     assert (result.schools.schools, result.schools.teams) == (3, 3)
     assert result.scan.hits == ()
     for name in ("report.md", "positions.csv", "trends.csv"):

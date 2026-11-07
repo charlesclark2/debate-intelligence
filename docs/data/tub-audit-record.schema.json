@@ -88,6 +88,7 @@
         "report-part",
         "school-view",
         "school",
+        "team",
         "position"
       ],
       "description": "Which kind of landscape page was shown, never which part, school or position."

@@ -202,9 +202,31 @@ None.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-11-07
 
 **Notes:**
+
+One rule, pinned from both sides: the refusals are skipped, and the run that held the lock and then
+failed is not.
+
+1. **ac1 passes.** Red was 8 failed, each an assertion that read the refusal as the latest run; green
+   39. Every record is written by the monitor's own `record_for_failure` from a real refusal built with
+   invented values, so the tests read what production writes.
+2. **Mutants.** All 11 are caught. Mutants 6 and 7, every `Run…` class and `RunLockLost` counted as a
+   refusal, are the ones that matter, and they are caught. The harness error on mutant 10 is reported
+   and its rebuilt mutant was caught. The two equivalent mutants are correctly set aside.
+3. **What dev reads today is accepted as written:** current for the three followed caselists, and no
+   change from the old rule, because the bucket's run log can never hold a refusal
+   (`record_stays_local`). The task matters on the Mac's own log, and after the move of the run's home,
+   which closes v1-e40-t29's follow-up 2. The session read only the run logs of the journey's restored
+   copy and printed only ids, outcomes and classes, which is acceptable here. In future, ask before
+   reading inside a restored copy.
+4. **Decisions accepted.** The setup refusals (`RunStateNotSeeded`, `RunLockUnreadable`,
+   `BucketKeepsRunState`) keep reading stopped, because each means no runner refreshes the store until
+   a person acts. `LOCK_REFUSALS` is public.
+5. **Follow-up 1:** the PM amends v1-e40-t44's spec in the next batch, so its refusal class joins
+   `LOCK_REFUSALS` with a case in this file's parametrisation.
+6. **Merge:** a plain `scripts/task pr` once `ci` is green. The Goal is `Succeeded`.

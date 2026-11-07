@@ -113,7 +113,7 @@ def test_the_labels_refusal_panel_names_the_sidecar_and_the_hint(tmp_path: Path,
 
     assert result.exit_code == ExitCode.DOMAIN_FAILURE, result.output
     flat = " ".join(result.output.replace("│", " ").split())
-    assert "LABELS_FILE_CHANGED" in flat or "labels file" in flat
+    assert "LABELS_FILE_CHANGED" in flat
     assert sha256(INVENTED)[:12] in flat
     assert "spreadsheet" in flat
     assert built == []

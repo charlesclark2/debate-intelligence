@@ -146,4 +146,4 @@ def test_only_the_role_changes_and_unplaced_texts_are_left_as_they_are() -> None
     assert [(one.position_id, one.role) for one in unplaced] == [(None, None)]
     found = readings_on_own_side(TAXONOMY, (*placed, *unplaced), ["NEG"])
     assert [one.model_copy(update={"role": ANSWERS}) for one in found[:3]] == list(placed)
-    assert found[3] == unplaced[0]
+    assert found[3:] == unplaced

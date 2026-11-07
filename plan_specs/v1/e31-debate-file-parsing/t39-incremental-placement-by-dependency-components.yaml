@@ -38,7 +38,10 @@ spec:
       - An incremental table that differs from a full rebuild's on the same store
       - Real card text in any fixture, log or report
       - A change to the occurrence table's format or its readers
-  context: []
+  context:
+    - kind: TaskRef
+      name: v1-e31-t10-incremental-aggregate-rebuild
+      relation: dependsOn
   acceptanceCriteria:
     - id: ac1
       description: >-

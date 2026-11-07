@@ -605,6 +605,14 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e41-t23-the-remove-smoke-file-no-longer-decides-the-slowest-part
+    - id: ext-v1-e07-t16-public-pool-footer-test-on-an-injected-clock
+      kind: External
+      name: 'Prerequisite from E07: The public-pool footer test counts its results on an injected clock, not the real one'
+      description: >-
+        Cross-epic prerequisite owned by v1-e07-discovery-adapters (release v1.4).
+      inputs:
+        goalRef: v1-e07-t16-public-pool-footer-test-on-an-injected-clock
+        specRef: plan_specs/v1/e07-discovery-adapters/t16-public-pool-footer-test-on-an-injected-clock.yaml
     - id: t24
       kind: Task
       name: 'The cluster comparison''s key test does not race a 0.3-second timer'
@@ -613,6 +621,8 @@ spec:
       inputs:
         specRef: plan_specs/v1/e41-delivery-tooling-upkeep/t24-the-cluster-comparison-key-test-without-a-timer-race.yaml
         goalRef: v1-e41-t24-the-cluster-comparison-key-test-without-a-timer-race
+      dependsOn:
+      - ext-v1-e07-t16-public-pool-footer-test-on-an-injected-clock
       acceptanceCriteria:
       - type: command_succeeds
         name: Task spec v1-e41-t24-the-cluster-comparison-key-test-without-a-timer-race reports phase Succeeded
@@ -630,6 +640,8 @@ spec:
       inputs:
         specRef: plan_specs/v1/e41-delivery-tooling-upkeep/t25-env-example-says-where-the-caselist-token-lives.yaml
         goalRef: v1-e41-t25-env-example-says-where-the-caselist-token-lives
+      dependsOn:
+      - t22
       acceptanceCriteria:
       - type: command_succeeds
         name: Task spec v1-e41-t25-env-example-says-where-the-caselist-token-lives reports phase Succeeded

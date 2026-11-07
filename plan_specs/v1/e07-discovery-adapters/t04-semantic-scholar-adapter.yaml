@@ -52,6 +52,9 @@ spec:
       - Exceeding the unauthenticated shared rate limit when no key is configured
   context:
     - kind: TaskRef
+      name: v1-e07-t10-time-waiting-on-a-pace-is-not-a-failure
+      relation: dependsOn
+    - kind: TaskRef
       name: v1-e07-t01-search-provider-contract
       relation: dependsOn
     - kind: TaskRef

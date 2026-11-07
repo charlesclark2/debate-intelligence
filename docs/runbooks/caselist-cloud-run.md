@@ -1840,10 +1840,8 @@ Success looks like four lines, newest first, the newest Wednesday's run with the
 before had and a time within about a quarter of theirs. A failed run, or one much slower, goes to the
 PM before the second import, with its log's last lines.
 
-**A rebuild after a whole-file removal** is this same import, dry run first, for each backfile the
-removal's plan listed ([caselist-removal.md](caselist-removal.md), step 5): imported already, it
-downloads nothing and spends no budget, so `"already_imported": true` and `"downloaded_bytes": 0` are
-its success. The window still applies.
+**After a whole-file removal** no backfile is rebuilt: since `v1-e30-t33` the removal rewrites the
+aggregates it reaches in place, a backfile's included ([caselist-removal.md](caselist-removal.md), step 5).
 
 **A rebuild after a parser bump** is the same again, on the run's task definition that carries the new
 parser, after the bump's first weekly run

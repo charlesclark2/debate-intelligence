@@ -553,3 +553,13 @@ Added by the PM. Nothing above is changed, and this section is not a review.
 | ac3: the journey's J4 to J9 in dev with J7's --execute (operator) | NOT RUN | J4 to J8 PASS; J9 recorded next | 2026-11-06/07, from $WT at a2324c2 (dev.380). J2 restored a docx-7 copy (18,345 objects, 500.9 s); J3 imported the seed (3 first seen); J4 published nothing new (the seed's objects were in the bucket since 2026-11-05) and parsed it (3 sources, 4 cards, 2 clusters); J5 built ab5dd9d3ac95d07b from dev's four stores and testcl26, checked OK, published; J6 passed every step. J7's dry run planned exactly the one file and the three bucket tables of parsed/testcl26/2026.10.27-docx-7/: index.jsonl -1 of 3 (1,158 bytes), failures.jsonl holds none (0 bytes), occurrences.jsonl -2 of 4 (2,728 bytes). --execute: DONE, 14 bucket object versions deleted, 1 manifest rewritten, 2 aggregates rewritten without 3 rows, nothing rebuilt; P1b printed 0 for both tables; J8 passed (the removed card's page refuses, it is not in the results) |
 
 J9 (the seed out of dev's index) and J10 ran the same night; the PM records them and closes the Goal in the next batch. Promotion item 9 no longer waits on this task's code.
+
+## Operator records (recorded by the PM, 2026-11-07)
+
+Added by the PM. Nothing above is changed, and this section is not a review.
+
+| Criterion | Was | Now | Record |
+|---|---|---|---|
+| ac3, the rest: J9 and J10 | J4 to J8 PASS; J9 recorded next | PASS | 2026-11-07. J9 rebuilt dev's index from the copy without testcl26: e95f10c1a8fda754, the index dev held before the journey, its stores equal to J5's before-manifest; published past the shrink guard with --allow-shrink, which named testcl26 alone (0 documents against 2). J10 deleted the copy and the seed, and the leftover search read 0 restored copies |
+
+Every criterion passes, so the Goal is `Succeeded`.

@@ -353,3 +353,13 @@ Added by the PM. Nothing above is changed, and this section is not a review.
 | ac4: the signed-in journey, an operator-run script whose run is recorded in the report | J2 stopped (2026-11-03) | J2 to J6, J9, J10 PASS; J7 and J8 NOT RUN | 2026-11-05, build 1.1.0.dev342. J2: a copy restored under the dev lock in 351.8 s, 58 manifests, parsed store 2026.10.27-docx-7 18,345 objects. J3: 3 new sources imported into the copy. J4: 3 uploaded and verified; the parse 3 sources, 3 parsed, 4 cards; parsed/testcl26/2026.10.27-docx-7/ published, 6 uploads. J5: index ab5dd9d3ac95d07b, every store dev's index held unchanged, the suppression list the same, testcl26 2 documents, published. J6: every step PASS (sign in, search, result count, open the card, provenance on the card page, back link, Copy card, the copy holds the card, no provenance line in the copy, download offered, download). J7: the removal's dry run planned every caselist's aggregates, so the PM stopped it before --execute (v1-e30-t33). J9: index e95f10c1a8fda754, the stores as before the seed, published past the shrink guard for testcl26 alone. J10: the copy and the seed deleted |
 
 J7 and J8 run again after v1-e30-t33 merges, from a fresh copy with the seed published again. The seed's three sources and its parsed directory stay in the dev bucket under testcl26 until then: synthetic, and no dev run pulls that caselist.
+
+## Operator records (recorded by the PM, 2026-11-07)
+
+Added by the PM. Nothing above is changed, and this section is not a review.
+
+| Criterion | Was | Now | Record |
+|---|---|---|---|
+| ac4: the journey, J7 and J8 rerun after v1-e30-t33 | J7 and J8 rerun after v1-e30-t33 | PASS | 2026-11-06/07, from dev.380: J2 to J10 again. J6 passed every step (card path recorded in the operator's terminal); J7's dry run planned the seed's one file and three bucket tables only, and --execute (RM-2026-91) rewrote 2 aggregates without 3 rows with nothing rebuilt; J8 passed; J9 put e95f10c1a8fda754 back; J10 left no copy |
+
+The journey has now passed end to end in dev, the removal included.

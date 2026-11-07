@@ -30,7 +30,10 @@ spec:
     forbidden:
       - A real tournament, school or team name in a fixture, test, log or report
       - A data line exempted from the scan
-  context: []
+  context:
+    - kind: TaskRef
+      name: v1-e32-t06-ld-de-extinction-taxonomy
+      relation: dependsOn
   acceptanceCriteria:
     - id: ac1
       description: >-

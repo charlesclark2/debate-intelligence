@@ -27,7 +27,10 @@ spec:
     forbidden:
       - A longer timer in place of the fix
       - A behaviour change to the script beyond the seam
-  context: []
+  context:
+    - kind: TaskRef
+      name: v1-e07-t16-public-pool-footer-test-on-an-injected-clock
+      relation: dependsOn
   acceptanceCriteria:
     - id: ac1
       description: >-

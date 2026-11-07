@@ -32,6 +32,9 @@ spec:
       - A prod publish whose counts differ from dev's without the PM's word
   context:
     - kind: TaskRef
+      name: v1-e31-t40-publish-only-dry-run
+      relation: dependsOn
+    - kind: TaskRef
       name: v1-e40-t16-prod-reparse-after-a-parser-bump
       relation: dependsOn
   acceptanceCriteria:

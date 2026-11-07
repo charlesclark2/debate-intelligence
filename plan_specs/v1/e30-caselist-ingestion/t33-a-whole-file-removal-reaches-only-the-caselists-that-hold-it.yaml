@@ -88,7 +88,7 @@ spec:
         The operator reruns the journey's J4 to J9 in dev with J7's --execute and the ruled
         rewrite, the card gone in J8, and the PM records it (operator).
 status:
-  phase: InProgress
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

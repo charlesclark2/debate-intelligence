@@ -33,7 +33,10 @@ spec:
       - A label, tag or card text from the coach's sample in a test, log, commit or report
       - A change to the coach's labels
       - A scoring command that reads a labels file without the check
-  context: []
+  context:
+    - kind: TaskRef
+      name: v1-e32-t46-prompt-1-2-0-refusal-fixes-and-answering-stances
+      relation: dependsOn
   acceptanceCriteria:
     - id: ac1
       description: >-

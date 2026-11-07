@@ -29,7 +29,10 @@ spec:
     forbidden:
       - Card text from any real cassette in a test, log or report
       - A hit in the cards sent ever set aside
-  context: []
+  context:
+    - kind: TaskRef
+      name: v1-e32-t44-scan-marked-hits-leave-a-text-clean
+      relation: dependsOn
   acceptanceCriteria:
     - id: ac1
       description: >-

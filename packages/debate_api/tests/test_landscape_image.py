@@ -1,4 +1,5 @@
-"""The function's image installs what renders the landscape pages (`v1-e39-t17`).
+"""The function's image installs what renders the landscape pages (`v1-e39-t17`), and since `v1-e32-t57`
+debate_core, which holds the renderer, declares it.
 
 `scripts/tub_deploy.sh` builds the image from `uv export --package debate-api`, so the image holds
 `debate-api`'s dependencies as `uv.lock` records them and nothing else. The landscape pages render a
@@ -17,7 +18,10 @@ from pathlib import Path
 from typing import Any, Final
 
 REPOSITORY: Final = Path(__file__).resolve().parents[3]
-RENDERER: Final = REPOSITORY / "packages" / "debate_api" / "src" / "debate_api" / "landscape_markdown.py"
+RENDERER: Final = (
+    REPOSITORY / "packages" / "debate_core" / "src" / "debate_core" / "arguments" / "landscape" / "pages.py"
+)
+"""The renderer since `v1-e32-t57` moved it from `debate_api.landscape_markdown`, unchanged."""
 
 
 def _lock_package(lock: dict[str, Any], name: str) -> dict[str, Any]:
@@ -40,3 +44,14 @@ def test_the_image_installs_markdown_it_py_as_debate_apis_own_dependency() -> No
 
     assert "markdown-it-py" in declared
     assert "mdurl" in {dependency["name"] for dependency in renderer["dependencies"]}
+
+
+def test_the_renderers_own_package_declares_markdown_it_py_at_the_locked_version() -> None:
+    """`v1-e32-t57`: the renderer is debate_core's, so the CLI's report check imports it too; debate_core
+    declares it, and the lock holds the version debate_api's image already installed."""
+    lock = tomllib.loads((REPOSITORY / "uv.lock").read_text(encoding="utf-8"))
+    core = _lock_package(lock, "debate-core")
+
+    assert "markdown-it-py" in {dependency["name"] for dependency in core["dependencies"]}
+    assert {"name": "markdown-it-py", "specifier": ">=4.0"} in core["metadata"]["requires-dist"]
+    assert _lock_package(lock, "markdown-it-py")["version"] == "4.2.0"

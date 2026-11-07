@@ -101,6 +101,14 @@ def test_landscape_report_writes_the_bundle_offline_with_no_model(
     assert data["school_view"] == {"schools": 3, "team_codes": 3, "rows": 7}
     assert data["staleness"]["failed_run"] is None
     assert data["scan"]["hits"] == []
+    # `v1-e32-t57`: every page the pilot cuts from schools.md, measured, and none over ADR-0019's budget.
+    pages = data["pages"]
+    assert (pages["budget"], pages["frame_allowance"], pages["checked"], pages["over_budget"]) == (
+        153_600,
+        28_672,
+        11,
+        [],
+    )
     for identity in ("Quillmere", "Brindle", "Harrowgate", "Lantern Classic", "Thistle Open", '"QW"', '"PX"'):
         assert identity not in result.stdout
 

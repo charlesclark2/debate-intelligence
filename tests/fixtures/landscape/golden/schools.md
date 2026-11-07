@@ -18,21 +18,26 @@ Every count comes from files teams disclosed to the caselist (FILE_IMPORT), not 
 
 ## By school
 
-Under each school's table, each team's rounds, one line per round under each position: the positions the team reads first, in the table's order, then those it only answers. Lines are newest snapshot first, and give the tournament and round exactly as the team's filename gave them, the round's side, and `reads`, or `AT` where the round's file answers the position. "One file for N rounds" marks a round whose file holding the position the team disclosed for N of its rounds, so those rounds may be one file disclosed again rather than N rounds that each read it.
+Under each school's table, its teams, each with a link to its openCaselist page, or a note that it has none, and a link to its rounds under its own heading. A team's rounds are one line per round under each position: the positions the team reads first, in the table's order, then those it only answers. Lines are newest snapshot first, and give the tournament and round exactly as the team's filename gave them, the round's side, and `reads`, or `AT` where the round's file answers the position. "One file for N rounds" marks a round whose file holding the position the team disclosed for N of its rounds, so those rounds may be one file disclosed again rather than N rounds that each read it.
 
 ### Ashgrove Fictional
 
-| Team code | Side | Position | Rounds | Team page |
-|---|---|---|---|---|
-| XX | aff | `costs-advantage` | 2 | none |
-| XX | aff | `single-payer-aff` | 2 | none |
-| YY | neg | `cap-k` | 1 | none |
-| YY | neg | `election-da` | 1 | none |
-| YY | neg | `hospital-closures-da` | 1 | none |
-| YY | neg | `spending-da` | 1 | none |
-| YY | neg | `states-cp` | 1 | none |
+| Team code | Side | Position | Rounds |
+|---|---|---|---|
+| XX | aff | `costs-advantage` | 2 |
+| XX | aff | `single-payer-aff` | 2 |
+| YY | neg | `cap-k` | 1 |
+| YY | neg | `election-da` | 1 |
+| YY | neg | `hospital-closures-da` | 1 |
+| YY | neg | `spending-da` | 1 |
+| YY | neg | `states-cp` | 1 |
 
-**XX, round by round** (newest snapshot first)
+Each team's rounds, on a page of its own:
+
+- XX: [round by round](#xx), no openCaselist page
+- YY: [round by round](#yy), no openCaselist page
+
+#### XX
 
 - `costs-advantage`
   - Imaginary Classic, R1, aff, reads (one file for 2 rounds)
@@ -44,7 +49,7 @@ Under each school's table, each team's rounds, one line per round under each pos
   - Imaginary Classic, R1, aff, AT (one file for 2 rounds)
   - Fictional Invitational, R1, aff, AT (one file for 2 rounds)
 
-**YY, round by round** (newest snapshot first)
+#### YY
 
 - `cap-k`
   - Imaginary Classic, R1, neg, reads
@@ -61,18 +66,23 @@ Under each school's table, each team's rounds, one line per round under each pos
 
 ### Birchmoor
 
-| Team code | Side | Position | Rounds | Team page |
-|---|---|---|---|---|
-| QQ | aff | `condo-bad` | 1 | [openCaselist](https://opencaselist.com/synthpolicy26/Birchmoor/QQ) |
-| QQ | aff | `costs-advantage` | 1 | [openCaselist](https://opencaselist.com/synthpolicy26/Birchmoor/QQ) |
-| QQ | neg | `cap-k` | 1 | [openCaselist](https://opencaselist.com/synthpolicy26/Birchmoor/QQ) |
-| QQ | neg | `spending-da` | 1 | [openCaselist](https://opencaselist.com/synthpolicy26/Birchmoor/QQ) |
-| ZZ | aff | `costs-advantage` | 1 | [openCaselist](https://opencaselist.com/synthpolicy26/Birchmoor/ZZ) |
-| ZZ | aff | `innovation-advantage` | 1 | [openCaselist](https://opencaselist.com/synthpolicy26/Birchmoor/ZZ) |
-| ZZ | neg | `spending-da` | 1 | [openCaselist](https://opencaselist.com/synthpolicy26/Birchmoor/ZZ) |
-| ZZ | neg | `states-cp` | 1 | [openCaselist](https://opencaselist.com/synthpolicy26/Birchmoor/ZZ) |
+| Team code | Side | Position | Rounds |
+|---|---|---|---|
+| QQ | aff | `condo-bad` | 1 |
+| QQ | aff | `costs-advantage` | 1 |
+| QQ | neg | `cap-k` | 1 |
+| QQ | neg | `spending-da` | 1 |
+| ZZ | aff | `costs-advantage` | 1 |
+| ZZ | aff | `innovation-advantage` | 1 |
+| ZZ | neg | `spending-da` | 1 |
+| ZZ | neg | `states-cp` | 1 |
 
-**QQ, round by round** (newest snapshot first)
+Each team's rounds, on a page of its own:
+
+- QQ: [round by round](#qq), [openCaselist](https://opencaselist.com/synthpolicy26/Birchmoor/QQ)
+- ZZ: [round by round](#zz), [openCaselist](https://opencaselist.com/synthpolicy26/Birchmoor/ZZ)
+
+#### QQ
 
 - `condo-bad`
   - Imaginary Classic, R2, aff, reads
@@ -83,7 +93,7 @@ Under each school's table, each team's rounds, one line per round under each pos
 - `spending-da`
   - Fictional Invitational, R2, neg, reads
 
-**ZZ, round by round** (newest snapshot first)
+#### ZZ
 
 - `costs-advantage`
   - Fictional Invitational, R2, aff, reads
@@ -96,22 +106,27 @@ Under each school's table, each team's rounds, one line per round under each pos
 
 ### Cedarvale Fictional
 
-| Team code | Side | Position | Rounds | Team page |
-|---|---|---|---|---|
-| VV | aff | `costs-advantage` | 1 | none |
-| VV | aff | `public-option-aff` | 1 | none |
-| WW | neg | `nhi-t` | 2 | none |
-| WW | neg | `election-da` | 1 | none |
-| WW | neg | `provider-strikes-da` | 1 | none |
+| Team code | Side | Position | Rounds |
+|---|---|---|---|
+| VV | aff | `costs-advantage` | 1 |
+| VV | aff | `public-option-aff` | 1 |
+| WW | neg | `nhi-t` | 2 |
+| WW | neg | `election-da` | 1 |
+| WW | neg | `provider-strikes-da` | 1 |
 
-**VV, round by round** (newest snapshot first)
+Each team's rounds, on a page of its own:
+
+- VV: [round by round](#vv), no openCaselist page
+- WW: [round by round](#ww), no openCaselist page
+
+#### VV
 
 - `costs-advantage`
   - Fictional Invitational, R3, aff, reads
 - `public-option-aff`
   - Fictional Invitational, R3, aff, reads
 
-**WW, round by round** (newest snapshot first)
+#### WW
 
 - `nhi-t`
   - Imaginary Classic, R3, neg, reads
@@ -123,16 +138,21 @@ Under each school's table, each team's rounds, one line per round under each pos
 
 ### Driftwood Fictional
 
-| Team code | Side | Position | Rounds | Team page |
-|---|---|---|---|---|
-| JJ | aff | `innovation-advantage` | 1 | none |
-| JJ | aff | `single-payer-aff` | 1 | none |
-| JJ | neg | `spending-da` | 1 | none |
-| JJ | neg | `states-cp` | 1 | none |
-| KK | aff | `costs-advantage` | 1 | none |
-| KK | aff | `innovation-advantage` | 1 | none |
+| Team code | Side | Position | Rounds |
+|---|---|---|---|
+| JJ | aff | `innovation-advantage` | 1 |
+| JJ | aff | `single-payer-aff` | 1 |
+| JJ | neg | `spending-da` | 1 |
+| JJ | neg | `states-cp` | 1 |
+| KK | aff | `costs-advantage` | 1 |
+| KK | aff | `innovation-advantage` | 1 |
 
-**JJ, round by round** (newest snapshot first)
+Each team's rounds, on a page of its own:
+
+- JJ: [round by round](#jj), no openCaselist page
+- KK: [round by round](#kk), no openCaselist page
+
+#### JJ
 
 - `innovation-advantage`
   - Imaginary Classic, R3, aff, reads
@@ -148,7 +168,7 @@ Under each school's table, each team's rounds, one line per round under each pos
 - `election-da` (answers only)
   - Imaginary Classic, R3, aff, AT
 
-**KK, round by round** (newest snapshot first)
+#### KK
 
 - `costs-advantage`
   - Imaginary Classic, R1, aff, reads

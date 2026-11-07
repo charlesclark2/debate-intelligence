@@ -315,6 +315,35 @@ def test_the_purge_and_the_season_window_reach_school_rounds_csv_as_they_reach_t
     ]
 
 
+def test_the_purge_and_the_season_window_reach_the_team_pages_through_schools_md(tmp_path: Path) -> None:
+    """`v1-e32-t57`: a team's page is a `####` heading inside schools.md and in no file of its own, so the
+    aged-out schools.md goes with every team page in it, every version, and the one inside the window
+    stays with its own."""
+    view = (
+        "# Positions by school\n\n## By school\n\n### Maple Grove\n\n"
+        "- QX: [round by round](#qx), no openCaselist page\n\n#### QX\n\n- `spending-da`\n"
+        "  - Seaside Open, Round 5, aff, AT\n\n## By position\n"
+    )
+    old, new = f"reports/landscape/{CURRENT}/2026-07-28", f"reports/landscape/{CURRENT}/2026-08-04"
+    for bundle in (old, new):
+        (tmp_path / "data" / bundle).mkdir(parents=True)
+        (tmp_path / "data" / bundle / "schools.md").write_text(view)
+    ran = school_views(
+        tmp_path,
+        [
+            version(f"{old}/schools.md", "t2"),
+            version(f"{old}/schools.md", "t1", latest=False),
+            version(f"{new}/schools.md", "t3"),
+        ],
+        [],
+    )
+    assert ran.returncode == 0, ran.stderr
+    assert requested(tmp_path) == [(f"{old}/schools.md", "t1"), (f"{old}/schools.md", "t2")]
+    assert (tmp_path / "views" / "local.txt").read_text().splitlines() == [
+        str(tmp_path / "data" / old / "schools.md")
+    ]
+
+
 def test_school_views_stop_on_a_file_neither_list_names_and_write_nothing(tmp_path: Path) -> None:
     ran = school_views(
         tmp_path,

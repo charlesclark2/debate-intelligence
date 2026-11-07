@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block title %}{{ piece.heading }} · {{ school.heading }} · {{ bundle.caselist }} positions by school · Team evidence search{% endblock %}
+{% block main %}
+<nav class="back-link" aria-label="Back"><a href="/landscape/{{ bundle.caselist }}/schools">{{ view.title or "Positions by school" }}</a> · <a href="/landscape/{{ bundle.caselist }}/schools/{{ school.path | urlencode }}">{{ school.heading }}</a></nav>
+<h1>{{ piece.heading }}</h1>
+<p class="help">{{ school.heading }}'s team, in the {{ bundle.caselist }} view through {{ bundle.snapshot.isoformat() }}. Newest snapshot first.</p>
+<div class="landscape-body">
+{{ piece.body_html | safe }}
+</div>
+{% endblock %}

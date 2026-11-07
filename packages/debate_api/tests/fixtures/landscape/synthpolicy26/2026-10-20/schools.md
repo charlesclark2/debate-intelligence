@@ -29,6 +29,15 @@ This page names schools and team codes exactly as they were disclosed, and links
 |---|---|---|---|---|
 | EF | neg | `invented-da` | 1 | [openCaselist](https://opencaselist.com/synthpolicy26/Birch-Hollow/EF) |
 
+Each team's rounds, on a page of its own:
+
+- EF: [round by round](#ef)
+
+#### EF
+
+- `invented-da`
+  - Imaginary Classic, Quarters, neg, reads
+
 ## By position
 
 The negative's positions by kind, then the affirmative side's, in the report's order. Under each, every team that read it, by rounds. A team's openCaselist page lists the rounds it disclosed, with their files; it is linked when the school and the team code are each one word of the page's address.

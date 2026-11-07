@@ -34,6 +34,7 @@ from debate_api.landscape_pages import (
     landscape_report_part,
     landscape_school,
     landscape_school_view,
+    landscape_team,
 )
 from debate_api.pages import IMMUTABLE, qr_code_svg
 from debate_api.search_pages import card_copy, card_page, search_page
@@ -64,6 +65,7 @@ ROUTE_ACCESS: Final = {
     "/landscape/{caselist}/report/{part}": Access.SIGNED_IN,
     "/landscape/{caselist}/schools": Access.SIGNED_IN,
     "/landscape/{caselist}/schools/{school}": Access.SIGNED_IN,
+    "/landscape/{caselist}/schools/{school}/{team}": Access.SIGNED_IN,
     "/landscape/{caselist}/positions/{position_id}": Access.SIGNED_IN,
     "/coach": Access.COACH,
 }
@@ -111,6 +113,12 @@ def register_routes(app: FastAPI, routes: RouteAccess) -> None:
     )
     app.add_api_route(
         "/landscape/{caselist}/schools/{school}", landscape_school, methods=["GET"], include_in_schema=False
+    )
+    app.add_api_route(
+        "/landscape/{caselist}/schools/{school}/{team}",
+        landscape_team,
+        methods=["GET"],
+        include_in_schema=False,
     )
     app.add_api_route(
         "/landscape/{caselist}/positions/{position_id}",

@@ -37,6 +37,17 @@ sentence, :meth:`~debate_core.application.landscape_staleness.FailedSyncRun.sent
 `staleness.failed_run` holds the run id and the failed stages' names or the error's class, as the hook
 holds them: never a stage's reason or the error's message, which can name a school or a path.
 
+## The school view's pages against the page budget
+
+Every run measures each page the search pilot will cut from `schools.md` (`v1-e32-t57`): the view's
+front page, each school, each team and each position, as its body's bytes and a 28,672-byte frame for
+the site's header, script and stylesheet. The `PAGES:` line says that none reaches ADR-0019's 153,600
+bytes, with the largest page's and the largest position page's bytes, or names each page that does, for
+the terminal. `--json`'s `pages` holds the budget, the frame, the pages measured, each page over the
+budget (`over_budget`: its kind, heading, school and bytes) and the largest page's and position page's
+bytes. A page over the budget is published all the same: the dry run before a publish is where the
+operator stops and asks the PM (the runbook's step 3).
+
 ## `--publish`
 
 Uploads the bundle to `reports/landscape/<caselist>/<snapshot>/` in this environment's evidence
@@ -249,6 +260,12 @@ from debate_core.arguments.landscape.scan_hits import (
     mark_counts,
 )
 from debate_core.domain.landscape_classification import Stance
+from debate_core.domain.landscape_pages import (
+    PAGE_FRAME_ALLOWANCE,
+    LandscapePage,
+    PageSize,
+    SchoolViewPageSizes,
+)
 from debate_core.domain.landscape_trends import LandscapeTrends, TrendLabel
 from debate_core.domain.model_contracts import TaskClass
 
@@ -1278,6 +1295,7 @@ def run_summary(
             "accepted_now": result.scan.accepted_now,
             "acceptance_log": result.scan.acceptance_log,
         },
+        "pages": _pages_json(result.pages),
         "publish": None
         if publish is None
         else {
@@ -1388,6 +1406,7 @@ def _display(result: LandscapeRunResult, settings: Settings) -> str:
         f"School view: {result.schools.schools} school(s), {result.schools.teams} team code(s), "
         f"{len(result.schools.rows)} row(s).",
         _staleness_line(result),
+        *_pages_lines(result.pages),
         *_bundle_lines(result),
     ]
     scan = result.scan
@@ -1423,6 +1442,51 @@ def _display(result: LandscapeRunResult, settings: Settings) -> str:
             else "Nothing uploaded."
         )
     return "\n".join(lines)
+
+
+def _pages_json(sizes: SchoolViewPageSizes) -> dict[str, JsonValue]:
+    """`data.pages` (`v1-e32-t57`): the budget, the frame allowance, how many pages were measured, each
+    page over the budget by kind, heading and bytes, and the largest page's and position page's bytes."""
+    largest, position = sizes.largest, sizes.largest_position
+    return {
+        "budget": sizes.budget,
+        "frame_allowance": PAGE_FRAME_ALLOWANCE,
+        "checked": len(sizes.pages),
+        "over_budget": [
+            {"kind": page.kind.value, "page": page.page, "school": page.school, "bytes": page.bytes}
+            for page in sizes.over_budget
+        ],
+        "largest": None if largest is None else {"kind": largest.kind.value, "bytes": largest.bytes},
+        "largest_position": None if position is None else {"page": position.page, "bytes": position.bytes},
+    }
+
+
+def _pages_lines(sizes: SchoolViewPageSizes) -> list[str]:
+    """The `PAGES:` line, then each page over the budget by name, for a terminal (`v1-e32-t57`)."""
+    measured = f"ADR-0019's {sizes.budget:,} bytes (a page's body and a {PAGE_FRAME_ALLOWANCE:,}-byte frame)"
+    over = sizes.over_budget
+    if not over:
+        largest, position = sizes.largest, sizes.largest_position
+        most = "" if largest is None else f"; the largest is {_page_kind(largest)} at {largest.bytes:,} bytes"
+        positions = "" if position is None else f", the largest position page {position.bytes:,} bytes"
+        return [f"PAGES: none of {len(sizes.pages)} school-view pages reaches {measured}{most}{positions}."]
+    return [
+        f"PAGES: {len(over)} of {len(sizes.pages)} school-view pages reach {measured}, named below; "
+        "nothing is refused for it.",
+        *(f"  {_page_name(page)}: {page.bytes:,} bytes" for page in over),
+    ]
+
+
+def _page_kind(page: PageSize) -> str:
+    return "the front page" if page.kind is LandscapePage.SCHOOL_VIEW else f"a {page.kind.value} page"
+
+
+def _page_name(page: PageSize) -> str:
+    if page.kind is LandscapePage.SCHOOL_VIEW:
+        return "the school view's front page"
+    if page.kind is LandscapePage.TEAM:
+        return f"team {page.page} of {page.school}"
+    return f"{page.kind.value} {page.page}"
 
 
 def _staleness_line(result: LandscapeRunResult) -> str:

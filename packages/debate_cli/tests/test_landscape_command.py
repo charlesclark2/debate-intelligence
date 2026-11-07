@@ -34,6 +34,7 @@ from typer.testing import CliRunner, Result
 
 import debate_cli.commands.landscape as landscape_module
 import debate_cli.container as container_module
+import debate_core.application.landscape_run as landscape_run_module
 from debate_cli.app import create_app
 from debate_cli.exit_codes import ExitCode
 from debate_core.application.errors import (
@@ -49,6 +50,7 @@ from debate_core.application.landscape_model_evaluation import (
     FormatEvaluation,
 )
 from debate_core.application.landscape_model_stage import ModelClassificationStage, ParsedStoreCardTexts
+from debate_core.application.landscape_page_sizes import measure_school_view
 from debate_core.application.landscape_report import CIRCUIT_WIDE_FILES, SCHOOL_VIEW_FILES
 from debate_core.application.landscape_run import BUNDLE_FILES, LandscapeRunService, PositionClassifier
 from debate_core.application.landscape_seeding import SeedReading
@@ -75,6 +77,7 @@ from debate_core.arguments.landscape.model_stage import DEFAULT_BATCH_SIZE, Name
 from debate_core.arguments.landscape.queue_order import QueueOrderModel
 from debate_core.arguments.landscape.scan_hits import HitField, HitKind, ScanHit
 from debate_core.domain.landscape_classification import ModelStancedPositionAnswers, Stance
+from debate_core.domain.landscape_pages import PAGE_FRAME_ALLOWANCE
 from debate_core.domain.model_contracts import ModelParams, ModelPrompt, ModelResponse, TaskClass
 from debate_core.integrations.docx_parser import DebateDocxParser
 from debate_core.integrations.landscape.classification_store import queue_order_model_path, review_queue_path
@@ -1079,6 +1082,141 @@ def test_publish_dry_run_lists_the_planned_uploads_and_writes_nothing_but_the_te
     assert {
         path.relative_to(world.data_dir) for path in landscape_state.rglob("*") if path.is_file()
     } == TEXT_CACHES
+
+
+# ------------------------------------------------------------------------------------------------
+# The school view's pages against the page budget (v1-e32-t57)
+# ------------------------------------------------------------------------------------------------
+
+EVERY_SCHOOL_VIEW_PAGE = [
+    ("school-view", "", None),
+    ("school", "Brindle Valley", None),
+    ("team", "ZT", "Brindle Valley"),
+    ("school", "Harrowgate Prep", None),
+    ("team", "PX", "Harrowgate Prep"),
+    ("school", "Quillmere Academy", None),
+    ("team", "QW", "Quillmere Academy"),
+    ("position", "spending-da", None),
+    ("position", "states-cp", None),
+    ("position", "single-payer-aff", None),
+    ("position", "costs-advantage", None),
+]
+"""synthetic26's school-view pages, by hand from its table: three schools of one team each, then the four
+positions they read."""
+OVER_THE_FRAME = PAGE_FRAME_ALLOWANCE + 1
+"""A budget every page is over: one byte more than the frame allowance."""
+
+
+@pytest.fixture
+def every_page_over(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(landscape_run_module, "PAGE_BUDGET", OVER_THE_FRAME)
+
+
+def _pages(result: Result) -> dict[str, Any]:
+    data = _data(result)
+    assert "pages" in data, "the run reports no pages"
+    return data["pages"]
+
+
+def _pages_line(result: Result) -> int:
+    lines = result.stdout.splitlines()
+    starts = [index for index, line in enumerate(lines) if line.startswith("PAGES:")]
+    assert len(starts) == 1, "the run prints one PAGES: line"
+    return starts[0]
+
+
+def _pages_named(pages: dict[str, Any]) -> list[tuple[str, str, str | None]]:
+    return [(page["kind"], page["page"], page["school"]) for page in pages["over_budget"]]
+
+
+def test_a_dry_run_measures_every_school_view_page_and_names_none_under_the_budget(
+    world: SyntheticRun, buckets: S3Client
+) -> None:
+    result = landscape(world, "--caselist", CASELIST, "--publish", "--dry-run")
+
+    assert result.exit_code == ExitCode.OK, result.output
+    pages = _pages(result)
+    assert set(pages) == {
+        "budget",
+        "frame_allowance",
+        "checked",
+        "over_budget",
+        "largest",
+        "largest_position",
+    }
+    assert (pages["budget"], pages["frame_allowance"], pages["checked"]) == (153_600, 28_672, 11)
+    assert pages["over_budget"] == []
+    assert set(pages["largest"]) == {"kind", "bytes"} and set(pages["largest_position"]) == {"page", "bytes"}
+    assert PAGE_FRAME_ALLOWANCE < pages["largest_position"]["bytes"] <= pages["largest"]["bytes"] < 153_600
+
+
+def test_a_dry_run_names_every_page_over_the_budget_in_its_json(
+    world: SyntheticRun, buckets: S3Client, every_page_over: None
+) -> None:
+    result = landscape(world, "--caselist", CASELIST, "--publish", "--dry-run")
+
+    assert result.exit_code == ExitCode.OK, result.output
+    pages = _pages(result)
+    assert (pages["budget"], pages["checked"]) == (OVER_THE_FRAME, 11)
+    assert _pages_named(pages) == EVERY_SCHOOL_VIEW_PAGE
+    assert all(page["bytes"] >= OVER_THE_FRAME for page in pages["over_budget"])
+    assert _data(result)["publish"]["uploaded"] == []
+
+
+def test_a_publish_names_every_page_over_the_budget_and_publishes_the_bundle(
+    world: SyntheticRun, buckets: S3Client, every_page_over: None
+) -> None:
+    """The PM's ruling of 2026-11-07, Q2: named and published; no refusal and no flag."""
+    result = landscape(world, "--caselist", CASELIST, "--publish")
+
+    assert result.exit_code == ExitCode.OK, result.output
+    data = _data(result)
+    assert _pages_named(_pages(result)) == EVERY_SCHOOL_VIEW_PAGE
+    assert (data["publish"]["uploaded"], data["publish"]["refused"]) == (KEYS, None)
+    published = buckets.get_object(Bucket=DEV_BUCKET, Key=KEYS[BUNDLE.index("schools.md")])["Body"].read()
+    measured = measure_school_view(published.decode(), CASELIST, budget=OVER_THE_FRAME)
+    assert [page["bytes"] for page in data["pages"]["over_budget"]] == [page.bytes for page in measured.pages]
+
+
+def test_a_dry_run_says_in_a_pages_line_that_no_page_reaches_the_budget(world: SyntheticRun) -> None:
+    result = landscape(world, "--caselist", CASELIST, "--dry-run", json_output=False)
+
+    assert result.exit_code == ExitCode.OK, result.output
+    line = result.stdout.splitlines()[_pages_line(result)]
+    assert line.startswith(
+        "PAGES: none of 11 school-view pages reaches ADR-0019's 153,600 bytes (a page's body and a "
+        "28,672-byte frame); the largest is "
+    )
+    assert ", the largest position page " in line
+
+
+@pytest.mark.parametrize("arguments", [("--dry-run",), ("--publish", "--dry-run"), ("--publish",)])
+def test_a_dry_run_and_a_publish_name_each_page_over_the_budget_in_the_terminal(
+    world: SyntheticRun, buckets: S3Client, every_page_over: None, arguments: tuple[str, ...]
+) -> None:
+    result = landscape(world, "--caselist", CASELIST, *arguments, json_output=False)
+
+    assert result.exit_code == ExitCode.OK, result.output
+    lines, at = result.stdout.splitlines(), _pages_line(result)
+    assert lines[at] == (
+        "PAGES: 11 of 11 school-view pages reach ADR-0019's 28,673 bytes (a page's body and a 28,672-byte "
+        "frame), named below; nothing is refused for it."
+    )
+    named = [line.split(": ", 1)[0] for line in lines[at + 1 : at + 12]]
+    assert named == [
+        "  the school view's front page",
+        "  school Brindle Valley",
+        "  team ZT of Brindle Valley",
+        "  school Harrowgate Prep",
+        "  team PX of Harrowgate Prep",
+        "  school Quillmere Academy",
+        "  team QW of Quillmere Academy",
+        "  position spending-da",
+        "  position states-cp",
+        "  position single-payer-aff",
+        "  position costs-advantage",
+    ]
+    assert all(line.endswith(" bytes") for line in lines[at + 1 : at + 12])
 
 
 def test_publish_with_debate_env_unset_goes_to_dev_never_prod(

@@ -37,6 +37,8 @@ if TYPE_CHECKING:  # pragma: no cover - import for the type checker only
 BUCKET: Final = "debate-test-evidence-landscape"
 NEWEST: Final = "reports/landscape/synthpolicy26/2026-10-20"
 SCHOOL_VIEW: Final = "/landscape/synthpolicy26/schools"
+TEAM_PAGE: Final = "/landscape/synthpolicy26/schools/birch-hollow-2/ef"
+"""`v1-e32-t57`: the fixture's one team page, EF's, under its school Birch-Hollow."""
 NEITHER_SIDE: Final = "/landscape/synthpolicy26/report/neither-side"
 JUST_UNDER_FIVE_MINUTES: Final = timedelta(minutes=4, seconds=59)
 _STANDARD_RECORD_FIELDS: Final = set(vars(logging.LogRecord("", 0, "", 0, "", None, None)))
@@ -112,6 +114,7 @@ def test_a_deleted_school_view_shows_within_five_minutes_and_no_older_view_repla
     over_moto: Any, bucket: S3Client
 ) -> None:
     assert body(over_moto, "/landscape/synthpolicy26/schools/ashgrove")[0] == 200
+    assert body(over_moto, TEAM_PAGE)[0] == 200
 
     bucket.delete_object(Bucket=BUCKET, Key=f"{NEWEST}/schools.md")
     over_moto.clock.advance(JUST_UNDER_FIVE_MINUTES)
@@ -119,6 +122,7 @@ def test_a_deleted_school_view_shows_within_five_minutes_and_no_older_view_repla
     over_moto.clock.advance(timedelta(seconds=1))
     status, removed = body(over_moto, SCHOOL_VIEW)
     school_status, school = body(over_moto, "/landscape/synthpolicy26/schools/ashgrove")
+    team_status, team = body(over_moto, TEAM_PAGE)
     listing = body(over_moto, "/landscape")[1]
 
     assert (held_status, "Ashgrove" in held) == (200, True)
@@ -126,6 +130,12 @@ def test_a_deleted_school_view_shows_within_five_minutes_and_no_older_view_repla
     assert "<h1>No positions by school this week</h1>" in removed
     assert "Oldfield" not in removed and "2026-10-13" not in removed
     assert (school_status, "Ashgrove" in school, "Oldfield" in school) == (404, False, False)
+    # `v1-e32-t57`: a team's page is cut from schools.md, so the removal's deletion takes it too.
+    assert (team_status, "<h1>No positions by school this week</h1>" in team, "Quarters" in team) == (
+        404,
+        True,
+        False,
+    )
     assert "/landscape/synthpolicy26/schools" not in listing
 
 
@@ -341,6 +351,7 @@ EXPECTED_RECORDS: Final = [
         "/landscape/synthpolicy26/schools/birch-hollow-2",
         {"page": "school", "caselist": "synthpolicy26", "snapshot": "2026-10-20"},
     ),
+    (TEAM_PAGE, {"page": "team", "caselist": "synthpolicy26", "snapshot": "2026-10-20"}),
     (
         "/landscape/synthpolicy26/positions/invented-da",
         {"page": "position", "caselist": "synthpolicy26", "snapshot": "2026-10-20"},
@@ -400,6 +411,8 @@ def test_no_record_names_a_school_team_code_or_position(student: Any) -> None:
     [
         "/landscape/nocaselist26",
         "/landscape/synthpolicy26/schools/oldfield",
+        "/landscape/synthpolicy26/schools/birch-hollow-2/no-such-team",
+        "/landscape/synthpolicy26/schools/oldfield/ef",
         "/landscape/synthpolicy26/positions/no-such-position",
         "/landscape/synthpolicy26/report/no-such-part",
     ],
@@ -444,6 +457,7 @@ def test_no_log_record_at_any_level_holds_a_school_anchor_position_id_school_or_
         "/landscape/synthpolicy26/schools/birch-hollow",
         "/landscape/synthpolicy26/positions/invented-aff",
         "/landscape/synthpolicy26/schools/oldfield",
+        "/landscape/synthpolicy26/schools/birch-hollow-2/no-such-team",
     ]
     with caplog.at_level(logging.NOTSET):
         logging.getLogger().setLevel(logging.NOTSET)

@@ -89,6 +89,7 @@ from debate_core.arguments.landscape.aff_assignment import (
     TRANSITION_PLAN_TEXT_METHOD,
 )
 from debate_core.domain.landscape import PositionKind, PositionSide
+from debate_core.domain.landscape_pages import Anchors
 from debate_core.domain.landscape_report import (
     CHAIN_ROLES,
     IMPACT_KINDS,
@@ -1343,35 +1344,42 @@ def render_schools_markdown(view: SchoolView, report: LandscapeReport) -> str:
         school: list(found)
         for school, found in groupby(view.round_lines, key=lambda line: line.school.casefold())
     }
+    # Every heading of the file, in order, as the pilot anchors them: a team's link is its heading's.
+    anchors = Anchors()
+    anchors.add(_one_line(lines[0].removeprefix("# ")))
+    anchors.add("By school")
     for school in sorted(
         rows_of.keys() | lines_of.keys(), key=lambda school: _school_order(school, rows_of, lines_of)
     ):
         listed = rows_of.get(school, [])
         shown = listed[0].school if listed else lines_of[school][0].school
+        anchors.add(_one_line(shown))
         lines += [f"### {_cell(shown)}", ""]
         if listed:
-            lines += ["| Team code | Side | Position | Rounds | Team page |", "|---|---|---|---|---|"]
+            lines += ["| Team code | Side | Position | Rounds |", "|---|---|---|---|"]
             lines += [
-                f"| {_cell(row.team_code)} | {row.side.value} | `{row.position_id}` | {row.rounds:,} | "
-                f"{_team_page_cell(view.team_page(row))} |"
+                f"| {_cell(row.team_code)} | {row.side.value} | `{row.position_id}` | {row.rounds:,} |"
                 for row in listed
             ]
         else:
             lines.append("No team of this school read a counted position.")
         lines.append("")
-        lines += _school_round_lists(lines_of.get(school, []))
+        lines += _school_teams(view, listed, lines_of.get(school, []), anchors)
     lines += _by_position_section(view, report)
     return "\n".join(lines).rstrip("\n") + "\n"
 
 
 _ROUND_LINES_LEAD: Final = (
-    "Under each school's table, each team's rounds, one line per round under each position: the positions "
-    "the team reads first, in the table's order, then those it only answers. Lines are newest snapshot "
-    "first, and give the tournament and round exactly as the team's filename gave them, the round's side, "
+    "Under each school's table, its teams, each with a link to its openCaselist page, or a note that it "
+    "has none, and a link to its rounds under its own heading. A team's rounds are one line per round "
+    "under each position: the positions the team reads first, in the table's order, then those it only "
+    "answers. Lines are newest snapshot first, and give the tournament and round exactly as the team's "
+    "filename gave them, the round's side, "
     'and `reads`, or `AT` where the round\'s file answers the position. "One file for N rounds" marks a '
     "round whose file holding the position the team disclosed for N of its rounds, so those rounds may be "
     "one file disclosed again rather than N rounds that each read it."
 )
+_TEAM_LIST_LEAD: Final = "Each team's rounds, on a page of its own:"
 _NOT_DISCLOSED: Final = {"tournament": "no tournament disclosed", "round": "no round disclosed"}
 _LINE_START: Final = re.compile(r"^(\d+)([.)])|^([#+=-])")
 """What, starting a list item's text, CommonMark reads as a list marker or a heading."""
@@ -1389,14 +1397,32 @@ def _round_lines_count(view: SchoolView) -> str:
     return f"{len(view.round_lines):,}: {len(view.round_lines) - at:,} reads, {at:,} AT"
 
 
-def _school_round_lists(lines: Sequence[SchoolRound]) -> list[str]:
-    """One school's teams, each its positions with a line per round (`v1-e32-t54`)."""
-    out: list[str] = []
-    for _, team in groupby(lines, key=lambda line: line.team_code):
-        listed = list(team)
-        out += [f"**{_cell(listed[0].team_code)}, round by round** (newest snapshot first)", ""]
+def _school_teams(
+    view: SchoolView, rows: Sequence[SchoolRow], lines: Sequence[SchoolRound], anchors: Anchors
+) -> list[str]:
+    """One school's teams: a list linking each to its openCaselist page and its rounds, then each team's
+    rounds under a `####` heading, its positions with a line per round (`v1-e32-t54`, `v1-e32-t57`).
+
+    The pilot makes a page of each team's heading (the PM's ruling of 2026-11-07), so a school's page
+    holds its table and this list, and a team's page its rounds. `anchors` is every heading of the file
+    so far, so each link is to its team's heading wherever a team code repeats another heading."""
+    by_team = {code: list(team) for code, team in groupby(lines, key=lambda line: line.team_code)}
+    teams: dict[str, SchoolRow | SchoolRound] = {code: found[0] for code, found in by_team.items()}
+    for row in rows:
+        teams.setdefault(row.team_code, row)
+    if not teams:
+        return []
+    links = [anchors.add(_one_line(code)) for code in teams]
+    out = [_TEAM_LIST_LEAD, ""]
+    for (code, first), anchor in zip(teams.items(), links, strict=True):
+        url = view.team_page(first)
+        page = "no openCaselist page" if url is None else f"[openCaselist]({url})"
+        out.append(f"- {_item(code)}: [round by round](#{anchor}), {page}")
+    out.append("")
+    for code in teams:
+        out += [f"#### {_cell(code)}", ""]
         for (position_id, answers_only), under in groupby(
-            listed, key=lambda line: (line.position_id, line.answers_only)
+            by_team.get(code, []), key=lambda line: (line.position_id, line.answers_only)
         ):
             out.append(f"- `{position_id}`" + (" (answers only)" if answers_only else ""))
             out += [f"  - {_round_line(line)}" for line in under]

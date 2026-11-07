@@ -10,6 +10,7 @@ team's signed-in members, students and coach alike, under the E39 gate's item 11
 | `GET /landscape/<caselist>/report/<part>` | one `#` part of the report, by its heading's anchor |
 | `GET /landscape/<caselist>/schools` | the school view's front page: its header, its schools, its positions |
 | `GET /landscape/<caselist>/schools/<school>` | one school, by its heading's anchor |
+| `GET /landscape/<caselist>/schools/<school>/<team>` | one team's rounds (`v1-e32-t57`) |
 | `GET /landscape/<caselist>/positions/<position id>` | one position's teams |
 
 Every one is a `GET` behind the gate, for any session, and changes nothing. The bundles come from
@@ -65,6 +66,7 @@ __all__ = [
     "landscape_report_part",
     "landscape_school",
     "landscape_school_view",
+    "landscape_team",
 ]
 
 _UNAVAILABLE_HEADING: Final = "The landscape reports are not available right now"
@@ -200,6 +202,25 @@ async def landscape_school(caselist: str, school: str, request: Request) -> HTML
     if piece is None:
         return _refused(request, 404, _NOT_FOUND_HEADING, _NOT_FOUND)
     return await _shown(request, "landscape_piece.html", LandscapePage.SCHOOL, bundle, view=view, piece=piece)
+
+
+async def landscape_team(caselist: str, school: str, team: str, request: Request) -> HTMLResponse:
+    """One team's rounds, by its school's anchor and its own heading's anchor in the school (`v1-e32-t57`)."""
+    bundle = await _bundle(request, caselist)
+    if isinstance(bundle, HTMLResponse):
+        return bundle
+    view = bundle.school_view
+    if view is None:
+        return await _shown(
+            request, "landscape_school_view.html", LandscapePage.TEAM, bundle, status_code=404, view=None
+        )
+    found = view.school(school)
+    piece = None if found is None else found.team(team)
+    if found is None or piece is None:
+        return _refused(request, 404, _NOT_FOUND_HEADING, _NOT_FOUND)
+    return await _shown(
+        request, "landscape_team.html", LandscapePage.TEAM, bundle, view=view, school=found, piece=piece
+    )
 
 
 async def landscape_position(caselist: str, position_id: str, request: Request) -> HTMLResponse:

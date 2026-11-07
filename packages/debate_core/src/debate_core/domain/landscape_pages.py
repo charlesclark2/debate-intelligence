@@ -4,7 +4,8 @@ The pilot shows the newest published landscape bundle of each caselist, `report.
 view `schools.md`, to signed-in members. What is decided here holds whatever renders the pages:
 
 * **Which pages there are** (:class:`LandscapePage`): the caselists, a caselist's report front page
-  and one page per `#` part of it, its school view's front page, and one page per school and per
+  and one page per `#` part of it, its school view's front page, and one page per school, per team
+  (`v1-e32-t57`: each `####` heading inside a school, the PM's ruling of 2026-11-07) and per
   position (the PM's layout ruling of 2026-10-25, and the parts from the review of 2026-10-26, when one
   report page had reached 92% of ADR-0019's 150 KB). The page kind is all an audit record says of
   where a member was, never which part, school or position.
@@ -24,6 +25,7 @@ view `schools.md`, to signed-in members. What is decided here holds whatever ren
 from __future__ import annotations
 
 import re
+from collections.abc import Container
 from dataclasses import dataclass
 from datetime import date, timedelta
 from enum import StrEnum
@@ -35,6 +37,8 @@ from debate_core.domain.search_source_links import OPENCASELIST_ORIGIN, team_pag
 
 __all__ = [
     "LANDSCAPE_HOLD",
+    "PAGE_BUDGET",
+    "PAGE_FRAME_ALLOWANCE",
     "LANDSCAPE_PREFIX",
     "REPORT_FILE",
     "SCHOOL_VIEW_FILE",
@@ -42,6 +46,8 @@ __all__ = [
     "BundleFile",
     "LandscapeLink",
     "LandscapePage",
+    "PageSize",
+    "SchoolViewPageSizes",
     "bundle_file",
     "heading_anchor",
     "is_position_id",
@@ -53,6 +59,15 @@ LANDSCAPE_HOLD: Final = timedelta(minutes=5)
 
 LANDSCAPE_PREFIX: Final = "reports/landscape/"
 """Where the bundles are, as `debate_core.application.landscape_bundle_files.REPORTS_PREFIX` says."""
+
+PAGE_BUDGET: Final = 150 * 1024
+"""ADR-0019 (b) 1: a page, its script and its stylesheet, at most 153,600 bytes sent."""
+
+PAGE_FRAME_ALLOWANCE: Final = 28 * 1024
+"""What a landscape page sends besides its body, allowed for: the site's header and the page's own
+chrome, with its headings, then the pilot's script and stylesheet (`v1-e32-t57`, the PM's ruling of
+2026-11-07, Q4). 26,611 bytes on the synthetic page measured that day; a `debate_api` test holds every
+page kind, with a long heading, at or under it, and fails first when the assets outgrow it."""
 
 REPORT_FILE: Final = "report.md"
 SCHOOL_VIEW_FILE: Final = "schools.md"
@@ -74,7 +89,52 @@ class LandscapePage(StrEnum):
     REPORT_PART = "report-part"
     SCHOOL_VIEW = "school-view"
     SCHOOL = "school"
+    TEAM = "team"
+    """One team's rounds, under its school (`v1-e32-t57`)."""
     POSITION = "position"
+
+
+@dataclass(frozen=True, slots=True)
+class PageSize:
+    """One school-view page as the report measures it (`v1-e32-t57`): its body's bytes and the frame."""
+
+    kind: LandscapePage
+    page: str
+    """The page's heading: a school, a team code or a position id; empty for the view's front page."""
+    body_bytes: int
+    school: str | None = None
+    """A team's school; `None` for any other page."""
+
+    @property
+    def bytes(self) -> int:
+        """What the page sends with its script and stylesheet, at most: its body and the frame allowance."""
+        return self.body_bytes + PAGE_FRAME_ALLOWANCE
+
+
+@dataclass(frozen=True, slots=True)
+class SchoolViewPageSizes:
+    """Every page the pilot cuts from a bundle's `schools.md`, measured against the budget (`v1-e32-t57`).
+
+    A page is over the budget when it would send the budget's bytes or more: the budget test holds a page
+    under it. The report names those and goes on (the PM's ruling of 2026-11-07, Q2).
+    """
+
+    pages: tuple[PageSize, ...] = ()
+    budget: int = PAGE_BUDGET
+
+    @property
+    def over_budget(self) -> tuple[PageSize, ...]:
+        return tuple(page for page in self.pages if page.bytes >= self.budget)
+
+    @property
+    def largest(self) -> PageSize | None:
+        return max(self.pages, key=lambda page: page.bytes, default=None)
+
+    @property
+    def largest_position(self) -> PageSize | None:
+        """Recorded each week, so the position pages' growth is on record (the PM's ruling, Q3)."""
+        positions = [page for page in self.pages if page.kind is LandscapePage.POSITION]
+        return max(positions, key=lambda page: page.bytes, default=None)
 
 
 @dataclass(frozen=True, slots=True)
@@ -138,17 +198,31 @@ class LandscapeLink(StrEnum):
     """A heading on the page it is on."""
     TEAM_PAGE = "team-page"
     """A team's openCaselist page, in the school view, opened in a new tab with no opener or referrer."""
+    TEAM_ROUNDS = "team-rounds"
+    """On a school's page, the heading of one of that school's teams, which is the team's own page
+    (`v1-e32-t57`): the link goes to that page instead."""
 
 
-def landscape_link(href: str, *, caselist: str, anchors: Anchors, team_pages: bool) -> LandscapeLink | None:
+def landscape_link(
+    href: str,
+    *,
+    caselist: str,
+    anchors: Anchors,
+    team_pages: bool,
+    team_rounds: Container[str] = frozenset(),
+) -> LandscapeLink | None:
     """What the link to `href` may be on a page of `caselist`'s bundle, or `None` to show it as text.
 
     A team page is allowed only where `team_pages` is (the school view), and only when the rule that
     builds one gives back exactly `href` from the bundle's own caselist and the link's school and team
-    code: another caselist, another origin, a query, a fragment or an extra segment gives `None`.
+    code: another caselist, another origin, a query, a fragment or an extra segment gives `None`. A
+    fragment naming one of `team_rounds`, the anchors in the file of this school's team headings, is the
+    team's page.
     """
     fragment = _FRAGMENT.match(href)
     if fragment is not None:
+        if fragment.group(1) in team_rounds:
+            return LandscapeLink.TEAM_ROUNDS
         return LandscapeLink.SAME_PAGE if fragment.group(1) in anchors else None
     if not team_pages or not href.startswith(_TEAM_PAGE_PREFIX):
         return None

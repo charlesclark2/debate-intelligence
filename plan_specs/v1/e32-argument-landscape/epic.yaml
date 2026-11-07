@@ -1114,6 +1114,9 @@ spec:
         goalRef: v1-e32-t50-a-second-labelled-sample-held-out
       dependsOn:
       - t46
+      - t53
+      - t55
+      - t58
       acceptanceCriteria:
       - type: command_succeeds
         name: Task spec v1-e32-t50-a-second-labelled-sample-held-out reports phase Succeeded
@@ -1270,6 +1273,8 @@ spec:
       inputs:
         specRef: plan_specs/v1/e32-argument-landscape/t58-the-coach-sample-labels-file-guarded.yaml
         goalRef: v1-e32-t58-the-coach-sample-labels-file-guarded
+      dependsOn:
+      - t46
       acceptanceCriteria:
       - type: command_succeeds
         name: Task spec v1-e32-t58-the-coach-sample-labels-file-guarded reports phase Succeeded
@@ -1288,6 +1293,8 @@ spec:
       inputs:
         specRef: plan_specs/v1/e32-argument-landscape/t59-a-repair-cassettes-hits-count-the-cards-sent.yaml
         goalRef: v1-e32-t59-a-repair-cassettes-hits-count-the-cards-sent
+      dependsOn:
+      - t44
       acceptanceCriteria:
       - type: command_succeeds
         name: Task spec v1-e32-t59-a-repair-cassettes-hits-count-the-cards-sent reports phase Succeeded
@@ -1305,6 +1312,8 @@ spec:
       inputs:
         specRef: plan_specs/v1/e32-argument-landscape/t60-the-bundle-scan-reads-the-reports-own-words-as-its-own.yaml
         goalRef: v1-e32-t60-the-bundle-scan-reads-the-reports-own-words-as-its-own
+      dependsOn:
+      - t06
       acceptanceCriteria:
       - type: command_succeeds
         name: Task spec v1-e32-t60-the-bundle-scan-reads-the-reports-own-words-as-its-own reports phase Succeeded

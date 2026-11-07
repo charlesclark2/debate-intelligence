@@ -153,6 +153,7 @@ spec:
       dependsOn:
       - t01
       - ext-v1-e04-t02-http-fetcher
+      - t10
       acceptanceCriteria:
       - type: command_succeeds
         name: Task spec v1-e07-t04-semantic-scholar-adapter reports phase Succeeded

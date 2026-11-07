@@ -31,7 +31,10 @@ spec:
       - A lifecycle rule that can reach an aggregate, a per-source file or a manifest
       - A plan that destroys or replaces an account assignment or permission set
       - A price or limit written from memory
-  context: []
+  context:
+    - kind: TaskRef
+      name: v1-e31-t10-incremental-aggregate-rebuild
+      relation: dependsOn
   acceptanceCriteria:
     - id: ac1
       description: >-

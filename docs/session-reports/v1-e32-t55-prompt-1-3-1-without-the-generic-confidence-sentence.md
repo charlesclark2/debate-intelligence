@@ -827,3 +827,13 @@ reversible and checked byte for byte.
 8. **The PM records ac2 in docs/data** in the next batch, and the Goal is then `Succeeded`.
 9. **Merge:** `scripts/task pr --partial` once `ci` is green. The Goal stays `InProgress` until that
    record.
+
+## Operator records (recorded by the PM, 2026-11-07)
+
+Added by the PM. Nothing above is changed, and this section is not a review.
+
+| Criterion | Was | Now | Record |
+|---|---|---|---|
+| ac2: the operator's re-record of the 47 on deep_audit under 1.3.1, recorded beside 1.3.0's | NOT RUN (recorded by the PM) | PASS | 2026-11-06, scored on the coach's labels of 2026-11-06: 1.3.1 26 of 38 (0.684) beside 1.3.0's replay 24 of 32 (0.750) on the same labels; recorded in docs/data/landscape-model-evaluation.md |
+
+Every criterion passes, so the Goal is `Succeeded`.

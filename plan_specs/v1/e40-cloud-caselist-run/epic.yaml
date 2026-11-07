@@ -1007,6 +1007,14 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e40-t44-a-scheduled-run-refuses-a-second-run-within-hours
+    - id: ext-v1-e07-t16-public-pool-footer-test-on-an-injected-clock
+      kind: External
+      name: 'Prerequisite from E07: The public-pool footer test counts its results on an injected clock, not the real one'
+      description: >-
+        Cross-epic prerequisite owned by v1-e07-discovery-adapters (release v1.4).
+      inputs:
+        goalRef: v1-e07-t16-public-pool-footer-test-on-an-injected-clock
+        specRef: plan_specs/v1/e07-discovery-adapters/t16-public-pool-footer-test-on-an-injected-clock.yaml
     - id: t45
       kind: Task
       name: 'The run lock tells a test when a writer starts waiting, so the shared-renewal test is not a thread race'
@@ -1016,6 +1024,8 @@ spec:
       inputs:
         specRef: plan_specs/v1/e40-cloud-caselist-run/t45-run-lock-offers-a-test-hook-when-a-writer-waits.yaml
         goalRef: v1-e40-t45-run-lock-offers-a-test-hook-when-a-writer-waits
+      dependsOn:
+      - ext-v1-e07-t16-public-pool-footer-test-on-an-injected-clock
       acceptanceCriteria:
       - type: command_succeeds
         name: Task spec v1-e40-t45-run-lock-offers-a-test-hook-when-a-writer-waits reports phase Succeeded
@@ -1042,6 +1052,14 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e40-t46-a-backfile-without-the-running-parsers-directory-is-named
+    - id: ext-v1-e31-t40-publish-only-dry-run
+      kind: External
+      name: 'Prerequisite from E31: caselist parse --publish-only has a dry run that lists what it would send and refuses what it would refuse'
+      description: >-
+        Cross-epic prerequisite owned by v1-e31-debate-file-parsing (release v1.1).
+      inputs:
+        goalRef: v1-e31-t40-publish-only-dry-run
+        specRef: plan_specs/v1/e31-debate-file-parsing/t40-publish-only-dry-run.yaml
     - id: t47
       kind: Task
       name: 'Prod receives each backfile once, by hand, before the run''s home moves'
@@ -1052,6 +1070,7 @@ spec:
         goalRef: v1-e40-t47-prods-one-time-backfile-publish
       dependsOn:
       - t16
+      - ext-v1-e31-t40-publish-only-dry-run
       acceptanceCriteria:
       - type: command_succeeds
         name: Task spec v1-e40-t47-prods-one-time-backfile-publish reports phase Succeeded

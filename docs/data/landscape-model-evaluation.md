@@ -638,3 +638,32 @@ only.
 
 The re-record of the 47 under 1.3.1, on `deep_audit` only, is recorded here by the PM when the operator has
 it ([the record runbook](../runbooks/landscape-model-evaluation-record.md#prompt-131-the-re-record-on-deep_audit-v1-e32-t55)).
+
+### The re-record under 1.3.1 (`v1-e32-t55` ac2, recorded by the PM 2026-11-07)
+
+`deep_audit`, 2026-11-06, the 47 cards of the sample, scored on the coach's labels of 2026-11-06 (the PM's
+ruling (A); SHA-256 `553374704519…`). 1.3.0 is its kept recording replayed on the same labels, with no
+model call. Counts and row numbers only.
+
+| On the labels of 2026-11-06 | Pipeline (bar 0.85) | Below the threshold | Coverage | Weighted |
+|---|---|---|---|---|
+| 1.3.0 (replay) | 24 of 32, 0.750 (95%: 0.58 to 0.87) | 15 | 0.681 | 0.655 |
+| **1.3.1 (this re-record)** | **26 of 38, 0.684** (95%: 0.53 to 0.81) | 9 | 0.809 | 0.615 |
+
+* **The recording:** 5 calls (2 repaired for `string_too_long`), 43,165 input and 5,235 output tokens,
+  $0.208 at `config/model_pricing.yaml`.
+* **What it says:** the two prompts are not told apart. 1.3.1 answers more cards, with more right (26) and
+  more wrong (12). The generic condition holds: its one generic answer above the threshold (row 60) is
+  right. Gained rows 34, 53, 58, 60; lost rows 7 and 47; rows 15, 20, 33 and 56 went from below the
+  threshold to wrong answers.
+* **The scans:** prompt inputs and cassettes clean. The repair cassettes read not clean only because their
+  input holds the model's own failed answer (`v1-e32-t59`); the operator judged all 63 hits ordinary words,
+  none a team's name, so the cassettes are kept.
+* **The coach's two sittings** of the stance rows (2026-11-04, lost to a spreadsheet save, and 2026-11-06)
+  agree on 15 of the 19 cards; rows 16, 21, 25 and 57 differ. That is the first measure of how stable the
+  stance labels are between sittings, and it bounds what any prompt can score on those rows. 1.3.0 scores 24
+  of 32 on either label set.
+* **What follows:** the bar is not met and the hold on live model runs stands. `v1-e32-t50` is measured on
+  1.3.1, as ruled before either score was seen; rows 16 and 57 take the 2026-11-06 labels, row 33 stays open
+  for its sitting.
+

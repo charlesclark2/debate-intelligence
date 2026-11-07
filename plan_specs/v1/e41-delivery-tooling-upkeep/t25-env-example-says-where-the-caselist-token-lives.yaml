@@ -25,7 +25,10 @@ spec:
     packages: [.env.example, README.md, packages/debate_cli/README.md, tests/docs, docs/guides]
     forbidden:
       - A credential value or a real path to one in any file
-  context: []
+  context:
+    - kind: TaskRef
+      name: v1-e41-t22-per-user-credentials-file-and-a-missing-working-folder
+      relation: dependsOn
   acceptanceCriteria:
     - id: ac1
       description: >-

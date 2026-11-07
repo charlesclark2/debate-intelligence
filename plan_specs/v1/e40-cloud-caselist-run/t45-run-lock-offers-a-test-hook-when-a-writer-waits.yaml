@@ -27,7 +27,10 @@ spec:
     forbidden:
       - A test that reads the lock's private state
       - A behaviour change to the lock in production
-  context: []
+  context:
+    - kind: TaskRef
+      name: v1-e07-t16-public-pool-footer-test-on-an-injected-clock
+      relation: dependsOn
   acceptanceCriteria:
     - id: ac1
       description: >-

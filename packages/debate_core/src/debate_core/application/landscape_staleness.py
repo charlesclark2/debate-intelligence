@@ -41,15 +41,23 @@ Any of three things, per caselist. When more than one applies, the banner says e
    (an expired token, a provider error while listing, a refused start) is recorded with no stage
    and no archive listed, only the caselists it was asked for and its error's class. When those
    caselists name this one, the run decides as a listing run would, if it is the later of the two,
-   and the banner says the run "stopped before its stages", naming the class. The run lock's
-   refusal (:class:`~debate_core.application.caselist_sync.SyncRunInProgress`) is the exception:
-   the run holding the lock is the one that counts, and a second launch must not flip the report.
+   and the banner says the run "stopped before its stages", naming the class.
+
+   **A pull the run lock refused is no run at all** (`v1-e40-t38`). It did nothing, and its record
+   has the shape of a run that stopped: `failed`, no stage, the refusal's class. The refusals are
+   :data:`LOCK_REFUSALS`: the local lock held by another pull
+   (:class:`~debate_core.application.caselist_sync.SyncRunInProgress`), and the bucket's lock held
+   by another runner, held for good by the move of the weekly run's home, or naming another home
+   (:class:`~debate_core.application.caselist.run_lock.RunLockHeld`, ``RunHomeMoved``,
+   ``RunLockWrongHome``). Such a record is passed over, so the report reads as the last run that
+   ran left it: current, cap-bound or failed. A run that held the lock and then failed (its lease
+   lost, or told to stop) is not a refusal, and reads stopped.
 
    These change nothing, in either direction:
 
    * a run that never listed this caselist nor stopped naming it: another caselist's run, and
      `--publish-pending`, which lists nothing and is asked for no caselist;
-   * a run the run lock refused;
+   * a pull the run lock refused;
    * an `incomplete` run, whose parse, landscape, search-index, report or retention stage failed
      after the snapshot was captured;
    * a run with no end recorded. A killed run writes no record at all, and a line without
@@ -70,12 +78,14 @@ from datetime import date
 from typing import Final
 
 from debate_core.application.caselist.publish_plan import manifest_prefix, snapshot_of_manifest_key
+from debate_core.application.caselist.run_lock import RunHomeMoved, RunLockHeld, RunLockWrongHome
 from debate_core.application.caselist_sync import StageOutcome, SyncRunInProgress, SyncStage
 from debate_core.application.ports.evidence_store import EvidenceObjectStore
 from debate_core.application.sync_runs import SyncRunLog, SyncRunRecord
 
 __all__ = [
     "DEFAULT_STALE_AFTER_DAYS",
+    "LOCK_REFUSALS",
     "STALE_BANNER_HEADING",
     "FailedSyncRun",
     "LandscapeStaleness",
@@ -120,26 +130,40 @@ class FailedSyncRun:
 _STAGE_NAMES: Final = frozenset(str(stage) for stage in SyncStage)
 
 
-_LOCK_REFUSAL: Final = SyncRunInProgress.__name__
+LOCK_REFUSALS: Final = frozenset(
+    refusal.__name__ for refusal in (SyncRunInProgress, RunLockHeld, RunHomeMoved, RunLockWrongHome)
+)
+"""The error classes of a pull the run lock refused, which did nothing and is no run at all here.
+
+The local lock held by another pull, the bucket's lock held by another runner, the lock held for good
+by the move of the weekly run's home (`v1-e40-t11`), and a lock naming another home. Not the lock's
+other errors: :class:`~debate_core.application.caselist.run_lock.RunLockLost` ends a run that held
+the lock and began, and the setup refusals (an unseeded bucket, an unreadable lock, a seeded bucket
+in local mode) say no runner is refreshing this store until a person acts, so a report built on it
+reads stale as before."""
+
+
+def _refused_by_the_lock(record: SyncRunRecord) -> bool:
+    """A pull the run lock refused: it did nothing, so it is no run of any caselist (`v1-e40-t38`)."""
+    return not record.succeeded and record.error_class in LOCK_REFUSALS
 
 
 def _stopped_naming(record: SyncRunRecord, caselist: str) -> bool:
-    """A run that raised, asked for `caselist`, and was not refused by the run lock."""
-    return (
-        not record.succeeded
-        and record.error_class is not None
-        and record.error_class != _LOCK_REFUSAL
-        and caselist in record.caselists
-    )
+    """A run that raised and asked for `caselist`."""
+    return not record.succeeded and record.error_class is not None and caselist in record.caselists
 
 
 def _latest_run_of(caselist: str, records: Sequence[SyncRunRecord]) -> SyncRunRecord | None:
-    """The latest run that listed `caselist`'s archives, or stopped on an error naming it."""
+    """The latest run that listed `caselist`'s archives, or stopped on an error naming it.
+
+    A pull the run lock refused is passed over, so the run before it decides.
+    """
     return next(
         (
             record
             for record in reversed(records)
-            if caselist in record.deferred_by_caselist or _stopped_naming(record, caselist)
+            if not _refused_by_the_lock(record)
+            and (caselist in record.deferred_by_caselist or _stopped_naming(record, caselist))
         ),
         None,
     )

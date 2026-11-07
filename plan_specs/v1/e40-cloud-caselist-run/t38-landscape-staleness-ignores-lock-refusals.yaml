@@ -36,7 +36,7 @@ spec:
         A lock refusal leaves the landscape's staleness as the last real run made it, while
         a run that failed after starting still reads stopped, by tests shown failing first.
 status:
-  phase: Pending
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

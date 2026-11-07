@@ -14,6 +14,16 @@ from pathlib import Path
 
 import pytest
 
+from debate_core.application.caselist.run_lock import (
+    LockBody,
+    LockHolder,
+    LockState,
+    RunHomeMoved,
+    RunLockHeld,
+    RunLockLost,
+    RunLockWrongHome,
+    RunTerminated,
+)
 from debate_core.application.caselist_sync import (
     ArchiveSelection,
     RunSummary,
@@ -444,24 +454,175 @@ async def test_a_later_run_that_listed_the_caselist_clears_a_run_that_stopped(
     assert not staleness.stale
 
 
-async def test_a_run_the_lock_refused_changes_nothing(objects: FsEvidenceObjectStore, tmp_path: Path) -> None:
-    """The run holding the lock is the one that counts: a second launch flips nothing, either way."""
-    refusal = stopped(SyncRunInProgress(tmp_path / "caselist-sync.lock"))
+# ------------------------------------------------------------------------------------------------
+# A lock refusal is no run at all (`v1-e40-t38`)
+# ------------------------------------------------------------------------------------------------
+#
+# A pull the run lock refused did nothing: another runner held the lock, the weekly run's home had
+# moved, or the lock named another home. Its record says `failed` with the refusal's class and no
+# stage, the shape of a run that stopped on an error, and until `v1-e40-t38` only the local lock's
+# `SyncRunInProgress` was exempt. Every holder, run id, task and time below is invented.
+
+INVENTED_LOCK_FILE = "invented-sync.lock"
+INVENTED_HOLDER = LockHolder(
+    kind="cloud", run_id="20260918T055500Z", command="caselist pull", task="invented-task-7f3e"
+)
+INVENTED_MOVE = LockBody(
+    home_environment="prod",
+    state=LockState.HELD,
+    holder=LockHolder(
+        kind="moved", run_id="20260910T120000Z", command="caselist move-run-home", by="mac", build="v0.0.0-x"
+    ),
+    acquired_at=datetime(2026, 9, 10, 12, tzinfo=UTC),
+)
+
+
+def lock_refusals(tmp_path: Path) -> dict[str, BaseException]:
+    """One of each refusal of the run lock, by the class name its record carries."""
+    refusals: list[BaseException] = [
+        SyncRunInProgress(tmp_path / INVENTED_LOCK_FILE),
+        RunLockHeld(holder=INVENTED_HOLDER, lease_expires_at=datetime(2026, 9, 18, 6, 25, tzinfo=UTC)),
+        RunHomeMoved(body=INVENTED_MOVE, environment="dev"),
+        RunLockWrongHome(home="prod", environment="dev"),
+    ]
+    return {type(refusal).__name__: refusal for refusal in refusals}
+
+
+LOCK_REFUSAL_CLASSES = ("SyncRunInProgress", "RunLockHeld", "RunHomeMoved", "RunLockWrongHome")
+
+REFUSED_AT = datetime(2026, 9, 18, 6, tzinfo=UTC)
+"""After every run the tests below record: the refusal is the latest record."""
+
+
+def refused(tmp_path: Path, refusal_class: str, *, started: datetime = REFUSED_AT) -> SyncRunRecord:
+    """A pull the run lock refused, recorded the way the monitor records it (`record_for_failure`)."""
+    record = stopped(lock_refusals(tmp_path)[refusal_class], started=started)
+    assert record.error_class == refusal_class and not record.stages and not record.deferred_by_caselist
+    return record
+
+
+@pytest.mark.parametrize("refusal_class", LOCK_REFUSAL_CLASSES)
+async def test_a_lock_refusal_after_a_completed_run_leaves_the_report_as_that_run_made_it(
+    objects: FsEvidenceObjectStore, tmp_path: Path, refusal_class: str
+) -> None:
+    """Current stays current, and a backlog the completed run left to the cap stays counted."""
     current = log_of(tmp_path / "current", run_of(SEPTEMBER_16))
-    failed = log_of(tmp_path / "failed", run_of(SEPTEMBER_16, failed=(SyncStage.DOWNLOAD,)))
-    for log in (current, failed):
-        log.append(refusal)
+    cap_bound = log_of(tmp_path / "cap-bound", run_of(SEPTEMBER_16, deferred=2))
+    for log in (current, cap_bound):
+        log.append(refused(tmp_path, refusal_class))
 
-    after_success = await LandscapeStalenessCheck(objects=objects, run_log=current).check(
+    after_current = await LandscapeStalenessCheck(objects=objects, run_log=current).check(
         CASELIST, report_date=FRESH
     )
-    after_failure = await LandscapeStalenessCheck(objects=objects, run_log=failed).check(
+    after_cap_bound = await LandscapeStalenessCheck(objects=objects, run_log=cap_bound).check(
         CASELIST, report_date=FRESH
     )
 
-    assert refusal.error_class == "SyncRunInProgress"
-    assert not after_success.stale
-    assert after_failure.failed_run == FailedSyncRun(run_id=FAILED_RUN_ID, stages=("download",))
+    assert after_current.failed_run is None
+    assert not after_current.stale
+    assert with_stale_banner(STAND_IN_REPORT, after_current) == STAND_IN_REPORT
+    assert with_staleness_metadata(STAND_IN_METADATA, after_current)["stale"] == "false"
+    assert after_cap_bound.failed_run is None
+    assert after_cap_bound.archives_awaiting_download == 2
+    assert "stopped before its stages" not in (after_cap_bound.banner() or "")
+
+
+@pytest.mark.parametrize("refusal_class", LOCK_REFUSAL_CLASSES)
+async def test_a_lock_refusal_after_a_failed_run_leaves_it_failed(
+    objects: FsEvidenceObjectStore, tmp_path: Path, refusal_class: str
+) -> None:
+    """The failed run is still the latest run that ran: its stage, or its error, is what the banner says."""
+    at_a_stage = log_of(tmp_path / "at-a-stage", run_of(SEPTEMBER_16, failed=(SyncStage.DOWNLOAD,)))
+    on_an_error = log_of(tmp_path / "on-an-error", run_of(SEPTEMBER_16))
+    on_an_error.append(stopped(EXPIRED_TOKEN))
+    for log in (at_a_stage, on_an_error):
+        log.append(refused(tmp_path, refusal_class))
+
+    after_stage = await LandscapeStalenessCheck(objects=objects, run_log=at_a_stage).check(
+        CASELIST, report_date=FRESH
+    )
+    after_error = await LandscapeStalenessCheck(objects=objects, run_log=on_an_error).check(
+        CASELIST, report_date=FRESH
+    )
+
+    assert after_stage.failed_run == FailedSyncRun(run_id=FAILED_RUN_ID, stages=("download",))
+    assert after_error.failed_run == FailedSyncRun(
+        run_id=STOPPED_RUN_ID, stopped_before_stages=True, error_class="CaselistAuthExpired"
+    )
+    for staleness in (after_stage, after_error):
+        assert staleness.stale
+        assert refusal_class not in (staleness.banner() or "")
+
+
+@pytest.mark.parametrize(
+    "error",
+    [
+        pytest.param(RunLockLost(), id="RunLockLost"),
+        pytest.param(RunTerminated(), id="RunTerminated"),
+    ],
+)
+async def test_a_run_that_failed_after_it_started_still_reads_stopped(
+    objects: FsEvidenceObjectStore, tmp_path: Path, error: BaseException
+) -> None:
+    """These runs held the lock and began: a lease lost mid-run, or a run told to stop. Not refusals.
+
+    `RunLockLost` is the lock's own error and its record stays local, as a refusal's does; neither
+    makes it a run that did nothing.
+    """
+    log = log_of(tmp_path, run_of(SEPTEMBER_16))
+    log.append(stopped(error, started=REFUSED_AT))
+    check = LandscapeStalenessCheck(objects=objects, run_log=log)
+
+    staleness = await check.check(CASELIST, report_date=FRESH)
+
+    name = type(error).__name__
+    assert staleness.stale
+    assert staleness.failed_run == FailedSyncRun(
+        run_id="20260918T060000Z", stopped_before_stages=True, error_class=name
+    )
+    assert f"stopped before its stages ({name})." in (staleness.banner() or "")
+
+
+async def test_a_log_holding_only_lock_refusals_reads_as_no_run(
+    objects: FsEvidenceObjectStore, tmp_path: Path
+) -> None:
+    """Every refusal, one after another: the report is what it would be with no run log at all."""
+    log = SyncRunLog(tmp_path / SYNC_RUN_LOG_FILENAME)
+    for hour, refusal_class in enumerate(LOCK_REFUSAL_CLASSES):
+        log.append(refused(tmp_path, refusal_class, started=REFUSED_AT + timedelta(hours=hour)))
+
+    with_refusals = await LandscapeStalenessCheck(objects=objects, run_log=log).check(
+        CASELIST, report_date=FRESH
+    )
+    without_a_log = await LandscapeStalenessCheck(objects=objects, run_log=None).check(
+        CASELIST, report_date=FRESH
+    )
+
+    assert len(log.read()) == len(LOCK_REFUSAL_CLASSES)
+    assert with_refusals == without_a_log
+    assert with_refusals.failed_run is None
+    assert not with_refusals.stale
+
+
+async def test_refusals_after_a_failed_run_and_before_a_completed_one_change_nothing_either_way(
+    objects: FsEvidenceObjectStore, tmp_path: Path
+) -> None:
+    """Several refusals in a row are passed over to the run before them, and a later run clears it."""
+    log = log_of(tmp_path, run_of(SEPTEMBER_16, failed=(SyncStage.IMPORT,)))
+    for hour, refusal_class in enumerate(LOCK_REFUSAL_CLASSES):
+        log.append(refused(tmp_path, refusal_class, started=REFUSED_AT + timedelta(hours=hour)))
+    check = LandscapeStalenessCheck(objects=objects, run_log=log)
+
+    still_failed = await check.check(CASELIST, report_date=FRESH)
+    log.append(
+        record_for_summary(
+            run_of(datetime(2026, 9, 19, 6, tzinfo=UTC)), environment="dev", mode="run", previous=log.read()
+        )
+    )
+    cleared = await check.check(CASELIST, report_date=FRESH)
+
+    assert still_failed.failed_run == FailedSyncRun(run_id=FAILED_RUN_ID, stages=("import",))
+    assert cleared.failed_run is None and not cleared.stale
 
 
 async def test_a_run_that_stopped_naming_another_caselist_changes_nothing(

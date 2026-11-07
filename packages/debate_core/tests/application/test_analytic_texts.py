@@ -614,3 +614,48 @@ async def test_a_cached_reading_takes_the_sides_of_the_run_that_reads_it(tmp_pat
     assert (again.read.hits, again.read.parsed) == (1, 0)
     assert _seam_roles(again) == READS_ALL
     assert _cached_roles(tmp_path) == [PositionRole.ANSWERS] * 3
+
+
+@pytest.mark.anyio
+async def test_each_file_takes_its_own_sides_not_the_caselists(tmp_path: Path) -> None:
+    store = PlantedCaselist(tmp_path, SEAM_CASELIST)
+    store.source(
+        "answered-neg",
+        [PlantedCard(("AT: Cap K",))],
+        disclosures=[("2026-09-15", _path("One", "Neg", 1))],
+        content=answered(),
+    )
+    other = build_docx(
+        paragraph_xml(run_xml("AT: Cap K"), style="Heading2")
+        + paragraph_xml(run_xml("The alternative is to reject other sample answers."), style="Analytic")
+    )
+    store.source(
+        "answered-aff",
+        [PlantedCard(("AT: Cap K",))],
+        disclosures=[("2026-09-15", _path("Two", "Aff", 2))],
+        content=other,
+    )
+    objects = FsEvidenceObjectStore(tmp_path)
+    blobs = FsEvidenceObjectStore(tmp_path, subdirectory=Path("blobs"))
+    local = LocalEvidence(
+        objects=objects, blobs=blobs, object_path_for=objects.path_for, blob_path_for=blobs.path_for
+    )
+    reading = await read_seed_sources(
+        store=LocalParsedStore(tmp_path),
+        local=local,
+        suppression=RecordedSuppressionList(local_suppression_list_file(tmp_path)),
+        topic=TOPIC,
+        caselist=SEAM_CASELIST,
+        through=date(2026, 9, 29),
+    )
+    found = await _report_inputs(tmp_path, reading, local)
+    sides = {source.sha256: {team.side.value for team in source.teams} for source in reading.sources}
+    roles = {
+        frozenset(sides[sha]): [one.role for one in readings]
+        for sha, readings in found.inputs.readings.items()
+    }
+    assert roles == {
+        frozenset({"NEG"}): [PositionRole.READS] * 3,
+        frozenset({"AFF"}): [PositionRole.ANSWERS],
+    }
+    assert sorted(found.inputs.texts.values()) == sorted([ANSWERED_CP, ANSWERED_ALT])

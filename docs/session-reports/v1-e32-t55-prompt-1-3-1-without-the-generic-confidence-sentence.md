@@ -510,6 +510,15 @@ Paste back its whole output. It holds paths, sizes, times, counts and command li
   save, not a shell command.
 * **The Trash** is not readable from the terminal, so the operator looks in it in Finder.
 
+**1d's set-up, run by the operator (2026-11-06).** The Trash was empty in Finder, and Excel was quit first.
+* The block printed `Restored.` and a sample check of advantage 16, cp 6, da 5, k 10, none 3, t 7; answers 0,
+  reads 44; two second labels (both advantages).
+* The session confirmed by checksum only:
+  * the live file is now byte for byte `.before-stance-relabel.csv` (t41's review);
+  * `.regressed-2026-11-05.csv` is byte for byte the file Excel wrote, which is `.before-relabel.csv`;
+  * no `.incoming` file is left in the folder.
+* Next is the coach's sitting.
+
 * **The stance-labelled file is a candidate reading `none 2 | answers 10 | reads 35 | second labels 2`.**
   If one does, go to 1c.
 * **If none does**, but Time Machine lists a local snapshot or a backup between 2026-11-04 22:51 and

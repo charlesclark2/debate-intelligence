@@ -17,7 +17,10 @@ from pathlib import Path
 from typing import Any, Final
 
 REPOSITORY: Final = Path(__file__).resolve().parents[3]
-RENDERER: Final = REPOSITORY / "packages" / "debate_api" / "src" / "debate_api" / "landscape_markdown.py"
+RENDERER: Final = (
+    REPOSITORY / "packages" / "debate_core" / "src" / "debate_core" / "arguments" / "landscape" / "pages.py"
+)
+"""The renderer since `v1-e32-t57` moved it from `debate_api.landscape_markdown`, unchanged."""
 
 
 def _lock_package(lock: dict[str, Any], name: str) -> dict[str, Any]:

@@ -21,7 +21,7 @@ are `v1-e39-t06`'s; the landscape pages are `v1-e39-t17`'s.
 | `access` | the gate in front of every route: which routes need a session, the coach check, CSRF |
 | `routes` | the routes, and `ROUTE_ACCESS`, the access each needs |
 | `search_pages` | the search page, its results, the card page and Copy card's copy, all `GET` |
-| `landscape_pages`, `landscape_markdown` | the landscape report and its school view, rendered from the newest bundle with markdown-it, raw HTML escaped and every link checked |
+| `landscape_pages`, `landscape_markdown` | the landscape report and its school view, rendered from the newest bundle by `debate_core.arguments.landscape.pages` (markdown-it, raw HTML escaped and every link checked; moved there by `v1-e32-t57` so the report's page-size check measures the same bytes) |
 | `copy_card` | Copy card's HTML and text, from a fixed table of emphasis, colour and size styles |
 | `cookies` | the AES-GCM `__Host-` cookies and what each holds |
 | `configuration` | the environment variables, and the cookie keys (the placeholder is refused) |

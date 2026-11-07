@@ -599,6 +599,82 @@ ROWS=~/.debate-research/dev/landscape/local-classifier/hspolicy26/policy-2026-27
 if env | grep -q '^DEBATE_'; then echo "STOP: a DEBATE_ variable is set; unset it and paste again"; else uv run debate-research landscape evaluate --caselist hspolicy26 --snapshot 2026-10-20 --sample "$SAMPLE" --sample-rows "$ROWS" --breakdown --route deep_audit; fi
 ```
 
+## The coach's sitting of 2026-11-06 (1d)
+
+The coach re-sat t46's stance rows through `relabel_coach_sample.py`, from t41's review. It used the same 13
+listed rows, 6 controls and seed 20261105 as on 2026-11-04, so the same 19 cards came in the same order.
+The operator pasted the sitting's last line and the sample check:
+
+* `Done. Listed: 9 changed, 4 unchanged. Control: 1 changed, 5 unchanged.` These are the same numbers of
+  changes as on 2026-11-04.
+* The sample check: labelled 47; by kind advantage 16, aff 1, cp 7, da 5, k 9, none 2, t 7; by stance
+  answers 9, reads 36; two second labels, both advantages. The 2026-11-04 sitting had given advantage
+  15, cp 7, da 6, k 10, none 2, t 7, and answers 10, reads 35.
+* The file: written by the script (a new inode, 294172968, at 2026-11-06 23:05:46, and no Excel mark), 7,929
+  bytes, SHA-256 `553374704519fd29f13a43e279a08537b28c87fbfc58372be845bc0de2b0a922`. t41's copy beside it is
+  unchanged.
+
+**Where the two sittings differ.** The session compared today's labels with t41's copy, reading only the
+row number and label columns (taxonomy ids), and the `at:` rows with docs/data's record of 2026-11-04. The
+2026-11-04 labels themselves are gone with the overwritten file, so only which rows took `at:` can be
+compared:
+
+| Row | 2026-11-04 | 2026-11-06 |
+|---|---|---|
+| 5, 11, 20, 26, 31, 41, 59 (listed) | changed to `at:` | changed to `at:`, the same rows |
+| 40 (control) | changed to `at:` | changed: `none` to `at:delay-cp` |
+| 21 (listed) | changed to `at:` | kept (t41's label, reads) |
+| 25 (listed) | changed to `at:` | kept (t41's label, reads) |
+| 16 (listed) | kept | `inequality-advantage` to `at:inequality-advantage` |
+| 57 (listed) | kept (`cap-k`) | `cap-k` to `kritikal-aff` |
+| 13, 33 (listed) | kept | kept |
+
+* 4 of the 19 cards came out differently between the two sittings.
+* Rows 16 and 57 are two of the three rows the PM's ruling 3 on t49 sends to the coach alongside
+  `v1-e32-t50` (16, 33 and 57). Today the coach gave row 16 an `at:` label, and row 57 `kritikal-aff`, the
+  position that reads a kritik's theory on the affirmative: the possibility that ruling named. Row 33 he kept.
+* The re-score's guard expects the 2026-11-04 counts, so it refuses this file, as written, until the PM
+  rules.
+
+### For the PM (a relay)
+
+```text
+v1-e32-t55: the coach re-sat t46's stance rows (1d), from t41's review, on the same 19 cards, order
+and seed as 2026-11-04. No stance-labelled copy was found anywhere (search, Excel's folder, the
+Trash, Time Machine: none set up), and Microsoft Excel wrote the bad file (quarantine mark at the
+second of the write).
+
+Result: the same numbers of changes (listed 9, control 1), but not the same labels.
+  2026-11-04: by kind advantage 15, cp 7, da 6, k 10, none 2, t 7; answers 10, reads 35; 2 second labels.
+  2026-11-06: by kind advantage 16, aff 1, cp 7, da 5, k 9, none 2, t 7; answers 9, reads 36; 2 second labels.
+Row by row (only the at: rows of 2026-11-04 are on record):
+  rows 21 and 25 took at: on 11-04 and were kept today;
+  row 16 was kept on 11-04 and is at:inequality-advantage today;
+  row 57 was kept on 11-04 (cap-k) and is kritikal-aff today;
+  the other 7 listed changes and the control (row 40, now at:delay-cp) agree.
+So 4 of 19 cards differ between the coach's two sittings. Rows 16 and 57 are two of your ruling 3
+rows on t49 (16, 33, 57).
+
+Question: which labels does 1.3.1 get scored on?
+  (A) Today's file, the coach's current decisions. To compare like with like, also replay 1.3.0's kept
+      cassettes on today's labels (read-only, from a checkout before t55's merge, no model call,
+      about a minute). 1.3.0's 24 of 32 stays on record as scored on the 11-04 labels.
+  (B) First a short sitting on rows 16, 21, 25 and 57 alone, the coach choosing between his two
+      answers (shown unmarked, without saying which sitting gave which), then (A) on that file.
+  (C) Score today's file against 1.3.0's 24 of 32 as is. Not recommended: that mixes a prompt
+      change with a label change.
+Recommendation: (A). Why: today's file is a complete sitting, made the way the 11-04 one was, and the
+like-for-like replay keeps the prompt comparison clean. (B) asks the coach to referee himself, with
+nothing new to show him. The 4-in-19 disagreement is worth recording either way: it is the first
+measure of how far the coach's own stance labels hold between sittings.
+On rows 16 and 57 under ruling 3: today's labels may be taken as the coach's answer for those two
+(an at: label for 16, kritikal-aff for 57). Row 33 is still open.
+
+The re-score block's guard expects the 11-04 counts and refuses today's file. Once you rule, I give
+the operator a block guarded on the counts you choose. The scan hits (2(B)) do not depend on the
+labels and can be judged now. ac2 stays NOT RUN; the Goal stays InProgress.
+```
+
 ## Follow-up work
 
 * `test_coach_sample_stance.py`'s module docstring still calls 1.2.0 the stage's default (stale since

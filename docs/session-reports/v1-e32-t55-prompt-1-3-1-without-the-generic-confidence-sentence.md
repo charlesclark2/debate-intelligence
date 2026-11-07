@@ -491,6 +491,25 @@ bytes or more and counts the rest (the labels file is about 7,700 bytes). It pri
 
 Paste back its whole output. It holds paths, sizes, times, counts and command lines, no row or label text.
 
+**What the search found (the operator's second run, 2026-11-06):**
+
+* **No copy reads the stance counts.** The labels files found are the three in `landscape-review`:
+  * the live file: none 7, answers 0, reads 40, no second labels;
+  * `.before-relabel.csv`: the same;
+  * `.before-stance-relabel.csv`: none 3, answers 0, reads 44, two second labels (t41's review).
+* **The other candidates are not this sample's labels:**
+  * the cite-shape sample `coach-sample-20261031` under `parser-eval/` (refused, not this sample);
+  * the unlabelled `policy-2026-27-nhi-coach-sample.csv` (refused) and its rows file;
+  * copies of t41's report and spec in worktrees and old build folders;
+  * the session's own invented test files in its scratch folder.
+  * 386 files under 1,000 bytes were left out.
+* **Excel's own folder:** AutoRecovery copies of other workbooks and of `coach-sample-20261031` (2026-10-31),
+  none of this labels file.
+* **Time Machine:** no destination set up, and no local snapshots of `/`.
+* **Shell history:** 10 lines name the file or its folder, none from 2026-11-04 on. That fits Excel's own
+  save, not a shell command.
+* **The Trash** is not readable from the terminal, so the operator looks in it in Finder.
+
 * **The stance-labelled file is a candidate reading `none 2 | answers 10 | reads 35 | second labels 2`.**
   If one does, go to 1c.
 * **If none does**, but Time Machine lists a local snapshot or a backup between 2026-11-04 22:51 and

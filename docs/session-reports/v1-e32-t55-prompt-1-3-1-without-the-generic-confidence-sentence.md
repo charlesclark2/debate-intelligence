@@ -675,13 +675,18 @@ the operator a block guarded on the counts you choose. The scan hits (2(B)) do n
 labels and can be judged now. ac2 stays NOT RUN; the Goal stays InProgress.
 ```
 
-### The scan's hits (2(B)), in progress
+### The scan's hits (2(B))
 
 The operator ran the hit-listing block on 2026-11-06 and pasted only its closing `EVALUATION_BELOW_BAR`
 panel: counts, taxonomy ids and row numbers, no hit text. The hit listing prints above that panel,
 numbered across the three scans in order: prompt inputs 0, cassettes 1 to 50, repair cassettes 51 to 113.
 Each line shows its marks: a team's name, a taxonomy word, a JSON key, in the cards sent. The operator
 judges hits 51 to 113 in the terminal and reports only the verdicts.
+
+**The operator's verdict (2026-11-06):** every one of the 63 repair-cassette hits (51 to 113) is an ordinary
+word, and none names a team. Only the verdict came back; no hit text is in this report or the chat. So
+2(B) is done for this recording: the repair cassettes' `clean: false` is the `in_input` rule gap (the PM's
+2(A) follow-up), not a name in the recording.
 
 That replay also scores the 1.3.1 recording on today's labels. The session has not recorded those figures
 and has kept them out of the relay above, so that the PM chooses which labels to score on before seeing

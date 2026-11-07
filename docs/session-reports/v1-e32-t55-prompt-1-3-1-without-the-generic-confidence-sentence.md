@@ -55,7 +55,7 @@ on invented files. The session stops there, as ruled.
 | Criterion | Status | Evidence (command → result) |
 |---|---|---|
 | ac1: Prompt 1.3.1 differs from 1.3.0 by the one sentence, is locked and the default, its cassettes keyed by it and 1.3.0's replaying unchanged, by tests shown failing first | PASS | See [How ac1 was shown](#how-ac1-was-shown) below |
-| ac2: the operator's re-record of the 47 on deep_audit under 1.3.1, its breakdown and scans, recorded beside 1.3.0's (operator, recorded by the PM) | NOT RUN (operator) | A live model call on the operator's Bedrock profile, which no session makes. The block is under [Operator follow-ups](#operator-follow-ups) and in [the record runbook's last section](../runbooks/landscape-model-evaluation-record.md#prompt-131-the-re-record-on-deep_audit-v1-e32-t55). The PM records the result |
+| ac2: the operator's re-record of the 47 on deep_audit under 1.3.1, its breakdown and scans, recorded beside 1.3.0's (operator, recorded by the PM) | NOT RUN (recorded by the PM) | Recorded 2026-11-06, scored on the coach's 2026-11-06 labels as the PM ruled (A); its breakdown and scans, beside 1.3.0's replay on the same labels, are [in the addendum's section](#the-pms-addendum-2026-11-07-and-131-beside-130-on-the-coachs-labels-of-2026-11-06). The PM records it in docs/data. The recording itself was A live model call on the operator's Bedrock profile, which no session makes. The block is under [Operator follow-ups](#operator-follow-ups) and in [the record runbook's last section](../runbooks/landscape-model-evaluation-record.md#prompt-131-the-re-record-on-deep_audit-v1-e32-t55). The PM records the result |
 | Node: Prompt 1.3.1 tests pass (`uv run pytest packages/debate_core/tests/arguments/landscape`) | PASS | `.venv/bin/python scripts/hard_stop.py 115 uv run pytest packages/debate_core/tests/arguments/landscape` → 1,253 passed in 7.6 s |
 
 ### How ac1 was shown
@@ -171,6 +171,11 @@ schema, not the version asked. The stage test and the replay tests catch it.
 
 1. **The affected set** (293 files) was stopped at 115 seconds and is left to the pull request's `ci`
    (agreement 10). The changed test directories and the always-run list ran instead (2,876 passed).
+
+2. **The session's own replays** of the kept `deep_audit` cassettes, 1.3.1 and 1.3.0, on the coach's 2026-11-06
+   labels: read-only, no model call, 2 minutes 13 seconds for both, a little over agreement 2's two
+   minutes. They are the like-for-like comparison the PM's ruling (A) asked for, and t49's read-only replays
+   were run the same way.
 
 Nothing else: every file changed is in the spec's packages, and no forbidden item was touched.
 
@@ -691,6 +696,81 @@ word, and none names a team. Only the verdict came back; no hit text is in this 
 That replay also scores the 1.3.1 recording on today's labels. The session has not recorded those figures
 and has kept them out of the relay above, so that the PM chooses which labels to score on before seeing
 which choice scores better. They are recorded once the PM rules.
+
+## The PM's addendum (2026-11-07), and 1.3.1 beside 1.3.0 on the coach's labels of 2026-11-06
+
+**The addendum.**
+* The label set is (A): the coach's sitting of 2026-11-06.
+* The 1.3.1 scores that were held back may now be read and recorded, beside 1.3.0 replayed on the same
+  labels.
+* 2(B) is recorded: the operator judged all 63 repair-cassette hits ordinary words, none naming a team, so
+  this recording's cassettes are kept.
+
+**Holding the scores back was right.** The operator's 2(B) replay had already scored 1.3.1 on the
+2026-11-06 labels before the PM chose a label set. If the PM had seen that score while choosing, the labels
+could have been picked by how well they scored. Keeping it out of the relay meant they were chosen on how
+the sittings were made, and the score did not come into it.
+
+**How these were measured.** The session replayed the kept `deep_audit` cassettes of both versions on the
+2026-11-06 labels, in one process from this worktree, with no model call. The labels file was unchanged
+since the sitting (SHA-256 `553374704519…`); no `DEBATE_` variable was set and no caselist pull was running.
+* 1.3.1 ran at the stage's default.
+* 1.3.0 ran with the stage pinned to 1.3.0, by wrapping the evaluation service's stage factory, as
+  `v1-e32-t44` replayed an older version. The scoring code is the branch's, and t55 changes only the default
+  version, so this is the replay a checkout before t55's merge would give.
+* The 1.3.1 figures match the operator's pasted panel exactly.
+* Both replays together took 2 minutes 13 seconds ([Deviation 2](#deviations-from-the-spec)).
+
+| On the coach's labels of 2026-11-06 | 1.3.0 (replay of t49's re-record) | **1.3.1 (this re-record)** |
+|---|---|---|
+| Pipeline (bar 0.85) | 24 of 32, 0.750 (95%: 0.579 to 0.867) | **26 of 38, 0.684** (95%: 0.525 to 0.809) |
+| Below the threshold | 15 | 9 |
+| Coverage | 0.681 | 0.809 |
+| Weighted by stratum | 0.655 | 0.615 |
+| Outcomes | correct 24, wrong kind 5, same kind 3, below 15 | correct 26, wrong kind 8, same kind 3, placed though none 1, below 9 |
+| Generic answers above the threshold | 1: row 26, wrong (`at:generic-k`), a named-label row | 1: row 60, right (`generic-k`); no named-label row |
+| Second labels | 2 cards, 0 right on the second | 2 cards, 1 right on the second |
+| Calls, tokens | 3; 41,332 in, 4,737 out | 5 (2 repairs); 43,165 in, 5,235 out ($0.208) |
+| Scans | all clean | prompt inputs and cassettes clean; repair cassettes not, by the `in_input` rule (2(A)); every hit judged an ordinary word (2(B)) |
+
+**What the comparison says.**
+* The two prompts cannot be told apart on this sample; the intervals overlap almost entirely.
+* 1.3.1 answers more cards above the threshold: 9 below it against 15. More of those answers are right
+  (26 against 24), and more are wrong (12 against 8).
+* The generic condition that removed the sentence now holds. Its one generic answer above the threshold is
+  right, and no named-kritik card was answered generic.
+
+**The rows whose outcome changed** (1.3.0 to 1.3.1, the same labels; answers with confidence):
+
+| Row | Label | 1.3.0 | 1.3.1 |
+|---|---|---|---|
+| 34 | `growth-advantage` | below (`at:economy-da` 0.45) | **correct** (0.72) |
+| 53 | `single-payer-t` | below (0.55) | **correct** (0.72) |
+| 58 | `stagnation-advantage` | same kind (`costs-advantage` 0.72) | **correct** (`economy-advantage`, its second label, 0.65) |
+| 60 | `generic-k` | below (`cap-k` 0.50) | **correct** (0.62) |
+| 7 | `framework-t` | correct (0.62) | below (0.55) |
+| 47 | `costs-advantage` | correct (0.82) | same kind (`inequality-advantage` 0.88) |
+| 15 | `none` | below (`antiblackness-k` 0.50) | placed though labelled none (0.72) |
+| 20 | `at:data-advantage` | below (`security-k` 0.35) | same kind (`at:bioterror-advantage` 0.65) |
+| 33 | `costs-advantage` | below (`public-option-cp` 0.55) | wrong kind (0.62) |
+| 56 | `advantage-cp` | below (`at:inequality-advantage` 0.50) | wrong kind (0.65) |
+| 26 | `at:cap-k` | same kind (`at:generic-k` 0.62) | wrong kind (`kritikal-aff` 0.72) |
+
+* Gained: 34, 53, 58, 60. Lost: 7 and 47.
+* Four answers that had been below the threshold became wrong ones: 15, 20, 33 and 56.
+* Row 26 left the generic answer for the kritikal affirmative. Rows 12 and 55 (`cap-k`) are right under
+  both.
+* Rows 9 and 53, the ones the PM named for t50, split: 53 turned right again, and 9 is still `rates-da` at
+  0.55, below.
+
+**1.3.0 on the two label sets.** 1.3.0's 24 of 32 on the 2026-11-04 labels stays on record. On the
+2026-11-06 labels it also scores 24 of 32 (below 15):
+* The four rows the sittings disagree on move no 1.3.0 outcome but one. Rows 16 and 25 are below the
+  threshold under both, and row 21's `at:should-t` answer is wrong kind under both.
+* Row 57, now labelled `kritikal-aff`, goes from wrong stance to wrong kind: the model answered `at:cap-k`.
+
+**ac2** has its re-record, breakdown and scans recorded here, beside 1.3.0's on the same labels. It stays
+NOT RUN until the PM records it in docs/data, as the criterion says.
 
 ## Follow-up work
 

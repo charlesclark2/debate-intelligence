@@ -334,21 +334,21 @@ cd /Users/charlesclark/Documents/debate/debate-intelligence-tool/debate-intellig
 
 One block, in order: the sample check, the Bedrock login check, the recording on `deep_audit`, then the
 breakdown replaying it. Each `STOP:` line stops it before any model call. The sample check must show the
-labels 1.3.0 was scored on (by kind advantage 15, cp 7, da 6, k 10, none 2, t 7; by stance answers 10, reads
-35), or the block stops: the first run of this block, on 2026-11-06, recorded against an older labels file
+coach's labels of 2026-11-06, which the PM chose on 2026-11-07 (by kind advantage 16, aff 1, cp 7, da 5, k 9,
+none 2, t 7; by stance answers 9, reads 36), or the block stops: the first run of this block, on 2026-11-06, recorded against an older labels file
 because it checked those counts only in the prose below. Expected runtime: 2 to 4 minutes.
 
 ```bash
 SAMPLE=~/Documents/debate/landscape-review/policy-2026-27-nhi-coach-sample-labelled.csv
 ROWS=~/.debate-research/dev/landscape/local-classifier/hspolicy26/policy-2026-27-nhi-coach-sample.jsonl
-if env | grep -q '^DEBATE_'; then echo "STOP: a DEBATE_ variable is set; unset it and paste again"; elif pgrep -f "caselist pull" >/dev/null; then echo "STOP: a caselist pull is running; wait for it to finish"; elif ! CHECK=$(uv run debate-research --json landscape evaluate --caselist hspolicy26 --snapshot 2026-10-20 --sample "$SAMPLE" --sample-rows "$ROWS" --check-sample); then echo "$CHECK"; echo "STOP: the sample check failed; paste its JSON and record nothing"; elif ! printf '%s\n' "$CHECK" | grep -qF '"by_label_kind": {"advantage": 15, "cp": 7, "da": 6, "k": 10, "none": 2, "t": 7}' || ! printf '%s\n' "$CHECK" | grep -qF '"by_stance": {"answers": 10, "reads": 35}'; then echo "$CHECK"; echo "STOP: these are not the labels 1.3.0 was scored on; paste this JSON and nothing else"; elif ! aws sts get-caller-identity --profile debate-dev-bedrock >/dev/null; then echo "STOP: the Bedrock profile is not logged in; log in and paste again"; else uv run debate-research --json landscape evaluate --caselist hspolicy26 --snapshot 2026-10-20 --sample "$SAMPLE" --sample-rows "$ROWS" --model-mode record --route deep_audit; uv run debate-research --json landscape evaluate --caselist hspolicy26 --snapshot 2026-10-20 --sample "$SAMPLE" --sample-rows "$ROWS" --breakdown --route deep_audit; fi
+if env | grep -q '^DEBATE_'; then echo "STOP: a DEBATE_ variable is set; unset it and paste again"; elif pgrep -f "caselist pull" >/dev/null; then echo "STOP: a caselist pull is running; wait for it to finish"; elif ! CHECK=$(uv run debate-research --json landscape evaluate --caselist hspolicy26 --snapshot 2026-10-20 --sample "$SAMPLE" --sample-rows "$ROWS" --check-sample); then echo "$CHECK"; echo "STOP: the sample check failed; paste its JSON and record nothing"; elif ! printf '%s\n' "$CHECK" | grep -qF '"by_label_kind": {"advantage": 16, "aff": 1, "cp": 7, "da": 5, "k": 9, "none": 2, "t": 7}' || ! printf '%s\n' "$CHECK" | grep -qF '"by_stance": {"answers": 9, "reads": 36}'; then echo "$CHECK"; echo "STOP: these are not the coach's labels of 2026-11-06; paste this JSON and nothing else"; elif ! aws sts get-caller-identity --profile debate-dev-bedrock >/dev/null; then echo "STOP: the Bedrock profile is not logged in; log in and paste again"; else uv run debate-research --json landscape evaluate --caselist hspolicy26 --snapshot 2026-10-20 --sample "$SAMPLE" --sample-rows "$ROWS" --model-mode record --route deep_audit; uv run debate-research --json landscape evaluate --caselist hspolicy26 --snapshot 2026-10-20 --sample "$SAMPLE" --sample-rows "$ROWS" --breakdown --route deep_audit; fi
 ```
 
 What to read, and paste back: **the three JSON objects, and nothing else.** They hold counts, taxonomy ids
 and sample row numbers.
 
-* **The sample check:** `labelled` 47, `by_stance` answers 10 and reads 35, as 1.3.0's re-record left
-  them.
+* **The sample check:** `labelled` 47, `by_stance` answers 9 and reads 36: the coach's re-sitting of
+  2026-11-06, which the PM chose after Excel overwrote the 2026-11-04 file (`v1-e32-t55`'s report).
 * **The recording:**
   * `prompt_version` `1.3.1`, `route` `deep_audit`; `labelled`, `found` and `asked` 47; `calls` 3 or 4.
   * `pipeline.accuracy` against `target` 0.85 is the bar. Exit 0 means the pipeline meets it and every
@@ -374,7 +374,7 @@ about a minute.
 ```bash
 SAMPLE=~/Documents/debate/landscape-review/policy-2026-27-nhi-coach-sample-labelled.csv
 ROWS=~/.debate-research/dev/landscape/local-classifier/hspolicy26/policy-2026-27-nhi-coach-sample.jsonl
-if env | grep -q '^DEBATE_'; then echo "STOP: a DEBATE_ variable is set; unset it and paste again"; elif pgrep -f "caselist pull" >/dev/null; then echo "STOP: a caselist pull is running; wait for it to finish"; elif ! CHECK=$(uv run debate-research --json landscape evaluate --caselist hspolicy26 --snapshot 2026-10-20 --sample "$SAMPLE" --sample-rows "$ROWS" --check-sample); then echo "$CHECK"; echo "STOP: the sample check failed; paste its JSON and record nothing"; elif ! printf '%s\n' "$CHECK" | grep -qF '"by_label_kind": {"advantage": 15, "cp": 7, "da": 6, "k": 10, "none": 2, "t": 7}' || ! printf '%s\n' "$CHECK" | grep -qF '"by_stance": {"answers": 10, "reads": 35}'; then echo "$CHECK"; echo "STOP: these are not the labels 1.3.0 was scored on; paste this JSON and nothing else"; else echo "$CHECK"; uv run debate-research --json landscape evaluate --caselist hspolicy26 --snapshot 2026-10-20 --sample "$SAMPLE" --sample-rows "$ROWS" --breakdown --route deep_audit; fi
+if env | grep -q '^DEBATE_'; then echo "STOP: a DEBATE_ variable is set; unset it and paste again"; elif pgrep -f "caselist pull" >/dev/null; then echo "STOP: a caselist pull is running; wait for it to finish"; elif ! CHECK=$(uv run debate-research --json landscape evaluate --caselist hspolicy26 --snapshot 2026-10-20 --sample "$SAMPLE" --sample-rows "$ROWS" --check-sample); then echo "$CHECK"; echo "STOP: the sample check failed; paste its JSON and record nothing"; elif ! printf '%s\n' "$CHECK" | grep -qF '"by_label_kind": {"advantage": 16, "aff": 1, "cp": 7, "da": 5, "k": 9, "none": 2, "t": 7}' || ! printf '%s\n' "$CHECK" | grep -qF '"by_stance": {"answers": 9, "reads": 36}'; then echo "$CHECK"; echo "STOP: these are not the coach's labels of 2026-11-06; paste this JSON and nothing else"; else echo "$CHECK"; uv run debate-research --json landscape evaluate --caselist hspolicy26 --snapshot 2026-10-20 --sample "$SAMPLE" --sample-rows "$ROWS" --breakdown --route deep_audit; fi
 ```
 
 Paste back the two JSON objects, nothing else: the sample check, and the breakdown with `prompt_version`

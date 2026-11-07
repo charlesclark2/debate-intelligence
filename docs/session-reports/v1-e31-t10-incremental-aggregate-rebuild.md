@@ -854,9 +854,49 @@ The PM decides whether they become spec changes or new tasks. -->
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-11-06
 
 **Notes:**
+
+The equivalence is proven where it can be broken. The oracle is the rebuild as the task found it,
+copied whole. The property compares every aggregate after every step, removals and version changes
+included. 18% of its cases move an older card to another cluster, which is the case a join-only
+approach gets wrong, and R2 shows it does.
+
+1. **ac1 passes.** Four synthetic sizes were timed by phase, beside every recorded real figure, and
+   committed before any code (`b24cd37`). The finding that the real rebuild is sublinear in sources
+   corrects the 900 s projection in the spec and in v1-e34-t17. The 1.54 against 1.07 disagreement is
+   left open, with the block that settles it.
+2. **ac2 passes.** The property ran 200 cases on a fresh database, with each event in a real share
+   of them. The directed merge and the removal-shrank cases were worked by hand. At 2,000 sources the
+   SHA-256 equals the start commit's.
+3. **ac3 passes at 0.14.** The criterion was written against the rebuild the weekly run had when it
+   was filed, and that is what the week now costs: 76.05 s to 10.7 s at 2,000 sources. The 0.26 to
+   0.28 against this build's own, faster full rebuild is recorded beside it. The rising ratio (0.19 at
+   250 sources to 0.26 at 2,000) is exactly what Stage 2 exists to remove.
+4. **Red runs and mutants.** R1's result, that the table stays exact without the checks, is reported
+   honestly. Pinning the checks by the path a run takes is the right answer (Decision 2). All 26
+   mutants are caught, and the five that first survived each led to a real test or to deleting code
+   that decided nothing (17).
+5. **Deviations accepted.** The `debate_cli` and root-`tests/` changes are the ones the ruling
+   required. Item 5 (`git fetch origin dev`, read-only) is noted: sessions make no network call but
+   `scripts/task sync`, and this one should have asked.
+6. **Decisions accepted.** 1, the state holds only the sources placed, which keeps a stopped source's
+   words out of a published file. 3 is moot until an image carries this task, because no bucket
+   directory holds a state before then; Follow-up 3 covers the runbook. 4 needs no grant change. 8, an
+   unreadable state is a full rebuild and never a stop.
+7. **The state's cost is accepted for dev**: about 0.4 GB a week and about 1.7 GB held under 30 days of
+   noncurrent versions. Prod would hold up to about 20 GB under 365 days. Since the state can always
+   be rebuilt, the PM files a p3: a lifecycle rule that expires `placement-state.sqlite`'s noncurrent
+   versions in days, in both buckets.
+8. **Follow-ups, which the PM files in the next batch:** Stage 2 (E31, p2, about 9h), with Follow-up
+   2's shingle count folded in; the removal runbook line (E30, p3); the lifecycle rule above (E31,
+   p3).
+9. **Operator follow-up A** runs before the merge, from this worktree, while its `.venv` is here. It
+   is read-only and takes no lock, so it can run alongside other work.
+10. **Merge:** `scripts/task pr --partial` once `ci` is green and dev's docx-9 run image is applied
+    (ruling Q5). The Goal stays `InProgress` until ac4 is recorded after the first weekly run placed
+    from a state.

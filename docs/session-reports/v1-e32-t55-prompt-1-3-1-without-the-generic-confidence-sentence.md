@@ -790,9 +790,40 @@ NOT RUN until the PM records it in docs/data, as the criterion says.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-11-07
 
 **Notes:**
+
+A two-hour prompt change that turned into finding out how the coach's labels were lost, and the session
+handled that the right way: by metadata and checksums only, never a row read, with every restore kept
+reversible and checked byte for byte.
+
+1. **ac1 passes.** The diff test reads raw bytes and allows exactly the one removal and the two
+   front-matter changes a prompt file must make. Mutant 7 (one CRLF line) shows why the test reads
+   bytes. Red was 10 failed for their reasons, and all 15 mutants are caught.
+2. **The cause is found and accepted:** Microsoft Excel saved over the live file at 19:15:33 on
+   2026-11-05, shown by the quarantine mark set in the same second as the write, with no script
+   involved. The search covered Excel's own folder, the Trash, Time Machine and the shell history; the
+   first search's noise was caught and corrected. Its follow-up is `v1-e32-t58` (filed in the PM's batch of
+   2026-11-06), which goes further than the report's suggestion: every scoring command checks the file's
+   SHA-256, and every sitting keeps a dated copy.
+3. **ac2's figures are accepted as recorded here,** on the coach's labels of 2026-11-06. 1.3.1 scores 26 of
+   38 (0.684) beside 1.3.0's 24 of 32 (0.750) on the same labels: the two cannot be told apart, and 1.3.1
+   answers more cards (coverage 0.809) with more right and more wrong. The generic condition now holds.
+   The bar is not met, and the hold on live model runs stands. `v1-e32-t50` is measured on 1.3.1, as ruled
+   before either score was seen. That holds even though 1.3.1's precision is lower here, because choosing
+   now would be choosing on the outcome.
+4. **Holding the 1.3.1 scores back until the label set was chosen was right**, and the report says why.
+5. **The coach's two sittings agree on 15 of 19 cards.** Rows 16 and 57 take today's labels under ruling
+   3; row 33 stays open for `v1-e32-t50`.
+6. **Deviations accepted.** Deviation 2, the replays at 2 minutes 13 seconds, is the comparison the ruling
+   asked for. Pinning 1.3.0 by wrapping the stage factory is equivalent to a checkout before the merge,
+   since t55 changes only the default.
+7. **One item the ruling asked for is missing:** the read-only line for the labels file. The PM gives it
+   to the operator directly.
+8. **The PM records ac2 in docs/data** in the next batch, and the Goal is then `Succeeded`.
+9. **Merge:** `scripts/task pr --partial` once `ci` is green. The Goal stays `InProgress` until that
+   record.

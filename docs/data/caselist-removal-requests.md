@@ -20,6 +20,7 @@ exercises, so an exercise never takes a number a requester was given.
 | Request id | Received | Requester category | Reason code | Scope | Outcome |
 |---|---|---|---|---|---|
 | `RM-2026-90` | 2026-10-01 | None: an operator exercise, not a request | `POLICY` | One synthetic team, all snapshots, in the synthetic caselist `testcl26`; dev only | **Completed in dev on 2026-10-01** (v1-e30-t07 real-IAM exercise, on commit `9ede19e`); see the note below |
+| `RM-2026-91` | 2026-11-07 | None: an operator exercise, not a request | `POLICY` | One synthetic file of the journey's seed (Quillfern Academy) in the synthetic caselist `testcl26`; dev only | **Completed in dev on 2026-11-07** (`v1-e39-t10`'s journey, J7, by `v1-e30-t33`'s removal from dev.380) |
 
 ### `RM-2026-90`: the 2026-10-01 dev exercise on synthetic data
 

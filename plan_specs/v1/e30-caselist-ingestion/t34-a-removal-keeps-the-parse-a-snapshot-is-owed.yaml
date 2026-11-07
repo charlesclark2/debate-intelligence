@@ -1,0 +1,75 @@
+# TASK v1-e30-t34-a-removal-keeps-the-parse-a-snapshot-is-owed - A removal keeps the parse a snapshot is owed, now that nothing is rebuilt after it
+# Epic: E30 Caselist Evidence Ingestion | Release: v1.1 | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e30-t34-a-removal-keeps-the-parse-a-snapshot-is-owed
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e30-caselist-ingestion
+  annotations:
+    debate/title: "A removal keeps the parse a snapshot is owed, now that nothing is rebuilt after it"
+spec:
+  # Filed by the PM, 2026-11-06, from v1-e30-t33's follow-up 1 (the PM's ruling of 2026-11-05).
+  description: >-
+    removal_service._clear_parses_owed clears the parse owed for each snapshot whose manifest a
+    removal rewrote (v1-e40-t08). It did so because the runbook's rebuild after a removal parsed
+    whatever was unparsed; since v1-e30-t33 nothing follows a removal, so a snapshot owed a
+    parse may wait for its caselist's next import. The PM ruled: keep the entry. The next parse
+    stage reads the manifests as the removal rewrote them, so keeping it cannot bring a removed
+    file back. Proposal first, briefly: whether the next run's parse picks those sources up
+    anyway; if it does, the task is the docstring and a test that pins it, otherwise stop
+    clearing the entry, by tests shown failing first.
+  priority: 2
+  constraints:
+    packages: [debate_core.application, packages/debate_core/tests, docs/runbooks]
+    forbidden:
+      - A removed file parsed or published again
+      - Network or AWS access in a test
+  context:
+    - kind: TaskRef
+      name: v1-e30-t33-a-whole-file-removal-reaches-only-the-caselists-that-hold-it
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        After a removal, a snapshot owed a parse is still parsed by the next parse stage,
+        its removed file left out, by a test shown failing first.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e30-t34-a-removal-keeps-the-parse-a-snapshot-is-owed-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e30-caselist-ingestion
+spec:
+  description: >-
+    A removal keeps the parse a snapshot is owed, now that nothing is rebuilt after it.
+  goalRef:
+    name: v1-e30-t34-a-removal-keeps-the-parse-a-snapshot-is-owed
+  graph:
+    nodes:
+      - id: a-removal-keeps-the-parse-a-snapshot-is
+        kind: Task
+        name: Removal keeps the parse owed
+        description: >-
+          A removal keeps the parse a snapshot is owed, now that nothing is rebuilt after
+          it.
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Removal keeps the parse owed tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests, -k, removal and owed]
+status:
+  phase: Pending

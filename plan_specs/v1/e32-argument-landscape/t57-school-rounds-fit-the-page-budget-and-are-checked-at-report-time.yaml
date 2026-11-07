@@ -1,0 +1,96 @@
+# TASK v1-e32-t57-school-rounds-fit-the-page-budget-and-are-checked-at-report-time - The per-school round lists stay inside the page budget all season, and a school page over it is named at report time
+# Epic: E32 Argument Landscape Reports | Release: v1.2 (Argument landscape & file building) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e32-t57-school-rounds-fit-the-page-budget-and-are-checked-at-report-time
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e32-argument-landscape
+  annotations:
+    debate/title: "The per-school round lists stay inside the page budget all season, and a school page over it is named at report time"
+spec:
+  # Filed by the PM, 2026-11-06, from v1-e32-t54's page-size measurement (the PM's ruling of 2026-11-06).
+  description: >-
+    v1-e32-t54 measured hspolicy26's largest school page at 148,342 of ADR-0019's 153,600 bytes
+    (96.6%), with 1,158 round lines after 17 snapshots: about 68 lines and 69 bytes a line per
+    snapshot, so the snapshot after the 2026-11-11 run is likely to take it over. Nothing
+    refuses a larger page at run time; only a test holds the budget. A collapsed element does
+    not help, because the budget counts the bytes sent, not what is shown. Proposal first: how
+    the largest page stays under the budget to the end of the season, with the bytes measured on
+    a page of the largest real size and on the size projected for the season's last snapshot.
+    The options to weigh: each team's round list on a page of its own that the school page links
+    to; a compact line per position listing its rounds; a cap with the rest in
+    school_rounds.csv; or another. Then a check at report time: the dry run and the publish name
+    every school page over the budget, in their text and in --json, and the proposal says
+    whether the publish refuses such a page or names it and goes on. school_rounds.csv and
+    policy 1.23's limits are unchanged; nothing new reaches the circuit-wide report. Wanted
+    before the hspolicy26 report is republished from the snapshot after the 2026-11-11 run.
+  priority: 1
+  constraints:
+    packages: [debate_core.arguments, debate_core.application, debate_core.domain, debate_api, debate_cli, packages/debate_core/tests, packages/debate_api/tests, packages/debate_cli/tests, tests/smoke, tests/fixtures/landscape, docs/runbooks, docs/guides]
+    forbidden:
+      - A real school, team code, tournament or debater name in a fixture, test, log or report
+      - A change to ADR-0019's budget
+      - Card text beside a school or team code
+      - A tournament or round in the circuit-wide report
+  context:
+    - kind: TaskRef
+      name: v1-e32-t54-school-view-names-the-rounds-each-position-was-read-in
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        The proposal, with the bytes measured on the largest real size and the season's
+        projected size, is ruled on by the PM before any code.
+    - id: ac2
+      description: >-
+        The largest school page at both sizes stays under ADR-0019's budget, by a test that
+        carries a page that large, shown failing first.
+    - id: ac3
+      description: >-
+        The dry run and the publish name every school page over the budget, in text and
+        --json, and do with it what the PM ruled, by tests shown failing first.
+    - id: ac4
+      description: >-
+        The operator republishes the hspolicy26 report from the snapshot after the
+        2026-11-11 run, and the PM records the largest page's bytes (operator).
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e32-t57-school-rounds-fit-the-page-budget-and-are-checked-at-report-time-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e32-argument-landscape
+spec:
+  description: >-
+    The per-school round lists stay inside the page budget all season, and a school page over it
+    is named at report time.
+  goalRef:
+    name: v1-e32-t57-school-rounds-fit-the-page-budget-and-are-checked-at-report-time
+  graph:
+    nodes:
+      - id: school-rounds-fit-the-page-budget-and-ar
+        kind: Task
+        name: Rounds within the budget
+        description: >-
+          The per-school round lists stay inside the page budget all season, and a school
+          page over it is named at report time.
+        estimatedEffort: 4h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Rounds within the budget tests pass
+            command: uv
+            args: [run, pytest, packages/debate_api/tests/test_landscape_pages.py, packages/debate_core/tests, -k, school]
+status:
+  phase: Pending

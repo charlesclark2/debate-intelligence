@@ -1,0 +1,94 @@
+# TASK v1-e31-t39-incremental-placement-by-dependency-components - A weekly rebuild re-clusters only the dependency components the week's new bodies reach
+# Epic: E31 Debate File Parsing | Release: v1.1 | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e31-t39-incremental-placement-by-dependency-components
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e31-debate-file-parsing
+  annotations:
+    debate/title: "A weekly rebuild re-clusters only the dependency components the week's new bodies reach"
+spec:
+  # Filed by the PM, 2026-11-06, from v1-e31-t10's follow-up 1 (Stage 2) and the PM's review of 2026-11-06.
+  description: >-
+    v1-e31-t10 (Stage 1, merged) keeps a placement state and re-places every card from it: on
+    the real hspolicy26 store a full rebuild took 305 s, of which reading documents (88 s) and
+    fingerprints (68 s) are what a week skips, and the rest grows with the store. Stage 2
+    re-clusters only the dependency components the week's new bodies reach, by the rule
+    v1-e31-t10's report sets out (band pairs at the threshold, confirmed containments, both-end
+    holders of short bodies; stock-phrase edges bounded; linking partitioned by short-cite
+    keys), adds each body's component and each card's placement to the state, and folds in that
+    report's follow-up 2 (each body's shingle count in the state). Fix the measurement first:
+    scripts/measure_rebuild_scaling.py's real mode read new_bodies 0 for both its new sets on
+    the real store, most likely because a weekly manifest names every stored source; a new body
+    must be one first seen. Measure the real component sizes again (the largest real component
+    was 405 bodies, against 42 synthetic) in a read-only operator block over the dev data
+    directory, and send the PM the figures with the proposal before any code. Today's full
+    rebuild stays the oracle, with Stage 1's checks, removal handling and property tests,
+    Hypothesis under agreement 8.
+  priority: 2
+  constraints:
+    packages: [debate_core.application, debate_core.evidence, debate_core.integrations.local, packages/debate_core/tests, scripts, tests/scripts, docs/data]
+    forbidden:
+      - An incremental table that differs from a full rebuild's on the same store
+      - Real card text in any fixture, log or report
+      - A change to the occurrence table's format or its readers
+  context: []
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        The measurement's new bodies are counted as first seen, the real component sizes are
+        measured by the operator, and the proposal is ruled on by the PM before any code.
+    - id: ac2
+      description: >-
+        After every step of a property over generated weeks (merges, splits, renames across
+        components, removals, a version change), the incremental tables and state equal a
+        full rebuild's, byte for byte, shown failing first, with mutants on the component
+        rules.
+    - id: ac3
+      description: >-
+        On the largest synthetic store, a week of 5% new sources takes under a quarter of
+        this build's own full rebuild, with the figures.
+    - id: ac4
+      description: >-
+        The operator records a weekly run placed by components and a by-hand full rebuild of
+        the same store with equal tables (operator).
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e31-t39-incremental-placement-by-dependency-components-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e31-debate-file-parsing
+spec:
+  description: >-
+    A weekly rebuild re-clusters only the dependency components the week's new bodies reach.
+  goalRef:
+    name: v1-e31-t39-incremental-placement-by-dependency-components
+  graph:
+    nodes:
+      - id: incremental-placement-by-dependency-comp
+        kind: Task
+        name: Placement by components
+        description: >-
+          A weekly rebuild re-clusters only the dependency components the week's new
+          bodies reach.
+        estimatedEffort: 9h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Placement by components tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests, -k, card_stats or rebuild or occurrence]
+status:
+  phase: Pending

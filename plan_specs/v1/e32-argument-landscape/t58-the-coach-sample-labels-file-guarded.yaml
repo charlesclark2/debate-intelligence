@@ -1,0 +1,77 @@
+# TASK v1-e32-t58-the-coach-sample-labels-file-guarded - The coach's labels file is guarded: a changed file is refused, and every sitting keeps the file it replaces
+# Epic: E32 Argument Landscape Reports | Release: v1.2 (Argument landscape & file building) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e32-t58-the-coach-sample-labels-file-guarded
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e32-argument-landscape
+  annotations:
+    debate/title: "The coach's labels file is guarded: a changed file is refused, and every sitting keeps the file it replaces"
+spec:
+  # Filed by the PM, 2026-11-06, from v1-e32-t55's finding and the PM's ruling of 2026-11-07.
+  description: >-
+    On 2026-11-05 at 19:15 Microsoft Excel overwrote the coach-sample labels file with the copy
+    made before v1-e32-t41's review, losing that review and v1-e32-t46's stance sitting; no copy
+    existed anywhere, and the coach sat the stance rows again on 2026-11-06. Make it impossible
+    to lose a sitting silently: (a) the labels file's SHA-256 is recorded beside it by the
+    sitting that wrote it, and every scoring, replay and re-record command refuses a labels file
+    whose SHA-256 differs from the recorded one, naming both and the command that writes them;
+    (b) relabel_coach_sample.py keeps a dated copy of the file before every sitting it writes,
+    never overwrites a copy, and records the new SHA-256; (c) the runbook says the file is
+    opened only through the script, never in a spreadsheet app, and gives the read-only line and
+    how to undo it for a sitting. Tests use invented labels only.
+  priority: 2
+  constraints:
+    packages: [scripts, debate_core.application, debate_core.arguments, debate_cli, packages/debate_core/tests, packages/debate_cli/tests, tests/scripts, docs/runbooks, docs/data]
+    forbidden:
+      - A label, tag or card text from the coach's sample in a test, log, commit or report
+      - A change to the coach's labels
+      - A scoring command that reads a labels file without the check
+  context: []
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        A labels file whose SHA-256 differs from the recorded one is refused by every
+        scoring, replay and re-record command, naming both, and a sitting keeps a dated copy
+        and records the new SHA-256, by tests on invented labels shown failing first.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e32-t58-the-coach-sample-labels-file-guarded-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e32-argument-landscape
+spec:
+  description: >-
+    The coach's labels file is guarded: a changed file is refused, and every sitting keeps the
+    file it replaces.
+  goalRef:
+    name: v1-e32-t58-the-coach-sample-labels-file-guarded
+  graph:
+    nodes:
+      - id: the-coach-sample-labels-file-guarded
+        kind: Task
+        name: Labels file guard
+        description: >-
+          The coach's labels file is guarded: a changed file is refused, and every sitting
+          keeps the file it replaces.
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Labels file guard tests pass
+            command: uv
+            args: [run, pytest, tests/scripts, packages/debate_core/tests, -k, labels]
+status:
+  phase: Pending

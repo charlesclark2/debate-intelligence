@@ -359,3 +359,9 @@ Added by the PM. Nothing above is changed, and this section is not a review.
 | ac3, the next weekly cloud run after the first import | NOT RUN | PASS | the hand run `20261105T034547Z` of the weekly run's task definition (revision 11), started after the scheduled launch was refused on 2026-11-04: `completed`, 03:45:47 to 05:12:57 UTC: its restore took 3.8 s (5 state files, the run-state bundle 11,751,521 bytes), and the run's 87 minutes are the full docx-7 re-parse (parse 73.8 min, search index 11.4 min), not hspolicy25's state |
 
 Three imports remain (hsld25, hspolicy24, hsld24), at most one a day outside the window. The PM orders hsld25 after the docx-9 run image is applied, so it is parsed once, into docx-9. The Goal stays `InProgress`.
+
+## The docx-9 image (PM note, 2026-11-06)
+
+Dev's run image carries `2026.11.03-docx-9` since 2026-11-06 (task definition revision 14), so hsld25's
+import may run, outside the no-import window and never while another session holds the dev lock; it is
+parsed once, into docx-9.

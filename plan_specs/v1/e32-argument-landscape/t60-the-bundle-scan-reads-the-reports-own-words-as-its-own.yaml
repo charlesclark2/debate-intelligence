@@ -1,0 +1,72 @@
+# TASK v1-e32-t60-the-bundle-scan-reads-the-reports-own-words-as-its-own - The bundle scan does not count the report's own fixed lines as a tournament's words
+# Epic: E32 Argument Landscape Reports | Release: v1.2 (Argument landscape & file building) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e32-t60-the-bundle-scan-reads-the-reports-own-words-as-its-own
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e32-argument-landscape
+  annotations:
+    debate/title: "The bundle scan does not count the report's own fixed lines as a tournament's words"
+spec:
+  # Filed by the PM, 2026-11-06, from the hspolicy26 publish of 2026-11-06 (the PM's note).
+  description: >-
+    The dry run of 2026-11-06 found 76 scan hits in hspolicy26's bundle, 73 of them `tournament`
+    hits in report.md on lines the report itself writes: the header rows of the impact and
+    link-chain tables (`| Rank | Teams | Tag | Cite | Scenario |`, `| Role | Teams | Tag | Cite
+    |`), the note on withheld tags and the line saying round titles are not read. A tournament
+    name configured since v1-e32-t06 shares a word with them. Every such line was accepted by
+    digest, but 73 lines of noise make a real hit easy to miss. Exempt exactly the report's own
+    fixed lines (the template's text, matched whole, not a word list), keep every line that
+    carries data a hit, and say in the report which tournament word matched, by count only.
+  priority: 3
+  constraints:
+    packages: [debate_core.application, debate_core.arguments, packages/debate_core/tests]
+    forbidden:
+      - A real tournament, school or team name in a fixture, test, log or report
+      - A data line exempted from the scan
+  context: []
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        The report's own fixed lines are not hits while every data line is scanned as
+        before, by tests on invented tournament names shown failing first.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e32-t60-the-bundle-scan-reads-the-reports-own-words-as-its-own-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e32-argument-landscape
+spec:
+  description: >-
+    The bundle scan does not count the report's own fixed lines as a tournament's words.
+  goalRef:
+    name: v1-e32-t60-the-bundle-scan-reads-the-reports-own-words-as-its-own
+  graph:
+    nodes:
+      - id: the-bundle-scan-reads-the-reports-own-wo
+        kind: Task
+        name: Scan the report's own lines
+        description: >-
+          The bundle scan does not count the report's own fixed lines as a tournament's
+          words.
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Scan the report's own lines tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests, -k, landscape_scan]
+status:
+  phase: Pending

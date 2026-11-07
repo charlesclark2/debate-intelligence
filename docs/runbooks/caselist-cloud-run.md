@@ -783,7 +783,11 @@ definition pins one by digest.
 `check_image_plan.py` printing `PLAN OK`, put the schedule and the login on revision 10. On
 2026-11-01 v1-e40-t30's memory apply (`check_image_plan.py --memory`, `PLAN OK`) put the schedule on
 revision 11, the same image at 32 GB. The same day `v1.1.0-dev.289` was pushed for a hand-run import
-only, registering revision 12 (32 GB); the schedule stayed on 11 for Wednesday 2026-11-04.
+only, registering revision 12 (32 GB); the schedule stayed on 11 for Wednesday 2026-11-04. On 2026-11-06
+`v1.1.0-dev.380` (`2026.11.03-docx-9`, carrying `v1-e30-t33` and `v1-e32-t54`) was pushed, registering
+revision 14, and the apply put the schedule and the login on it. Its plan also carried `v1-e40-t42`'s
+retry and alarm and `v1-e32-t54`'s grant, so the check printed `PLAN STOP` and the PM read every changed
+field before the apply; a plan after it read `No changes`. The dry run's build took 30.7 s.
 
 **The search index's format: dev's function first** (`v1-e39-t16`). The run's index stage builds
 dev's search index in the format its image writes, and dev's pilot function refuses an index of a

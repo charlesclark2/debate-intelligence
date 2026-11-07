@@ -1,0 +1,78 @@
+# TASK v1-e40-t47-prods-one-time-backfile-publish - Prod receives each backfile once, by hand, before the run's home moves
+# Epic: E40 — Weekly Caselist Run in the Cloud | Release: v1.8 (Weekly caselist run in the cloud) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e40-t47-prods-one-time-backfile-publish
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.8
+    debate/epic: v1-e40-cloud-caselist-run
+  annotations:
+    debate/title: "Prod receives each backfile once, by hand, before the run's home moves"
+spec:
+  # Filed by the PM, 2026-11-06, from v1-e40-t16's ruling Q4 (i) (2026-11-06).
+  description: >-
+    By the PM's ruling, prod receives each backfile's raw sources, manifests and parsed store
+    once, by hand, at the parser version current then, before the run's home moves; after the
+    move it follows a bump with the same cloud rebuild task as dev. Nothing in prod reads a
+    backfile until v1-e39-t18. Write the steps in the cutover runbook: a copy restored with the
+    backfile's sources, the parse check (to_parse 0) and the comparison with dev's counts, the
+    raw publish, --publish-only (with v1-e31-t40's dry run), and the copy deleted. The
+    operator's measure of 2026-11-06 puts hspolicy25's copy at 17,395,979,390 bytes against
+    78,961,410,048 free.
+  priority: 3
+  constraints:
+    packages: [docs/runbooks, docs/data, tests/docs]
+    forbidden:
+      - The copy kept after the step
+      - A prod publish whose counts differ from dev's without the PM's word
+  context:
+    - kind: TaskRef
+      name: v1-e40-t16-prod-reparse-after-a-parser-bump
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        The steps are written, each with where it runs and what success looks like;
+        check_command_blocks and check_links pass.
+    - id: ac2
+      description: >-
+        The operator publishes hspolicy25 to prod by them on the PM's word, and the PM
+        records it (operator).
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e40-t47-prods-one-time-backfile-publish-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.8
+    debate/epic: v1-e40-cloud-caselist-run
+spec:
+  description: >-
+    Prod receives each backfile once, by hand, before the run's home moves.
+  goalRef:
+    name: v1-e40-t47-prods-one-time-backfile-publish
+  graph:
+    nodes:
+      - id: prods-one-time-backfile-publish
+        kind: Task
+        name: Prod's backfile publish
+        description: >-
+          Prod receives each backfile once, by hand, before the run's home moves.
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Prod's backfile publish tests pass
+            command: uv
+            args: [run, pytest, tests/docs]
+status:
+  phase: Pending

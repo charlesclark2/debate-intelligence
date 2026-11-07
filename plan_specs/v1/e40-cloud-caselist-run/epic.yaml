@@ -1025,5 +1025,41 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e40-t45-run-lock-offers-a-test-hook-when-a-writer-waits
+    - id: t46
+      kind: Task
+      name: 'A backfile with no directory at the running parser version is named'
+      description: >-
+        A backfile with no directory at the running parser version is named.
+      inputs:
+        specRef: plan_specs/v1/e40-cloud-caselist-run/t46-a-backfile-without-the-running-parsers-directory-is-named.yaml
+        goalRef: v1-e40-t46-a-backfile-without-the-running-parsers-directory-is-named
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e40-t46-a-backfile-without-the-running-parsers-directory-is-named reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e40-t46-a-backfile-without-the-running-parsers-directory-is-named
+    - id: t47
+      kind: Task
+      name: 'Prod receives each backfile once, by hand, before the run''s home moves'
+      description: >-
+        Prod receives each backfile once, by hand, before the run's home moves.
+      inputs:
+        specRef: plan_specs/v1/e40-cloud-caselist-run/t47-prods-one-time-backfile-publish.yaml
+        goalRef: v1-e40-t47-prods-one-time-backfile-publish
+      dependsOn:
+      - t16
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e40-t47-prods-one-time-backfile-publish reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e40-t47-prods-one-time-backfile-publish
 status:
   phase: Pending

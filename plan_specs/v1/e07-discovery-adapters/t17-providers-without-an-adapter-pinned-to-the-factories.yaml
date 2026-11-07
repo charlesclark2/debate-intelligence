@@ -1,0 +1,68 @@
+# TASK v1-e07-t17-providers-without-an-adapter-pinned-to-the-factories - The providers named as having no adapter are pinned to the container's discovery factories
+# Epic: E07 Discovery Provider Adapters | Release: v1.4 (Federated research from the CLI) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e07-t17-providers-without-an-adapter-pinned-to-the-factories
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.4
+    debate/epic: v1-e07-discovery-adapters
+  annotations:
+    debate/title: "The providers named as having no adapter are pinned to the container's discovery factories"
+spec:
+  # Filed by the PM, 2026-11-06, from v1-e41-t22's follow-up (the PM's review, 2026-11-05).
+  description: >-
+    v1-e41-t22 wrote PROVIDERS_WITHOUT_AN_ADAPTER (Semantic Scholar, GDELT) in
+    provider_credentials.py beside the container's discovery factories, and nothing ties the two
+    together, so an adapter added later could leave its provider named as having none in `doctor
+    --providers`. Add a test that the set is exactly the configured providers the factories do
+    not build.
+  priority: 3
+  constraints:
+    packages: [debate_core.application, debate_cli, packages/debate_core/tests, packages/debate_cli/tests]
+    forbidden:
+      - Network access in a test
+  context: []
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        A test fails when a provider in the set gains a factory or a factory's provider is
+        in the set, shown failing first.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e07-t17-providers-without-an-adapter-pinned-to-the-factories-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.4
+    debate/epic: v1-e07-discovery-adapters
+spec:
+  description: >-
+    The providers named as having no adapter are pinned to the container's discovery factories.
+  goalRef:
+    name: v1-e07-t17-providers-without-an-adapter-pinned-to-the-factories
+  graph:
+    nodes:
+      - id: providers-without-an-adapter-pinned-to-t
+        kind: Task
+        name: Adapter set pinned
+        description: >-
+          The providers named as having no adapter are pinned to the container's discovery
+          factories.
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Adapter set pinned tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests, packages/debate_cli/tests, -k, provider]
+status:
+  phase: Pending

@@ -1,0 +1,77 @@
+# TASK v1-e31-t40-publish-only-dry-run - caselist parse --publish-only has a dry run that lists what it would send and refuses what it would refuse
+# Epic: E31 Debate File Parsing | Release: v1.1 | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e31-t40-publish-only-dry-run
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e31-debate-file-parsing
+  annotations:
+    debate/title: "caselist parse --publish-only has a dry run that lists what it would send and refuses what it would refuse"
+spec:
+  # Filed by the PM, 2026-11-06, from v1-e40-t16's ruling Q7 (2026-11-06).
+  description: >-
+    v1-e40-t16's prod steps send dev's restored parsed store to prod with `caselist parse
+    --publish-only`, which refuses --dry-run, so prod's first publish of a parsed store has only
+    the session's own checks before it. Add --dry-run: it makes every check --publish-only makes
+    (the directory whole, written by this build's parser and fingerprint versions, its
+    aggregates naming nothing the target's suppression list stops or holds), lists what it would
+    upload and what is already there with its count and bytes, and writes nothing to any bucket
+    or the data directory, by tests on moto. The cutover runbook's step 6 runs it before each
+    caselist's publish, its counts read against the copy's.
+  priority: 2
+  constraints:
+    packages: [debate_core.application, debate_core.integrations, debate_cli, packages/debate_core/tests, packages/debate_cli/tests, docs/runbooks]
+    forbidden:
+      - A write to any bucket or the data directory in a dry run
+      - Network or AWS access in a test
+  context:
+    - kind: TaskRef
+      name: v1-e31-t30-parsed-store-publish-only
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        The dry run makes the publish's checks and lists its uploads and skips with counts
+        and bytes while writing nothing, and the cutover runbook's step 6 runs it first, by
+        tests on moto shown failing first.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e31-t40-publish-only-dry-run-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e31-debate-file-parsing
+spec:
+  description: >-
+    caselist parse --publish-only has a dry run that lists what it would send and refuses what
+    it would refuse.
+  goalRef:
+    name: v1-e31-t40-publish-only-dry-run
+  graph:
+    nodes:
+      - id: publish-only-dry-run
+        kind: Task
+        name: Publish-only dry run
+        description: >-
+          caselist parse --publish-only has a dry run that lists what it would send and
+          refuses what it would refuse.
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Publish-only dry run tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests, packages/debate_cli/tests, -k, publish_only]
+status:
+  phase: Pending

@@ -617,6 +617,9 @@ backfile import. This step is the check, here and in prod, a synthetic exercise 
 - [ ] The removal ran from a build carrying `v1-e30-t33`, and so does the `caselist status` that
       checks it (step 6): an older build deletes every caselist's aggregates, and an older status
       reports a rewrite as residue.
+- [ ] After a removal by a build carrying `v1-e31-t10`, `caselist remove` and `caselist status --residue`
+      run from such a build too: an older build refuses an aggregate record that names a placement
+      state (`v1-e31-t10`, Decision 3).
 
 To see it for one table, set `KEY` to a `bucket` key the plan listed and `REMOVED` to the sha256 the
 dry run named. It reads one object with the everyday profile and writes nothing.

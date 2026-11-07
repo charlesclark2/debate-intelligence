@@ -81,12 +81,12 @@ spec:
         A whole-file removal of a file held in one caselist plans only that caselist's
         aggregates, in the version directories holding its parsed file; a file held in two
         caselists plans both; a re-run still plans what a first run left; and the ruled
-        rebuild restores the aggregates without the removed rows, by tests on synthetic
+        rewrite leaves the aggregates without the removed rows, by tests on synthetic
         stores shown failing first.
     - id: ac3
       description: >-
         The operator reruns the journey's J4 to J9 in dev with J7's --execute and the ruled
-        rebuild, the card gone in J8, and the PM records it (operator).
+        rewrite, the card gone in J8, and the PM records it (operator).
 status:
   phase: InProgress
 ---

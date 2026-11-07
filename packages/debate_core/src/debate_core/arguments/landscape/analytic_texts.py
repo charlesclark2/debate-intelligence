@@ -43,6 +43,13 @@ A text belongs to the position its section is placed under: the nearest placed h
 placed heading is kept as unplaced and never guessed: under headings that place nothing (`1NC`, `OFF`), or
 under no heading at all. A text read by its place is only ever one placed under a CP the team reads.
 
+**Its file's side** (`v1-e32-t56`, the PM's ruling of 2026-11-07). A reading keeps the matcher's role,
+and is cached with it: the cache's key holds no side, and a file can later be disclosed on another side.
+Where the readings meet their file's sides, for the report, :func:`readings_on_own_side` gives each placed
+one its role by `v1-e32-t49`'s own-side rule: a text under an answer heading in a file disclosed only on
+its position's own side reads it. A text read by its place is found by the matcher's role alone, so the
+rule never adds one (the PM's ruling: 2 of 1,832 placed texts on hspolicy26 carried ANSWERS at all).
+
 ## A CP text whole (`v1-e32-t35`, the PM's context of 2026-11-01)
 
 A CP text is shown with the lines under it that make it whole (:func:`whole_text`), each a paragraph of
@@ -86,6 +93,7 @@ from typing import Annotated, Final, Literal
 from pydantic import Field, StringConstraints
 
 from debate_core.arguments.landscape.matcher import MatchItem, PositionMatcher, tag_words
+from debate_core.arguments.landscape.side_role import side_role
 from debate_core.arguments.landscape.source_headings import (
     CaselistNames,
     heading_path,
@@ -131,6 +139,7 @@ __all__ = [
     "passes_actor_guard",
     "read_analytic_texts",
     "read_back_texts",
+    "readings_on_own_side",
     "role_of_the_ballot_form",
     "section_paragraphs_of",
     "text_digest",
@@ -426,6 +435,26 @@ def heading_placement(
         return Placement(TextPlacement.PLACED, result.position_id, result.role)
 
     return place
+
+
+def readings_on_own_side(
+    taxonomy: Taxonomy, readings: Sequence[AnalyticTextReading], file_sides: Collection[str]
+) -> tuple[AnalyticTextReading, ...]:
+    """`readings` of one file disclosed on `file_sides`, each placed one's role by
+    :func:`~debate_core.arguments.landscape.side_role.side_role` (`v1-e32-t56`).
+
+    A text under an answer heading in a file disclosed only on its position's own side reads the position;
+    in a file on the other side, on both, or on no readable side, it keeps the role the matcher gave it. An
+    unplaced text, and one whose role does not change, is returned as it is.
+    """
+    found: list[AnalyticTextReading] = []
+    for reading in readings:
+        if reading.position_id is not None:
+            role = side_role(taxonomy, reading.position_id, reading.role, file_sides)
+            if role is not reading.role:
+                reading = reading.model_copy(update={"role": role})
+        found.append(reading)
+    return tuple(found)
 
 
 def role_of_the_ballot_form(

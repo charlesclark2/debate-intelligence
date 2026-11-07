@@ -17,7 +17,9 @@ or on no readable side, and a position either side reads, keep the role they hav
 Not in the matcher: stage one's results are cached by a card's fingerprint (its headings and tag), which cards
 in files on different sides share, and the model is asked once per fingerprint. The rule is applied where a
 result meets its own card's file:
-:meth:`~debate_core.application.position_classification.PositionClassificationService.classify`.
+:meth:`~debate_core.application.position_classification.PositionClassificationService.classify`. The
+analytic texts take the same rule where their cached readings meet their file's sides
+(:func:`~debate_core.arguments.landscape.analytic_texts.readings_on_own_side`, `v1-e32-t56`).
 
 Pure: values in, values out.
 """

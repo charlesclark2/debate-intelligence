@@ -222,9 +222,36 @@ afterwards. No test here uses Hypothesis, so agreement 8's fresh database does n
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-11-07
 
 **Notes:**
+
+The 2026-11-05 loss can no longer be silent. Every command that reads the coach's labels checks them
+first, and the smoke check shows the exact failure this closes: an LF re-save that used to be scored 4 of
+4 is now refused.
+
+1. **ac1 passes.** Red against a skeleton that checked nothing was 35 failed, each for its reason; green
+   55, and 166 on the node's command. All 18 mutants on the digest check and the write order are caught,
+   including `match` for `fullmatch`, `wb` for `xb`, and the sidecar written before the CSV.
+2. **Decisions accepted.**
+   - A `shasum -a 256`-format sidecar, so the file can also be checked by hand.
+   - `--expect` required for the one-time step, so a recorded digest never blesses whatever the file
+     holds now.
+   - The dated copy taken at write time.
+   - The bytes read once, then checked, then decoded.
+   - The old `.before-stance-relabel.csv` refusal removed. It would have refused every later sitting.
+   - Dated copies left without a sidecar, so restoring one is a PM-ruled step.
+   - The finding that `os.replace` replaces a read-only file, which is why `chmod a-w` after a sitting is
+     the step that matters.
+3. **Deviations accepted.** The smoke check is agreement 5's. `score-sample` is guarded because the spec's
+   forbidden list covers every scoring command.
+4. **Follow-ups.**
+   - 1, the file a sitting writes gets its own `.after-sitting-…` copy with no sidecar: filed (E32, p3).
+   - 2, the coach's guide sentence: the PM writes it into `landscape-taxonomy.md` in the next batch.
+   - 3, a restore script: not filed. It is rare, and a PM-ruled step by hand is right for now.
+5. **Operator follow-up 1** runs before the merge, from this worktree. Its block guards the digest twice
+   and makes the file read-only. The PM records it, and the Goal is then `Succeeded`.
+6. **Merge:** `scripts/task pr --partial` once `ci` is green.

@@ -445,9 +445,46 @@ step 5 of the runbook deletes the copy and this runbook's files under `/tmp`.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-11-07
 
 **Notes:**
+
+Built to the ruling, and measured where it matters: the largest school page goes from 149 KB to about
+42 KB, and the season's projected sizes hold under the budget for both the school and the team page.
+
+1. **ac1 passes.** The proposal was measured and ruled before any code, and nothing was committed in
+   between.
+2. **ac2 passes.** Four sizes (151 and 453 rows, 1,158 and 3,474 lines; teams of 257 and 771). Red
+   against the old renderer was 4 failed at the missing team page. The synthetic round line was made no
+   cheaper than the real 69.4 bytes, which is the detail that makes this test honest.
+3. **ac3 passes.** The check names every over-budget page in the dry run and the publish, and refuses
+   nothing, as ruled. The runbook's step 3 stops on `pages_over_budget` above 0, with names read in the
+   terminal only. Red runs 6, 3 and 7 failed, then green.
+4. **The move is proven byte-identical.** The goldens were written by the old code before the move, and
+   the old template wrote the apostrophe golden that caught mutant 15. All 22 mutants are caught, and the
+   two that first survived each got their test.
+5. **Deviations accepted.** The four places outside the packages are where the ruling's requirements
+   live. The spec's description is amended by the PM in the next batch. The hand-edited `uv.lock`: if
+   `ci`'s locked sync refuses it, the operator runs `uv lock` on the Mac with the network and the PR
+   takes the result.
+6. **Decisions accepted.**
+   - A team heading is the team code, with anchors counted over the file as the pilot numbers them.
+   - Teams with no round line are still listed, so their openCaselist link is not lost.
+   - Older `schools.md` files render as before.
+   - Over budget means reaching it (`>=`).
+7. **The deploy order, settled with dev's parser plan.** A dev pilot deployed from `dev` now would also
+   carry docx-9 and turn Download off until the 2026-11-11 index. So the dev pilot is deployed once, on
+   Thursday 2026-11-12, after that run records its docx-9 index. That single deploy carries both docx-9
+   (v1-e40-t16's ruling) and this task. The republish (ac4) follows the deploy. No bundle with team
+   headings is published before then, and the weekly run publishes no landscape bundle.
+8. **Follow-ups, which the PM files or writes in the next batch:**
+   - `debate_api`'s redundant markdown-it-py declaration (E41, p3);
+   - the frame allowance's rule (raise it in the pull request whose script or stylesheet passes it),
+     written as a PM note in ADR-0019;
+   - position-page growth stays recorded weekly, with a split as its own task if the check ever names
+     one.
+9. **Merge:** `scripts/task pr --partial` once `ci` (the whole selection) is green. The Goal stays
+   `InProgress` until ac4 is recorded.

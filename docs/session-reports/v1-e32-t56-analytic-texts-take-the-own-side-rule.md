@@ -225,9 +225,29 @@ None. The CP text read by its place was ruled (a), not filed.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-11-07
 
 **Notes:**
+
+Small in effect (1 text on hspolicy26) and right in shape: one rule, applied where a reading meets its
+file's sides, with the cache left holding what the matcher saw.
+
+1. **ac1 passes.** The count was taken from the cache read-only and sent before any code. Red against
+   a skeleton was 5 and 2 failures, each a role assertion, and the expected passes are explained.
+   Green: 114 tests on the node's command.
+2. **Mutants.** All ten are caught by assertions. The per-file seam case was added to catch the
+   "every file's sides" mutant, and the helper-drops-unplaced mutant's IndexError was turned into a real
+   assertion.
+3. **Decisions accepted.** 1, no rules-version bump, because sides are not in the cache key and a file's
+   side can change. 2, the CP text read by its place, ruled (a) with the count. 3, a file's sides are its
+   disclosing teams' sides, the same as for its cards. 4, every placed kind goes through the one rule.
+4. **Deviations accepted.** 1, the count's one-off script kept in the scratchpad, with counts only. 2,
+   noted: a zsh glob that matched nothing emptied the path list and started the default selection, and
+   `hard_stop.py` stopped it at 115 s. Check a path list is non-empty before running pytest on it. 3, the
+   affected set is left to `ci`.
+5. **No operator follow-up.** hspolicy26 is republished with the next snapshot, alongside
+   `v1-e32-t57`'s republish.
+6. **Merge:** a plain `scripts/task pr` once `ci` is green. The Goal is `Succeeded`.

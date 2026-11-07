@@ -25,6 +25,7 @@ from pathlib import Path
 import pytest
 
 from debate_core.application.caselist.suppression import RecordedSuppressionList
+from debate_core.application.coach_sample_labels_file import digest_line, digest_path, labels_digest
 from debate_core.application.ports.parsed_store import PARSED_PREFIX, source_object_key
 from debate_core.application.ports.suppression import (
     ReasonCode,
@@ -196,7 +197,9 @@ def test_the_five_commands_write_only_under_the_data_directory(
         writer = csv.DictWriter(stream, fieldnames=list(rows[0]))
         writer.writeheader()
         writer.writerows({**row, "position": "none"} for row in rows)
+    record_labels(labels)
     before[labels] = labels.read_bytes()
+    before[digest_path(labels)] = digest_path(labels).read_bytes()
     assert run(world, "score-sample", "--labels", str(labels)) == 0
     assert run(world, "train-queue-order") == 0
     after = {path: data for path, data in files_under(tmp_path).items() if data_dir not in path.parents}
@@ -300,6 +303,7 @@ def test_score_sample_scores_the_coachs_labels_and_leaves_out_a_removed_source(
         writer = csv.DictWriter(stream, fieldnames=list(rows[0]))
         writer.writeheader()
         writer.writerows({**row, "position": "none"} for row in rows)
+    record_labels(labels)
     capsys.readouterr()
     assert run(world, "score-sample", "--labels", str(labels)) == 0
     lines = printed(capsys)
@@ -315,6 +319,36 @@ def test_score_sample_scores_the_coachs_labels_and_leaves_out_a_removed_source(
         "A removal has reached 1 sampled cards' sources since the sample was drawn; row"
     )
     assert lines[1] == "Labels: 9 of 10 sampled cards (blank and `unsure` rows are not scored)."
+
+
+def record_labels(labels: Path) -> None:
+    """The sidecar a sitting writes beside the coach's labelled file (`v1-e32-t58`)."""
+    digest_path(labels).write_text(digest_line(labels_digest(labels.read_bytes()), labels), encoding="ascii")
+
+
+def test_score_sample_refuses_a_labels_file_its_sidecar_does_not_record(
+    world: tuple[Path, Path, list[str]], tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    assert run(world, "features") == 0
+    assert run(world, "sample") == 0
+    with (output(world) / f"{TOPIC}-coach-sample.csv").open(encoding="utf-8", newline="") as stream:
+        rows = list(csv.DictReader(stream))
+    labels = tmp_path / "labelled.csv"
+    with labels.open("w", encoding="utf-8", newline="") as stream:
+        writer = csv.DictWriter(stream, fieldnames=list(rows[0]))
+        writer.writeheader()
+        writer.writerows({**row, "position": "none"} for row in rows)
+    record_labels(labels)
+    labels.write_bytes(labels.read_bytes().replace(b"\n", b"\r\n"))
+    capsys.readouterr()
+
+    assert run(world, "score-sample", "--labels", str(labels)) == 2
+
+    printed = capsys.readouterr()
+    assert printed.out == ""
+    assert printed.err.startswith("Refused: the labels file labelled.csv has SHA-256 ")
+    assert str(digest_path(labels)) in printed.err and "scripts/relabel_coach_sample.py" in printed.err
+    assert not (output(world) / f"{TOPIC}-coach-sample-score.json").exists()
 
 
 def test_a_table_a_removal_has_reached_is_refused(

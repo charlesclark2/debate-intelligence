@@ -41,6 +41,7 @@ from tests.smoke.installed_build import REPO_ROOT, InstalledCli
 from debate_cli.exit_codes import ExitCode
 from debate_core.application.caselist.evidence_listing import LocalEvidence
 from debate_core.application.caselist.suppression import RecordedSuppressionList
+from debate_core.application.coach_sample_labels_file import digest_line, digest_path, labels_digest
 from debate_core.application.landscape_model_evaluation import LandscapeModelEvaluationService
 from debate_core.application.landscape_model_stage import ModelClassificationStage, ParsedStoreCardTexts
 from debate_core.application.ports.parsed_store import OCCURRENCES_NAME, PARSED_PREFIX
@@ -142,6 +143,7 @@ def write_sample(world: SyntheticRun, directory: Path) -> tuple[Path, Path]:
             fingerprint = hashlib.sha256(f"{tag}|{cite}".encode()).hexdigest()
             lines.append(json.dumps({"sample_row": row, "item_id": by_card[fingerprint], "stratum": "all"}))
     rows.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    digest_path(sample).write_text(digest_line(labels_digest(sample.read_bytes()), sample), encoding="ascii")
     return sample, rows
 
 

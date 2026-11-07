@@ -583,6 +583,21 @@ def test_each_team_is_a_heading_under_its_school_listed_with_its_two_links_by_it
     assert "| School | Team code | Side | Rounds | Team page |" in text, "a position's table keeps it"
 
 
+def test_a_team_in_the_table_with_no_round_line_is_still_listed_with_its_openCaselist_link() -> None:
+    """The table lost its team page column (`v1-e32-t57`), so the list is the only place a team's link
+    is: a team with rows and, against the counts' rule, no line is listed all the same."""
+    bundle = _bundle()
+    rows = (SchoolRow(school="Larkspur", team_code="AB", side=SchoolSide.NEG, position_id="cap-k", rounds=1),)
+    view = bundle.schools.model_copy(update={"rows": rows, "round_lines": ()})
+    text = render_schools_markdown(view, bundle.report)
+
+    assert (
+        "- AB: [round by round](#ab), [openCaselist](https://opencaselist.com/synthpolicy26/Larkspur/AB)\n"
+        in text
+    )
+    assert "\n#### AB\n" in text
+
+
 def test_the_school_view_carries_no_debater_name_tag_cite_or_path() -> None:
     """ac4: names planted where a team's own words could carry them never reach the view's files."""
     inputs = read_synthetic_caselist(FIXTURE)

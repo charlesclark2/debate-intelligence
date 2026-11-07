@@ -41,6 +41,7 @@ from tests.smoke.installed_build import REPO_ROOT, InstalledCli
 from debate_cli.exit_codes import ExitCode
 from debate_core.application.caselist.evidence_listing import LocalEvidence
 from debate_core.application.caselist.suppression import RecordedSuppressionList
+from debate_core.application.coach_sample_labels_file import digest_line, digest_path, labels_digest
 from debate_core.application.landscape_model_evaluation import LandscapeModelEvaluationService
 from debate_core.application.landscape_model_stage import ModelClassificationStage, ParsedStoreCardTexts
 from debate_core.application.ports.parsed_store import OCCURRENCES_NAME, PARSED_PREFIX
@@ -142,7 +143,13 @@ def write_sample(world: SyntheticRun, directory: Path) -> tuple[Path, Path]:
             fingerprint = hashlib.sha256(f"{tag}|{cite}".encode()).hexdigest()
             lines.append(json.dumps({"sample_row": row, "item_id": by_card[fingerprint], "stratum": "all"}))
     rows.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    record_labels(sample)
     return sample, rows
+
+
+def record_labels(sample: Path) -> None:
+    """The sidecar the coach's sitting writes beside the labels file (`v1-e32-t58`)."""
+    digest_path(sample).write_text(digest_line(labels_digest(sample.read_bytes()), sample), encoding="ascii")
 
 
 def record_cassettes(world: SyntheticRun, sample: Path, rows: Path) -> Path:
@@ -281,6 +288,7 @@ def test_landscape_evaluate_check_sample_counts_a_second_label_and_asks_no_model
     lines = ["sample_row,position,also", f"1,{labels[0]},costs-advantage"]
     lines += [f"{row},{'AT:' if row == 3 else ''}{label}," for row, label in enumerate(labels[1:], start=2)]
     sample.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    record_labels(sample)
     cassettes = world.data_dir / "landscape" / "model-cassettes"
     before = sorted(cassettes.rglob("*"))
 
@@ -293,3 +301,24 @@ def test_landscape_evaluate_check_sample_counts_a_second_label_and_asks_no_model
     assert data["second_labels"] == {"rows": 1, "by_kind": {"advantage": 1}}
     assert data["by_stance"] == {"answers": 1, "reads": 3}
     assert sorted(cassettes.rglob("*")) == before
+
+
+def test_landscape_evaluate_refuses_a_labels_file_its_sidecar_does_not_record(
+    installed_cli: InstalledCli, evaluation: tuple[SyntheticRun, Path, Path]
+) -> None:
+    """`v1-e32-t58`: the recorded sample saved again with its CSV writer's CRLF line endings turned to LF, as
+    an editor might save it, is refused by the replay before anything is read, naming both digests shortened
+    and the sidecar."""
+    world, sample, rows = evaluation
+    recorded = hashlib.sha256(sample.read_bytes()).hexdigest()
+    sample.write_bytes(sample.read_bytes().replace(b"\r\n", b"\n"))
+    found = hashlib.sha256(sample.read_bytes()).hexdigest()
+    assert found != recorded
+
+    result = evaluate(installed_cli, world, sample, rows)
+
+    assert result.exit_code == ExitCode.DOMAIN_FAILURE, result.output
+    error = json.loads(result.stdout)["error"]
+    assert error["code"] == "LABELS_FILE_CHANGED"
+    assert (error["details"]["found"], error["details"]["recorded"]) == (found[:12], recorded[:12])
+    assert f"{sample}.sha256" in error["message"]

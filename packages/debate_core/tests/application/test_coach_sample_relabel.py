@@ -16,7 +16,6 @@ import pytest
 from debate_core.application.coach_sample_relabel import (
     CONTROL_ROWS,
     SittingRow,
-    copy_path,
     disclosed_side,
     relabel_counts,
     relabelled_sample,
@@ -154,12 +153,6 @@ def test_the_end_counts_changed_and_unchanged_split_into_listed_and_control() ->
 )
 def test_the_disclosed_side_is_said_in_words(sides: set[str], words: str) -> None:
     assert disclosed_side(frozenset(sides)) == words
-
-
-def test_the_copy_is_kept_beside_the_sample() -> None:
-    sample = Path("/somewhere/coach-sample-labelled.csv")
-
-    assert copy_path(sample) == Path("/somewhere/coach-sample-labelled.before-stance-relabel.csv")
 
 
 # ------------------------------------------------------------------------------------------------

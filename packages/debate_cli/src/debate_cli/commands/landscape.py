@@ -177,6 +177,14 @@ prints its rows by label kind and its second labels by kind. It reads no card, a
 nothing, so it takes no `--breakdown`, no `--route` and no `--model-mode record`
 (`CHECK_SAMPLE_ASKS_NO_MODEL`).
 
+Every mode reads the sample through its guard (`v1-e32-t58`,
+:mod:`debate_core.application.coach_sample_labels_file`): before anything else, the file's SHA-256 must be
+the one its sidecar, `<sample>.sha256`, records. Only the coach's sitting writes the two, the file first. A
+file that differs is refused, exit `1` (`LABELS_FILE_CHANGED`), naming both digests shortened, the sidecar
+and the command that writes it; so is a file with no sidecar (`LABELS_DIGEST_MISSING`, whose hint gives the
+one-time step that records it) and a sidecar that is not one line of a digest and a name
+(`LABELS_DIGEST_UNREADABLE`).
+
 `--route <task class>` (`v1-e32-t43`) measures the same cards on another generative route of the routing
 file: that route's model and settings answer the prompt's `high_volume` calls, for the router and the
 budget guard alike, and the cassettes are recorded to and replayed and scanned from
@@ -190,12 +198,13 @@ from __future__ import annotations
 
 import asyncio
 import dataclasses
+import io
 import shlex
 import sys
 from datetime import date
 from enum import StrEnum
 from pathlib import Path
-from typing import Annotated, Any, Final, NoReturn, cast
+from typing import Annotated, Any, Final, NoReturn, TextIO, cast
 
 import typer
 from typer.core import TyperOption
@@ -208,6 +217,7 @@ from debate_cli.options.landscape_config import landscape_config_dir
 from debate_cli.options.snapshot_date import parse_snapshot_date
 from debate_cli.output import CliOutput, CommandFailure, JsonValue, OutputMode
 from debate_core.application.analytic_texts import AnalyticTextCounts
+from debate_core.application.coach_sample_labels_file import read_labels_file
 from debate_core.application.errors import error_code_of
 from debate_core.application.landscape_model_evaluation import (
     BAR_READS,
@@ -494,26 +504,30 @@ def evaluate(
     cli = cli_context(ctx)
     if json_output and not cli.output.is_json:
         cli.output = CliOutput(OutputMode.JSON, verbose=cli.output.verbose)
+    labels = io.StringIO(read_labels_file(sample), newline="")
     if check_sample:
         return _check_sample(
             cli,
             ctx,
             caselist,
-            (sample, sample_rows),
+            (labels, sample_rows),
             snapshot,
             config_dir,
             alone=not breakdown and route is None and model_mode is EvaluationMode.REPLAY,
         )
-    if breakdown and model_mode is EvaluationMode.RECORD:
-        _end(cli, ctx, _BREAKDOWN_RECORDS_NOTHING)
-    refusal = _route_refusal(route) or (_policy_refusal() if model_mode is EvaluationMode.RECORD else None)
+    recording = model_mode is EvaluationMode.RECORD
+    refusal = (
+        (_BREAKDOWN_RECORDS_NOTHING if breakdown and recording else None)
+        or _route_refusal(route)
+        or (_policy_refusal() if recording else None)
+    )
     if refusal is not None:
         _end(cli, ctx, refusal)
     service = cli.services.landscape_evaluation(
-        config_dir=landscape_config_dir(config_dir), record=model_mode is EvaluationMode.RECORD, route=route
+        config_dir=landscape_config_dir(config_dir), record=recording, route=route
     )
     through = parse_snapshot_date(snapshot) if snapshot else None
-    with sample.open(encoding="utf-8", newline="") as labels, sample_rows.open(encoding="utf-8") as rows:
+    with sample_rows.open(encoding="utf-8") as rows:
         broken_down = (
             asyncio.run(service.break_down(caselist, labels, rows, snapshot=through)) if breakdown else None
         )
@@ -569,7 +583,7 @@ def _check_sample(
     cli: CliContext,
     ctx: typer.Context,
     caselist: str,
-    files: tuple[Path, Path],
+    files: tuple[TextIO, Path],
     snapshot: str | None,
     config_dir: Path | None,
     *,
@@ -578,10 +592,10 @@ def _check_sample(
     """`--check-sample`: the sample read as the evaluation reads it and counted, with no model asked."""
     if not alone:
         _end(cli, ctx, _CHECK_SAMPLE_ALONE)
+    labels, sample_rows = files
     service = cli.services.landscape_evaluation(config_dir=landscape_config_dir(config_dir), record=False)
-    sample, sample_rows = files
     through = parse_snapshot_date(snapshot) if snapshot else None
-    with sample.open(encoding="utf-8", newline="") as labels, sample_rows.open(encoding="utf-8") as rows:
+    with sample_rows.open(encoding="utf-8") as rows:
         checked = asyncio.run(service.check_sample(caselist, labels, rows, snapshot=through))
     cli.output.success(
         command_name(ctx), sample_check_summary(checked), display=_sample_check_display(checked)

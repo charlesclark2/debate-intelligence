@@ -37,6 +37,7 @@ import debate_cli.container as container_module
 import debate_core.application.landscape_run as landscape_run_module
 from debate_cli.app import create_app
 from debate_cli.exit_codes import ExitCode
+from debate_core.application.coach_sample_labels_file import digest_line, digest_path, labels_digest
 from debate_core.application.errors import (
     ModelAccessDenied,
     ModelRequestRejected,
@@ -2046,10 +2047,16 @@ def _evaluated(**changes: Any) -> FormatEvaluation:
     return dataclasses.replace(changed, **{name: changes.get(name, score) for name, score in scores.items()})
 
 
+def _record_labels(sample: Path) -> None:
+    """The sidecar the coach's sitting writes beside the labels file (`v1-e32-t58`)."""
+    digest_path(sample).write_text(digest_line(labels_digest(sample.read_bytes()), sample), encoding="ascii")
+
+
 @pytest.fixture
 def sample_files(tmp_path: Path) -> tuple[Path, Path]:
     sample = tmp_path / "coach-sample.csv"
     sample.write_text("sample_row,position\n1,spending-da\n", encoding="utf-8")
+    _record_labels(sample)
     rows = tmp_path / "coach-sample.jsonl"
     rows.write_text('{"schema": "local-classifier-sample-1"}\n', encoding="utf-8")
     return sample, rows
@@ -2885,6 +2892,7 @@ def test_evaluate_breakdown_counts_the_cards_scored_correct_on_their_second_labe
 def _sample(tmp_path: Path, csv_text: str) -> tuple[Path, Path]:
     sample = tmp_path / "coach-sample-labelled.csv"
     sample.write_text(csv_text, encoding="utf-8")
+    _record_labels(sample)
     rows = tmp_path / "coach-sample.jsonl"
     lines = ['{"schema": "local-classifier-sample-1"}']
     lines += [json.dumps({"sample_row": row, "item_id": f"{'a' * 64}:{row}"}) for row in range(1, 6)]

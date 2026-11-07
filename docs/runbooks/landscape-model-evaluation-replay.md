@@ -14,7 +14,11 @@ does not name it yet; the recorded cassettes already name it.
 
 * The coach's labelled sample, the CSV the coach filled, and the rows file `v1-e32-t21` wrote beside it.
   The replay must use the same labelled CSV as the recording: the cards asked about, and so the
-  batches, come from its labels.
+  batches, come from its labels. Since `v1-e32-t58` the replay first checks the CSV against its sidecar
+  (`<name>.sha256` beside it, written by the coach's sitting) and refuses a file whose SHA-256 differs
+  (`LABELS_FILE_CHANGED`) or that has no sidecar (`LABELS_DIGEST_MISSING`), before it reads anything else.
+  Open the CSV only through the sitting, never in a spreadsheet app
+  ([the guarded labels file](landscape-model-evaluation-record.md#the-labels-file-is-guarded-v1-e32-t58)).
 * The parsed store and the weekly snapshot the recording read. Name the snapshot with `--snapshot`, so a
   newer week does not change the cards.
 * The cassettes under `~/.debate-research/<env>/landscape/model-cassettes/`: the classify prompt's, and
@@ -73,6 +77,9 @@ What to read:
 * `MISSING_FIXTURE_ERROR` means a request differs from every recorded one: the labels, the snapshot, the
   parsed store or the taxonomy changed since the recording. No model was called. Stop; the evaluation
   has to be recorded again, which waits on the PM.
+* `LABELS_FILE_CHANGED` or `LABELS_DIGEST_MISSING` (exit 1) means the labels file is not the one the last
+  sitting recorded, or has no record; nothing was read and no model was called. Stop, keep the file as it
+  is, and paste the code and the two shortened digests to the PM; never record a new digest to get past it.
 * This output holds counts and taxonomy ids only, so it may be pasted into a session.
 
 ## 3. The hits, in the terminal

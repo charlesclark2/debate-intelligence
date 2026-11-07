@@ -19,7 +19,9 @@ untouched. Five commands:
 * **`sample`** trains the same way, with the same seed, and writes 60 unplaced cards for the coach to
   label: a CSV of each card's tag and headings with an empty `position` column, and beside it the
   sampled cards' ids and predictions, which the CSV does not show.
-* **`score-sample`** reads the coach's labelled CSV and scores both models' predictions on it.
+* **`score-sample`** reads the coach's labelled CSV and scores both models' predictions on it. It reads
+  the CSV through its guard (`v1-e32-t58`): a file whose SHA-256 is not the one its sidecar
+  (`<name>.sha256`) records is refused, as `landscape evaluate` refuses it.
 * **`train-queue-order`** (`v1-e32-t26`) trains the proxy as `compare` does, with the same seed and
   the same nine tenths, and writes its weights with the confidence from which its held-out precision
   stays at 90%, t21's threshold, as the review queue's order model. From the next `classify` or
@@ -47,6 +49,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import io
 import json
 import os
 import subprocess
@@ -59,6 +62,7 @@ from pathlib import Path
 
 from debate_core.application.caselist.evidence_listing import LocalEvidence
 from debate_core.application.caselist.suppression import RecordedSuppressionList
+from debate_core.application.coach_sample_labels_file import LabelsFileRefused, read_labels_file
 from debate_core.application.errors import DomainError
 from debate_core.application.landscape_seeding import read_seed_sources
 from debate_core.application.landscape_staleness import LandscapeStalenessCheck
@@ -532,8 +536,7 @@ async def _score_sample(arguments: argparse.Namespace) -> int:
         raise Refused(f"no sample under {directory}; run `sample` first")
     with items_path.open(encoding="utf-8") as stream:
         sample = read_sample(stream)
-    with labels_path.open(encoding="utf-8", newline="") as stream:
-        labels = read_sample_labels(stream, taxonomy)
+    labels = read_sample_labels(io.StringIO(read_labels_file(labels_path), newline=""), taxonomy)
     unknown = sorted(set(labels) - {item.sample_row for item in sample.items})
     if unknown:
         raise Refused(f"the labelled file has {len(unknown)} rows the sample does not, from row {unknown[0]}")
@@ -541,7 +544,7 @@ async def _score_sample(arguments: argparse.Namespace) -> int:
     if removed:
         print(
             f"A removal has reached {len(removed)} sampled cards' sources since the sample was drawn; rows "
-            f"{', '.join(map(str, removed))} are not scored. Delete them from the labelled file."
+            f"{', '.join(map(str, removed))} are not scored. The labelled file stays as it is."
         )
     kept = {row: label for row, label in labels.items() if row not in removed}
     print(
@@ -702,6 +705,9 @@ def main(
     try:
         refuse_an_unsafe_environment(os.environ if environ is None else environ, processes)
         return asyncio.run(runs[arguments.command](arguments))
+    except LabelsFileRefused as refused:
+        print(f"Refused: {refused}. {refused.hint}", file=sys.stderr)
+        return 2
     except (Refused, DomainError, ValueError, OSError) as error:
         print(f"Refused: {error}", file=sys.stderr)
         return 2

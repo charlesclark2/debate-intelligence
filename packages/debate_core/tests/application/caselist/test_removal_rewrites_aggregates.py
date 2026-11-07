@@ -834,3 +834,107 @@ async def test_status_counts_an_older_version_of_a_table_it_reached(world: Remov
     backdate(world, key, rewrite[0], REMOVAL_TIME - CLOCK_SKEW_MARGIN - timedelta(minutes=5))
 
     assert await aggregate_residue(world) == {"occurrences.jsonl": 1}
+
+
+# ------------------------------------------------------------------------------------------------
+# The placement state (`v1-e31-t10`)
+# ------------------------------------------------------------------------------------------------
+
+STATE: Final = "placement-state.sqlite"
+
+
+async def plant_state(
+    world: RemovalWorld, caselist: str, version: str, *, versions_in_the_bucket: int
+) -> bytes:
+    """A placement state's file in a directory, here and in the bucket. A removal never reads one, so
+    its bytes are anything; the bucket gets it `versions_in_the_bucket` times."""
+    content = f"a placement state of {caselist} {version}".encode()
+    path = world.data_dir / "parsed" / local_key(caselist, version, STATE)
+    path.write_bytes(content)
+    for _ in range(versions_in_the_bucket):
+        await world.bucket.put_file(bucket_key(caselist, version, STATE), path)
+    return content
+
+
+async def test_a_removal_deletes_the_placement_state_of_each_directory_it_reaches_on_each_side(
+    world: RemovalWorld,
+) -> None:
+    """`only` is parsed in `testcl26`'s current directory alone, so that directory's state goes, here and
+    in the bucket with both its versions, and is recorded; the older directory's and `testcm26`'s stay,
+    as their tables do. The state is deleted, never edited: no other file of the directory changes for it."""
+    await plant_state(world, CASELIST, CURRENT, versions_in_the_bucket=2)
+    older = await plant_state(world, CASELIST, OLDER, versions_in_the_bucket=1)
+    second = await plant_state(world, SECOND, CURRENT, versions_in_the_bucket=1)
+
+    plan = await plan_removal(world, "only")
+
+    states = {key: change for (_, key), change in reached(plan).items() if key.endswith(STATE)}
+    assert sorted(states) == [bucket_key(CASELIST, CURRENT, STATE), local_key(CASELIST, CURRENT, STATE)]
+    assert {change.action for change in states.values()} == {AggregateAction.DISCARD}
+    bucket_change = states[bucket_key(CASELIST, CURRENT, STATE)]
+    assert bucket_change.versions is not None and len(bucket_change.versions) == 2
+    assert bucket_change.rows is None and bucket_change.sha256 is None, "a state is never counted or read"
+
+    report = await world.service().execute(plan)
+
+    assert report.completed
+    assert report.placement_states_deleted == 2
+    assert not (world.data_dir / "parsed" / local_key(CASELIST, CURRENT, STATE)).exists()
+    assert bucket_versions(world, bucket_key(CASELIST, CURRENT, STATE)) == []
+    assert (world.data_dir / "parsed" / local_key(CASELIST, OLDER, STATE)).read_bytes() == older
+    assert [body for _, body in bucket_versions(world, bucket_key(SECOND, CURRENT, STATE))] == [second]
+    (record,) = await world.removal_log().aggregate_records()
+    assert bucket_key(CASELIST, CURRENT, STATE) in record.deleted
+    assert all(not one.key.endswith(STATE) for one in record.kept)
+
+
+async def test_status_counts_an_older_version_of_a_placement_state_it_deleted(world: RemovalWorld) -> None:
+    """A version of a deleted state older than the removal is one it should have taken: residue. A new
+    state the next run writes is newer than the removal, and is not."""
+    await plant_state(world, CASELIST, CURRENT, versions_in_the_bucket=1)
+    await remove(world, "only")
+    key = bucket_key(CASELIST, CURRENT, STATE)
+    stale = str(world.client.put_object(Bucket=world.bucket_name, Key=key, Body=b"stale")["VersionId"])
+    backdate(world, key, stale, REMOVAL_TIME - timedelta(days=1))
+    for other, version_id in everything_under(world, f"parsed/{CASELIST}/{CURRENT}/"):
+        if other != key:
+            backdate(world, other, version_id, REMOVAL_TIME - CLOCK_SKEW_MARGIN - timedelta(minutes=5))
+
+    assert await aggregate_residue(world) == {STATE: 1}
+
+    world.client.put_object(Bucket=world.bucket_name, Key=key, Body=b"the next run's state")
+    assert await aggregate_residue(world) == {STATE: 1}, (
+        "the new state is not residue; the stale one still is"
+    )
+
+
+async def test_a_state_written_between_the_plan_and_the_execution_is_deleted_too(world: RemovalWorld) -> None:
+    """Every version of a reached state goes, whenever it was written: one written after the dry run
+    holds the removed source's words as much as one written before."""
+    await plant_state(world, CASELIST, CURRENT, versions_in_the_bucket=1)
+    plan = await plan_removal(world, "only")
+    path = world.data_dir / "parsed" / local_key(CASELIST, CURRENT, STATE)
+    await world.bucket.put_file(bucket_key(CASELIST, CURRENT, STATE), path)
+
+    assert (await world.service().execute(plan)).completed
+
+    assert bucket_versions(world, bucket_key(CASELIST, CURRENT, STATE)) == []
+
+
+async def test_a_rerun_of_a_completed_removal_deletes_every_version_of_the_state_it_reaches(
+    world: RemovalWorld,
+) -> None:
+    """A table a re-run reaches keeps the versions written since the first run's completion; a state
+    goes with every version, as the ruling says, whenever it was written: the next run rebuilds the
+    directory in full, which is always safe."""
+    await plant_state(world, CASELIST, CURRENT, versions_in_the_bucket=1)
+    await remove(world, "only")
+    path = world.data_dir / "parsed" / local_key(CASELIST, CURRENT, STATE)
+    path.write_bytes(b"the state the next run wrote")
+    await world.bucket.put_file(bucket_key(CASELIST, CURRENT, STATE), path)
+
+    again = await plan_removal(world, "only")
+    assert any(change.key == bucket_key(CASELIST, CURRENT, STATE) for change in again.aggregates)
+    assert (await world.service().execute(again)).completed
+
+    assert bucket_versions(world, bucket_key(CASELIST, CURRENT, STATE)) == []

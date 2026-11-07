@@ -66,7 +66,12 @@ from debate_core.application.ports.parsed_store import (
     parse_version_directory,
     source_object_key,
 )
+from debate_core.application.ports.placement_state import PLACEMENT_STATE_NAME, PlacementState
 from debate_core.integrations.file_streaming import INCOMING_FILE_PREFIX, atomic_replacement
+from debate_core.integrations.local.placement_state_file import (
+    read_placement_state_file,
+    write_placement_state_file,
+)
 from debate_core.integrations.local.refusals import (
     directories_in,
     files_under,
@@ -144,6 +149,13 @@ class LocalParsedStore:
         if not second.strip():
             return None
         return self._record(DocumentRecord, second, path, 2)
+
+    async def read_placement_state(self, caselist: str, version: str) -> PlacementState | None:
+        path = self._root / caselist / version / PLACEMENT_STATE_NAME
+        with refused_as_access_denied("read", _ROLE):
+            if not is_regular_file(path):
+                return None
+            return read_placement_state_file(path)
 
     async def read_index(self, caselist: str, version: str) -> tuple[SourceEntry, ...] | None:
         return self._read_lines(SourceEntry, self._root / caselist / version / INDEX_NAME)
@@ -253,6 +265,15 @@ class LocalParsedStore:
         else:
             with refused_as_access_denied("write", _ROLE):
                 (directory / CAMP_PATHS_NAME).unlink(missing_ok=True)
+
+    async def write_placement_state(self, caselist: str, version: str, state: PlacementState) -> None:
+        await self._refuse_old_version(caselist, version, parse_version_directory(version)[0])
+        with (
+            refused_as_access_denied("write", _ROLE),
+            atomic_replacement(self._root / caselist / version / PLACEMENT_STATE_NAME) as incoming,
+        ):
+            incoming.unlink()
+            write_placement_state_file(incoming, state)
 
     # -- helpers ------------------------------------------------------------------------------
 

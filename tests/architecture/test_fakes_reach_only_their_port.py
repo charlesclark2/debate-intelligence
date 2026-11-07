@@ -266,11 +266,14 @@ def test_the_check_finds_a_name_imported_from_the_ports_package_itself() -> None
 
 def test_the_check_finds_a_foreign_port_reached_through_another_fakes_module() -> None:
     sources = fake_sources()
+    # The parsed store's fake reaches its own port, and the placement state's, which that port imports
+    # (`v1-e31-t10`): both are foreign to the card edit log's fake.
+    reached = ["parsed_store (through parsed_store)", "placement_state (through parsed_store)"]
     sources["card_edit_log"] += "from debate_core.testing.fakes.parsed_store import InMemoryParsedStore\n"
-    assert ports_out_of_place("card_edit_log", sources) == ["parsed_store (through parsed_store)"]
+    assert ports_out_of_place("card_edit_log", sources) == reached
     sources = fake_sources()
     sources["card_edit_log"] += "from .parsed_store import InMemoryParsedStore\n"
-    assert ports_out_of_place("card_edit_log", sources) == ["parsed_store (through parsed_store)"]
+    assert ports_out_of_place("card_edit_log", sources) == reached
 
 
 def test_the_check_allows_the_ports_a_fakes_modules_own_port_imports() -> None:

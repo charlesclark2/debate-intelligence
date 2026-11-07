@@ -81,6 +81,7 @@ from typing import Final, Literal, NamedTuple, Protocol, Self, runtime_checkable
 
 from pydantic import Field, JsonValue, model_validator
 
+from debate_core.application.ports.placement_state import PLACEMENT_STATE_NAME, PlacementState
 from debate_core.domain import Sha256Hex
 from debate_core.domain.base import DomainModel, NonEmptyText
 from debate_core.domain.card_occurrence import ClusterMembership
@@ -145,9 +146,10 @@ CAMP_PATHS_NAME: Final = "camp_paths.jsonl"
 AGGREGATE_NAMES: Final = (INDEX_NAME, FAILURES_NAME, OCCURRENCES_NAME)
 """The files rebuilt from the per-source files on every run, which every version directory holds."""
 
-REBUILT_NAMES: Final = (*AGGREGATE_NAMES, CAMP_PATHS_NAME)
-"""Every file a run rebuilds, a publish sends after the per-source files and a removal deletes: the
-aggregates, and `camp_paths.jsonl` where the table has a camp row at a camp path (`v1-e33-t07`)."""
+REBUILT_NAMES: Final = (*AGGREGATE_NAMES, CAMP_PATHS_NAME, PLACEMENT_STATE_NAME)
+"""Every file a run rebuilds, a publish sends after the per-source files and a removal reaches: the
+aggregates, `camp_paths.jsonl` where the table has a camp row at a camp path (`v1-e33-t07`), and the
+placement state (`v1-e31-t10`), which a removal deletes rather than rewrites."""
 
 REPARSE_SEPARATOR: Final = "_reparse-"
 """Between a parser version and its generation in a version directory's name."""
@@ -593,6 +595,18 @@ class ParsedStore(Protocol):
         parse pipeline builds each row as the store writes it, so a caselist's rows are never held
         at once. A row that fails to build leaves every file as it was.
         """
+        ...
+
+    async def read_placement_state(self, caselist: str, version: str) -> PlacementState | None:
+        """The directory's placement state (`v1-e31-t10`), or `None` when it has none.
+
+        Raises :class:`~debate_core.application.ports.placement_state.UnreadablePlacementState` for a
+        file that is there and cannot be read whole, never naming a word of it.
+        """
+        ...
+
+    async def write_placement_state(self, caselist: str, version: str, state: PlacementState) -> None:
+        """Replace the directory's placement state, atomically. Written after the aggregates."""
         ...
 
     async def read_index(self, caselist: str, version: str) -> tuple[SourceEntry, ...] | None:

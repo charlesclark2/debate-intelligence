@@ -18,7 +18,27 @@
    result arrives, so a run stopped part-way keeps what it finished.
 5. **Rebuilds the three aggregates** from every per-source file in the directory: the index, the
    failures file and the occurrence table, with fingerprints and clusters from the `v1-e31-t04`
-   service (:class:`~debate_core.application.caselist_card_stats.CardPlacer`).
+   service (:class:`~debate_core.application.caselist_card_stats.CardPlacer`), placing the cards
+   from the placement state where it may be used (below), and writes a new placement state.
+
+## The placement state (`v1-e31-t10`)
+
+Every rebuild places every card of the directory again, because a new card can move an older one to
+another cluster, join two, split one, or take an abbreviated card's link away. What it no longer does
+every week is read every document and sign every distinct full body with MinHash: about 30% and 50
+to 80% of a rebuild. Beside the aggregates it keeps the placement state
+(:mod:`debate_core.application.ports.placement_state`): what placing a card reads of it, each
+distinct full body's words as numbers in one vocabulary, and each body's MinHash signature. A run
+places the cards of the sources the state holds from it, reads the documents of the others, and signs
+only bodies it has not signed; the cards, words and signatures are the same, so the table is the
+full rebuild's, byte for byte.
+
+It is used only when it is readable, its parser, profile and fingerprint versions and its rules are
+this run's, and its sources are exactly the ones the rebuild places less the ones this run added
+(:class:`FullRebuildReason` names each other case). Anything else is a full rebuild, which writes a
+new state, so deleting the state is always safe: a removal does (`caselist remove`), and a new
+version directory starts without one. `parse.incremental_rebuild` off makes every rebuild a full one.
+The run logs which way it placed the cards and why, in counts.
 
 ## The rebuild reads cards source by source (`v1-e40-t36`)
 
@@ -27,11 +47,11 @@ about 1.3 GB in the main process for 250 `hspolicy26` sources, growing with ever
 (`docs/data/caselist-parse-memory.md`). It now reads one source's document at a time, gives each
 card to a :class:`~debate_core.application.caselist_card_stats.CardPlacer` and keeps of it only its
 place in the table: its source, its paragraph range and its completeness. What must stay whole is
-what a cluster spanning sources needs, which the placer holds: a fingerprint per card, and the text of
-each distinct full body for the clusterer. The rows are then ordered by a key per row and built one
-at a time as the store writes them, so no list of rows is held either. The aggregates are the same
-bytes as before for the same store: cards are given in the order the one list was sorted into, by
-source and then first paragraph, and the rows are written in the same order.
+what a cluster spanning sources needs, which the placer holds: a fingerprint per card, and the words of
+each distinct full body for the clusterer, as numbers (`v1-e31-t10`). The rows are then ordered by
+a key per row and built one at a time as the store writes them, so no list of rows is held either.
+The aggregates are the same bytes as before for the same store: cards are given in the order the one
+list was sorted into, by source and then first paragraph, and the rows are written in the same order.
 
 ## A failing source is an outcome
 
@@ -56,11 +76,12 @@ The setting's description gives the measured reasons for its default.
 The aggregates are rebuilt from scratch on every run and never read back, and each of them consults
 the suppression list itself, which is a required constructor argument with no default. A source the
 list stops, or a disclosure of it, is in none of them after the next run, whether the removal was
-made on this machine or on another. `caselist remove` deletes the removed source's per-source files
-and every aggregate of the caselists it touches (`v1-e30-t07`, extended by this task), so between a
-removal and the next run there is no aggregate holding the source either; the runbook's next step
-is this command. The session report for this task gives the reasons for rebuilding rather than
-filtering on read.
+made on this machine or on another. The placement state is not an aggregate read back either: it
+holds only the sources the rebuild places, so a stopped source is in no state written after the stop,
+and a state built before it no longer matches the sources placed, which makes the run a full one. A
+removal rewrites the aggregates it reaches without the removed rows (`v1-e30-t33`) and deletes their
+directories' placement states (`v1-e31-t10`). The session report of `v1-e31-t06` gives the reasons for
+rebuilding rather than filtering on read.
 
 ## A table a newer build stamped
 
@@ -82,9 +103,11 @@ from __future__ import annotations
 import hashlib
 import logging
 import time
+from array import array
 from collections import Counter
-from collections.abc import Awaitable, Callable, Iterator, Sequence
+from collections.abc import Awaitable, Callable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field
+from enum import StrEnum
 from typing import Final, Protocol
 
 from debate_core.application.caselist.evidence_listing import LocalEvidence
@@ -128,6 +151,12 @@ from debate_core.application.ports.parsed_store import (
     skip_key,
     version_directory_name,
 )
+from debate_core.application.ports.placement_state import (
+    PlacedBody,
+    PlacedCard,
+    PlacementState,
+    UnreadablePlacementState,
+)
 from debate_core.application.ports.suppression import SuppressionList, SuppressionState
 from debate_core.domain.debate_files import CardCompleteness, ParsedCard, ParsedDocument, ParseFailure
 from debate_core.evidence.fingerprints import FINGERPRINT_VERSION
@@ -136,6 +165,7 @@ __all__ = [
     "PARSE_FAILURE_RATE_EXCEEDED",
     "CaselistParseService",
     "FailureListing",
+    "FullRebuildReason",
     "FailureRow",
     "ParsePlan",
     "ParseRunReport",
@@ -156,10 +186,32 @@ same way next time."""
 
 class PlacesCards(Protocol):
     """Places a caselist's cards given one at a time (`v1-e40-t36`), as
-    :class:`~debate_core.application.caselist_card_stats.CardPlacer` does."""
+    :class:`~debate_core.application.caselist_card_stats.CardPlacer` does, from their documents or
+    from a placement state (`v1-e31-t10`)."""
 
-    def add(self, card: ParsedCard) -> None:
-        """Take the next card."""
+    signatures: dict[str, array[int]]
+
+    @property
+    def rules(self) -> str:
+        """The digest a placement state made by this placer is stamped with."""
+        ...
+
+    @property
+    def vocabulary(self) -> tuple[str, ...]: ...
+
+    @property
+    def body_words(self) -> Mapping[str, array[int]]: ...
+
+    def adopt(self, vocabulary: Sequence[str], signatures: Mapping[str, array[int]]) -> None:
+        """Begin from a placement state, before any card."""
+        ...
+
+    def add(self, card: ParsedCard) -> PlacedCard:
+        """Take the next card; what placing it reads of it."""
+        ...
+
+    def add_placed(self, card: PlacedCard, words: array[int] | None) -> None:
+        """Take the next card as a placement state holds it."""
         ...
 
     def placements(self) -> Sequence[ClusterPlacement]:
@@ -167,9 +219,26 @@ class PlacesCards(Protocol):
         ...
 
 
-_CardPosition = tuple[EnumeratedSource, int, int, CardCompleteness]
-"""What the occurrence rows need of a card besides its placement: its source, first and last
-paragraph, and completeness."""
+class FullRebuildReason(StrEnum):
+    """Why a rebuild read every source's document rather than the placement state (`v1-e31-t10`)."""
+
+    TURNED_OFF = "TURNED_OFF"
+    """`parse.incremental_rebuild` is off."""
+    NO_STATE = "NO_STATE"
+    """The directory has none: its first rebuild, a new version directory, or a removal deleted it."""
+    UNREADABLE = "UNREADABLE"
+    VERSIONS_DIFFER = "VERSIONS_DIFFER"
+    """Its parser, profile or fingerprint version is not this run's."""
+    RULES_DIFFER = "RULES_DIFFER"
+    """What decides its contents (markers, shingles, MinHash) is not this build's."""
+    SOURCES_DIFFER = "SOURCES_DIFFER"
+    """Its sources are not the ones placed less the ones this run added: a source stopped, reinstated,
+    removed, or parsed by another run since it was written."""
+
+
+_CardPosition = tuple[EnumeratedSource, PlacedCard]
+"""What the occurrence rows need of a card besides its placement: its source, and its paragraph range
+and completeness, which the placed card carries."""
 
 _RowKey = tuple[str, str, int, str, str, int, int]
 """An occurrence row's place in the table: cluster, source, first paragraph, snapshot and disclosure,
@@ -336,6 +405,9 @@ class CaselistParseService:
             run is about to parse and this machine does not hold, before any is parsed: none in an
             ordinary week, all of them in a full re-parse on a restored copy. `None` reads this
             machine's blob store alone, as every parse before it did.
+        incremental_rebuild: The `parse.incremental_rebuild` setting (`v1-e31-t10`): whether the
+            rebuild may place from the placement state. Off, every rebuild reads every document, and
+            still writes a new state.
     """
 
     def __init__(
@@ -351,6 +423,7 @@ class CaselistParseService:
         failure_rate_minimum_sources: int,
         clock: Callable[[], float] = time.monotonic,
         fetch_missing: Callable[[str, Sequence[EnumeratedSource]], Awaitable[object]] | None = None,
+        incremental_rebuild: bool = True,
     ) -> None:
         if failure_rate_minimum_sources < 1:
             raise ValueError("failure_rate_minimum_sources must be at least 1")
@@ -368,6 +441,7 @@ class CaselistParseService:
         self._threshold = failure_rate_threshold
         self._minimum_sources = failure_rate_minimum_sources
         self._clock = clock
+        self._incremental = incremental_rebuild
 
     # -- planning -----------------------------------------------------------------------------
 
@@ -478,6 +552,7 @@ class CaselistParseService:
             await self._fetch_missing(plan.caselist, plan.to_parse)
         started = self._clock()
         by_digest = {source.sha256: source for source in plan.sources}
+        added: set[str] = set()
         parsed = cards = 0
         unsupported: Counter[str] = Counter()
         failed: Counter[str] = Counter()
@@ -485,6 +560,7 @@ class CaselistParseService:
             source = by_digest[job.source.sha256]
             entry, document = self._record(plan, source, result)
             await self._store.write_source(plan.caselist, plan.version, entry, document)
+            added.add(source.sha256)
             if entry.outcome is SourceOutcome.PARSED:
                 parsed += 1
                 cards += entry.cards
@@ -497,7 +573,7 @@ class CaselistParseService:
                 )
             if progress is not None:
                 progress(done)
-        totals = await self._rebuild(plan)
+        totals = await self._rebuild(plan, frozenset(added))
         report = ParseRunReport(
             plan=plan,
             applied=True,
@@ -596,21 +672,64 @@ class CaselistParseService:
                 stamps or (), caselist=plan.caselist, version=version, store=THIS_MACHINES_PARSED_STORE
             )
 
-    async def _rebuild(self, plan: ParsePlan) -> StoreTotals:
-        """Rewrite the index, failures and occurrence files from the per-source files and manifests.
+    async def _rebuild(self, plan: ParsePlan, added: frozenset[str] = frozenset()) -> StoreTotals:
+        """Rewrite the index, failures and occurrence files from the per-source files and manifests,
+        then the placement state.
 
-        Built from scratch: nothing is read back from the aggregates being replaced. Each aggregate
-        consults the suppression list for itself.
+        Nothing is read back from the aggregates being replaced, and each aggregate consults the
+        suppression list for itself. The cards are placed from the placement state where it may be
+        used (:meth:`_usable_state`), and from each source's document otherwise; `added` are the
+        sources this run wrote, whose documents are read in any case.
         """
         state = plan.suppression
         held = {source.sha256: source for source in plan.sources}
         entries = await self._store.read_entries(plan.caselist, plan.version)
         index = _index_rows(entries, held, state)
         failures = _failure_rows(entries, held, state)
-        occurrences, rows, clusters = await self._occurrence_rows(plan, entries, held, state)
+        placed_sources = _placed_sources(entries, held, state)
+        placer = self._card_placer()
+        stored, reason = await self._usable_state(plan, placer, placed_sources, added)
+        if stored is not None:
+            placer.adopt(stored.vocabulary, _signatures(stored))
+        occurrences, rows, clusters, kept = await self._occurrence_rows(
+            plan, placed_sources, state, placer, stored
+        )
         await self._store.write_aggregates(
             plan.caselist, plan.version, index=index, failures=failures, occurrences=occurrences
         )
+        await self._store.write_placement_state(
+            plan.caselist,
+            plan.version,
+            PlacementState(
+                parser_version=plan.parser_version,
+                profile_version=plan.profile_version,
+                fingerprint_version=FINGERPRINT_VERSION,
+                rules=placer.rules,
+                vocabulary=placer.vocabulary,
+                sources=kept,
+                bodies={
+                    fingerprint: PlacedBody(words, placer.signatures.get(fingerprint))
+                    for fingerprint, words in placer.body_words.items()
+                },
+            ),
+        )
+        read = sum(1 for source in placed_sources if stored is None or source.sha256 not in stored.sources)
+        if reason is None:
+            logger.info(
+                "caselist parse %s %s: placed from the placement state, %d of %d placed sources read",
+                plan.caselist,
+                plan.version,
+                read,
+                len(placed_sources),
+            )
+        else:
+            logger.info(
+                "caselist parse %s %s: rebuilt in full (%s), %d placed sources read",
+                plan.caselist,
+                plan.version,
+                reason,
+                read,
+            )
         return StoreTotals(
             sources=len(index),
             parsed=sum(entry.outcome is SourceOutcome.PARSED for entry in index),
@@ -621,41 +740,74 @@ class CaselistParseService:
             clusters=clusters,
         )
 
+    async def _usable_state(
+        self,
+        plan: ParsePlan,
+        placer: PlacesCards,
+        placed_sources: Sequence[EnumeratedSource],
+        added: frozenset[str],
+    ) -> tuple[PlacementState | None, FullRebuildReason | None]:
+        """The directory's placement state when it may be used, or why it may not (the PM's ruling of
+        2026-11-06, item 2): it is used only when it is readable, its stamps are this run's, and its
+        sources are exactly the ones placed less the ones this run added."""
+        if not self._incremental:
+            return None, FullRebuildReason.TURNED_OFF
+        try:
+            stored = await self._store.read_placement_state(plan.caselist, plan.version)
+        except UnreadablePlacementState:
+            return None, FullRebuildReason.UNREADABLE
+        if stored is None:
+            return None, FullRebuildReason.NO_STATE
+        if (stored.parser_version, stored.profile_version, stored.fingerprint_version) != (
+            plan.parser_version,
+            plan.profile_version,
+            FINGERPRINT_VERSION,
+        ):
+            return None, FullRebuildReason.VERSIONS_DIFFER
+        if stored.rules != placer.rules:
+            return None, FullRebuildReason.RULES_DIFFER
+        if set(stored.sources) != {source.sha256 for source in placed_sources} - added:
+            return None, FullRebuildReason.SOURCES_DIFFER
+        return stored, None
+
     async def _occurrence_rows(
         self,
         plan: ParsePlan,
-        entries: Sequence[SourceEntry],
-        held: dict[str, EnumeratedSource],
+        placed_sources: Sequence[EnumeratedSource],
         state: SuppressionState,
-    ) -> tuple[Iterator[OccurrenceRecord], int, int]:
-        """One row per card per disclosure the list does not stop, made as the store writes them;
-        how many rows; and how many clusters.
+        placer: PlacesCards,
+        stored: PlacementState | None,
+    ) -> tuple[Iterator[OccurrenceRecord], int, int, dict[str, tuple[PlacedCard, ...]]]:
+        """One row per card per disclosure the list does not stop, made as the store writes them; how
+        many rows; how many clusters; and each placed source's cards as the placement state keeps them.
 
         A disclosure is one row however many snapshots list it, spanning the first to the latest.
-        Each source's cards are read and given to the placer in turn, in the order of one list of
-        every card sorted by source and first paragraph, and none is kept (this module's docstring).
+        Each source's cards are given to the placer in turn, in the order of one list of every card
+        sorted by source and first paragraph: from the placement state when it holds the source, and
+        from its document otherwise, which is then let go (this module's docstring).
         """
-        placer = self._card_placer()
         cards: list[_CardPosition] = []
-        for entry in sorted(entries, key=lambda entry: entry.source_sha256):
-            source = held.get(entry.source_sha256)
-            if entry.outcome is not SourceOutcome.PARSED or source is None:
-                continue
-            live = live_disclosures(source, state)
-            if not live:
-                continue
-            for card in await self._cards_of(plan, source, live[0].path):
-                placer.add(card)
-                provenance = card.provenance
-                cards.append(
-                    (source, provenance.first_element_index, provenance.last_element_index, card.completeness)
-                )
+        kept: dict[str, tuple[PlacedCard, ...]] = {}
+        for source in placed_sources:
+            from_state = stored.sources.get(source.sha256) if stored is not None else None
+            if from_state is not None and stored is not None:
+                for card in from_state:
+                    body = (
+                        stored.bodies.get(card.fingerprint)
+                        if card.completeness is CardCompleteness.FULL
+                        else None
+                    )
+                    placer.add_placed(card, None if body is None else body.words)
+                placed = from_state
+            else:
+                live = live_disclosures(source, state)
+                placed = tuple(placer.add(card) for card in await self._cards_of(plan, source, live[0].path))
+            kept[source.sha256] = placed
+            cards.extend((source, card) for card in placed)
         placements = placer.placements()
         spans: dict[str, list[tuple[str | None, str, str, tuple[str, ...]]]] = {}
         order: list[_RowKey] = []
-        for position, ((source, first_element, _, _), placement) in enumerate(
-            zip(cards, placements, strict=True)
-        ):
+        for position, ((source, card), placement) in enumerate(zip(cards, placements, strict=True)):
             if source.sha256 not in spans:
                 spans[source.sha256] = _disclosure_spans(source, state)
             for span, (disclosure, first, _, _) in enumerate(spans[source.sha256]):
@@ -663,7 +815,7 @@ class CaselistParseService:
                     (
                         placement.cluster_id,
                         source.sha256,
-                        first_element,
+                        card.first_element,
                         first,
                         disclosure or "",
                         position,
@@ -674,7 +826,7 @@ class CaselistParseService:
 
         def rows() -> Iterator[OccurrenceRecord]:
             for *_, position, span in order:
-                source, first_element, last_element, completeness = cards[position]
+                source, card = cards[position]
                 placement = placements[position]
                 disclosure, first, last, camp_paths = spans[source.sha256][span]
                 yield OccurrenceRecord(
@@ -687,16 +839,16 @@ class CaselistParseService:
                     fingerprint_version=FINGERPRINT_VERSION,
                     disclosure=disclosure,
                     camp=source.camp,
-                    first_element_index=first_element,
-                    last_element_index=last_element,
+                    first_element_index=card.first_element,
+                    last_element_index=card.last_element,
                     exact_fingerprint=placement.fingerprint,
                     cluster_id=placement.cluster_id,
                     membership=placement.membership,
-                    completeness=completeness,
+                    completeness=card.completeness,
                     camp_path_disclosures=camp_paths,
                 )
 
-        return rows(), len(order), len({placement.cluster_id for placement in placements})
+        return rows(), len(order), len({placement.cluster_id for placement in placements}), kept
 
     async def _cards_of(self, plan: ParsePlan, source: EnumeratedSource, path: str) -> list[ParsedCard]:
         """One parsed source's cards by first paragraph, its document let go once they are read."""
@@ -811,6 +963,27 @@ def _disclosure_spans(
         (disclosure, first, last, camp_path_digests(source, state, first))
         for (disclosure, _), (first, last) in spans.items()
     ]
+
+
+def _placed_sources(
+    entries: Sequence[SourceEntry], held: dict[str, EnumeratedSource], state: SuppressionState
+) -> list[EnumeratedSource]:
+    """The sources whose cards are placed, by SHA-256: parsed, stored by the manifests, and disclosed
+    at a path the list neither stops nor holds. The sources a placement state is built from."""
+    placed: list[EnumeratedSource] = []
+    for entry in sorted(entries, key=lambda entry: entry.source_sha256):
+        source = held.get(entry.source_sha256)
+        if entry.outcome is SourceOutcome.PARSED and source is not None and live_disclosures(source, state):
+            placed.append(source)
+    return placed
+
+
+def _signatures(stored: PlacementState) -> dict[str, array[int]]:
+    return {
+        fingerprint: body.signature
+        for fingerprint, body in stored.bodies.items()
+        if body.signature is not None
+    }
 
 
 def _index_rows(

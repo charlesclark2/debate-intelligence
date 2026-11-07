@@ -549,6 +549,7 @@ class _Counts:
     aggregates_rewritten: int = 0
     aggregate_rows_dropped: int = 0
     aggregates_deleted: int = 0
+    placement_states_deleted: int = 0
     aggregates_kept: list[AggregateRewriteRecord] = field(default_factory=lambda: [])
     """Each aggregate in the bucket left clean so far, rewritten or kept, with its clean version."""
     aggregate_keys_deleted: list[str] = field(default_factory=lambda: [])
@@ -581,6 +582,9 @@ class RemovalReport:
     aggregate_rows_dropped: int = 0
     aggregates_deleted: int = 0
     """Aggregates of retired version directories deleted with every version, in the bucket."""
+    placement_states_deleted: int = 0
+    """Placement states of the directories reached, deleted with every version, here and in the
+    bucket (`v1-e31-t10`); the next run rebuilds each of those directories in full."""
 
     @property
     def completed(self) -> bool:
@@ -672,7 +676,7 @@ def _doomed(
     directory's, every one but the rewrite's, or the older ones a re-run has still to purge."""
     if keeping and version.version_id == kept:
         return False
-    if change.action in (AggregateAction.DELETE, AggregateAction.REWRITE):
+    if change.action in (AggregateAction.DELETE, AggregateAction.DISCARD, AggregateAction.REWRITE):
         return True
     return plan.purges(version)
 
@@ -896,6 +900,7 @@ class CaselistRemovalService:
             aggregates_rewritten=counts.aggregates_rewritten,
             aggregate_rows_dropped=counts.aggregate_rows_dropped,
             aggregates_deleted=counts.aggregates_deleted,
+            placement_states_deleted=counts.placement_states_deleted,
         )
         if failure is not None:
             raise RemovalIncomplete(report, failure, suppressed=suppressed, unlogged=unlogged) from failure
@@ -1011,12 +1016,24 @@ class CaselistRemovalService:
             else:
                 counts.aggregate_keys_deleted.append(change.key)
                 counts.aggregates_deleted += int(change.action is AggregateAction.DELETE)
+                counts.placement_states_deleted += int(change.action is AggregateAction.DISCARD)
 
     async def _local_aggregates(
         self, plan: RemovalPlan, staged: dict[tuple[Side, ObjectKey], Path], counts: _Counts
     ) -> None:
-        """Each aggregate on this machine the plan rewrites, replaced atomically by its checked rewrite."""
+        """Each aggregate on this machine the plan rewrites, replaced atomically by its checked rewrite;
+        and each placement state it reaches, deleted (`v1-e31-t10`)."""
         for change in plan.aggregates_on(Side.LOCAL):
+            if change.action is AggregateAction.DISCARD:
+                held = tuple(
+                    version
+                    for version in await self.local_parsed.list_versions(change.key)
+                    if version.key == change.key
+                )
+                deleted = await self.local_parsed.delete_versions(held)
+                counts.local_files_deleted += deleted
+                counts.placement_states_deleted += int(bool(deleted))
+                continue
             if change.action is not AggregateAction.REWRITE:
                 continue
             await self.local_parsed_objects.put_file(change.key, staged[(Side.LOCAL, change.key)])

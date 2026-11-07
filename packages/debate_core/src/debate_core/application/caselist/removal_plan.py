@@ -298,7 +298,12 @@ from debate_core.application.ports.caselist import CaselistRepository
 from debate_core.application.ports.caselist_source import openev_id_of_inbox_name
 from debate_core.application.ports.evidence_store import EvidenceObjectStore, ObjectInfo, ObjectKey
 from debate_core.application.ports.evidence_versions import EvidenceVersionStore, ObjectVersion
-from debate_core.application.ports.parsed_store import PARSED_PREFIX, REBUILT_NAMES, source_digest_of_key
+from debate_core.application.ports.parsed_store import (
+    PARSED_PREFIX,
+    REBUILT_NAMES,
+    source_digest_of_key,
+)
+from debate_core.application.ports.placement_state import PLACEMENT_STATE_NAME
 from debate_core.application.ports.providers import Clock
 from debate_core.application.ports.suppression import (
     REMOVAL_REASONS,
@@ -608,6 +613,10 @@ class AggregateAction(StrEnum):
     rewritten, since a rewrite would be a new version without the tag that expires it."""
     UNREADABLE = "unreadable"
     """A line of it cannot be read: `--execute` stops before writing anything, and says which line."""
+    DISCARD = "discard"
+    """The placement state (`v1-e31-t10`): deleted with every version, never edited, in a live
+    directory. It holds the words of the sources it was built from, and deleting it is always safe:
+    the next run rebuilds the directory in full and writes a new one."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -1436,8 +1445,9 @@ class RemovalPlanner:
             base = f"{caselist}/{version}/"
             present = {one.key for one in await self._local_parsed.list_versions(base)}
             names = [name for name in REBUILT_NAMES if f"{base}{name}" in present]
+            tables = [name for name in names if name != PLACEMENT_STATE_NAME]
             counted = await self._counted(
-                names,
+                tables,
                 rows_removed,
                 base,
                 self._local_parsed_objects,
@@ -1445,6 +1455,8 @@ class RemovalPlanner:
             )
             return [
                 _change(Side.LOCAL, caselist, version, name, f"{base}{name}", counted[name], ())
+                if name != PLACEMENT_STATE_NAME
+                else _discard(Side.LOCAL, caselist, version, f"{base}{name}", None, None)
                 for name in names
             ]
         base = f"{PARSED_PREFIX}/{caselist}/{version}/"
@@ -1460,7 +1472,11 @@ class RemovalPlanner:
             {}
             if retired
             else await self._counted(
-                current, rows_removed, base, self._remote, label=f"{base.rstrip('/')} in the bucket"
+                [name for name in current if name != PLACEMENT_STATE_NAME],
+                rows_removed,
+                base,
+                self._remote,
+                label=f"{base.rstrip('/')} in the bucket",
             )
         )
         for name in names:
@@ -1479,6 +1495,11 @@ class RemovalPlanner:
                         bytes=None if info is None else info.size,
                         versions=every,
                     )
+                )
+                continue
+            if name == PLACEMENT_STATE_NAME:
+                changes.append(
+                    _discard(Side.BUCKET, caselist, version, key, every, None if info is None else info.size)
                 )
                 continue
             older = (
@@ -2602,6 +2623,28 @@ def _still_to_take(change: AggregateChange, plan: RemovalPlan) -> bool:
 
 def _is_current(version: ObjectVersion) -> bool:
     return version.is_latest and not version.is_delete_marker
+
+
+def _discard(
+    side: Side,
+    caselist: str,
+    version: str,
+    key: ObjectKey,
+    versions: tuple[ObjectVersion, ...] | None,
+    size: int | None,
+) -> AggregateChange:
+    """The placement state of a directory the removal reaches (`v1-e31-t10`): deleted with every
+    version, never edited, so the next run rebuilds the directory in full."""
+    return AggregateChange(
+        key=key,
+        side=side,
+        caselist=caselist,
+        version=version,
+        name=PLACEMENT_STATE_NAME,
+        action=AggregateAction.DISCARD,
+        bytes=size,
+        versions=versions,
+    )
 
 
 def _change(

@@ -673,8 +673,12 @@ class RemovalScopeEntry(DomainModel):
 
 _AGGREGATE_KEY_PATTERN: Final = (
     r"^parsed/([a-z]+[0-9]{2}|openev)/[A-Za-z0-9][A-Za-z0-9._-]*/"
-    r"(index|failures|occurrences|camp_paths)\.jsonl$"
+    r"((index|failures|occurrences|camp_paths)\.jsonl|placement-state\.sqlite)$"
 )
+"""An aggregate's key in the bucket: the four tables, and since `v1-e31-t10` the placement state, which
+a removal deletes and records under `deleted`. A build carrying `v1-e30-t33` and not `v1-e31-t10`
+refuses a record naming a placement state, so `caselist remove` and `caselist status --residue` run
+from a build carrying `v1-e31-t10` once one has removed anything (as `v1-e30-t33` asked of itself)."""
 
 
 class AggregateRewriteRecord(DomainModel):
@@ -707,7 +711,8 @@ class RemovalAggregatesEntry(DomainModel):
     kept: tuple[AggregateRewriteRecord, ...]
     """Each aggregate rewritten, or kept because it held no removed row, with its clean version."""
     deleted: tuple[Annotated[str, StringConstraints(pattern=_AGGREGATE_KEY_PATTERN)], ...]
-    """Each aggregate of a directory retention had tagged, deleted with every version."""
+    """Each aggregate of a directory retention had tagged, deleted with every version; and each
+    placement state of a directory the removal reached (`v1-e31-t10`)."""
 
     def joins(self, entry: RemovalLogEntry) -> bool:
         """Whether this is `entry`'s record: the same environment, request and moment."""

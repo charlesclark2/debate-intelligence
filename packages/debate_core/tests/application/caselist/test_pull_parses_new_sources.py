@@ -343,9 +343,10 @@ async def test_a_pull_parses_the_new_snapshots_new_sources_rebuilds_the_aggregat
 ) -> None:
     """Two weeks, then a third. The second pull's parser is asked for the one source 09-15 adds.
 
-    Nine objects go up after the first pull: six per-source files and three aggregates. After the
-    second, three: `direct`'s file, and the index and the occurrence table it changes. The failures
-    file is byte for byte what the bucket holds, so it is not sent again.
+    Ten objects go up after the first pull: six per-source files, three aggregates and the placement
+    state (`v1-e31-t10`). After the second, four: `direct`'s file, the index and the occurrence table
+    it changes, and the state, which now holds it. The failures file is byte for byte what the bucket
+    holds, so it is not sent again.
     """
     first_parser = CountingParser()
     source = FakeSource(installation.archives, weeks=[WEEK_1, WEEK_2])
@@ -361,11 +362,11 @@ async def test_a_pull_parses_the_new_snapshots_new_sources_rebuilds_the_aggregat
         "unsupported": 2,
         "failed": 1,
         "cards": 4,
-        "uploaded": 9,
+        "uploaded": 10,
         "not_published": 0,
     }
     assert parsed_keys() == set(parsed_tree(installation))
-    assert len(parsed_keys()) == 9
+    assert len(parsed_keys()) == 10
 
     second_parser = CountingParser()
     source.weeks = [WEEK_1, WEEK_2, WEEK_3]
@@ -382,7 +383,7 @@ async def test_a_pull_parses_the_new_snapshots_new_sources_rebuilds_the_aggregat
         "unsupported": 0,
         "failed": 0,
         "cards": 1,
-        "uploaded": 3,
+        "uploaded": 4,
         "not_published": 0,
     }
     # The aggregates were rebuilt over every source the caselist holds, and are what the bucket has.
@@ -390,10 +391,10 @@ async def test_a_pull_parses_the_new_snapshots_new_sources_rebuilds_the_aggregat
     assert len(aggregate(installation, "occurrences.jsonl")) == 7
     assert {row["last_snapshot"] for row in aggregate(installation, "occurrences.jsonl")} == {"2026-09-15"}
     assert parsed_keys() == set(parsed_tree(installation))
-    assert len(parsed_keys()) == 10
+    assert len(parsed_keys()) == 11, "seven per-source files, three aggregates and the placement state"
     assert stage_reason(second, SyncStage.PARSE) == (
         "1 caselist(s) parsed: 1 source(s) attempted, 6 skipped as parsed already, 0 unsupported, "
-        "0 failed, 1 card(s); 3 object(s) of the parsed store uploaded"
+        "0 failed, 1 card(s); 4 object(s) of the parsed store uploaded"
     )
 
 
@@ -497,13 +498,14 @@ async def test_a_failure_rate_over_the_threshold_fails_the_stage_and_nothing_bef
     assert parse["outcome"] == "failed"
     assert parse["error_codes"] == ["PARSE_FAILURE_RATE_EXCEEDED"]
     assert parse["reason"] == (
-        f"{COUNTS_OF_THE_FIRST_PARSE}; 9 object(s) of the parsed store uploaded; "
+        f"{COUNTS_OF_THE_FIRST_PARSE}; 10 object(s) of the parsed store uploaded; "
         f"{CASELIST}: 1 of the 4 source(s) tried failed, over the failure-rate threshold"
     )
     assert "caselist parse --caselist <slug> --failures" in str(parse["hint"])
     assert_the_import_and_the_raw_publish_stand(installation, watched.summary)
-    # What parsed is published all the same, as `caselist parse --publish` publishes it.
-    assert len(parsed_keys()) == 9
+    # What parsed is published all the same, as `caselist parse --publish` publishes it: six per-source
+    # files, three aggregates and the placement state.
+    assert len(parsed_keys()) == 10
     assert watched.pulled.record is not None
     assert watched.pulled.record.outcome is SyncRunOutcome.INCOMPLETE
     # Running the pull again would import nothing and so parse nothing: the fix is the parse command.
@@ -783,7 +785,7 @@ async def test_after_a_parser_version_bump_the_caselist_is_parsed_in_full_and_th
         "unsupported": 2,
         "failed": 1,
         "cards": 5,
-        "uploaded": 10,
+        "uploaded": 11,
         "not_published": 0,
     }
     assert "1 of them parsed in full, into a version directory that held nothing" in stage_reason(
@@ -818,8 +820,9 @@ async def test_a_caselist_reparsed_into_a_second_generation_is_parsed_and_publis
     assert counts(summary)["full_parses"] == 0
     assert len(aggregate(installation, "index.jsonl", second)) == 7
     assert len(aggregate(installation, "index.jsonl")) == 6, "the first generation is never written again"
-    # Seven source files and three aggregates, none of which the bucket held for this generation.
-    assert counts(summary)["uploaded"] == 10
+    # Seven source files, three aggregates and the placement state, none of which the bucket held for
+    # this generation.
+    assert counts(summary)["uploaded"] == 11
     assert parsed_keys() == first_generation | set(parsed_tree(installation, second))
 
 
@@ -982,7 +985,7 @@ async def test_publish_pending_does_not_publish_the_parsed_store_and_caselist_pa
 
     assert parser.asked == []
     assert published.succeeded
-    assert published.count(SourceResult.UPLOADED) == 9
+    assert published.count(SourceResult.UPLOADED) == 10
     assert parsed_keys() == set(parsed_tree(installation))
 
 
@@ -1001,7 +1004,9 @@ async def test_the_next_pull_that_imports_into_the_caselist_publishes_what_an_ea
 
     assert outcome(summary, SyncStage.PARSE) is StageOutcome.COMPLETED
     assert counts(summary)["attempted"] == 1
-    assert counts(summary)["uploaded"] == 10, "seven source files and three aggregates, all of them new there"
+    assert counts(summary)["uploaded"] == 11, (
+        "seven source files, three aggregates and the placement state, all of them new there"
+    )
     assert counts(summary)["not_published"] == 0
     assert parsed_keys() == set(parsed_tree(installation))
 

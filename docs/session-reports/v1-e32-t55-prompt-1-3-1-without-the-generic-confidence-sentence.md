@@ -675,6 +675,18 @@ the operator a block guarded on the counts you choose. The scan hits (2(B)) do n
 labels and can be judged now. ac2 stays NOT RUN; the Goal stays InProgress.
 ```
 
+### The scan's hits (2(B)), in progress
+
+The operator ran the hit-listing block on 2026-11-06 and pasted only its closing `EVALUATION_BELOW_BAR`
+panel: counts, taxonomy ids and row numbers, no hit text. The hit listing prints above that panel,
+numbered across the three scans in order: prompt inputs 0, cassettes 1 to 50, repair cassettes 51 to 113.
+Each line shows its marks: a team's name, a taxonomy word, a JSON key, in the cards sent. The operator
+judges hits 51 to 113 in the terminal and reports only the verdicts.
+
+That replay also scores the 1.3.1 recording on today's labels. The session has not recorded those figures
+and has kept them out of the relay above, so that the PM chooses which labels to score on before seeing
+which choice scores better. They are recorded once the PM rules.
+
 ## Follow-up work
 
 * `test_coach_sample_stance.py`'s module docstring still calls 1.2.0 the stage's default (stale since

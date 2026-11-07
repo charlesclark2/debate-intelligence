@@ -7,9 +7,9 @@ random order and unmarked (:func:`sitting_rows`). Each card shows the coach's ow
 coach's CSV, the side its file was disclosed on, and the coach's label, and nothing about the model's
 answers, the recordings or the score (:func:`run_sitting`). The coach answers with a label, `at:<id>` for a
 card that answers the position, and Enter keeps it; a label the evaluation would refuse is asked again,
-never echoed. Only changed labels are written (:func:`relabelled_sample`), after the file they replace is kept as a
-dated copy (:mod:`debate_core.application.coach_sample_labels_file`, `v1-e32-t58`), and the end counts changed and unchanged rows, listed and control
-(:func:`relabel_counts`).
+never echoed. Only changed labels are written (:func:`relabelled_sample`), after the file they replace is
+kept as a dated copy (:mod:`debate_core.application.coach_sample_labels_file`, `v1-e32-t58`), and the end
+counts changed and unchanged rows, listed and control (:func:`relabel_counts`).
 
 `scripts/relabel_coach_sample.py` is the terminal half. This module is the rest, values in and values out;
 nothing here logs, and no row's text leaves the terminal it is shown in.
@@ -46,6 +46,7 @@ __all__ = [
 
 CONTROL_ROWS: Final = 6
 """Labelled rows off the session's list drawn into the sitting, unmarked, beside the listed rows."""
+
 
 @dataclass(frozen=True, slots=True)
 class SittingRow:

@@ -134,7 +134,9 @@ def sample(world: SyntheticRun, tmp_path: Path) -> tuple[Path, Path]:
         rows.append(json.dumps({"sample_row": row, "item_id": item_ids[fingerprint]}))
     csv_file, rows_file = tmp_path / "coach-sample.csv", tmp_path / "coach-sample.jsonl"
     csv_file.write_text("\n".join(labels) + "\n", encoding="utf-8")
-    digest_path(csv_file).write_text(digest_line(labels_digest(csv_file.read_bytes()), csv_file), encoding="ascii")
+    digest_path(csv_file).write_text(
+        digest_line(labels_digest(csv_file.read_bytes()), csv_file), encoding="ascii"
+    )
     rows_file.write_text("\n".join(rows) + "\n", encoding="utf-8")
     return csv_file, rows_file
 

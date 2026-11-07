@@ -138,8 +138,9 @@ class LabelsDigestMissing(LabelsFileRefused):
             sample,
             found=found,
             hint="Once, for a file a sitting wrote before the sidecar existed: "
-            f"{RECORD_COMMAND} --sample <the labels file> --expect <the SHA-256 that sitting's record gives>. "
-            "It records the digest only if the file still has it, and never over a sidecar.",
+            f"{RECORD_COMMAND} --sample <the labels file> "
+            "--expect <the SHA-256 that sitting's record gives>. It records the digest only if the file "
+            "still has it, and never over a sidecar.",
         )
 
 
@@ -153,8 +154,8 @@ class LabelsDigestUnreadable(LabelsFileRefused):
             f"({SITTING_COMMAND}); nothing was read",
             sample,
             found=found,
-            hint="Do not edit the sidecar or the file. Tell the PM; the dated copies beside the file hold the "
-            "file each sitting replaced.",
+            hint="Do not edit the sidecar or the file. Tell the PM; the dated copies beside the file hold "
+            "the file each sitting replaced.",
         )
 
 
@@ -209,7 +210,11 @@ def check_labels(sample: Path, data: bytes) -> str:
 
     Raises :class:`LabelsFileChanged` when it does not, and what :func:`recorded_digest` raises.
     """
-    return labels_digest(data)
+    found = labels_digest(data)
+    recorded = recorded_digest(sample, found=found)
+    if found != recorded:
+        raise LabelsFileChanged(sample, found=found, recorded=recorded)
+    return found
 
 
 def read_labels_file(sample: Path) -> str:
@@ -237,8 +242,17 @@ def keep_dated_copy(sample: Path, data: bytes, at: datetime) -> Path:
     copy of that minute is already there: an existing copy is never overwritten (the file is opened for
     exclusive creation). Raises `OSError` when the copy read back is not `data`.
     """
-    copy = sample.with_name(f"{sample.stem}.before-stance-relabel{sample.suffix}")
-    copy.write_bytes(data)
+    stamp = f"{sample.stem}{COPY_MARK}{at:%Y-%m-%d-%H%M}"
+    number = 1
+    while True:
+        copy = sample.with_name(f"{stamp}{'' if number == 1 else f'-{number}'}{sample.suffix}")
+        try:
+            with copy.open("xb") as handle:
+                handle.write(data)
+        except FileExistsError:
+            number += 1
+            continue
+        break
     if copy.read_bytes() != data:
         raise OSError(f"the copy at {copy} does not match the file it keeps")
     return copy
@@ -262,16 +276,24 @@ def write_sitting(sample: Path, text: str, *, at: datetime) -> SittingFiles:
     copy = keep_dated_copy(sample, sample.read_bytes(), at)
     data = text.encode("utf-8")
     _replace(sample, data)
-    return SittingFiles(copy=copy, digest=labels_digest(data))
+    digest = labels_digest(data)
+    _replace(digest_path(sample), digest_line(digest, sample).encode("ascii"))
+    return SittingFiles(copy=copy, digest=digest)
 
 
 def record_first_digest(sample: Path, *, expect: str) -> str:
     """The one-time step: record the SHA-256 of a labels file that has no sidecar, if it is `expect`.
 
-    Raises :class:`LabelsDigestAlreadyRecorded` when a sidecar is there (it is never overwritten, the
-    sidecar is opened for exclusive creation) and :class:`LabelsFileNotTheExpectedOne` when the file's digest
-    is not `expect`, writing nothing either way.
+    Raises :class:`LabelsFileNotTheExpectedOne` when the file's digest is not `expect`, and
+    :class:`LabelsDigestAlreadyRecorded` when a sidecar is there: it is opened for exclusive creation, so one
+    is never overwritten. Either way nothing is written.
     """
     found = labels_digest(sample.read_bytes())
-    digest_path(sample).write_text(digest_line(found, sample), encoding="ascii")
+    if found != expect:
+        raise LabelsFileNotTheExpectedOne(sample, found=found, expected=expect)
+    try:
+        with digest_path(sample).open("x", encoding="ascii", newline="") as handle:
+            handle.write(digest_line(found, sample))
+    except FileExistsError:
+        raise LabelsDigestAlreadyRecorded(sample) from None
     return found

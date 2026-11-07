@@ -1,5 +1,5 @@
-"""`scripts/relabel_coach_sample.py` reads the labels file through its guard and writes it as a guarded sitting
-(`v1-e32-t58`).
+"""`scripts/relabel_coach_sample.py` reads the labels file through its guard and writes it as a guarded
+sitting (`v1-e32-t58`).
 
 The store and the coach are stood in for: the container's evaluation answers each row's side, and the
 sitting answers with the changes the test chose. The rules themselves are

@@ -43,7 +43,10 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--sample", required=True, type=Path, help="The coach's labelled CSV.")
     parser.add_argument(
-        "--expect", required=True, type=_sha256, help="The SHA-256 the file must have, from its sitting's record."
+        "--expect",
+        required=True,
+        type=_sha256,
+        help="The SHA-256 the file must have, from its sitting's record.",
     )
     arguments = parser.parse_args(argv)
     sample = arguments.sample.expanduser()
@@ -53,8 +56,10 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Refused: {refused}. {refused.hint}", file=sys.stderr)
         return 1
     except OSError as failed:
-        print(f"Refused: the labels file could not be read or its sidecar written ({type(failed).__name__}).",
-              file=sys.stderr)
+        print(
+            f"Refused: the labels file could not be read or its sidecar written ({type(failed).__name__}).",
+            file=sys.stderr,
+        )
         return 1
     print(f"Recorded {digest} for {sample.name} in {digest_path(sample)}.")
     return 0

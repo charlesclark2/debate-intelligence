@@ -15,7 +15,6 @@ from pathlib import Path
 
 import pytest
 
-import debate_core.application.coach_sample_labels_file as labels_file
 from debate_core.application.coach_sample_labels_file import (
     LabelsDigestAlreadyRecorded,
     LabelsDigestMissing,
@@ -172,11 +171,16 @@ def test_a_sitting_writes_the_dated_copy_then_the_labels_file_then_its_sidecar(
 
     def watched(source: str | os.PathLike[str], target: str | os.PathLike[str]) -> None:
         seen.append(
-            (Path(target).name, _copies(tmp_path), sample.read_bytes(), (tmp_path / SIDECAR).read_text("ascii"))
+            (
+                Path(target).name,
+                _copies(tmp_path),
+                sample.read_bytes(),
+                (tmp_path / SIDECAR).read_text("ascii"),
+            )
         )
         replace(source, target)
 
-    monkeypatch.setattr(labels_file.os, "replace", watched)
+    monkeypatch.setattr("debate_core.application.coach_sample_labels_file.os.replace", watched)
 
     written = write_sitting(sample, RELABELLED, at=AT)
 
@@ -237,7 +241,7 @@ def test_a_sitting_stopped_before_the_sidecar_leaves_a_labels_refusal(
             raise SittingStopped
         replace(source, target)
 
-    monkeypatch.setattr(labels_file.os, "replace", stops_at_the_sidecar)
+    monkeypatch.setattr("debate_core.application.coach_sample_labels_file.os.replace", stops_at_the_sidecar)
     with pytest.raises(SittingStopped):
         write_sitting(sample, RELABELLED, at=AT)
     monkeypatch.undo()
@@ -259,7 +263,7 @@ def test_a_sitting_stopped_before_the_labels_file_leaves_it_as_its_sidecar_recor
     def stops(source: str | os.PathLike[str], target: str | os.PathLike[str]) -> None:
         raise SittingStopped
 
-    monkeypatch.setattr(labels_file.os, "replace", stops)
+    monkeypatch.setattr("debate_core.application.coach_sample_labels_file.os.replace", stops)
     with pytest.raises(SittingStopped):
         write_sitting(sample, RELABELLED, at=AT)
     monkeypatch.undo()

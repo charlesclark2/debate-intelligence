@@ -1241,5 +1241,78 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e32-t56-analytic-texts-take-the-own-side-rule
+    - id: t57
+      kind: Task
+      name: 'The per-school round lists stay inside the page budget all season, and a school page over it is named at report time'
+      description: >-
+        The per-school round lists stay inside the page budget all season, and a school page
+        over it is named at report time.
+      inputs:
+        specRef: plan_specs/v1/e32-argument-landscape/t57-school-rounds-fit-the-page-budget-and-are-checked-at-report-time.yaml
+        goalRef: v1-e32-t57-school-rounds-fit-the-page-budget-and-are-checked-at-report-time
+      dependsOn:
+      - t54
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e32-t57-school-rounds-fit-the-page-budget-and-are-checked-at-report-time reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e32-t57-school-rounds-fit-the-page-budget-and-are-checked-at-report-time
+    - id: t58
+      kind: Task
+      name: 'The coach''s labels file is guarded: a changed file is refused, and every sitting keeps the file it replaces'
+      description: >-
+        The coach's labels file is guarded: a changed file is refused, and every sitting
+        keeps the file it replaces.
+      inputs:
+        specRef: plan_specs/v1/e32-argument-landscape/t58-the-coach-sample-labels-file-guarded.yaml
+        goalRef: v1-e32-t58-the-coach-sample-labels-file-guarded
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e32-t58-the-coach-sample-labels-file-guarded reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e32-t58-the-coach-sample-labels-file-guarded
+    - id: t59
+      kind: Task
+      name: 'A repair cassette''s scan counts a hit as input only when its words come from the cards the failed call sent'
+      description: >-
+        A repair cassette's scan counts a hit as input only when its words come from the
+        cards the failed call sent.
+      inputs:
+        specRef: plan_specs/v1/e32-argument-landscape/t59-a-repair-cassettes-hits-count-the-cards-sent.yaml
+        goalRef: v1-e32-t59-a-repair-cassettes-hits-count-the-cards-sent
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e32-t59-a-repair-cassettes-hits-count-the-cards-sent reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e32-t59-a-repair-cassettes-hits-count-the-cards-sent
+    - id: t60
+      kind: Task
+      name: 'The bundle scan does not count the report''s own fixed lines as a tournament''s words'
+      description: >-
+        The bundle scan does not count the report's own fixed lines as a tournament's words.
+      inputs:
+        specRef: plan_specs/v1/e32-argument-landscape/t60-the-bundle-scan-reads-the-reports-own-words-as-its-own.yaml
+        goalRef: v1-e32-t60-the-bundle-scan-reads-the-reports-own-words-as-its-own
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e32-t60-the-bundle-scan-reads-the-reports-own-words-as-its-own reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e32-t60-the-bundle-scan-reads-the-reports-own-words-as-its-own
 status:
   phase: Pending

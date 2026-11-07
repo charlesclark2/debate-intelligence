@@ -72,7 +72,7 @@ spec:
         the coach (before 2026-11-18), and applies dev after the PM reads the plan, the plan
         after it saying No changes (operator, recorded by the PM).
 status:
-  phase: InProgress
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

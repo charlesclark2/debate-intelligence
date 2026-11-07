@@ -887,5 +887,60 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e31-t38-a-parse-workers-time-limit-starts-when-it-is-ready
+    - id: t39
+      kind: Task
+      name: 'A weekly rebuild re-clusters only the dependency components the week''s new bodies reach'
+      description: >-
+        A weekly rebuild re-clusters only the dependency components the week's new bodies
+        reach.
+      inputs:
+        specRef: plan_specs/v1/e31-debate-file-parsing/t39-incremental-placement-by-dependency-components.yaml
+        goalRef: v1-e31-t39-incremental-placement-by-dependency-components
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e31-t39-incremental-placement-by-dependency-components reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e31-t39-incremental-placement-by-dependency-components
+    - id: t40
+      kind: Task
+      name: 'caselist parse --publish-only has a dry run that lists what it would send and refuses what it would refuse'
+      description: >-
+        caselist parse --publish-only has a dry run that lists what it would send and
+        refuses what it would refuse.
+      inputs:
+        specRef: plan_specs/v1/e31-debate-file-parsing/t40-publish-only-dry-run.yaml
+        goalRef: v1-e31-t40-publish-only-dry-run
+      dependsOn:
+      - t30
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e31-t40-publish-only-dry-run reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e31-t40-publish-only-dry-run
+    - id: t41
+      kind: Task
+      name: 'The placement state''s noncurrent versions expire in days, in both buckets'
+      description: >-
+        The placement state's noncurrent versions expire in days, in both buckets.
+      inputs:
+        specRef: plan_specs/v1/e31-debate-file-parsing/t41-placement-state-versions-expire-in-days.yaml
+        goalRef: v1-e31-t41-placement-state-versions-expire-in-days
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e31-t41-placement-state-versions-expire-in-days reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e31-t41-placement-state-versions-expire-in-days
 status:
   phase: Pending

@@ -39,7 +39,7 @@ spec:
     (landscape-report-from-the-cloud-run.md) and the PM records it.
   priority: 1
   constraints:
-    packages: [debate_core.arguments, debate_core.application, debate_core.domain, debate_core.integrations, debate_api, debate_cli, packages/debate_core/tests, packages/debate_api/tests, packages/debate_cli/tests, docs/runbooks, docs/data, docs/guides]
+    packages: [debate_core.arguments, debate_core.application, debate_core.domain, debate_core.integrations, debate_api, debate_cli, packages/debate_core/tests, packages/debate_api/tests, packages/debate_cli/tests, docs/runbooks, docs/data, docs/guides, infrastructure/modules/evidence_bucket, tests/docs, tests/smoke, tests/fixtures/landscape]
     forbidden:
       - A real school, team code, tournament or debater name in a fixture, test, log, commit or report
       - A tournament or round in the circuit-wide report
@@ -68,7 +68,7 @@ spec:
         The operator republishes the hspolicy26 report after the merge and the PM records it
         (operator).
 status:
-  phase: InProgress
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

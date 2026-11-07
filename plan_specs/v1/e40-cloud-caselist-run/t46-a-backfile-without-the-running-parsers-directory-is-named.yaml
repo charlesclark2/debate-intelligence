@@ -1,0 +1,67 @@
+# TASK v1-e40-t46-a-backfile-without-the-running-parsers-directory-is-named - A backfile with no directory at the running parser version is named
+# Epic: E40 — Weekly Caselist Run in the Cloud | Release: v1.8 (Weekly caselist run in the cloud) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e40-t46-a-backfile-without-the-running-parsers-directory-is-named
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.8
+    debate/epic: v1-e40-cloud-caselist-run
+  annotations:
+    debate/title: "A backfile with no directory at the running parser version is named"
+spec:
+  # Filed by the PM, 2026-11-06, from v1-e40-t16's follow-up (the PM's ruling Q4, 2026-11-06).
+  description: >-
+    Nothing re-parses a backfile after a parser bump, and nothing says so: the weekly run parses
+    only the caselists it follows, and the weekly index leaves backfiles out until v1-e39-t18.
+    `caselist runs --remote` (or `doctor`, as the proposal argues) names each backfile whose
+    parsed store has no directory at the running build's parser version, with the version it
+    does hold, by tests on synthetic stores.
+  priority: 3
+  constraints:
+    packages: [debate_core.application, debate_cli, packages/debate_core/tests, packages/debate_cli/tests]
+    forbidden:
+      - Network or AWS access in a test
+  context: []
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        Each backfile with no directory at the running parser version is named with the
+        version it holds, by tests on synthetic stores shown failing first.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e40-t46-a-backfile-without-the-running-parsers-directory-is-named-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.8
+    debate/epic: v1-e40-cloud-caselist-run
+spec:
+  description: >-
+    A backfile with no directory at the running parser version is named.
+  goalRef:
+    name: v1-e40-t46-a-backfile-without-the-running-parsers-directory-is-named
+  graph:
+    nodes:
+      - id: a-backfile-without-the-running-parsers-d
+        kind: Task
+        name: Backfile parser version named
+        description: >-
+          A backfile with no directory at the running parser version is named.
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Backfile parser version named tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests, packages/debate_cli/tests, -k, backfile]
+status:
+  phase: Pending

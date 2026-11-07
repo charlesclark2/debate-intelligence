@@ -840,5 +840,24 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e30-t33-a-whole-file-removal-reaches-only-the-caselists-that-hold-it
+    - id: t34
+      kind: Task
+      name: 'A removal keeps the parse a snapshot is owed, now that nothing is rebuilt after it'
+      description: >-
+        A removal keeps the parse a snapshot is owed, now that nothing is rebuilt after it.
+      inputs:
+        specRef: plan_specs/v1/e30-caselist-ingestion/t34-a-removal-keeps-the-parse-a-snapshot-is-owed.yaml
+        goalRef: v1-e30-t34-a-removal-keeps-the-parse-a-snapshot-is-owed
+      dependsOn:
+      - t33
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e30-t34-a-removal-keeps-the-parse-a-snapshot-is-owed reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e30-t34-a-removal-keeps-the-parse-a-snapshot-is-owed
 status:
   phase: Pending

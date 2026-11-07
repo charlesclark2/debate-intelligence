@@ -473,3 +473,9 @@ Added by the PM. Nothing above is changed, and this section is not a review.
 | ac2, step 3: the "before" copy and its count | NOT RUN (operator) | Done (before half) | 2026-11-05, build 1.1.0.dev342: ~/t32-before restored, parsed_version 2026.10.27-docx-7, 18,345 objects. count_tags_by_rule.py: hsld26 sources 6,889, cards 105,947, no_tag 1,916, tagged_by_bold_tag 185, tagged_by_unbolded_tail 0; hspf26 4,143, 67,217, 3,478, 1,003, 0; hspolicy26 5,132, 168,732, 1,638, 44, 0; openev 102, 8,081, 78, 0, 0. The cards total 349,977 and the sources 16,266, the hand run's own figures |
 
 Steps 4 to 6 follow the docx-9 run image's full re-parse: the "after" copy's count against these, then both copies deleted. The Goal stays `InProgress`.
+
+## The before copy (PM note, 2026-11-06)
+
+`~/t32-before` was deleted on 2026-11-06 under data-use policy 1.18, its counts kept in
+`~/t32-before-counts.json`, which is what step 5 compares the after copy's counts with. Step 6 deletes
+the after copy alone.

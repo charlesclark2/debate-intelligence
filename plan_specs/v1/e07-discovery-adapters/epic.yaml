@@ -402,5 +402,23 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e07-t16-public-pool-footer-test-on-an-injected-clock
+    - id: t17
+      kind: Task
+      name: 'The providers named as having no adapter are pinned to the container''s discovery factories'
+      description: >-
+        The providers named as having no adapter are pinned to the container's discovery
+        factories.
+      inputs:
+        specRef: plan_specs/v1/e07-discovery-adapters/t17-providers-without-an-adapter-pinned-to-the-factories.yaml
+        goalRef: v1-e07-t17-providers-without-an-adapter-pinned-to-the-factories
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e07-t17-providers-without-an-adapter-pinned-to-the-factories reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e07-t17-providers-without-an-adapter-pinned-to-the-factories
 status:
   phase: Pending

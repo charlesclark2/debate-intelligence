@@ -53,7 +53,7 @@ ticked yes or no with its date, before the coach's beta (`v1-e39-t10` ac7).
 | 6. A second promotion, carrying `2026.11.03-docx-9` | no | | Added by the PM, 2026-11-06 (`v1-e40-t16`): prod's function and index at the same parser version; after dev's run of 2026-11-11 |
 | 7. Prod's parsed store current | no | | Dev holds `docx-7` since the hand run of 2026-11-05 (`20261105T034547Z`); prod goes straight to `docx-9` by `v1-e40-t16`'s steps, after item 6 |
 | 8. Prod's first index published | no | | After item 7, from the same restored copy, straight after prod's function is deployed at `docx-9` (`v1-e40-t16`) |
-| 9. `v1-e39-t07`'s prod removal exercise | no | | Not before `v1-e30-t33`: a whole-file removal today plans every caselist's aggregates, and the rebuild reads the Mac's own store |
+| 9. `v1-e39-t07`'s prod removal exercise | no | | `v1-e30-t33`'s removal was proved in dev's journey on 2026-11-07 (J7 and J8). Prod's removal runs from a build carrying it, after `v1-e32-t54`'s grant is applied in prod |
 | 10. Superseded parsed directories retired in prod | no | 2026-11-03 | Dry run only: all 20 directories (`docx-1` to `docx-6`, four caselists) `not yet superseded` until item 7; then five directories, judged by a `docx-9` build |
 | 11. The request to school IT | | | |
 | 12. The beta's prod accounts created | | | |

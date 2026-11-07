@@ -1,0 +1,72 @@
+# TASK v1-e32-t59-a-repair-cassettes-hits-count-the-cards-sent - A repair cassette's scan counts a hit as input only when its words come from the cards the failed call sent
+# Epic: E32 Argument Landscape Reports | Release: v1.2 (Argument landscape & file building) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e32-t59-a-repair-cassettes-hits-count-the-cards-sent
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e32-argument-landscape
+  annotations:
+    debate/title: "A repair cassette's scan counts a hit as input only when its words come from the cards the failed call sent"
+spec:
+  # Filed by the PM, 2026-11-06, from v1-e32-t55's point 2 (the PM's ruling of 2026-11-06).
+  description: >-
+    v1-e32-t55's re-record repaired two batches (string_too_long). A repair cassette's input
+    includes the model's own failed answer, so all 63 of its hits were in_input, which keeps a
+    hit even when it carries a trusted mark (53 a JSON key, 10 a taxonomy word), and the scan
+    read not clean for the first time since v1-e32-t44's marks. in_input exists to keep copied
+    card text. Count a repair cassette's hit as in_input only when its words come from the cards
+    the failed call sent, not from the failed answer, and keep every other rule. Tests on
+    invented cassettes.
+  priority: 3
+  constraints:
+    packages: [debate_core.application, debate_core.arguments, packages/debate_core/tests]
+    forbidden:
+      - Card text from any real cassette in a test, log or report
+      - A hit in the cards sent ever set aside
+  context: []
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        A repair cassette's hit from the failed answer alone is not in_input, while one from
+        the cards sent still is, by tests on invented cassettes shown failing first.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e32-t59-a-repair-cassettes-hits-count-the-cards-sent-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e32-argument-landscape
+spec:
+  description: >-
+    A repair cassette's scan counts a hit as input only when its words come from the cards the
+    failed call sent.
+  goalRef:
+    name: v1-e32-t59-a-repair-cassettes-hits-count-the-cards-sent
+  graph:
+    nodes:
+      - id: a-repair-cassettes-hits-count-the-cards
+        kind: Task
+        name: Repair cassette scan
+        description: >-
+          A repair cassette's scan counts a hit as input only when its words come from the
+          cards the failed call sent.
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Repair cassette scan tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests, -k, cassette and scan]
+status:
+  phase: Pending

@@ -1,0 +1,75 @@
+# TASK v1-e31-t41-placement-state-versions-expire-in-days - The placement state's noncurrent versions expire in days, in both buckets
+# Epic: E31 Debate File Parsing | Release: v1.1 | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e31-t41-placement-state-versions-expire-in-days
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e31-debate-file-parsing
+  annotations:
+    debate/title: "The placement state's noncurrent versions expire in days, in both buckets"
+spec:
+  # Filed by the PM, 2026-11-06, from the PM's review of v1-e31-t10 (2026-11-06).
+  description: >-
+    v1-e31-t10's placement-state.sqlite is rewritten whole by every rebuild of each caselist,
+    about 0.4 GB a week across the four followed stores, and the buckets keep noncurrent
+    versions 30 days in dev and 365 in prod: up to about 20 GB in prod a year of a file that can
+    always be rebuilt. Expire its noncurrent versions in days (the proposal says how many). S3's
+    lifecycle filters by prefix, tag and size, not by a key's ending, so the proposal says how
+    the rule reaches only the state (a tag the publisher sets on it, or another way) without
+    touching an aggregate or a per-source file; prices and limits are never written from memory.
+    Terraform tests shown failing first; the PM reads each environment's plan before its apply.
+  priority: 3
+  constraints:
+    packages: [infrastructure/modules/evidence_bucket, debate_core.application, debate_core.integrations, packages/debate_core/tests, docs/runbooks, docs/data]
+    forbidden:
+      - A lifecycle rule that can reach an aggregate, a per-source file or a manifest
+      - A plan that destroys or replaces an account assignment or permission set
+      - A price or limit written from memory
+  context: []
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        The proposal is ruled on, and the rule expires only the state's noncurrent versions,
+        by Terraform tests and code tests shown failing first.
+    - id: ac2
+      description: >-
+        The operator applies dev and then prod after the PM reads each plan (operator).
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e31-t41-placement-state-versions-expire-in-days-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e31-debate-file-parsing
+spec:
+  description: >-
+    The placement state's noncurrent versions expire in days, in both buckets.
+  goalRef:
+    name: v1-e31-t41-placement-state-versions-expire-in-days
+  graph:
+    nodes:
+      - id: placement-state-versions-expire-in-days
+        kind: Task
+        name: State versions expire
+        description: >-
+          The placement state's noncurrent versions expire in days, in both buckets.
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: State versions expire tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests, -k, placement_state]
+status:
+  phase: Pending

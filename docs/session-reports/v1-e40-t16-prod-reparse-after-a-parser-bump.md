@@ -387,3 +387,13 @@ ten breaks planted there.
 7. **Merge:** `scripts/task pr --partial` once `ci` is green. The Goal stays `InProgress` until ac2 is
    recorded, after dev's 2026-11-11 run at docx-9, dev's function on 2026-11-12, promotion item 6 and
    the PM's word.
+
+## Operator records (recorded by the PM, 2026-11-06)
+
+Added by the PM. Nothing above is changed, and this section is not a review.
+
+| Criterion | Was | Now | Record |
+|---|---|---|---|
+| Operator follow-up 1: the owed weeks and what they need (not a criterion) | not run | run | 2026-11-06, from the main clone. Run-state bundle 11,751,521 bytes. Prod lacks hsld26's 2026-10-20, 10-27 and 11-03, hspolicy26's 2026-10-20, 10-27, 11-03 and full/2026-10-20, hspf26's 2026-10-20, 10-27, 11-04 and full/2026-10-20; openev's two manifests (2026-ld, 2026-policy) are in prod under another digest, prod holding 104 of the 105 sources they name. The hand publish copy 15,462,781,868 bytes (parsed 11,147,679,654, owed sources 4,303,350,693); hspolicy25's copy (Q4 (i)) 17,395,979,390 bytes; 78,961,410,048 free |
+
+The first prod session republishes openev's two manifests at step 5. The Goal stays `InProgress` until ac2.

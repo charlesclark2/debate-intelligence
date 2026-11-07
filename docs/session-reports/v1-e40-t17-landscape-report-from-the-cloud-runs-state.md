@@ -339,3 +339,23 @@ Added by the PM. Nothing above is changed, and this section is not a review.
 | ac3, the copy deleted (step 5) | NOT RUN | PASS | `removed …/landscape-copy-hspolicy26`, the five `/tmp` files deleted, 0 landscape copies left |
 
 The runbook's missing `--config-dir` is fixed by the PM in the same batch as this record (2026-10-31), with the parse's measured time. Every criterion passes, so the Goal is `Succeeded`. This publish is also `v1-e32-t29`'s republish, which carries `v1-e32-t28`'s.
+
+## Hand publishes by these steps (recorded by the PM, 2026-11-06)
+
+Added by the PM. Nothing above is changed.
+
+**hspolicy26, 2026-11-06.** The installed build (dev.342) refuses topics.yaml's tournaments key
+(`extra="forbid"`), so every step ran from the main clone on dev with `uv run`, which also parsed the
+copy with the clone's parser.
+
+* Step 1: the first restore stopped on `STORE_UNAVAILABLE` (a wifi drop) and left its lease; the copy was
+  deleted and the restore run again after the lease plus the lock's five-minute margin. It took the lock
+  over, fetched 5,190 sources (1,476,748,524 bytes), none suppressed, parsed_objects 0 at
+  `2026.11.03-docx-9`.
+* Step 2: 5,190 attempted, 5,132 parsed, 168,728 cards, failure rate 0.0, 1,215.2 s.
+* Step 3: snapshot 2026-11-03, stale false, 103 positions, 0 model calls, the two text caches filled
+  (2,348 and 5,132). 76 scan hits, 73 not yet accepted, every one read in the terminal: 72 were
+  report.md's own table headers and fixed lines matching a tournament word (`v1-e32-t60`), one a plan
+  text, two card tags with their cites in top_cards.csv; none named a school, team or debater.
+* Step 4: published with the dry run's digest, 7 uploaded, the acceptance recorded. Then
+  `v1-e32-t54`'s republish added the round view (that report's ac3), and step 5 deleted the copy.

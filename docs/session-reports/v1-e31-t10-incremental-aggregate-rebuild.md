@@ -900,3 +900,13 @@ approach gets wrong, and R2 shows it does.
 10. **Merge:** `scripts/task pr --partial` once `ci` is green and dev's docx-9 run image is applied
     (ruling Q5). The Goal stays `InProgress` until ac4 is recorded after the first weekly run placed
     from a state.
+
+## Operator records (recorded by the PM, 2026-11-06)
+
+Added by the PM. Nothing above is changed, and this section is not a review.
+
+| Criterion | Was | Now | Record |
+|---|---|---|---|
+| Operator follow-up A: the real phase split, components and state size (not a criterion) | not run | run | 2026-11-06, this branch's full rebuild over the Mac's hspolicy26 at 2026.10.27-docx-7: 3,869 sources (3,825 parsed), 126,681 cards, 148,659 occurrences, 21,595 clusters, 29,866 distinct full bodies of 26,968,420 words, 305.32 s (reading documents 88.44, fingerprints 68.28, MinHash 83.23, CutIndex 23.86, cut step 16.72, band pairs 12.41, joins 2.72, writing 1.71, linking 0.10, the rest 7.85). The state 152,764,416 bytes, written in 0.39 s; peak memory 698,728,448 bytes. 18,546 stored components, the largest 405, 148 and 95 bodies; 49,117 joining edges. table_equals_the_stores false: the Mac's table was written by dev.342, before v1-e31-t29's matching change (ca399dc3). The component counts read new_bodies 0 for both new sets, which `v1-e31-t39` fixes first |
+
+The 741 s of 2026-11-02 was the old MinHash on a loaded Mac; reading documents and fingerprints, half of the 305 s, are what a week placed from the state skips. The Goal stays `InProgress` until ac4.

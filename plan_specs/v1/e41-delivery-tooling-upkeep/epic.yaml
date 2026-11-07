@@ -622,5 +622,22 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e41-t24-the-cluster-comparison-key-test-without-a-timer-race
+    - id: t25
+      kind: Task
+      name: '.env.example says where the caselist token is kept, not in .env'
+      description: >-
+        .env.example says where the caselist token is kept, not in .env.
+      inputs:
+        specRef: plan_specs/v1/e41-delivery-tooling-upkeep/t25-env-example-says-where-the-caselist-token-lives.yaml
+        goalRef: v1-e41-t25-env-example-says-where-the-caselist-token-lives
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e41-t25-env-example-says-where-the-caselist-token-lives reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e41-t25-env-example-says-where-the-caselist-token-lives
 status:
   phase: Pending

@@ -27,6 +27,9 @@ spec:
     N, how a scheduled start is told apart from a hand run (a hand run, such as the operator's
     of 2026-11-05 after a refused launch, must still run), and which recorded runs count (a run
     refused for the lock does not), and stop for the PM's ruling.
+    (PM amendment 2026-11-07, from v1-e40-t38's follow-up.) The refusal this task adds joins
+    landscape_staleness.LOCK_REFUSALS, with a case in test_landscape_staleness.py's parametrisation, so a
+    refused scheduled pull never makes the landscape read "stopped before its stages".
   priority: 3
   constraints:
     packages: [debate_core.application, debate_core.integrations, debate_cli, packages/debate_core/tests, packages/debate_cli/tests, docs/runbooks]

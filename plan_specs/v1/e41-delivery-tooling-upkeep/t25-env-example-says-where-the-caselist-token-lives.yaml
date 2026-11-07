@@ -1,0 +1,66 @@
+# TASK v1-e41-t25-env-example-says-where-the-caselist-token-lives - .env.example says where the caselist token is kept, not in .env
+# Epic: E41 — Delivery Tooling Upkeep | Release: v1.8 (Weekly caselist run in the cloud) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e41-t25-env-example-says-where-the-caselist-token-lives
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.8
+    debate/epic: v1-e41-delivery-tooling-upkeep
+  annotations:
+    debate/title: ".env.example says where the caselist token is kept, not in .env"
+spec:
+  # Filed by the PM, 2026-11-06, from v1-e41-t22's follow-up (the PM's review, 2026-11-05).
+  description: >-
+    .env.example says `caselist auth login` writes the caselist token into .env. It does not:
+    the token store keeps it (the keychain, a file, or Secrets Manager in the cloud). Correct
+    the line, and check the root README and the CLI README say the same, with no value written
+    anywhere.
+  priority: 3
+  constraints:
+    packages: [.env.example, README.md, packages/debate_cli/README.md, tests/docs, docs/guides]
+    forbidden:
+      - A credential value or a real path to one in any file
+  context: []
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        The line names the token store, and the READMEs agree, by a docs check shown failing
+        first.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e41-t25-env-example-says-where-the-caselist-token-lives-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.8
+    debate/epic: v1-e41-delivery-tooling-upkeep
+spec:
+  description: >-
+    .env.example says where the caselist token is kept, not in .env.
+  goalRef:
+    name: v1-e41-t25-env-example-says-where-the-caselist-token-lives
+  graph:
+    nodes:
+      - id: env-example-says-where-the-caselist-toke
+        kind: Task
+        name: Token line
+        description: >-
+          .env.example says where the caselist token is kept, not in .env.
+        estimatedEffort: 30m
+        acceptanceCriteria:
+          - type: test_passes
+            name: Token line tests pass
+            command: uv
+            args: [run, pytest, tests/docs]
+status:
+  phase: Pending

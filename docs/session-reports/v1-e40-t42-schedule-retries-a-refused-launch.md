@@ -327,3 +327,13 @@ Added by the PM. Nothing above is changed, and this section is not a review.
 | ac3, first half: the operator reads the dead letter and whether the alarm emailed the coach (before 2026-11-18) | NOT RUN (operator) | PASS | Read 2026-11-05 without deleting: one message in debate-dev-caselist-run-dlq, sent 2026-11-04 12:00:28Z, ERROR_CODE ServerException, RETRY_ATTEMPTS 0, EXHAUSTED_RETRY_CONDITION MaximumRetryAttempts, the RunTask request for debate-dev-caselist-run:11 with no ClientToken. The alarm went OK to ALARM at 12:07:55Z on the 12:01:00Z datapoint, and the coach confirmed the email reached his inbox, about 7.5 minutes after the dead letter. The operator purged the queue on 2026-11-05 as ruled, and the alarm read OK at 2026-11-05 07:06:12Z |
 
 ac3's second half (dev's plan read by the PM, the apply, and the plan after it saying No changes) runs from `dev` after the merge, so the Goal stays `InProgress`. The guard against a second scheduled run within N hours (ruling 3) is filed as `v1-e40-t44`.
+
+## Operator records (recorded by the PM, 2026-11-06)
+
+Added by the PM. Nothing above is changed, and this section is not a review.
+
+| Criterion | Was | Now | Record |
+|---|---|---|---|
+| ac3, second half: dev applied after the PM reads the plan, and the plan after it saying No changes | NOT RUN | PASS | 2026-11-06, in one dev plan with the docx-9 run image and v1-e32-t54's grant: Plan 4 to add, 7 to change, 2 to destroy. check_image_plan.py stopped on the changes beyond an image's, as it must, and the PM read every changed field: the launch-refused rule and its target created, the alarm summing NumberOfMessagesSent over 6 periods, the SNS policy, both schedules' maximum_retry_attempts 0 to 3 with their state unchanged. Applied; a plan after it read `No changes`, and the schedule reads ENABLED |
+
+Every criterion passes, so the Goal is `Succeeded`.

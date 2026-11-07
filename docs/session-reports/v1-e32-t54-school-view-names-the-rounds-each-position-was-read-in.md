@@ -576,3 +576,13 @@ school view everywhere one is reached, the bucket's grant included.
    the dry run's lines before the publish, and deletes the copy with the runbook's step 5 after.
 9. **Merge:** `scripts/task pr --partial` once `ci` is green. The Goal stays `InProgress` until ac3
    is recorded.
+
+## Operator records (recorded by the PM, 2026-11-06)
+
+Added by the PM. Nothing above is changed, and this section is not a review.
+
+| Criterion | Was | Now | Record |
+|---|---|---|---|
+| ac3: the operator republishes the hspolicy26 report after the merge, and the PM records it (operator) | NOT RUN | PASS | 2026-11-06, over the copy restored that night, from the main clone on dev with uv run (parser 2026.11.03-docx-9, --model-mode none). Dry run: snapshot 2026-11-03, stale false, 5,132 sources, 168,728 cards (86,236 counted), 103 positions, 0 model calls, 76 scan hits and none not yet accepted, 8 files planned (school_rounds.csv and schools.md UPLOAD, 6 UNCHANGED), the school view 180 schools, 591 team codes, 2,752 rows. Publish: 2 uploaded, 6 unchanged, nothing refused. The copy was deleted afterwards and no restored copy was left on the Mac |
+
+Every criterion passes, so the Goal is `Succeeded`. The PM approved the grant file outside the packages (2026-11-06) and amends `constraints.packages` to the four places its criteria live. The grant was applied in dev on 2026-11-06 (evidence-store.md); prod's apply comes before promotion item 9. The collapsed view and the report-time budget check are `v1-e32-t57` (p1).

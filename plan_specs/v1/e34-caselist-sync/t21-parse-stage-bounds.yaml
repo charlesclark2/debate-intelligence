@@ -24,6 +24,9 @@ spec:
     likely on a Wednesday morning. Make `caselist parse` take the run lock, and give the parse
     stage a time budget after which it stops cleanly, records what it finished, and is `failed`
     with its own code. Out of scope: the rebuild's speed (v1-e31-t10).
+    (PM amendment 2026-11-06.) Written for the Mac's weekly agent before the cutover of 2026-10-26.
+    Since then the weekly run is the cloud task, which holds the run lock and its own credentials. Blocked
+    until the PM rewrites it for the cloud run, or cancels it; no session starts it before then.
   priority: 2
   constraints:
     packages: [debate_core.application, debate_cli, packages/debate_core/tests, packages/debate_cli/tests, tests/smoke, docs/runbooks]
@@ -49,7 +52,7 @@ spec:
         The budget's setting and default are in docs/runbooks/caselist-scheduled-sync.md,
         argued from the recorded timings.
 status:
-  phase: Pending
+  phase: Blocked
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

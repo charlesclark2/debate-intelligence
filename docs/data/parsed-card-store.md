@@ -656,7 +656,7 @@ versions and the delete markers left under one caselist's `sha256/`, which shoul
 | `2026.10.18-docx-5` | dev bucket | 2026-10-22, tagged | 12,713 | about 7.5 GB (hsld26 4,973 objects, 2.5 GB; hspf26 4,440, 1.3 GB; hspolicy26 3,193, 3.5 GB; openev 107, 200.7 MB) | |
 | `2026.10.18-docx-5` | this machine | 2026-10-22, deleted | 12,713 | about 7.5 GB | |
 | `2026.10.18-docx-5` | prod bucket | not yet: `not yet superseded` (dry run 2026-11-03), until prod holds the installed build's version, `docx-9` ([evidence-search runbook](../runbooks/evidence-search.md#promoting-the-pilot-to-prod), item 10) | 12,713 listed | about 7.5 GB | |
-| `2026.10.20-docx-6` | dev bucket | 2026-11-05, tagged | 16,299 | about 9.8 GB (hsld26 6,417 objects, 3.3 GB; hspf26 5,429, 1.6 GB; hspolicy26 4,345, 4.7 GB; openev 108, 200.7 MB) | |
+| `2026.10.20-docx-6` | dev bucket | 2026-11-05, tagged | 16,299 | about 9.8 GB (hsld26 6,417 objects, 3.3 GB; hspf26 5,429, 1.6 GB; hspolicy26 4,345, 4.7 GB; openev 108, 200.7 MB) | The first lifecycle run's check (2026-11-06): 10,000 expired (all of hsld26, 3,583 of hspf26), 6,299 still current and tagged (hspf26 1,846, hspolicy26 4,345, openev 108), queued under the same rule; checked again later. The 32-day check falls about 2026-12-08 |
 | `2026.10.20-docx-6` | this machine | not yet: kept while `v1-e32-t49` replays the coach's sample from it | | | |
 | `2026.10.20-docx-6` | prod bucket | not yet: as `docx-5`, after prod holds `docx-7` | 12,713 listed | about 7.5 GB | |
 

@@ -144,7 +144,7 @@ those two caches for step 4 (a build before `v1-e32-t30` keeps none of it); the 
 fill took 551 s on 2026-10-24)
 Where: your Mac, in the same window
 ```bash
-if [ "$(date +%u)" = 3 ]; then echo "STOP: it is Wednesday, the cloud run's day"; elif env | grep -q '^DEBATE_'; then echo "STOP: DEBATE_ overrides are set in this shell"; elif [ ! -d "$COPY" ]; then echo "STOP: no copy at ${COPY}"; elif [ ! -f "$CFG/topics.yaml" ]; then echo "STOP: no topics.yaml in ${CFG}"; else aws sso login --profile debate-dev-evidence && cd "$HOME" && caffeinate -i env DEBATE_ENV=dev debate-research --json landscape report --caselist "$CASELIST" --restored-copy "$COPY" --config-dir "$CFG" --model-mode none --publish --dry-run > /tmp/landscape-dry-run.json; echo "exit $?"; python3 -I -c 'import json, sys; e = json.load(open(sys.argv[1])); d = e.get("data") or (e.get("error") or {}).get("details") or {}; c = d.get("counts") or {}; m = (d.get("classification") or {}).get("model") or {}; s = d.get("scan") or {}; print("code", (e.get("error") or {}).get("code")); print("snapshot", d.get("snapshot"), "parsed_version", d.get("parsed_version"), "stale", (d.get("staleness") or {}).get("stale")); print("sources", c.get("sources"), "cards", c.get("cards"), "counted", c.get("cards_counted"), "positions", c.get("positions")); print("would_ask", m.get("would_ask"), "held_back", m.get("held_back"), "model_calls", d.get("model_calls")); print("scan_hits", len(s.get("hits") or []), "not_yet_accepted", s.get("not_yet_accepted"), "digest", s.get("digest")); print("planned", [one["action"] for one in (d.get("publish") or {}).get("planned") or []]); t = d.get("text_caches") or {}; print("text_caches_read", [(t.get(k) or {}).get("read") for k in ("plan_texts", "analytic_texts")])' /tmp/landscape-dry-run.json; fi
+if [ "$(date +%u)" = 3 ]; then echo "STOP: it is Wednesday, the cloud run's day"; elif env | grep -q '^DEBATE_'; then echo "STOP: DEBATE_ overrides are set in this shell"; elif [ ! -d "$COPY" ]; then echo "STOP: no copy at ${COPY}"; elif [ ! -f "$CFG/topics.yaml" ]; then echo "STOP: no topics.yaml in ${CFG}"; else aws sso login --profile debate-dev-evidence && cd "$HOME" && caffeinate -i env DEBATE_ENV=dev debate-research --json landscape report --caselist "$CASELIST" --restored-copy "$COPY" --config-dir "$CFG" --model-mode none --publish --dry-run > /tmp/landscape-dry-run.json; echo "exit $?"; python3 -I -c 'import json, sys; e = json.load(open(sys.argv[1])); d = e.get("data") or (e.get("error") or {}).get("details") or {}; c = d.get("counts") or {}; m = (d.get("classification") or {}).get("model") or {}; s = d.get("scan") or {}; print("code", (e.get("error") or {}).get("code")); print("snapshot", d.get("snapshot"), "parsed_version", d.get("parsed_version"), "stale", (d.get("staleness") or {}).get("stale")); print("sources", c.get("sources"), "cards", c.get("cards"), "counted", c.get("cards_counted"), "positions", c.get("positions")); print("would_ask", m.get("would_ask"), "held_back", m.get("held_back"), "model_calls", d.get("model_calls")); print("scan_hits", len(s.get("hits") or []), "not_yet_accepted", s.get("not_yet_accepted"), "digest", s.get("digest")); print("planned", [one["action"] for one in (d.get("publish") or {}).get("planned") or []]); t = d.get("text_caches") or {}; print("text_caches_read", [(t.get(k) or {}).get("read") for k in ("plan_texts", "analytic_texts")]); p = d.get("pages") or {}; print("pages_checked", p.get("checked"), "pages_over_budget", len(p.get("over_budget") or []), "largest_page", (p.get("largest") or {}).get("kind"), (p.get("largest") or {}).get("bytes"), "largest_position_page", (p.get("largest_position") or {}).get("bytes"), "budget", p.get("budget"))' /tmp/landscape-dry-run.json; fi
 ```
 Success looks like:
 
@@ -157,7 +157,11 @@ Success looks like:
 * `not_yet_accepted 0`, and `planned` eight entries (seven from a build before `v1-e32-t54`), each
   `UPLOAD` or `UNCHANGED`;
 * `text_caches_read` two numbers, above zero the first time this build reports the caselist (`[None,
-  None]` from a build before `v1-e32-t30`).
+  None]` from a build before `v1-e32-t30`);
+* `pages_checked` above zero and `pages_over_budget 0` (`v1-e32-t57`): no page the pilot cuts from
+  `schools.md` reaches ADR-0019's `budget 153600` bytes. `largest_page` is the largest page's kind and
+  bytes and `largest_position_page` the largest position page's bytes, which the PM records each week.
+  A build before `v1-e32-t57` prints `pages_checked None`.
 
 **Send the PM these lines** before the publish. They hold counts only. **Stop** on:
 
@@ -167,6 +171,11 @@ Success looks like:
   `--json` and read the line that starts `STALE:`; tell the PM.
 * `not_yet_accepted` above zero: the scan found lines no earlier publish accepted. Read them with the
   next block; they are for this terminal only, never for a report, a document, an issue or a commit.
+* `pages_over_budget` above zero: a school-view page would send ADR-0019's budget or more, and the
+  publish would publish it all the same (the PM's ruling of 2026-11-07). Send the PM the
+  `pages_over_budget` line, which holds counts and bytes only, and do not publish until the PM says.
+  The pages' names are a school or a team code: read them with the block after the scan's, for this
+  terminal only.
 
 **Operator command** (expected runtime a second)
 Where: your Mac, in the same window, only when `not_yet_accepted` is above zero
@@ -176,6 +185,14 @@ python3 -I -c 'import json, sys; e = json.load(open(sys.argv[1])); d = e.get("da
 It prints every hit, the ones accepted before among them. If no line names a team, publish with the
 digest the dry run printed, in step 4's second block. If one does, stop and tell the PM that a hit names
 a team, without the line.
+
+**Operator command** (expected runtime a second)
+Where: your Mac, in the same window, only when `pages_over_budget` is above zero
+```bash
+python3 -I -c 'import json, sys; e = json.load(open(sys.argv[1])); d = e.get("data") or (e.get("error") or {}).get("details") or {}; [print(p["kind"], p["school"] or "", p["page"], p["bytes"]) for p in (d.get("pages") or {}).get("over_budget") or []]' /tmp/landscape-dry-run.json
+```
+It prints each page over the budget: its kind, a team's school, its heading and its bytes. These name
+schools and team codes, so they are for this terminal only. Tell the PM only the kinds and bytes.
 
 **A model run** (`v1-e32-t06`'s LD report, never hspolicy26's proof): steps 3 and 4 run from the
 checkout `CFG` sits in, pulled up to date on `dev` with the caselist's taxonomy. In each of their
@@ -197,10 +214,12 @@ filled the plan-text and analytic-text caches, so the publish parses no source a
 a text the report quotes; about as long as the dry run with a build before it)
 Where: your Mac, in the same window
 ```bash
-if [ "$(date +%u)" = 3 ]; then echo "STOP: it is Wednesday, the cloud run's day"; elif env | grep -q '^DEBATE_'; then echo "STOP: DEBATE_ overrides are set in this shell"; elif [ ! -d "$COPY" ]; then echo "STOP: no copy at ${COPY}"; elif [ ! -f "$CFG/topics.yaml" ]; then echo "STOP: no topics.yaml in ${CFG}"; else aws sso login --profile debate-dev-evidence && cd "$HOME" && caffeinate -i env DEBATE_ENV=dev debate-research --json landscape report --caselist "$CASELIST" --restored-copy "$COPY" --config-dir "$CFG" --model-mode none --publish > /tmp/landscape-publish.json; echo "exit $?"; python3 -I -c 'import json, sys; e = json.load(open(sys.argv[1])); d = e.get("data") or (e.get("error") or {}).get("details") or {}; p = d.get("publish") or {}; print("code", (e.get("error") or {}).get("code"), "cause", ((e.get("error") or {}).get("details") or {}).get("cause_code"), "retry_after", ((e.get("error") or {}).get("details") or {}).get("retry_after_seconds")); print("snapshot", d.get("snapshot"), "model_calls", d.get("model_calls"), "cards", (d.get("counts") or {}).get("cards")); print("uploaded", len(p.get("uploaded") or []), "unchanged", len(p.get("unchanged") or []), "refused", p.get("refused"))' /tmp/landscape-publish.json; fi
+if [ "$(date +%u)" = 3 ]; then echo "STOP: it is Wednesday, the cloud run's day"; elif env | grep -q '^DEBATE_'; then echo "STOP: DEBATE_ overrides are set in this shell"; elif [ ! -d "$COPY" ]; then echo "STOP: no copy at ${COPY}"; elif [ ! -f "$CFG/topics.yaml" ]; then echo "STOP: no topics.yaml in ${CFG}"; else aws sso login --profile debate-dev-evidence && cd "$HOME" && caffeinate -i env DEBATE_ENV=dev debate-research --json landscape report --caselist "$CASELIST" --restored-copy "$COPY" --config-dir "$CFG" --model-mode none --publish > /tmp/landscape-publish.json; echo "exit $?"; python3 -I -c 'import json, sys; e = json.load(open(sys.argv[1])); d = e.get("data") or (e.get("error") or {}).get("details") or {}; p = d.get("publish") or {}; print("code", (e.get("error") or {}).get("code"), "cause", ((e.get("error") or {}).get("details") or {}).get("cause_code"), "retry_after", ((e.get("error") or {}).get("details") or {}).get("retry_after_seconds")); print("snapshot", d.get("snapshot"), "model_calls", d.get("model_calls"), "cards", (d.get("counts") or {}).get("cards")); print("uploaded", len(p.get("uploaded") or []), "unchanged", len(p.get("unchanged") or []), "refused", p.get("refused")); g = d.get("pages") or {}; print("pages_over_budget", len(g.get("over_budget") or []), "largest_page", (g.get("largest") or {}).get("kind"), (g.get("largest") or {}).get("bytes"), "largest_position_page", (g.get("largest_position") or {}).get("bytes"))' /tmp/landscape-publish.json; fi
 ```
 Success looks like `exit 0`, `code None cause None retry_after None`, the dry run's `snapshot` and `cards`, `model_calls 0`, and
-`uploaded` plus `unchanged` equal to 8 (7 from a build before `v1-e32-t54`), with `uploaded` above zero
+`uploaded` plus `unchanged` equal to 8 (7 from a build before `v1-e32-t54`), the dry run's
+`pages_over_budget`, `largest_page` and `largest_position_page` (send the PM these, which it records),
+with `uploaded` above zero
 for a week not published before, and above zero the first time a build carrying `v1-e32-t54` publishes
 a week published before it: `school_rounds.csv` is new, and `schools.md` holds the round lists.
 `RUN_LOCK_HELD`: a run holds the lock; wait and run this block again. In a model run, `MODEL_STAGE_INTERRUPTED`
@@ -223,7 +242,7 @@ it. It is accepted only while it is the digest of the hits this run finds:
 Where: your Mac, in the same window
 ```bash
 DIGEST=
-if [ -z "$DIGEST" ]; then echo "STOP: set DIGEST to the dry run's digest"; elif [ "$(date +%u)" = 3 ]; then echo "STOP: it is Wednesday, the cloud run's day"; elif env | grep -q '^DEBATE_'; then echo "STOP: DEBATE_ overrides are set in this shell"; elif [ ! -d "$COPY" ]; then echo "STOP: no copy at ${COPY}"; elif [ ! -f "$CFG/topics.yaml" ]; then echo "STOP: no topics.yaml in ${CFG}"; else aws sso login --profile debate-dev-evidence && cd "$HOME" && caffeinate -i env DEBATE_ENV=dev debate-research --json landscape report --caselist "$CASELIST" --restored-copy "$COPY" --config-dir "$CFG" --model-mode none --publish --accept-scan-hits "$DIGEST" > /tmp/landscape-publish.json; echo "exit $?"; python3 -I -c 'import json, sys; e = json.load(open(sys.argv[1])); d = e.get("data") or (e.get("error") or {}).get("details") or {}; p = d.get("publish") or {}; print("code", (e.get("error") or {}).get("code")); print("snapshot", d.get("snapshot"), "model_calls", d.get("model_calls")); print("uploaded", len(p.get("uploaded") or []), "unchanged", len(p.get("unchanged") or []), "refused", p.get("refused"), "accepted_now", (d.get("scan") or {}).get("accepted_now"))' /tmp/landscape-publish.json; fi
+if [ -z "$DIGEST" ]; then echo "STOP: set DIGEST to the dry run's digest"; elif [ "$(date +%u)" = 3 ]; then echo "STOP: it is Wednesday, the cloud run's day"; elif env | grep -q '^DEBATE_'; then echo "STOP: DEBATE_ overrides are set in this shell"; elif [ ! -d "$COPY" ]; then echo "STOP: no copy at ${COPY}"; elif [ ! -f "$CFG/topics.yaml" ]; then echo "STOP: no topics.yaml in ${CFG}"; else aws sso login --profile debate-dev-evidence && cd "$HOME" && caffeinate -i env DEBATE_ENV=dev debate-research --json landscape report --caselist "$CASELIST" --restored-copy "$COPY" --config-dir "$CFG" --model-mode none --publish --accept-scan-hits "$DIGEST" > /tmp/landscape-publish.json; echo "exit $?"; python3 -I -c 'import json, sys; e = json.load(open(sys.argv[1])); d = e.get("data") or (e.get("error") or {}).get("details") or {}; p = d.get("publish") or {}; print("code", (e.get("error") or {}).get("code")); print("snapshot", d.get("snapshot"), "model_calls", d.get("model_calls")); print("uploaded", len(p.get("uploaded") or []), "unchanged", len(p.get("unchanged") or []), "refused", p.get("refused"), "accepted_now", (d.get("scan") or {}).get("accepted_now")); g = d.get("pages") or {}; print("pages_over_budget", len(g.get("over_budget") or []), "largest_page", (g.get("largest") or {}).get("kind"), (g.get("largest") or {}).get("bytes"), "largest_position_page", (g.get("largest_position") or {}).get("bytes"))' /tmp/landscape-publish.json; fi
 ```
 Success is the block above's, with `accepted_now True`. The acceptance is recorded in your dev data
 directory, so next week's publish stops only on new hits.

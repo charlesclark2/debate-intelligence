@@ -627,8 +627,12 @@ alone, as the student search's card page builds it, so a team whose school or te
 of the page's address (a school with a space in it, say) has no link, and the view's **Team pages** row
 counts them. On hspolicy26 through 2026-10-20, all 475 team codes at 155 schools had one.
 
-**Round by round** (`v1-e32-t54`, policy 1.23). Under each school's table, `schools.md` lists each
-team's rounds under each of its positions: first the positions the team reads, in the table's order,
+**Round by round** (`v1-e32-t54`, policy 1.23). Under each school's table, `schools.md` lists the
+school's teams, each with a link to its openCaselist page, or a note that it has none, and a link to its
+rounds (`v1-e32-t57`): the table has no team page column of its own. Each team's rounds are under a
+heading of its own, which the pilot shows as the team's page, one click from the school's:
+`/landscape/<caselist>/schools/<school>/<team>`. A team's page lists its rounds under each of its
+positions: first the positions the team reads, in the table's order,
 then those it only answers, marked *(answers only)*. Each line is one round, newest snapshot first,
 then by tournament and by round, latest first (elimination rounds before prelims, a higher prelim
 before a lower one, a label the platform does not recognise after those it does). A line gives the
@@ -639,6 +643,13 @@ round of a tournament shows that file under each of them, so the mark says those
 disclosed again rather than N rounds that each read it. `school_rounds.csv` holds the same lines, one
 row each, with the round's first-seen snapshot and the count in `rounds_in_file`; `schools.csv` is
 unchanged. No line holds a tag, cite or any other text of a card.
+
+**The page budget** (`v1-e32-t57`). Every report measures each page the pilot cuts from `schools.md`
+against ADR-0019's 153,600 bytes: the front page, each school, each team and each position. Its
+`PAGES:` line says none reaches it, or names each that does; a page over it is published all the same,
+and the runbook's dry run is where the operator stops and asks the PM. The largest school page today
+is about 42 KB; at the size projected for the season's last snapshot, the school page and the largest
+team's page are each about half the budget.
 
 The report itself, `report.md` and its CSVs, names no school or team, no tournament and no round, and
 carries no link out of the page: report.md's contents list links only to its own headings. The view

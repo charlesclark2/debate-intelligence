@@ -515,13 +515,16 @@ def evaluate(
             config_dir,
             alone=not breakdown and route is None and model_mode is EvaluationMode.REPLAY,
         )
-    if breakdown and model_mode is EvaluationMode.RECORD:
-        _end(cli, ctx, _BREAKDOWN_RECORDS_NOTHING)
-    refusal = _route_refusal(route) or (_policy_refusal() if model_mode is EvaluationMode.RECORD else None)
+    recording = model_mode is EvaluationMode.RECORD
+    refusal = (
+        (_BREAKDOWN_RECORDS_NOTHING if breakdown and recording else None)
+        or _route_refusal(route)
+        or (_policy_refusal() if recording else None)
+    )
     if refusal is not None:
         _end(cli, ctx, refusal)
     service = cli.services.landscape_evaluation(
-        config_dir=landscape_config_dir(config_dir), record=model_mode is EvaluationMode.RECORD, route=route
+        config_dir=landscape_config_dir(config_dir), record=recording, route=route
     )
     through = parse_snapshot_date(snapshot) if snapshot else None
     with sample_rows.open(encoding="utf-8") as rows:

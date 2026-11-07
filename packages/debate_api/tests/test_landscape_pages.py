@@ -10,7 +10,9 @@ hand from those files (working agreement 6). The authorization matrix
 Each page is private and never cached, loads only the pilot's own script and stylesheet with nothing
 inline, offers no search, download or share link in its body (the header is the site's, Search link
 and cart included), and weighs under ADR-0019's 150 KB with a bundle as large as hspolicy26's, part
-by part, its largest part leaving at least a quarter of the line free.
+by part, its largest part leaving at least a quarter of the line free. Since `v1-e32-t57`, the largest
+school page and team page stay under it at today's size and at the size projected for the season's last
+snapshot, and every school-view page's frame is within the report check's allowance.
 """
 
 from __future__ import annotations
@@ -22,7 +24,11 @@ from typing import Any, Final
 import pytest
 
 from debate_api.app import PRIVATE_NO_STORE
+from debate_core.application.landscape_page_sizes import measure_school_view
 from debate_core.application.landscape_report import LandscapeReportService
+from debate_core.arguments.landscape.render import render_schools_markdown
+from debate_core.domain.landscape_pages import PAGE_FRAME_ALLOWANCE, LandscapePage, heading_anchor
+from debate_core.domain.landscape_schools import RoundStance, SchoolRound, SchoolRow, SchoolSide
 from debate_core.testing.landscape_report import read_synthetic_caselist, synthetic_staleness
 
 PAGE_BUDGET: Final = 150 * 1024
@@ -584,4 +590,200 @@ def test_every_landscape_page_of_a_bundle_as_large_as_hspolicy26s_is_under_the_p
     )
     assert all(weight < PAGE_BUDGET for weight in others.values()), others
     assert max(part_weights.values()) <= (1 - HEADROOM) * PAGE_BUDGET, part_weights
+    world.services.search_index.close()
+
+
+# --------------------------------------------------------------------------------------------
+# The largest school page and team page, today and at the season's last snapshot (v1-e32-t57)
+# --------------------------------------------------------------------------------------------
+
+TODAY_LINES: Final = HSPOLICY26_LARGEST_SCHOOL_LINES
+TODAY_TEAM_LINES: Final = 257
+"""hspolicy26's largest team's round lines on 2026-11-03 (`v1-e32-t54`'s counts: lines per team, max 257)."""
+SEASON_END_LINES: Final = 3_474
+"""The largest school's lines at the season's last snapshot, 2027-06-29: 1,158 + 34 snapshots of 68.1
+(`config/landscape/topics.yaml` puts hspolicy26 on to 2027-06-30; the PM's ruling of 2026-11-07)."""
+SEASON_END_TEAM_LINES: Final = 771
+"""The largest team's 257 lines over 17 snapshots, at the same rate over 51."""
+SEASON_END_ROWS: Final = 453
+"""151 rows over 17 snapshots at the same rate over 51: an upper bound, since a team's positions repeat."""
+REAL_BYTES_PER_LINE: Final = 69.4
+"""`v1-e32-t54`'s estimate of a real round line's bytes on the old school page, its share of the position
+and team lines included: the synthetic team page's lines are held at least that large."""
+LINES_PER_TEAM: Final = 60
+SIZES: Final = {
+    "today": (HSPOLICY26_LARGEST_SCHOOL_ROWS, TODAY_LINES, TODAY_TEAM_LINES),
+    "today-lines-season-end-rows": (SEASON_END_ROWS, TODAY_LINES, TODAY_TEAM_LINES),
+    "season-end-lines-today-rows": (HSPOLICY26_LARGEST_SCHOOL_ROWS, SEASON_END_LINES, SEASON_END_TEAM_LINES),
+    "season-end": (SEASON_END_ROWS, SEASON_END_LINES, SEASON_END_TEAM_LINES),
+}
+
+
+def _teams(lines: int, largest: int) -> list[int]:
+    """Each team's round lines: the largest team first, then teams of sixty, then what is left."""
+    rest = lines - largest
+    return [
+        largest,
+        *[LINES_PER_TEAM] * (rest // LINES_PER_TEAM),
+        *([rest % LINES_PER_TEAM] if rest % LINES_PER_TEAM else []),
+    ]
+
+
+def _largest_school_view(rows: int, lines: int, largest_team: int) -> str:
+    """schools.md as debate_core writes it, for one invented school of `rows` rows and `lines` round lines,
+    its largest team `largest_team` of them: lines as `v1-e32-t54`'s budget test wrote them, with a word
+    more in the tournament so a line is no smaller than a real one."""
+    bundle = LandscapeReportService().bundle(
+        read_synthetic_caselist(SYNTHETIC_CASELIST), synthetic_staleness()
+    )
+    teams = _teams(lines, largest_team)
+    round_lines: list[SchoolRound] = []
+    for team, count in enumerate(teams):
+        for line in range(count):
+            position, nth = line // 6, line % 6
+            round_lines.append(
+                SchoolRound(
+                    school="Invented000",
+                    team_code=f"T{team:03d}",
+                    position_id=f"invented-position-{team}-{position}",
+                    stance=RoundStance.AT if position % 10 > 4 else RoundStance.READS,
+                    side=SchoolSide.NEG,
+                    tournament=f"Invented Open {team:02d}-{position % 10}-{nth}",
+                    round_label="Quarters",
+                    snapshot=bundle.schools.snapshot,
+                    rounds_in_file=3 if nth % 2 else 1,
+                    answers_only=position % 10 > 4,
+                )
+            )
+    table = [
+        SchoolRow(
+            school="Invented000",
+            team_code=f"T{row % len(teams):03d}",
+            side=SchoolSide.NEG,
+            position_id=f"invented-position-{row % len(teams)}-{row}",
+            rounds=row + 1,
+        )
+        for row in range(rows)
+    ]
+    table.sort(key=lambda row: row.team_code)
+    view = bundle.schools.model_copy(update={"rows": tuple(table), "round_lines": tuple(round_lines)})
+    return render_schools_markdown(view, bundle.report)
+
+
+@pytest.mark.parametrize("size", list(SIZES))
+def test_the_largest_school_page_and_team_page_stay_under_the_budget_today_and_at_the_seasons_end(
+    make_world: Any, landscape_store: Any, size: str
+) -> None:
+    """The PM's ruling of 2026-11-07: the largest school page, its table and its list of teams, and the
+    largest team's page, at today's size and the size projected for 2027-06-29, rows at 151 and at 453."""
+    rows, lines, largest_team = SIZES[size]
+    markdown = _largest_school_view(rows, lines, largest_team)
+    world = make_world(
+        landscape_objects=landscape_store(
+            {
+                "reports/landscape/synthpolicy26/2026-09-15/report.md": large_report().encode(),
+                "reports/landscape/synthpolicy26/2026-09-15/schools.md": markdown.encode(),
+            }
+        )
+    )
+    world.signed_in_student()
+    state = world.app.state.pilot
+    assets = len(state.app_script.content) + len(state.app_stylesheet.content)
+    school = world.browser.get("/landscape/synthpolicy26/schools/invented000")
+    team = world.browser.get("/landscape/synthpolicy26/schools/invented000/t000")
+    assert (school.status_code, team.status_code) == (200, 200)
+    school_main, team_main = main_of(school.text), main_of(team.text)
+
+    assert school_main.count("<tr>") - 1 == rows
+    assert school_main.count("round by round</a>") == len(_teams(lines, largest_team))
+    assert team_main.count("<li>") - team_main.count("<li><code>") == largest_team
+    team_body = team_main.split('<div class="landscape-body">', 1)[1]
+    assert len(team_body.encode()) >= REAL_BYTES_PER_LINE * largest_team, "lines as large as real ones"
+    weights = {"school": len(school.content) + assets, "team": len(team.content) + assets}
+    assert all(weight < PAGE_BUDGET for weight in weights.values()), weights
+    # The report's check measures the same two pages at no fewer bytes than the pilot sends.
+    measured = {
+        page.kind: page.bytes
+        for page in measure_school_view(markdown, "synthpolicy26").pages
+        if (page.kind, page.page) in ((LandscapePage.SCHOOL, "Invented000"), (LandscapePage.TEAM, "T000"))
+    }
+    assert (
+        measured[LandscapePage.SCHOOL] >= weights["school"]
+        and measured[LandscapePage.TEAM] >= weights["team"]
+    )
+    world.services.search_index.close()
+
+
+LONG: Final = "Invented " * 18
+"""A heading of 162 characters: three times the longest school name a real page is likely to carry."""
+
+
+def _long_headings_view() -> str:
+    return f"""# Positions by school: {LONG}through 2026-09-15
+
+## By school
+
+### {LONG}School
+
+Each team's rounds, on a page of its own:
+
+- {LONG}Team: [round by round](#{LONG.lower().replace(" ", "-")}team)
+
+#### {LONG}Team
+
+- `invented-da`
+  - Invented Open, Quarters, neg, reads
+
+## By position
+
+### Disadvantages
+
+#### `invented-da`
+
+| School | Team code | Side | Rounds | Team page |
+|---|---|---|---|---|
+| {LONG}School | {LONG}Team | neg | 1 | none |
+"""
+
+
+def test_every_school_view_pages_frame_with_a_long_heading_is_within_the_allowance(
+    make_world: Any, landscape_store: Any
+) -> None:
+    """The PM's ruling of 2026-11-07, Q4: what a page sends besides the body the report measures, its
+    header, chrome and headings and the pilot's script and stylesheet, is at most the allowance, so the
+    check never measures a page smaller than the pilot sends it."""
+    markdown = _long_headings_view()
+    world = make_world(
+        landscape_objects=landscape_store(
+            {
+                "reports/landscape/synthpolicy26/2026-09-15/report.md": large_report().encode(),
+                "reports/landscape/synthpolicy26/2026-09-15/schools.md": markdown.encode(),
+            }
+        )
+    )
+    world.signed_in_student()
+    state = world.app.state.pilot
+    assets = len(state.app_script.content) + len(state.app_stylesheet.content)
+    school = heading_anchor(f"{LONG}School")
+    paths = {
+        LandscapePage.SCHOOL_VIEW: SCHOOL_VIEW,
+        LandscapePage.SCHOOL: f"/landscape/synthpolicy26/schools/{school}",
+        LandscapePage.TEAM: f"/landscape/synthpolicy26/schools/{school}/{heading_anchor(f'{LONG}Team')}",
+        LandscapePage.POSITION: "/landscape/synthpolicy26/positions/invented-da",
+    }
+    measured = {page.kind: page for page in measure_school_view(markdown, "synthpolicy26").pages}
+
+    frames = {}
+    for kind, path in paths.items():
+        response = world.browser.get(path)
+        assert response.status_code == 200, path
+        assert LONG.strip() in response.text, path
+        frames[kind] = len(response.content) + assets - measured[kind].body_bytes
+        assert measured[kind].bytes >= len(response.content) + assets, kind
+    assert set(frames) == set(LandscapePage) - {
+        LandscapePage.CASELISTS,
+        LandscapePage.REPORT,
+        LandscapePage.REPORT_PART,
+    }
+    assert max(frames.values()) <= PAGE_FRAME_ALLOWANCE, frames
     world.services.search_index.close()

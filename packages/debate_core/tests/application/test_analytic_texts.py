@@ -22,6 +22,7 @@ from debate_core.application.caselist.evidence_listing import LocalEvidence
 from debate_core.application.caselist.parse_workers import InProcessParseRunner
 from debate_core.application.caselist.suppression import RecordedSuppressionList
 from debate_core.application.landscape_seeding import read_seed_sources
+from debate_core.application.ports.analytic_text_store import CachedAnalyticTexts
 from debate_core.arguments.landscape.analytic_texts import AnalyticTextRules, CounterplanActors
 from debate_core.domain.caselist import SourceDocument
 from debate_core.domain.landscape import Taxonomy, Topic
@@ -490,3 +491,126 @@ async def test_the_seam_gives_the_report_the_plank_counts(tmp_path: Path) -> Non
         reading=reading, taxonomy=TAXONOMY, overrides=OVERRIDES, actors=ACTORS, writes=True
     )
     assert (dict(found.inputs.plank_labels), dict(found.inputs.planks_refused_by_guard)) == ({}, {})
+
+
+# ------------------------------------------------------------------------------------------------
+# The own-side rule at the seam (v1-e32-t56, the PM's ruling of 2026-11-07)
+# ------------------------------------------------------------------------------------------------
+
+ANSWERED_CP = "Congress should fund a sample answer clinic."
+ANSWERED_ALT = "The alternative is to reject sample answers."
+
+
+def answered() -> bytes:
+    """A CP text, an overview and an alternative, each under an answer heading naming a negative position."""
+    return build_docx(
+        "".join(
+            [
+                paragraph_xml(run_xml("AT: States CP"), style="Heading2"),
+                paragraph_xml(run_xml(f"Text: {ANSWERED_CP}"), style="Analytic"),
+                paragraph_xml(run_xml("AT: Cap K"), style="Heading2"),
+                paragraph_xml(run_xml("Overview"), style="Heading3"),
+                paragraph_xml(run_xml(ANSWERED_ALT), style="Analytic"),
+            ]
+        )
+    )
+
+
+async def _answered_reading(data_dir: Path, sides: list[str]) -> tuple[Any, LocalEvidence]:
+    """The answered file, disclosed once on each of `sides`, each time by another invented school."""
+    store = PlantedCaselist(data_dir, SEAM_CASELIST)
+    schools = ["One", "Two"]
+    store.source(
+        "answered",
+        [PlantedCard(("AT: Cap K",))],
+        disclosures=[
+            ("2026-09-15", _path(schools[number], side, number + 1)) for number, side in enumerate(sides)
+        ],
+        content=answered(),
+    )
+    objects = FsEvidenceObjectStore(data_dir)
+    blobs = FsEvidenceObjectStore(data_dir, subdirectory=Path("blobs"))
+    local = LocalEvidence(
+        objects=objects, blobs=blobs, object_path_for=objects.path_for, blob_path_for=blobs.path_for
+    )
+    reading = await read_seed_sources(
+        store=LocalParsedStore(data_dir),
+        local=local,
+        suppression=RecordedSuppressionList(local_suppression_list_file(data_dir)),
+        topic=TOPIC,
+        caselist=SEAM_CASELIST,
+        through=date(2026, 9, 29),
+    )
+    (source,) = reading.sources
+    assert sorted(team.side.value for team in source.teams) == sorted(side.upper() for side in sides)
+    return reading, local
+
+
+async def _report_inputs(data_dir: Path, reading: Any, local: LocalEvidence) -> Any:
+    return await _seam_service(data_dir, local, CountingParser()).report_inputs(
+        reading=reading, taxonomy=TAXONOMY, overrides=OVERRIDES, actors=ACTORS, writes=True
+    )
+
+
+def _seam_roles(found: Any) -> list[tuple[AnalyticTextKind, str | None, PositionRole | None]]:
+    (readings,) = found.inputs.readings.values()
+    return [(one.kind, one.position_id, one.role) for one in readings]
+
+
+def _cached_roles(data_dir: Path) -> list[PositionRole | None]:
+    path = data_dir / "landscape" / "analytic_texts" / f"{SEAM_CASELIST}.jsonl"
+    (line,) = path.read_text(encoding="utf-8").splitlines()
+    return [one.role for one in CachedAnalyticTexts.model_validate_json(line).readings]
+
+
+ANSWERS_ALL = [
+    (CP, "states-cp", PositionRole.ANSWERS),
+    (OVERVIEW, "cap-k", PositionRole.ANSWERS),
+    (ALT, "cap-k", PositionRole.ANSWERS),
+]
+READS_ALL = [
+    (CP, "states-cp", PositionRole.READS),
+    (OVERVIEW, "cap-k", PositionRole.READS),
+    (ALT, "cap-k", PositionRole.READS),
+]
+
+
+@pytest.mark.anyio
+async def test_analytic_texts_under_an_answer_heading_in_their_own_sides_file_reach_the_report_reading(
+    tmp_path: Path,
+) -> None:
+    reading, local = await _answered_reading(tmp_path, ["Neg"])
+    found = await _report_inputs(tmp_path, reading, local)
+    assert _seam_roles(found) == READS_ALL
+    # The texts to quote are chosen after the rule: the CP text and the alternative now read, so are quoted.
+    assert sorted(found.inputs.texts.values()) == sorted([ANSWERED_CP, ANSWERED_ALT])
+    assert (found.quoted.sources, found.quoted.wanted) == (1, 2)
+    # The cache keeps the matcher's role: the file's sides are not in its key.
+    assert _cached_roles(tmp_path) == [PositionRole.ANSWERS] * 3
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("sides", [["Aff"], ["Aff", "Neg"]], ids=["the other side", "both sides"])
+async def test_analytic_texts_in_a_file_on_the_other_side_or_both_keep_their_role_at_the_seam(
+    tmp_path: Path, sides: list[str]
+) -> None:
+    reading, local = await _answered_reading(tmp_path, sides)
+    found = await _report_inputs(tmp_path, reading, local)
+    assert _seam_roles(found) == ANSWERS_ALL
+    assert dict(found.inputs.texts) == {}
+    assert (found.quoted.sources, found.quoted.wanted) == (0, 0)
+
+
+@pytest.mark.anyio
+async def test_a_cached_reading_takes_the_sides_of_the_run_that_reads_it(tmp_path: Path) -> None:
+    reading, local = await _answered_reading(tmp_path, ["Aff", "Neg"])
+    first = await _report_inputs(tmp_path, reading, local)
+    assert (first.read.parsed, _seam_roles(first)) == (1, ANSWERS_ALL)
+    # The file's affirmative disclosure is gone by the next run: the same cached reading now reads.
+    (source,) = reading.sources
+    negative_only = tuple(team for team in source.teams if team.side.value == "NEG")
+    later = dataclasses.replace(reading, sources=(dataclasses.replace(source, teams=negative_only),))
+    again = await _report_inputs(tmp_path, later, local)
+    assert (again.read.hits, again.read.parsed) == (1, 0)
+    assert _seam_roles(again) == READS_ALL
+    assert _cached_roles(tmp_path) == [PositionRole.ANSWERS] * 3

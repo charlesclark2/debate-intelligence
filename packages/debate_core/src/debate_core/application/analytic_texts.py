@@ -15,7 +15,13 @@ under a placeholder path. One run:
 3. keeps what :func:`~debate_core.arguments.landscape.analytic_texts.read_analytic_texts` derives from each,
    placed under its position, never the text, and writes the cache back when anything changed.
 
-Then, for the report, :meth:`AnalyticTextService.quote` reads again, in memory, only the sources holding a
+For the report, :meth:`AnalyticTextService.report_inputs` gives each placed reading its role by its file's
+sides, `v1-e32-t49`'s own-side rule
+(:func:`~debate_core.arguments.landscape.analytic_texts.readings_on_own_side`, `v1-e32-t56`): a text under
+an answer heading in a file disclosed only on its position's own side reads it. The cache keeps the
+matcher's role, since its key holds no side.
+
+Then :meth:`AnalyticTextService.quote` reads again, in memory, only the sources holding a
 CP text, plank, alternative or role of the ballot placed under a position of its kind, and returns each
 such text word for word when its paragraph still hashes to the digest kept for it. Nothing it reads is
 written. Overviews are never read again: they are counted only.
@@ -26,6 +32,7 @@ failed, is not cached, so the next run tries it again.
 
 from __future__ import annotations
 
+import dataclasses
 from collections import Counter
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
@@ -44,6 +51,7 @@ from debate_core.arguments.landscape.analytic_texts import (
     CounterplanActors,
     read_analytic_texts,
     read_back_texts,
+    readings_on_own_side,
     section_paragraphs_of,
 )
 from debate_core.arguments.landscape.source_headings import CaselistNames
@@ -297,7 +305,9 @@ class AnalyticTextService:
         """A landscape run's seam: the readings and quoted texts of the run's own reading.
 
         Every on-topic source of the reading is read, on either side: overviews are counted on both. Each
-        heading is placed with its disclosing teams' own names and the caselist's schools taken out.
+        heading is placed with its disclosing teams' own names and the caselist's schools taken out. Each
+        placed reading then takes its role from its file's sides, the disclosing teams' (`v1-e32-t56`), before
+        the texts to quote are chosen; the cache keeps the matcher's role.
         `writes` False reads through a cache that is never written. A landscape run, a dry run too, asks
         with `writes` True (`v1-e32-t30`).
         """
@@ -317,6 +327,13 @@ class AnalyticTextService:
                 for sha, source in on_topic.items()
             },
             caselist_names=reading.caselist_names,
+        )
+        run = dataclasses.replace(
+            run,
+            readings={
+                sha: readings_on_own_side(taxonomy, found, [team.side.value for team in on_topic[sha].teams])
+                for sha, found in run.readings.items()
+            },
         )
         quoted = await self.quote(reading.caselist, documents, run, taxonomy)
         return AnalyticTextsForReport(

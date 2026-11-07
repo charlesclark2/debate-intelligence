@@ -35,6 +35,11 @@
         "body_sha256": "2d82c576d4021e2cdb452d839ca05cfe389be294e1b51fd60a204764b322107f",
         "output_schema": "debate_core.domain.landscape_classification.ModelStancedPositionAnswers",
         "task_class": "high_volume"
+      },
+      "1.3.1": {
+        "body_sha256": "6d7a08f4387db0da0a6d7dbfdd31f69384ee13a2aeefec555c4c57435434d092",
+        "output_schema": "debate_core.domain.landscape_classification.ModelStancedPositionAnswers",
+        "task_class": "high_volume"
       }
     },
     "model.repair": {

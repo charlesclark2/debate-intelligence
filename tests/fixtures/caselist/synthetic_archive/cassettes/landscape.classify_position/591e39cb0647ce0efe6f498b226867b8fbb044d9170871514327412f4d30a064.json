@@ -4,7 +4,7 @@
     "synthcl26"
   ],
   "cassette_format": 1,
-  "key": "75b8038ca10419c95efc1317896356736f5980f70a466b6a4b5c7be5f1250b89",
+  "key": "591e39cb0647ce0efe6f498b226867b8fbb044d9170871514327412f4d30a064",
   "request": {
     "output_schema": "debate_core.domain.landscape_classification.ModelStancedPositionAnswers",
     "params": {
@@ -15,7 +15,7 @@
     },
     "prompt": {
       "prompt_id": "landscape.classify_position",
-      "prompt_version": "1.3.0",
+      "prompt_version": "1.3.1",
       "variables": {
         "items": "[\n {\n  \"cite\": \"marsh 26\",\n  \"excerpt\": \"under the invented statute a breach of the cap starts automatic cuts within thirty days to every program on the synthetic schedule popular or not\",\n  \"headings\": [\n   \"off case one\"\n  ],\n  \"item\": \"item-1\",\n  \"tag\": \"a breach of the cap triggers automatic cuts to every invented program\",\n  \"under_an_answer_heading\": false\n }\n]",
         "positions": "[\n {\n  \"id\": \"grid-adv\",\n  \"kind\": \"advantage\",\n  \"label\": \"Grid reliability advantage\",\n  \"side\": \"aff\"\n },\n {\n  \"id\": \"spending-da\",\n  \"kind\": \"da\",\n  \"label\": \"Spending disadvantage\",\n  \"side\": \"neg\"\n }\n]",
@@ -38,7 +38,7 @@
       ]
     },
     "prompt_id": "landscape.classify_position",
-    "prompt_version": "1.3.0",
+    "prompt_version": "1.3.1",
     "provider_request_id": null,
     "route": {
       "effort": null,

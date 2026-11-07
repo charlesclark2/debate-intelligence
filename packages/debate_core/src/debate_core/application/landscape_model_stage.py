@@ -107,10 +107,11 @@ logger = logging.getLogger(__name__)
 CLASSIFY_POSITION_PROMPT_ID: Final = "landscape.classify_position"
 """The registered prompt the stage runs (`prompts/landscape/classify_position.md`)."""
 
-CLASSIFY_POSITION_VERSION: Final = "1.3.0"
-"""The version of :data:`CLASSIFY_POSITION_PROMPT_ID` a stage runs unless it is built with another: 1.3.0
-(`v1-e32-t49`), in 1.2.0's stanced schema (`v1-e32-t46`) with the same variables. A stage built with 1.2.0,
-1.1.0 or 1.0.0 asks as that version was recorded, so its cassettes replay as recorded."""
+CLASSIFY_POSITION_VERSION: Final = "1.3.1"
+"""The version of :data:`CLASSIFY_POSITION_PROMPT_ID` a stage runs unless it is built with another: 1.3.1
+(`v1-e32-t55`), 1.3.0 (`v1-e32-t49`) less its generic-confidence sentence, in 1.2.0's stanced schema
+(`v1-e32-t46`) with the same variables. A stage built with 1.3.0, 1.2.0, 1.1.0 or 1.0.0 asks as that version
+was recorded, so its cassettes replay as recorded."""
 
 CLASSIFICATION_TASK_CLASS: Final = TaskClass.HIGH_VOLUME
 """The task class the prompt declares and is routed as: cheap, frequent classification."""

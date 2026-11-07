@@ -231,7 +231,7 @@ def test_landscape_evaluate_replays_the_recorded_sample_with_clean_scans(
 
     assert result.exit_code == ExitCode.OK, result.output
     data = json.loads(result.stdout)["data"]
-    assert (data["prompt_version"], data["taxonomy_version"], data["event"]) == ("1.3.0", "1.0.0", "POLICY")
+    assert (data["prompt_version"], data["taxonomy_version"], data["event"]) == ("1.3.1", "1.0.0", "POLICY")
     assert (data["labelled"], data["found"], data["asked"], data["calls"]) == (4, 4, 4, 2)
     assert (data["counted"], data["correct"], data["accuracy"], data["meets_target"]) == (4, 4, 1.0, True)
     assert (data["placed_below_threshold"], data["placed_labelled_none"], data["refused"]) == (0, 0, {})

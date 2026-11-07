@@ -250,14 +250,25 @@ async def test_the_stage_asks_prompt_1_2_0_for_stanced_answers(prompts: PromptRe
 
 
 @pytest.mark.anyio
-async def test_the_stage_asks_prompt_1_3_0_by_default_in_the_stanced_schema(prompts: PromptRegistry) -> None:
+async def test_the_stage_asks_prompt_1_3_0_for_stanced_answers(prompts: PromptRegistry) -> None:
+    router = StancedByTag()
+
+    await evaluate_labelled_cards(
+        READING, TAXONOMY, LABELLED, stage_over(router, prompts, "1.3.0"), overrides=OVERRIDES
+    )
+
+    assert router.schemas == [ModelStancedPositionAnswers]
+
+
+@pytest.mark.anyio
+async def test_the_stage_asks_prompt_1_3_1_by_default_in_the_stanced_schema(prompts: PromptRegistry) -> None:
     router = StancedByTag()
 
     await evaluate_labelled_cards(
         READING, TAXONOMY, LABELLED, stage_over(router, prompts), overrides=OVERRIDES
     )
 
-    assert CLASSIFY_POSITION_VERSION == "1.3.0"
+    assert CLASSIFY_POSITION_VERSION == "1.3.1"
     assert router.schemas == [ModelStancedPositionAnswers]
 
 
@@ -539,7 +550,7 @@ async def test_1_2_0_recordings_replay_unchanged_and_1_3_0_finds_none_of_them(
     assert (replayed.counted, replayed.correct) == (recorded.counted, recorded.correct) == (7, 5)
     with pytest.raises(MissingFixtureError, match="1.3.0"):
         await evaluate_labelled_cards(
-            READING, TAXONOMY, LABELLED, stage_over(replaying, prompts), overrides=OVERRIDES
+            READING, TAXONOMY, LABELLED, stage_over(replaying, prompts, "1.3.0"), overrides=OVERRIDES
         )
 
 
@@ -642,6 +653,62 @@ def test_prompt_1_3_0_drops_the_1_2_0_sentences_it_replaces(prompts: PromptRegis
 
     assert sentence in old_system
     assert sentence not in new_system
+
+
+# ------------------------------------------------------------------------------------------------
+# Prompt 1.3.1 (`v1-e32-t55`): 1.3.0 less the generic-confidence sentence, the stage's default. Its
+# cassettes are keyed by 1.3.1, and 1.3.0's still replay when 1.3.0 is asked for
+# ------------------------------------------------------------------------------------------------
+
+
+async def record_into(cassettes: Path, prompts: PromptRegistry, version: str | None) -> Any:
+    recording = RecordReplayModelRouter(
+        StancedByTag(), mode=ModelMode.RECORD, cassette_dir=cassettes, environ={}
+    )
+    return await evaluate_labelled_cards(
+        READING, TAXONOMY, LABELLED, stage_over(recording, prompts, version), overrides=OVERRIDES
+    )
+
+
+def recorded_version(cassettes: Path) -> str:
+    [cassette] = sorted((cassettes / CLASSIFY_POSITION_PROMPT_ID).glob("*.json"))
+    return json.loads(cassette.read_text(encoding="utf-8"))["request"]["prompt"]["prompt_version"]
+
+
+@pytest.mark.anyio
+async def test_1_3_0_recordings_replay_unchanged_and_1_3_1_finds_none_of_them(
+    tmp_path: Path, prompts: PromptRegistry
+) -> None:
+    recorded = await record_into(tmp_path, prompts, "1.3.0")
+    assert recorded_version(tmp_path) == "1.3.0"
+
+    replaying = RecordReplayModelRouter(None, mode=ModelMode.REPLAY, cassette_dir=tmp_path)
+    replayed = await evaluate_labelled_cards(
+        READING, TAXONOMY, LABELLED, stage_over(replaying, prompts, "1.3.0"), overrides=OVERRIDES
+    )
+    assert (replayed.counted, replayed.correct) == (recorded.counted, recorded.correct) == (7, 5)
+    with pytest.raises(MissingFixtureError, match="1.3.1"):
+        await evaluate_labelled_cards(
+            READING, TAXONOMY, LABELLED, stage_over(replaying, prompts), overrides=OVERRIDES
+        )
+
+
+@pytest.mark.anyio
+async def test_the_default_records_under_1_3_1_and_1_3_0_finds_none_of_those_recordings(
+    tmp_path: Path, prompts: PromptRegistry
+) -> None:
+    recorded = await record_into(tmp_path, prompts, None)
+    assert recorded_version(tmp_path) == "1.3.1"
+
+    replaying = RecordReplayModelRouter(None, mode=ModelMode.REPLAY, cassette_dir=tmp_path)
+    replayed = await evaluate_labelled_cards(
+        READING, TAXONOMY, LABELLED, stage_over(replaying, prompts), overrides=OVERRIDES
+    )
+    assert (replayed.counted, replayed.correct) == (recorded.counted, recorded.correct) == (7, 5)
+    with pytest.raises(MissingFixtureError, match="1.3.0"):
+        await evaluate_labelled_cards(
+            READING, TAXONOMY, LABELLED, stage_over(replaying, prompts, "1.3.0"), overrides=OVERRIDES
+        )
 
 
 @pytest.mark.anyio

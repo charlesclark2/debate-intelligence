@@ -19,6 +19,12 @@ with its 2026-11-02 copy. The recording is sound, but it has to be re-scored onc
 file is back. The repair cassettes' scan also failed on a rule gap. See
 [the re-record, as returned](#the-re-record-as-the-operator-returned-it-2026-11-06) and the PM's questions.
 
+**The PM ruled on 2026-11-06** ([the ruling](#the-pms-ruling-on-the-re-record-2026-11-06)): search for the stance-labelled
+file first, then re-sit t46's stance rows if none turns up. Microsoft Excel wrote the live file at 19:15:33
+(its quarantine mark, set that second). `.before-stance-relabel.csv` holds t41's review, and the relabel
+script keeps no record of the coach's answers. The search, restore and re-sit blocks are written and tested
+on invented files. The session stops there, as ruled.
+
 **What was built:**
 
 * **Prompt 1.3.1** (`prompts/landscape/classify_position@1.3.1.md`): 1.3.0 with one sentence taken out of
@@ -363,11 +369,207 @@ ROWS=~/.debate-research/dev/landscape/local-classifier/hspolicy26/policy-2026-27
 if env | grep -q '^DEBATE_'; then echo "STOP: a DEBATE_ variable is set; unset it and paste again"; else uv run debate-research landscape evaluate --caselist hspolicy26 --snapshot 2026-10-20 --sample "$SAMPLE" --sample-rows "$ROWS" --breakdown --route deep_audit; fi
 ```
 
+## The PM's ruling on the re-record (2026-11-06)
+
+1. **The labels file: (A), searched for properly first, then (B) if no copy turns up. Never (C).** 1.3.0's
+   24 of 32 stands, because it was scored before 19:15.
+2. **The repair cassettes' scan: (A) as a follow-up (E32, p3), and (B) for this recording.** The operator reads
+   the 63 hits in the terminal. They report only whether each is an ordinary word, a JSON key or a taxonomy
+   word, and whether any names a team.
+3. **Recorded as given:** 5 calls, 43,165 input and 5,235 output tokens, $0.208 at `config/model_pricing.yaml`.
+   The answers that do not depend on the labels are in [the section above](#the-re-record-as-the-operator-returned-it-2026-11-06).
+   The score waits for 1.
+
+ac2 stays NOT RUN until the re-score runs on the coach's labels.
+
+### What wrote the live labels file at 19:15 on 2026-11-05: Microsoft Excel
+
+Found from the file system's metadata only: inode numbers, times and extended attributes, read with `stat`
+and `xattr`. No row, tag or label was read.
+
+* **The live file's inode was born at 22:51:26 on 2026-11-04.** That is the stance sitting's own write:
+  `relabel_coach_sample.py` writes `.<name>.incoming` and moves it into place with `os.replace`, so each
+  sitting gives the file a new inode. At **19:15:33 on 2026-11-05 that same inode was written again**, with
+  the bytes of `.before-relabel.csv`.
+* **The writer was Microsoft Excel.** The live file carries a `com.apple.quarantine` mark whose agent is
+  `Microsoft Excel`. Its timestamp field decodes to **2026-11-05 19:15:33 CST, the same second as the write**.
+  macOS puts that mark on a file a sandboxed app like Excel saves. Excel's own preferences folder
+  (`~/Library/Containers/com.microsoft.Excel/Data/Library/Preferences`) was also modified at 19:15.
+  * Excel's save keeps the file's identity, which fits the inode surviving.
+  * Neither backup copy names an agent: `.before-stance-relabel.csv` carries a mark without one (set when
+    the sitting copied the file at 22:44:37 on 2026-11-04), and `.before-relabel.csv` has no mark at all.
+* **Not a script.** The relabel script always makes a new inode, and refuses to start when its
+  `.before-stance-relabel.csv` copy differs from the sample. No script, runbook block or test in the
+  repository, on any branch, names `.before-relabel.csv`; only this report does. `cp -p` is ruled out too,
+  as it would have kept the copy's 2026-11-02 time. So by the ruling (1b) no script fix is filed.
+* **What Excel had open** (the Nov 2 copy opened and saved under the live name, or a window left open since
+  before t41's review) is the operator's to say. **Excel is running on this Mac now:** the restore and
+  sitting blocks below refuse to run while it is.
+
+### Whether `.before-stance-relabel.csv` holds t41's review: yes
+
+The session ran the sample check on both backup copies, from this worktree. It is read-only, took about a
+second each, printed counts only, and made no model call:
+
+| Copy | Size, modified | By kind | By stance | Second labels |
+|---|---|---|---|---|
+| `.before-stance-relabel.csv` | 7,891 bytes, 2026-11-02 17:09:21 | advantage 16, cp 6, da 5, k 10, none 3, t 7 | answers 0, reads 44 | 2 |
+| `.before-relabel.csv` (= the live file now) | 7,725 bytes, 2026-11-02 00:00:22 | advantage 14, cp 4, da 5, k 10, none 7, t 7 | answers 0, reads 40 | 0 |
+
+The first row is t41's relabel exactly as the PM recorded it in docs/data: advantage 16, cp 6, da 5, k 10,
+none 3, t 7, two second labels, both advantages. So if no stance-labelled copy is found, **the coach
+re-sits only t46's stance rows**, from that copy.
+
+### Whether `relabel_coach_sample.py` keeps a record of the coach's answers: no
+
+The sitting holds the changed labels in memory and writes them into the CSV once, at the end
+(`relabelled_sample`, then `os.replace`). Before that it keeps only the copy of the CSV it started from.
+It logs nothing, and its last line is counts only ("Nothing is logged or written but the coach's labels", in
+its docstring). So the only record of the coach's stance decisions was the file Excel overwrote. There is no
+record to replay, and rebuilding the labels from the counts and row numbers in docs/data would be (C).
+
+### The blocks, in order
+
+Go to the worktree first:
+
+```bash
+cd /Users/charlesclark/Documents/debate/debate-intelligence-tool/debate-intelligence-worktrees/v1-e32-t55-prompt-1-3-1-without-the-generic-confidence-sentence
+```
+
+**Before anything, while Excel is still open:** look at Excel's open windows. If one holds the labels
+file, close it with **Don't Save**. Then list what Excel keeps in its own folder. This is an exception to
+the ruling's "~/Library excluded", proposed because Excel wrote the file: its AutoRecovery copies live
+there, and quitting can clear them. It prints paths, sizes and times only, in seconds:
+
+```bash
+if [ -d "$HOME/Library/Containers/com.microsoft.Excel" ]; then find "$HOME/Library/Containers/com.microsoft.Excel" -type f \( -iname '*coach-sample*' -o -iname '*autorecover*' \) -exec stat -f '%N  %z bytes  modified %Sm' -t '%Y-%m-%d %H:%M:%S' {} + 2>/dev/null; echo "--- Done"; else echo "Excel keeps no folder here"; fi
+```
+
+Then quit Excel (Don't Save if asked).
+
+**1a and 1b: the search, read-only.** It looks by name for anything with `coach-sample` in its name under
+the home folder, `/tmp` and `TMPDIR`. The Trash, every worktree, `~/.claude` and the session scratch folders
+under `/tmp` are all covered; `~/Library` is left out. It also looks by content, for any other CSV whose
+header has `sample_row` and `position`, leaving out `tests/`, `fixtures/` and `node_modules`.
+* For each candidate it prints its path, size, modification time and the sample check's counts: none,
+  answers, reads, second labels. Nothing else.
+* It then lists Time Machine's destination, its local snapshots and its last backups (read-only), and the
+  shell history lines naming the labels file or its folder, with their times.
+* Expected runtime: 2 to 4 minutes. Two passes over the home folder take about a minute each, and each
+  candidate about a second.
+
+```bash
+ROWS=~/.debate-research/dev/landscape/local-classifier/hspolicy26/policy-2026-27-nhi-coach-sample.jsonl
+counts() { uv run debate-research --json landscape evaluate --caselist hspolicy26 --snapshot 2026-10-20 --sample "$1" --sample-rows "$ROWS" --check-sample 2>/dev/null | python3 -c 'import sys,json; lines=[l for l in sys.stdin.read().splitlines() if l.startswith("{")]; d=json.loads(lines[-1]) if lines else {}; x=d.get("data") or {}; s=x.get("by_stance") or {}; print("    check:", d.get("status", "no JSON"), (d.get("error") or {}).get("code") or "", "| none", (x.get("by_label_kind") or {}).get("none"), "| answers", s.get("answers"), "| reads", s.get("reads"), "| second labels", (x.get("second_labels") or {}).get("rows"))'; }
+candidate() { stat -f '%N  %z bytes  modified %Sm' -t '%Y-%m-%d %H:%M:%S' "$1"; case "$1" in *.csv) counts "$1" ;; *) echo "    check: not a CSV" ;; esac; }
+if env | grep -q '^DEBATE_'; then echo "STOP: a DEBATE_ variable is set; unset it and paste again"; elif pgrep -f "caselist pull" >/dev/null; then echo "STOP: a caselist pull is running; wait for it to finish"; else
+echo "--- By name: home folder (Trash, worktrees, ~/.claude included; ~/Library left out), /tmp, TMPDIR"
+ls "$HOME/.Trash" >/dev/null 2>&1 || echo "    the Trash is not readable from this terminal: look in it in Finder for a name with coach-sample"
+{ find "$HOME" -path "$HOME/Library" -prune -o -type f -iname '*coach-sample*' -print0 2>/dev/null; find /private/tmp "${TMPDIR:-/private/tmp}" -type f -iname '*coach-sample*' -print0 2>/dev/null; } | while IFS= read -r -d '' f; do candidate "$f"; done
+echo "--- By content: other CSVs whose header has sample_row and position (tests, fixtures and node_modules left out)"
+{ find "$HOME" -path "$HOME/Library" -prune -o -type f -iname '*.csv' -not -iname '*coach-sample*' -not -path '*/tests/*' -not -path '*/fixtures/*' -not -path '*/node_modules/*' -print0 2>/dev/null; find /private/tmp "${TMPDIR:-/private/tmp}" -type f -iname '*.csv' -not -iname '*coach-sample*' -print0 2>/dev/null; } | while IFS= read -r -d '' f; do head -1 "$f" 2>/dev/null | grep -q 'sample_row' && head -1 "$f" | grep -q 'position' && candidate "$f"; done
+echo "--- Time Machine"
+tmutil destinationinfo 2>&1 | grep -E '^(Name|Kind)' || echo "    no destination set up"
+tmutil listlocalsnapshots / 2>&1
+tmutil listbackups 2>&1 | tail -5
+echo "--- Shell history lines naming the labels file or its folder"
+for h in ~/.zsh_history ~/.bash_history; do [ -f "$h" ] && python3 -c 'import sys,re,datetime; [print("   ", datetime.datetime.fromtimestamp(int(m.group(1))).strftime("%Y-%m-%d %H:%M:%S") if (m := re.match(r": (\d+):\d+;", l)) else "no time", l[:300]) for l in open(sys.argv[1], encoding="utf-8", errors="replace").read().splitlines() if "coach-sample" in l or "landscape-review" in l]' "$h"; done
+echo "--- Done"
+fi
+```
+
+Paste back its whole output. It holds paths, sizes, times, counts and command lines, no row or label text.
+
+* **The stance-labelled file is a candidate reading `none 2 | answers 10 | reads 35 | second labels 2`.**
+  If one does, go to 1c.
+* **If none does**, but Time Machine lists a local snapshot or a backup between 2026-11-04 22:51 and
+  2026-11-05 19:15, stop and paste it: the copy is inside it, and taking it out is the next ruling's step.
+* **Otherwise**, go to 1d.
+
+**1c: if a copy reads the stance counts.** First the check, read-only: it confirms that copy's counts again
+and that nothing is in the way. Set `FOUND` on its first line to the path the search printed, in the
+single quotes:
+
+```bash
+FOUND='paste here the path the search printed'
+ROWS=~/.debate-research/dev/landscape/local-classifier/hspolicy26/policy-2026-27-nhi-coach-sample.jsonl
+LIVE=~/Documents/debate/landscape-review/policy-2026-27-nhi-coach-sample-labelled.csv
+REGRESSED=~/Documents/debate/landscape-review/policy-2026-27-nhi-coach-sample-labelled.regressed-2026-11-05.csv
+if env | grep -q '^DEBATE_'; then echo "STOP: a DEBATE_ variable is set; unset it and paste again"; elif pgrep -f "caselist pull" >/dev/null; then echo "STOP: a caselist pull is running; wait for it to finish"; elif [ ! -f "$FOUND" ]; then echo "STOP: FOUND is not a file; set it to the path the search printed"; elif [ "$FOUND" -ef "$LIVE" ]; then echo "STOP: FOUND is the live file itself"; elif [ -e "$REGRESSED" ]; then echo "STOP: the .regressed copy already exists; paste this line only"; elif ! CHECK=$(uv run debate-research --json landscape evaluate --caselist hspolicy26 --snapshot 2026-10-20 --sample "$FOUND" --sample-rows "$ROWS" --check-sample 2>/dev/null); then echo "STOP: the sample check failed on that copy; nothing was changed"; elif ! printf '%s\n' "$CHECK" | grep -qF '"by_label_kind": {"advantage": 15, "cp": 7, "da": 6, "k": 10, "none": 2, "t": 7}' || ! printf '%s\n' "$CHECK" | grep -qF '"by_stance": {"answers": 10, "reads": 35}' || ! printf '%s\n' "$CHECK" | grep -qF '"second_labels": {"rows": 2,'; then echo "STOP: that copy is not the stance-labelled file; nothing was changed"; else echo "OK: the stance-labelled file. It can be restored with the next block."; fi
+```
+
+Only after `OK:`, the restore. It refuses while Excel runs. It keeps the current file beside it as
+`policy-2026-27-nhi-coach-sample-labelled.regressed-2026-11-05.csv` and checks that copy byte for byte, then
+copies `FOUND` into place, checks that byte for byte too, and runs the sample check. Set `FOUND` as before:
+
+```bash
+FOUND='paste here the path the search printed'
+ROWS=~/.debate-research/dev/landscape/local-classifier/hspolicy26/policy-2026-27-nhi-coach-sample.jsonl
+LIVE=~/Documents/debate/landscape-review/policy-2026-27-nhi-coach-sample-labelled.csv
+REGRESSED=~/Documents/debate/landscape-review/policy-2026-27-nhi-coach-sample-labelled.regressed-2026-11-05.csv
+if env | grep -q '^DEBATE_'; then echo "STOP: a DEBATE_ variable is set; unset it and paste again"; elif pgrep -f "caselist pull" >/dev/null; then echo "STOP: a caselist pull is running; wait for it to finish"; elif pgrep -x "Microsoft Excel" >/dev/null; then echo "STOP: Microsoft Excel is running; quit it first, so it cannot save over the labels file again"; elif [ ! -f "$FOUND" ]; then echo "STOP: FOUND is not a file; set it to the path the search printed"; elif [ "$FOUND" -ef "$LIVE" ]; then echo "STOP: FOUND is the live file itself"; elif [ -e "$REGRESSED" ]; then echo "STOP: the .regressed copy already exists; paste this line only"; elif ! CHECK=$(uv run debate-research --json landscape evaluate --caselist hspolicy26 --snapshot 2026-10-20 --sample "$FOUND" --sample-rows "$ROWS" --check-sample 2>/dev/null); then echo "STOP: the sample check failed on that copy; nothing was changed"; elif ! printf '%s\n' "$CHECK" | grep -qF '"by_label_kind": {"advantage": 15, "cp": 7, "da": 6, "k": 10, "none": 2, "t": 7}' || ! printf '%s\n' "$CHECK" | grep -qF '"by_stance": {"answers": 10, "reads": 35}' || ! printf '%s\n' "$CHECK" | grep -qF '"second_labels": {"rows": 2,'; then echo "STOP: that copy is not the stance-labelled file; nothing was changed"; elif ! cp -p "$LIVE" "$REGRESSED" || ! cmp -s "$LIVE" "$REGRESSED"; then echo "STOP: the copy of the current file did not match; nothing was replaced"; elif ! cp "$FOUND" "$LIVE" || ! cmp -s "$FOUND" "$LIVE"; then echo "STOP: the restore did not match; the current file is kept at the .regressed path"; else echo "Restored."; uv run debate-research --json landscape evaluate --caselist hspolicy26 --snapshot 2026-10-20 --sample "$LIVE" --sample-rows "$ROWS" --check-sample; fi
+```
+
+Success: `Restored.`, then a sample check with none 2, answers 10, reads 35 and two second labels. Then
+run the re-score, which makes no model call (about a minute). Paste back its two JSON objects only:
+
+```bash
+SAMPLE=~/Documents/debate/landscape-review/policy-2026-27-nhi-coach-sample-labelled.csv
+ROWS=~/.debate-research/dev/landscape/local-classifier/hspolicy26/policy-2026-27-nhi-coach-sample.jsonl
+if env | grep -q '^DEBATE_'; then echo "STOP: a DEBATE_ variable is set; unset it and paste again"; elif pgrep -f "caselist pull" >/dev/null; then echo "STOP: a caselist pull is running; wait for it to finish"; elif ! CHECK=$(uv run debate-research --json landscape evaluate --caselist hspolicy26 --snapshot 2026-10-20 --sample "$SAMPLE" --sample-rows "$ROWS" --check-sample); then echo "$CHECK"; echo "STOP: the sample check failed; paste its JSON and record nothing"; elif ! printf '%s\n' "$CHECK" | grep -qF '"by_label_kind": {"advantage": 15, "cp": 7, "da": 6, "k": 10, "none": 2, "t": 7}' || ! printf '%s\n' "$CHECK" | grep -qF '"by_stance": {"answers": 10, "reads": 35}'; then echo "$CHECK"; echo "STOP: these are not the labels 1.3.0 was scored on; paste this JSON and nothing else"; else echo "$CHECK"; uv run debate-research --json landscape evaluate --caselist hspolicy26 --snapshot 2026-10-20 --sample "$SAMPLE" --sample-rows "$ROWS" --breakdown --route deep_audit; fi
+```
+
+**1d: if no copy turns up.** First the set-up. It puts t41's review back in place from
+`.before-stance-relabel.csv`, keeping the current file as `.regressed-2026-11-05.csv`, checked the same way.
+It refuses unless that copy reads t41's counts:
+
+```bash
+FOUND=~/Documents/debate/landscape-review/policy-2026-27-nhi-coach-sample-labelled.before-stance-relabel.csv
+ROWS=~/.debate-research/dev/landscape/local-classifier/hspolicy26/policy-2026-27-nhi-coach-sample.jsonl
+LIVE=~/Documents/debate/landscape-review/policy-2026-27-nhi-coach-sample-labelled.csv
+REGRESSED=~/Documents/debate/landscape-review/policy-2026-27-nhi-coach-sample-labelled.regressed-2026-11-05.csv
+if env | grep -q '^DEBATE_'; then echo "STOP: a DEBATE_ variable is set; unset it and paste again"; elif pgrep -f "caselist pull" >/dev/null; then echo "STOP: a caselist pull is running; wait for it to finish"; elif pgrep -x "Microsoft Excel" >/dev/null; then echo "STOP: Microsoft Excel is running; quit it first, so it cannot save over the labels file again"; elif [ ! -f "$FOUND" ]; then echo "STOP: FOUND is not a file; set it to the path the search printed"; elif [ "$FOUND" -ef "$LIVE" ]; then echo "STOP: FOUND is the live file itself"; elif [ -e "$REGRESSED" ]; then echo "STOP: the .regressed copy already exists; paste this line only"; elif ! CHECK=$(uv run debate-research --json landscape evaluate --caselist hspolicy26 --snapshot 2026-10-20 --sample "$FOUND" --sample-rows "$ROWS" --check-sample 2>/dev/null); then echo "STOP: the sample check failed on that copy; nothing was changed"; elif ! printf '%s\n' "$CHECK" | grep -qF '"by_label_kind": {"advantage": 16, "cp": 6, "da": 5, "k": 10, "none": 3, "t": 7}' || ! printf '%s\n' "$CHECK" | grep -qF '"by_stance": {"answers": 0, "reads": 44}' || ! printf '%s\n' "$CHECK" | grep -qF '"second_labels": {"rows": 2,'; then echo "STOP: that copy does not hold t41's review; nothing was changed"; elif ! cp -p "$LIVE" "$REGRESSED" || ! cmp -s "$LIVE" "$REGRESSED"; then echo "STOP: the copy of the current file did not match; nothing was replaced"; elif ! cp "$FOUND" "$LIVE" || ! cmp -s "$FOUND" "$LIVE"; then echo "STOP: the restore did not match; the current file is kept at the .regressed path"; else echo "Restored."; uv run debate-research --json landscape evaluate --caselist hspolicy26 --snapshot 2026-10-20 --sample "$LIVE" --sample-rows "$ROWS" --check-sample; fi
+```
+
+Success: `Restored.`, then a sample check with none 3, answers 0, reads 44 and two second labels. Then
+**the coach's sitting**, with the coach at the terminal. It uses the rows and seed the PM ruled for t46's
+(2026-11-05): the 13 listed rows and 6 controls drawn by the seed 20261105, so the coach sees the same 19
+cards in the same order he saw on 2026-11-04. It refuses unless the labels file reads t41's counts, and
+while Excel runs. The relabel script's own copy check passes, because its `.before-stance-relabel.csv`
+copy is then the sample itself:
+
+```bash
+ROWS=~/.debate-research/dev/landscape/local-classifier/hspolicy26/policy-2026-27-nhi-coach-sample.jsonl
+LIVE=~/Documents/debate/landscape-review/policy-2026-27-nhi-coach-sample-labelled.csv
+REGRESSED=~/Documents/debate/landscape-review/policy-2026-27-nhi-coach-sample-labelled.regressed-2026-11-05.csv
+if env | grep -q '^DEBATE_'; then echo "STOP: a DEBATE_ variable is set; unset it and paste again"; elif pgrep -f "caselist pull" >/dev/null; then echo "STOP: a caselist pull is running; wait for it to finish"; elif pgrep -x "Microsoft Excel" >/dev/null; then echo "STOP: Microsoft Excel is running; quit it first, so it cannot save over the labels file again"; elif ! CHECK=$(uv run debate-research --json landscape evaluate --caselist hspolicy26 --snapshot 2026-10-20 --sample "$LIVE" --sample-rows "$ROWS" --check-sample 2>/dev/null); then echo "STOP: the sample check failed; run nothing more"; elif ! printf '%s\n' "$CHECK" | grep -qF '"by_label_kind": {"advantage": 16, "cp": 6, "da": 5, "k": 10, "none": 3, "t": 7}' || ! printf '%s\n' "$CHECK" | grep -qF '"by_stance": {"answers": 0, "reads": 44}' || ! printf '%s\n' "$CHECK" | grep -qF '"second_labels": {"rows": 2,'; then echo "STOP: the labels file is not t41's review; run the set-up block first"; elif ! uv run python scripts/relabel_coach_sample.py --caselist hspolicy26 --snapshot 2026-10-20 --sample "$LIVE" --sample-rows "$ROWS" --rows 5,11,13,16,20,21,25,26,31,33,41,57,59 --seed 20261105; then echo "STOP: the sitting stopped; paste its last line only"; else uv run debate-research --json landscape evaluate --caselist hspolicy26 --snapshot 2026-10-20 --sample "$LIVE" --sample-rows "$ROWS" --check-sample; fi
+```
+
+Paste back the sitting's last line (counts only) and the JSON object. Then run the re-score above.
+* Its guard expects the sitting's 2026-11-05 counts (none 2, answers 10, reads 35). If the coach decides any
+  row differently this time, it stops with the new counts. That is the coach's decision, and it goes to the
+  PM before anything is scored.
+
+**2(B): the scan's hits, any time.** They do not depend on the labels. Read them in the terminal only and
+never paste or copy them. For each of the 63 repair-cassette hits, report only whether it is an ordinary
+word, a JSON key or a taxonomy word, and whether any names a team:
+
+```bash
+SAMPLE=~/Documents/debate/landscape-review/policy-2026-27-nhi-coach-sample-labelled.csv
+ROWS=~/.debate-research/dev/landscape/local-classifier/hspolicy26/policy-2026-27-nhi-coach-sample.jsonl
+if env | grep -q '^DEBATE_'; then echo "STOP: a DEBATE_ variable is set; unset it and paste again"; else uv run debate-research landscape evaluate --caselist hspolicy26 --snapshot 2026-10-20 --sample "$SAMPLE" --sample-rows "$ROWS" --breakdown --route deep_audit; fi
+```
+
 ## Follow-up work
 
 * `test_coach_sample_stance.py`'s module docstring still calls 1.2.0 the stage's default (stale since
   t49). It is harmless and was left alone. A one-word fix for whoever next touches the file.
-* The repair cassettes' `in_input` mark (question 2 of [the relay](#for-the-pm-a-relay)): the PM's to file, under E32.
+* **E32, p3, as ruled (2(A)):** a repair cassette's hit counts as `in_input` only when its words come from the
+  cards the failed call sent, not from the model's own failed answer (`scan_hits.repair_cassette_hits`).
+* **The labels file: no script follow-up (1b).** Excel wrote it, not a script. A suggestion for the PM, not
+  filed: `--check-sample` could print the labels file's SHA-256, and each sitting record the one it wrote, so
+  a block refuses a file no sitting wrote. The coach's guide could also say the labels CSV is written only
+  by a sitting, never saved from Excel.
 * As the PM ruled on t49: `v1-e32-t50`'s held-out sample is measured on 1.3.1, with rows 9 and 53 the ones
   to watch in its breakdown.
 

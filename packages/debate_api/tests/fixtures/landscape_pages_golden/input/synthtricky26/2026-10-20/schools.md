@@ -34,6 +34,10 @@ How to read the lines. A [same-page link](#by-position) and an [outside link](ht
 
 No team of this school read a counted position.
 
+### St. Fictional's
+
+No team of this school read a counted position.
+
 ## By position
 
 The positions.

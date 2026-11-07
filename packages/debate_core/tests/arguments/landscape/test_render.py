@@ -652,6 +652,7 @@ def test_the_scan_still_reads_the_school_view_for_paths_only_and_finds_nothing()
     """The run scans the bundle so; a team-page link is no path, so the school view has no hit."""
     files = _bundle().files
     disclosures = read_synthetic_caselist(FIXTURE).disclosures
+    assert "\n#### XX\n" in files["schools.md"], "`v1-e32-t57`: the team pages are in what is scanned"
     assert scan_report(files, disclosures, school_view_files=SCHOOL_VIEW_FILES) == ()
     named = scan_report({name: files[name] for name in SCHOOL_VIEW_FILES}, disclosures)
     assert {hit.file for hit in named} == set(SCHOOL_VIEW_FILES)

@@ -68,6 +68,13 @@ BUNDLES = (
     ("testcl26b", "2026-09-29"),
 )
 
+TEAM_PAGES_VIEW = (
+    "# Positions by school: testcl26 through 2026-09-29\n\n## By school\n\n### Maple Grove\n\n"
+    "- QX: [round by round](#qx), no openCaselist page\n\n#### QX\n\n- `spending-da`\n"
+    "  - Seaside Open, Round 5, aff, AT\n\n## By position\n"
+)
+"""A schools.md with a team's page in it, as `v1-e32-t57` writes one: a `####` heading in its school."""
+
 REMOVED_VIEWS = (
     "reports/landscape/testcl26/2026-09-15/school_rounds.csv",
     "reports/landscape/testcl26/2026-09-15/schools.csv",
@@ -339,6 +346,22 @@ class TestTheExecution:
         }
         assert (report.school_view_files_deleted, report.school_view_versions_deleted) == (6, 12)
 
+    async def test_a_schools_md_holding_team_pages_goes_whole_with_every_team_page_in_it(
+        self, bundles: RemovalWorld
+    ) -> None:
+        """`v1-e32-t57`: a team's page is a `####` heading in schools.md: deleting the file takes them all."""
+        key = "reports/landscape/testcl26/2026-09-29/schools.md"
+        with_teams = TEAM_PAGES_VIEW.encode()
+        write_local(bundles, key, with_teams, written=WRITTEN)
+        put(bundles, key, with_teams, written=WRITTEN)
+
+        await removed(bundles)
+
+        assert key not in local_reports(bundles)
+        assert all(found != key for found, _ in bucket_reports(bundles))
+        left = [*local_reports(bundles).values(), *bucket_reports(bundles).values()]
+        assert not any(b"\n#### " in data for data in left), "no team page is left anywhere"
+
     async def test_a_version_the_dry_run_could_not_see_goes_by_the_same_rule(
         self, bundles: RemovalWorld
     ) -> None:
@@ -467,6 +490,23 @@ class TestStatus:
 
         (residue,) = [one for one in report.residue if one.caselist == SYNTHETIC_CASELIST]
         assert residue.school_views == ()
+
+    async def test_a_schools_md_holding_team_pages_left_behind_is_counted_as_residue(
+        self, bundles: RemovalWorld
+    ) -> None:
+        """`v1-e32-t57`: team pages left in a schools.md are that file's residue, counted as it is."""
+        await removed(bundles)
+        key = f"reports/landscape/{SYNTHETIC_CASELIST}/2026-09-29/schools.md"
+        write_local(bundles, key, TEAM_PAGES_VIEW.encode(), written=WRITTEN)
+        put(bundles, key, TEAM_PAGES_VIEW.encode(), written=WRITTEN)
+
+        report = await status_of(bundles).status(residue=True)
+
+        (residue,) = [one for one in report.residue if one.caselist == SYNTHETIC_CASELIST]
+        assert residue.school_views == (
+            OlderVersions(role="school view", versions=1),
+            OlderVersions(role="local school view", versions=1),
+        )
 
     async def test_a_view_written_after_the_removal_is_not_residue(self, bundles: RemovalWorld) -> None:
         await removed(bundles)

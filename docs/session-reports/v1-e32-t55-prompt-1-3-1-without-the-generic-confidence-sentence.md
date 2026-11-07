@@ -460,23 +460,34 @@ header has `sample_row` and `position`, leaving out `tests/`, `fixtures/` and `n
 
 ```bash
 ROWS=~/.debate-research/dev/landscape/local-classifier/hspolicy26/policy-2026-27-nhi-coach-sample.jsonl
+small=0
 counts() { uv run debate-research --json landscape evaluate --caselist hspolicy26 --snapshot 2026-10-20 --sample "$1" --sample-rows "$ROWS" --check-sample 2>/dev/null | python3 -c 'import sys,json; lines=[l for l in sys.stdin.read().splitlines() if l.startswith("{")]; d=json.loads(lines[-1]) if lines else {}; x=d.get("data") or {}; s=x.get("by_stance") or {}; print("    check:", d.get("status", "no JSON"), (d.get("error") or {}).get("code") or "", "| none", (x.get("by_label_kind") or {}).get("none"), "| answers", s.get("answers"), "| reads", s.get("reads"), "| second labels", (x.get("second_labels") or {}).get("rows"))'; }
-candidate() { stat -f '%N  %z bytes  modified %Sm' -t '%Y-%m-%d %H:%M:%S' "$1"; case "$1" in *.csv) counts "$1" ;; *) echo "    check: not a CSV" ;; esac; }
+candidate() { if [ "$(stat -f %z "$1")" -lt 1000 ]; then small=$((small + 1)); return; fi; stat -f '%N  %z bytes  modified %Sm' -t '%Y-%m-%d %H:%M:%S' "$1"; case "$1" in *.csv) counts "$1" ;; *) echo "    check: not a CSV" ;; esac; }
 if env | grep -q '^DEBATE_'; then echo "STOP: a DEBATE_ variable is set; unset it and paste again"; elif pgrep -f "caselist pull" >/dev/null; then echo "STOP: a caselist pull is running; wait for it to finish"; else
+echo "--- Excel's own folder"
+if [ -d "$HOME/Library/Containers/com.microsoft.Excel" ]; then find "$HOME/Library/Containers/com.microsoft.Excel" -type f \( -iname '*coach-sample*' -o -iname '*autorecover*' \) -exec stat -f '%N  %z bytes  modified %Sm' -t '%Y-%m-%d %H:%M:%S' {} + 2>/dev/null; else echo "    Excel keeps no folder here"; fi
 echo "--- By name: home folder (Trash, worktrees, ~/.claude included; ~/Library left out), /tmp, TMPDIR"
 ls "$HOME/.Trash" >/dev/null 2>&1 || echo "    the Trash is not readable from this terminal: look in it in Finder for a name with coach-sample"
 { find "$HOME" -path "$HOME/Library" -prune -o -type f -iname '*coach-sample*' -print0 2>/dev/null; find /private/tmp "${TMPDIR:-/private/tmp}" -type f -iname '*coach-sample*' -print0 2>/dev/null; } | while IFS= read -r -d '' f; do candidate "$f"; done
 echo "--- By content: other CSVs whose header has sample_row and position (tests, fixtures and node_modules left out)"
 { find "$HOME" -path "$HOME/Library" -prune -o -type f -iname '*.csv' -not -iname '*coach-sample*' -not -path '*/tests/*' -not -path '*/fixtures/*' -not -path '*/node_modules/*' -print0 2>/dev/null; find /private/tmp "${TMPDIR:-/private/tmp}" -type f -iname '*.csv' -not -iname '*coach-sample*' -print0 2>/dev/null; } | while IFS= read -r -d '' f; do head -1 "$f" 2>/dev/null | grep -q 'sample_row' && head -1 "$f" | grep -q 'position' && candidate "$f"; done
+echo "    files under 1,000 bytes left out (test fixtures; the labels file is about 7,700): $small"
 echo "--- Time Machine"
 tmutil destinationinfo 2>&1 | grep -E '^(Name|Kind)' || echo "    no destination set up"
 tmutil listlocalsnapshots / 2>&1
 tmutil listbackups 2>&1 | tail -5
-echo "--- Shell history lines naming the labels file or its folder"
-for h in ~/.zsh_history ~/.bash_history; do [ -f "$h" ] && python3 -c 'import sys,re,datetime; [print("   ", datetime.datetime.fromtimestamp(int(m.group(1))).strftime("%Y-%m-%d %H:%M:%S") if (m := re.match(r": (\d+):\d+;", l)) else "no time", l[:300]) for l in open(sys.argv[1], encoding="utf-8", errors="replace").read().splitlines() if "coach-sample" in l or "landscape-review" in l]' "$h"; done
+echo "--- Shell history lines naming the labels file or its folder, from 2026-11-04 on"
+for h in ~/.zsh_history ~/.bash_history; do [ -f "$h" ] && python3 -c 'import sys,re,datetime; since=datetime.datetime(2026,11,4).timestamp(); hits=[l for l in open(sys.argv[1], encoding="utf-8", errors="replace").read().splitlines() if "coach-sample" in l or "landscape-review" in l]; stamp=lambda l: re.match(r": (\d+):\d+;", l); new=[l for l in hits if stamp(l) and int(stamp(l).group(1)) >= since]; [print("   ", datetime.datetime.fromtimestamp(int(stamp(l).group(1))).strftime("%Y-%m-%d %H:%M:%S"), re.sub(r"^: \d+:\d+;", "", l)[:200]) for l in new]; print("    in", sys.argv[1], len(hits), "lines in all,", len(new), "from 2026-11-04 on")' "$h"; done
 echo "--- Done"
 fi
 ```
+
+**The first run of this block (2026-11-06) was too loud.** It listed every pytest fixture under `TMPDIR`, each
+32 to 535 bytes. Pasted, that output passed 50,000 characters and was cut at both ends, so its home-folder,
+Time Machine and history sections never arrived. Every candidate in the part that did arrive was one of
+those fixtures, and none read the stance counts. The block above replaces it. It lists only files of 1,000
+bytes or more and counts the rest (the labels file is about 7,700 bytes). It prints history only from
+2026-11-04 on, with a count of the earlier lines, and it now includes the Excel-folder listing.
 
 Paste back its whole output. It holds paths, sizes, times, counts and command lines, no row or label text.
 

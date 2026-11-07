@@ -30,8 +30,12 @@ same use case. One run, for one caselist at one weekly snapshot (the newest unle
    then the report shows the affirmative side's unidentified share), and `v1-e34-t03`'s staleness hook
    given the sync run log, so a run the daily download cap held back makes the report stale whatever its
    snapshot's age (the PM's ruling of 2026-10-24).
-5. **Scans** the bundle (:mod:`debate_core.application.landscape_scan`) and returns every hit: the
-   per-school view, which names schools and team codes by design, for paths only.
+5. **Measures** every page the pilot will cut from `schools.md`
+   (:mod:`debate_core.application.landscape_page_sizes`, `v1-e32-t57`): the result's `pages` names each
+   one that would send ADR-0019's budget or more, in a dry run and a publish alike, and refuses nothing
+   (the PM's ruling of 2026-11-07). Then it **scans** the bundle
+   (:mod:`debate_core.application.landscape_scan`) and returns every hit: the per-school view, which
+   names schools and team codes by design, for paths only.
 6. **Writes** the bundle to `<data dir>/reports/landscape/<caselist>/<snapshot>/`, or `--out`.
 7. **Publishes**, when asked, to `reports/landscape/<caselist>/<snapshot>/` in the environment's
    bucket through the E29 blob-store port, uploading only the files whose SHA-256 differs from the
@@ -87,6 +91,7 @@ from debate_core.application.landscape_model_stage import (
     ModelClassificationStage,
     ModelStageInterrupted,
 )
+from debate_core.application.landscape_page_sizes import measure_school_view
 from debate_core.application.landscape_report import (
     SCHOOL_VIEW_FILES,
     LandscapeReportInputs,
@@ -122,6 +127,7 @@ from debate_core.arguments.landscape.analytic_texts import CounterplanActors
 from debate_core.arguments.landscape.review_queue import DEFAULT_REVIEW_THRESHOLD, ReviewRow
 from debate_core.domain.landscape import Taxonomy, Topic
 from debate_core.domain.landscape_classification import OverrideRules, PositionClassification
+from debate_core.domain.landscape_pages import PAGE_BUDGET, SCHOOL_VIEW_FILE, SchoolViewPageSizes
 from debate_core.domain.landscape_report import LandscapeCard, LandscapeReport
 from debate_core.domain.landscape_schools import SchoolView
 from debate_core.domain.landscape_trends import LandscapeTrends
@@ -392,6 +398,9 @@ class LandscapeRunResult:
     (`v1-e33-t14`); empty when the topic has no such file. No count reads them."""
     cards: tuple[LandscapeCard, ...] = field(default=(), repr=False)
     """Every card the report ranked from, with its cluster and its headings as the matcher reads them."""
+    pages: SchoolViewPageSizes = field(default_factory=SchoolViewPageSizes)
+    """Every page the pilot will cut from `schools.md`, measured against ADR-0019's budget; those over it
+    are named and published all the same (`v1-e32-t57`, the PM's ruling of 2026-11-07)."""
     bundle_files: Mapping[str, str] = field(default_factory=dict[str, str], repr=False)
     """The bundle's files as rendered, by name: what the scan read, in memory, written or not. A dry run's
     scan is counted by section from them (`v1-e32-t16`); they are never logged."""
@@ -441,6 +450,7 @@ class LandscapeRunService:
         backfile_caselists: Sequence[str] = (),
         parser_version: str | None = None,
         queue_order: ReviewQueueOrdering | None = None,
+        page_budget: int | None = None,
     ) -> None:
         self._taxonomies = taxonomies
         # Never classified, never a per-school view (data-use policy 1.17, `v1-e34-t34`).
@@ -465,6 +475,8 @@ class LandscapeRunService:
         self._max_model_items = max_model_items
         self._parser_version = parser_version
         self._queue_order = queue_order
+        # ADR-0019's budget unless a test asks for another: the check names pages against it.
+        self._page_budget = page_budget
 
     def _classifier_for(self, store: ClassificationStore, request: LandscapeRunRequest) -> PositionClassifier:
         """The classifier for `request`: stage one alone under `none`, with the model stage otherwise."""
@@ -607,6 +619,13 @@ class LandscapeRunService:
             ),
             staleness,
         )
+        # The pages the pilot will cut from schools.md, as it will send them (`v1-e32-t57`): any over
+        # ADR-0019's budget is named, in a dry run and a publish alike, and refuses nothing.
+        pages = measure_school_view(
+            bundle.files[SCHOOL_VIEW_FILE],
+            request.caselist,
+            budget=PAGE_BUDGET if self._page_budget is None else self._page_budget,
+        )
         hits = scan_report(bundle.files, reading.disclosures, school_view_files=SCHOOL_VIEW_FILES)
         pending = pending_hits(hits, self._acceptances.accepted(request.caselist))
         scan = ScanResult(hits=hits, pending=pending, digest=hits_digest(pending))
@@ -647,6 +666,7 @@ class LandscapeRunService:
             plan_mechanism_words=mechanisms.words if mechanisms is not None else (),
             cards=cards,
             bundle_files={name: bundle.files[name] for name in BUNDLE_FILES},
+            pages=pages,
         )
 
     async def _snapshot(self, caselist: str, asked: date | None) -> date:

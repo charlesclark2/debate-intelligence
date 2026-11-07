@@ -37,6 +37,8 @@ from debate_core.domain.search_source_links import OPENCASELIST_ORIGIN, team_pag
 
 __all__ = [
     "LANDSCAPE_HOLD",
+    "PAGE_BUDGET",
+    "PAGE_FRAME_ALLOWANCE",
     "LANDSCAPE_PREFIX",
     "REPORT_FILE",
     "SCHOOL_VIEW_FILE",
@@ -44,6 +46,8 @@ __all__ = [
     "BundleFile",
     "LandscapeLink",
     "LandscapePage",
+    "PageSize",
+    "SchoolViewPageSizes",
     "bundle_file",
     "heading_anchor",
     "is_position_id",
@@ -55,6 +59,15 @@ LANDSCAPE_HOLD: Final = timedelta(minutes=5)
 
 LANDSCAPE_PREFIX: Final = "reports/landscape/"
 """Where the bundles are, as `debate_core.application.landscape_bundle_files.REPORTS_PREFIX` says."""
+
+PAGE_BUDGET: Final = 150 * 1024
+"""ADR-0019 (b) 1: a page, its script and its stylesheet, at most 153,600 bytes sent."""
+
+PAGE_FRAME_ALLOWANCE: Final = 28 * 1024
+"""What a landscape page sends besides its body, allowed for: the site's header and the page's own
+chrome, with its headings, then the pilot's script and stylesheet (`v1-e32-t57`, the PM's ruling of
+2026-11-07, Q4). 26,611 bytes on the synthetic page measured that day; a `debate_api` test holds every
+page kind, with a long heading, at or under it, and fails first when the assets outgrow it."""
 
 REPORT_FILE: Final = "report.md"
 SCHOOL_VIEW_FILE: Final = "schools.md"
@@ -79,6 +92,49 @@ class LandscapePage(StrEnum):
     TEAM = "team"
     """One team's rounds, under its school (`v1-e32-t57`)."""
     POSITION = "position"
+
+
+@dataclass(frozen=True, slots=True)
+class PageSize:
+    """One school-view page as the report measures it (`v1-e32-t57`): its body's bytes and the frame."""
+
+    kind: LandscapePage
+    page: str
+    """The page's heading: a school, a team code or a position id; empty for the view's front page."""
+    body_bytes: int
+    school: str | None = None
+    """A team's school; `None` for any other page."""
+
+    @property
+    def bytes(self) -> int:
+        """What the page sends with its script and stylesheet, at most: its body and the frame allowance."""
+        return self.body_bytes + PAGE_FRAME_ALLOWANCE
+
+
+@dataclass(frozen=True, slots=True)
+class SchoolViewPageSizes:
+    """Every page the pilot cuts from a bundle's `schools.md`, measured against the budget (`v1-e32-t57`).
+
+    A page is over the budget when it would send the budget's bytes or more: the budget test holds a page
+    under it. The report names those and goes on (the PM's ruling of 2026-11-07, Q2).
+    """
+
+    pages: tuple[PageSize, ...] = ()
+    budget: int = PAGE_BUDGET
+
+    @property
+    def over_budget(self) -> tuple[PageSize, ...]:
+        return tuple(page for page in self.pages if page.bytes >= self.budget)
+
+    @property
+    def largest(self) -> PageSize | None:
+        return max(self.pages, key=lambda page: page.bytes, default=None)
+
+    @property
+    def largest_position(self) -> PageSize | None:
+        """Recorded each week, so the position pages' growth is on record (the PM's ruling, Q3)."""
+        positions = [page for page in self.pages if page.kind is LandscapePage.POSITION]
+        return max(positions, key=lambda page: page.bytes, default=None)
 
 
 @dataclass(frozen=True, slots=True)

@@ -41,6 +41,7 @@ school, addressed by its heading's anchor, and every position under its kind, ad
 
 from __future__ import annotations
 
+import dataclasses
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Final
@@ -148,6 +149,10 @@ class RenderedSchoolView:
     kinds: tuple[PositionKind, ...]
     rest_html: str = ""
     """Anything after the two sections, rendered on the front page."""
+    front_body_html: str = ""
+    """The front page's body, its header, its two sections' leads and lists, and `rest_html`, as one
+    string (`v1-e32-t57`): what the page sends between its frame's tags, so the report's page-size check
+    measures it as the pilot sends it."""
 
     def school(self, path: str) -> LandscapePiece | None:
         return next((one for one in self.schools if one.path == path), None)
@@ -253,7 +258,7 @@ def render_school_view(markdown: str, caselist: str) -> RenderedSchoolView:
             team_pages=True,
             anchors=front,
         )
-        return RenderedSchoolView(title, header, (), "", "", (), "", "", ())
+        return RenderedSchoolView(title, header, (), "", "", (), "", "", (), front_body_html=f"{header}\n")
     header_tokens = [*preamble, *(token for one in sections[:by_school_at] for token in one.tokens)]
     header = _render(header_tokens, caselist=caselist, team_pages=True, anchors=front)
     by_school, by_position = sections[by_school_at], sections[by_position_at]
@@ -261,7 +266,7 @@ def render_school_view(markdown: str, caselist: str) -> RenderedSchoolView:
     stray, schools = _cut_schools(sections[by_school_at + 1 : by_position_at])
     rest = sections[by_position_at + 1 :]
     kinds_end = next((index for index, one in enumerate(rest) if one.level <= 2), len(rest))
-    return RenderedSchoolView(
+    view = RenderedSchoolView(
         title=title,
         header_html=header,
         contents=(
@@ -286,6 +291,43 @@ def render_school_view(markdown: str, caselist: str) -> RenderedSchoolView:
             anchors=front,
         ),
     )
+    return dataclasses.replace(view, front_body_html=_front_body(view, caselist))
+
+
+def _front_body(view: RenderedSchoolView, caselist: str) -> str:
+    """The school view's front page between its body's tags, byte for byte as its template wrote it
+    before `v1-e32-t57` (the golden pages hold it): headings and addresses escaped as Jinja's
+    autoescape and `urlencode` do."""
+    out = [f"{view.header_html}\n", "\n"]
+    out.append(f'<h2 id="{_text(view.by_school_anchor)}">By school</h2>\n{view.by_school_lead_html}\n')
+    out.append('<ul class="landscape-index">\n')
+    out += [
+        f'<li><a href="/landscape/{_text(caselist)}/schools/{_text(quote(school.path))}">'
+        f"{_text(school.heading)}</a></li>\n"
+        for school in view.schools
+    ]
+    out.append("</ul>\n")
+    out.append(f'<h2 id="{_text(view.by_position_anchor)}">By position</h2>\n{view.by_position_lead_html}\n')
+    for kind in view.kinds:
+        out.append(f'<h3 id="{_text(kind.anchor)}">{_text(kind.heading)}</h3>\n{kind.lead_html}\n')
+        out.append('<ul class="landscape-index">\n')
+        out += [
+            f'<li><a href="/landscape/{_text(caselist)}/positions/{_text(quote(position.path))}"><code>'
+            f"{_text(position.heading)}</code></a></li>\n"
+            for position in kind.positions
+        ]
+        out += [f"<li>{_text(heading)}</li>\n" for heading in kind.unaddressed]
+        out.append("</ul>\n")
+    out.append(f"{view.rest_html}\n")
+    return "".join(out)
+
+
+_ESCAPES: Final = {"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&#34;", "'": "&#39;"}
+
+
+def _text(text: str) -> str:
+    """`text` escaped as Jinja's autoescape (MarkupSafe) escapes it, entity for entity."""
+    return "".join(_ESCAPES.get(character, character) for character in text)
 
 
 @dataclass(slots=True)

@@ -14,22 +14,6 @@
 {% endfor %}</ul>
 </nav>
 {% endif %}<div class="landscape-body">
-{{ view.header_html | safe }}
-{% if view.contents %}
-<h2 id="{{ view.by_school_anchor }}">By school</h2>
-{{ view.by_school_lead_html | safe }}
-<ul class="landscape-index">
-{% for school in view.schools %}<li><a href="/landscape/{{ bundle.caselist }}/schools/{{ school.path | urlencode }}">{{ school.heading }}</a></li>
-{% endfor %}</ul>
-<h2 id="{{ view.by_position_anchor }}">By position</h2>
-{{ view.by_position_lead_html | safe }}
-{% for kind in view.kinds %}<h3 id="{{ kind.anchor }}">{{ kind.heading }}</h3>
-{{ kind.lead_html | safe }}
-<ul class="landscape-index">
-{% for position in kind.positions %}<li><a href="/landscape/{{ bundle.caselist }}/positions/{{ position.path | urlencode }}"><code>{{ position.heading }}</code></a></li>
-{% endfor %}{% for heading in kind.unaddressed %}<li>{{ heading }}</li>
-{% endfor %}</ul>
-{% endfor %}{{ view.rest_html | safe }}
-{% endif %}</div>
+{{ view.front_body_html | safe }}</div>
 {% endif %}
 {% endblock %}

@@ -12,6 +12,7 @@ import dataclasses
 from collections.abc import Sequence
 from datetime import UTC, date, datetime
 from pathlib import Path
+from typing import Final
 
 import pytest
 
@@ -19,6 +20,7 @@ from debate_core.application.aff_assignment import AffAssignmentsForReport
 from debate_core.application.analytic_texts import AnalyticTextCounts, AnalyticTextsForReport, QuotedTextsRun
 from debate_core.application.caselist.evidence_listing import LocalEvidence
 from debate_core.application.caselist.suppression import RecordedSuppressionList
+from debate_core.application.landscape_page_sizes import measure_school_view
 from debate_core.application.landscape_report import round_id
 from debate_core.application.landscape_run import (
     BUNDLE_FILES,
@@ -35,6 +37,7 @@ from debate_core.application.landscape_run import (
     PublishRefusal,
     UnknownCaselist,
     UnknownSnapshot,
+    report_key,
 )
 from debate_core.application.landscape_scan import ScanAcceptanceLog, ScanKind, hits_digest
 from debate_core.application.landscape_seeding import SeedReading
@@ -48,6 +51,7 @@ from debate_core.arguments.landscape.kritikal_aff import KritikalAffInputs
 from debate_core.domain.caselist import Side
 from debate_core.domain.landscape import Taxonomy
 from debate_core.domain.landscape_classification import OverrideRules, PositionClassification, PositionRole
+from debate_core.domain.landscape_pages import PAGE_BUDGET, PAGE_FRAME_ALLOWANCE, LandscapePage, PageSize
 from debate_core.domain.landscape_report import AffAssignment
 from debate_core.domain.landscape_texts import AnalyticTextKind, AnalyticTextReading, TextForm, TextPlacement
 from debate_core.domain.style_profile import StructuralUnit
@@ -89,6 +93,7 @@ def _service(
     aff_assignments: AffAssignmentsFromReading | None = None,
     analytic_texts: AnalyticTextsFromReading | None = None,
     classifier: object = None,
+    page_budget: int | None = None,
 ) -> LandscapeRunService:
     data_dir = world.data_dir
     objects = FsEvidenceObjectStore(data_dir)
@@ -112,6 +117,7 @@ def _service(
         aff_assignments=aff_assignments,
         analytic_texts=analytic_texts,
         classifier=classifier,  # pyright: ignore[reportArgumentType]
+        page_budget=page_budget,
     )
 
 
@@ -732,6 +738,64 @@ async def test_the_school_view_is_written_locally_and_its_names_are_not_scan_hit
     for name in ("report.md", "positions.csv", "trends.csv"):
         text = (result.directory / name).read_text(encoding="utf-8")
         assert "Quillmere" not in text and "QW" not in text
+
+
+# ------------------------------------------------------------------------------------------------
+# The school view's pages against the page budget (v1-e32-t57)
+# ------------------------------------------------------------------------------------------------
+
+EVERY_SCHOOL_VIEW_PAGE: Final = [
+    (LandscapePage.SCHOOL_VIEW, "", None),
+    (LandscapePage.SCHOOL, "Brindle Valley", None),
+    (LandscapePage.TEAM, "ZT", "Brindle Valley"),
+    (LandscapePage.SCHOOL, "Harrowgate Prep", None),
+    (LandscapePage.TEAM, "PX", "Harrowgate Prep"),
+    (LandscapePage.SCHOOL, "Quillmere Academy", None),
+    (LandscapePage.TEAM, "QW", "Quillmere Academy"),
+    (LandscapePage.POSITION, "spending-da", None),
+    (LandscapePage.POSITION, "states-cp", None),
+    (LandscapePage.POSITION, "single-payer-aff", None),
+    (LandscapePage.POSITION, "costs-advantage", None),
+]
+"""synthetic26's school view, by hand from its table: three schools of one team each, then the four
+positions they read, the negative's by kind and then the affirmative's."""
+
+
+def _named(pages: tuple[PageSize, ...]) -> list[tuple[LandscapePage, str, str | None]]:
+    return [(page.kind, page.page, page.school) for page in pages]
+
+
+async def test_a_run_measures_every_school_view_page_and_none_is_over_the_budget(world: SyntheticRun) -> None:
+    result = await _run(_service(world), dry_run=True)
+
+    assert _named(result.pages.pages) == EVERY_SCHOOL_VIEW_PAGE
+    assert (result.pages.budget, result.pages.over_budget) == (PAGE_BUDGET, ())
+    assert result.pages.largest is not None and result.pages.largest_position is not None
+
+
+async def test_a_dry_run_names_every_page_over_the_budget(
+    world: SyntheticRun, bucket: FsEvidenceObjectStore
+) -> None:
+    """A budget one byte over the frame puts every page over it, so every page is named."""
+    result = await _run(
+        _service(world, bucket=bucket, page_budget=PAGE_FRAME_ALLOWANCE + 1), publish=True, dry_run=True
+    )
+
+    assert _named(result.pages.over_budget) == EVERY_SCHOOL_VIEW_PAGE
+    assert result.publish is not None and result.publish.uploaded == ()
+
+
+async def test_a_publish_names_every_page_over_the_budget_and_goes_on(
+    world: SyntheticRun, bucket: FsEvidenceObjectStore
+) -> None:
+    """The PM's ruling of 2026-11-07, Q2: named, and published; the dry run before it is where to stop."""
+    result = await _run(_service(world, bucket=bucket, page_budget=PAGE_FRAME_ALLOWANCE + 1), publish=True)
+
+    assert _named(result.pages.over_budget) == EVERY_SCHOOL_VIEW_PAGE
+    assert result.publish is not None and result.publish.refused is None
+    assert len(result.publish.uploaded) == len(BUNDLE_FILES)
+    published = bucket.path_for(report_key(CASELIST, NEWEST, "schools.md")).read_text(encoding="utf-8")
+    assert result.pages == measure_school_view(published, CASELIST, budget=PAGE_FRAME_ALLOWANCE + 1)
 
 
 # ------------------------------------------------------------------------------------------------

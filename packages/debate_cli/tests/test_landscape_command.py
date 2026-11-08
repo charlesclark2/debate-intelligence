@@ -37,6 +37,7 @@ import debate_cli.container as container_module
 import debate_core.application.landscape_run as landscape_run_module
 from debate_cli.app import create_app
 from debate_cli.exit_codes import ExitCode
+from debate_core.application import landscape_scan
 from debate_core.application.coach_sample_labels_file import digest_line, digest_path, labels_digest
 from debate_core.application.errors import (
     ModelAccessDenied,
@@ -76,6 +77,7 @@ from debate_core.arguments.landscape.evaluation_breakdown import (
 )
 from debate_core.arguments.landscape.model_stage import DEFAULT_BATCH_SIZE, NameScan
 from debate_core.arguments.landscape.queue_order import QueueOrderModel
+from debate_core.arguments.landscape.render import FIXED_LINES
 from debate_core.arguments.landscape.scan_hits import HitField, HitKind, ScanHit
 from debate_core.domain.landscape_classification import ModelStancedPositionAnswers, Stance
 from debate_core.domain.landscape_pages import PAGE_FRAME_ALLOWANCE
@@ -269,6 +271,7 @@ def test_report_writes_the_bundle_and_json_names_paths_counts_methods_and_model_
         "digest": data["scan"]["digest"],
         "accepted_now": False,
         "acceptance_log": None,
+        "exempted": [],
     }
     assert data["notice"] is None
 
@@ -1271,6 +1274,30 @@ def test_publish_with_a_planted_tournament_is_refused_printing_the_hit_and_its_d
     assert (
         planted_world.data_dir / "reports" / "landscape" / CASELIST / "2026-09-15" / "report.md"
     ).is_file()
+
+
+def test_the_report_s_own_fixed_lines_a_tournament_is_in_are_counted_and_no_hit(
+    planted_world: SyntheticRun, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`v1-e32-t60`: the world's tournaments share no word with the template, so the planted tag's line stands
+    in for one of top_cards.csv's fixed lines. The count names the file and the tournament, never the line."""
+    first = landscape(planted_world, "--caselist", CASELIST, "--dry-run")
+    line = _data(first)["scan"]["hits"][0]["text"]
+    fixed = {**FIXED_LINES, "top_cards.csv": FIXED_LINES["top_cards.csv"] | {line}}
+    monkeypatch.setattr(landscape_scan, "FIXED_LINES", fixed)
+
+    data = _data(landscape(planted_world, "--caselist", CASELIST, "--dry-run"))
+    text = landscape(planted_world, "--caselist", CASELIST, "--dry-run", json_output=False)
+
+    assert data["scan"]["hits"] == []
+    assert data["scan"]["exempted"] == [{"file": "top_cards.csv", "term": "Thistle Open", "lines": 1}]
+    assert data["notice"] is None
+    assert "Scan: 0 hit(s), 0 not yet accepted." in text.stdout
+    assert (
+        "Passed over, the report's own fixed lines a tournament is in (no hit): "
+        "top_cards.csv 'Thistle Open' 1 line(s)."
+    ) in text.stdout
+    assert "At Thistle Open" not in text.stdout
 
 
 def test_publish_with_the_printed_digest_goes_ahead_and_a_stale_one_is_refused(

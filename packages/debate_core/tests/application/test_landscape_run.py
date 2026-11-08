@@ -16,6 +16,7 @@ from typing import Final
 
 import pytest
 
+from debate_core.application import landscape_scan
 from debate_core.application.aff_assignment import AffAssignmentsForReport
 from debate_core.application.analytic_texts import AnalyticTextCounts, AnalyticTextsForReport, QuotedTextsRun
 from debate_core.application.caselist.evidence_listing import LocalEvidence
@@ -39,7 +40,7 @@ from debate_core.application.landscape_run import (
     UnknownSnapshot,
     report_key,
 )
-from debate_core.application.landscape_scan import ScanAcceptanceLog, ScanKind, hits_digest
+from debate_core.application.landscape_scan import ExemptedLines, ScanAcceptanceLog, ScanKind, hits_digest
 from debate_core.application.landscape_seeding import SeedReading
 from debate_core.application.landscape_staleness import STALE_BANNER_HEADING
 from debate_core.application.ports.classification_store import ClassificationStore
@@ -48,6 +49,7 @@ from debate_core.application.sync_runs import SYNC_RUN_LOG_FILENAME, StageEntry,
 from debate_core.arguments.landscape.aff_assignment import TransitionPlanInputs
 from debate_core.arguments.landscape.analytic_texts import AnalyticTextInputs, CounterplanActors, text_digest
 from debate_core.arguments.landscape.kritikal_aff import KritikalAffInputs
+from debate_core.arguments.landscape.render import FIXED_LINES
 from debate_core.domain.caselist import Side
 from debate_core.domain.landscape import Taxonomy
 from debate_core.domain.landscape_classification import OverrideRules, PositionClassification, PositionRole
@@ -656,6 +658,44 @@ async def test_a_later_run_stops_only_on_hits_not_yet_accepted(tmp_path: Path) -
     assert later.publish is not None and later.publish.refused is PublishRefusal.SCAN_HITS_NOT_ACCEPTED
     assert [hit.term for hit in later.scan.pending] == ["Lantern Classic"]
     assert len(later.scan.hits) == 2
+
+
+def _as_a_fixed_line(monkeypatch: pytest.MonkeyPatch, file: str, line: str) -> None:
+    """The world's tournaments share no word with the template, so a planted tag's line stands in for one of
+    the report's own fixed lines (`v1-e32-t60`): what the run does with the scan's count is the test."""
+    fixed = {**FIXED_LINES, file: FIXED_LINES.get(file, frozenset[str]()) | {line}}
+    monkeypatch.setattr(landscape_scan, "FIXED_LINES", fixed)
+
+
+async def test_the_run_returns_the_fixed_lines_the_scan_passed_over_by_count(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    world = plant_synthetic_run(tmp_path, planted_tags=PLANTED_TOURNAMENT)
+    service = _service(world)
+    line = (await _run(service, dry_run=True)).scan.hits[0].line
+    _as_a_fixed_line(monkeypatch, "top_cards.csv", line)
+
+    result = await _run(service, dry_run=True)
+
+    assert result.scan.hits == () and result.scan.pending == ()
+    assert result.scan.exempted == (ExemptedLines("top_cards.csv", "Thistle Open", 1),)
+
+
+async def test_an_acceptance_keeps_the_count_of_what_the_scan_passed_over(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    world = plant_synthetic_run(tmp_path, planted_tags={**PLANTED_TOURNAMENT, **SECOND_TOURNAMENT})
+    service = _service(world, bucket=FsEvidenceObjectStore(tmp_path / "bucket"))
+    first = await _run(service, dry_run=True)
+    thistle = next(hit for hit in first.scan.hits if hit.term == "Thistle Open")
+    _as_a_fixed_line(monkeypatch, thistle.file, thistle.line)
+    digest = (await _run(service, dry_run=True)).scan.digest
+
+    result = await _run(service, publish=True, accept_scan_hits=digest)
+
+    assert result.scan.accepted_now
+    assert [hit.term for hit in result.scan.hits] == ["Lantern Classic"]
+    assert result.scan.exempted == (ExemptedLines(thistle.file, "Thistle Open", 1),)
 
 
 async def test_a_dry_run_records_no_acceptance(tmp_path: Path) -> None:

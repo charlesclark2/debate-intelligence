@@ -1308,6 +1308,9 @@ def run_summary(
             "digest": result.scan.digest,
             "accepted_now": result.scan.accepted_now,
             "acceptance_log": result.scan.acceptance_log,
+            "exempted": [
+                {"file": one.file, "term": one.term, "lines": one.lines} for one in result.scan.exempted
+            ],
         },
         "pages": _pages_json(result.pages),
         "publish": None
@@ -1434,6 +1437,9 @@ def _display(result: LandscapeRunResult, settings: Settings) -> str:
         + f": {hit.line}"
         for hit in scan.hits
     ]
+    if scan.exempted:
+        passed_over = "; ".join(f"{one.file} {one.term!r} {one.lines} line(s)" for one in scan.exempted)
+        lines.append(f"Passed over, the report's own fixed lines a tournament is in (no hit): {passed_over}.")
     if scan.accepted_now:
         lines.append(
             f"Accepted {len(scan.pending)} hit(s) under digest {scan.digest}; "

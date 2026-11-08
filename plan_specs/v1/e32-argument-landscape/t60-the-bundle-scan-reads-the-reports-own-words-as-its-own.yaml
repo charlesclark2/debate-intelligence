@@ -26,7 +26,9 @@ spec:
     carries data a hit, and say in the report which tournament word matched, by count only.
   priority: 3
   constraints:
-    packages: [debate_core.application, debate_core.arguments, packages/debate_core/tests]
+    # Session, 2026-11-07: debate_cli and its tests added (the report's Deviations). The count of what the
+    # scan passed over reaches the operator only through the command's text and --json output.
+    packages: [debate_core.application, debate_core.arguments, packages/debate_core/tests, debate_cli, packages/debate_cli/tests]
     forbidden:
       - A real tournament, school or team name in a fixture, test, log or report
       - A data line exempted from the scan

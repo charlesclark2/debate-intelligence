@@ -26,7 +26,9 @@ spec:
     need pacing.
   priority: 3
   constraints:
-    packages: [debate_core.integrations.discovery, debate_core.application, packages/debate_core/tests]
+    # Session, 2026-11-08: debate_core.domain added for ProviderHealth.not_asked_count, which the PM's
+    # ruling 3 of 2026-11-08 asks provider_health to show (session report, Deviations).
+    packages: [debate_core.integrations.discovery, debate_core.application, debate_core.domain, packages/debate_core/tests]
     forbidden:
       - A provider's limits exceeded
       - A query that was sent and ran slow no longer timing out
@@ -42,7 +44,7 @@ spec:
         nor as latency, and Crossref's eleven-query public-pool case behaves as today on
         virtual time, by tests shown failing first.
 status:
-  phase: InProgress
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

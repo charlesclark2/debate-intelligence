@@ -56,7 +56,7 @@ from __future__ import annotations
 import asyncio
 import statistics
 from collections import deque
-from collections.abc import Awaitable, Callable, Iterable, Iterator, Sequence
+from collections.abc import Awaitable, Callable, Generator, Iterable, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timedelta
@@ -443,7 +443,7 @@ class _CallTime:
         self._timing = False
 
     @contextmanager
-    def timing(self) -> Iterator[None]:
+    def timing(self) -> Generator[None]:
         """Listen to the call's pace turns; entered inside the call's `asyncio.timeout`."""
         self._first_deadline = self._deadline.when()
         self._timing = True

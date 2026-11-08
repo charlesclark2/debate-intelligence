@@ -238,13 +238,12 @@ def test_a_sent_call_that_runs_slow_still_times_out_its_timeout_after_its_releas
     async def scenario() -> tuple[ProviderHealth, float]:
         work: list[Work] = [0.5, "hang"] if queued_first else ["hang"]
         provider, _ = wrapped(ONE_EVERY_TWO_SECONDS, work, timeout_seconds=1.0)
-        if queued_first:
-            first = asyncio.ensure_future(provider.search(query(0)))
-            await asyncio.sleep(0)
+        first = asyncio.ensure_future(provider.search(query(0))) if queued_first else None
+        await asyncio.sleep(0)
         with pytest.raises(ProviderTimedOut):
             await provider.search(query(1))
         raised_at = now_seconds()
-        if queued_first:
+        if first is not None:
             await first
         return provider.health(), raised_at
 

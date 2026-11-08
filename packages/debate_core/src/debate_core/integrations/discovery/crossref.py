@@ -25,19 +25,22 @@ crossref.org/documentation/retrieve-metadata/rest-api/access-and-authentication 
 single-record limits). Each answer also states limits in `x-rate-limit-limit`,
 `x-rate-limit-interval` and `x-concurrency-limit` (the same access page), and
 :func:`advertised_limits` tightens the pace to them, never loosening it past the documented ones.
-The adapter's pacer starts its queries first come, first served, one interval/limit apart and no
-more at once than the concurrency allows.
+The adapter queues its queries on the shared
+:class:`~debate_core.integrations.discovery.pace.Pacer` (v1-e07-t10), at the pool's :attr:`PoolLimits.pace`:
+first come, first served, one interval/limit apart and no more at once than the concurrency allows.
 
-A federated search sends every query at once and each one's `providers.timeout_seconds` starts
-then, so on the public pool a search of eleven queries cannot send its eleventh before ten seconds.
-A query therefore waits for its turn only while its answer could still come back in time: until
-the timeout less a **reserve**, the median time Crossref has taken to answer in this process,
-clamped to at least 1 second and at most half the timeout, and 2 seconds before any answer
-(:func:`answer_reserve_seconds`). A query still waiting then is never sent. It is answered at once
-with no results, marked partial, and an error naming the pool's rate (and, on the public pool, the
-cure: a contact email). The search is PARTIAL and says why, and the circuit breaker counts no
-failure, because a query never sent says nothing about Crossref. A query that was sent and then
-runs slow still times out in the wrapper (PM rulings of 2026-11-02).
+A federated search sends every query at once, so on the public pool a search of eleven queries
+cannot send its eleventh before ten seconds. A query therefore waits for its turn only while its
+answer could still come back within `providers.timeout_seconds` of when it was asked: until the
+timeout less a **reserve**, the median time Crossref has taken to answer in this process, clamped
+to at least 1 second and at most half the timeout, and 2 seconds before any answer
+(:func:`answer_reserve_seconds`). A query still waiting then is never sent. It is answered at its
+deadline with no results, marked partial, and an error naming the pool's rate (and, on the public
+pool, the cure: a contact email). The search is PARTIAL and says why (PM rulings of 2026-11-02).
+The wrapper hears from the pacer that the query was queued and never sent, so it counts the
+answer as "not asked", neither a failure nor a latency sample, and counts no queued time towards a
+sent query's timeout or latency: a query that was sent and runs slow still times out
+`providers.timeout_seconds` after its pace released it.
 
 **Refusals** go through :func:`~debate_core.integrations.discovery.http_failures.provider_error_for_status`:
 a `429` is :class:`~debate_core.application.errors.ProviderRateLimited`, held for its `Retry-After`
@@ -78,9 +81,9 @@ import re
 import statistics
 import time
 from collections import deque
-from collections.abc import Awaitable, Callable, Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, replace
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from http.cookiejar import CookieJar, DefaultCookiePolicy
 from types import MappingProxyType
 from typing import Any, Final, cast
@@ -98,6 +101,7 @@ from debate_core.domain.discovery import CandidateResult, DatePrecision, Provide
 from debate_core.domain.enums import SourceType
 from debate_core.integrations.crossref_doi import work_from_message
 from debate_core.integrations.discovery.http_failures import provider_error_for_status
+from debate_core.integrations.discovery.pace import Pace, Pacer, Sleep
 from debate_core.integrations.discovery.redaction import logger, protect_logs
 
 __all__ = [
@@ -203,9 +207,6 @@ _JATS_HEADING: Final = re.compile(r"<jats:title\b[^>]*>.*?</jats:title>", re.IGN
 _JATS_BLOCK: Final = re.compile(r"</?jats:(?:p|sec|list|list-item|disp-quote)\b[^>]*>", re.IGNORECASE)
 _ANY_TAG: Final = re.compile(r"<[^>]+>")
 _INTERVAL: Final = re.compile(r"(\d+(?:\.\d+)?)s?")
-
-type Sleep = Callable[[float], Awaitable[None]]
-"""How the pacer waits: `asyncio.sleep` in a real run, a test's virtual time in a test."""
 
 
 def source_type_for(work_type: object) -> SourceType:
@@ -416,9 +417,11 @@ class PoolLimits:
     concurrency: int
 
     @property
-    def spacing(self) -> timedelta:
-        """The least time between two queries' starts."""
-        return timedelta(seconds=self.interval_seconds / self.requests)
+    def pace(self) -> Pace:
+        """These limits as the shared pacer keeps them: evenly spaced starts, `concurrency` at a time."""
+        return Pace(
+            requests=self.requests, interval_seconds=self.interval_seconds, concurrency=self.concurrency
+        )
 
     def rate_phrase(self) -> str:
         """`1 query a second`, `3 queries a second`, `1 query every 2 seconds`."""
@@ -480,82 +483,6 @@ def answer_reserve_seconds(median_answer_seconds: float | None, timeout_seconds:
     return min(max(seen, MIN_RESERVE_SECONDS), timeout_seconds / 2)
 
 
-class _Pacer:
-    """Starts queries first come, first served, at the pool's pace, or tells one it was too late.
-
-    One per adapter, so one per process in the CLI. Every time is read from the injected clock and
-    every wait is the injected sleep.
-    """
-
-    def __init__(self, documented: PoolLimits, *, timeout_seconds: float, clock: Clock, sleep: Sleep) -> None:
-        self._documented = documented
-        self._limits = documented
-        self._timeout_seconds = timeout_seconds
-        self._clock = clock
-        self._sleep = sleep
-        self._turn = asyncio.Lock()
-        self._in_flight = 0
-        self._released = asyncio.Event()
-        self._last_start: datetime | None = None
-        self._answer_seconds: deque[float] = deque(maxlen=_ANSWER_WINDOW)
-
-    @property
-    def limits(self) -> PoolLimits:
-        return self._limits
-
-    @property
-    def reserve_seconds(self) -> float:
-        median = statistics.median(self._answer_seconds) if self._answer_seconds else None
-        return answer_reserve_seconds(median, self._timeout_seconds)
-
-    async def admit(self) -> bool:
-        """Wait for this query's turn; True to send it now, False when its turn came too late.
-
-        A query is sent only before its deadline: the timeout less the reserve, counted from when it
-        arrived. Waiting in line holds no slot, so a query cancelled while it waits gives up nothing
-        but its turn.
-        """
-        arrived = self._clock.now()
-        async with self._turn:
-            while True:
-                now = self._clock.now()
-                deadline = arrived + timedelta(seconds=self._timeout_seconds - self.reserve_seconds)
-                if now >= deadline:
-                    return False
-                ready_at = now if self._last_start is None else self._last_start + self._limits.spacing
-                free = self._in_flight < self._limits.concurrency
-                if free and now >= ready_at:
-                    self._in_flight += 1
-                    self._last_start = now
-                    return True
-                if free:
-                    await self._sleep((min(ready_at, deadline) - now).total_seconds())
-                else:
-                    await self._until_released_or((deadline - now).total_seconds())
-
-    def answered(self, seconds: float, headers: Mapping[str, str]) -> None:
-        """An answer came back after `seconds`: keep its time and the limits it advertised."""
-        self._answer_seconds.append(max(seconds, 0.0))
-        self._limits = advertised_limits(self._documented, headers)
-
-    def release(self) -> None:
-        """An admitted query is finished, however it ended."""
-        self._in_flight -= 1
-        released, self._released = self._released, asyncio.Event()
-        released.set()
-
-    async def _until_released_or(self, seconds: float) -> None:
-        waiting = (
-            asyncio.ensure_future(self._released.wait()),
-            asyncio.ensure_future(self._sleep(seconds)),
-        )
-        try:
-            await asyncio.wait(waiting, return_when=asyncio.FIRST_COMPLETED)
-        finally:
-            for task in waiting:
-                task.cancel()
-
-
 # --------------------------------------------------------------------------------------------
 # The adapter
 # --------------------------------------------------------------------------------------------
@@ -584,8 +511,11 @@ class CrossrefProvider:
         self._clock = clock
         if self._contact_email is not None:
             protect_logs((self._contact_email,))
-        pool = POLITE_POOL if self._contact_email is not None else PUBLIC_POOL
-        self._pacer = _Pacer(pool, timeout_seconds=timeout_seconds, clock=clock, sleep=sleep)
+        self._documented = POLITE_POOL if self._contact_email is not None else PUBLIC_POOL
+        self._limits = self._documented
+        self._timeout_seconds = timeout_seconds
+        self._pacer = Pacer(self._documented.pace, clock=clock, sleep=sleep)
+        self._answer_seconds: deque[float] = deque(maxlen=_ANSWER_WINDOW)
 
     @property
     def name(self) -> str:
@@ -594,16 +524,17 @@ class CrossrefProvider:
     @property
     def limits(self) -> PoolLimits:
         """The pace now: the pool's documented limits, tightened by the last answer's headers."""
-        return self._pacer.limits
+        return self._limits
 
     @property
     def reserve_seconds(self) -> float:
         """The time a query keeps back for its answer when deciding whether it is too late to send."""
-        return self._pacer.reserve_seconds
+        median = statistics.median(self._answer_seconds) if self._answer_seconds else None
+        return answer_reserve_seconds(median, self._timeout_seconds)
 
     def __repr__(self) -> str:
         contact = "configured" if self._contact_email is not None else "none"
-        return f"{type(self).__name__}(contact_email={contact}, pool={self._pacer.limits.pool})"
+        return f"{type(self).__name__}(contact_email={contact}, pool={self._limits.pool})"
 
     async def aclose(self) -> None:
         """Close the HTTP client and its connections."""
@@ -611,10 +542,10 @@ class CrossrefProvider:
 
     async def search(self, query: ProviderQuery) -> ProviderResponse:
         started = time.perf_counter()
-        if not await self._pacer.admit():
-            return self._not_asked(started)
-        try:
-            sent = self._clock.now()
+        async with self._pacer.turn(within=self._send_within) as sent:
+            if not sent:
+                return self._not_asked(started)
+            sent_at = self._clock.now()
             try:
                 response = await self._client.get(
                     CROSSREF_WORKS_URL, params=works_parameters(query, contact_email=self._contact_email)
@@ -623,9 +554,7 @@ class CrossrefProvider:
                 raise ProviderUnavailable(self.name, "timed out") from error
             except httpx.HTTPError as error:
                 raise ProviderUnavailable(self.name, f"transport failure: {type(error).__name__}") from error
-            self._pacer.answered((self._clock.now() - sent).total_seconds(), response.headers)
-        finally:
-            self._pacer.release()
+            self._answered((self._clock.now() - sent_at).total_seconds(), response.headers)
         failure = provider_error_for_status(
             self.name, response.status_code, response.headers, now=self._clock.now()
         )
@@ -635,8 +564,18 @@ class CrossrefProvider:
         elapsed_ms = (time.perf_counter() - started) * 1000
         return ProviderResponse(provider=self.name, results=results, elapsed_ms=elapsed_ms)
 
+    def _send_within(self) -> float:
+        """How long after a query arrives it may still be sent: the timeout less the reserve."""
+        return self._timeout_seconds - self.reserve_seconds
+
+    def _answered(self, seconds: float, headers: Mapping[str, str]) -> None:
+        """An answer came back after `seconds`: keep its time, and pace to the limits it advertised."""
+        self._answer_seconds.append(max(seconds, 0.0))
+        self._limits = advertised_limits(self._documented, headers)
+        self._pacer.retune(self._limits.pace)
+
     def _not_asked(self, started: float) -> ProviderResponse:
-        limits = self._pacer.limits
+        limits = self._limits
         reason = f"{self.name}: not asked: the {limits.pool} pool allows {limits.rate_phrase()}"
         if limits.pool == PUBLIC_POOL.pool:
             reason += "; set a contact email for the polite pool"

@@ -1105,7 +1105,7 @@ async def test_eleven_queries_on_the_public_pool_send_what_fits_and_leave_the_br
     (health,) = registry.health()
     assert health.state is BreakerState.CLOSED
     assert (health.error_count, health.consecutive_failures, health.last_error) == (0, 0, None)
-    assert health.success_count == 11
+    assert (health.success_count, health.not_asked_count) == (asked_count, 11 - asked_count)
 
 
 def on_the_loops_virtual_time(

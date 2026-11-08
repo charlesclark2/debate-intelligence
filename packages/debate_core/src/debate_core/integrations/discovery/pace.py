@@ -36,7 +36,7 @@ from __future__ import annotations
 
 import asyncio
 from collections import deque
-from collections.abc import Awaitable, Callable, Iterator
+from collections.abc import Awaitable, Callable, Generator
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass
@@ -124,7 +124,7 @@ _LISTENER: ContextVar[PaceListener | None] = ContextVar("debate_pace_listener", 
 
 
 @contextmanager
-def listening(listener: PaceListener) -> Iterator[None]:
+def listening(listener: PaceListener) -> Generator[None]:
     """Every pace turn taken inside this block, in this task or one it starts, reports to `listener`."""
     token = _LISTENER.set(listener)
     try:

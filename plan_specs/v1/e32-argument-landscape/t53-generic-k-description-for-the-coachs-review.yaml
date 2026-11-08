@@ -41,7 +41,7 @@ spec:
         description is in generic.yaml with the versions bumped and the config tests
         passing.
 status:
-  phase: Pending
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

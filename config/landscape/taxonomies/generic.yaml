@@ -12,9 +12,13 @@
 # Kantian ethics and skepticism, each with headings two or more hsld26 teams used on the de-extinction
 # topic as aliases; the two theory positions drafted beside them were dropped by the coach. They name LD only, so no Policy count moves and policy-2026-27-nhi
 # keeps its version.
+# 1.2.1 (2026-11-08, v1-e32-t53, the coach's review of the same day): generic-k's description in the
+# coach's own wording, a card clearly related to a kritik that no named kritik here covers. He did not
+# take v1-e32-t49's proposed wording. A description, so a patch; policy-2026-27-nhi moves to 1.5.1 with
+# it, and LD's topic keeps its version, since generic-k names Policy only.
 schema_version: 1
 topic_id: generic
-taxonomy_version: 1.2.0
+taxonomy_version: 1.2.1
 event: null
 positions:
 
@@ -93,7 +97,7 @@ positions:
     label: Generic K
     kind: k
     side: neg
-    description: A kritik card, a link, alternative, framework or impact, that fits no named kritik in this list.
+    description: A card clearly related to a kritik that does not fall under any of the named kritiks in this list.
     events: [POLICY]
     aliases: [ontology]
 

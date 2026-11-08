@@ -2066,16 +2066,13 @@ class ServiceContainer:
             clock=clock,
             environment=settings.environment.value,
             run_state=self.removal_run_state(),
-            # A removal that reaches a snapshot clears its parse owed (`v1-e40-t08`); in bucket mode
-            # the restored file, which the removal's save of the state files then saves.
-            parse_owed=self.parse_owed(),
         )
 
     def parse_owed(self) -> ParseOwed:
         """The parses this machine's runs owe, in the data directory (`v1-e40-t08`).
 
-        What `caselist status` and `caselist runs` read, and a removal clears from. The pull builds
-        its own over the same file, with the bucket-mode save as it is written.
+        What `caselist status` and `caselist runs` read; a removal keeps it as it is (`v1-e30-t34`). The
+        pull builds its own over the same file, with the bucket-mode save as it is written.
         """
         return ParseOwed(self.settings.storage.data_dir / PARSE_OWED_FILENAME)
 

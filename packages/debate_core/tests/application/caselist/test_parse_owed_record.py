@@ -3,8 +3,9 @@
 :class:`~debate_core.application.caselist_sync.ParseOwed` is the run's record of the parses it
 owes. The whole-run behaviour is `packages/debate_cli/tests/bucket_mode/test_parse_owed.py`'s; these
 pin the record itself: caselist slugs, snapshot names and parser versions and nothing else (the
-spec's forbidden list), a removal clearing only the snapshots it reached, and a file that cannot be
-read never taken for nothing owed. Every body is written by hand.
+spec's forbidden list), a published store clearing its caselist's entries, and a file that cannot be
+read never taken for nothing owed. A removal clears nothing since `v1-e30-t34`
+(`test_removal_keeps_the_parse_owed.py`). Every body is written by hand.
 """
 
 from __future__ import annotations
@@ -65,17 +66,6 @@ def test_a_published_parsed_store_clears_every_entry_of_its_caselist_and_removes
 
     assert not record.path.exists(), "no file when nothing is owed"
     assert written == [record.path] * 3, "each write and the removal are saved, in bucket mode to the bucket"
-
-
-def test_a_removal_clears_the_snapshots_it_reached_and_nothing_else(tmp_path: Path) -> None:
-    record = ParseOwed(tmp_path / "caselist-sync-parse-owed.json")
-    record.owe(snapshots=[WEEK, LATER_WEEK, CAMP], full_parses=[BUMP])
-
-    record.clear_snapshots([WEEK, PendingSnapshot(caselist="hspf26", snapshot="2026-10-21")])
-
-    assert record.read() == ParsesOwed(snapshots=(LATER_WEEK, CAMP), full_parses=(BUMP,)), (
-        "the other week of the same caselist, the camp release and the full parse stay owed"
-    )
 
 
 @pytest.mark.parametrize(

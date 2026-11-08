@@ -76,11 +76,25 @@ another caselist's bundle, or the run-state bundle.
 The bundle the removal took school views from is not republished here. The plan names the newest
 snapshot's (:attr:`~debate_core.application.caselist.removal_plan.RemovalPlan.republish`), and the PM
 coordinates `landscape report --publish` once the removal is done.
+
+## The parse owed is kept
+
+A removal leaves the parse-owed file (:class:`~debate_core.application.caselist_sync.ParseOwed`) as
+it found it, the entries of the snapshots whose manifests it rewrote included (`v1-e30-t34`, the PM's
+ruling of 2026-11-08). Until then it cleared those (`v1-e40-t08`), because the rebuild
+`caselist-removal.md` asked for after a removal parsed whatever of the caselist was unparsed; since
+`v1-e30-t33` nothing is rebuilt after a removal. The parse stage chooses a caselist when the file names
+it, when its store has no directory of the running parser version, or when the run imported into it,
+and a caselist parsed before always has such a directory, so a cleared entry left the snapshot's
+unparsed sources waiting for the caselist's next import. Kept, the entry is made by the next run, the
+cloud run in bucket mode, whatever it imports. It cannot bring the removed file back: an entry names a
+caselist to parse, never a source, and the parse plans from the manifests this removal rewrote and
+leaves out what the suppression list stops. A snapshot whose only unparsed source was the removed file
+is parsed with nothing to parse, its store published, and its entry cleared then, as any other.
 """
 
 from __future__ import annotations
 
-import contextlib
 import re
 import tempfile
 import uuid
@@ -91,7 +105,6 @@ from typing import Final, Protocol
 
 from debate_core.application.caselist.evidence_listing import LocalEvidence
 from debate_core.application.caselist.inbox_purge import CaselistInbox, InboxPurge, purge_inbox
-from debate_core.application.caselist.publish_plan import snapshot_of_manifest_key
 from debate_core.application.caselist.publish_service import error_code_of
 from debate_core.application.caselist.removal_aggregates import (
     AggregateRewriteRefused,
@@ -122,7 +135,6 @@ from debate_core.application.caselist.suppression import (
     RecordedSuppressionList,
     load_suppression_state,
 )
-from debate_core.application.caselist_sync import ParseOwed, ParseOwedUnreadable, PendingSnapshot
 from debate_core.application.errors import (
     DomainError,
     StoreAccessDenied,
@@ -764,9 +776,6 @@ class CaselistRemovalService:
     """In bucket mode (`v1-e40-t04`): the run's state, restored before a plan and rewritten after a
     removal, its earlier versions then purged. `None` in local mode, where no bundle exists: a local-mode
     command refuses a bucket that holds one (the PM's ruling 3(a))."""
-    parse_owed: ParseOwed | None = None
-    """The parses the runs owe (`v1-e40-t08`): a removal clears the entry of each snapshot it reaches.
-    In bucket mode, the restored file, saved with the other state files by the bundle's rewrite."""
     _access: TakedownAccess | None = field(default=None, init=False)
 
     # --------------------------------------------------------------------------------------
@@ -855,7 +864,6 @@ class CaselistRemovalService:
             await self._delete_local_files(plan, counts)
             await self._delete_local_school_views(plan, counts)
             await self._rewrite_local_manifests(plan, counts)
-            self._clear_parses_owed(plan)
             await self._purge_inbox(plan, counts)
             await self._delete_records(plan, counts)
             await self._rewrite_run_state(access, counts)
@@ -1157,27 +1165,6 @@ class CaselistRemovalService:
             await self._put_lines(self.local.objects, rewrite)
             counts.manifests_rewritten += 1
             counts.manifest_rows_dropped += rewrite.rows_dropped
-
-    def _clear_parses_owed(self, plan: RemovalPlan) -> None:
-        """The parse owed for each snapshot whose manifest the removal rewrote (`v1-e40-t08`).
-
-        It was cleared because the rebuild `caselist-removal.md` asked for after a removal, `caselist
-        parse --publish`, parsed whatever of the caselist was unparsed. Since `v1-e30-t33` no rebuild
-        follows a removal; whether the entry should now stay for the next parse stage is a question for
-        the PM (that task's session report), and until it is ruled this clears it as before. A file that
-        cannot be read is left as it is, for the parse stage to fail on: it never stops a removal.
-        """
-        if self.parse_owed is None:
-            return
-        reached = {
-            PendingSnapshot(caselist=caselist, snapshot=snapshot)
-            for rewrite in plan.manifests
-            for caselist in plan.touched_caselists
-            if (snapshot := snapshot_of_manifest_key(caselist, rewrite.key, full_archives=True)) is not None
-        }
-        if reached:
-            with contextlib.suppress(ParseOwedUnreadable):
-                self.parse_owed.clear_snapshots(reached)
 
     async def _purge_inbox(self, plan: RemovalPlan, counts: _Counts) -> None:
         """The sync's inbox, as planned: after this machine's store, before the records."""

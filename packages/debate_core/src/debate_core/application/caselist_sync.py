@@ -293,8 +293,10 @@ whether or not it imports anything. A caselist the run follows, `openev` include
 has no directory of the running parser version, though it has sources, owes a full parse, recorded
 before it starts. An entry is cleared only when its caselist's parsed store is published complete:
 never at the parse, so a parse whose publish failed is owed still. A caselist owed that the run does
-not follow is left owed, and said. A removal that reaches a snapshot clears its entry. Only an
-environment that publishes owes anything: one with no bucket has nothing to clear an entry by.
+not follow is left owed, and said. A removal keeps every entry, those of the snapshots it reached
+included (`v1-e30-t34`): nothing is rebuilt after it, so the next run makes the parse, from the
+manifests the removal rewrote, which no longer name the removed file. Only an environment that
+publishes owes anything: one with no bucket has nothing to clear an entry by.
 
 **The whole caselist is planned, and its skip key finds what is new.** The stage hands the pipeline
 a caselist, never a snapshot. Every source already parsed under the running parser and profile
@@ -2388,12 +2390,6 @@ class ParseOwed:
         """Clear every entry of `caselist`: its parsed store was just published complete."""
         owed = self.read()
         self._clear(owed, lambda one: one.caselist == caselist)
-
-    def clear_snapshots(self, snapshots: Iterable[PendingSnapshot]) -> None:
-        """Clear the entries of `snapshots`: a removal reached them. Full parses owed stay owed."""
-        reached = frozenset(snapshots)
-        owed = self.read()
-        self._clear(owed, lambda one: isinstance(one, PendingSnapshot) and one in reached)
 
     def _clear(self, owed: ParsesOwed, cleared: Callable[[PendingSnapshot | FullParseOwed], bool]) -> None:
         left = ParsesOwed(

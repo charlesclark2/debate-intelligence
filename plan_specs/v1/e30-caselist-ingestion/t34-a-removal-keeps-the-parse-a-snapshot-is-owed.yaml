@@ -40,7 +40,7 @@ spec:
         After a removal, a snapshot owed a parse is still parsed by the next parse stage,
         its removed file left out, by a test shown failing first.
 status:
-  phase: Pending
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

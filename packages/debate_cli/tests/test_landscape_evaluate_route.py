@@ -25,6 +25,7 @@ from typer.testing import CliRunner, Result
 
 from debate_cli.app import create_app
 from debate_cli.exit_codes import ExitCode
+from debate_core.application.coach_sample_labels_file import digest_line, digest_path, labels_digest
 from debate_core.application.ports.model_router import ModelRouter
 from debate_core.application.ports.parsed_store import OCCURRENCES_NAME, PARSED_PREFIX
 from debate_core.domain.landscape_classification import ModelStancedPositionAnswers, card_item_id
@@ -133,6 +134,9 @@ def sample(world: SyntheticRun, tmp_path: Path) -> tuple[Path, Path]:
         rows.append(json.dumps({"sample_row": row, "item_id": item_ids[fingerprint]}))
     csv_file, rows_file = tmp_path / "coach-sample.csv", tmp_path / "coach-sample.jsonl"
     csv_file.write_text("\n".join(labels) + "\n", encoding="utf-8")
+    digest_path(csv_file).write_text(
+        digest_line(labels_digest(csv_file.read_bytes()), csv_file), encoding="ascii"
+    )
     rows_file.write_text("\n".join(rows) + "\n", encoding="utf-8")
     return csv_file, rows_file
 

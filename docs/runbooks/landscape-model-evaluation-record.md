@@ -23,6 +23,8 @@ Since `v1-e32-t55` a checkout runs prompt 1.3.1, re-recorded on `deep_audit` by
   recording otherwise (`MODEL_USE_NOT_YET_ALLOWED`).
 * The calls are live: 47 cards in 3 batches of at most 20, on dev's `high_volume` route. Expect 3 or 4
   calls (one more if a batch is repaired), about 30,000 input tokens, a few cents.
+* **The labels file has its sidecar** ([the guarded labels file](#the-labels-file-is-guarded-v1-e32-t58)).
+  Every block below refuses the file without it.
 
 ## What to paste back
 
@@ -31,6 +33,66 @@ row numbers, which may be pasted into a session. Never paste the terminal listin
 (step 5) anywhere, a Claude session included: it prints schools, team codes and tournaments with words
 of card text around them (`docs/policies/caselist-data-use.md`, model provider use, condition 1,
 version 1.21).
+
+## The labels file is guarded (`v1-e32-t58`)
+
+On 2026-11-05 Microsoft Excel saved an older copy over the coach's labels file, and two sittings were lost
+before any command noticed (`v1-e32-t55`'s report). Since `v1-e32-t58`:
+
+* **The file is opened only through the sitting script** (`scripts/relabel_coach_sample.py`), never in a
+  spreadsheet app (Excel, Numbers) or an editor, not even to look. A label is changed only in a sitting
+  the PM rules.
+* **Its SHA-256 is recorded beside it**, in `policy-2026-27-nhi-coach-sample-labelled.csv.sha256`: one line
+  in the format `shasum -a 256` prints, the digest in lower-case hex, two spaces and the file's name. Only
+  a sitting writes it, after the file, and once the one-time step below.
+* **Every command that reads the file checks it first:** `landscape evaluate` in every mode
+  (`--check-sample`, the replay, `--breakdown`, `--model-mode record`), the sitting itself and
+  `compare_local_classifier.py score-sample`. A file whose SHA-256 differs is refused with
+  `LABELS_FILE_CHANGED`, exit 1, naming both digests shortened, the sidecar and the command that writes
+  it; a file with no sidecar with `LABELS_DIGEST_MISSING`; a sidecar that is not that one line with
+  `LABELS_DIGEST_UNREADABLE`. On any of them, stop: do not record a new digest, keep the file as it is,
+  and paste the error's code and the two shortened digests to the PM, nothing else.
+* **Every sitting keeps the file it replaces**, beside it, under the sitting's date and time:
+  `policy-2026-27-nhi-coach-sample-labelled.before-sitting-YYYY-MM-DD-HHMM.csv`, with `-2`, `-3` after the
+  time for a second sitting in the same minute. A copy is never overwritten. The sitting then writes the
+  file through its `.incoming` file and a rename, and only then the sidecar, so a sitting that stops in
+  between leaves a refusal, never a file the sidecar wrongly vouches for. A dated copy has no sidecar of
+  its own, so a command refuses it until the PM rules it back into place.
+* **The file is read-only between sittings:**
+
+```bash
+chmod a-w ~/Documents/debate/landscape-review/policy-2026-27-nhi-coach-sample-labelled.csv
+```
+
+A spreadsheet app then cannot save over it. A sitting's block makes it writable first (`chmod u+w`) and
+read-only again after (`chmod a-w`), as [the sitting's block](#1-the-coachs-relabelling-sitting) does: the
+sitting puts a new file in place, and a new file starts writable.
+
+### Once: record the digest of the coach's labels of 2026-11-06
+
+The file the coach's sitting of 2026-11-06 wrote has SHA-256
+`553374704519fd29f13a43e279a08537b28c87fbfc58372be845bc0de2b0a922` (`v1-e32-t55`'s report), and no
+sidecar, since the sidecar did not exist then. This block records it once, from a checkout holding
+`v1-e32-t58` (its task worktree until it merges, a checkout of `dev` after), and only if the file still
+has that digest. It refuses a set `DEBATE_` variable, a running Excel and a sidecar already there; the
+script itself refuses again if the digest differs and never overwrites a sidecar. Then it makes the file
+read-only and reads it with `--check-sample`: a few seconds, no card read, no model asked.
+
+```bash
+cd /Users/charlesclark/Documents/debate/debate-intelligence-tool/debate-intelligence-worktrees/v1-e32-t58-the-coach-sample-labels-file-guarded
+```
+
+```bash
+SAMPLE=~/Documents/debate/landscape-review/policy-2026-27-nhi-coach-sample-labelled.csv
+ROWS=~/.debate-research/dev/landscape/local-classifier/hspolicy26/policy-2026-27-nhi-coach-sample.jsonl
+EXPECT=553374704519fd29f13a43e279a08537b28c87fbfc58372be845bc0de2b0a922
+if env | grep -q '^DEBATE_'; then echo "STOP: a DEBATE_ variable is set; unset it and paste again"; elif pgrep -x "Microsoft Excel" >/dev/null; then echo "STOP: Microsoft Excel is running; quit it first, so it cannot save over the labels file"; elif [ -e "${SAMPLE}.sha256" ]; then echo "STOP: the sidecar is already there; record nothing and paste this line"; elif [ "$(shasum -a 256 "$SAMPLE" | cut -d ' ' -f 1)" != "$EXPECT" ]; then echo "STOP: the labels file is not the one the sitting of 2026-11-06 wrote; record nothing and tell the PM"; elif ! uv run python scripts/record_coach_sample_digest.py --sample "$SAMPLE" --expect "$EXPECT"; then echo "STOP: nothing was recorded; paste the Refused line"; elif ! chmod a-w "$SAMPLE"; then echo "STOP: the digest is recorded, but the file could not be made read-only"; else uv run debate-research --json landscape evaluate --caselist hspolicy26 --snapshot 2026-10-20 --sample "$SAMPLE" --sample-rows "$ROWS" --check-sample; fi
+```
+
+Success: `Recorded 553374704519fd29… for policy-2026-27-nhi-coach-sample-labelled.csv in …`, then the JSON
+with `labelled` 47, `by_label_kind` advantage 16, aff 1, cp 7, da 5, k 9, none 2, t 7, and `by_stance`
+answers 9, reads 36. Paste back the `Recorded` line, or the `STOP:` or `Refused:` line, and the JSON:
+digests, paths and counts only.
 
 ## 1. Go to the checkout
 
@@ -49,7 +111,9 @@ card, asks no model and writes nothing. It must exit 0 with `labelled` 47 before
 if env | grep -q '^DEBATE_'; then echo "STOP: a DEBATE_ variable is set; unset it and paste again"; else uv run debate-research --json landscape evaluate --caselist hspolicy26 --snapshot 2026-10-20 --sample ~/Documents/debate/landscape-review/policy-2026-27-nhi-coach-sample-labelled.csv --sample-rows ~/.debate-research/dev/landscape/local-classifier/hspolicy26/policy-2026-27-nhi-coach-sample.jsonl --check-sample; fi
 ```
 
-A refusal names the row and the rule; fix the sample before recording. If step 3 below fails with
+A refusal names the row and the rule, or the labels file's digests (`LABELS_FILE_CHANGED`,
+`LABELS_DIGEST_MISSING`): record nothing and tell the PM; the file is changed only in a sitting the PM
+rules. If step 3 below fails with
 `ModelAccessDenied` before any call, check the Bedrock profile's login with
 `aws sts get-caller-identity --profile debate-dev-bedrock`, which also refreshes the role's
 credentials, then run step 3 again (2026-11-02).
@@ -183,22 +247,28 @@ was disclosed on, and the coach's label; nothing about the model's answers, the 
 Type a label (`at:politics-da` for a card that answers the politics DA, a plain id for one that reads it,
 `none`, or `unsure`), or press Enter to keep it. A label the evaluation would refuse is asked again.
 
-The script first reads the store for each card's side (about half a minute), then keeps a copy of the CSV
-beside it (`policy-2026-27-nhi-coach-sample-labelled.before-stance-relabel.csv`) before anything is
-written. It writes only changed labels, once, at the end; Ctrl-C writes nothing. It ends with one line of
-counts, then `--check-sample` reads the result: a few seconds, no card read and no model asked.
+The script first checks the labels file against its sidecar and stops on a file the sidecar does not
+record ([the guarded labels file](#the-labels-file-is-guarded-v1-e32-t58)). It reads the store for each
+card's side (about half a minute), and writes only changed labels, once, at the end; Ctrl-C writes nothing.
+Before it writes, it keeps the file it replaces as a dated copy beside it
+(`policy-2026-27-nhi-coach-sample-labelled.before-sitting-YYYY-MM-DD-HHMM.csv`), then writes the file, then
+its sidecar. (Until `v1-e32-t58` it kept one copy, `.before-stance-relabel.csv`, and wrote no sidecar.) It
+ends with one line of counts, then `--check-sample` reads the result: a few seconds, no card read and no
+model asked. The block makes the file writable for the sitting and read-only again after it, whether the
+sitting finished or stopped; it refuses to start while Excel runs.
 
 ```bash
 SAMPLE=~/Documents/debate/landscape-review/policy-2026-27-nhi-coach-sample-labelled.csv
 ROWS=~/.debate-research/dev/landscape/local-classifier/hspolicy26/policy-2026-27-nhi-coach-sample.jsonl
-if env | grep -q '^DEBATE_'; then echo "STOP: a DEBATE_ variable is set; unset it and paste again"; elif pgrep -f "caselist pull" >/dev/null; then echo "STOP: a caselist pull is running; wait for it to finish"; elif ! uv run python scripts/relabel_coach_sample.py --caselist hspolicy26 --snapshot 2026-10-20 --sample "$SAMPLE" --sample-rows "$ROWS" --rows 5,11,13,16,20,21,25,26,31,33,41,57,59 --seed 20261105; then echo "STOP: the sitting stopped; paste its last line only"; else uv run debate-research --json landscape evaluate --caselist hspolicy26 --snapshot 2026-10-20 --sample "$SAMPLE" --sample-rows "$ROWS" --check-sample; fi
+if env | grep -q '^DEBATE_'; then echo "STOP: a DEBATE_ variable is set; unset it and paste again"; elif pgrep -f "caselist pull" >/dev/null; then echo "STOP: a caselist pull is running; wait for it to finish"; elif pgrep -x "Microsoft Excel" >/dev/null; then echo "STOP: Microsoft Excel is running; quit it first, so it cannot save over the labels file"; elif ! chmod u+w "$SAMPLE"; then echo "STOP: the labels file could not be made writable for the sitting"; elif ! uv run python scripts/relabel_coach_sample.py --caselist hspolicy26 --snapshot 2026-10-20 --sample "$SAMPLE" --sample-rows "$ROWS" --rows 5,11,13,16,20,21,25,26,31,33,41,57,59 --seed 20261105; then chmod a-w "$SAMPLE"; echo "STOP: the sitting stopped; paste its last line only"; else chmod a-w "$SAMPLE"; uv run debate-research --json landscape evaluate --caselist hspolicy26 --snapshot 2026-10-20 --sample "$SAMPLE" --sample-rows "$ROWS" --check-sample; fi
 ```
 
 What to paste back: **the sitting's last line** (`Done. Listed: ... Control: ...`, counts only) **and the
 JSON object**, nothing else. The cards the sitting showed stay in the terminal. Success: exit 0, `labelled`
 47 (fewer only if the coach turned a row `unsure`), and `by_stance` with `answers` above zero if the coach
 wrote any `at:` label. Stop on a `STOP:` line, on `EVALUATION_REFUSED` (its message names the row and the
-rule), or on a `Stopped:` line from the sitting.
+rule), or on a `Stopped:` line from the sitting. This block is the shape of every sitting from now on; the
+PM gives each sitting's rows and seed.
 
 ### 2. The re-record on both routes, then the breakdowns
 

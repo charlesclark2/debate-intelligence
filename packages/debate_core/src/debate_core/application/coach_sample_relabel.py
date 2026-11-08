@@ -7,9 +7,9 @@ random order and unmarked (:func:`sitting_rows`). Each card shows the coach's ow
 coach's CSV, the side its file was disclosed on, and the coach's label, and nothing about the model's
 answers, the recordings or the score (:func:`run_sitting`). The coach answers with a label, `at:<id>` for a
 card that answers the position, and Enter keeps it; a label the evaluation would refuse is asked again,
-never echoed. Only changed labels are written (:func:`relabelled_sample`), after a copy of the CSV is kept
-(:func:`copy_path`), and the end counts changed and unchanged rows, listed and control
-(:func:`relabel_counts`).
+never echoed. Only changed labels are written (:func:`relabelled_sample`), after the file they replace is
+kept as a dated copy (:mod:`debate_core.application.coach_sample_labels_file`, `v1-e32-t58`), and the end
+counts changed and unchanged rows, listed and control (:func:`relabel_counts`).
 
 `scripts/relabel_coach_sample.py` is the terminal half. This module is the rest, values in and values out;
 nothing here logs, and no row's text leaves the terminal it is shown in.
@@ -22,7 +22,6 @@ import io
 import random
 from collections.abc import Callable, Collection, Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Final
 
 from debate_core.application.landscape_model_evaluation import (
@@ -35,10 +34,8 @@ from debate_core.domain.landscape import Taxonomy
 
 __all__ = [
     "CONTROL_ROWS",
-    "COPY_SUFFIX",
     "ShownRow",
     "SittingRow",
-    "copy_path",
     "disclosed_side",
     "relabel_counts",
     "relabelled_sample",
@@ -49,9 +46,6 @@ __all__ = [
 
 CONTROL_ROWS: Final = 6
 """Labelled rows off the session's list drawn into the sitting, unmarked, beside the listed rows."""
-
-COPY_SUFFIX: Final = ".before-stance-relabel"
-"""Added to the sample's name for the copy kept before anything is written."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -145,11 +139,6 @@ def relabel_counts(rows: Sequence[SittingRow], changed: Collection[int]) -> dict
     for one in rows:
         counts["listed" if one.listed else "control"]["changed" if one.row in changed else "unchanged"] += 1
     return counts
-
-
-def copy_path(sample: Path) -> Path:
-    """Where the copy of `sample` is kept before the sitting writes it."""
-    return sample.with_name(f"{sample.stem}{COPY_SUFFIX}{sample.suffix}")
 
 
 @dataclass(frozen=True, slots=True)

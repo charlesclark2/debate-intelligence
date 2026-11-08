@@ -83,9 +83,9 @@ class InventedAnswer(BaseModel):
     rationale: str
 
 
+# The invented failed call's schema. A docstring would be its JSON schema's description, so it has none:
+# the schema names `confidence` twice, as its field's title and in its `required` list.
 class InventedAnswers(BaseModel):
-    """The invented failed call's schema: its JSON schema titles the `confidence` field `Confidence`."""
-
     answers: list[InventedAnswer]
 
 
@@ -94,9 +94,8 @@ class PlainAnswer(BaseModel):
     rationale: str
 
 
+# An invented schema naming nothing on the scan's lists.
 class PlainAnswers(BaseModel):
-    """An invented schema naming nothing on the scan's lists."""
-
     answers: list[PlainAnswer]
 
 
@@ -226,7 +225,8 @@ SCHOOL, CODE = HitKind.SCHOOL, HitKind.TEAM_CODE
 
 def test_repair_cassette_scan_marks_no_hit_outside_its_cards_as_in_the_input() -> None:
     """The instructions' and the answer's `confidence` and `or` are not the card's words: not in the input,
-    each set aside by its trusted mark. The schema's title `Confidence` is metadata, set aside alike."""
+    each set aside by its trusted mark. The schema's `Confidence` title and `required` entry are metadata, set
+    aside alike."""
     hits = repair_cassette_hits("repair cassette 1", repair_cassette(MODEL_WORDS), NAMES)
 
     assert marks(hits) == {
@@ -236,7 +236,7 @@ def test_repair_cassette_scan_marks_no_hit_outside_its_cards_as_in_the_input() -
         (HitField.RATIONALE, CODE, "or", False, False, True),
         (HitField.METADATA, SCHOOL, "confidence", False, True, False),
     }
-    assert len(hits) == 5
+    assert len(hits) == 6
 
 
 def test_repair_cassette_scan_of_model_words_not_in_its_cards_is_clean() -> None:
@@ -244,7 +244,7 @@ def test_repair_cassette_scan_of_model_words_not_in_its_cards_is_clean() -> None
 
     assert scan.clean
     assert (scan.texts, scan.schools, scan.team_codes, scan.other_names, scan.texts_left) == (1, 1, 1, 0, 0)
-    assert scan.set_aside == {"texts": 1, "hits": 5, "json_key": 3, "in_taxonomy": 2}
+    assert scan.set_aside == {"texts": 1, "hits": 6, "json_key": 4, "in_taxonomy": 2}
 
 
 @pytest.mark.parametrize(
@@ -363,11 +363,11 @@ def test_repair_cassette_scan_clean_flag_and_counts_over_several_cassettes() -> 
 
     assert not scan.clean
     assert (scan.texts, scan.schools, scan.team_codes, scan.other_names, scan.texts_left) == (3, 2, 2, 0, 1)
-    assert scan.set_aside == {"texts": 1, "hits": 5, "json_key": 3, "in_taxonomy": 2}
+    assert scan.set_aside == {"texts": 1, "hits": 6, "json_key": 4, "in_taxonomy": 2}
     assert repair_scan([texts[0], texts[2]]).clean
     hits = repair_cassette_hits("repair cassette 1", texts[0], NAMES)
     assert mark_counts(hits) == {
-        "cassette metadata": {"hits": 1, "team_name": 0, "in_taxonomy": 0, "json_key": 1, "in_input": 0},
+        "cassette metadata": {"hits": 2, "team_name": 0, "in_taxonomy": 0, "json_key": 2, "in_input": 0},
         "model rationale": {"hits": 2, "team_name": 0, "in_taxonomy": 1, "json_key": 1, "in_input": 0},
         "repaired prompt": {"hits": 2, "team_name": 0, "in_taxonomy": 1, "json_key": 1, "in_input": 0},
     }

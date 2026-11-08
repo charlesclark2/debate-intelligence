@@ -19,6 +19,17 @@ A federated search asks several providers at once and must not be held hostage b
   library's exceptions; one that leaks something else is reported as
   :class:`~debate_core.application.errors.ProviderUnavailable` naming the exception's type;
 * **records health** for the CLI's status footer (:meth:`ResilientProvider.health`);
+* **does not hold a provider's own pace against it** (v1-e07-t10). An adapter that queues its
+  requests on a :class:`~debate_core.integrations.discovery.pace.Pacer` tells the wrapper, through
+  the listener installed for each call, when a call starts waiting and how its wait ended. While a
+  call is queued its timeout is suspended, and when its pace releases it the timeout is moved on by
+  the time it was queued, so the timeout fails a call only for `timeout_seconds` of time it was not
+  queued: a call that was sent and runs slow still times out. The latency recorded is the call's
+  time less its queued time, for an answer and a failure alike. A call whose pace never sent it (its
+  turn would have come after its deadline, and the adapter answered "not asked") is returned as it
+  is but counted apart, in `not_asked_count`: neither a success, a failure nor a latency sample, and
+  its breaker permit is released with no verdict, as a cancelled call's is. A call that asks
+  several queries at once is queued while any one of them waits for its turn;
 * **asks an adapter that answers several queries at once with all of them** (v1-e08-t10):
   :func:`resilient` wraps a :class:`~debate_core.application.ports.providers.MultiQuerySearchProvider`
   in :class:`ResilientMultiQueryProvider`, whose `search_each` is one guarded call for every query
@@ -45,7 +56,8 @@ from __future__ import annotations
 import asyncio
 import statistics
 from collections import deque
-from collections.abc import Awaitable, Callable, Iterable, Sequence
+from collections.abc import Awaitable, Callable, Iterable, Iterator, Sequence
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
@@ -58,6 +70,7 @@ from debate_core.application.errors import (
 )
 from debate_core.application.ports.providers import Clock, MultiQuerySearchProvider, SearchProvider
 from debate_core.domain.discovery import BreakerState, ProviderHealth, ProviderQuery, ProviderResponse
+from debate_core.integrations.discovery.pace import TurnOutcome, listening
 from debate_core.integrations.discovery.redaction import logger, protect_logs, redact_exception_chain
 
 __all__ = [
@@ -79,7 +92,7 @@ class ResiliencePolicy:
     """
 
     timeout_seconds: float = 10.0
-    """How long one call may take before it is cancelled."""
+    """How long one call may take before it is cancelled, not counting time queued on its own pace."""
 
     failure_threshold: int = 3
     """Consecutive failures that open the breaker."""
@@ -233,6 +246,7 @@ class ResilientProvider:
         self._success_count = 0
         self._error_count = 0
         self._skipped_count = 0
+        self._not_asked_count = 0
         self._last_error: str | None = None
         self._last_error_at: datetime | None = None
         self._rate_limited_until: datetime | None = None
@@ -270,25 +284,26 @@ class ResilientProvider:
             self._skipped_count += 1
             logger.debug("discovery provider %s skipped: circuit breaker open", self._name)
             raise
-        started = self._clock.now()
         deadline = asyncio.timeout(self._policy.timeout_seconds)
+        call = _CallTime(deadline, self._clock)
         try:
             async with deadline:
-                responses = tuple(await ask())
+                with call.timing():
+                    responses = tuple(await ask())
         except TimeoutError as error:
             if deadline.expired():
                 failure: ProviderError = ProviderTimedOut(self._name, self._policy.timeout_seconds)
-                self._fail(permit, failure, started)
+                self._fail(permit, failure, call)
                 raise failure from None
             failure = self._untranslated(error)
-            self._fail(permit, failure, started, cause=error)
+            self._fail(permit, failure, call, cause=error)
             raise failure from error
         except ProviderError as error:
-            self._fail(permit, error, started)
+            self._fail(permit, error, call)
             raise
         except Exception as error:
             failure = self._untranslated(error)
-            self._fail(permit, failure, started, cause=error)
+            self._fail(permit, failure, call, cause=error)
             raise failure from error
         except BaseException:
             self._breaker.release(permit)
@@ -296,15 +311,18 @@ class ResilientProvider:
         strangers = [response.provider for response in responses if response.provider != self._name]
         if strangers:
             failure = ProviderUnavailable(self._name, f"the adapter answered as {strangers[0]!r}")
-            self._fail(permit, failure, started)
+            self._fail(permit, failure, call)
             raise failure
         if len(responses) != expected:
             failure = ProviderUnavailable(
                 self._name, f"the adapter answered {len(responses)} of {expected} queries"
             )
-            self._fail(permit, failure, started)
+            self._fail(permit, failure, call)
             raise failure
-        self._succeed(permit, started)
+        if call.not_asked:
+            self._not_asked(permit)
+        else:
+            self._succeed(permit, call)
         return responses
 
     async def aclose(self) -> None:
@@ -329,6 +347,7 @@ class ResilientProvider:
             success_count=self._success_count,
             error_count=self._error_count,
             skipped_count=self._skipped_count,
+            not_asked_count=self._not_asked_count,
             last_error=self._last_error,
             last_error_at=self._last_error_at,
             p50_latency_ms=statistics.median(self._latencies_ms) if self._latencies_ms else None,
@@ -354,11 +373,11 @@ class ResilientProvider:
             self._name, f"the adapter raised {type(error).__name__}, which it should have translated"
         )
 
-    def _succeed(self, permit: BreakerPermit, started: datetime) -> None:
+    def _succeed(self, permit: BreakerPermit, call: _CallTime) -> None:
         was = self._breaker.state
         self._breaker.record_success(permit)
         self._success_count += 1
-        self._latencies_ms.append(self._elapsed_ms(started))
+        self._latencies_ms.append(call.latency_ms())
         if was is not BreakerState.CLOSED and self._breaker.state is BreakerState.CLOSED:
             logger.info("discovery provider %s recovered: circuit breaker closed", self._name)
 
@@ -366,7 +385,7 @@ class ResilientProvider:
         self,
         permit: BreakerPermit,
         failure: ProviderError,
-        started: datetime,
+        call: _CallTime,
         *,
         cause: BaseException | None = None,
     ) -> None:
@@ -376,7 +395,7 @@ class ResilientProvider:
         was = self._breaker.state
         self._breaker.record_failure(permit)
         self._error_count += 1
-        self._latencies_ms.append(self._elapsed_ms(started))
+        self._latencies_ms.append(call.latency_ms())
         now = self._clock.now()
         self._last_error = str(failure)
         self._last_error_at = now
@@ -392,8 +411,81 @@ class ResilientProvider:
                 self._breaker.open_until,
             )
 
-    def _elapsed_ms(self, started: datetime) -> float:
-        return max((self._clock.now() - started).total_seconds() * 1000.0, 0.0)
+    def _not_asked(self, permit: BreakerPermit) -> None:
+        """The adapter's own pace never sent the call: no verdict for the breaker, no latency."""
+        self._breaker.release(permit)
+        self._not_asked_count += 1
+        logger.debug("discovery provider %s answered not asked: its own pace never sent the call", self._name)
+
+
+class _CallTime:
+    """One call's time, and how much of it was queued on the adapter's own pace.
+
+    The :class:`~debate_core.integrations.discovery.pace.PaceListener` the wrapper installs for the
+    call. The call is queued while any of its pace turns is waiting. Its timeout is suspended then
+    and moved on by the queued time when the last wait ends, on the event loop's clock, which the
+    timeout runs on; its latency is read from the injected clock, less the time queued.
+    """
+
+    def __init__(self, deadline: asyncio.Timeout, clock: Clock) -> None:
+        self._deadline = deadline
+        self._clock = clock
+        self._loop = asyncio.get_running_loop()
+        self._started = clock.now()
+        self._waiting = 0
+        self._waiting_since = self._started
+        self._waiting_since_loop = 0.0
+        self._queued = timedelta(0)
+        self._queued_loop_seconds = 0.0
+        self._released = 0
+        self._refused = 0
+        self._first_deadline: float | None = None
+        self._timing = False
+
+    @contextmanager
+    def timing(self) -> Iterator[None]:
+        """Listen to the call's pace turns; entered inside the call's `asyncio.timeout`."""
+        self._first_deadline = self._deadline.when()
+        self._timing = True
+        try:
+            with listening(self):
+                yield
+        finally:
+            self._timing = False
+
+    def waiting(self) -> None:
+        self._waiting += 1
+        if self._waiting == 1:
+            self._waiting_since = self._clock.now()
+            self._waiting_since_loop = self._loop.time()
+            self._move_deadline(None)
+
+    def waited(self, outcome: TurnOutcome) -> None:
+        if outcome is TurnOutcome.RELEASED:
+            self._released += 1
+        elif outcome is TurnOutcome.NOT_ASKED:
+            self._refused += 1
+        self._waiting -= 1
+        if self._waiting == 0:
+            self._queued += self._clock.now() - self._waiting_since
+            self._queued_loop_seconds += self._loop.time() - self._waiting_since_loop
+            first = self._first_deadline
+            self._move_deadline(None if first is None else first + self._queued_loop_seconds)
+
+    @property
+    def not_asked(self) -> bool:
+        """Every pace turn the call took was refused: the adapter sent nothing."""
+        return self._refused > 0 and self._released == 0
+
+    def latency_ms(self) -> float:
+        """The call's time so far, less the time it was queued on its pace."""
+        now = self._clock.now()
+        queued = self._queued + (now - self._waiting_since if self._waiting else timedelta(0))
+        return max((now - self._started - queued).total_seconds() * 1000.0, 0.0)
+
+    def _move_deadline(self, when: float | None) -> None:
+        if self._timing and not self._deadline.expired():
+            self._deadline.reschedule(when)
 
 
 class ResilientMultiQueryProvider(ResilientProvider):

@@ -1191,6 +1191,19 @@ def test_the_public_pool_case_on_the_loops_virtual_time_keeps_its_results_footer
     assert (health.error_count, health.consecutive_failures, health.last_error) == (0, 0, None)
 
 
+@pytest.mark.parametrize(
+    ("answer_seconds", "sent"), [(0.5, 9), (1.5, 6), (2.5, 3)], ids=["0.5 s", "1.5 s", "2.5 s"]
+)
+def test_the_public_pool_case_counts_not_asked_answers_apart_and_its_latency_from_answers_only(
+    answer_seconds: float, sent: int
+) -> None:
+    """Every query sent is answered `answer_seconds` after the pace released it, so that is the
+    median latency, however long the query was queued; the queries never sent are counted apart."""
+    _, health = run_in_virtual_time(on_the_loops_virtual_time(answer_seconds, asked=[]))
+    assert (health.success_count, health.not_asked_count, health.error_count) == (sent, 11 - sent, 0)
+    assert health.p50_latency_ms == pytest.approx(answer_seconds * 1000, abs=0.01)
+
+
 async def test_eleven_queries_on_the_polite_pool_are_all_answered_at_one_and_a_half_seconds() -> None:
     time = VirtualTime()
     asked: list[str] = []

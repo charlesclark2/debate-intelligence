@@ -42,7 +42,7 @@ spec:
         nor as latency, and Crossref's eleven-query public-pool case behaves as today on
         virtual time, by tests shown failing first.
 status:
-  phase: Pending
+  phase: InProgress
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

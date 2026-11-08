@@ -349,6 +349,13 @@ restored copy, no backfile import. The `DONE` output says *Parsed store: N aggre
 without M row(s); K in retired directories deleted. Nothing is to be rebuilt.* N is the number of
 lines the plan marked *rewritten*.
 
+A parse owed stays owed, and the next cloud run makes it (`v1-e30-t34`). A week a run published and
+did not parse is written in the parse-owed file (`caselist runs --remote` names it), and the removal
+leaves that entry as it is, even for a week whose manifest it rewrote. The next run parses the
+caselist from the rewritten manifests, so the removed file is not among what it parses or publishes;
+a week whose only unparsed source was the removed file is parsed with nothing to parse, and its entry
+is cleared then.
+
 ## Step 6 — Verify dev
 
 First, the store and S3 agree and the sources are gone:

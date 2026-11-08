@@ -1089,9 +1089,10 @@ After it has published, a run parses what it imported (`v1-e34-t17`). It is the 
   owes a full parse, `openev` included, whether or not anything was imported into it. An entry is
   cleared only when its caselist's parsed store is published complete, so a run killed after its
   publish, or one whose parsed-store publish failed, leaves the parse to the next run, which makes
-  it even when it imports nothing. A removal that reaches a snapshot clears its entry: the rebuild
-  that follows a removal parses the caselist. `caselist runs` and `caselist status` end with what is
-  owed, and `--json` gives it as `parses_owed`.
+  it even when it imports nothing. A removal keeps every entry (`v1-e30-t34`): nothing is rebuilt
+  after a removal, so the next run makes the parse, from the manifests the removal rewrote, without
+  the removed file. `caselist runs` and `caselist status` end with what is owed, and `--json` gives
+  it as `parses_owed`.
 * **What is parsed.** Every source of that caselist not yet parsed under the build's parser and
   profile versions. In an ordinary week that is the week's new sources; everything else is
   `skipped`.

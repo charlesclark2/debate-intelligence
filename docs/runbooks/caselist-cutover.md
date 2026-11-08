@@ -1224,7 +1224,7 @@ publish would upload and what prod already holds with the same digest, with coun
 uploads nothing and writes nothing in the copy, and it needs no `--confirm-prod`. Each block signs
 in to prod first. Set `CASELIST` in the first.
 
-**Operator command** (expected runtime ~1 min: it heads each object of the store in prod)
+**Operator command** (expected runtime about a minute, not yet measured: it heads each object prod already lists, and uploads nothing)
 Where: your Mac, in the window that keeps `WEEK`
 ```bash
 CASELIST=hsld26

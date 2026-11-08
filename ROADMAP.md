@@ -61,7 +61,7 @@ v2.3's extension work.
 | Release | Theme | Epics | Tasks | Done | Est. hours |
 |---|---|---|---|---|---|
 | [v1.0](plan_specs/releases/v1.0.yaml) | Foundation & verified evidence core | 3 | 55 | 55 | 252 |
-| [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 4 | 125 | 102 | 550 |
+| [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 4 | 125 | 103 | 550 |
 | [v1.2](plan_specs/releases/v1.2.yaml) | Argument landscape & file building | 3 | 96 | 78 | 364 |
 | [v1.3](plan_specs/releases/v1.3.yaml) | URL → verified card | 2 | 24 | 15 | 125 |
 | [v1.4](plan_specs/releases/v1.4.yaml) | Federated research from the CLI | 2 | 39 | 19 | 136 |
@@ -219,7 +219,7 @@ OpenCaselist archives and OpenEv camp files for HS LD, Policy and PF are importe
 | [The pull keeps OpenEv's own camp word on a camp file's manifest row](plan_specs/v1/e30-caselist-ingestion/t31-openev-camp-word-on-the-manifest-row.yaml) `v1-e30-t31-openev-camp-word-on-the-manifest-row` | Succeeded | 2 | 1.0 |
 | [Michigan's three camps are filed apart, as OpenEv files them, so their cards can link](plan_specs/v1/e30-caselist-ingestion/t32-michigan-split-into-openevs-three-camps.yaml) `v1-e30-t32-michigan-split-into-openevs-three-camps` | Succeeded | 1 | 2.0 |
 | [A whole-file removal deletes only the aggregates of the caselists that hold the file, and its rebuild works in bucket mode](plan_specs/v1/e30-caselist-ingestion/t33-a-whole-file-removal-reaches-only-the-caselists-that-hold-it.yaml) `v1-e30-t33-a-whole-file-removal-reaches-only-the-caselists-that-hold-it` | Succeeded | 1 | 8.0 |
-| [A removal keeps the parse a snapshot is owed, now that nothing is rebuilt after it](plan_specs/v1/e30-caselist-ingestion/t34-a-removal-keeps-the-parse-a-snapshot-is-owed.yaml) `v1-e30-t34-a-removal-keeps-the-parse-a-snapshot-is-owed` | Pending | 1 | 2.0 |
+| [A removal keeps the parse a snapshot is owed, now that nothing is rebuilt after it](plan_specs/v1/e30-caselist-ingestion/t34-a-removal-keeps-the-parse-a-snapshot-is-owed.yaml) `v1-e30-t34-a-removal-keeps-the-parse-a-snapshot-is-owed` | Succeeded | 1 | 2.0 |
 
 #### [E31 — Debate File Parsing](plan_specs/v1/e31-debate-file-parsing/epic.yaml)
 

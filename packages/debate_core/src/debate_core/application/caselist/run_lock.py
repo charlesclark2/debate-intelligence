@@ -987,6 +987,21 @@ class BucketWriteGuard:
         finally:
             lock.release()
 
+    def refuse_what_holding_would_refuse(self) -> None:
+        """Raise what :meth:`held` raises before it writes, reading the lock and writing nothing.
+
+        For a dry run that refuses what its real run would (`caselist parse --publish-only --dry-run`,
+        `v1-e31-t40`): in bucket mode :meth:`BucketRunLock.check`, take's rules with nothing taken; in
+        local mode ruling 3(a)'s read. An environment that names no bucket has nothing to ask.
+        """
+        if self._lock is None:
+            return
+        lock = self._lock()
+        if self._mode is RunStateMode.BUCKET:
+            lock.check()
+            return
+        self.refuse_a_seeded_bucket(lock)
+
     @staticmethod
     def refuse_a_seeded_bucket(lock: BucketRunLock) -> None:
         """Ruling 3(a): raise :class:`BucketKeepsRunState` when the bucket holds a lock object.

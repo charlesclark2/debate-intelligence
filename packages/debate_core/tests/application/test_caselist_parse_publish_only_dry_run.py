@@ -144,7 +144,9 @@ async def test_a_plan_over_an_empty_bucket_uploads_the_whole_directory_and_the_p
         key: (kind_by_hand(key), size) for key, size in sizes.items()
     }
     for kind in (PER_SOURCE, AGGREGATES, PLACEMENT):
-        assert plan.size(UPLOAD, kind) == sum(size for key, size in sizes.items() if kind_by_hand(key) is kind)
+        assert plan.size(UPLOAD, kind) == sum(
+            size for key, size in sizes.items() if kind_by_hand(key) is kind
+        )
     assert plan.count(UPLOAD) == len(sizes)
     assert plan.size(UPLOAD) == sum(sizes.values())
     assert (plan.caselist, plan.version, plan.prefix) == (CASELIST, DOCX_PARSER_VERSION, PREFIX)
@@ -252,9 +254,12 @@ async def test_an_aggregate_the_bucket_holds_with_other_bytes_is_an_upload_that_
 
 
 async def test_a_newer_occurrence_table_in_the_bucket_refuses_the_plan_as_it_refuses_the_publish(
-    world: World, tmp_path: Path, as_build: Callable[[str], None]
+    tmp_path: Path, as_build: Callable[[str], None]
 ) -> None:
+    """A world of its own, parsed by a build at a synthetic fingerprint version from the start."""
     as_build(BUILD)
+    world = World(data_dir=tmp_path / "evidence-at-v7", zips_dir=tmp_path / "zips-at-v7")
+    await import_weeks(world.data_dir, world.zips_dir, through=THROUGH_0908)
     await world.run()
     version = DOCX_PARSER_VERSION
     assert {row["fingerprint_version"] for row in world.lines("occurrences.jsonl")} == {BUILD}

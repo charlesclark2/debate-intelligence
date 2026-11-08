@@ -20,6 +20,7 @@ bytes are measured on disk here.
 
 from __future__ import annotations
 
+import gc
 import json
 import re
 from pathlib import Path
@@ -41,7 +42,15 @@ from debate_core.application.ports.suppression import (
 )
 from debate_core.integrations.docx_parser import DOCX_PARSER_VERSION
 
-from .test_caselist_parse_publish_only import DEV_BUCKET, PROD_BUCKET, RECORDED, REMOVED, envelope_of, invoke, plant
+from .test_caselist_parse_publish_only import (
+    DEV_BUCKET,
+    PROD_BUCKET,
+    RECORDED,
+    REMOVED,
+    envelope_of,
+    invoke,
+    plant,
+)
 from .test_caselist_parse_publish_only import buckets as buckets  # noqa: F401 - a fixture
 from .test_caselist_parse_publish_only import imported as imported  # noqa: F401 - a fixture
 from .test_caselist_parse_publish_only import installation as installation  # noqa: F401 - an autouse fixture
@@ -58,7 +67,9 @@ PREFIX: Final = f"parsed/{CASELIST}/{DOCX_PARSER_VERSION}/"
 
 
 def dry_run(*extra: str) -> Result:
-    return invoke("--json", "caselist", "parse", "--caselist", CASELIST, "--publish-only", "--dry-run", *extra)
+    return invoke(
+        "--json", "caselist", "parse", "--caselist", CASELIST, "--publish-only", "--dry-run", *extra
+    )
 
 
 def publish_only(*extra: str) -> Result:
@@ -83,7 +94,12 @@ def every_version(client: S3Client) -> dict[str, list[tuple[str, str, str]]]:
 
 
 def every_path(data_dir: Path) -> dict[str, tuple[bytes, int]]:
-    """Every file and directory of the data directory, with its bytes and modification time."""
+    """Every file and directory of the data directory, with its bytes and modification time.
+
+    An earlier in-process command's SQLite connection is collected first: closed by the garbage
+    collector during the next command, it would checkpoint the database there.
+    """
+    gc.collect()
     return {
         path.relative_to(data_dir).as_posix(): (
             path.read_bytes() if path.is_file() else b"<directory>",
@@ -188,7 +204,10 @@ def test_a_dry_run_to_prod_needs_no_confirmation_and_plans_what_publish_only_the
 def test_a_dry_run_over_a_bucket_missing_two_files_plans_those_and_the_rest_present(
     imported: Path, buckets: S3Client, published_to_dev: dict[str, Any]
 ) -> None:
-    lost = [f"{PREFIX}occurrences.jsonl", next(key for key in on_disk(imported) if digest_of("verbatim") in key)]
+    lost = [
+        f"{PREFIX}occurrences.jsonl",
+        next(key for key in on_disk(imported) if digest_of("verbatim") in key),
+    ]
     for key in lost:
         buckets.delete_object(Bucket=DEV_BUCKET, Key=key)
     sizes = on_disk(imported)
@@ -202,9 +221,12 @@ def test_a_dry_run_over_a_bucket_missing_two_files_plans_those_and_the_rest_pres
     whole = SOURCES_THROUGH_0908 + AGGREGATES_OF_A_WEEKLY_STORE + 1
     assert plan["objects"] == nothing(upload=2, present=whole - 2)
     assert plan["bytes"] == nothing(
-        upload=sum(sizes[key] for key in lost), present=sum(size for key, size in sizes.items() if key not in lost)
+        upload=sum(sizes[key] for key in lost),
+        present=sum(size for key, size in sizes.items() if key not in lost),
     )
-    assert plan["by_kind"]["per_source_files"]["objects"] == nothing(upload=1, present=SOURCES_THROUGH_0908 - 1)
+    assert plan["by_kind"]["per_source_files"]["objects"] == nothing(
+        upload=1, present=SOURCES_THROUGH_0908 - 1
+    )
 
     counts = envelope_of(publish_only())["data"]["publish"]["counts"]
     assert (counts["uploaded"], counts["skipped"]) == (2, whole - 2)
@@ -247,8 +269,7 @@ def figures_in(text: str) -> dict[str, dict[str, tuple[int, int]]]:
     found: dict[str, dict[str, tuple[int, int]]] = {}
     for row in ("Per-source files", "Aggregates", "Placement state", "Total"):
         match = re.search(
-            rf"{row} "
-            + "; ".join(rf"{action} (\d+) \((\d+) bytes\)" for action in ACTIONS),
+            rf"{row} " + "; ".join(rf"{action} (\d+) \((\d+) bytes\)" for action in ACTIONS),
             flat,
         )
         assert match is not None, f"no {row} row in {flat!r}"
@@ -308,7 +329,10 @@ def test_a_file_the_bucket_holds_with_other_bytes_is_named_and_the_dry_run_fails
         "withheld",
     )
     assert plan["objects"] == nothing(upload=SOURCES_THROUGH_0908 - 1, blocked=1)
-    assert error["hint"] == "Nothing was uploaded. A checksum mismatch in the bucket needs a person."
+    assert error["hint"] == (
+        "Nothing was uploaded. A checksum mismatch in the bucket needs a person; an object that "
+        "could not be read, run the dry run again."
+    )
 
 
 # ------------------------------------------------------------------------------------------------
@@ -343,7 +367,9 @@ def parsed_under_another_profile(
     parse_here()
     path = next((directory_of(data_dir) / "sha256").rglob(f"{digest_of('wiki')}.jsonl"))
     entry, *rest = path.read_text(encoding="utf-8").splitlines(keepends=True)
-    path.write_text(json.dumps({**json.loads(entry), "profile_version": "2026.10.01-verbatim-2"}) + "\n" + "".join(rest))
+    path.write_text(
+        json.dumps({**json.loads(entry), "profile_version": "2026.10.01-verbatim-2"}) + "\n" + "".join(rest)
+    )
     return ()
 
 
@@ -353,7 +379,9 @@ def occurrences_stamped_by_another_build(
     parse_here()
     path = directory_of(data_dir) / "occurrences.jsonl"
     rows = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()]
-    path.write_text("".join(json.dumps({**row, "fingerprint_version": "card-fingerprint-v1"}) + "\n" for row in rows))
+    path.write_text(
+        "".join(json.dumps({**row, "fingerprint_version": "card-fingerprint-v1"}) + "\n" for row in rows)
+    )
     return ()
 
 

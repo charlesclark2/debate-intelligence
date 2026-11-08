@@ -6,6 +6,7 @@
     debate-research caselist parse --caselist hsld26 --snapshot 2026-09-15
     debate-research caselist parse --caselist hsld26 --dry-run
     debate-research caselist parse --caselist hsld26 --publish
+    debate-research caselist parse --caselist hsld26 --publish-only --dry-run
     debate-research caselist parse --caselist hsld26 --publish-only
     debate-research caselist parse --caselist openev --reparse
     debate-research caselist parse --caselist hsld26 --failures
@@ -51,8 +52,23 @@ asked of the list the publisher is given; when it fails a check, the command is 
 reason's code, exit `1`, and a hint naming `--publish`.
 
 It is refused, exit `2`, beside `--publish` or any option that only shapes a rebuild (`--reparse`,
-`--snapshot`, `--dry-run`), and beside `--failures`, which publishes nothing. The guards are
-`--publish`'s.
+`--snapshot`), and beside `--failures`, which publishes nothing. The guards are `--publish`'s.
+
+## `--publish-only --dry-run`
+
+Lists what `--publish-only` would upload and what the bucket already holds with the same digest,
+with counts and bytes for each kind (per-source files, aggregates, the placement state), and
+uploads and writes nothing (`v1-e31-t40`). It makes every check `--publish-only` makes, in the same
+order, and is refused by each with the same code, message, hint and exit code: the environment
+guard, the directory's checks, the run lock (read, never taken:
+:meth:`~debate_core.application.caselist.run_lock.BucketWriteGuard.refuse_what_holding_would_refuse`)
+and the occurrence table guard. Only `--confirm-prod` is the real publish's. The plan is
+:meth:`~debate_core.application.caselist.parsed_publish.ParsedStorePublisher.plan`, which decides
+each object by the publish's own code. A per-source file the bucket holds with other bytes, which
+the publish would fail and withhold the aggregates for, fails the dry run as
+`PARSED_PUBLISH_BLOCKED`, exit `1`, after the plan is printed.
+
+## `--failures`
 
 
 Lists the sources of the current version directory that did not parse, by SHA-256 prefix and the
@@ -75,7 +91,13 @@ from debate_cli.exit_codes import ExitCode, exit_code_for_failure_codes
 from debate_cli.options.bucket_environment import CONFIRM_PROD_FLAG
 from debate_cli.output import CliOutput, CommandFailure, JsonValue, OutputMode, TableSpec
 from debate_cli.panel_summaries import by_count, digest_of_key, every_value_in_full, some_prefixes
-from debate_core.application.caselist.parsed_publish import ParsedObjectOutcome, ParsedPublishReport
+from debate_core.application.caselist.parsed_publish import (
+    ParsedObjectKind,
+    ParsedObjectOutcome,
+    ParsedPublishPlan,
+    ParsedPublishReport,
+    PlannedAction,
+)
 from debate_core.application.caselist.publish_plan import validate_publish_target
 from debate_core.application.caselist.publish_service import SourceResult
 from debate_core.application.caselist_parse import (
@@ -87,7 +109,14 @@ from debate_core.application.errors import UNMODELLED_ERROR_CODE
 from debate_core.application.settings import Settings
 from debate_core.evidence.fingerprints import FINGERPRINT_VERSION
 
-__all__ = ["ConflictingPublishOnly", "failures_summary", "parse", "parse_summary", "publish_only_summary"]
+__all__ = [
+    "ConflictingPublishOnly",
+    "failures_summary",
+    "parse",
+    "parse_summary",
+    "publish_only_plan_summary",
+    "publish_only_summary",
+]
 
 FAILURES_NOTICE: Final = (
     "Contains disclosure paths, which name schools and team codes. For this terminal only: never "
@@ -121,7 +150,14 @@ def parse(
         bool, typer.Option("--reparse", help="Parse everything again, into a new version directory.")
     ] = False,
     dry_run: Annotated[
-        bool, typer.Option("--dry-run", help="Count what would be parsed and write nothing.")
+        bool,
+        typer.Option(
+            "--dry-run",
+            help=(
+                "Count what would be parsed and write nothing; with --publish-only, list what it "
+                "would upload and refuse what it would refuse."
+            ),
+        ),
     ] = False,
     failures: Annotated[
         bool, typer.Option("--failures", help="List the sources that did not parse, with their paths.")
@@ -143,8 +179,9 @@ def parse(
             ctx,
             caselist,
             confirmed=confirm_prod,
-            beside={"publish": publish, "reparse": reparse, "dry_run": dry_run, "failures": failures},
+            beside={"publish": publish, "reparse": reparse, "failures": failures},
             snapshot=snapshot,
+            dry_run=dry_run,
         )
         return
     validate_publish_target(caselist, snapshot)
@@ -193,14 +230,13 @@ class ConflictingPublishOnly(typer.BadParameter):
 
 
 def _refuse_beside_publish_only(
-    *, publish: bool, reparse: bool, snapshot: str | None, dry_run: bool, failures: bool
+    *, publish: bool, reparse: bool, snapshot: str | None, failures: bool
 ) -> None:
     """Raise :class:`ConflictingPublishOnly` for the first option given that `--publish-only` refuses."""
     for given, option, why in (
         (publish, "--publish", "--publish rebuilds the directory first"),
         (reparse, "--reparse", "--reparse rebuilds into a new directory"),
         (snapshot is not None, "--snapshot", "--snapshot chooses what a rebuild parses"),
-        (dry_run, "--dry-run", "--dry-run counts what a rebuild would parse"),
         (failures, "--failures", "--failures lists the directory's failures and publishes nothing"),
     ):
         if given:
@@ -215,9 +251,15 @@ def _publish_only(
     confirmed: bool,
     beside: dict[str, bool],
     snapshot: str | None,
+    dry_run: bool,
 ) -> None:
     """`--publish-only`: the options it refuses beside it, `--publish`'s guards, the directory's
-    check, then `--publish`'s publisher. `beside` is each flag of the command by its parameter."""
+    check, then `--publish`'s publisher, or its plan with `--dry-run`. `beside` is each flag of the
+    command by its parameter.
+
+    The dry run is the same path with the writes taken out: the environment guard as a publish's
+    (`writing=True`), `--confirm-prod` alone left to the real run.
+    """
     _refuse_beside_publish_only(snapshot=snapshot, **beside)
     validate_publish_target(caselist)
     settings = cli.services.settings
@@ -225,10 +267,13 @@ def _publish_only(
         cli,
         ctx,
         no_bucket(settings, writing=True)
-        or unconfirmed_production_write(settings, writing=True, confirmed=confirmed),
+        or unconfirmed_production_write(settings, writing=not dry_run, confirmed=confirmed),
     )
     # With the bucket: the check asks the list the publisher is given, this environment's.
     version = asyncio.run(cli.services.caselist_parse(with_bucket=True).publishable_version(caselist))
+    if dry_run:
+        _publish_only_dry_run(cli, ctx, caselist, version)
+        return
     published = run_holding_the_bucket_lock(
         cli,
         "caselist parse --publish-only",
@@ -238,6 +283,21 @@ def _publish_only(
     failure = _publish_failure(published, payload)
     if failure is None or not cli.output.is_json:
         cli.output.success(command_name(ctx), payload, display=_publish_only_table(published, settings))
+    if failure is not None:
+        cli.output.failure(failure, command=command_name(ctx))
+        raise typer.Exit(code=failure.exit_code)
+
+
+def _publish_only_dry_run(cli: CliContext, ctx: typer.Context, caselist: str, version: str) -> None:
+    """`--publish-only --dry-run`, after the directory's checks: the lock read and never taken, then
+    the publisher's plan, uploading and writing nothing."""
+    cli.services.bucket_write_guard().refuse_what_holding_would_refuse()
+    planned = asyncio.run(cli.services.parsed_publisher().plan(caselist, version))
+    settings = cli.services.settings
+    payload = publish_only_plan_summary(planned, settings)
+    failure = _plan_failure(planned, payload)
+    if failure is None or not cli.output.is_json:
+        cli.output.success(command_name(ctx), payload, display=_publish_only_plan_table(planned, settings))
     if failure is not None:
         cli.output.failure(failure, command=command_name(ctx))
         raise typer.Exit(code=failure.exit_code)
@@ -305,6 +365,38 @@ def publish_only_summary(published: ParsedPublishReport, settings: Settings) -> 
         "publish_only": True,
         "fingerprint_version": FINGERPRINT_VERSION,
         "publish": _publish_summary(published, settings),
+    }
+
+
+def publish_only_plan_summary(planned: ParsedPublishPlan, settings: Settings) -> dict[str, JsonValue]:
+    """`--publish-only --dry-run --json`'s `data`: the plan's counts and bytes, in total and by kind.
+
+    `plan`'s `objects` and `bytes` are the totals, each by what the publish would do with an object
+    (`upload`, `present`, `suppressed`, `blocked`); `by_kind` gives the same for each kind.
+    """
+    return {
+        "environment": settings.environment.value,
+        "caselist": planned.caselist,
+        "version": planned.version,
+        "publish_only": True,
+        "dry_run": True,
+        "fingerprint_version": FINGERPRINT_VERSION,
+        "plan": {
+            "bucket": settings.storage.s3.bucket,
+            "prefix": planned.prefix,
+            **_planned_figures(planned, None),
+            "by_kind": {kind.value: _planned_figures(planned, kind) for kind in ParsedObjectKind},
+            "aggregates": "withheld" if planned.aggregates_withheld else "planned",
+            "blocked_keys": list(planned.blocked_keys),
+            "blocked_codes": list(dict.fromkeys(planned.blocked_codes)),
+        },
+    }
+
+
+def _planned_figures(planned: ParsedPublishPlan, kind: ParsedObjectKind | None) -> dict[str, JsonValue]:
+    return {
+        "objects": {action.value: planned.count(action, kind) for action in PlannedAction},
+        "bytes": {action.value: planned.size(action, kind) for action in PlannedAction},
     }
 
 
@@ -410,21 +502,67 @@ def _publish_failure(published: ParsedPublishReport, payload: dict[str, JsonValu
     )
 
 
+def _plan_failure(planned: ParsedPublishPlan, payload: dict[str, JsonValue]) -> CommandFailure | None:
+    """`PARSED_PUBLISH_BLOCKED`: the plan holds an object the publish would fail, so it would end
+    `PARSED_PUBLISH_INCOMPLETE`. Exit `1` on a checksum mismatch, `3` when every blocked object is
+    one a store did not answer for, as the publish's own exit would be."""
+    blocked = [one for one in planned.objects if one.action is PlannedAction.BLOCKED]
+    if not blocked:
+        return None
+    panel: dict[str, JsonValue] = {
+        "environment": payload["environment"],
+        "caselist": f"{planned.caselist}, version {planned.version}",
+        "objects": _planned_counts(planned),
+        "aggregates": "withheld" if planned.aggregates_withheld else "planned",
+        "blocked": _named_objects(
+            [(one.key, one.kind is ParsedObjectKind.PER_SOURCE_FILES, one.error_code) for one in blocked]
+        ),
+    }
+    return CommandFailure(
+        code="PARSED_PUBLISH_BLOCKED",
+        message=(
+            f"{len(blocked)} object(s) cannot be published as planned (a per-source file the bucket "
+            "holds with other bytes, or an object that could not be read)"
+            + ("; the aggregates would be withheld" if planned.aggregates_withheld else "")
+        ),
+        exit_code=exit_code_for_failure_codes(planned.blocked_codes),
+        details=payload,
+        hint=(
+            "Nothing was uploaded. A checksum mismatch in the bucket needs a person; an object that "
+            "could not be read, run the dry run again."
+        ),
+        panel_details=every_value_in_full(panel),
+    )
+
+
 def _published_counts(published: ParsedPublishReport) -> str:
     """`6 uploaded, 0 skipped, 0 suppressed, 31 failed`: every object of the version directory."""
     return ", ".join(f"{published.count(result)} {result.value}" for result in SourceResult)
 
 
+def _planned_counts(planned: ParsedPublishPlan, kind: ParsedObjectKind | None = None) -> str:
+    """`upload 6 (1234 bytes); present 0 (0 bytes); suppressed 0 (0 bytes); blocked 0 (0 bytes)`:
+    the `--json` plan's figures for `kind`, or for every kind, in the same order."""
+    return "; ".join(
+        f"{action.value} {planned.count(action, kind)} ({planned.size(action, kind)} bytes)"
+        for action in PlannedAction
+    )
+
+
 def _not_confirmed(failed: list[ParsedObjectOutcome]) -> str:
     """The objects not confirmed: source files by digest prefix, aggregates by name, then their codes."""
-    sources = sorted(
-        digest_of_key(outcome.key).removesuffix(".jsonl") for outcome in failed if not outcome.aggregate
-    )
-    aggregates = [outcome.key.rsplit("/", 1)[-1] for outcome in failed if outcome.aggregate]
+    return _named_objects([(outcome.key, not outcome.aggregate, outcome.error_code) for outcome in failed])
+
+
+def _named_objects(objects: list[tuple[str, bool, str | None]]) -> str:
+    """Objects as `(key, a per-source file, error code)`: source files by digest prefix, the others
+    by name, then their codes."""
+    sources = sorted(digest_of_key(key).removesuffix(".jsonl") for key, source, _ in objects if source)
+    others = [key.rsplit("/", 1)[-1] for key, source, _ in objects if not source]
     what = [f"{len(sources)} source file(s) {some_prefixes(sources)}"] if sources else []
-    if aggregates:
-        what.append(f"{len(aggregates)} aggregate(s) ({', '.join(sorted(aggregates))})")
-    codes = by_count(outcome.error_code or UNMODELLED_ERROR_CODE for outcome in failed)
+    if others:
+        what.append(f"{len(others)} aggregate(s) ({', '.join(sorted(others))})")
+    codes = by_count(code or UNMODELLED_ERROR_CODE for _, _, code in objects)
     return f"{', '.join(what)}: {codes}"
 
 
@@ -473,6 +611,28 @@ def _publish_only_table(published: ParsedPublishReport, settings: Settings) -> T
         rows=[["Version", published.version], ["Published", _published(published, settings)]],
         title=f"caselist parse {published.caselist} --publish-only",
         caption="Nothing was parsed or rebuilt: the directory was published as the last rebuild left it.",
+    )
+
+
+def _publish_only_plan_table(planned: ParsedPublishPlan, settings: Settings) -> TableSpec:
+    """The `--json` plan's figures, row by row: each kind, then the total."""
+    last = (
+        "A per-source file is blocked, so the aggregates and the placement state would be withheld."
+        if planned.aggregates_withheld
+        else "The aggregates and the placement state go last, once every per-source file is confirmed."
+    )
+    return TableSpec(
+        columns=("", planned.caselist),
+        rows=[
+            ["Version", planned.version],
+            ["Per-source files", _planned_counts(planned, ParsedObjectKind.PER_SOURCE_FILES)],
+            ["Aggregates", _planned_counts(planned, ParsedObjectKind.AGGREGATES)],
+            ["Placement state", _planned_counts(planned, ParsedObjectKind.PLACEMENT_STATE)],
+            ["Total", _planned_counts(planned)],
+            ["Bucket", f"{settings.storage.s3.bucket}/{planned.prefix}"],
+        ],
+        title=f"caselist parse {planned.caselist} --publish-only --dry-run",
+        caption=f"Dry run: nothing was uploaded or written. {last}",
     )
 
 

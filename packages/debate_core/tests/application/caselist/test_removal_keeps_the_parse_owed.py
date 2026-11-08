@@ -87,6 +87,7 @@ async def test_a_removal_that_reaches_an_owed_snapshot_keeps_every_parse_owed_by
     report = await service.execute(plan)
 
     assert report.log_entry.outcome is RemovalOutcome.COMPLETED
+    assert owed.path.is_file(), "the file is kept"
     assert owed.path.read_bytes() == before, "every entry kept, the reached snapshot's included"
     assert REACHED in owed.read().snapshots
 

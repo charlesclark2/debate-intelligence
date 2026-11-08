@@ -14,6 +14,10 @@ index from a copy restored from dev only after three checks, each a Python hered
   `version_directory`, `occurrence_rows`, `occurrences_sha256` and documents, plus the parser and
   fingerprint versions, the suppression list, the document count and the stores. The index id and
   the SQLite version are reported, not compared.
+* `PUBLISHPLAN` (step 6, `v1-e31-t40`) reads one store's `caselist parse --publish-only --dry-run`
+  against the copy's directory: its `upload`, `present` and `suppressed` together must be the copy's
+  objects and bytes, at the restored version. It writes `parsed-planned-<store>.txt` only then, and
+  the store's publish block requires that file.
 
 The code is read out of the runbook between its heredoc markers and run as the operator runs it
 (`python3 -I -` with the runbook's arguments), so a change to the runbook is what is tested. The
@@ -472,12 +476,139 @@ def test_a_total_that_differs_with_every_store_equal_still_stops(tmp_path: Path)
 
 
 # ------------------------------------------------------------------------------------------------
+# Step 6: each store's dry run, read against the copy
+# ------------------------------------------------------------------------------------------------
+
+#: The copy's directory for the store: eleven objects of 100 bytes each.
+COPY_OBJECTS: Final = 11
+
+
+def plan_answer(**changed: Any) -> dict[str, Any]:
+    """`--publish-only --dry-run --json`, as the command writes it, for a plan that covers the copy."""
+    plan: dict[str, Any] = {
+        "bucket": "synthetic-prod-bucket",
+        "prefix": f"parsed/hsld26/{NEW}/",
+        "objects": {"upload": 3, "present": 7, "suppressed": 1, "blocked": 0},
+        "bytes": {"upload": 300, "present": 700, "suppressed": 100, "blocked": 0},
+        "by_kind": {},
+        "aggregates": "planned",
+        "blocked_keys": [],
+        "blocked_codes": [],
+    }
+    plan.update(changed)
+    data = {
+        "environment": "prod",
+        "caselist": "hsld26",
+        "version": NEW,
+        "publish_only": True,
+        "dry_run": True,
+        "fingerprint_version": "card-fingerprint-v4",
+        "plan": plan,
+    }
+    return {"schema_version": 1, "status": "ok", "command": "caselist parse", "data": data, "error": None}
+
+
+def publish_plan(
+    tmp_path: Path, answer: dict[str, Any] | str, *, objects: int = COPY_OBJECTS, version: str = NEW
+) -> tuple[list[str], Path]:
+    directory = tmp_path / "parsed" / "hsld26" / NEW
+    for number in range(objects):
+        path = directory / "sha256" / f"{number:02d}" / f"synthetic-{number}.jsonl"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(b"x" * 100)
+    directory.mkdir(parents=True, exist_ok=True)
+    answer_path = tmp_path / "prod-publish-parsed-plan-hsld26.json"
+    answer_path.write_text(answer if isinstance(answer, str) else json.dumps(answer), encoding="utf-8")
+    planned = tmp_path / "parsed-planned-hsld26.txt"
+    planned.write_text("left by an earlier dry run\n", encoding="utf-8")
+    return run_code("PUBLISHPLAN", "hsld26", version, directory, answer_path, planned), planned
+
+
+def test_a_plan_that_covers_the_copy_exactly_passes_and_leaves_its_upload_count(tmp_path: Path) -> None:
+    lines, planned = publish_plan(tmp_path, plan_answer())
+
+    assert lines == [
+        f"hsld26 {NEW}: the copy holds 11 objects, 1100 bytes",
+        "  upload 3 objects, 300 bytes",
+        "  present 7 objects, 700 bytes",
+        "  suppressed 1 objects, 100 bytes",
+        "  blocked 0 objects, 0 bytes",
+        "OK: hsld26 would upload 3 objects, 300 bytes",
+    ]
+    assert planned.read_text(encoding="utf-8") == "3\n"
+
+
+@pytest.mark.parametrize(
+    ("answer", "objects", "said"),
+    [
+        (
+            {
+                "schema_version": 1,
+                "status": "error",
+                "data": None,
+                "error": {"code": "PARSED_AGGREGATES_NAME_WHAT_THE_LIST_STOPS"},
+            },
+            COPY_OBJECTS,
+            "STOP: hsld26: refused: PARSED_AGGREGATES_NAME_WHAT_THE_LIST_STOPS",
+        ),
+        ("", COPY_OBJECTS, "STOP: hsld26: refused: no answer"),
+        (
+            {"schema_version": 1, "status": "ok", "data": {"version": NEW, "publish": {}}, "error": None},
+            COPY_OBJECTS,
+            "STOP: hsld26: the answer holds no plan; was it the dry run?",
+        ),
+        (
+            plan_answer(
+                objects={"upload": 2, "present": 7, "suppressed": 1, "blocked": 0},
+                bytes={"upload": 200, "present": 700, "suppressed": 100, "blocked": 0},
+            ),
+            COPY_OBJECTS,
+            "STOP: hsld26: the plan covers 10 objects, 1000 bytes, not the copy's 11 objects, 1100 bytes",
+        ),
+        (
+            plan_answer(bytes={"upload": 300, "present": 699, "suppressed": 100, "blocked": 0}),
+            COPY_OBJECTS,
+            "STOP: hsld26: the plan covers 11 objects, 1099 bytes, not the copy's 11 objects, 1100 bytes",
+        ),
+        (
+            plan_answer(
+                objects={"upload": 0, "present": 0, "suppressed": 0, "blocked": 0},
+                bytes={"upload": 0, "present": 0, "suppressed": 0, "blocked": 0},
+            ),
+            0,
+            "STOP: hsld26: the copy holds nothing for hsld26",
+        ),
+    ],
+    ids=["refused", "no-answer", "a-publishs-answer", "fewer-objects", "fewer-bytes", "empty-copy"],
+)
+def test_a_refusal_or_a_plan_that_differs_from_the_copy_stops_and_leaves_no_ok(
+    tmp_path: Path, answer: dict[str, Any] | str, objects: int, said: str
+) -> None:
+    lines, planned = publish_plan(tmp_path, answer, objects=objects)
+
+    assert said in lines
+    assert not any(line.startswith("OK") for line in lines)
+    assert not planned.exists()
+
+
+def test_a_plan_for_another_version_stops(tmp_path: Path) -> None:
+    lines, planned = publish_plan(tmp_path, plan_answer(), version=OLD)
+
+    assert f"STOP: hsld26: the plan is for {NEW}, not the restored {OLD}" in lines
+    assert not planned.exists()
+
+
+# ------------------------------------------------------------------------------------------------
 # The blocks around the checks
 # ------------------------------------------------------------------------------------------------
 
 
 def test_every_block_that_writes_to_prod_refuses_without_the_comparisons_ok() -> None:
-    writers = [block for block in bash_blocks() if "--publish-only" in block or "tub index publish" in block]
+    writers = [
+        block
+        for block in bash_blocks()
+        if ("--publish-only" in block and "--dry-run" not in block) or "tub index publish" in block
+    ]
 
     assert len(writers) == 2
     for block in writers:
@@ -485,6 +616,23 @@ def test_every_block_that_writes_to_prod_refuses_without_the_comparisons_ok() ->
         assert "--confirm-prod" in block
     [comparison] = [block for block in bash_blocks() if "tub index build" in block]
     assert '[[ ! -f "${COPY}/parse-checked.txt" ]]' in comparison
+
+
+def test_each_stores_publish_follows_its_dry_run_which_alone_takes_no_confirmation() -> None:
+    """`v1-e31-t40`: the dry run block, then the publish block that refuses without its OK and uses it up."""
+    blocks = bash_blocks()
+    [planning] = [block for block in blocks if "--publish-only --dry-run" in block]
+    [publishing] = [block for block in blocks if "--publish-only --confirm-prod" in block]
+
+    assert blocks.index(planning) + 1 == blocks.index(publishing)
+    assert "--confirm-prod" not in planning
+    assert '[[ ! -f "${COPY}/prod-index-compared.txt" ]]' in planning
+    assert "<<'PUBLISHPLAN'" in planning
+    assert '[[ ! -f "${COPY}/parsed-planned-${CASELIST}.txt" ]]' in publishing
+    publish_line = next(line for line in publishing.splitlines() if "--publish-only --confirm-prod" in line)
+    removal_line = next(line for line in publishing.splitlines() if "rm -f" in line)
+    assert publishing.index(publish_line) < publishing.index(removal_line)
+    assert removal_line.strip() == 'rm -f "${COPY}/parsed-planned-${CASELIST}.txt"'
 
 
 def test_the_parsed_store_is_never_parsed_or_rebuilt_in_the_copy() -> None:

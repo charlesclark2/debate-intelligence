@@ -1214,13 +1214,17 @@ the file. Then the next caselist or week, from its dry run.
 
 ### 6. The parsed store, one store at a time
 
-Only after step 4's `OK`. Each of `hsld26`, `hspolicy26`, `hspf26` and `openev`, as restored:
-`--publish-only` parses nothing. It checks the directory is whole and written by this build's
-parser and fingerprint versions, and that its aggregates name nothing prod's suppression list stops
-or holds. Then it publishes the files prod lacks, the aggregates last. It takes no `--dry-run`
-(`v1-e31-t30`), so steps 3 and 4 are its plan. Each block signs in to prod first. Set `CASELIST`.
+Only after step 4's `OK`. Each of `hsld26`, `hspolicy26`, `hspf26` and `openev`, as restored, in two
+blocks: its dry run, then its publish. `--publish-only` parses nothing. It checks the directory is
+whole and written by this build's parser and fingerprint versions, and that its aggregates name
+nothing prod's suppression list stops or holds. Then it publishes the files prod lacks, the
+aggregates last. `--publish-only --dry-run` (`v1-e31-t40`) makes every one of those checks and is
+refused by each with the same code, reads prod's run lock without taking it, and lists what the
+publish would upload and what prod already holds with the same digest, with counts and bytes. It
+uploads nothing and writes nothing in the copy, and it needs no `--confirm-prod`. Each block signs
+in to prod first. Set `CASELIST` in the first.
 
-**Operator command** (expected runtime not yet measured: a store's share of the parsed store goes up from the Mac, the whole store in a bump's week)
+**Operator command** (expected runtime ~1 min: it heads each object of the store in prod)
 Where: your Mac, in the window that keeps `WEEK`
 ```bash
 CASELIST=hsld26
@@ -1233,26 +1237,106 @@ elif [[ ! -f "${COPY}/prod-index-compared.txt" ]]; then
   echo "STOP: no OK from step 4 in ${COPY}"
 else
   VERSION=$(cat "${COPY}/parse-checked.txt")
-  echo "${CASELIST} ${VERSION}: $(find "${COPY}/parsed/${CASELIST}/${VERSION}" -type f | wc -l | tr -d ' ') objects in the copy"
-  aws sso login --profile debate-prod-evidence && cd "$HOME" && caffeinate -i env DEBATE_ENV=prod DEBATE_STORAGE__DATA_DIR="$COPY" debate-research --json caselist parse --caselist "$CASELIST" --publish-only --confirm-prod > /tmp/prod-publish-parsed-${CASELIST}.json
+  aws sso login --profile debate-prod-evidence && cd "$HOME" && env DEBATE_ENV=prod DEBATE_STORAGE__DATA_DIR="$COPY" debate-research --json caselist parse --caselist "$CASELIST" --publish-only --dry-run > /tmp/prod-publish-parsed-plan-${CASELIST}.json
   echo "exit $?"
-  grep -oE '"(version|aggregates)": "[^"]+"|"(uploaded|skipped|suppressed|failed)": [0-9]+|"code": "[A-Z_]+"' /tmp/prod-publish-parsed-${CASELIST}.json
+  python3 -I - "$CASELIST" "$VERSION" "${COPY}/parsed/${CASELIST}/${VERSION}" /tmp/prod-publish-parsed-plan-${CASELIST}.json "${COPY}/parsed-planned-${CASELIST}.txt" <<'PUBLISHPLAN'
+import json, os, sys
+caselist, version, directory, answer_path, planned = sys.argv[1:]
+if os.path.exists(planned):
+    os.remove(planned)
+files, size = 0, 0
+for root, _, names in os.walk(directory):
+    for name in names:
+        files += 1
+        size += os.path.getsize(os.path.join(root, name))
+print(caselist + " " + version + ": the copy holds " + str(files) + " objects, " + str(size) + " bytes")
+try:
+    answer = json.load(open(answer_path, encoding="utf-8"))
+except ValueError:
+    answer = {}
+data = answer.get("data") or {}
+plan = data.get("plan")
+problems = []
+if answer.get("status") != "ok":
+    problems.append("refused: " + str((answer.get("error") or {}).get("code") or "no answer"))
+elif not plan:
+    problems.append("the answer holds no plan; was it the dry run?")
+else:
+    objects, sizes = plan["objects"], plan["bytes"]
+    for action in ("upload", "present", "suppressed", "blocked"):
+        print("  " + action + " " + str(objects[action]) + " objects, " + str(sizes[action]) + " bytes")
+    covered = objects["upload"] + objects["present"] + objects["suppressed"]
+    covered_size = sizes["upload"] + sizes["present"] + sizes["suppressed"]
+    if data.get("version") != version:
+        problems.append("the plan is for " + str(data.get("version")) + ", not the restored " + version)
+    if files == 0:
+        problems.append("the copy holds nothing for " + caselist)
+    if (covered, covered_size) != (files, size):
+        problems.append(
+            "the plan covers " + str(covered) + " objects, " + str(covered_size) + " bytes, not the copy's "
+            + str(files) + " objects, " + str(size) + " bytes"
+        )
+if problems:
+    print("\n".join("STOP: " + caselist + ": " + one for one in problems))
+else:
+    open(planned, "w", encoding="utf-8").write(str(objects["upload"]) + "\n")
+    print("OK: " + caselist + " would upload " + str(objects["upload"]) + " objects, " + str(sizes["upload"]) + " bytes")
+PUBLISHPLAN
 fi
 ```
-Success looks like the copy's object count, `exit 0`, `"version"` the restored one, `"failed": 0`,
-`"aggregates": "published"`, and `"uploaded"` plus `"skipped"` equal to the copy's count. In a bump's
-week `"uploaded"` is the whole directory; in other weeks it is the week's new files and the rewritten
-aggregates. Then:
+Read it before the next block. Success looks like `exit 0`, the copy's object count and bytes, the
+four lines of the plan, and `OK: <store> would upload <n> objects, <bytes> bytes`. The block says
+`OK` only when the plan's `upload`, `present` and `suppressed` together are the copy's objects and
+bytes exactly, and the plan is for the restored version; it then leaves
+`parsed-planned-<store>.txt` in the copy, which the publish block requires. In a bump's week
+`upload` is the whole directory, its bytes the copy's; in other weeks it is the week's new files and
+the rewritten aggregates, and the rest is `present`. **Stop** on any `STOP` line and go to step 8.
+Send the PM the plan file, `/tmp/prod-publish-parsed-plan-<store>.json`: it holds counts, bytes,
+versions and keys only.
 
-* `PARSED_PUBLISH_INCOMPLETE` or `STORE_CREDENTIALS_EXPIRED`: run the block again, which uploads only
-  what prod does not confirm.
-* A code naming prod's suppression list: the aggregates name a source prod has removed and dev has
-  not. Stop and tell the PM; never rebuild in the copy.
+* `STOP: <store>: refused: <code>`: a refusal the publish would make too. A code naming prod's
+  suppression list means the aggregates name a source prod has removed and dev has not: tell the PM,
+  and never rebuild in the copy. `PARSED_PUBLISH_BLOCKED` means prod holds other bytes under a
+  per-source file's key: a person looks at it. `STORE_CREDENTIALS_EXPIRED`: run this block again.
 * **`STORE_ACCESS_DENIED`**, or any refusal of access: prod's first `--publish-only` is untried
   (`v1-e40-t16`). Stop and send the PM the code. A cure that needs a Terraform change is the PM's
   to read as a plan first; none is applied here.
+* The plan covering other figures than the copy: the copy's directory holds a file the store's
+  layout does not name, or the plan read another directory. Stop and send the PM the two lines.
 
-Then the next store.
+**Operator command** (expected runtime not yet measured: a store's share of the parsed store goes up from the Mac, the whole store in a bump's week)
+Where: your Mac, in the same window, straight after the dry run
+```bash
+COPY="$HOME/.debate-research/prod-publish-${WEEK}"
+PULL=$(pgrep -fl 'debate-research( --json)? caselist pull')
+OVERRIDES=$(env | grep '^DEBATE_' | cut -d= -f1 | tr '\n' ' ')
+if [[ -n "$PULL" || -n "$OVERRIDES" || "$(TZ=America/Chicago date +%u)" = 3 ]]; then
+  echo "STOP: a pull is running, a DEBATE_ override is set, or it is Wednesday"
+elif [[ ! -f "${COPY}/prod-index-compared.txt" ]]; then
+  echo "STOP: no OK from step 4 in ${COPY}"
+elif [[ ! -f "${COPY}/parsed-planned-${CASELIST}.txt" ]]; then
+  echo "STOP: no OK from ${CASELIST}'s dry run in ${COPY}"
+else
+  VERSION=$(cat "${COPY}/parse-checked.txt")
+  echo "${CASELIST} ${VERSION}: $(find "${COPY}/parsed/${CASELIST}/${VERSION}" -type f | wc -l | tr -d ' ') objects in the copy, $(cat "${COPY}/parsed-planned-${CASELIST}.txt") planned to upload"
+  aws sso login --profile debate-prod-evidence && cd "$HOME" && caffeinate -i env DEBATE_ENV=prod DEBATE_STORAGE__DATA_DIR="$COPY" debate-research --json caselist parse --caselist "$CASELIST" --publish-only --confirm-prod > /tmp/prod-publish-parsed-${CASELIST}.json
+  echo "exit $?"
+  rm -f "${COPY}/parsed-planned-${CASELIST}.txt"
+  grep -oE '"(version|aggregates)": "[^"]+"|"(uploaded|skipped|suppressed|failed)": [0-9]+|"code": "[A-Z_]+"' /tmp/prod-publish-parsed-${CASELIST}.json
+fi
+```
+Success looks like the copy's object count and the dry run's planned upload, `exit 0`, `"version"`
+the restored one, `"failed": 0`, `"aggregates": "published"`, `"uploaded"` equal to the dry run's
+`upload`, and `"uploaded"`, `"skipped"` and `"suppressed"` together equal to the copy's count. The
+block uses up the dry run's file, so every run of it, a retry too, starts from the dry run. Then:
+
+* `PARSED_PUBLISH_INCOMPLETE` or `STORE_CREDENTIALS_EXPIRED`: run both blocks again, from the dry
+  run, which then plans only what prod does not confirm.
+* `"uploaded"` other than the dry run's `upload` with `exit 0`: prod changed between the two blocks.
+  Send the PM both files.
+* Any other code: stop and send the PM the code, as for the dry run's.
+
+Then the next store, from its dry run.
 
 ### 7. Prod's function, then prod's index
 

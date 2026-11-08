@@ -1007,6 +1007,28 @@ async def test_the_reserve_follows_the_median_of_the_answers_seen() -> None:
         assert provider.reserve_seconds == expected
 
 
+async def test_a_query_waiting_when_an_answer_moves_the_reserve_keeps_to_the_new_deadline() -> None:
+    """The second query starts waiting at 0 with the 2 s reserve, a deadline of 8 s. The first is
+    answered at 6 s, which makes the reserve 5 s and the second query's deadline 5 s, already past:
+    it is not asked at 6 s, rather than sent then to be answered at 12 s."""
+    time = VirtualTime()
+    starts: list[float] = []
+
+    async def answer(request: httpx.Request) -> httpx.Response:
+        starts.append(time.seconds_since())
+        await time.sleep(6.0)
+        return httpx.Response(200, json=works())
+
+    provider = build_over(httpx.MockTransport(answer), contact_email=None, time=time)
+    first, second = await time.run(
+        asyncio.gather(provider.search(CARBON_CAPTURE), provider.search(CARBON_CAPTURE))
+    )
+
+    assert starts == [0.0]
+    assert (first.partial, second.partial, second.error) == (False, True, NOT_ASKED_PUBLIC)
+    assert time.seconds_since() == 6.0
+
+
 async def test_a_query_cancelled_while_waiting_gives_up_its_turn() -> None:
     time = VirtualTime()
     starts: list[float] = []

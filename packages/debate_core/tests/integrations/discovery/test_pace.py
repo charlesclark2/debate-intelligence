@@ -320,22 +320,38 @@ def test_a_probe_its_pace_answers_not_asked_decides_nothing_and_frees_the_probe(
 
 
 def test_queries_asked_at_once_count_as_queued_while_any_of_them_waits_for_its_turn() -> None:
-    """Two queries in one call at one a second: the first released at once and answered at 0.2 s, the
-    second released at 1 s and answered at 1.2 s. The call was queued from 0 to 1 s, while a query
-    of it waited, so its latency is 200 ms; and its 0.5 s timeout counted only those 200 ms."""
+    """Three queries in one call at one a second: released at 0, 1 and 2 s and each answered 0.2 s
+    later. The second and third wait together from 0 to 1 s, so the call was queued from 0 to 2 s
+    once, not for 1 + 2 s; its latency is 200 ms, and its 0.5 s timeout counted only those 200 ms."""
 
     async def scenario() -> ProviderHealth:
         clock = EventLoopClock()
-        adapter = PacedMultiQueryAdapter(Pacer(ONE_A_SECOND, clock=clock), [0.2, 0.2])
+        adapter = PacedMultiQueryAdapter(Pacer(ONE_A_SECOND, clock=clock), [0.2, 0.2, 0.2])
         policy = ResiliencePolicy(timeout_seconds=0.5)
         provider = ResilientMultiQueryProvider(adapter, policy, clock=clock)
-        responses = await provider.search_each((query(0), query(1)))
-        assert [response.partial for response in responses] == [False, False]
+        responses = await provider.search_each((query(0), query(1), query(2)))
+        assert [response.partial for response in responses] == [False, False, False]
         return provider.health()
 
     health = run_in_virtual_time(scenario())
     assert (health.success_count, health.error_count, health.not_asked_count) == (1, 0, 0)
     assert health.p50_latency_ms == pytest.approx(200.0, abs=0.01)
+
+
+def test_queries_asked_at_once_of_which_one_was_sent_are_an_answer_not_a_not_asked() -> None:
+    """Two queries in one call, the second refused at its 0.5 s deadline: the provider answered the
+    first, so the call is a success, not a "not asked"."""
+
+    async def scenario() -> tuple[ProviderHealth, list[bool]]:
+        clock = EventLoopClock()
+        adapter = PacedMultiQueryAdapter(Pacer(ONE_A_SECOND, clock=clock), [0.2], within=0.5)
+        provider = ResilientMultiQueryProvider(adapter, ResiliencePolicy(timeout_seconds=5.0), clock=clock)
+        responses = await provider.search_each((query(0), query(1)))
+        return provider.health(), [response.partial for response in responses]
+
+    health, partial = run_in_virtual_time(scenario())
+    assert partial == [False, True]
+    assert (health.success_count, health.error_count, health.not_asked_count) == (1, 0, 0)
 
 
 def test_a_turn_taken_outside_the_wrapper_reports_to_nobody() -> None:

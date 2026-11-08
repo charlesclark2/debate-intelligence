@@ -242,9 +242,44 @@ Whichever way it runs, the count appears only once this branch is in the build t
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-11-08
 
 **Notes:**
+
+The PM read the built code in the worktree. `scan_bundle` passes a hit over only when the term is a
+tournament and the whole line is, by exact string equality, one of that file's `FIXED_LINES`; everything
+else is scanned as before. `FIXED_LINES` is built from the same constants and helpers the renderer
+writes from (`_ReportLines`, the heading and row helpers, each CSV's first line and header row), so the
+two cannot drift. A line that carries data can't equal a fixed line, because a fixed line by
+construction carries no value.
+
+1. **ac1 passes.** Red against a scan that exempted nothing was 20 failed, each at an assertion, with the
+   53 expected passes explained; green 87. All 16 mutants are caught, including every loosening of the
+   match (strip, prefix, substring, case, spacing, a word list), the wrong file, and the registry
+   drifting from the template in four ways.
+2. **The template guard is two-sided.** A static walk refuses a bare literal in what `render_markdown`
+   reaches. A rendered check over four fixture variants refuses an unnamed value-free line. The renderer
+   refactor is byte-identical, pinned by the goldens.
+3. **The count, derived from the template: 71 of 2026-11-06's 76 hits removed** (72 by the spec's 73),
+   with 4 or 5 remaining. The real figure comes with the republish after the 2026-11-11 run. The golden
+   report under an invented `Cite` passes over 10 lines and keeps the withheld-tags note.
+4. **Deviations accepted.**
+   - 1, `debate_cli` added to the spec's packages, with a comment saying why: the count reaches the
+     operator only through the command.
+   - 2, the withheld-tags note stays a hit because it carries three counts. That is the rule working.
+     Its key's digit masking keeps the accepted digest stable week to week.
+5. **Decisions accepted.**
+   - 1, the scan's tournament terms come from the disclosures' tournament field, not `topics.yaml`.
+     Correctly noted; it changes nothing.
+   - 2, only a tournament is passed over, per the spec's title.
+   - 3, a fixed line is one with no value interpolated.
+6. **Follow-ups, which the PM files or makes in the next batch:**
+   - the withheld-tags note's counts on a line of their own (E32, p3);
+   - every kind passed over on an exact fixed line (E32, p3). It is safe, because a template line
+     carries no identity, and it ends weekly false hits such as a team code `AT` on the `AT:` bullet;
+   - the runbook's step 3 printout gains `scan.exempted` by count, which the PM edits into the runbook
+     in the batch, replacing this report's separate block.
+7. **Merge:** a plain `scripts/task pr` once `ci` is green. The Goal is `Succeeded`.

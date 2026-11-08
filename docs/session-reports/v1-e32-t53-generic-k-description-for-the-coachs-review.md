@@ -159,9 +159,33 @@ not built here).
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-11-08
 
 **Notes:**
+
+The PM checked the worktree against `origin/dev` file by file. `generic.yaml` changes only generic-k's
+description line, to the coach's exact text; its version goes 1.2.0 → 1.2.1 with a changelog entry. The
+NHI taxonomy and `topics.yaml` go 1.5.0 → 1.5.1, with the NHI file's changelog entry. LD's topic stays at
+1.0.0. Nothing else in config changed.
+
+1. **ac1 passes.** The coach's decision is recorded as he gave it, the description is pinned by test, and
+   the config tests pass (59 on the node's command, 108 with the re-key and review-position tests). Both
+   planted breaks fail for their reason.
+2. **The re-key needs no code,** because the request carries the version and every description. The new
+   test pins that a 1.5.0 recording, or one with the old description, never replays. Recordings at 1.5.0
+   replay only from a checkout before this merge, and the report says so.
+3. **The cache, counted:** 140,055 deterministic results at 1.5.0 and none from a model, so the next
+   hspolicy26 report re-places every card with stage one and calls nothing. The republish after the
+   2026-11-11 run does this, so expect its dry run to take the longer first-run time. The
+   `release_landscape_taxonomy.py --version 1.5.1` step follows that first publish, in the PM's next batch.
+4. **Item 4's careful wording is right.** Row 26 under 1.3.0 placed `at:generic-k` and was wrong. No
+   recording placed a card as reading generic-k above the threshold before 1.3.1.
+5. **Item 5: the date is right.** The review was 2026-11-08 on the coach's clock; the session's clock
+   was in UTC.
+6. **The follow-up design is accepted as the basis for the PM's amendment of v1-e32-t52.** On its
+   question: by fingerprint. The coach never sees a card he has already ruled on, even when a later
+   snapshot brings it again. The decisions file records the snapshot each fingerprint was reviewed at.
+7. **Merge:** a plain `scripts/task pr` once `ci` is green. The Goal is `Succeeded`.

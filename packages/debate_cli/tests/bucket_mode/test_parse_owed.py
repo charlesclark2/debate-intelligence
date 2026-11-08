@@ -6,8 +6,8 @@ mode. The entry is cleared only when that caselist's parsed store is published c
 whose publish failed stays owed. A run that starts with entries owed parses and publishes those
 caselists first, though it imports nothing. A parser version the store has no directory of owes a
 full parse of every caselist the run follows, `openev` included, before the index stage.
-`caselist runs` and `caselist status` say what is owed, and a removal that reaches a snapshot clears
-its entry.
+`caselist runs` and `caselist status` say what is owed. A removal keeps every entry, and the next run
+parses the caselist owed without the removed file (`v1-e30-t34`).
 
 Through the real command and composition root, over moto's bucket and the fictional caselist, as the
 rest of this directory runs (`conftest.py`). The kills are `v1-e40-t04`'s harness
@@ -375,7 +375,7 @@ def test_a_full_parse_cut_short_is_still_owed_by_the_next_run(world: World, tmp_
 
 
 # ------------------------------------------------------------------------------------------------
-# ac2: what is owed is said, and a removal that reaches a snapshot clears its entry
+# ac2: what is owed is said
 # ------------------------------------------------------------------------------------------------
 
 
@@ -411,43 +411,102 @@ def test_nothing_owed_is_said_as_nothing(world: World) -> None:
     assert "Parse owed" not in world.invoke("caselist", "runs").output
 
 
-def test_a_removal_that_reaches_a_snapshot_clears_its_entry_and_no_other(world: World) -> None:
-    """`wiki` is disclosed in 09-01 and every week after: a removal of it reaches both weeks a first
-    pull owes, and not the camp release."""
-    world.listing(WEEK_1, WEEK_2)
-    killed_at_parse(world)
-    assert owed_here(world.data_dir) == FIRST_PULL_OWED
-    world.monkeypatch.setenv("DEBATE_REMOVAL_PROFILE", "debate-dev-evidence-removal")
+# ------------------------------------------------------------------------------------------------
+# A removal keeps the parse owed, and the next run makes it without the removed file (`v1-e30-t34`)
+# ------------------------------------------------------------------------------------------------
 
-    removed = world.run(
-        "caselist", "remove", "--source", digest_of("wiki"), "--reason", "REQUESTED_BY_TEAM",
+REMOVED_FROM_THE_OWED_WEEK: Final = [
+    pytest.param("wiki", 1, True, id="another-source-of-the-owed-week"),
+    pytest.param("direct", 0, False, id="the-owed-weeks-only-unparsed-source"),
+]
+"""The file removed, how many sources the next run's parse attempts after it, and whether the parsed
+store held the file before the removal.
+
+Both are disclosed in week three, the week the killed run owes, so the removal rewrites its manifest.
+`wiki` is disclosed in every week and was parsed with the first two: the next run attempts week
+three's one new source, `direct`. `direct` is week three's only new source: removed, it leaves the
+week nothing to parse, and the next run attempts none, publishes the store and clears the entry
+rather than keeping it owed for ever (the PM's ruling of 2026-11-08, 4)."""
+
+
+def removed(world: World, body: str) -> None:
+    """`caselist remove --execute` of the fixture's file `body`, with the takedown profile."""
+    world.monkeypatch.setenv("DEBATE_REMOVAL_PROFILE", "debate-dev-evidence-removal")
+    done = world.run(
+        "caselist", "remove", "--source", digest_of(body), "--reason", "REQUESTED_BY_TEAM",
         "--request", "RM-2026-03", "--execute",
     )  # fmt: skip
-
-    assert removed["exit_code"] == ExitCode.OK, removed
-    assert owed_here(world.data_dir) == {
-        "full_parses": [],
-        "snapshots": [{"caselist": "openev", "snapshot": "2026-policy"}],
-    }
+    assert done["exit_code"] == ExitCode.OK, done
 
 
-def test_a_bucket_mode_removal_clears_the_entry_in_the_bucket(world: World, tmp_path: Path) -> None:
+def parsed_store_naming(world: World, body: str) -> list[str]:
+    """Each file of the parsed store, on this machine and in the bucket, whose path or bytes name
+    the fixture's file `body` by its digest: its per-source file, and any aggregate holding its rows."""
+    digest = digest_of(body)
+    here = [
+        path.as_posix()
+        for path in sorted((world.data_dir / "parsed").rglob("*"))
+        if path.is_file() and (digest in path.name or digest.encode() in path.read_bytes())
+    ]
+    there = [
+        key
+        for key in sorted(world.object_keys("parsed/"))
+        if digest in key or digest.encode() in world.body(key)
+    ]
+    return here + there
+
+
+@pytest.mark.parametrize(("body", "attempted", "parsed_before"), REMOVED_FROM_THE_OWED_WEEK)
+def test_a_removal_keeps_the_parse_owed_and_the_next_run_parses_it_without_the_removed_file(
+    world: World, parses: list[str], body: str, attempted: int, parsed_before: bool
+) -> None:
+    week_three_killed_in_local_mode(world)
+    assert owed_here(world.data_dir) == WEEK_3_OWED
+    assert bool(parsed_store_naming(world, body)) is parsed_before, "the premise"
+
+    removed(world, body)
+
+    assert owed_here(world.data_dir) == WEEK_3_OWED, "kept: nothing is rebuilt after a removal"
+    parses.clear()
+    following = world.pull()
+    assert following["exit_code"] == ExitCode.OK, following
+    assert following["data"]["snapshots_imported"] == [], "the premise: nothing new to import"
+    assert parses == [CASELIST], "the owed caselist is parsed though the run imported nothing"
+    assert following["data"]["parse"]["attempted"] == attempted, "never the removed file"
+    assert stage(following, "parse")["outcome"] == "completed", stage(following, "parse")
+    assert owed_here(world.data_dir) is None, "cleared once the parsed store was published complete"
+    assert parsed_store_naming(world, body) == []
+    assert world.pull()["data"]["parse"] is None, "and owed nothing after"
+
+
+@pytest.mark.parametrize(("body", "attempted", "parsed_before"), REMOVED_FROM_THE_OWED_WEEK)
+def test_a_bucket_mode_removal_keeps_the_parse_owed_in_the_bucket_and_the_next_run_makes_it(
+    world: World, tmp_path: Path, parses: list[str], body: str, attempted: int, parsed_before: bool
+) -> None:
     seeded(world)
     world.use(tmp_path / "killed")
     killed_at_parse(world)
     assert owed_in_the_bucket(world) == WEEK_3_OWED
+    assert bool(parsed_store_naming(world, body)) is parsed_before, "the premise"
     world.clock.advance(timedelta(minutes=36))
     world.use(tmp_path / "the-removal")
-    world.monkeypatch.setenv("DEBATE_REMOVAL_PROFILE", "debate-dev-evidence-removal")
     # The killed run's lease is past; a removal takes the lock over as a run does.
 
-    removed = world.run(
-        "caselist", "remove", "--source", digest_of("wiki"), "--reason", "REQUESTED_BY_TEAM",
-        "--request", "RM-2026-03", "--execute",
-    )  # fmt: skip
+    removed(world, body)
 
-    assert removed["exit_code"] == ExitCode.OK, removed
-    assert owed_in_the_bucket(world) is None
+    assert owed_in_the_bucket(world) == WEEK_3_OWED, "kept in the bucket: nothing is rebuilt after a removal"
+    world.use(tmp_path / "next")
+    parses.clear()
+    following = world.pull()
+    assert following["exit_code"] == ExitCode.OK, following
+    assert following["data"]["snapshots_imported"] == []
+    assert parses == [CASELIST]
+    assert following["data"]["parse"]["attempted"] == attempted, "never the removed file"
+    assert stage(following, "parse")["outcome"] == "completed", stage(following, "parse")
+    assert owed_in_the_bucket(world) is None, "cleared in the bucket once its parsed store was published"
+    assert parsed_store_naming(world, body) == []
+    world.use(tmp_path / "after")
+    assert world.pull()["data"]["parse"] is None, "and owed nothing after"
 
 
 # ------------------------------------------------------------------------------------------------

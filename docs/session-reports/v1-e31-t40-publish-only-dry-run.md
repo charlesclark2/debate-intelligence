@@ -273,9 +273,33 @@ before each store's publish. That session will measure the dry run's runtime.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-11-08
 
 **Notes:**
+
+The dry run prod's first parsed-store publish needed, built so it cannot drift from the publish: one
+`plan` decides each object with the code the publish decides by, and the counts are checked against the
+real publish that follows.
+
+1. **ac1 passes.** Red twice: against the code as it was, and against a refuse-nothing skeleton that
+   failed every refusal and lock case. Green 27, and 81 on the node's command. "Nothing written" is shown
+   by every object version, every lock version, and every file's bytes and modification time.
+2. **Mutants.** All 21 are caught by assertions, including the lock taken or skipped, the database opened
+   at construction, and a blocked plan exiting 0. The ten planted runbook breaks are caught, and the one
+   first missed (a refusal indistinguishable from a plan) got its own stop.
+3. **The side effect is accepted, and it is a fix:** `--publish-only` and `--failures` no longer open and
+   migrate `debate.sqlite3` before any check. The rebuild's tests pass unchanged, and the card placer is
+   built where it is used.
+4. **Decisions accepted.** The publish's environment guard, not a read's. The lock read, never taken
+   (`refuse_what_holding_would_refuse`). `PARSED_PUBLISH_BLOCKED` as the publish's incomplete outcome
+   foretold. The placement state as its own kind. Step 6's stricter check (upload, present and suppressed
+   together equal the copy), with its one-use OK file.
+5. **Deviation 1 accepted.** The smoke check, the runbook test and the guide each pinned the refusal this
+   task frees. The PM adds `tests/smoke`, `tests/docs` and `docs/guides` to `constraints.packages` in the
+   next batch.
+6. **This unblocks `v1-e40-t47`**, whose steps use this dry run. Its first real use is `v1-e40-t16`'s prod
+   session.
+7. **Merge:** a plain `scripts/task pr` once `ci` (358 files) is green. The Goal is `Succeeded`.

@@ -667,3 +667,28 @@ model call. Counts and row numbers only.
   1.3.1, as ruled before either score was seen; rows 16 and 57 take the 2026-11-06 labels, row 33 stays open
   for its sitting.
 
+### The coach's decision on `generic-k`'s description (`v1-e32-t53`, 2026-11-08)
+
+The coach's review of 2026-11-08, recorded as the PM gave it. Ids, versions and row numbers only.
+
+* **The decision.** `generic-k` is "a card which is clearly related to a K, but doesn't fall under the
+  purview of one of the established K's that are part of the case list." He did not approve `v1-e32-t49`'s
+  proposed wording ("...such as a critique of the affirmative's ontology"); his wording replaces it.
+* **The new description**, in `config/landscape/taxonomies/generic.yaml`: "A card clearly related to a
+  kritik that does not fall under any of the named kritiks in this list." Nothing else in the entry
+  changed: its label, kind, side, event and alias are as they were. A description moves no count, so a
+  patch: generic.yaml to 1.2.1 and `policy-2026-27-nhi` to 1.5.1 with it. The LD topic keeps its version,
+  since `generic-k` names Policy only. `tests/config/test_landscape_taxonomies.py` pins the text.
+* **What `generic-k` scored before it.** Before 1.3.1, no recording placed a card as reading `generic-k`
+  above the threshold: rows 46, 50 and 60 were counted right on neither route under 1.2.0, and 1.3.0's one
+  generic answer above the threshold (row 26, an `at:cap-k` card) answered `at:generic-k` and was wrong.
+  1.3.1 placed one, row 60, which the coach labelled `generic-k`.
+* **His request.** Periodic reviews, by him, of the cards placed under `generic-k`, to find kritiks the
+  landscape has not yet recorded. The PM files it as a mode of `v1-e32-t52` (the guided taxonomy review).
+* **Recordings.** The model stage's requests carry the taxonomy's version and every description, so
+  their cassette key moved. Every kept recording of the 47-card sample was made at 1.5.0 or earlier and
+  does not replay from a checkout with this change; a replay of one runs from a checkout before it.
+  `v1-e32-t50`'s held-out sample is recorded under 1.5.1, so its model reads the coach's wording.
+* **The landscape's cache.** A taxonomy version is part of the classification cache's key, so the next
+  `landscape report` on hspolicy26 re-places every card. Stage one reads no description, so its
+  placements and counts are unchanged, and with `--model-mode none` (the default) no model is called.

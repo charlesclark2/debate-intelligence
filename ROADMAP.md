@@ -61,7 +61,7 @@ v2.3's extension work.
 | Release | Theme | Epics | Tasks | Done | Est. hours |
 |---|---|---|---|---|---|
 | [v1.0](plan_specs/releases/v1.0.yaml) | Foundation & verified evidence core | 3 | 55 | 55 | 252 |
-| [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 4 | 125 | 103 | 550 |
+| [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 4 | 125 | 104 | 550 |
 | [v1.2](plan_specs/releases/v1.2.yaml) | Argument landscape & file building | 3 | 96 | 78 | 364 |
 | [v1.3](plan_specs/releases/v1.3.yaml) | URL → verified card | 2 | 24 | 15 | 125 |
 | [v1.4](plan_specs/releases/v1.4.yaml) | Federated research from the CLI | 2 | 39 | 19 | 136 |
@@ -264,7 +264,7 @@ OpenCaselist archives and OpenEv camp files for HS LD, Policy and PF are importe
 | [The parser evaluation's baseline is refreshed from `docx-5` to the current parser](plan_specs/v1/e31-debate-file-parsing/t37-parser-evaluation-baseline-refreshed.yaml) `v1-e31-t37-parser-evaluation-baseline-refreshed` | Pending | 1 | 1.0 |
 | [A parse worker's time limit starts when the worker reports ready, not when it is spawned](plan_specs/v1/e31-debate-file-parsing/t38-a-parse-workers-time-limit-starts-when-it-is-ready.yaml) `v1-e31-t38-a-parse-workers-time-limit-starts-when-it-is-ready` | Pending | 0 | 2.0 |
 | [A weekly rebuild re-clusters only the dependency components the week's new bodies reach](plan_specs/v1/e31-debate-file-parsing/t39-incremental-placement-by-dependency-components.yaml) `v1-e31-t39-incremental-placement-by-dependency-components` | Pending | 1 | 9.0 |
-| [caselist parse --publish-only has a dry run that lists what it would send and refuses what it would refuse](plan_specs/v1/e31-debate-file-parsing/t40-publish-only-dry-run.yaml) `v1-e31-t40-publish-only-dry-run` | Pending | 1 | 2.0 |
+| [caselist parse --publish-only has a dry run that lists what it would send and refuses what it would refuse](plan_specs/v1/e31-debate-file-parsing/t40-publish-only-dry-run.yaml) `v1-e31-t40-publish-only-dry-run` | Succeeded | 1 | 2.0 |
 | [The placement state's noncurrent versions expire in days, in both buckets](plan_specs/v1/e31-debate-file-parsing/t41-placement-state-versions-expire-in-days.yaml) `v1-e31-t41-placement-state-versions-expire-in-days` | Pending | 1 | 2.0 |
 
 #### [E34 — Scheduled Caselist Sync](plan_specs/v1/e34-caselist-sync/epic.yaml)

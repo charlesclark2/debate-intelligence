@@ -145,7 +145,7 @@ def test_publish_only_beside_an_option_it_has_no_use_for_is_refused_and_writes_n
     store = imported / "parsed"
     before = {path: path.stat().st_mtime_ns for path in store.rglob("*") if path.is_file()}
 
-    for beside in (["--publish"], ["--reparse"], ["--snapshot", SNAPSHOT], ["--dry-run"], ["--failures"]):
+    for beside in (["--publish"], ["--reparse"], ["--snapshot", SNAPSHOT], ["--failures"]):
         result = installed_cli.run(
             "--json", "caselist", "parse", "--caselist", CASELIST, "--publish-only", *beside
         )
@@ -156,3 +156,30 @@ def test_publish_only_beside_an_option_it_has_no_use_for_is_refused_and_writes_n
         assert f"so it cannot be combined with {beside[0]}" in error["message"]
 
     assert {path: path.stat().st_mtime_ns for path in store.rglob("*") if path.is_file()} == before
+
+
+def test_the_publish_only_dry_run_is_refused_as_publish_only_is_with_no_bucket_and_writes_nothing(
+    installed_cli: InstalledCli, imported: Path
+) -> None:
+    """`v1-e31-t40`: offline, the harness's empty AWS config defines no profile for the build's dev
+    bucket. `--dry-run` beside `--publish-only` is no usage error: it meets `--publish-only`'s own
+    checks, and is refused by the same code, having written nothing."""
+    reported(installed_cli.run("--json", "caselist", "parse", "--caselist", CASELIST))
+    before = {
+        path: (path.read_bytes() if path.is_file() else b"", path.stat().st_mtime_ns)
+        for path in sorted(imported.rglob("*"))
+    }
+
+    planned = installed_cli.run(
+        "--json", "caselist", "parse", "--caselist", CASELIST, "--publish-only", "--dry-run"
+    )
+
+    assert {
+        path: (path.read_bytes() if path.is_file() else b"", path.stat().st_mtime_ns)
+        for path in sorted(imported.rglob("*"))
+    } == before
+    real = installed_cli.run("--json", "caselist", "parse", "--caselist", CASELIST, "--publish-only")
+    assert planned.exit_code == real.exit_code == ExitCode.DOMAIN_FAILURE, planned.stdout
+    refused = json.loads(planned.stdout)["error"]
+    assert refused == json.loads(real.stdout)["error"]
+    assert refused["code"] == "STORE_PROFILE_NOT_CONFIGURED"

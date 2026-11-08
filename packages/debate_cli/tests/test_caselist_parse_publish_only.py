@@ -12,7 +12,8 @@ holds the command to:
 * ac4: dev's store sent to prod, whose bucket's suppression list holds a removal or a path hold
   dev's lacks, is refused, and nothing reaches prod's `parsed/`.
 * `--publish` and every option that only shapes a rebuild are refused beside it, before anything
-  is read or written; so is `--failures`. `--publish`'s guards are its guards.
+  is read or written; so is `--failures`. `--publish`'s guards are its guards. `--dry-run` is
+  `test_caselist_parse_publish_only_dry_run.py`'s (`v1-e31-t40`).
 * An incomplete publish, either way, says to retry with `--publish-only`.
 * Nothing it prints names a school, a team code or a path.
 """
@@ -273,8 +274,8 @@ def test_a_directory_a_removal_left_without_aggregates_is_refused_and_nothing_is
 
 @pytest.mark.parametrize(
     "beside",
-    [("--publish",), ("--reparse",), ("--snapshot", "2026-09-01"), ("--dry-run",), ("--failures",)],
-    ids=["publish", "reparse", "snapshot", "dry-run", "failures"],
+    [("--publish",), ("--reparse",), ("--snapshot", "2026-09-01"), ("--failures",)],
+    ids=["publish", "reparse", "snapshot", "failures"],
 )
 def test_an_option_publish_only_has_no_use_for_is_refused_before_anything_runs(
     imported: Path, buckets: S3Client, beside: tuple[str, ...]

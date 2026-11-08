@@ -32,16 +32,24 @@ A checksum mismatch among the failures still needs a person: `--publish-only` le
 file the bucket holds with other bytes alone, as `--publish` does.
 
 **The same store sent to a second environment.** Production's parsed store is published from dev's
-data directory. After the dev rebuild and publish, send that directory to prod without rebuilding
-it again:
+data directory. After the dev rebuild and publish, read what prod would get first, with the dry run
+(below), which needs no `--confirm-prod`:
 
 ```bash
 uv run debate-research caselist parse --caselist hsld26 --publish
+DEBATE_ENV=prod DEBATE_STORAGE__DATA_DIR="$HOME/.debate-research/dev" uv run debate-research caselist parse --caselist hsld26 --publish-only --dry-run
+unset DEBATE_ENV DEBATE_STORAGE__DATA_DIR
+```
+
+Then, if it was not refused and its `Total` row's `upload` is what you expected, send that directory
+to prod without rebuilding it again:
+
+```bash
 DEBATE_ENV=prod DEBATE_STORAGE__DATA_DIR="$HOME/.debate-research/dev" uv run debate-research caselist parse --caselist hsld26 --publish-only --confirm-prod
 unset DEBATE_ENV DEBATE_STORAGE__DATA_DIR
 ```
 
-The prod line needs `--confirm-prod`, as `--publish` does there. The `unset` matters for the same
+The real prod publish needs `--confirm-prod`, as `--publish` does there. The `unset` matters for the same
 reason it does in the backfill runbook: a shell left on prod with dev's data directory is how a
 later command reaches the wrong bucket.
 
@@ -82,8 +90,40 @@ change re-parses nothing, so such records are what a rebuild by this build leave
 sends them too.
 
 These options cannot be combined with `--publish-only`, and the command exits `2` without reading or
-writing anything if they are: `--publish` (it rebuilds first), `--reparse`, `--snapshot` and
-`--dry-run` (they only shape a rebuild), and `--failures` (it lists, and publishes nothing).
+writing anything if they are: `--publish` (it rebuilds first), `--reparse` and `--snapshot` (they
+only shape a rebuild), and `--failures` (it lists, and publishes nothing). `--dry-run` can
+(`v1-e31-t40`), below.
+
+## Seeing what it would send: `--dry-run`
+
+```bash
+uv run debate-research caselist parse --caselist hsld26 --publish-only --dry-run
+```
+
+The dry run makes every check `--publish-only` makes, in the same order, and is refused by each
+with the same code, message, hint and exit code: the environment (dev or prod only), every refusal
+in the table above, the bucket's run lock (read, never taken: a lock another runner holds is
+`RUN_LOCK_HELD`, a bucket that keeps the run's state in local mode `BUCKET_KEEPS_RUN_STATE`), and an
+occurrence table in the bucket stamped by a newer build. Only `--confirm-prod` is left to the real
+publish, so a prod dry run needs none.
+
+Then it lists what the publish would do with each object of the version directory, by kind (the
+per-source files, the aggregates, the placement state) and in total: `upload`, absent from the bucket
+or an aggregate the bucket holds with other bytes; `present`, in the bucket with the same digest;
+`suppressed`, a per-source file the list stops or holds; `blocked`, a per-source file the bucket
+holds with other bytes. Each with its count and its bytes on this machine. It uploads nothing, takes
+no lock, and writes nothing to the bucket or the data directory.
+
+A `blocked` file is one the publish would fail, withholding the aggregates, so the dry run then
+lists no aggregate and ends `PARSED_PUBLISH_BLOCKED`, exit `1`, after printing the plan. A checksum
+mismatch needs a person.
+
+`--json` gives the same figures as the table, under `plan`: `objects` and `bytes` are the totals,
+each by `upload`, `present`, `suppressed` and `blocked`, and `by_kind` gives the same for
+`per_source_files`, `aggregates` and `placement_state`. `aggregates` says `planned` or `withheld`,
+and `blocked_keys` and `blocked_codes` name what is blocked. The envelope has `"publish_only": true`
+and `"dry_run": true`. The real publish that follows uploads the plan's `upload` and skips its
+`present`, unless the bucket changes in between.
 
 ## What it reports
 

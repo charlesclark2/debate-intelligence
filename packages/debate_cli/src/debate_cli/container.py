@@ -1202,7 +1202,10 @@ class ServiceContainer:
                 timeout_seconds=parse.per_file_timeout_seconds,
             ),
             suppression=suppression,
-            card_placer=self.caselist_card_stats().placer,
+            # Asked of at a rebuild's placing, not here: the stats service opens and migrates this
+            # environment's SQLite file, which `--publish-only --dry-run` must leave as it found it
+            # (`v1-e31-t40`). The placer itself reads no database.
+            card_placer=lambda: self.caselist_card_stats().placer(),
             failure_rate_threshold=parse.failure_rate_threshold,
             failure_rate_minimum_sources=parse.failure_rate_minimum_sources,
             # Bucket mode (`v1-e40-t04`): raw sources a restored copy lacks come from the bucket.

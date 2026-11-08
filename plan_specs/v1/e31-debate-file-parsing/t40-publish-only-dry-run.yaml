@@ -41,7 +41,7 @@ spec:
         and bytes while writing nothing, and the cutover runbook's step 6 runs it first, by
         tests on moto shown failing first.
 status:
-  phase: Pending
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

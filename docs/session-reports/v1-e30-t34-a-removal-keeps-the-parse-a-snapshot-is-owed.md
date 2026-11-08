@@ -154,9 +154,29 @@ None.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-11-08
 
 **Notes:**
+
+The proposal's finding is shown by test, not argued: with the entry cleared, the next parse stage chose
+nothing (`assert [] == ['testcl26']`), in both modes. Kept, the owed caselist is parsed and the removed
+file named nowhere.
+
+1. **ac1 passes.** Red was 2 failed (core) and 4 failed (command level), each at the clearing. The extra
+   red run, with the "kept" assertions taken out, shows the consequence the ruling cared about: the owed
+   caselist was not parsed. Green 34; the node's command 4.
+2. **Ruling 4 holds.** A week whose only unparsed source was the removed file is parsed with nothing to
+   parse, published, and cleared, so it is never owed for ever. A mutant shows it.
+3. **Mutants.** All six on the rule are caught. The crash on the first run (`FileNotFoundError`) was
+   turned into an assertion. The two informational mutants are the useful part: each removed-file guard
+   (the rewritten manifests, the suppression filter) keeps the file out on its own, so they are
+   independent.
+4. **Deviations accepted.** 1 and 2 were ruled: the PM amends the spec's packages and the node's command
+   (adding `packages/debate_cli/tests/bucket_mode/test_parse_owed.py`) in the next batch. 3, the
+   scheduled-sync runbook's sentence, was wrong after the change, and correcting it is right.
+5. **Decisions accepted.** No new test for a parser bump's full parse owed, because those entries were
+   never cleared and the method is gone.
+6. **Merge:** a plain `scripts/task pr` once `ci` (348 files) is green. The Goal is `Succeeded`.

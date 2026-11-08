@@ -25,6 +25,8 @@
   teams' headings hold.
 * **The plan-mechanism words** (`plan_mechanisms/<topic id>.yaml`, `v1-e33-t14`) load with the
   taxonomies, and the same check runs over them: a word is one the teams' block headings hold.
+* **generic-k reads as the coach wrote it** (`v1-e32-t53`): its description is pinned to his wording of
+  2026-11-08, so a change to it shows here before it reaches the model stage.
 * **Nothing else is in the directory** but the release lock (`released.yaml`, `v1-e32-t08`, checked
   in `test_landscape_released_ids.py`), so the seeding CSV and the review queue, which hold real
   headings, cannot be committed beside the files by mistake.
@@ -252,6 +254,25 @@ def plan_mechanism_findings(words: PlanMechanismWords) -> list[str]:
 
 def test_there_are_taxonomy_files() -> None:
     assert TAXONOMY_FILES, f"no taxonomy under {CONFIG / TAXONOMY_DIRECTORY}"
+
+
+GENERIC_K_DESCRIPTION = (
+    "A card clearly related to a kritik that does not fall under any of the named kritiks in this list."
+)
+"""The coach's own wording, from his review of 2026-11-08 (`v1-e32-t53`): he did not take `v1-e32-t49`'s
+proposed description. The model stage sends it, so an edit to it needs his review again."""
+
+
+def test_generic_k_is_described_in_the_coachs_own_words() -> None:
+    found = [
+        position
+        for path in TAXONOMY_FILES
+        for position in load_taxonomy_file(path).positions
+        if position.id == "generic-k"
+    ]
+
+    assert len(found) == 1, f"generic-k is in {len(found)} taxonomy files; one holds it"
+    assert found[0].description == GENERIC_K_DESCRIPTION
 
 
 def test_the_configuration_loads_as_one() -> None:

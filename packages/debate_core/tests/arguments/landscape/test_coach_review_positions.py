@@ -84,4 +84,4 @@ def test_the_three_positions_are_active_with_their_kind_side_and_a_description()
         "free-market-cp": ("cp", "neg", True),
         "federalism-cp": ("cp", "neg", True),
     }
-    assert taxonomy.taxonomy_version == "1.5.0"
+    assert taxonomy.taxonomy_version == "1.5.1"

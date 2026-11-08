@@ -54,6 +54,14 @@ id; cards by rank). Nothing here computes a count; the service did.
   one page per school), and in **school_rounds.csv**, one row per team, position and round. schools.csv's
   columns are unchanged, and no circuit-wide file names a tournament or a round.
 
+## The lines written word for word
+
+Every line report.md writes word for word, with nothing from the caselist in it, is named once, in
+:class:`_ReportLines` or as a line built from the renderer's own tables alone, and every circuit-wide
+CSV's first line and header row too. :data:`FIXED_LINES` holds them by file for the bundle scan, which
+passes over a tournament found in one of them (`v1-e32-t60`): the renderer and the scan read the same
+text, so a change to the template changes both.
+
 ## What is written exactly, and what is escaped
 
 A card's tag and short cite are written exactly as parsed in the CSV, but a tag holding a word of a
@@ -78,6 +86,7 @@ from datetime import date
 from decimal import ROUND_HALF_UP, Decimal
 from fractions import Fraction
 from itertools import groupby
+from types import MappingProxyType
 from typing import Final
 
 from debate_core.arguments.landscape.aff_assignment import (
@@ -123,6 +132,7 @@ from debate_core.domain.landscape_trends import (
 from debate_core.domain.search_source_links import NoTeamPage
 
 __all__ = [
+    "FIXED_LINES",
     "IMPACT_CARD_COLUMNS",
     "PLANK_TABLE_HEADER",
     "POSITION_COLUMNS",
@@ -290,13 +300,200 @@ _TEXT_NOUNS: Final = {
     AnalyticTextKind.K_ALTERNATIVE: "alternative",
     AnalyticTextKind.ROLE_OF_THE_BALLOT: "role of the ballot",
 }
-_TITLES_NOT_READ: Final = "The caselist's own round titles and cite entries are not read this season."
-"""The PM's ruling of 2026-10-24 (`v1-e32-t09`): the site's round and cite titles are not taken."""
+_ROLE_LABELS: Final = {
+    ChainRole.UNIQUENESS: "Uniqueness",
+    ChainRole.LINK: "Link",
+    ChainRole.INTERNAL_LINK: "Internal link",
+    ChainRole.IMPACT: "Impact",
+    ChainRole.INHERENCY: "Inherency",
+    ChainRole.SOLVENCY: "Solvency",
+}
+"""How report.md names each chain role (`v1-e32-t14`)."""
 _MARKDOWN_SPECIAL: Final = re.compile(r"([\\`*_\[\]<>|])")
 _WHITESPACE: Final = re.compile(r"\s+")
 _NOT_IN_ANCHOR: Final = re.compile(r"[^\w\- ]")
 _THOUSANDTH: Final = Decimal("0.001")
 _TENTH: Final = Decimal("0.1")
+
+
+class _ReportLines:
+    """Every line report.md writes word for word, which is why the scan passes over it (`v1-e32-t60`).
+
+    A line here carries nothing from the caselist: no position, tag, cite, count or team. The renderer
+    writes each one from here and :data:`FIXED_LINES` hands them to the scan, so the two cannot drift. A
+    line the template writes with a value in it is not here, and the scan reads it as it always has.
+    """
+
+    PROVENANCE_NOTE: Final = (
+        "Every count comes from files teams disclosed to the caselist (FILE_IMPORT), not from evidence "
+        "the platform has verified. No school, team or debater is named."
+    )
+    ABOUT_HEADING: Final = "## About this report"
+    HOW_TO_READ_LEAD: Final = "How to read the numbers:"
+    ROUNDS_BULLET: Final = (
+        "* **Rounds** are disclosed rounds: one team, one side, one tournament round. A round reads a "
+        "position when one of its cards is placed under it at or above the review threshold."
+    )
+    TEAMS_BULLET: Final = "* **Teams** are distinct teams, on any side."
+    NEW_BULLET: Final = "* **New** means first disclosed after the previous snapshot."
+    NEW_BULLET_FIRST_SNAPSHOT: Final = (
+        "* **New** means first disclosed after the previous snapshot; this is the first, so "
+        "nothing is marked new."
+    )
+    ANSWERS_BULLET: Final = (
+        "* A card under an `AT:` heading answers a position and never counts as reading it, and so does "
+        "a card placed under a position in a round on the other side: a `Midterms DA` block in an "
+        "affirmative file is the 2AC answering it."
+    )
+    RUNS_THROUGH_BULLET: Final = (
+        "* **What each impact runs through**, under its impact cards, names each rank by the first of these "
+        "it has, marked with where the name came from: its **scenario**, heading words two or more teams "
+        "use under the position (a `Scenario 1` heading's name, a named heading, or the words beside an "
+        "impact or internal-link label, such as `Dome impact`), and where the coach has listed a position's "
+        "scenarios only the coach's names, each with the teams of every heading listed under it; its "
+        "**internal link**, the nearest card above it under the same position heading that a heading or its "
+        "tag labels an internal link; its **link**, the nearest such card that a heading or its tag labels a "
+        "link, never an answer such as `no link`, `link turn` or `non-unique`; the impact card's own "
+        "**tag**; and the **card above** it, the card "
+        "directly above it in its block when that is not an impact card itself: where it sits, not what it "
+        "does. None is guessed. A rank with none of these is left out, and the position says how many "
+        "were. A scenario name or a tag holding a word of a caselist school or team code is withheld, and "
+        "the next one names the rank."
+    )
+    LINK_CHAIN_BULLET: Final = (
+        "* **The link chain** of each advantage and DA is its most-read card for each role a team labelled, "
+        "by a heading under the position or the tag's first words: uniqueness (`U`, `UQ`), link, internal "
+        "link (`IL`) and impact, and for an advantage inherency and solvency. An `AT:` heading, a "
+        "heading naming two roles, and a card that answers the position or is read on the other side fill "
+        "no role. A role no team labelled says so."
+    )
+    CONTENTS_HEADING: Final = "## Contents"
+    POSITIONS_HEADING: Final = "## Positions"
+    NO_POSITION_READ: Final = "No position was read in this range."
+    POSITION_TABLE_HEADER: Final = (
+        "| Position | Rounds | Teams | Aff rounds | Neg rounds | Share of teams | First seen | New |"
+    )
+    IMPACT_TABLE_HEADER: Final = "| Rank | Teams | Tag | Cite | Scenario |"
+    RUNS_THROUGH_LEAD: Final = "What each impact runs through:"
+    LINK_CHAIN_LEAD: Final = "Link chain:"
+    CHAIN_TABLE_HEADER: Final = "| Role | Teams | Tag | Cite |"
+    ADVANTAGES_BY_AFF_HEADING: Final = "## Advantages by affirmative"
+    NO_ADVANTAGE_UNDER_AN_AFF: Final = "No affirmative round assigned an aff reads an advantage."
+    ADVANTAGE_TABLE_HEADER: Final = "| Advantage | Teams |"
+    KRITIKAL_AFFS_HEADING: Final = "## Kritikal affirmatives"
+    NO_KRITIKAL_ROUND: Final = "No affirmative round is assigned to it."
+    NO_K_FAMILY: Final = "No K family is named in the K-aff files' headings."
+    TEXTS_HEADING: Final = "## Counterplan texts, alternatives and roles of the ballot"
+    TEXT_TABLE_HEADER: Final = "| Rank | Teams | Text |"
+    PLANKS_HEADING: Final = "## Counterplan planks"
+    NO_PLANK_PLACED: Final = "No plank was placed under a CP the team reads."
+    NO_PLANK_SHOWN: Final = "None of them can be shown."
+    OVERVIEWS_HEADING: Final = "## Overviews"
+    OVERVIEWS_LEAD: Final = (
+        "Counted, never quoted: data-use policy 1.13 does not list overviews, and the coach keeps it so "
+        "(2026-10-24). Per position, the teams whose files hold an overview label (`Overview`, `O/V`, `OV`) "
+        "under it, on each side."
+    )
+    NO_OVERVIEW_PLACED: Final = "No overview was placed under a position the team reads."
+    OVERVIEW_TABLE_HEADER: Final = "| Position | Kind | Teams | Aff teams | Neg teams |"
+    NEW_HEADING: Final = "## New this week"
+    FIRST_SNAPSHOT: Final = "This is the caselist's first snapshot, so nothing is marked new."
+    FIRST_WINDOW: Final = (
+        "This is the caselist's first weekly window on this topic: every position read is NEW and none "
+        "has a delta."
+    )
+    NO_POSITION_FIRST_READ: Final = "No position was first read on this topic in this week's window."
+    NO_TREND_DRAWN: Final = "No trend is drawn: there is no earlier window on this topic to compare with."
+    UNCLASSIFIED_HEADING: Final = "## Unclassified"
+    UNCLASSIFIED_LEAD: Final = "What this report could not count:"
+    METHODS_LEAD: Final = "How affirmative rounds were identified:"
+    METHOD_TABLE_HEADER: Final = "| Method | Aff rounds |"
+    TITLES_NOT_READ: Final = "The caselist's own round titles and cite entries are not read this season."
+    """The PM's ruling of 2026-10-24 (`v1-e32-t09`): the site's round and cite titles are not taken."""
+
+
+_PART_HEADINGS: Final = ("Affirmative", "Negative", "Neither side")
+"""report.md's three parts, in order (`v1-e32-t20`)."""
+_TREND_HEADINGS: Final = ("Rising", "Falling")
+_CIRCUIT_WIDE_CSVS: Final = (
+    ("positions", POSITION_COLUMNS),
+    ("top_cards", TOP_CARD_COLUMNS),
+    ("impact_cards", IMPACT_CARD_COLUMNS),
+    ("trends", TREND_COLUMNS),
+)
+"""The circuit-wide CSVs, by the name their header block gives them, with their columns."""
+
+
+def _part_heading(part: str) -> str:
+    return f"# {part}"
+
+
+def _side_heading(side: PositionSide) -> str:
+    return f"## {_SIDE_HEADINGS[side]}"
+
+
+def _kind_heading(kind: PositionKind) -> str:
+    return f"### {_KIND_HEADINGS[kind]}"
+
+
+def _impact_heading(kind: PositionKind) -> str:
+    return f"#### {_KIND_HEADINGS[kind]}: impact cards"
+
+
+def _no_labelled_card_row(role: ChainRole) -> str:
+    return f"| {_ROLE_LABELS[role]} |  | no labelled card |  |"
+
+
+def _text_heading(kind: AnalyticTextKind) -> str:
+    return f"### {_TEXT_KINDS[kind][0]}"
+
+
+def _no_text_placed(kind: AnalyticTextKind) -> str:
+    return f"No {_TEXT_NOUNS[kind]} was placed under {_TEXT_KINDS[kind][2]} the team reads."
+
+
+def _trend_heading(heading: str) -> str:
+    return f"## {heading}"
+
+
+def _report_line(name: str) -> str:
+    """A CSV's first line: the report it is."""
+    return f"# report={name}"
+
+
+def _column_row(columns: Sequence[str]) -> str:
+    """A CSV's header row. Its columns are bare identifiers, which the CSV writer would quote none of."""
+    return ",".join(columns)
+
+
+FIXED_LINES: Final[Mapping[str, frozenset[str]]] = MappingProxyType(
+    {
+        "report.md": frozenset(
+            {
+                *(value for name, value in vars(_ReportLines).items() if name.isupper()),
+                PLANK_TABLE_HEADER,
+                *map(_part_heading, _PART_HEADINGS),
+                *map(_side_heading, _SIDE_HEADINGS),
+                *map(_kind_heading, _KIND_HEADINGS),
+                *map(_impact_heading, IMPACT_KINDS),
+                *(_no_labelled_card_row(role) for roles in CHAIN_ROLES.values() for role in roles),
+                *map(_text_heading, QUOTED_KINDS),
+                *map(_no_text_placed, QUOTED_KINDS),
+                *map(_trend_heading, _TREND_HEADINGS),
+            }
+        ),
+        **{
+            f"{name}.csv": frozenset({_report_line(name), _column_row(columns)})
+            for name, columns in _CIRCUIT_WIDE_CSVS
+        },
+    }
+)
+"""Each circuit-wide file's fixed lines, by file name: the lines its template writes word for word.
+
+The bundle scan passes over a tournament found in one of them, whole, in its own file
+(`v1-e32-t60`, :mod:`debate_core.application.landscape_scan`). In report.md they are
+:class:`_ReportLines` and the lines built from the renderer's own tables alone (a part's, side's or
+kind's heading, a chain role with no labelled card); in a CSV, its first line and its header row."""
 
 
 def header_metadata(report: LandscapeReport) -> dict[str, str]:
@@ -390,12 +587,11 @@ def _csv(
     metadata: Mapping[str, str], name: str, columns: Sequence[str], rows: Iterable[Sequence[str]]
 ) -> str:
     out = io.StringIO()
-    out.write(f"# report={name}\n")
+    out.write(f"{_report_line(name)}\n")
     for key, value in metadata.items():
         out.write(f"# {key}={_one_line(value)}\n")
-    writer = csv.writer(out, lineterminator="\n")
-    writer.writerow(columns)
-    writer.writerows(rows)
+    out.write(f"{_column_row(columns)}\n")
+    csv.writer(out, lineterminator="\n").writerows(rows)
     return out.getvalue()
 
 
@@ -406,18 +602,19 @@ def render_markdown(report: LandscapeReport, trends: LandscapeTrends | None = No
     negative's, and those of neither side. With `trends`, its new, rising and falling sections are
     theirs (`v1-e32-t04`); without, the new section is `v1-e32-t03`'s.
     """
+    affirmative, negative, neither_side = _PART_HEADINGS
     parts = {
-        "Affirmative": [
+        affirmative: [
             *_positions_section(report, PositionSide.AFF),
             *_advantages_section(report),
             *_kritikal_section(report),
         ],
-        "Negative": [
+        negative: [
             *_positions_section(report, PositionSide.NEG),
             *_texts_sections(report),
             *_planks_section(report),
         ],
-        "Neither side": [
+        neither_side: [
             *_no_positions_section(report),
             *_positions_section(report, PositionSide.BOTH),
             *_overviews_section(report),
@@ -429,13 +626,13 @@ def render_markdown(report: LandscapeReport, trends: LandscapeTrends | None = No
     lines += _contents_section(parts)
     for part, part_lines in parts.items():
         if part_lines:
-            lines += [f"# {part}", "", *part_lines]
+            lines += [_part_heading(part), "", *part_lines]
     return "\n".join(lines).rstrip("\n") + "\n"
 
 
 def _contents_section(parts: Mapping[str, Sequence[str]]) -> list[str]:
     """One line per part with a section: its link, then each of its sections'."""
-    lines = ["## Contents", ""]
+    lines = [_ReportLines.CONTENTS_HEADING, ""]
     for part, part_lines in parts.items():
         if part_lines:
             sections = ", ".join(
@@ -468,12 +665,11 @@ def _header_section(report: LandscapeReport, trends: LandscapeTrends | None = No
     return [
         f"# Argument landscape: {header.caselist} through {header.snapshot.isoformat()}",
         "",
-        "Every count comes from files teams disclosed to the caselist (FILE_IMPORT), not from evidence "
-        "the platform has verified. No school, team or debater is named.",
+        _ReportLines.PROVENANCE_NOTE,
         "",
         *_short_history(trends),
         *_part_of_a_week(trends),
-        "## About this report",
+        _ReportLines.ABOUT_HEADING,
         "",
         "| | |",
         "|---|---|",
@@ -493,22 +689,16 @@ def _header_section(report: LandscapeReport, trends: LandscapeTrends | None = No
         f"{header.neg_rounds:,} neg rounds by {header.neg_teams:,} teams |",
         f"| Data freshness | {freshness} |",
         "",
-        "How to read the numbers:",
+        _ReportLines.HOW_TO_READ_LEAD,
         "",
-        "* **Rounds** are disclosed rounds: one team, one side, one tournament round. A round reads a "
-        "position when one of its cards is placed under it at or above the review threshold.",
-        "* **Teams** are distinct teams, on any side.",
+        _ReportLines.ROUNDS_BULLET,
+        _ReportLines.TEAMS_BULLET,
         "* **Share of teams** is the teams that read a position on its own side, over the teams that "
         f"disclosed on that side through {header.snapshot.isoformat()}: {header.aff_teams:,} on the "
         f"affirmative, {header.neg_teams:,} on the negative, and all {header.teams:,} for a position either "
         "side reads.",
-        "* **New** means first disclosed after the previous snapshot."
-        if header.previous_snapshot
-        else "* **New** means first disclosed after the previous snapshot; this is the first, so "
-        "nothing is marked new.",
-        "* A card under an `AT:` heading answers a position and never counts as reading it, and so does "
-        "a card placed under a position in a round on the other side: a `Midterms DA` block in an "
-        "affirmative file is the 2AC answering it.",
+        _ReportLines.NEW_BULLET if header.previous_snapshot else _ReportLines.NEW_BULLET_FIRST_SNAPSHOT,
+        _ReportLines.ANSWERS_BULLET,
         f"* Each position's {report.header.top_cards_per_position:,} most-read cards are in `top_cards.csv`, "
         "where near-duplicate copies of a card count as one card.",
         f"* **Impact cards**, under each advantage and DA, are up to {header.impact_cards_per_position:,} "
@@ -519,24 +709,8 @@ def _header_section(report: LandscapeReport, trends: LandscapeTrends | None = No
         "advantage its impact. Only the labelled copies of a card count. An impact nobody labelled is not "
         "found, so each kind says how many of its documents carry no labelled impact. They are also in "
         "`impact_cards.csv`.",
-        "* **What each impact runs through**, under its impact cards, names each rank by the first of these "
-        "it has, marked with where the name came from: its **scenario**, heading words two or more teams "
-        "use under the position (a `Scenario 1` heading's name, a named heading, or the words beside an "
-        "impact or internal-link label, such as `Dome impact`), and where the coach has listed a position's "
-        "scenarios only the coach's names, each with the teams of every heading listed under it; its "
-        "**internal link**, the nearest card above it under the same position heading that a heading or its "
-        "tag labels an internal link; its **link**, the nearest such card that a heading or its tag labels a "
-        "link, never an answer such as `no link`, `link turn` or `non-unique`; the impact card's own "
-        "**tag**; and the **card above** it, the card "
-        "directly above it in its block when that is not an impact card itself: where it sits, not what it "
-        "does. None is guessed. A rank with none of these is left out, and the position says how many "
-        "were. A scenario name or a tag holding a word of a caselist school or team code is withheld, and "
-        "the next one names the rank.",
-        "* **The link chain** of each advantage and DA is its most-read card for each role a team labelled, "
-        "by a heading under the position or the tag's first words: uniqueness (`U`, `UQ`), link, internal "
-        "link (`IL`) and impact, and for an advantage inherency and solvency. An `AT:` heading, a "
-        "heading naming two roles, and a card that answers the position or is read on the other side fill "
-        "no role. A role no team labelled says so.",
+        _ReportLines.RUNS_THROUGH_BULLET,
+        _ReportLines.LINK_CHAIN_BULLET,
         _tags_left_empty(report.table_tags_withheld),
         *([_trends_bullet(trends)] if trends is not None else []),
         "",
@@ -556,7 +730,7 @@ def _tags_left_empty(withheld: TableTagsWithheld) -> str:
 
 
 def _no_positions_section(report: LandscapeReport) -> list[str]:
-    return [] if report.positions else ["## Positions", "", "No position was read in this range.", ""]
+    return [] if report.positions else [_ReportLines.POSITIONS_HEADING, "", _ReportLines.NO_POSITION_READ, ""]
 
 
 def _positions_section(report: LandscapeReport, side: PositionSide) -> list[str]:
@@ -564,12 +738,12 @@ def _positions_section(report: LandscapeReport, side: PositionSide) -> list[str]
     on_side = [stats for stats in report.positions if stats.side is side]
     if not on_side:
         return []
-    lines = [f"## {_SIDE_HEADINGS[side]}", ""]
+    lines = [_side_heading(side), ""]
     for kind, of_kind in groupby(on_side, key=lambda stats: stats.kind):
         lines += [
-            f"### {_KIND_HEADINGS[kind]}",
+            _kind_heading(kind),
             "",
-            "| Position | Rounds | Teams | Aff rounds | Neg rounds | Share of teams | First seen | New |",
+            _ReportLines.POSITION_TABLE_HEADER,
             "|---|---|---|---|---|---|---|---|",
         ]
         listed = list(of_kind)
@@ -594,7 +768,7 @@ def _impact_block(
         ImpactCoverage(kind=kind, documents=0, labelled_documents=0),
     )
     lines = [
-        f"#### {_KIND_HEADINGS[kind]}: impact cards",
+        _impact_heading(kind),
         "",
         f"{_IMPACT_NOUNS[kind]} documents with no labelled impact: "
         f"{_of(coverage.unlabelled_documents, coverage.documents)}.",
@@ -609,13 +783,13 @@ def _impact_block(
         if not cards:
             lines += [f"{named}: no labelled impact card.", ""]
         else:
-            lines += [named, "", "| Rank | Teams | Tag | Cite | Scenario |", "|---|---|---|---|---|"]
+            lines += [named, "", _ReportLines.IMPACT_TABLE_HEADER, "|---|---|---|---|---|"]
             lines += [
                 f"| {card.rank} | {card.teams_reading:,} | {_cell(card.tag or '')} | "
                 f"{_cell(card.short_cite or '')} | {_cell(card.scenario or '')} |"
                 for card in cards
             ]
-            lines += ["", "What each impact runs through:", ""]
+            lines += ["", _ReportLines.RUNS_THROUGH_LEAD, ""]
             lines += _lead_ins(cards)
             lines.append("")
         if chains is not None:
@@ -629,7 +803,7 @@ def _advantages_section(report: LandscapeReport) -> list[str]:
     if found is None:
         return []
     lines = [
-        "## Advantages by affirmative",
+        _ReportLines.ADVANTAGES_BY_AFF_HEADING,
         "",
         "Under each aff, the advantages read in the affirmative rounds assigned to it (by the round's plan "
         "text or the team's other rounds), ranked by the teams reading them; the "
@@ -639,7 +813,7 @@ def _advantages_section(report: LandscapeReport) -> list[str]:
         "",
     ]
     if not found.affs:
-        lines += ["No affirmative round assigned an aff reads an advantage.", ""]
+        lines += [_ReportLines.NO_ADVANTAGE_UNDER_AN_AFF, ""]
     for one in found.affs:
         heading = f"{_cell(one.label)} (`{one.position_id}`)"
         lines += [
@@ -650,7 +824,7 @@ def _advantages_section(report: LandscapeReport) -> list[str]:
             f"{_count(one.rounds, 'assigned round')} by {_count(one.teams, 'team')}; "
             f"{one.advantage_teams:,} of the teams read an advantage.",
             "",
-            "| Advantage | Teams |",
+            _ReportLines.ADVANTAGE_TABLE_HEADER,
             "|---|---|",
         ]
         lines += [f"| {_cell(row.label)} (`{row.position_id}`) | {row.teams:,} |" for row in one.advantages]
@@ -691,7 +865,7 @@ def _kritikal_section(report: LandscapeReport) -> list[str]:
         return []
     summary = report.unclassified
     lines = [
-        "## Kritikal affirmatives",
+        _ReportLines.KRITIKAL_AFFS_HEADING,
         "",
         f"Affirmative rounds assigned to {_cell(found.label)} (`{found.position_id}`): a file of the round "
         "holds no plan text and a K-aff marker (a role of the ballot, an advocacy statement, `The 1AC is` or "
@@ -707,10 +881,13 @@ def _kritikal_section(report: LandscapeReport) -> list[str]:
             "team's other rounds."
         )
     else:
-        lines.append("No affirmative round is assigned to it.")
+        lines.append(_ReportLines.NO_KRITIKAL_ROUND)
     lines.append("")
     if found.refused_by_advantage == 1:
-        lines.append("1 round was not carried into because its own file reads an advantage.")
+        lines.append(
+            f"{found.refused_by_advantage:,} round was not carried into because its own file reads an "
+            "advantage."
+        )
     else:
         lines.append(
             f"{found.refused_by_advantage:,} rounds were not carried into because their own file reads an "
@@ -727,7 +904,7 @@ def _kritikal_section(report: LandscapeReport) -> list[str]:
             f"{listed}."
         )
     else:
-        lines.append("No K family is named in the K-aff files' headings.")
+        lines.append(_ReportLines.NO_K_FAMILY)
     lines += [
         "",
         f"{_of(summary.aff_rounds_unidentified, summary.aff_rounds, 'affirmative rounds')} still have no "
@@ -735,17 +912,6 @@ def _kritikal_section(report: LandscapeReport) -> list[str]:
         "",
     ]
     return lines
-
-
-_ROLE_LABELS: Final = {
-    ChainRole.UNIQUENESS: "Uniqueness",
-    ChainRole.LINK: "Link",
-    ChainRole.INTERNAL_LINK: "Internal link",
-    ChainRole.IMPACT: "Impact",
-    ChainRole.INHERENCY: "Inherency",
-    ChainRole.SOLVENCY: "Solvency",
-}
-"""How report.md names each chain role (`v1-e32-t14`)."""
 
 
 def _chain_coverage_lines(kind: PositionKind, chains: ChainCoverage) -> list[str]:
@@ -799,11 +965,11 @@ def _lead_ins(cards: Sequence[ImpactCard]) -> list[str]:
 def _chain_table(report: LandscapeReport, kind: PositionKind, position_id: str) -> list[str]:
     """A position's most-read card per chain role, or `no labelled card`, in role order."""
     found = {card.role: card for card in report.chain_cards if card.position_id == position_id}
-    lines = ["Link chain:", "", "| Role | Teams | Tag | Cite |", "|---|---|---|---|"]
+    lines = [_ReportLines.LINK_CHAIN_LEAD, "", _ReportLines.CHAIN_TABLE_HEADER, "|---|---|---|---|"]
     for role in CHAIN_ROLES[kind]:
         card = found.get(role)
         if card is None:
-            lines.append(f"| {_ROLE_LABELS[role]} |  | no labelled card |  |")
+            lines.append(_no_labelled_card_row(role))
         else:
             lines.append(
                 f"| {_ROLE_LABELS[role]} | {card.teams_reading:,} | {_cell(card.tag or '')} | "
@@ -819,7 +985,7 @@ def _texts_sections(report: LandscapeReport) -> list[str]:
         return []
     coverage = {one.kind: one for one in texts.coverage}
     lines = [
-        "## Counterplan texts, alternatives and roles of the ballot",
+        _ReportLines.TEXTS_HEADING,
         "",
         "The teams' own words, quoted as their files hold them (data-use policy 1.13), never beside a "
         "school or team code. A text belongs to the position its section is placed under: the nearest "
@@ -830,10 +996,10 @@ def _texts_sections(report: LandscapeReport) -> list[str]:
         "",
     ]
     for kind in QUOTED_KINDS:
-        heading, found_by, under = _TEXT_KINDS[kind]
+        _, found_by, under = _TEXT_KINDS[kind]
         one = coverage[kind]
         lines += [
-            f"### {heading}",
+            _text_heading(kind),
             "",
             f"Found by {found_by}: {one.labels:,} in {one.documents:,} files.",
             "",
@@ -854,12 +1020,12 @@ def _texts_sections(report: LandscapeReport) -> list[str]:
         lines.append("")
         shown = [position for position in texts.positions if position.kind is kind]
         if not shown:
-            lines += [f"No {_TEXT_NOUNS[kind]} was placed under {under} the team reads.", ""]
+            lines += [_no_text_placed(kind), ""]
         for position in shown:
             lines += [
                 f"**{_cell(position.label)}** (`{position.position_id}`)",
                 "",
-                "| Rank | Teams | Text |",
+                _ReportLines.TEXT_TABLE_HEADER,
                 "|---|---|---|",
             ]
             lines += [line for row in position.texts for line in _text_rows(row)]
@@ -889,7 +1055,7 @@ def _planks_section(report: LandscapeReport) -> list[str]:
         return []
     one = next(found for found in texts.coverage if found.kind is AnalyticTextKind.CP_PLANK)
     lines = [
-        "## Counterplan planks",
+        _ReportLines.PLANKS_HEADING,
         "",
         "A CP's planks, quoted as its texts above are (data-use policy 1.13), never beside a school or team "
         "code. A CP text ending in a colon lists them in the paragraphs after it, up to the first card or "
@@ -917,7 +1083,7 @@ def _planks_section(report: LandscapeReport) -> list[str]:
         lines.append(f"* Could not be read again as they were read: {one.unread:,}.")
     lines.append("")
     if not texts.planks:
-        return [*lines, "No plank was placed under a CP the team reads.", ""]
+        return [*lines, _ReportLines.NO_PLANK_PLACED, ""]
     for planks in texts.planks:
         lines += [f"**{_cell(planks.label)}** (`{planks.position_id}`)", "", *_planks_table(planks)]
     return lines
@@ -930,11 +1096,9 @@ def _overviews_section(report: LandscapeReport) -> list[str]:
         return []
     overview = next(one for one in texts.coverage if one.kind is AnalyticTextKind.OVERVIEW)
     lines = [
-        "## Overviews",
+        _ReportLines.OVERVIEWS_HEADING,
         "",
-        "Counted, never quoted: data-use policy 1.13 does not list overviews, and the coach keeps it so "
-        "(2026-10-24). Per position, the teams whose files hold an overview label (`Overview`, `O/V`, `OV`) "
-        "under it, on each side.",
+        _ReportLines.OVERVIEWS_LEAD,
         "",
         f"Found: {overview.labels:,} in {overview.documents:,} files.",
         "",
@@ -944,8 +1108,8 @@ def _overviews_section(report: LandscapeReport) -> list[str]:
         "",
     ]
     if not texts.overviews:
-        return [*lines, "No overview was placed under a position the team reads.", ""]
-    lines += ["| Position | Kind | Teams | Aff teams | Neg teams |", "|---|---|---|---|---|"]
+        return [*lines, _ReportLines.NO_OVERVIEW_PLACED, ""]
+    lines += [_ReportLines.OVERVIEW_TABLE_HEADER, "|---|---|---|---|---|"]
     lines += [
         f"| {_cell(one.label)} (`{one.position_id}`) | {one.position_kind.value} | {one.teams:,} | "
         f"{one.aff_teams:,} | {one.neg_teams:,} |"
@@ -966,7 +1130,7 @@ def _planks_table(planks: CpPlanks) -> list[str]:
         summary += f" {planks.withheld:,} {verb} withheld for naming a school."
     lines = [summary, ""]
     if not planks.groups:
-        return [*lines, "None of them can be shown.", ""]
+        return [*lines, _ReportLines.NO_PLANK_SHOWN, ""]
     lines += [PLANK_TABLE_HEADER, "|---|---|---|---|"]
     rest: list[str] = []
     for group in planks.groups:
@@ -989,9 +1153,9 @@ def _not_placed(coverage: TextCoverage) -> str:
 
 def _new_section(report: LandscapeReport) -> list[str]:
     previous = report.header.previous_snapshot
-    lines = ["## New this week", ""]
+    lines = [_ReportLines.NEW_HEADING, ""]
     if previous is None:
-        return [*lines, "This is the caselist's first snapshot, so nothing is marked new.", ""]
+        return [*lines, _ReportLines.FIRST_SNAPSHOT, ""]
     new = [stats for stats in report.positions if stats.is_new]
     if not new:
         return [*lines, f"No position was first disclosed after {previous.isoformat()}.", ""]
@@ -1101,7 +1265,7 @@ def _trends_bullet(trends: LandscapeTrends) -> str:
 
 
 def _trend_sections(trends: LandscapeTrends) -> list[str]:
-    lines = ["## New this week", ""]
+    lines = [_ReportLines.NEW_HEADING, ""]
     new = trends.labelled(TrendLabel.NEW)
     if trends.topic_change is not None:
         change = trends.topic_change
@@ -1113,8 +1277,7 @@ def _trend_sections(trends: LandscapeTrends) -> list[str]:
         ]
     elif trends.previous_snapshot is None:
         lines += [
-            "This is the caselist's first weekly window on this topic: every position read is NEW and none "
-            "has a delta.",
+            _ReportLines.FIRST_WINDOW,
             "",
         ]
     elif (partial := trends.partial(trends.previous_snapshot)) is not None:
@@ -1138,14 +1301,14 @@ def _trend_sections(trends: LandscapeTrends) -> list[str]:
         ]
         lines.append("")
     else:
-        lines += ["No position was first read on this topic in this week's window.", ""]
+        lines += [_ReportLines.NO_POSITION_FIRST_READ, ""]
     for heading, label, direction in (
-        ("Rising", TrendLabel.RISING, "rose"),
-        ("Falling", TrendLabel.FALLING, "fell"),
+        (_TREND_HEADINGS[0], TrendLabel.RISING, "rose"),
+        (_TREND_HEADINGS[1], TrendLabel.FALLING, "fell"),
     ):
-        lines += [f"## {heading}", ""]
+        lines += [_trend_heading(heading), ""]
         if trends.previous_snapshot is None:
-            lines += ["No trend is drawn: there is no earlier window on this topic to compare with.", ""]
+            lines += [_ReportLines.NO_TREND_DRAWN, ""]
             continue
         rows = sorted(trends.labelled(label), key=lambda row: (-abs(row.delta_points or 0), row.position_id))
         rule = (
@@ -1515,9 +1678,9 @@ def _unclassified_section(report: LandscapeReport) -> list[str]:
     summary = report.unclassified
     threshold = f"{report.header.review_threshold:g}"
     lines = [
-        "## Unclassified",
+        _ReportLines.UNCLASSIFIED_HEADING,
         "",
-        "What this report could not count:",
+        _ReportLines.UNCLASSIFIED_LEAD,
         "",
         f"* **Cards:** {_of(summary.unclassified_cards, summary.cards)}: "
         f"{summary.unplaced_cards:,} waiting in the review queue, {summary.below_threshold_cards:,} placed "
@@ -1539,9 +1702,9 @@ def _unclassified_section(report: LandscapeReport) -> list[str]:
         )
     lines += [
         "",
-        "How affirmative rounds were identified:",
+        _ReportLines.METHODS_LEAD,
         "",
-        "| Method | Aff rounds |",
+        _ReportLines.METHOD_TABLE_HEADER,
         "|---|---|",
     ]
     lines += [
@@ -1568,7 +1731,7 @@ def _unclassified_section(report: LandscapeReport) -> list[str]:
             "| Identified another way, with a plan text under `Thus` in a file of the round naming another "
             f"aff (a control{': ' + by_method if by_method else ''}) | {transition.control_rounds:,} |",
         ]
-    lines += ["", _TITLES_NOT_READ, ""]
+    lines += ["", _ReportLines.TITLES_NOT_READ, ""]
     return lines
 
 

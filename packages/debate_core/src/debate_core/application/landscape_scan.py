@@ -24,6 +24,19 @@ filed under, as `v1-e32-t03`'s preview scanned:
   characters, since a shorter name is a word in every line;
 * a **path** anywhere, without regard to case.
 
+## The report's own lines
+
+hspolicy26's dry run of 2026-11-06 found 76 hits, most of them a tournament's word in a line report.md
+writes itself: an impact or link-chain table's header row (`| Rank | Teams | Tag | Cite | Scenario |`),
+the line saying round titles are not read. Such a line names no one, whatever word it shares with a
+tournament, and dozens of them accepted every week hide the one hit worth reading. So a **tournament** found
+in a line that is, whole and exactly, one of its own file's fixed lines is not a hit (`v1-e32-t60`):
+:data:`~debate_core.arguments.landscape.render.FIXED_LINES`, the lines the renderer writes word for word,
+named once for the renderer and this scan. The match is the line, never its words, so a line with
+anything more in it (a position, a tag, a cite, a count, a team) is a hit as before, however it begins;
+so is a school or a team code, which no template writes. What was passed over is counted by file and
+tournament (:class:`ExemptedLines`), never by its text.
+
 ## The per-school view
 
 `v1-e32-t04`'s `schools.csv` and `schools.md`, and `v1-e32-t54`'s `school_rounds.csv`, name schools,
@@ -52,6 +65,7 @@ import hashlib
 import json
 import os
 import re
+from collections import Counter
 from collections.abc import Collection, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import date
@@ -60,11 +74,13 @@ from pathlib import Path
 from typing import Final, cast
 
 from debate_core.application.caselist.path_parser import UNKNOWN_SCHOOL, UNKNOWN_TEAM_CODE
-from debate_core.arguments.landscape.render import PLANK_TABLE_HEADER
+from debate_core.arguments.landscape.render import FIXED_LINES, PLANK_TABLE_HEADER
 from debate_core.domain.caselist import Disclosure
 
 __all__ = [
     "DIGEST_LENGTH",
+    "BundleScan",
+    "ExemptedLines",
     "MINIMUM_NAME_LENGTH",
     "ScanAcceptance",
     "ScanAcceptanceLog",
@@ -74,6 +90,7 @@ __all__ = [
     "hits_by_section",
     "hits_digest",
     "pending_hits",
+    "scan_bundle",
     "scan_report",
 ]
 
@@ -211,18 +228,47 @@ def _section(lines: Sequence[str], number: int) -> tuple[tuple[int, int], str]:
     return (heading, 0), name
 
 
+@dataclass(frozen=True, slots=True, order=True)
+class ExemptedLines:
+    """How many of one file's fixed lines one tournament was found in and passed over: never a line."""
+
+    file: str
+    term: str
+    """The tournament, as its disclosures name it."""
+    lines: int
+
+
+@dataclass(frozen=True, slots=True)
+class BundleScan:
+    """What :func:`scan_bundle` found: the hits, and the fixed lines it passed over, by count."""
+
+    hits: tuple[ScanHit, ...] = field(repr=False)
+    exempted: tuple[ExemptedLines, ...] = field(repr=False)
+
+
 def scan_report(
     files: Mapping[str, str], disclosures: Iterable[Disclosure], *, school_view_files: Collection[str] = ()
 ) -> tuple[ScanHit, ...]:
+    """:func:`scan_bundle`'s hits alone."""
+    return scan_bundle(files, disclosures, school_view_files=school_view_files).hits
+
+
+def scan_bundle(
+    files: Mapping[str, str], disclosures: Iterable[Disclosure], *, school_view_files: Collection[str] = ()
+) -> BundleScan:
     """Every term of `disclosures` found in `files`, one hit per term per line, in file and line order.
 
-    In `school_view_files`, which may name schools, team codes and tournaments, only paths are hits.
+    In `school_view_files`, which may name schools, team codes and tournaments, only paths are hits. A
+    tournament in one of a file's own fixed lines (render's :data:`FIXED_LINES`), the whole line exactly as
+    its template writes it, is no hit but a count in :attr:`BundleScan.exempted`.
     """
     terms = _terms(disclosures)
     paths = [term for term in terms if term.kind is ScanKind.PATH]
     hits: list[ScanHit] = []
+    exempted: Counter[tuple[str, str]] = Counter()
     for name in sorted(files):
         looked_for = paths if name in school_view_files else terms
+        fixed = FIXED_LINES.get(name, frozenset[str]())
         for number, line in enumerate(files[name].splitlines(), start=1):
             folded = line.casefold()
             for term in looked_for:
@@ -230,8 +276,17 @@ def scan_report(
                     continue
                 if term.pattern is not None and term.pattern.search(line) is None:
                     continue
+                if term.kind is ScanKind.TOURNAMENT and line in fixed:
+                    exempted[(name, term.term)] += 1
+                    continue
                 hits.append(ScanHit(name, number, term.kind, term.term, line))
-    return tuple(sorted(hits))
+    return BundleScan(
+        hits=tuple(sorted(hits)),
+        exempted=tuple(
+            ExemptedLines(file=file, term=term, lines=lines)
+            for (file, term), lines in sorted(exempted.items())
+        ),
+    )
 
 
 def hits_digest(hits: Iterable[ScanHit]) -> str:

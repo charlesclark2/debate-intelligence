@@ -35,7 +35,8 @@ same use case. One run, for one caselist at one weekly snapshot (the newest unle
    one that would send ADR-0019's budget or more, in a dry run and a publish alike, and refuses nothing
    (the PM's ruling of 2026-11-07). Then it **scans** the bundle
    (:mod:`debate_core.application.landscape_scan`) and returns every hit: the per-school view, which
-   names schools and team codes by design, for paths only.
+   names schools and team codes by design, for paths only, and a tournament in one of the report's own
+   fixed lines counted, never a hit (`v1-e32-t60`).
 6. **Writes** the bundle to `<data dir>/reports/landscape/<caselist>/<snapshot>/`, or `--out`.
 7. **Publishes**, when asked, to `reports/landscape/<caselist>/<snapshot>/` in the environment's
    bucket through the E29 blob-store port, uploading only the files whose SHA-256 differs from the
@@ -101,12 +102,13 @@ from debate_core.application.landscape_report import (
 )
 from debate_core.application.landscape_restored_copy import LANDSCAPE_RUNBOOK
 from debate_core.application.landscape_scan import (
+    ExemptedLines,
     ScanAcceptance,
     ScanAcceptanceLog,
     ScanHit,
     hits_digest,
     pending_hits,
-    scan_report,
+    scan_bundle,
 )
 from debate_core.application.landscape_seeding import SeedReading, read_seed_sources
 from debate_core.application.landscape_staleness import (
@@ -337,6 +339,9 @@ class ScanResult:
     """This run recorded the operator's acceptance of :attr:`pending`."""
     acceptance_log: str | None = None
     """Where an acceptance was recorded, when this run recorded one."""
+    exempted: tuple[ExemptedLines, ...] = ()
+    """The report's own fixed lines a tournament was found in, by file and tournament: counts, never a line,
+    and no hit (`v1-e32-t60`)."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -626,9 +631,11 @@ class LandscapeRunService:
             request.caselist,
             budget=PAGE_BUDGET if self._page_budget is None else self._page_budget,
         )
-        hits = scan_report(bundle.files, reading.disclosures, school_view_files=SCHOOL_VIEW_FILES)
-        pending = pending_hits(hits, self._acceptances.accepted(request.caselist))
-        scan = ScanResult(hits=hits, pending=pending, digest=hits_digest(pending))
+        scanned = scan_bundle(bundle.files, reading.disclosures, school_view_files=SCHOOL_VIEW_FILES)
+        pending = pending_hits(scanned.hits, self._acceptances.accepted(request.caselist))
+        scan = ScanResult(
+            hits=scanned.hits, pending=pending, digest=hits_digest(pending), exempted=scanned.exempted
+        )
         directory = request.out or self._reports_dir / request.caselist / snapshot.isoformat()
         contents = {name: bundle.files[name].encode("utf-8") for name in BUNDLE_FILES}
         if not request.dry_run:
@@ -783,13 +790,7 @@ class LandscapeRunService:
                     hits=scan.pending,
                 )
             )
-            scan = ScanResult(
-                hits=scan.hits,
-                pending=scan.pending,
-                digest=scan.digest,
-                accepted_now=True,
-                acceptance_log=str(log),
-            )
+            scan = dataclasses.replace(scan, accepted_now=True, acceptance_log=str(log))
         uploaded: list[str] = []
         for one in planned:
             if one.action is not PublishAction.UPLOAD:

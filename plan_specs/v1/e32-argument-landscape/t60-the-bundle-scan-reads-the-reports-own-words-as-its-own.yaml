@@ -42,7 +42,7 @@ spec:
         The report's own fixed lines are not hits while every data line is scanned as
         before, by tests on invented tournament names shown failing first.
 status:
-  phase: InProgress
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

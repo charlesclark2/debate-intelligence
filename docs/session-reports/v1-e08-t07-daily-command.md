@@ -158,6 +158,14 @@ The smoke checks ran against the source checkout's console script (`installed: f
 runs them against the stamped wheel, where the unknown-preset check also shows the presets file was
 bundled.
 
+**After review: the pull request's `ci` failed in part 1.**
+`packages/debate_cli/tests/bucket_mode/test_bucket_mode_lock.py::test_every_registered_command_is_classified_as_writing_a_bucket_or_not`
+failed with `unclassified: ['daily']; gone: []`. Every command has to say whether it writes to a
+bucket. This session's checks did not include that file, so the omission showed up only in the
+affected set. `daily` writes only its digest file and the seen-set, both on the local disk (ruling
+4), so it is now listed under `NEVER_WRITE_A_BUCKET`. With that change, the test passes, and so does
+its whole file (`50 passed`). The rest of the pull request's run did not fail.
+
 ## Files changed
 
 * **`config/daily_presets.yaml`** (new): `politics` and `nhi`, with a header saying what each key

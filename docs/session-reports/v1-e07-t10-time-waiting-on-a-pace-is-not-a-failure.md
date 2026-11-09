@@ -269,9 +269,66 @@ None. The affected set (563 files) is the pull request's `ci` check's, under agr
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-11-09
 
 **Notes:**
+
+The PM read the built code in the worktree: `pace.py` (new), the `resilience.py` diff, the Crossref
+diff and the domain line. It matches the proposal and the PM's ruling of 2026-11-08, point by point.
+
+- `Pacer._wait` is Crossref's old `admit` loop, generalised. Starts are now spaced by burst, the deadline
+  is re-read from `within` on every look, and the release-or-deadline wait is unchanged. With a burst of
+  one, `_ready_at` is the old `last_start + spacing`.
+- The listener is installed by the wrapper through a context variable. `waiting()` fires before the line
+  lock is taken, so time spent behind another caller counts as queued.
+- `_CallTime` suspends the `asyncio.timeout` on the first wait. When the last wait ends, it reschedules
+  the timeout to the original deadline plus the queued loop time. So a sent call still has
+  `timeout_seconds` of its own.
+- The new Pacer keeps the old `_Pacer`'s loop-bound `asyncio.Lock` and `Event`. That brings no new risk.
+
+1. **ac1 passes.**
+   - **The pin.** The pin on the loop's virtual time was committed alone (`5beeba5`) and passed against
+     today's code with every finishing time written by hand. It is stronger than the old test, because the
+     wrapper's timeout and the fan-out's deadline both take part now.
+   - **The red runs.** Red run A: 9 failed, each at its own assertion, with the never-queued control and
+     the pin passing as they should. Red run B: 6 failed, against a pacer that releases everything at once.
+   - **Green.** The node command passed 271, and the bounded affected subset 1,784.
+   - **The mutants.** 16 of 17 were caught at assertions. Three of those survived at first, and the session
+     closed each with a new test rather than arguing it away.
+   - **The 17th, the deadline boundary `>` for `>=`, is accepted as not catchable.** At `now == deadline`
+     it sleeps 0 and spins without time moving. There is no terminating wrong behaviour to assert on, and
+     the old `_Pacer` had the same property.
+2. **Decision 1 is accepted.** A query released late that then hangs is now cut off by the search's 15 s
+   deadline before its own timeout, so the breaker hears no failure. The footer still says timeout, so the
+   forbidden case ("a query that was sent and ran slow no longer timing out") holds.
+   - A Crossref that hangs on everything still opens its breaker from the queries released before about 5 s.
+   - This is ruling 2 working as written.
+   - Whether the breaker should also hear of the late ones is filed below, proposal first.
+3. **Decision 2 is accepted.** A "not asked" answer gives the breaker no verdict: the permit is released, as
+   a cancelled call's is, so it neither resets nor adds to the failure count, and a half-open probe that
+   is not asked stays half open. That is ruling 3 read correctly, since a query never sent says nothing
+   about the provider. `success_count` now means calls answered, and the eleven-query case reads 9/6/3
+   answered with 2/5/8 not asked.
+4. **The deviation is accepted as a PM ruling.** `debate_core.domain` joins the packages for
+   `ProviderHealth.not_asked_count`. It is additive with a default of 0, `export_schemas --check` is OK,
+   and no test pins the key set. The session's comment in the spec stands.
+5. **Decisions 3 to 8 are accepted.**
+   - 3, a context variable rather than a port change.
+   - 4, the loop clock for the timeout and the injected clock for latency.
+   - 5, burst dividing `requests`, so no interval exceeds the limit.
+   - 6, a multi-query call is queued while any of its queries waits, and is not asked only if all were
+     refused.
+   - 7, Crossref keeps its reserve and its wording.
+   - 8, the pin's footer is pinned through its inputs.
+6. **Follow-ups, which the PM files in the next batch:**
+   - **E07, p3, proposal first:** the breaker hears of a released query that the search's deadline cut off
+     (Decision 1). The proposal says how the wrapper learns what is left of the search's deadline, or
+     offers another way.
+   - **E07, p3:** `test_search_presenter.py`'s stand-in Crossref queues on a real `Pacer`, so its health
+     reads what the real adapter's would (1 answered, 2 not asked). The packages are `debate_cli` tests.
+   - `v1-e07-t04` (Semantic Scholar) is ready once this merges. It configures its own `Pacer` and its own
+     `within`.
+7. **Merge:** a plain `scripts/task pr` once `ci` is green. The Goal is `Succeeded`.

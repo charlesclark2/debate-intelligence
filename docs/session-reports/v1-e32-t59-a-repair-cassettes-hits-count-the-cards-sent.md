@@ -192,9 +192,53 @@ None.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-11-09
 
 **Notes:**
+
+The PM read the built code in the worktree (`1a254f6`, `scan_hits.py`, 56 lines). `repair_cassette_hits`
+still scans the same texts and finds the same hits; only the `sent` text given to `_marked` changed.
+`_cards_sent` raw-decodes every JSON list in `failed_system` and `failed_user`, keeps those holding a
+card (an object with a `headings`, `tag`, `cite` or `excerpt` key), and reads them with `_sent_words`,
+the reader a first call's `items` uses. So "in the cards sent" now means the same thing in both kinds of
+cassette.
+
+1. **ac1 passes.** The tests ran red twice, 12 failed each time, every failure an assertion:
+   - against the pre-task rule, where the rule's own tests failed;
+   - against a "nothing sent" skeleton, where the guards failed.
+
+   The three tests that pass under both rules are explained. Green is 111 in the scan files, plus 159 in
+   the other readers of repair hits and 1,293 in the module's directory. All 8 mutants were caught at
+   assertions, including the no-fallback mutant, the positions-as-cards mutant and the first-card-only
+   mutant.
+2. **The correction to the PM's premise is right, and it is accepted.** The PM checked
+   `structured_output.repair_prompt` on dev. Its variables are `failed_prompt`, `failed_system`,
+   `failed_user`, `schema_name`, `json_schema` and `problems`, and its docstring says "Nothing the model
+   said in the failed answer is in it". t55's point 2 and this spec's description were wrong to say a
+   repair cassette's input includes the failed answer. The 63 hits were `in_input` because the failed
+   prompt's own instructions, preamble and keys hold their words. The rule as ruled, "only the cards the
+   failed call sent", excludes those words too, so the build is the ruling. The next batch records the
+   correction against t55's point 2 and this spec's description.
+3. **The fallback is accepted.** A failed prompt with no readable card list keeps the old rule, with every
+   word of it sent. That fails toward keeping a hit, so the scan reads unclean rather than clean, which is
+   the safe direction. Its two tests cover prose only and positions only, and its mutant is caught.
+4. **The 63, derived, are accepted as derived.** The prompt-input scan read 0 hits in those cards, so no
+   hit lies within one field, and all 63 would be set aside (53 a JSON key, 10 a taxonomy word), with the
+   repair cassettes clean. The one gap is a phrase of two or more words spanning two adjacent fields, and
+   the report says so plainly. No replay is needed. The next repaired recording shows the real figure,
+   and the PM reads it then.
+5. **Decisions accepted.**
+   - Cards are found by shape in the recorded request. A test proves this on the committed classify
+     prompt 1.3.1's real rendering.
+   - Keys are structure.
+   - Where hits are found is unchanged.
+   - The invented schema's two metadata hits come from pydantic's title and its `required` list, corrected
+     before the rule was written.
+
+   The stale docstring sentence (that the evaluation doesn't read repair cassettes) is rightly dropped.
+6. **The affected set ran into `hard_stop`** at 122 files, under a load average of 13. It is left to the
+   pull request's `ci` under agreement 10, with the parts that matter run by hand.
+7. **Merge:** a plain `scripts/task pr` once `ci` is green. The Goal is `Succeeded`.

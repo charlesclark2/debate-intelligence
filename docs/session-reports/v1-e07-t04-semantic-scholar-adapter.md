@@ -368,9 +368,64 @@ ruling 3 leaves to the operator; Semantic Scholar stays enabled in no profile un
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-11-09
 
 **Notes:**
+
+The PM read the adapter in the worktree (`semantic_scholar.py`), the move of the reserve into `pace.py`,
+and the wiring. It is built to the PM's rulings of 2026-11-09, point by point:
+
+- the key goes only in `API_KEY_HEADER` (`x-api-key`), and `protect_logs` is called in the constructor;
+- `KEYED_PACE` and `KEYLESS_PACE` are both `Pace(1, 1.0, concurrency=1)`, each with its source and date;
+- each query takes a turn on the shared `Pacer`, with `within` from the shared `AnswerTimes`;
+- `limit` is capped at the documented 100.
+
+1. **ac1 to ac4 pass.**
+   - The key header uses a respx route that matches only with the header, and a blank key counts as no
+     key.
+   - The pace is pinned by hand against both constants and both built adapters, on virtual time.
+   - The mapping is checked against hand-written expected lists.
+   - The kit is bound four times.
+   - The redaction test goes through the wrapper on every path, including the 429, a 403 body and a
+     transport message that quote the key.
+   - The one-process run after the OpenCaselist and discovery suites passes 1,449, with Semantic Scholar
+     last.
+
+   Red was 170 failed against a skeleton; the 14 that passed and the 7 `KeyError` non-assertions are
+   explained. All 21 mutants are caught. The swapped-constants mutant is rightly equivalent under ruling 1.
+2. **The reserve's move is behaviour-neutral.** It is its own commit (`feee177`), and Crossref's tests pass
+   unchanged on it.
+3. **Deviations 1 to 5 are accepted.**
+   - Deviation 3: `test_doctor_providers.py`, `test_search_command.py` (the container proof, where
+     Crossref's lives) and the credentials guide's row each follow from ruling 5.
+   - Deviation 4: the pinned counts move from 44 to 45.
+   - Deviation 5: `test_container_factories.py` passes unchanged.
+4. **Decisions accepted.** They include:
+   - one request per query at most 100 results, not marked partial;
+   - the DOI URL first, for dedupe across the three scholarly providers;
+   - hyphens as spaces, per the docs;
+   - an untyped paper is scholarly;
+   - the strict date rule, with no month precision and no invented day;
+   - `"url": ""` read as open with no copy;
+   - 403 is a refusal the breaker counts.
+
+   **Decision 15 is accepted, with a rule for next time.** Reading the OpenAPI description
+   (`swagger.json`) was a documentation read, with no search and no key. From now on, a file served from
+   a provider's API host is fetched by the operator or the PM, and the session asks for it.
+5. **Follow-ups, which the PM files in the next batch:**
+   - **E07:** enable Semantic Scholar in the committed profiles once the operator's live smoke passes (the
+     t13 pattern).
+   - **E07 or E08:** influential citations have no domain field, so either a ranking field or the adapter
+     stops asking for it.
+   - **Noted for v1-e07-t15's successor:** a refused key's wording (403) across the keyed providers.
+
+   The second page past 100 is noted only. v1-e07-t17 now starts from GDELT alone.
+6. **Operator follow-ups 1 and 2** (the live smokes, keyless and keyed) are optional and run after an
+   installed build carries this change. Neither is an acceptance criterion; the enabling task waits on
+   them.
+7. **Merge:** a plain `scripts/task pr` once `ci` is green. The Goal is `Succeeded`. `debate_cli/container.py`
+   is also changed by v1-e08-t07, so whichever of the two merges second runs `scripts/task sync` first and
+   keeps both changes.

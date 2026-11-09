@@ -34,13 +34,14 @@ cannot send its eleventh before ten seconds. A query therefore waits for its tur
 answer could still come back within `providers.timeout_seconds` of when it was asked: until the
 timeout less a **reserve**, the median time Crossref has taken to answer in this process, clamped
 to at least 1 second and at most half the timeout, and 2 seconds before any answer
-(:func:`answer_reserve_seconds`). A query still waiting then is never sent. It is answered at its
-deadline with no results, marked partial, and an error naming the pool's rate (and, on the public
-pool, the cure: a contact email). The search is PARTIAL and says why (PM rulings of 2026-11-02).
-The wrapper hears from the pacer that the query was queued and never sent, so it counts the
-answer as "not asked", neither a failure nor a latency sample, and counts no queued time towards a
-sent query's timeout or latency: a query that was sent and runs slow still times out
-`providers.timeout_seconds` after its pace released it.
+(:func:`~debate_core.integrations.discovery.pace.answer_reserve_seconds`, shared with Semantic
+Scholar since v1-e07-t04; this module still exports it and its two constants by name). A query
+still waiting then is never sent. It is answered at its deadline with no results, marked partial,
+and an error naming the pool's rate (and, on the public pool, the cure: a contact email). The
+search is PARTIAL and says why (PM rulings of 2026-11-02). The wrapper hears from the pacer that
+the query was queued and never sent, so it counts the answer as "not asked", neither a failure nor
+a latency sample, and counts no queued time towards a sent query's timeout or latency: a query that
+was sent and runs slow still times out `providers.timeout_seconds` after its pace released it.
 
 **Refusals** go through :func:`~debate_core.integrations.discovery.http_failures.provider_error_for_status`:
 a `429` is :class:`~debate_core.application.errors.ProviderRateLimited`, held for its `Retry-After`
@@ -78,9 +79,7 @@ from __future__ import annotations
 import asyncio
 import html
 import re
-import statistics
 import time
-from collections import deque
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
@@ -101,7 +100,15 @@ from debate_core.domain.discovery import CandidateResult, DatePrecision, Provide
 from debate_core.domain.enums import SourceType
 from debate_core.integrations.crossref_doi import work_from_message
 from debate_core.integrations.discovery.http_failures import provider_error_for_status
-from debate_core.integrations.discovery.pace import Pace, Pacer, Sleep
+from debate_core.integrations.discovery.pace import (
+    DEFAULT_RESERVE_SECONDS,
+    MIN_RESERVE_SECONDS,
+    AnswerTimes,
+    Pace,
+    Pacer,
+    Sleep,
+    answer_reserve_seconds,
+)
 from debate_core.integrations.discovery.redaction import logger, protect_logs
 
 __all__ = [
@@ -192,13 +199,6 @@ the records of whole journals, issues, proceedings and series are not sources to
 Crossref adds later is `other` until it is added here (:func:`source_type_for`).
 """
 
-DEFAULT_RESERVE_SECONDS: Final = 2.0
-"""The reserve for an answer before Crossref has answered once in this process."""
-
-MIN_RESERVE_SECONDS: Final = 1.0
-"""The least reserve, however fast Crossref has answered."""
-
-_ANSWER_WINDOW: Final = 50
 _DATE_KINDS: Final = ("issued", "published-online", "published-print")
 _CREATIVE_COMMONS_HOSTS: Final = frozenset({"creativecommons.org", "www.creativecommons.org"})
 _CREATIVE_COMMONS_PATHS: Final = ("/licenses/", "/publicdomain/")
@@ -474,15 +474,6 @@ def _interval_seconds(value: str | None) -> float | None:
     return float(matched.group(1))
 
 
-def answer_reserve_seconds(median_answer_seconds: float | None, timeout_seconds: float) -> float:
-    """The time kept back for an answer: the median seen, at least 1 s, at most half the timeout.
-
-    2 seconds before any answer is seen. When half the timeout is under a second, half wins.
-    """
-    seen = DEFAULT_RESERVE_SECONDS if median_answer_seconds is None else median_answer_seconds
-    return min(max(seen, MIN_RESERVE_SECONDS), timeout_seconds / 2)
-
-
 # --------------------------------------------------------------------------------------------
 # The adapter
 # --------------------------------------------------------------------------------------------
@@ -515,7 +506,7 @@ class CrossrefProvider:
         self._limits = self._documented
         self._timeout_seconds = timeout_seconds
         self._pacer = Pacer(self._documented.pace, clock=clock, sleep=sleep)
-        self._answer_seconds: deque[float] = deque(maxlen=_ANSWER_WINDOW)
+        self._answer_times = AnswerTimes()
 
     @property
     def name(self) -> str:
@@ -529,8 +520,7 @@ class CrossrefProvider:
     @property
     def reserve_seconds(self) -> float:
         """The time a query keeps back for its answer when deciding whether it is too late to send."""
-        median = statistics.median(self._answer_seconds) if self._answer_seconds else None
-        return answer_reserve_seconds(median, self._timeout_seconds)
+        return self._answer_times.reserve_seconds(self._timeout_seconds)
 
     def __repr__(self) -> str:
         contact = "configured" if self._contact_email is not None else "none"
@@ -570,7 +560,7 @@ class CrossrefProvider:
 
     def _answered(self, seconds: float, headers: Mapping[str, str]) -> None:
         """An answer came back after `seconds`: keep its time, and pace to the limits it advertised."""
-        self._answer_seconds.append(max(seconds, 0.0))
+        self._answer_times.answered(seconds)
         self._limits = advertised_limits(self._documented, headers)
         self._pacer.retune(self._limits.pace)
 

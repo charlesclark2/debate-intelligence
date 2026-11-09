@@ -1,0 +1,54 @@
+# Presets for `debate-research daily <preset>` digests (v1-e08-t07).
+#
+# Read by debate_core.application.daily_preset_config; every preset here is checked whenever `daily`
+# runs, and a mistake stops the run naming the preset and the field. A preset is added by adding it
+# here: no code names one. The LD and PF topics change during the season, so their presets are the
+# coach's to add, as their feed lists are (config/feeds/README.md); the September-October PF and LD
+# topics (data-center moratoriums, space colonization) are not shipped (PM ruling, 2026-11-09).
+#
+# Each preset names:
+#   name, label, description: what `daily` is given, the digest's heading, and what it is for.
+#   topic: the debate topic, as `search --topic` takes it (an id in config/argument_taxonomy.yaml's
+#     topics or a feed list's search_topics), or left out. It fills the expansion's {topic} and
+#     decides which government providers may be asked.
+#   queries: what each search is for, as a debater would type it into `search`.
+#   pairs: the argument/need pairs every query is expanded for, by taxonomy id (not an alias), in the
+#     order the digest groups its results.
+#   providers: the discovery providers asked, by their providers.enabled names. One the environment
+#     does not enable is reported "not configured" in the digest's footer, which makes it partial.
+#   feed_topics: the config/feeds/ files the rss and google_news providers read for this preset's run,
+#     and no others: a politics digest never reads the health-insurance feeds.
+#   max_results: the most results each search ranks (20 unless given).
+#
+# A feed result is kept only when every word of a query (after its template is filled in) is in the
+# item's title or summary, so short queries find more.
+schema_version: 1
+presets:
+  # Uniqueness only: elections, Senate votes and polling (PM ruling, 2026-11-09). Link queries that
+  # pair a DA's bill with a plan's mechanism are a separate task.
+  - name: politics
+    label: Politics
+    description: >-
+      Politics DA and midterms DA uniqueness: what is moving in Congress, Senate votes, elections
+      and polling, from the coach's politics feeds.
+    queries: [bill, Senate]
+    pairs:
+      - {argument: politics-da, need: uniqueness}
+      - {argument: midterms-da, need: uniqueness}
+    providers: [rss]
+    feed_topics: [politics]
+
+  - name: nhi
+    label: NHI
+    description: >-
+      The 2026-27 Policy topic on national health insurance: uniqueness for the topic's spending,
+      federalism and economy DAs, from scholarship, the health-policy feeds and the Federal Register
+      and GovInfo.
+    topic: policy-2026-27-nhi
+    queries: [health insurance]
+    pairs:
+      - {argument: spending-da, need: uniqueness}
+      - {argument: federalism-da, need: uniqueness}
+      - {argument: economy-da, need: uniqueness}
+    providers: [openalex, crossref, rss, federal_register, govinfo]
+    feed_topics: [health-insurance]

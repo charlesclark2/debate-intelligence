@@ -161,7 +161,10 @@ Seventeen mutants. Sixteen are caught at assertions, three of them only after th
   `.venv/bin/python scripts/hard_stop.py 115 .venv/bin/python -m pytest packages/debate_core/tests/integrations/discovery packages/debate_core/tests/domain/test_discovery.py packages/debate_core/tests/application/test_federated_dedupe.py packages/debate_core/tests/application/test_federated_ranking.py packages/debate_core/tests/application/test_federated_search_articles.py packages/debate_core/tests/application/test_federated_search.py packages/debate_cli/tests/test_search_command.py packages/debate_cli/tests/test_search_presenter.py packages/debate_cli/tests/test_search_presenter_standing_feed.py packages/debate_core/tests/testing/test_virtual_time.py tests/architecture tests/specs packages/debate_cli/tests/test_app.py packages/debate_cli/tests/test_help_rendering.py packages/debate_cli/tests/test_container_factories.py -n auto -m "not slow and not live"`
   → `1784 passed in 23.23s`. That covers t16's public-pool footer test, which runs Crossref's pacer on the CLI.
 * `ruff format --check .` → `2033 files already formatted`; `ruff check .` → `All checks passed!`.
-* `pyright packages/debate_core` → `0 errors, 0 warnings, 0 informations`.
+* `uv run --frozen pyright` (CI's typecheck, the whole repository) → `0 errors, 0 warnings, 0 informations`.
+  The first PR run failed it: `pyright packages/debate_core`, which this report quoted, did not
+  check `test_crossref.py`, where `isinstance(answer_seconds, float)` left `int` (which `float`
+  admits) in the indexing branch. The check now reads `int | float`.
 * `lint-imports` → `Contracts: 20 kept, 0 broken`.
 * `uv run scripts/export_schemas.py --check` → `OK: 10 schemas … are up to date` (`ProviderHealth` is in no exported schema).
 * `uv run scripts/validate_specs.py` → `OK: 655 files, 41 epics, 592 tasks, 22 releases`.

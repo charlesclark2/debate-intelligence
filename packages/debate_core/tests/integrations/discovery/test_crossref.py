@@ -1147,7 +1147,7 @@ def on_the_loops_virtual_time(
             asked.append(request.url.params["query.bibliographic"])
             number = len(asked)
             await asyncio.sleep(
-                answer_seconds if isinstance(answer_seconds, float) else answer_seconds[number - 1]
+                answer_seconds if isinstance(answer_seconds, int | float) else answer_seconds[number - 1]
             )
             return httpx.Response(200, json=works(an_item(DOI=f"10.5555/q.{number}")))
 

@@ -160,6 +160,9 @@ class BatchCandidate:
     title: str
     known_access: AccessStatus = AccessStatus.UNKNOWN
     """The status on the result's Article: UNKNOWN for a source no retrieval has read."""
+    need: BatchNeed | None = None
+    """What this candidate's card is cut for, when it is not the request's: a daily digest's results
+    come from searches for different arguments and needs (v1-e08-t07). None takes the request's."""
 
 
 def batch_candidates(outcome: SearchOutcome) -> tuple[BatchCandidate, ...]:
@@ -387,6 +390,7 @@ class BatchCutService:
         self, candidate: BatchCandidate, request: BatchCutRequest, reading: SpendReading
     ) -> BatchEntry:
         report: FetchReport | None = None
+        need = candidate.need or request.need
         try:
             report = await self._fetching.retrieve(candidate.url)
             # ArticleFetch gives a snapshot only for an ACCESSIBLE retrieval, and CardService refuses any
@@ -403,9 +407,9 @@ class BatchCutService:
             result = await self._cutting.cut_card(
                 CutRequest(
                     snapshot_id=report.snapshot.snapshot_id,
-                    need=request.need.need,
+                    need=need.need,
                     owner_id=request.owner_id,
-                    argument=request.need.argument,
+                    argument=need.argument,
                     format_profile=request.format_profile,
                 )
             )

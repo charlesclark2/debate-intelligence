@@ -149,6 +149,7 @@ def test_stamp_bundles_the_committed_profiles_and_routing_files(checkout: Path, 
         if path.is_file() and path.parent.name != "feeds"
     ) == [
         "argument_taxonomy.yaml",
+        "daily_presets.yaml",
         "federated_ranking.yaml",
         "format_profiles/flow.yaml",
         "format_profiles/plain.yaml",
@@ -171,7 +172,11 @@ def test_stamp_bundles_the_taxonomy_and_ranking_table_search_reads_unchanged(
     """An installed `search` expands with this taxonomy and ranks with this table (v1-e08-t09)."""
     sb.stamp(checkout, info(), tmp_path / "dist")
 
-    for relative in ("config/argument_taxonomy.yaml", "config/federated_ranking.yaml"):
+    for relative in (
+        "config/argument_taxonomy.yaml",
+        "config/federated_ranking.yaml",
+        "config/daily_presets.yaml",
+    ):
         bundled = checkout / sb.BUNDLED_CONFIG / relative
         assert bundled.read_bytes() == (REPO_ROOT / relative).read_bytes(), relative
 
@@ -215,6 +220,7 @@ def test_the_bundled_search_configuration_loads_as_search_loads_it(checkout: Pat
     [
         ("config/argument_taxonomy.yaml", "argument_taxonomy.yaml"),
         ("config/federated_ranking.yaml", "federated_ranking.yaml"),
+        ("config/daily_presets.yaml", "daily_presets.yaml"),
         ("config/feeds", "feed lists"),
     ],
 )
@@ -392,6 +398,7 @@ def test_a_wheel_without_cuts_prompts_or_its_default_format_profile_is_refused(
     [
         "debate_cli/_bundled_config/config/argument_taxonomy.yaml",
         "debate_cli/_bundled_config/config/federated_ranking.yaml",
+        "debate_cli/_bundled_config/config/daily_presets.yaml",
         "debate_cli/_bundled_config/config/feeds/health-insurance.yaml",
         "debate_cli/_bundled_config/config/feeds/politics.yaml",
         "debate_cli/_bundled_config/prompts/search/expand.md",

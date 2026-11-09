@@ -256,6 +256,27 @@ async def test_each_cut_is_asked_for_the_searchs_argument_and_need_by_the_owner(
     assert request.format_profile == "team-default"
 
 
+async def test_a_candidate_with_its_own_need_is_cut_for_it_and_the_others_for_the_requests() -> None:
+    """A daily digest's results come from searches for different needs (v1-e08-t07)."""
+    run = batch(PAGES)
+    own = BatchNeed(
+        argument="Midterms DA",
+        need="Uniqueness for Senate: Where things stand now, before the plan or action.",
+        heading="Midterms DA — Uniqueness: Senate",
+    )
+    candidates = [
+        BatchCandidate(rank=1, url=url("news"), title="Result 1", need=own),
+        BatchCandidate(rank=2, url=url("think-tank"), title="Result 2"),
+    ]
+
+    await run.service.cut(BatchCutRequest(candidates=candidates, wanted=2, need=NEED, owner_id=STUDENT))
+
+    assert [request.research_need for request in run.cutting.requests] == [
+        "Midterms DA: Uniqueness for Senate: Where things stand now, before the plan or action.",
+        "Politics DA: Link for health insurance: How the plan or action sets the argument off.",
+    ]
+
+
 async def test_an_unverified_card_is_kept_apart_and_never_counts_toward_n() -> None:
     run = batch(PAGES)
 

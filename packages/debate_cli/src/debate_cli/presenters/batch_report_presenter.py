@@ -41,6 +41,8 @@ __all__ = [
     "BUDGET_EXCEEDED_CODE",
     "AutoCutFiles",
     "AutoCutSettings",
+    "batch_report_table",
+    "entry_json",
     "exit_code_for_batch",
     "report_failure",
     "report_payload",
@@ -105,7 +107,8 @@ def _section(entry: BatchEntry) -> str | None:
     return "verified" if entry.is_verified else "unverified"
 
 
-def _entry_json(entry: BatchEntry) -> dict[str, JsonValue]:
+def entry_json(entry: BatchEntry) -> dict[str, JsonValue]:
+    """One entry of report.json: what became of one result the batch tried."""
     return {
         "rank": entry.rank,
         "url": entry.url,
@@ -150,12 +153,12 @@ def report_payload(
         "bundle": str(files.bundle) if files.bundle is not None else None,
         "manifest": str(files.manifest) if files.manifest is not None else None,
         "report": str(files.report),
-        "entries": [_entry_json(entry) for entry in report.entries],
+        "entries": [entry_json(entry) for entry in report.entries],
     }
 
 
-def _title(report: BatchReport, need: BatchNeed) -> str:
-    title = f"{len(report.verified)} of {report.wanted} cards VERIFIED for {need.heading}"
+def _title(report: BatchReport, heading: str) -> str:
+    title = f"{len(report.verified)} of {report.wanted} cards VERIFIED for {heading}"
     return title if report.complete else f"SHORT: {title}"
 
 
@@ -163,6 +166,13 @@ def report_table(
     report: BatchReport, outcome: SearchOutcome, need: BatchNeed, files: AutoCutFiles
 ) -> TableSpec:
     """The per-result table, then the provider footer, the files and the total cost."""
+    return batch_report_table(report, footer_lines(outcome), need.heading, files)
+
+
+def batch_report_table(
+    report: BatchReport, footer: list[str], heading: str, files: AutoCutFiles
+) -> TableSpec:
+    """:func:`report_table` over any footer: a search's, or a daily digest's (v1-e08-t07)."""
     rows = [
         (
             str(entry.rank),
@@ -174,7 +184,7 @@ def report_table(
         )
         for entry in report.entries
     ]
-    below = [*footer_lines(outcome)]
+    below = [*footer]
     if report.unverified:
         below.append(
             f"{len(report.unverified)} UNVERIFIED card(s) are in the bundle's own section, "
@@ -186,7 +196,7 @@ def report_table(
     return TableSpec(
         columns=("Rank", "URL", "Access", "Card", "Reasons", "Cost"),
         rows=rows,
-        title=_title(report, need),
+        title=_title(report, heading),
         caption=f"Stopped: {_STOP_WORDS[report.stop_reason]}.",
         lines_below=below,
     )

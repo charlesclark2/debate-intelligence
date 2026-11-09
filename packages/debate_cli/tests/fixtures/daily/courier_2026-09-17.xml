@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <title>The Example Courier</title>
+    <link>https://news.example.org/politics</link>
+    <description>Invented coverage for the daily command's tests.</description>
+    <item>
+      <title>Senate vote count on the stopgap spending measure</title>
+      <link>https://news.example.org/2026/09/17/senate-vote-count</link>
+      <guid isPermaLink="false">daily-a</guid>
+      <pubDate>Thu, 17 Sep 2026 14:00:00 +0000</pubDate>
+      <description>SNIPPETSENTINEL Leaders tallied the votes overnight.</description>
+    </item>
+    <item>
+      <title>Farm bill likely to pass Congress before the recess</title>
+      <link>https://news.example.org/2026/09/17/farm-bill?utm_source=feed</link>
+      <guid isPermaLink="false">daily-b</guid>
+      <pubDate>Thu, 17 Sep 2026 09:30:00 +0000</pubDate>
+      <description>SNIPPETSENTINEL Negotiators reached terms.</description>
+    </item>
+    <item>
+      <title>Senate election forecast: Democrats favored to hold the chamber</title>
+      <link>https://news.example.org/2026/09/17/senate-forecast</link>
+      <guid isPermaLink="false">daily-c</guid>
+      <pubDate>Thu, 17 Sep 2026 16:45:00 +0000</pubDate>
+      <description>SNIPPETSENTINEL A model of every race.</description>
+    </item>
+    <item>
+      <title>Senate vote count on last week's bill</title>
+      <link>https://news.example.org/2026/09/10/old-vote-count</link>
+      <guid isPermaLink="false">daily-e</guid>
+      <pubDate>Thu, 10 Sep 2026 12:00:00 +0000</pubDate>
+      <description>SNIPPETSENTINEL Before every window here.</description>
+    </item>
+    <item>
+      <title>Weekend weather</title>
+      <link>https://news.example.org/2026/09/17/weather</link>
+      <guid isPermaLink="false">daily-f</guid>
+      <pubDate>Thu, 17 Sep 2026 07:00:00 +0000</pubDate>
+      <description>SNIPPETSENTINEL Rain on Saturday.</description>
+    </item>
+  </channel>
+</rss>

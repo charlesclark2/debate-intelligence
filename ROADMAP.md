@@ -62,9 +62,9 @@ v2.3's extension work.
 |---|---|---|---|---|---|
 | [v1.0](plan_specs/releases/v1.0.yaml) | Foundation & verified evidence core | 3 | 55 | 55 | 252 |
 | [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 4 | 125 | 104 | 550 |
-| [v1.2](plan_specs/releases/v1.2.yaml) | Argument landscape & file building | 3 | 96 | 78 | 364 |
+| [v1.2](plan_specs/releases/v1.2.yaml) | Argument landscape & file building | 3 | 96 | 81 | 364 |
 | [v1.3](plan_specs/releases/v1.3.yaml) | URL → verified card | 2 | 24 | 15 | 125 |
-| [v1.4](plan_specs/releases/v1.4.yaml) | Federated research from the CLI | 2 | 39 | 19 | 136 |
+| [v1.4](plan_specs/releases/v1.4.yaml) | Federated research from the CLI | 2 | 39 | 20 | 136 |
 | [v1.5](plan_specs/releases/v1.5.yaml) | V1 quality gate & team pilot | 1 | 7 | 1 | 66 |
 | [v1.6](plan_specs/releases/v1.6.yaml) | Public team website | 3 | 31 | 22 | 169 |
 | [v1.7](plan_specs/releases/v1.7.yaml) | Team evidence search pilot | 1 | 30 | 25 | 100 |
@@ -395,14 +395,14 @@ Weekly argument-landscape reports show which positions are being read and with w
 | [A second labelled sample, held out from tuning, before the bar is read as met](plan_specs/v1/e32-argument-landscape/t50-a-second-labelled-sample-held-out.yaml) `v1-e32-t50-a-second-labelled-sample-held-out` | Pending | 4 | 3.0 |
 | [Late disclosures from tournaments before the de-extinction topic are counted on 2026-11-10 and 2026-11-17, and weekly after](plan_specs/v1/e32-argument-landscape/t51-late-disclosures-from-pre-topic-tournaments-counted.yaml) `v1-e32-t51-late-disclosures-from-pre-topic-tournaments-counted` | Blocked | 1 | 2.0 |
 | [A seeded taxonomy is reviewed by the coach one question at a time, and the decisions are applied by one command](plan_specs/v1/e32-argument-landscape/t52-guided-taxonomy-review-and-apply.yaml) `v1-e32-t52-guided-taxonomy-review-and-apply` | Pending | 1 | 4.0 |
-| [generic-k's description, rewritten as v1-e32-t49 proposed, for the coach's review](plan_specs/v1/e32-argument-landscape/t53-generic-k-description-for-the-coachs-review.yaml) `v1-e32-t53-generic-k-description-for-the-coachs-review` | Pending | 1 | 1.0 |
+| [generic-k's description, rewritten as v1-e32-t49 proposed, for the coach's review](plan_specs/v1/e32-argument-landscape/t53-generic-k-description-for-the-coachs-review.yaml) `v1-e32-t53-generic-k-description-for-the-coachs-review` | Succeeded | 1 | 1.0 |
 | [The per-school view names, under each position, the rounds whose disclosed file holds it](plan_specs/v1/e32-argument-landscape/t54-school-view-names-the-rounds-each-position-was-read-in.yaml) `v1-e32-t54-school-view-names-the-rounds-each-position-was-read-in` | Succeeded | 2 | 4.0 |
 | [Prompt 1.3.1: 1.3.0 without the generic-confidence sentence](plan_specs/v1/e32-argument-landscape/t55-prompt-1-3-1-without-the-generic-confidence-sentence.yaml) `v1-e32-t55-prompt-1-3-1-without-the-generic-confidence-sentence` | Succeeded | 1 | 2.0 |
 | [An analytic text under an answer heading in its own side's file reads its position](plan_specs/v1/e32-argument-landscape/t56-analytic-texts-take-the-own-side-rule.yaml) `v1-e32-t56-analytic-texts-take-the-own-side-rule` | Succeeded | 1 | 2.0 |
 | [The per-school round lists stay inside the page budget all season, and a school page over it is named at report time](plan_specs/v1/e32-argument-landscape/t57-school-rounds-fit-the-page-budget-and-are-checked-at-report-time.yaml) `v1-e32-t57-school-rounds-fit-the-page-budget-and-are-checked-at-report-time` | InProgress | 1 | 4.0 |
 | [The coach's labels file is guarded: a changed file is refused, and every sitting keeps the file it replaces](plan_specs/v1/e32-argument-landscape/t58-the-coach-sample-labels-file-guarded.yaml) `v1-e32-t58-the-coach-sample-labels-file-guarded` | InProgress | 1 | 3.0 |
-| [A repair cassette's scan counts a hit as input only when its words come from the cards the failed call sent](plan_specs/v1/e32-argument-landscape/t59-a-repair-cassettes-hits-count-the-cards-sent.yaml) `v1-e32-t59-a-repair-cassettes-hits-count-the-cards-sent` | Pending | 1 | 2.0 |
-| [The bundle scan does not count the report's own fixed lines as a tournament's words](plan_specs/v1/e32-argument-landscape/t60-the-bundle-scan-reads-the-reports-own-words-as-its-own.yaml) `v1-e32-t60-the-bundle-scan-reads-the-reports-own-words-as-its-own` | Pending | 1 | 2.0 |
+| [A repair cassette's scan counts a hit as input only when its words come from the cards the failed call sent](plan_specs/v1/e32-argument-landscape/t59-a-repair-cassettes-hits-count-the-cards-sent.yaml) `v1-e32-t59-a-repair-cassettes-hits-count-the-cards-sent` | Succeeded | 1 | 2.0 |
+| [The bundle scan does not count the report's own fixed lines as a tournament's words](plan_specs/v1/e32-argument-landscape/t60-the-bundle-scan-reads-the-reports-own-words-as-its-own.yaml) `v1-e32-t60-the-bundle-scan-reads-the-reports-own-words-as-its-own` | Succeeded | 1 | 2.0 |
 
 #### [E33 — Evidence File Builder](plan_specs/v1/e33-file-builder/epic.yaml)
 
@@ -482,7 +482,7 @@ A student can run `debate-research cut <URL>` and receive a verified, tagged, ci
 | [Government and policy source adapters](plan_specs/v1/e07-discovery-adapters/t07-government-adapters.yaml) `v1-e07-t07-government-adapters` | Succeeded | 2 | 6.0 |
 | [One Retry-After reader for every HTTP adapter, on an injected clock](plan_specs/v1/e07-discovery-adapters/t08-shared-retry-after.yaml) `v1-e07-t08-shared-retry-after` | Succeeded | 2 | 1.0 |
 | [A Google News item resolved by its headline in a configured publisher's own feed](plan_specs/v1/e07-discovery-adapters/t09-google-news-title-match.yaml) `v1-e07-t09-google-news-title-match` | Pending | 1 | 2.0 |
-| [The resilience wrapper does not count time a provider spends waiting on its own pace as a failure](plan_specs/v1/e07-discovery-adapters/t10-time-waiting-on-a-pace-is-not-a-failure.yaml) `v1-e07-t10-time-waiting-on-a-pace-is-not-a-failure` | Pending | 1 | 2.0 |
+| [The resilience wrapper does not count time a provider spends waiting on its own pace as a failure](plan_specs/v1/e07-discovery-adapters/t10-time-waiting-on-a-pace-is-not-a-failure.yaml) `v1-e07-t10-time-waiting-on-a-pace-is-not-a-failure` | Succeeded | 1 | 2.0 |
 | [A bill found by search shows its latest action and committees from Congress.gov](plan_specs/v1/e07-discovery-adapters/t11-congress-gov-bill-details.yaml) `v1-e07-t11-congress-gov-bill-details` | Pending | 1 | 2.0 |
 | [GAO reports and CRS reports can be found by search](plan_specs/v1/e07-discovery-adapters/t12-gao-and-crs-reports.yaml) `v1-e07-t12-gao-and-crs-reports` | Pending | 1 | 3.0 |
 | [The dev and prod profiles enable the discovery providers whose live smoke passed](plan_specs/v1/e07-discovery-adapters/t13-profiles-enable-the-providers-that-passed-their-smoke.yaml) `v1-e07-t13-profiles-enable-the-providers-that-passed-their-smoke` | Succeeded | 2 | 1.0 |

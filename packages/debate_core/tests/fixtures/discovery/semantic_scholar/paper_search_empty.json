@@ -1,0 +1,13 @@
+{
+  "query": {"query": "orbital debris liability", "filters": {"max_results": 5}},
+  "exchanges": [
+    {
+      "request": {
+        "method": "GET",
+        "url": "https://api.semanticscholar.org/graph/v1/paper/search?query=orbital+debris+liability&limit=5&fields=title%2Cauthors%2Cyear%2CpublicationDate%2Cvenue%2CexternalIds%2CcitationCount%2CinfluentialCitationCount%2CisOpenAccess%2CopenAccessPdf%2CpublicationTypes%2Cabstract"
+      },
+      "response": {"status": 200, "headers": {"content-type": "application/json"}, "body_file": "paper_search_empty.body.json"}
+    }
+  ],
+  "expected_results_file": "paper_search_empty.expected.json"
+}

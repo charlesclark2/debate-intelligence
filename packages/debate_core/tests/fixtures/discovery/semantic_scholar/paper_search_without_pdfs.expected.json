@@ -1,0 +1,65 @@
+[
+  {
+    "provider": "semantic_scholar",
+    "provider_record_id": "d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0",
+    "title": "The cost of direct air capture: a review",
+    "url": "https://doi.org/10.5555/dac.2019.0042",
+    "canonical_url": null,
+    "identifiers": {
+      "doi": "10.5555/dac.2019.0042",
+      "pmid": "31234567",
+      "semantic_scholar_id": "d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0"
+    },
+    "source_type": "scholarly",
+    "authors": ["Henrike Saltmarsh", "Bao Linwood", "Esteban Quarrie"],
+    "publication": "Invented Reviews in Climate Engineering",
+    "published_at": "2019-07-15T00:00:00Z",
+    "date_precision": "day",
+    "snippet": null,
+    "open_access_url": null,
+    "open_access": false,
+    "citation_count": 214,
+    "raw_ref": null
+  },
+  {
+    "provider": "semantic_scholar",
+    "provider_record_id": "e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1",
+    "title": "Direct air capture cost survey: data tables",
+    "url": "https://doi.org/10.5555/dac-tables.2023",
+    "canonical_url": null,
+    "identifiers": {
+      "doi": "10.5555/dac-tables.2023",
+      "semantic_scholar_id": "e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1"
+    },
+    "source_type": "other",
+    "authors": ["Invented Carbon Removal Consortium"],
+    "publication": null,
+    "published_at": "2023-11-30T00:00:00Z",
+    "date_precision": "day",
+    "snippet": null,
+    "open_access_url": null,
+    "open_access": true,
+    "citation_count": 2,
+    "raw_ref": null
+  },
+  {
+    "provider": "semantic_scholar",
+    "provider_record_id": "f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2",
+    "title": "Start-ups bet on pulling carbon from the air",
+    "url": "https://www.semanticscholar.org/paper/f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2",
+    "canonical_url": null,
+    "identifiers": {
+      "semantic_scholar_id": "f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2"
+    },
+    "source_type": "news",
+    "authors": ["Mirela Stoyanova-Pike"],
+    "publication": "Invented Science News",
+    "published_at": "2020-01-01T00:00:00Z",
+    "date_precision": "year",
+    "snippet": "Three companies say direct air capture will cost far less within a decade.",
+    "open_access_url": null,
+    "open_access": false,
+    "citation_count": null,
+    "raw_ref": null
+  }
+]

@@ -1,0 +1,13 @@
+{
+  "query": {"query": "carbon capture subsidies", "filters": {"since": "2020-01-01T00:00:00Z", "until": "2024-12-31T00:00:00Z", "max_results": 6}},
+  "exchanges": [
+    {
+      "request": {
+        "method": "GET",
+        "url": "https://api.semanticscholar.org/graph/v1/paper/search?query=carbon+capture+subsidies&publicationDateOrYear=2020-01-01%3A2024-12-31&limit=6&fields=title%2Cauthors%2Cyear%2CpublicationDate%2Cvenue%2CexternalIds%2CcitationCount%2CinfluentialCitationCount%2CisOpenAccess%2CopenAccessPdf%2CpublicationTypes%2Cabstract"
+      },
+      "response": {"status": 429, "headers": {"content-type": "application/json", "retry-after": "30"}, "body": "{\"message\": \"Too Many Requests\"}"}
+    }
+  ],
+  "expected_results_file": "paper_search_errors.expected.json"
+}

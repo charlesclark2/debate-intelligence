@@ -51,11 +51,14 @@ __all__ = [
     "SEARCH_PARTIAL_CODE",
     "ProviderSummary",
     "SearchProgress",
+    "display_date",
     "footer_lines",
     "outcome_failure",
+    "provider_calls_json",
     "provider_summaries",
     "results_table",
     "search_payload",
+    "status_footer_lines",
 ]
 
 SEARCH_PARTIAL_CODE = "SEARCH_PARTIAL"
@@ -170,9 +173,27 @@ def provider_summaries(statuses: Sequence[ProviderStatus]) -> tuple[ProviderSumm
 
 def footer_lines(outcome: SearchOutcome) -> list[str]:
     """The provider status footer: a heading naming the status, then one line per provider."""
+    return status_footer_lines(outcome.status, outcome.provider_statuses)
+
+
+def status_footer_lines(status: SearchStatus, statuses: Sequence[ProviderStatus]) -> list[str]:
+    """The footer over any calls: one search's, or every search of a daily digest (v1-e08-t07)."""
+    return [_HEADINGS[status], *(f"  {summary.line()}" for summary in provider_summaries(statuses))]
+
+
+def provider_calls_json(statuses: Sequence[ProviderStatus]) -> list[JsonValue]:
+    """Every call as the JSON's `provider_calls`: its provider, query, outcome, results and error."""
     return [
-        _HEADINGS[outcome.status],
-        *(f"  {summary.line()}" for summary in provider_summaries(outcome.provider_statuses)),
+        {
+            "provider": status.provider,
+            "query": status.query.query,
+            "outcome": status.outcome.value,
+            "elapsed_ms": status.elapsed_ms,
+            "results": len(status.response.results) if status.response is not None else 0,
+            "partial": status.response.partial if status.response is not None else False,
+            "error": status.error or (status.response.error if status.response is not None else None),
+        }
+        for status in statuses
     ]
 
 
@@ -185,7 +206,7 @@ def _articles_by_rank(outcome: SearchOutcome) -> dict[int, Article]:
     return {result.rank: article for result, article in zip(outcome.results, outcome.articles, strict=True)}
 
 
-def _date(ranked: RankedCandidate) -> str:
+def display_date(ranked: RankedCandidate) -> str:
     """The date to the precision known: `2022-05-17`, `2023-03` or `2021` (v1-e07-t03), or `undated`."""
     published, precision = ranked.candidate.published_at, ranked.candidate.date_precision
     if published is None:
@@ -267,18 +288,7 @@ def search_payload(outcome: SearchOutcome) -> dict[str, JsonValue]:
             for ranked in outcome.ranked_candidates
         ],
         "providers": [summary.as_json() for summary in provider_summaries(outcome.provider_statuses)],
-        "provider_calls": [
-            {
-                "provider": status.provider,
-                "query": status.query.query,
-                "outcome": status.outcome.value,
-                "elapsed_ms": status.elapsed_ms,
-                "results": len(status.response.results) if status.response is not None else 0,
-                "partial": status.response.partial if status.response is not None else False,
-                "error": status.error or (status.response.error if status.response is not None else None),
-            }
-            for status in outcome.provider_statuses
-        ],
+        "provider_calls": provider_calls_json(outcome.provider_statuses),
         "provider_health": [health.model_dump(mode="json") for health in outcome.provider_health],
     }
 
@@ -295,7 +305,7 @@ def results_table(outcome: SearchOutcome) -> TableSpec:
             str(ranked.rank),
             ranked.candidate.title,
             ranked.candidate.publication or "",
-            _date(ranked),
+            display_date(ranked),
             ranked.candidate.source_type.value.lower(),
             _access(ranked, articles.get(ranked.rank)),
             ranked.explanation,

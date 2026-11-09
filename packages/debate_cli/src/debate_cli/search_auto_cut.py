@@ -36,7 +36,7 @@ import asyncio
 import json
 import os
 import tempfile
-from collections.abc import Coroutine
+from collections.abc import Coroutine, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Final, NoReturn
@@ -57,6 +57,7 @@ from debate_cli.presenters.batch_report_presenter import (
     report_table,
 )
 from debate_core.application.batch_cut_service import (
+    BatchCandidate,
     BatchCutRequest,
     BatchNeed,
     BatchReport,
@@ -73,6 +74,8 @@ __all__ = [
     "AutoCutOptions",
     "auto_cut",
     "auto_cut_options",
+    "cut_and_write",
+    "write_atomically",
 ]
 
 DEFAULT_CONCURRENCY: Final = 2
@@ -164,7 +167,9 @@ def auto_cut(
     expansion = outcome.search.expansion
     assert expansion is not None, "--auto-cut is refused without --argument and --need"
     need = batch_need(cli.services.argument_taxonomy(), expansion, outcome.search.query)
-    report, files = _run(_cut_and_write(cli.services.batch_cutting(), outcome, need, options))
+    report, files = _run(
+        cut_and_write(cli.services.batch_cutting(), batch_candidates(outcome), need, options)
+    )
     payload = report_payload(
         report,
         outcome,
@@ -172,7 +177,7 @@ def auto_cut(
         AutoCutSettings(options.wanted, options.concurrency, options.card_format, options.max_cost),
         files,
     )
-    _write(files.report, (json.dumps(payload, ensure_ascii=False, indent=2) + "\n").encode("utf-8"))
+    write_atomically(files.report, (json.dumps(payload, ensure_ascii=False, indent=2) + "\n").encode("utf-8"))
     data: dict[str, JsonValue] = {"search": search, "auto_cut": payload}
     exit_code = exit_code_for_batch(report)
     if exit_code is ExitCode.OK or not cli.output.is_json:
@@ -181,14 +186,18 @@ def auto_cut(
         _end(cli, ctx, report_failure(report, data, exit_code))
 
 
-async def _cut_and_write(
-    batch: BatchCutting, outcome: SearchOutcome, need: BatchNeed, options: AutoCutOptions
+async def cut_and_write(
+    batch: BatchCutting, candidates: Sequence[BatchCandidate], need: BatchNeed, options: AutoCutOptions
 ) -> tuple[BatchReport, AutoCutFiles]:
-    """Run the batch, then write the bundle and its manifest when a card was cut."""
+    """Run the batch over `candidates`, then write the bundle and its manifest when a card was cut.
+
+    The bundle's block heading is `need`'s. `search --auto-cut` gives its ranked results; `daily
+    --auto-cut` its digest's new results, each with its own need (v1-e08-t07).
+    """
     async with batch:
         report = await batch.service.cut(
             BatchCutRequest(
-                candidates=batch_candidates(outcome),
+                candidates=candidates,
                 wanted=options.wanted,
                 need=need,
                 owner_id=LOCAL_OWNER_ID,
@@ -205,12 +214,12 @@ async def _cut_and_write(
             block=need.heading,
         )
         manifest = await batch.export.export_json_bundle(report.verified, report.unverified)
-    _write(options.output, document)
-    _write(options.manifest, manifest)
+    write_atomically(options.output, document)
+    write_atomically(options.manifest, manifest)
     return report, AutoCutFiles(report=options.report, bundle=options.output, manifest=options.manifest)
 
 
-def _write(path: Path, content: bytes) -> None:
+def write_atomically(path: Path, content: bytes) -> None:
     """Write `content` in one step: a file beside it, renamed into place, so no half-written file is left."""
     handle, temporary = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}.", suffix=".tmp")
     try:

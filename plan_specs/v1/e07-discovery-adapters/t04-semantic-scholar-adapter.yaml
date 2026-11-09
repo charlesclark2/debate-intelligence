@@ -63,6 +63,9 @@ spec:
       # semantic_scholar and builds it (as Crossref's, ruling 5) lives in test_search_command.py.
       - packages/debate_cli/tests/commands/test_doctor_providers.py
       - packages/debate_cli/tests/test_search_command.py
+      # v1-e07-t04 session, 2026-11-09 (Deviation, for the PM to confirm): the credentials guide's
+      # table said the key does nothing because this build had no Semantic Scholar adapter.
+      - docs/guides/provider-credentials.md
     # PM ruling 2026-11-09 (v1-e07-t04 brief, ruling 1): Semantic Scholar's public API page
     # (semanticscholar.org/product/api, read by the PM 2026-11-09) gives a key 1 request a second on
     # all endpoints and keyless callers one shared pool of 1,000 a second among all of them, with no

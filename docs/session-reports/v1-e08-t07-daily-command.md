@@ -333,9 +333,67 @@ Reply with 1A/1B and 2A/2B, and anything to undo from the FYI list.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-11-09
 
 **Notes:**
+
+The PM read the presets file, the commit list and the shape of the change in the worktree. The business
+logic is in `debate_core.application`:
+
+- the preset check (`daily_preset_config`);
+- `DigestService`;
+- the seen-set and its atomic store.
+
+`commands/daily.py` stays thin at 20 statements. The container builds the feed and Google News providers
+from the preset's own feed topics, and search's helpers were shared in a commit of their own (`25d7304`),
+after which `test_search_command.py` passed whole.
+
+1. **ac1 to ac4 pass**, on synthetic fixtures, offline:
+   - ac1, the digest file written by hand;
+   - ac2, the next date with a 2-day window, the 17th's file unchanged;
+   - ac3 as amended by ruling 1, the invented third preset loading end to end and the unknown preset
+     exiting 2 with the list;
+   - ac4, the JSON envelope and the partial footer.
+
+   Every extra case the PM asked for has its own test: a DOI seen at another URL, a failed run marking
+   nothing seen (three ways), feeds from another preset never read, and the review note. Red ran four
+   times against refuse-nothing skeletons. Of 19 mutants, 18 are caught. The survivor, `setdefault`
+   against assignment, is shown to be equivalent.
+2. **The PM's answers to the session's questions.**
+   - **1A.** A rerun of the same date lists that date's results again and replaces the file. That keeps
+     the forbidden line: the same date's digest is the same digest, replaced, not a later one listing it
+     again.
+   - **2A.** A complete digest with nothing new exits 0 and writes its file. A quiet day is a normal
+     digest.
+3. **The deviations are accepted.**
+   - 1, ruling 1.
+   - 2, `debate_core.domain`, `stamp_build.py` and its test, and the smoke check, each kept in
+     `constraints.packages`.
+   - 3, the optional `BatchCandidate.need`. It is the right reading of ruling 5: one batch and one
+     `report.json`, each card cut for its own need. It defaults to None, and `search --auto-cut` is
+     unchanged (87 pass on the change alone).
+   - 4, `--digest-dir`, whose default is ac1's path.
+4. **The decisions are accepted.** They include:
+   - the window overrules the templates' recency windows;
+   - keys are every member URL canonicalized, plus DOIs in lower case;
+   - each source is listed once, in the first group in preset order;
+   - the round-robin `--auto-cut` order;
+   - partial exits 6 and counts its results as listed;
+   - no snippet or abstract is printed, proved by a sentinel.
+5. **The presets are a first draft, and they are the coach's to change in config.** The PM notes one thing
+   for the coach: the 2026 midterms were on 2026-11-03, so the `midterms-da` uniqueness pair may be dropped
+   or retargeted. That is a config edit and needs no task.
+6. **Follow-ups, which the PM files in the next batch:**
+   - v1-e08-t18 is amended so `daily --auto-cut`'s `report.json` is named per run too;
+   - E08, p3: digest queries against the feed provider's every-word rule, once the optional real politics
+     digest gives the first count;
+   - the link-level politics DA task (ruling 3).
+7. **The operator follow-up** (one real politics digest into a Desktop scratch folder) is optional and runs
+   after a dev build carrying this is installed. It is not an acceptance criterion.
+8. **Merge:** a plain `scripts/task pr` once `ci` is green. The Goal is `Succeeded`. This branch starts
+   before v1-e07-t10 and v1-e07-t04, and v1-e07-t04 also changes `debate_cli/container.py`. So if it merges
+   first, run `scripts/task sync` here before the PR, keep both changes, and re-run `test_daily_command.py`,
+   `test_search_command.py` and `test_container_factories.py`.

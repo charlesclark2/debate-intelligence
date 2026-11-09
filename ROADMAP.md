@@ -64,7 +64,7 @@ v2.3's extension work.
 | [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 4 | 125 | 104 | 550 |
 | [v1.2](plan_specs/releases/v1.2.yaml) | Argument landscape & file building | 3 | 96 | 81 | 364 |
 | [v1.3](plan_specs/releases/v1.3.yaml) | URL → verified card | 2 | 24 | 15 | 125 |
-| [v1.4](plan_specs/releases/v1.4.yaml) | Federated research from the CLI | 2 | 39 | 20 | 136 |
+| [v1.4](plan_specs/releases/v1.4.yaml) | Federated research from the CLI | 2 | 39 | 22 | 136 |
 | [v1.5](plan_specs/releases/v1.5.yaml) | V1 quality gate & team pilot | 1 | 7 | 1 | 66 |
 | [v1.6](plan_specs/releases/v1.6.yaml) | Public team website | 3 | 31 | 22 | 169 |
 | [v1.7](plan_specs/releases/v1.7.yaml) | Team evidence search pilot | 1 | 30 | 25 | 100 |
@@ -476,7 +476,7 @@ A student can run `debate-research cut <URL>` and receive a verified, tagged, ci
 | [SearchProvider contract, health and circuit breaking](plan_specs/v1/e07-discovery-adapters/t01-search-provider-contract.yaml) `v1-e07-t01-search-provider-contract` | Succeeded | 1 | 9.0 |
 | [OpenAlex adapter](plan_specs/v1/e07-discovery-adapters/t02-openalex-adapter.yaml) `v1-e07-t02-openalex-adapter` | Succeeded | 2 | 5.0 |
 | [Crossref adapter](plan_specs/v1/e07-discovery-adapters/t03-crossref-adapter.yaml) `v1-e07-t03-crossref-adapter` | Succeeded | 3 | 5.0 |
-| [Semantic Scholar adapter](plan_specs/v1/e07-discovery-adapters/t04-semantic-scholar-adapter.yaml) `v1-e07-t04-semantic-scholar-adapter` | Pending | 3 | 4.0 |
+| [Semantic Scholar adapter](plan_specs/v1/e07-discovery-adapters/t04-semantic-scholar-adapter.yaml) `v1-e07-t04-semantic-scholar-adapter` | Succeeded | 3 | 4.0 |
 | [Publisher RSS/Atom and Google News RSS adapter](plan_specs/v1/e07-discovery-adapters/t05-rss-news-adapter.yaml) `v1-e07-t05-rss-news-adapter` | Succeeded | 2 | 8.0 |
 | [GDELT news adapter](plan_specs/v1/e07-discovery-adapters/t06-gdelt-adapter.yaml) `v1-e07-t06-gdelt-adapter` | Pending | 2 | 4.0 |
 | [Government and policy source adapters](plan_specs/v1/e07-discovery-adapters/t07-government-adapters.yaml) `v1-e07-t07-government-adapters` | Succeeded | 2 | 6.0 |
@@ -501,7 +501,7 @@ A student can run `debate-research cut <URL>` and receive a verified, tagged, ci
 | [Argument/need query expansion](plan_specs/v1/e08-research-workflows/t04-argument-need-expansion.yaml) `v1-e08-t04-argument-need-expansion` | Succeeded | 3 | 7.5 |
 | [`debate-research search` command](plan_specs/v1/e08-research-workflows/t05-search-command.yaml) `v1-e08-t05-search-command` | Succeeded | 4 | 6.0 |
 | [`--auto-cut N` batch cutting](plan_specs/v1/e08-research-workflows/t06-auto-cut.yaml) `v1-e08-t06-auto-cut` | Succeeded | 3 | 9.0 |
-| [`debate-research daily` digests](plan_specs/v1/e08-research-workflows/t07-daily-command.yaml) `v1-e08-t07-daily-command` | Pending | 2 | 7.0 |
+| [`debate-research daily` digests](plan_specs/v1/e08-research-workflows/t07-daily-command.yaml) `v1-e08-t07-daily-command` | Succeeded | 2 | 7.0 |
 | [Counterplans and kritiks get the research needs their arguments have](plan_specs/v1/e08-research-workflows/t08-counterplan-and-kritik-needs.yaml) `v1-e08-t08-counterplan-and-kritik-needs` | Succeeded | 1 | 2.0 |
 | [An installed build carries the configuration `search` reads: the argument taxonomy, the ranking table and the feed lists](plan_specs/v1/e08-research-workflows/t09-installed-build-carries-search-configuration.yaml) `v1-e08-t09-installed-build-carries-search-configuration` | Succeeded | 2 | 1.0 |
 | [One search asks each provider once, however many queries the expansion gives](plan_specs/v1/e08-research-workflows/t10-search-asks-each-provider-once.yaml) `v1-e08-t10-search-asks-each-provider-once` | Succeeded | 1 | 2.0 |

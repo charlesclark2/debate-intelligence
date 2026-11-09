@@ -39,7 +39,7 @@ spec:
         A repair cassette's hit from the failed answer alone is not in_input, while one from
         the cards sent still is, by tests on invented cassettes shown failing first.
 status:
-  phase: Pending
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

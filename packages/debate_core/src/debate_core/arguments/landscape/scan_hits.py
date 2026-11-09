@@ -66,7 +66,8 @@ A mark added to :class:`ScanHit` later sets no hit aside until a PM-reviewed cha
 
 MARKS_THAT_KEEP_A_HIT: Final = ("team_name", "in_input")
 """The marks that keep a hit counting toward `clean` whatever else it carries: a tournament hit that is a
-team's name, and words the text's own cards sent (copied from a card)."""
+team's name, and words the text's own cards sent (copied from a card; in a repair cassette, the failed
+call's cards, not the rest of its prompt, `v1-e32-t59`)."""
 
 
 class HitKind(StrEnum):
@@ -178,7 +179,8 @@ class ScanHit:
     """Every matched word is a word of a JSON key of the text (`tag`, `item`...): structure, not content."""
     in_input: bool = False
     """The matched words occur in the cards the text sent (their heading paths, tags, cites and
-    excerpts; a repair cassette's repaired prompt): a rationale or metadata hit marked so repeats them."""
+    excerpts; for a repair cassette, the cards its failed call sent, `v1-e32-t59`): a rationale or metadata
+    hit marked so repeats them."""
 
 
 def _matches(words: Sequence[str], phrase: str) -> Iterator[int]:
@@ -350,8 +352,11 @@ def cassette_hits(text_label: str, cassette: str, names: ScanNames) -> list[Scan
 def repair_cassette_hits(text_label: str, cassette: str, names: ScanNames) -> list[ScanHit]:
     """The hits in one `model.repair` cassette: the failed call's prompt it carries, the rationales, the rest.
 
-    The evaluation's scan does not read these (it reads the classify prompt's cassettes alone), but each
-    holds the failed call's rendered prompt, its cards with it.
+    The cassette's request holds the failed call's rendered prompt: the failed prompt's own instructions,
+    and its cards as the JSON list the prompt rendered. Since `v1-e32-t59` a hit is :attr:`ScanHit.in_input`
+    only when its words occur in those cards (:func:`_cards_sent`), as a first call's cassette reads its
+    `items`, never because the instructions or the repair call's own answer hold them. A failed prompt
+    holding no card list keeps the rule before: every word of it counts as sent.
     """
     document = _document(cassette)
     if document is None:
@@ -359,15 +364,56 @@ def repair_cassette_hits(text_label: str, cassette: str, names: ScanNames) -> li
     keys = _PROMPT_KEYS | _key_words(document)
     variables = _variables(document)
     found: list[ScanHit] = []
+    turns: list[str] = []
     repaired: list[str] = []
     for key in ("failed_system", "failed_user"):
         value = variables.pop(key, None)
         if isinstance(value, str):
+            turns.append(value)
             for part in json_values(value, names.leave_out):
                 found += _hits_in(text_label, HitField.REPAIRED_PROMPT, part, names)
                 repaired.append(tag_words(part))
     found += _rationale_and_metadata(text_label, document, names)
-    return _marked(found + _across(text_label, cassette, found, names), keys=keys, sent=" ".join(repaired))
+    cards = _cards_sent(turns)
+    sent = " ".join(repaired) if cards is None else cards
+    return _marked(found + _across(text_label, cassette, found, names), keys=keys, sent=sent)
+
+
+_CARD_KEYS: Final = frozenset({"headings", *_ITEM_FIELDS})
+"""The keys of a card's free-text fields, which :func:`_fields_of_items` reads."""
+
+
+def _cards_sent(turns: Iterable[str]) -> str | None:
+    """The words of the cards a failed call sent, read from the turns of its rendered prompt (`v1-e32-t59`):
+    every JSON list in them holding a card (an object with a key of :data:`_CARD_KEYS`), as
+    :func:`_sent_words` reads a first call's `items`. None when no turn holds such a list.
+
+    The classify prompt renders its `items` variable as a JSON list into its user turn, after its own words;
+    its `positions` list holds no card.
+    """
+    decoder = json.JSONDecoder()
+    cards: list[str] = []
+    read = False
+    for turn in turns:
+        start = turn.find("[")
+        while start != -1:
+            try:
+                value, end = decoder.raw_decode(turn, start)
+            except json.JSONDecodeError:
+                start = turn.find("[", start + 1)
+                continue
+            if _holds_a_card(value):
+                read = True
+                cards.append(_sent_words(value))
+            start = turn.find("[", end)
+    return " ".join(cards) if read else None
+
+
+def _holds_a_card(value: object) -> bool:
+    return isinstance(value, list) and any(
+        isinstance(one, dict) and not _CARD_KEYS.isdisjoint(cast(dict[str, object], one))
+        for one in cast(list[object], value)
+    )
 
 
 def _rationale_and_metadata(text_label: str, document: dict[str, object], names: ScanNames) -> list[ScanHit]:

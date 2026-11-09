@@ -577,8 +577,8 @@ async def test_the_bar_reads_a_cassette_scan_with_one_unmarked_hit_as_unclean(
 async def test_the_bar_reads_a_taxonomy_word_a_repair_cassettes_repaired_prompt_sent_as_unclean(
     prompts: PromptRegistry,
 ) -> None:
-    """The repaired prompt is what the failed call sent: its words are the cards', and no mark sets them
-    aside."""
+    """The repaired prompt is what the failed call sent. This one holds no card list to read (`v1-e32-t59`),
+    so every word of it counts as the cards', and no mark sets them aside."""
     result = await marked_evaluation(
         prompts, [MARKED_ONLY], (repair_cassette(CLASSIFY_POSITION_VERSION, "a card read ab initio"),)
     )
@@ -586,6 +586,54 @@ async def test_the_bar_reads_a_taxonomy_word_a_repair_cassettes_repaired_prompt_
     assert (result.cassettes.clean, result.repair_cassettes.team_codes) == (True, 1)
     assert (result.repair_cassettes.clean, result.repair_cassettes.texts_left) == (False, 1)
     assert not result.scans_clean
+
+
+def repaired_with_cards(tag: str) -> str:
+    """A repair cassette whose failed prompt holds its instructions and one invented card's JSON list, and
+    whose answer repeats the instructions' `rationale` and `ab`."""
+    cards = json.dumps(
+        [{"item": "item-1", "headings": ["Budget"], "tag": tag, "cite": None, "excerpt": None}], indent=1
+    )
+    return json.dumps(
+        {
+            "caselists": ["hspolicy99"],
+            "request": {
+                "prompt": {
+                    "prompt_id": "model.repair",
+                    "variables": {
+                        "failed_prompt": f"{CLASSIFY_POSITION_PROMPT_ID}@{CLASSIFY_POSITION_VERSION}",
+                        "failed_system": "Give a rationale for each card, read ab initio.",
+                        "failed_user": f"The cards, as a JSON list.\n\n{cards}",
+                    },
+                }
+            },
+            "response": {
+                "output": {"answers": [{"item": "item-1", "rationale": "the rationale reads it ab initio"}]}
+            },
+        }
+    )
+
+
+@pytest.mark.anyio
+async def test_the_bar_reads_a_repair_cassette_scan_whose_marked_words_no_card_sent_as_clean(
+    prompts: PromptRegistry,
+) -> None:
+    """`v1-e32-t59`: a repair cassette's hit is in the input only when its words come from the cards the
+    failed call sent. The instructions' and the answer's key name and taxonomy word are no card's: set aside.
+    A card that sends the taxonomy word keeps every hit of it."""
+    result = await marked_evaluation(prompts, [MARKED_ONLY], (repaired_with_cards("Spending tradeoff"),))
+
+    scan = result.repair_cassettes
+    assert (scan.texts, scan.schools, scan.team_codes, scan.other_names) == (1, 1, 1, 0)
+    assert (scan.clean, scan.texts_left) == (True, 0)
+    assert scan.set_aside == {"texts": 1, "hits": 4, "json_key": 2, "in_taxonomy": 2}
+    assert result.scans_clean
+
+    kept = await marked_evaluation(prompts, [MARKED_ONLY], (repaired_with_cards("Spending ab initio"),))
+
+    assert (kept.repair_cassettes.clean, kept.repair_cassettes.texts_left) == (False, 1)
+    assert kept.repair_cassettes.set_aside == {"texts": 0, "hits": 0, "json_key": 0, "in_taxonomy": 0}
+    assert not kept.scans_clean
 
 
 @pytest.mark.anyio

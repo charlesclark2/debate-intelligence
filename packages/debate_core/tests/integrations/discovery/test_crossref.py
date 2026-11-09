@@ -17,7 +17,7 @@ import itertools
 import json
 import logging
 import re
-from collections.abc import Awaitable, Callable, Iterator, Sequence
+from collections.abc import Awaitable, Callable, Coroutine, Iterator, Sequence
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta, timezone
 from pathlib import Path
@@ -38,6 +38,7 @@ from debate_core.domain.discovery import (
     BreakerState,
     CandidateResult,
     DatePrecision,
+    ProviderHealth,
     ProviderOutcome,
     ProviderQuery,
     ProviderResponse,
@@ -70,6 +71,7 @@ from debate_core.testing.contracts.search_provider import (
     load_recording,
 )
 from debate_core.testing.fakes.clock_and_ids import FixedClock
+from debate_core.testing.virtual_time import EventLoopClock, run_in_virtual_time
 
 pytestmark = pytest.mark.anyio
 
@@ -1005,6 +1007,28 @@ async def test_the_reserve_follows_the_median_of_the_answers_seen() -> None:
         assert provider.reserve_seconds == expected
 
 
+async def test_a_query_waiting_when_an_answer_moves_the_reserve_keeps_to_the_new_deadline() -> None:
+    """The second query starts waiting at 0 with the 2 s reserve, a deadline of 8 s. The first is
+    answered at 6 s, which makes the reserve 5 s and the second query's deadline 5 s, already past:
+    it is not asked at 6 s, rather than sent then to be answered at 12 s."""
+    time = VirtualTime()
+    starts: list[float] = []
+
+    async def answer(request: httpx.Request) -> httpx.Response:
+        starts.append(time.seconds_since())
+        await time.sleep(6.0)
+        return httpx.Response(200, json=works())
+
+    provider = build_over(httpx.MockTransport(answer), contact_email=None, time=time)
+    first, second = await time.run(
+        asyncio.gather(provider.search(CARBON_CAPTURE), provider.search(CARBON_CAPTURE))
+    )
+
+    assert starts == [0.0]
+    assert (first.partial, second.partial, second.error) == (False, True, NOT_ASKED_PUBLIC)
+    assert time.seconds_since() == 6.0
+
+
 async def test_a_query_cancelled_while_waiting_gives_up_its_turn() -> None:
     time = VirtualTime()
     starts: list[float] = []
@@ -1103,7 +1127,128 @@ async def test_eleven_queries_on_the_public_pool_send_what_fits_and_leave_the_br
     (health,) = registry.health()
     assert health.state is BreakerState.CLOSED
     assert (health.error_count, health.consecutive_failures, health.last_error) == (0, 0, None)
-    assert health.success_count == 11
+    assert (health.success_count, health.not_asked_count) == (asked_count, 11 - asked_count)
+
+
+def on_the_loops_virtual_time(
+    answer_seconds: float | Sequence[float], *, asked: list[str]
+) -> Coroutine[Any, Any, tuple[SearchState, ProviderHealth]]:
+    """The eleven queries through the registry's wrapper and the fan-out, every clock the loop's own.
+
+    Run under :func:`run_in_virtual_time`, so the pacer's sleeps, the wrapper's timeout and the
+    search's deadline all read one virtual clock, and an answer takes `answer_seconds` of it. Gives
+    the search and Crossref's health afterwards.
+    """
+
+    async def search() -> tuple[SearchState, ProviderHealth]:
+        clock = EventLoopClock(NOW)
+
+        async def answer(request: httpx.Request) -> httpx.Response:
+            asked.append(request.url.params["query.bibliographic"])
+            number = len(asked)
+            await asyncio.sleep(
+                answer_seconds if isinstance(answer_seconds, int | float) else answer_seconds[number - 1]
+            )
+            return httpx.Response(200, json=works(an_item(DOI=f"10.5555/q.{number}")))
+
+        factory = crossref_factory(
+            HttpSettings(), version=VERSION, clock=clock, transport=httpx.MockTransport(answer)
+        )
+        registry = ProviderRegistry.from_settings(
+            provider_settings(contact_email=None), {SearchProviderName.CROSSREF: factory}, clock=clock
+        )
+        stage = FanOutStage(registry, clock=clock, deadline_seconds=15.0)
+        state = SearchState(
+            search_id="01JBX3V5Q8R2T6V0W4X7Y1Z3A5", request=SearchRequest(query="heg answers"), queries=ELEVEN
+        )
+        searched = await stage.run(state)
+        (health,) = registry.health()
+        return searched, health
+
+    return search()
+
+
+@pytest.mark.parametrize(
+    ("answer_seconds", "answered_at", "not_asked_at"),
+    [
+        (0.5, [500, 1500, 2500, 3500, 4500, 5500, 6500, 7500, 8500], 9000),
+        (1.5, [1500, 3000, 4500, 6000, 7500, 9000], 8500),
+        (2.5, [2500, 5000, 7500], 7500),
+    ],
+    ids=["answers in 0.5 s", "answers in 1.5 s", "answers in 2.5 s"],
+)
+def test_the_public_pool_case_on_the_loops_virtual_time_keeps_its_results_footer_and_not_asked_answers(
+    answer_seconds: float, answered_at: list[int], not_asked_at: int
+) -> None:
+    """The eleven-query public-pool case, pinned before the pace moved into the shared pacer.
+
+    Written by hand: one start a second, one at a time, so query k starts when the one before it is
+    answered or a second after the one before it started, whichever is later. A query is sent only
+    before the timeout less the reserve, and the reserve is the median answer time clamped to at
+    least 1 s, so the deadline is 9 s, 8.5 s and 7.5 s. Every query still waiting is answered "not
+    asked" at that deadline. The footer is made from exactly these statuses: each one's outcome,
+    whether it is partial, its error and its results.
+    """
+    asked: list[str] = []
+    state, health = run_in_virtual_time(on_the_loops_virtual_time(answer_seconds, asked=asked))
+
+    sent = len(answered_at)
+    assert asked == [query.query for query in ELEVEN[:sent]]
+    statuses = state.provider_statuses
+    assert [status.query for status in statuses] == list(ELEVEN)
+    assert [(status.provider, status.outcome, status.error) for status in statuses] == [
+        ("crossref", ProviderOutcome.OK, None)
+    ] * 11
+    responses = [status.response for status in statuses]
+    assert [
+        (response.partial, response.error, [result.provider_record_id for result in response.results])
+        for response in responses
+        if response is not None
+    ] == [(False, None, [f"10.5555/q.{number}"]) for number in range(1, sent + 1)] + [
+        (True, NOT_ASKED_PUBLIC, [])
+    ] * (11 - sent)
+    assert [round(status.elapsed_ms) for status in statuses] == answered_at + [not_asked_at] * (11 - sent)
+    assert [candidate.provider_record_id for candidate in state.candidates] == [
+        f"10.5555/q.{number}" for number in range(1, sent + 1)
+    ]
+    assert search_status(statuses) is SearchStatus.PARTIAL
+    assert health.state is BreakerState.CLOSED
+    assert (health.error_count, health.consecutive_failures, health.last_error) == (0, 0, None)
+
+
+@pytest.mark.parametrize(
+    ("answer_seconds", "sent"), [(0.5, 9), (1.5, 6), (2.5, 3)], ids=["0.5 s", "1.5 s", "2.5 s"]
+)
+def test_the_public_pool_case_counts_not_asked_answers_apart_and_its_latency_from_answers_only(
+    answer_seconds: float, sent: int
+) -> None:
+    """Every query sent is answered `answer_seconds` after the pace released it, so that is the
+    median latency, however long the query was queued; the queries never sent are counted apart."""
+    _, health = run_in_virtual_time(on_the_loops_virtual_time(answer_seconds, asked=[]))
+    assert (health.success_count, health.not_asked_count, health.error_count) == (sent, 11 - sent, 0)
+    assert health.p50_latency_ms == pytest.approx(answer_seconds * 1000, abs=0.01)
+
+
+def test_a_query_released_late_that_runs_slow_is_still_a_timeout_cut_off_by_the_searchs_deadline() -> None:
+    """Five answers in 1.2 s each, so the sixth query is released at 6 s, and it never answers. Its
+    10 s timeout counts from its release, to 16 s, so the search's 15 s deadline cuts it off first:
+    a timeout in the footer, but no failure for the breaker, because the wrapper's call was
+    cancelled rather than timed out. The other five wait for the slot until 10 s less the 1.2 s
+    reserve and are not asked at 8.8 s."""
+    state, health = run_in_virtual_time(on_the_loops_virtual_time([1.2] * 5 + [3600.0], asked=[]))
+
+    statuses = state.provider_statuses
+    assert [status.outcome for status in statuses] == [ProviderOutcome.OK] * 5 + [ProviderOutcome.TIMEOUT] + [
+        ProviderOutcome.OK
+    ] * 5
+    assert statuses[5].error == "crossref: no answer before the search's 15s deadline"
+    assert round(statuses[5].elapsed_ms) == 15000
+    assert [status.response.error for status in statuses[6:] if status.response is not None] == [
+        NOT_ASKED_PUBLIC
+    ] * 5
+    assert [round(status.elapsed_ms) for status in statuses[6:]] == [8800] * 5
+    assert (health.success_count, health.not_asked_count, health.error_count) == (5, 5, 0)
+    assert health.state is BreakerState.CLOSED
 
 
 async def test_eleven_queries_on_the_polite_pool_are_all_answered_at_one_and_a_half_seconds() -> None:

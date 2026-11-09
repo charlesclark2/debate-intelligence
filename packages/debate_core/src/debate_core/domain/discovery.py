@@ -242,10 +242,18 @@ class ProviderHealth(DomainModel):
     provider: NonEmptyText = Field(description="Provider name, as it appears in settings.")
     state: BreakerState = Field(description="Where the circuit breaker stands right now.")
     consecutive_failures: int = Field(ge=0, description="Failures since the last success.")
-    success_count: int = Field(ge=0, description="Calls that returned a response.")
+    success_count: int = Field(ge=0, description="Calls the provider answered.")
     error_count: int = Field(ge=0, description="Calls that reached the provider and failed.")
     skipped_count: int = Field(
         ge=0, description="Calls refused without reaching the provider: breaker open or rate-limit hold."
+    )
+    not_asked_count: int = Field(
+        default=0,
+        ge=0,
+        description=(
+            "Calls the adapter's own pace never sent, because their turn would have come too late; "
+            "answered 'not asked', and neither a success, a failure nor a latency sample."
+        ),
     )
     last_error: str | None = Field(default=None, description="The most recent failure, redacted.")
     last_error_at: UtcDatetime | None = Field(default=None, description="When that failure happened.")

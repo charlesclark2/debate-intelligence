@@ -27,12 +27,15 @@ The adapters arrive with v1-e07-t02 to t07, each held to the shared contract kit
   :mod:`~debate_core.integrations.discovery.feed_check`.
 
 * :mod:`~debate_core.integrations.discovery.crossref` — Crossref works search (v1-e07-t03).
+* :mod:`~debate_core.integrations.discovery.semantic_scholar` — Semantic Scholar paper search
+  (v1-e07-t04). It and Crossref queue their requests on
+  :mod:`~debate_core.integrations.discovery.pace` (v1-e07-t10).
 * :mod:`~debate_core.integrations.discovery.federal_register` — the Federal Register's rules,
   proposed rules and notices, and :mod:`~debate_core.integrations.discovery.govinfo` — GovInfo's
   bills, committee reports, hearings and committee prints (v1-e07-t07), each asked only by a search
   whose topic lists it. GovInfo's api.data.gov key is :mod:`~debate_core.integrations.discovery.data_gov`'s.
 
-Semantic Scholar and GDELT follow. Fan-out across providers
+GDELT follows. Fan-out across providers
 and deduplication of what they return are E08's.
 
 Named `discovery`, not `search`: "search" is the student pilot's index (PM ruling, 2026-10-20).

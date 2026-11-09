@@ -16,7 +16,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-from collections.abc import Awaitable, Callable, Coroutine, Iterator, Sequence
+from collections.abc import Awaitable, Callable, Coroutine, Iterator
 from datetime import UTC, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Final
@@ -737,8 +737,8 @@ def test_the_pace_with_a_key_and_without_one_is_the_published_one_request_a_seco
     one_a_second_one_at_a_time = Pace(requests=1, interval_seconds=1.0, concurrency=1)
     transport = httpx.MockTransport(lambda request: httpx.Response(200, json=papers()))
 
-    assert KEYED_PACE == one_a_second_one_at_a_time
-    assert KEYLESS_PACE == one_a_second_one_at_a_time
+    assert one_a_second_one_at_a_time == KEYED_PACE
+    assert one_a_second_one_at_a_time == KEYLESS_PACE
     assert build_over(transport).pace == one_a_second_one_at_a_time
     assert build_over(transport, api_key=None).pace == one_a_second_one_at_a_time
 
@@ -888,7 +888,7 @@ async def test_a_429_with_retry_after_is_rate_limited_for_that_long() -> None:
     with pytest.raises(ProviderRateLimited) as caught:
         await replayed.provider.search(CARBON_CAPTURE)
     assert caught.value.retry_after_seconds == 30
-    assert str(caught.value) == "semantic_scholar: HTTP 429"
+    assert str(caught.value) == "semantic_scholar: HTTP 429 (retry after 30.0s)"
     assert len(replayed.sent()) == 1
 
 

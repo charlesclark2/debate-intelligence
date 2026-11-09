@@ -326,6 +326,23 @@ async def test_a_result_seen_under_its_doi_is_omitted_at_another_url(world: Worl
     assert digest.listed_before == 1
 
 
+async def test_a_source_merged_from_two_urls_is_seen_at_either(world: World) -> None:
+    """Two records of one work at two URLs, merged by their OpenAlex id, with no DOI: the digest lists
+    the merged source under the first URL, and the next day the second URL alone is the same source."""
+    first = news("report", "Midterms polling report on the invented bill", 17).model_copy(
+        update={"identifiers": ArticleIdentifiers(openalex_id="W4410000099")}
+    )
+    mirror = first.model_copy(update={"url": "https://mirror.example.com/reports/midterms-polling"})
+    world.provider.records = {"midterms polling": [first, mirror]}
+    [listed] = (await world.run(SEPTEMBER_17)).items
+    assert listed.ranked.candidate.canonical_url == "https://news.example.org/2026/09/17/report"
+    world.provider.records = {"midterms polling": [mirror]}
+
+    digest = await world.run(SEPTEMBER_18)
+
+    assert (digest.items, digest.listed_before) == ((), 1)
+
+
 async def test_running_the_same_date_again_gives_the_same_digest(world: World) -> None:
     first = await world.run(SEPTEMBER_17)
     again = await world.run(SEPTEMBER_17)

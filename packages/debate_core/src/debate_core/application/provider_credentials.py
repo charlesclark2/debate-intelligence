@@ -107,7 +107,12 @@ _WORDS: Final[dict[SearchProviderName, _Words]] = {
         "contact email set ({source}): Crossref's polite pool",
         "no contact email: Crossref's public pool",
     ),
-    SearchProviderName.SEMANTIC_SCHOLAR: _Words("Semantic Scholar"),
+    SearchProviderName.SEMANTIC_SCHOLAR: _Words(
+        "Semantic Scholar",
+        "semantic_scholar_api_key",
+        "API key set ({source})",
+        "no Semantic Scholar key: the shared pool, paced at one request a second",
+    ),
     SearchProviderName.RSS: _Words("RSS feeds"),
     SearchProviderName.GOOGLE_NEWS: _Words("Google News"),
     SearchProviderName.GDELT: _Words("GDELT"),
@@ -117,11 +122,10 @@ _WORDS: Final[dict[SearchProviderName, _Words]] = {
     ),
 }
 """Every provider's words. The OpenAlex row gives no daily figure: those are OpenAlex's prices, not this
-build's (the PM's ruling on `v1-e41-t22`, Q5)."""
+build's (the PM's ruling on `v1-e41-t22`, Q5). Semantic Scholar's row names no limit of its own either: the
+adapter keeps one request a second with a key and without (v1-e07-t04)."""
 
-PROVIDERS_WITHOUT_AN_ADAPTER: Final = frozenset(
-    {SearchProviderName.SEMANTIC_SCHOLAR, SearchProviderName.GDELT}
-)
+PROVIDERS_WITHOUT_AN_ADAPTER: Final = frozenset({SearchProviderName.GDELT})
 """Names settings accept that this build has no adapter for: the composition root's discovery
 factories (`debate_cli.container`) build every other one, and a search refuses these."""
 

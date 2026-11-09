@@ -1554,7 +1554,8 @@ class ServiceContainer:
 
         :meth:`~debate_core.integrations.discovery.registry.ProviderRegistry.from_settings` over this
         build's adapters: OpenAlex (`openalex_factory`, `v1-e07-t02`), Crossref
-        (`crossref_factory`, `v1-e07-t03`), the publisher feeds
+        (`crossref_factory`, `v1-e07-t03`), Semantic Scholar (`semantic_scholar_factory`, `v1-e07-t04`,
+        enabled in no profile until its live smoke), the publisher feeds
         (`feed_factory`), Google News's RSS search (`google_news_factory`, `v1-e07-t05`) and the
         Federal Register and GovInfo (`federal_register_factory` and `govinfo_factory`, `v1-e07-t07`,
         each asked only by a search on a topic whose feed file lists it; GovInfo without an api.data.gov
@@ -1582,6 +1583,7 @@ class ServiceContainer:
         from debate_core.integrations.discovery.govinfo import govinfo_factory
         from debate_core.integrations.discovery.openalex import openalex_factory
         from debate_core.integrations.discovery.registry import ProviderRegistry
+        from debate_core.integrations.discovery.semantic_scholar import semantic_scholar_factory
 
         settings = self.settings
         enabled = set(settings.providers.enabled)
@@ -1604,6 +1606,9 @@ class ServiceContainer:
                 settings.http, version=version, clock=clock, transport=transport
             ),
             SearchProviderName.CROSSREF: crossref_factory(
+                settings.http, version=version, clock=clock, transport=transport
+            ),
+            SearchProviderName.SEMANTIC_SCHOLAR: semantic_scholar_factory(
                 settings.http, version=version, clock=clock, transport=transport
             ),
             SearchProviderName.RSS: feed_factory(

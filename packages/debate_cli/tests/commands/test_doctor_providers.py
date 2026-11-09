@@ -163,11 +163,29 @@ def test_providers_this_build_has_no_adapter_for_say_so_and_keyless_ones_need_no
 
     assert rows == [
         "Credentials file ~/.debate-research/dev.env: not there",
-        "Semantic Scholar no adapter in this build",
+        "Semantic Scholar no Semantic Scholar key: the shared pool, paced at one request a second",
         "Google News no key needed",
         "GDELT no adapter in this build",
         "GovInfo no GovInfo key: GovInfo not asked",
     ]
+
+
+def test_a_semantic_scholar_key_is_named_by_its_source_and_a_blank_one_counts_as_missing(
+    installation: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Semantic Scholar has an adapter since v1-e07-t04: its row says whether its key is set."""
+    monkeypatch.setenv("DEBATE_PROVIDERS__ENABLED", '["semantic_scholar"]')
+    per_user_file(installation, f"DEBATE_PROVIDERS__SEMANTIC_SCHOLAR_API_KEY={KEY}")
+
+    _, keyed, result = provider_rows()
+    monkeypatch.setenv("DEBATE_PROVIDERS__SEMANTIC_SCHOLAR_API_KEY", "  ")
+    _, blank, _ = provider_rows()
+
+    assert keyed[1:] == [f"Semantic Scholar API key set ({SOURCE})"]
+    assert blank[1:] == [
+        "Semantic Scholar no Semantic Scholar key: the shared pool, paced at one request a second"
+    ]
+    assert_no_value(result)
 
 
 def test_with_no_provider_enabled_one_row_says_so(monkeypatch: pytest.MonkeyPatch) -> None:

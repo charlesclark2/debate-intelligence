@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <title>The Example Courier</title>
+    <link>https://news.example.org/politics</link>
+    <description>Invented coverage for the daily command's tests.</description>
+    <item>
+      <title>Farm bill likely to pass Congress before the recess</title>
+      <link>https://www.dailymeridian.example/science/2026/09/14/mammoth-revival-years-away?utm_source=newsletter</link>
+      <guid isPermaLink="false">cut-news</guid>
+      <pubDate>Thu, 17 Sep 2026 09:30:00 +0000</pubDate>
+      <description>SNIPPETSENTINEL Negotiators reached terms.</description>
+    </item>
+    <item>
+      <title>Senate vote count on the stopgap spending measure</title>
+      <link>https://www.harwell-institute.example/research/opportunity-cost-of-de-extinction</link>
+      <guid isPermaLink="false">cut-think</guid>
+      <pubDate>Thu, 17 Sep 2026 14:00:00 +0000</pubDate>
+      <description>SNIPPETSENTINEL Leaders tallied the votes overnight.</description>
+    </item>
+    <item>
+      <title>Senate election forecast: Democrats favored to hold the chamber</title>
+      <link>https://www.harborreview.example/politics/2026/10/inside-the-tariff-talks</link>
+      <guid isPermaLink="false">cut-paywalled</guid>
+      <pubDate>Thu, 17 Sep 2026 16:45:00 +0000</pubDate>
+      <description>SNIPPETSENTINEL A model of every race.</description>
+    </item>
+  </channel>
+</rss>

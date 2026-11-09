@@ -28,7 +28,8 @@ What `stamp` does, and why:
   `debate_cli/_bundled_config/prompts/`: `cut` loads its prompt registry and its `--format` profile
   from those copies (v1-e06-t06). `search` reads `config/argument_taxonomy.yaml`,
   `config/federated_ranking.yaml` and every `config/feeds/*.yaml` from the same place, so they are
-  bundled too, unchanged, and a checkout without them is refused (v1-e08-t09).
+  bundled too, unchanged, and a checkout without them is refused (v1-e08-t09); so is `daily`'s
+  `config/daily_presets.yaml` (v1-e08-t07).
 
 `check-wheels` refuses a build that is not exactly the two expected wheels at the stamped version,
 whose debate_cli does not pin debate_core, that lacks the build info, the bundled profiles, routing
@@ -89,12 +90,14 @@ REQUIRED_CLI_MEMBERS = (
     "debate_cli/_bundled_config/prompts/card/markup.md",
     "debate_cli/_bundled_config/config/argument_taxonomy.yaml",
     "debate_cli/_bundled_config/config/federated_ranking.yaml",
+    "debate_cli/_bundled_config/config/daily_presets.yaml",
     "debate_cli/_bundled_config/prompts/search/expand.md",
 )
 """Every wheel's fixed members; :func:`required_cli_members` adds the feed lists the checkout commits."""
 
-SEARCH_CONFIGURATION = ("argument_taxonomy.yaml", "federated_ranking.yaml")
-"""What `search` reads from `config/` beside the feed lists: its taxonomy and its ranking table."""
+SEARCH_CONFIGURATION = ("argument_taxonomy.yaml", "federated_ranking.yaml", "daily_presets.yaml")
+"""What `search` reads from `config/` beside the feed lists, its taxonomy and its ranking table, and
+the presets `daily` runs its searches from (v1-e08-t07)."""
 FEEDS = "feeds"
 """`config/feeds/`, every topic's feed list, read whole by the `rss` and `google_news` providers."""
 

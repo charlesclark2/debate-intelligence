@@ -66,6 +66,7 @@ from debate_cli.commands import (
     caselist_seed,
     config,
     cut,
+    daily,
     doctor,
     fetch,
     files,
@@ -90,6 +91,7 @@ def register_commands(app: typer.Typer) -> None:
     app.command("fetch")(fetch.fetch)
     app.command("cut")(cut.cut)
     app.command("search")(search.search)
+    app.command("daily")(daily.daily)
     app.command("usage")(usage.usage)
 
     configuration = command_group("config", "Inspect the settings this installation runs with.")

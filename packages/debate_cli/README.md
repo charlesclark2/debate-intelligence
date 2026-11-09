@@ -147,9 +147,9 @@ rather than writing an integer.
 | 2 | `USAGE_ERROR` | The command line was wrong: unknown command or option, missing argument, no command given. Nothing was executed. |
 | 3 | `RETRIEVAL_FAILURE` | Something the command depends on did not answer, so there is no answer yet. An external provider — search, fetch, a model — failed or rate-limited the call, or a store could not be read or written: it was unavailable, the SSO session for it expired, or it refused access (the operating system refusing a data directory included). The same command may well succeed later. |
 | 4 | `CARD_UNVERIFIED` | `cut` made a card and the evidence verifier did not pass it: the card was saved and written `UNVERIFIED`, with its banner, and each reason was printed. Never `0`, and not `1`, so a script can tell a card that needs a person's look from a cut that could not run (`v1-e06-t06`). |
-| 6 | `SEARCH_PARTIAL` | `search` returned what it found while at least one provider it asked did not answer in full: it failed, timed out, was rate-limited, had its breaker open, was not configured or answered only partly. The footer names each one. A partial search with no rows is a `6` too (`v1-e08-t05`). |
+| 6 | `SEARCH_PARTIAL` | `search` returned what it found while at least one provider it asked did not answer in full: it failed, timed out, was rate-limited, had its breaker open, was not configured or answered only partly. The footer names each one. A partial search with no rows is a `6` too (`v1-e08-t05`). `daily` exits `6` the same way, with its digest written (`v1-e08-t07`). |
 | 7 | `NO_RESULTS` | `search` asked every provider, every one answered in full, and nothing matched. |
-| 8 | `AUTO_CUT_SHORT` | `search --auto-cut N` made fewer than N VERIFIED cards: every result was tried, and the rest were inaccessible, not verified or could not be cut. What was cut is written (`v1-e08-t06`). |
+| 8 | `AUTO_CUT_SHORT` | `search --auto-cut N` (or `daily --auto-cut N`) made fewer than N VERIFIED cards: every result was tried, and the rest were inaccessible, not verified or could not be cut. What was cut is written (`v1-e08-t06`). |
 | 9 | `BUDGET_EXCEEDED` | `search --auto-cut N` stopped short of N VERIFIED cards because the budget guard refused a model call (`--max-cost`, a daily or monthly limit, or a model with no price while a limit is set). The cards already cut are written. |
 | 70 | `INTERNAL_ERROR` | A bug: an exception the CLI does not model. It is reported by its class, never its message (below). 70 is `EX_SOFTWARE` from `sysexits.h`. |
 
@@ -590,3 +590,39 @@ template queries alone.
 | `3` | No provider answered (`SEARCH_FAILED`). |
 | `6` | Partial (`SEARCH_PARTIAL`): results from the providers that answered, and the footer names each one that did not. |
 | `7` | Every provider answered, and nothing matched (`NO_RESULTS`). |
+
+## `debate-research daily`
+
+`debate-research daily <preset> --date YYYY-MM-DD` (`v1-e08-t07-daily-command`) writes one day's digest
+of new research for a preset in `config/daily_presets.yaml`: `politics` (politics DA and midterms DA
+uniqueness, from the politics feeds) and `nhi` (the NHI topic's spending, federalism and economy DA
+uniqueness). `DigestService` in `debate_core` runs each of the preset's queries, expanded for each of
+its argument/need pairs, through `search`'s federated search for the window (`--window 1d` to `31d`,
+ending with `--date`, in UTC; `--date` defaults to today). The feed and Google News providers are built
+for the preset's own feed topics, so a politics digest never reads the health-insurance feeds. A
+preset is added by adding it to the file: every preset there is checked when `daily` runs, and an
+unknown preset exits `2` listing the presets.
+
+The digest is `digests/<preset>-<date>.md` (`--format json` writes `.json` and prints it; `--digest-dir`
+names another directory): each new result under its argument and need, with its title, publisher,
+date, the ranking's explanation and its URL, then `search`'s provider footer. A feed topic with a feed
+still `awaiting_coach_review` is read, and the digest says so. Results a digest of the same preset
+listed on another date are left out; running a date again lists its own again. What each preset has
+listed is kept by canonical URL and DOI in `<data dir>/daily/seen/<preset>.json`, written only after
+the digest file is, so a run that fails marks nothing seen. `--auto-cut N` then cuts the new results
+as `search --auto-cut` does, each group's top result first and each card cut for its own argument and
+need, into `<preset>-<date>.docx` beside the digest.
+
+```console
+$ uv run debate-research daily politics --date 2026-09-17
+$ uv run debate-research daily nhi --window 3d --format json | jq '.data // .error.details | .groups[] | [.heading, (.results | length)]'
+```
+
+| Exit | Means |
+|---|---|
+| `0` | Every provider answered; the digest is written, with new results or none. |
+| `1` | None of the preset's providers is enabled (`NO_PROVIDER_ENABLED`); nothing is written. |
+| `2` | A usage error: an unknown preset (the presets are listed) or a `--window` that is not `1d` to `31d`. |
+| `3` | No provider answered (`SEARCH_FAILED`); nothing is written and nothing is marked listed. |
+| `6` | Partial (`SEARCH_PARTIAL`): the digest is written, and the footer names each provider that did not answer. |
+| `8`, `9` | With `--auto-cut`, as for `search --auto-cut`. |

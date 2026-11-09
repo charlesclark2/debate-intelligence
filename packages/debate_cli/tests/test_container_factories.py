@@ -203,6 +203,7 @@ def arguments(tmp_path: Path) -> dict[str, tuple[object, ...]]:
         "user_pool_id: str": ("us-east-1_planted",),
         "profile: str | None": (None,),
         "model_expansion: bool": (False, True),
+        "feed_topics: tuple[str, ...]": (("politics",), ()),
         "route: TaskClass | None": (None, TaskClass.DEEP_AUDIT),
     }
 

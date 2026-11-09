@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <title>The Example Health Wire</title>
+    <link>https://health.example.net</link>
+    <description>Invented coverage for the daily command's tests.</description>
+    <item>
+      <title>Health insurance subsidies at the center of the federal spending debate in Congress</title>
+      <link>https://health.example.net/2026/09/17/subsidies-spending-debate</link>
+      <guid isPermaLink="false">health-1</guid>
+      <pubDate>Thu, 17 Sep 2026 10:00:00 +0000</pubDate>
+      <description>SNIPPETSENTINEL Appropriators met.</description>
+    </item>
+    <item>
+      <title>States lead on health insurance policy as Washington stalls</title>
+      <link>https://health.example.net/2026/09/17/states-lead</link>
+      <guid isPermaLink="false">health-2</guid>
+      <pubDate>Thu, 17 Sep 2026 15:00:00 +0000</pubDate>
+      <description>SNIPPETSENTINEL Three governors spoke.</description>
+    </item>
+  </channel>
+</rss>

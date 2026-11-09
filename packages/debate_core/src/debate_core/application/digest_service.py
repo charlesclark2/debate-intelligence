@@ -72,6 +72,7 @@ __all__ = [
     "DigestWriter",
     "FeedTopicReview",
     "digest_batch_candidates",
+    "digest_bundle_need",
 ]
 
 MAX_WINDOW_DAYS: Final = 31
@@ -334,3 +335,10 @@ def digest_batch_candidates(digest: Digest) -> tuple[BatchCandidate, ...]:
         )
         for number, item in enumerate(order, start=1)
     )
+
+
+def digest_bundle_need(digest: Digest) -> BatchNeed:
+    """The batch request's need for a digest's `--auto-cut`: its heading is the bundle's block heading,
+    the digest's own. Every candidate carries the need its search was for
+    (:func:`digest_batch_candidates`), so this one's argument and need are never what a card is cut for."""
+    return BatchNeed(argument=digest.preset.label, need=digest.heading, heading=digest.heading)

@@ -149,8 +149,8 @@ def test_doctor_reports_the_environment_as_json() -> None:
     # (v1-e39-t02), the coach's pilot accounts (v1-e39-t05), and the check of the stores the weekly
     # index stage would find unparsed (v1-e34-t30), the file builder's build, quality check and
     # suggestion (v1-e33-t03), its publish (v1-e33-t05), the card cutting behind `cut`
-    # (v1-e06-t06), and the discovery providers and federated search behind `search` (v1-e08-t05)
-    # the last.
+    # (v1-e06-t06), the discovery providers and federated search behind `search` (v1-e08-t05), and
+    # the digest behind `daily` (v1-e08-t07) the last.
     # A later epic adding one adds it here too: this is the list an operator reads to find out
     # what this installation is wired for.
     assert data["services"] == [
@@ -166,6 +166,7 @@ def test_doctor_reports_the_environment_as_json() -> None:
         "caselist_sync_history",
         "caselist_sync_monitor",
         "caselist_token_store",
+        "daily_digesting",
         "discovery_providers",
         "evidence_profile_check",
         "evidence_sync",

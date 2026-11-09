@@ -215,6 +215,15 @@ from debate_core.application.caselist_sync import (
     why_no_search_index_stage,
 )
 from debate_core.application.citation_service import CitationService
+from debate_core.application.daily_preset_config import (
+    DAILY_PRESETS_PATH,
+    DailyPresetError,
+    PresetReferences,
+    check_daily_presets,
+    load_daily_presets,
+)
+from debate_core.application.digest_seen_set import FileDigestSeenStore
+from debate_core.application.digest_service import DigestService
 from debate_core.application.environment_data_dirs import profile_data_dir
 from debate_core.application.evidence_profiles import (
     MODEL_PROFILE_SETTING,
@@ -293,6 +302,7 @@ from debate_core.application.verify_manifest import VerifyManifest
 from debate_core.domain import new_id
 from debate_core.domain.argument_taxonomy import ArgumentTaxonomy
 from debate_core.domain.caselist import Event
+from debate_core.domain.daily_preset import DailyPresets
 from debate_core.domain.model_contracts import ModelProvider, TaskClass
 from debate_core.evidence.format_profile import (
     FORMAT_PROFILES_DIRECTORY,
@@ -328,6 +338,7 @@ __all__ = [
     "LOCAL_OWNER_ID",
     "SERVICE_NAMES",
     "CardCutting",
+    "DailyDigesting",
     "EvidenceStoreNotConfigured",
     "ServiceContainer",
     "Settings",
@@ -349,6 +360,7 @@ SERVICE_NAMES: Final[tuple[str, ...]] = (
     "caselist_sync_history",
     "caselist_sync_monitor",
     "caselist_token_store",
+    "daily_digesting",
     "discovery_providers",
     "evidence_profile_check",
     "evidence_sync",
@@ -443,6 +455,32 @@ class FederatedSearching:
     """
 
     def __init__(self, *, service: FederatedSearchService, providers: Closeable) -> None:
+        self.service = service
+        self._providers = providers
+
+    async def __aenter__(self) -> Self:
+        return self
+
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        traceback: TracebackType | None,
+    ) -> None:
+        await self._providers.aclose()
+
+
+DAILY_SEEN_DIRECTORY: Final = Path("daily") / "seen"
+"""Where each daily preset's seen-set is kept, in the data directory (`v1-e08-t07`): one
+`<preset>.json` per preset, never in the repository or a bucket (the PM's ruling of 2026-11-09)."""
+
+
+class DailyDigesting:
+    """What `daily` runs: the digest service over providers built for one preset's feed topics
+    (`v1-e08-t07`). An async context manager, like :class:`FederatedSearching`: leaving the block
+    closes every provider."""
+
+    def __init__(self, *, service: DigestService, providers: Closeable) -> None:
         self.service = service
         self._providers = providers
 
@@ -1574,6 +1612,10 @@ class ServiceContainer:
         return self.singleton("discovery_providers", self._build_discovery_providers)
 
     def _build_discovery_providers(self) -> ProviderRegistry:
+        return self._discovery_registry(None)
+
+    def _discovery_registry(self, topics: tuple[FeedConfig, ...] | None) -> ProviderRegistry:
+        """The registry over `topics`' feeds, or, given None, over every committed feed list."""
         from debate_cli import package_version
         from debate_core.integrations.discovery.crossref import crossref_factory
         from debate_core.integrations.discovery.federal_register import federal_register_factory
@@ -1595,9 +1637,9 @@ class ServiceContainer:
                 "provider may be enabled; set providers.enabled to [] or use an environment that allows it",
                 field="allow_network",
             )
-        topics: tuple[FeedConfig, ...] = ()
-        if enabled & {SearchProviderName.RSS, SearchProviderName.GOOGLE_NEWS}:
-            topics = self._topic_feed_lists()
+        if topics is None:
+            reads_feeds = enabled & {SearchProviderName.RSS, SearchProviderName.GOOGLE_NEWS}
+            topics = self._topic_feed_lists() if reads_feeds else ()
         clock = _PortClock(self.clock())
         version = package_version()
         cache = FileFeedCache(settings.storage.data_dir / FEED_CACHE_DIRECTORY)
@@ -1666,9 +1708,34 @@ class ServiceContainer:
         return self.singleton("federated_search", lambda: self._build_federated_search(model_expansion))
 
     def _build_federated_search(self, model_expansion: bool) -> FederatedSearching:
-        from debate_core.integrations.discovery.feed_config import search_topic_ids, topic_providers
-        from debate_core.integrations.local import SqliteArticleRepository, SqliteSearchRepository
         from debate_core.integrations.models.prompt_registry import PromptRegistry
+
+        guard = None
+        if model_expansion:
+            registry = PromptRegistry.load(_committed_prompts())
+            guard = StructuredOutputGuard(self._search_model_router(registry), registry)
+        providers = self.discovery_providers()
+        return FederatedSearching(service=self._federated_search_over(providers, guard), providers=providers)
+
+    def _search_topics(self) -> SearchTopics:
+        """The topics a search may name and the government providers each enables, from the taxonomy
+        and every committed feed list (v1-e07-t07)."""
+        from debate_core.integrations.discovery.feed_config import search_topic_ids, topic_providers
+
+        taxonomy = self.argument_taxonomy()
+        feed_lists = self._topic_feed_lists()
+        return SearchTopics(
+            known=tuple(
+                dict.fromkeys((*(topic.id for topic in taxonomy.topics), *search_topic_ids(feed_lists)))
+            ),
+            providers=topic_providers(feed_lists),
+        )
+
+    def _federated_search_over(
+        self, providers: ProviderRegistry, guard: StructuredOutputGuard | None
+    ) -> FederatedSearchService:
+        """`search`'s federated search over `providers`: the same stages, stores and topics."""
+        from debate_core.integrations.local import SqliteArticleRepository, SqliteSearchRepository
 
         settings = self.settings
         clock = _PortClock(self.clock())
@@ -1677,25 +1744,13 @@ class ServiceContainer:
         ranking = load_federated_ranking_config(
             _committed_root(str(FEDERATED_RANKING_CONFIG_PATH)) / FEDERATED_RANKING_CONFIG_PATH
         )
-        guard = None
-        if model_expansion:
-            registry = PromptRegistry.load(_committed_prompts())
-            guard = StructuredOutputGuard(self._search_model_router(registry), registry)
-        feed_lists = self._topic_feed_lists()
-        topics = SearchTopics(
-            known=tuple(
-                dict.fromkeys((*(topic.id for topic in taxonomy.topics), *search_topic_ids(feed_lists)))
-            ),
-            providers=topic_providers(feed_lists),
-        )
-        providers = self.discovery_providers()
-        service = FederatedSearchService(
+        return FederatedSearchService(
             providers,
             SqliteSearchRepository(self.database),
             clock=clock,
             ids=ids,
             deadline_seconds=settings.providers.search_deadline_seconds,
-            topics=topics,
+            topics=self._search_topics(),
             expand=QueryExpansionStage(taxonomy, clock=clock, guard=guard),
             normalize=DedupeStage(),
             rank=StagesInOrder(
@@ -1703,7 +1758,56 @@ class ServiceContainer:
                 ArticleMatchingStage(SqliteArticleRepository(self.database), clock=clock, ids=ids),
             ),
         )
-        return FederatedSearching(service=service, providers=providers)
+
+    def daily_presets(self) -> DailyPresets:
+        """The committed `config/daily_presets.yaml` (`v1-e08-t07`), every preset checked against the
+        taxonomy, the provider names and the committed feed lists when it is loaded. A preset that does
+        not load is a :class:`~debate_core.application.settings.ConfigurationError` naming it."""
+        return self.singleton("daily_presets", self._load_daily_presets)
+
+    def _load_daily_presets(self) -> DailyPresets:
+        from debate_core.integrations.discovery.feed_config import topic_providers
+
+        topics = self._search_topics()
+        feed_lists = self._topic_feed_lists()
+        references = PresetReferences(
+            taxonomy=self.argument_taxonomy(),
+            search_topics=topics.known,
+            feed_topics=tuple(config.topic for config in feed_lists),
+            government_providers=topic_providers(feed_lists),
+        )
+        path = _committed_root(str(DAILY_PRESETS_PATH)) / DAILY_PRESETS_PATH
+        try:
+            return check_daily_presets(load_daily_presets(path), references, source=str(DAILY_PRESETS_PATH))
+        except DailyPresetError as error:
+            raise ConfigurationError(str(error), field=str(DAILY_PRESETS_PATH)) from None
+
+    def daily_digesting(self, *, feed_topics: tuple[str, ...]) -> DailyDigesting:
+        """What `daily` runs (`v1-e08-t07`): :class:`DigestService` over `search`'s federated search,
+        whose feed and Google News providers read only `feed_topics`' committed feed lists, so a
+        politics digest never reads the health-insurance feeds. Every other provider, and the
+        network guard, are :meth:`discovery_providers`'s; a test gives the transport the same way, under
+        `"discovery_transport"`. Each preset's seen-set is `<data dir>/daily/seen/<preset>.json`."""
+        return self.singleton("daily_digesting", lambda: self._build_daily_digesting(feed_topics))
+
+    def _build_daily_digesting(self, feed_topics: tuple[str, ...]) -> DailyDigesting:
+        from debate_core.integrations.discovery.feed_config import FeedReview
+
+        lists = tuple(config for config in self._topic_feed_lists() if config.topic in feed_topics)
+        providers = self._discovery_registry(lists)
+        reviews = {
+            config.topic: tuple(
+                feed.publisher for feed in config.feeds if feed.review is FeedReview.AWAITING_COACH_REVIEW
+            )
+            for config in lists
+        }
+        service = DigestService(
+            searching=self._federated_search_over(providers, None),
+            seen=FileDigestSeenStore(self.settings.storage.data_dir / DAILY_SEEN_DIRECTORY),
+            taxonomy=self.argument_taxonomy(),
+            feed_reviews=reviews,
+        )
+        return DailyDigesting(service=service, providers=providers)
 
     def _search_model_router(self, registry: PromptRegistry) -> ModelRouter:
         """The router `search --expand-llm`'s `search.expand` call goes to, chosen as `cut`'s is.

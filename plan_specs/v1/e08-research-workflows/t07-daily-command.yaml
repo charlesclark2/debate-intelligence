@@ -60,7 +60,7 @@ spec:
       description: >-
         `--format json` emits the digest as JSON, and the provider status footer reports partial results.
 status:
-  phase: Pending
+  phase: InProgress
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

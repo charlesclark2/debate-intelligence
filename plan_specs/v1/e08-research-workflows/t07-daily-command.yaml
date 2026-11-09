@@ -32,7 +32,19 @@ spec:
     `review:` is still `awaiting_coach_review` runs, and the digest says so.
   priority: 2
   constraints:
-    packages: [debate_core.application, debate_cli, config/daily_presets.yaml]
+    # Added by the session, 2026-11-09, for the PM to keep or undo (the report's Deviations):
+    # debate_core.domain holds the node's own output, domain/daily_preset.py; scripts/stamp_build.py
+    # and its test bundle config/daily_presets.yaml into an installed build, as v1-e08-t09 bundles
+    # search's configuration; tests/smoke/test_daily_smoke.py is the command's smoke check
+    # (working agreement 5).
+    packages:
+      - debate_core.application
+      - debate_core.domain
+      - debate_cli
+      - config/daily_presets.yaml
+      - scripts/stamp_build.py
+      - tests/scripts/test_stamp_build.py
+      - tests/smoke/test_daily_smoke.py
     forbidden:
       - Scheduling or network services beyond the CLI invocation
       - Re-listing results already reported in a previous digest for the same preset
@@ -52,10 +64,15 @@ spec:
     - id: ac2
       description: >-
         Running the same preset for the next date omits results already listed on the previous day.
+    # PM ruling 2026-11-09 (v1-e08-t07's start): the file ships politics and nhi. data-centers and
+    # space were the September-October PF and LD topics and are not shipped; the coach adds the
+    # current LD and PF presets as config, with no code change, as config/feeds/README.md leaves their
+    # feeds to him. Was: "Presets for politics, nhi, data-centers and space validate on load, ...".
     - id: ac3
       description: >-
-        Presets for politics, nhi, data-centers and space validate on load, and an unknown preset exits 2
-        listing available presets.
+        Every preset in config/daily_presets.yaml (politics and nhi) validates on load, an invented
+        third preset added to the file loads with no code change, and an unknown preset exits 2
+        listing the available presets.
     - id: ac4
       description: >-
         `--format json` emits the digest as JSON, and the provider status footer reports partial results.
@@ -82,8 +99,9 @@ spec:
       - id: presets
         kind: Task
         name: Daily preset config
+        # PM ruling 2026-11-09: politics and nhi only; the coach adds the current LD and PF presets.
         description: >-
-          Define DailyPreset schema and seed presets for politics and the three current team topics.
+          Define DailyPreset schema and seed presets for politics and the NHI Policy topic.
         outputs: [config/daily_presets.yaml, packages/debate_core/src/debate_core/domain/daily_preset.py]
         estimatedEffort: 2h
         acceptanceCriteria:

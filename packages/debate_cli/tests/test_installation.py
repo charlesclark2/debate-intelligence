@@ -89,7 +89,7 @@ def test_the_container_wires_these_integrations() -> None:
     # `discovery.google_news_rss` and `discovery.openalex` inside the discovery providers factory, with
     # `discovery.registry` there and under TYPE_CHECKING, and `discovery.feed_config` under TYPE_CHECKING too;
     # and `discovery.crossref` in the same factory (v1-e07-t03), with `discovery.federal_register` and
-    # `discovery.govinfo` there (v1-e07-t07).
+    # `discovery.govinfo` there (v1-e07-t07), and `discovery.semantic_scholar` there too (v1-e07-t04).
     assert wired_integrations() == (
         "debate_core.integrations.bedrock",
         "debate_core.integrations.cloudwatch_audit",
@@ -104,6 +104,7 @@ def test_the_container_wires_these_integrations() -> None:
         "debate_core.integrations.discovery.govinfo",
         "debate_core.integrations.discovery.openalex",
         "debate_core.integrations.discovery.registry",
+        "debate_core.integrations.discovery.semantic_scholar",
         "debate_core.integrations.docx_file_writer.writer",
         "debate_core.integrations.docx_parser",
         "debate_core.integrations.html_extractor",
@@ -265,7 +266,7 @@ def test_the_check_exits_zero_and_reports_json_for_this_checkout(capsys: pytest.
     report = json.loads(capsys.readouterr().out)
     assert report["complete"] is True
     assert report["covered"] is True
-    assert len(report["imported"]) == len(report["wired"]) == 44
+    assert len(report["imported"]) == len(report["wired"]) == 45
 
 
 # ---------------------------------------------------------------------------------------------
@@ -404,6 +405,7 @@ def test_dropping_the_http_extra_leaves_the_client_without_httpx() -> None:
         "debate_core.integrations.discovery.google_news_rss": {"httpx"},
         "debate_core.integrations.discovery.govinfo": {"httpx"},
         "debate_core.integrations.discovery.openalex": {"httpx"},
+        "debate_core.integrations.discovery.semantic_scholar": {"httpx"},
         "debate_core.integrations.http_fetcher": {"httpx"},
         "debate_core.integrations.opencaselist": {"httpx"},
     }

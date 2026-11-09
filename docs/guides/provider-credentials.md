@@ -9,7 +9,7 @@ of them work better, or at all, with a credential of your own:
 | `DEBATE_PROVIDERS__CONTACT_EMAIL` | Crossref serves you from its public pool, one query a second instead of three, so a long search can leave some of its Crossref queries unasked. |
 | `DEBATE_PROVIDERS__OPENALEX_API_KEY` | OpenAlex answers keyless, with a lower daily allowance. |
 | `DEBATE_PROVIDERS__API_DATA_GOV_KEY` | GovInfo is not asked. The key is free from api.data.gov. |
-| `DEBATE_PROVIDERS__SEMANTIC_SCHOLAR_API_KEY` | Nothing yet: this build has no Semantic Scholar adapter. |
+| `DEBATE_PROVIDERS__SEMANTIC_SCHOLAR_API_KEY` | Semantic Scholar is asked without a key, from the pool every keyless caller shares. Searches keep to one query a second with a key or without, so today a key only identifies you. No profile enables Semantic Scholar yet. |
 
 None of them goes in a committed file. Since `v1-e41-t22` each machine keeps them in one file of its
 own, `~/.debate-research/dev.env` for the dev environment and `~/.debate-research/prod.env` for

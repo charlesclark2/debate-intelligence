@@ -1,0 +1,67 @@
+[
+  {
+    "provider": "semantic_scholar",
+    "provider_record_id": "3f1c0a9e2b7d4c6e8a0b1c2d3e4f5a6b7c8d9e0f",
+    "title": "Pricing carbon capture under production subsidies",
+    "url": "https://doi.org/10.5555/invented.2022.0417",
+    "canonical_url": null,
+    "identifiers": {
+      "doi": "10.5555/invented.2022.0417",
+      "pmid": "35512345",
+      "semantic_scholar_id": "3f1c0a9e2b7d4c6e8a0b1c2d3e4f5a6b7c8d9e0f"
+    },
+    "source_type": "scholarly",
+    "authors": ["Ilse Marrowby", "Tomas Underhill"],
+    "publication": "Journal of Invented Energy Economics",
+    "published_at": "2022-05-17T00:00:00Z",
+    "date_precision": "day",
+    "snippet": "Production subsidies change how carbon capture is priced and who pays.",
+    "open_access_url": "https://publisher.example.org/articles/2022.0417.pdf",
+    "open_access": true,
+    "citation_count": 57,
+    "raw_ref": null
+  },
+  {
+    "provider": "semantic_scholar",
+    "provider_record_id": "7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b",
+    "title": "Learning curves for point-source capture: a preprint",
+    "url": "https://doi.org/10.48550/arxiv.2203.01234",
+    "canonical_url": null,
+    "identifiers": {
+      "doi": "10.48550/arxiv.2203.01234",
+      "arxiv_id": "2203.01234",
+      "semantic_scholar_id": "7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b"
+    },
+    "source_type": "scholarly",
+    "authors": ["Odile Fenwright"],
+    "publication": null,
+    "published_at": "2022-03-02T00:00:00Z",
+    "date_precision": "day",
+    "snippet": null,
+    "open_access_url": "https://arxiv.org/pdf/2203.01234",
+    "open_access": true,
+    "citation_count": 4,
+    "raw_ref": null
+  },
+  {
+    "provider": "semantic_scholar",
+    "provider_record_id": "c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00",
+    "title": "Who captures the subsidy? Incidence in capture-ready plants",
+    "url": "https://www.semanticscholar.org/paper/c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00",
+    "canonical_url": null,
+    "identifiers": {
+      "arxiv_id": "2111.04567",
+      "semantic_scholar_id": "c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00"
+    },
+    "source_type": "scholarly",
+    "authors": ["Rasmus Kettleby", "Priya Ondaatje"],
+    "publication": "Invented Working Paper Series",
+    "published_at": "2021-01-01T00:00:00Z",
+    "date_precision": "year",
+    "snippet": "We estimate who bears the cost of capture subsidies.",
+    "open_access_url": "https://arxiv.org/pdf/2111.04567",
+    "open_access": true,
+    "citation_count": 12,
+    "raw_ref": null
+  }
+]

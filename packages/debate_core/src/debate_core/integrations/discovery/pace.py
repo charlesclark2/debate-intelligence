@@ -27,6 +27,14 @@ its wait ended (:class:`TurnOutcome`). The wrapper then counts the time queued n
 call's timeout nor towards its latency, and a call its pace answered "not asked" as neither a
 failure nor a latency sample.
 
+**When a call is too late to send.** An adapter usually wants a call sent only while its answer
+could still come back within the wrapper's timeout. :class:`AnswerTimes` keeps the time each answer
+took and gives the **reserve** to keep back for one: the median of the last
+:data:`ANSWER_WINDOW` answers, clamped to at least :data:`MIN_RESERVE_SECONDS` and at most half the
+timeout, and :data:`DEFAULT_RESERVE_SECONDS` before any answer (:func:`answer_reserve_seconds`).
+`within` is then the timeout less that reserve, read again on every look. Crossref chose it in
+v1-e07-t03 and Semantic Scholar shares it (v1-e07-t04).
+
 Every time is read from the injected
 :class:`~debate_core.application.ports.providers.Clock` and every wait is the injected sleep, so a
 test drives the pace on virtual time.
@@ -35,6 +43,7 @@ test drives the pace on virtual time.
 from __future__ import annotations
 
 import asyncio
+import statistics
 from collections import deque
 from collections.abc import Awaitable, Callable, Generator
 from contextlib import contextmanager
@@ -43,22 +52,61 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from enum import StrEnum
 from types import TracebackType
-from typing import Protocol
+from typing import Final, Protocol
 
 from debate_core.application.ports.providers import Clock
 
 __all__ = [
+    "ANSWER_WINDOW",
+    "DEFAULT_RESERVE_SECONDS",
+    "MIN_RESERVE_SECONDS",
+    "AnswerTimes",
     "Pace",
     "PaceListener",
     "Pacer",
     "Sleep",
     "Turn",
     "TurnOutcome",
+    "answer_reserve_seconds",
     "listening",
 ]
 
 type Sleep = Callable[[float], Awaitable[None]]
 """How a pacer waits: `asyncio.sleep` in a real run, a test's virtual time in a test."""
+
+DEFAULT_RESERVE_SECONDS: Final = 2.0
+"""The reserve for an answer before the provider has answered once in this process."""
+
+MIN_RESERVE_SECONDS: Final = 1.0
+"""The least reserve, however fast the provider has answered."""
+
+ANSWER_WINDOW: Final = 50
+"""How many of the latest answer times the reserve's median is taken over."""
+
+
+def answer_reserve_seconds(median_answer_seconds: float | None, timeout_seconds: float) -> float:
+    """The time kept back for an answer: the median seen, at least 1 s, at most half the timeout.
+
+    2 seconds before any answer is seen. When half the timeout is under a second, half wins.
+    """
+    seen = DEFAULT_RESERVE_SECONDS if median_answer_seconds is None else median_answer_seconds
+    return min(max(seen, MIN_RESERVE_SECONDS), timeout_seconds / 2)
+
+
+class AnswerTimes:
+    """How long one provider's latest answers took, and the reserve they call for."""
+
+    def __init__(self) -> None:
+        self._seconds: deque[float] = deque(maxlen=ANSWER_WINDOW)
+
+    def answered(self, seconds: float) -> None:
+        """An answer came back `seconds` after its request was sent."""
+        self._seconds.append(max(seconds, 0.0))
+
+    def reserve_seconds(self, timeout_seconds: float) -> float:
+        """:func:`answer_reserve_seconds` over the median of the answers kept."""
+        median = statistics.median(self._seconds) if self._seconds else None
+        return answer_reserve_seconds(median, timeout_seconds)
 
 
 @dataclass(frozen=True, slots=True)

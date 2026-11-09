@@ -109,6 +109,26 @@ CROSSREF_WORKS: Final = {
     },
 }
 """One Crossref item, written by hand: a report dated by its year alone (v1-e07-t03)."""
+SEMANTIC_SCHOLAR_HOST: Final = "api.semanticscholar.org"
+SEMANTIC_SCHOLAR_PAPERS: Final = {
+    "total": 1,
+    "offset": 0,
+    "data": [
+        {
+            "paperId": "c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00",
+            "title": "Who captures the subsidy?",
+            "authors": [{"authorId": None, "name": "Rasmus Kettleby"}],
+            "year": 2021,
+            "publicationDate": None,
+            "externalIds": {"ArXiv": "2111.04567", "CorpusId": 244012345},
+            "isOpenAccess": True,
+            "openAccessPdf": {"url": "https://arxiv.org/pdf/2111.04567", "status": "GREEN"},
+            "publicationTypes": None,
+        }
+    ],
+}
+"""One Semantic Scholar paper, written by hand: no DOI, dated by its year alone (v1-e07-t04)."""
+SEMANTIC_SCHOLAR_KEY: Final = "ss-K3y-7Qd2"
 FEDERAL_REGISTER_HOST: Final = "www.federalregister.gov"
 FEDERAL_REGISTER_DOCUMENTS: Final = {
     "count": 1,
@@ -251,6 +271,8 @@ class RecordedProviders:
             return httpx.Response(200, headers={"content-type": "application/json"}, content=body)
         if request.url.host == CROSSREF_HOST and request.url.path == "/works":
             return httpx.Response(200, json=CROSSREF_WORKS)
+        if request.url.host == SEMANTIC_SCHOLAR_HOST and request.url.path == "/graph/v1/paper/search":
+            return httpx.Response(200, json=SEMANTIC_SCHOLAR_PAPERS)
         if request.url.host == FEDERAL_REGISTER_HOST and request.url.path == "/api/v1/documents.json":
             return httpx.Response(200, json=FEDERAL_REGISTER_DOCUMENTS)
         if request.url.host == GOVINFO_HOST and request.url.path == "/search" and request.method == "POST":
@@ -882,6 +904,37 @@ def test_the_container_builds_crossref_when_providers_enabled_names_it(
     [request] = [request for request in seams.providers.requests if request.url.host == CROSSREF_HOST]
     assert request.url.params["query.bibliographic"] == "carbon capture subsidies"
     assert "mailto" not in request.url.params
+    assert seams.providers.transport.closed == 1
+
+
+def test_the_container_builds_semantic_scholar_with_its_key_when_providers_enabled_names_it(
+    seams: Seams, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    seams.registry_override = False
+    monkeypatch.setenv("DEBATE_PROVIDERS__ENABLED", '["semantic_scholar"]')
+    monkeypatch.setenv("DEBATE_PROVIDERS__SEMANTIC_SCHOLAR_API_KEY", SEMANTIC_SCHOLAR_KEY)
+
+    result = search("carbon-capture subsidies", "--format", "json")
+
+    assert result.exit_code == ExitCode.OK, result.output
+    data = envelope(result)["data"]
+    assert [(entry["provider"], entry["outcome"]) for entry in data["providers"]] == [
+        ("semantic_scholar", "ok")
+    ]
+    [item] = data["results"]
+    assert (item["title"], item["source_type"], item["published_at"]) == (
+        "Who captures the subsidy?",
+        "scholarly",
+        "2021-01-01T00:00:00+00:00",
+    )
+    assert (item["identifiers"]["semantic_scholar_id"], item["identifiers"]["arxiv_id"]) == (
+        "c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00",
+        "2111.04567",
+    )
+    [request] = [request for request in seams.providers.requests if request.url.host == SEMANTIC_SCHOLAR_HOST]
+    assert request.url.params["query"] == "carbon capture subsidies"
+    assert request.headers["x-api-key"] == SEMANTIC_SCHOLAR_KEY
+    assert SEMANTIC_SCHOLAR_KEY not in result.stdout + result.stderr
     assert seams.providers.transport.closed == 1
 
 

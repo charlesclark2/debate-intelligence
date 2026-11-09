@@ -1,0 +1,60 @@
+{
+  "total": 3,
+  "offset": 0,
+  "data": [
+    {
+      "paperId": "d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0",
+      "title": "The cost of direct air capture: a review",
+      "authors": [
+        {"authorId": "1801234567", "name": "Henrike Saltmarsh"},
+        {"authorId": "1801234568", "name": "Bao Linwood"},
+        {"authorId": "1801234569", "name": "Esteban Quarrie"}
+      ],
+      "year": 2019,
+      "publicationDate": "2019-07-15",
+      "venue": "Invented Reviews in Climate Engineering",
+      "externalIds": {"DOI": "10.5555/DAC.2019.0042", "PubMed": "31234567", "CorpusId": 198765432},
+      "citationCount": 214,
+      "influentialCitationCount": 19,
+      "isOpenAccess": false,
+      "openAccessPdf": null,
+      "publicationTypes": ["Review", "JournalArticle"],
+      "abstract": null
+    },
+    {
+      "paperId": "e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1",
+      "title": "Direct air capture cost survey: data tables",
+      "authors": [{"authorId": "2301234567", "name": "Invented Carbon Removal Consortium"}],
+      "year": 2023,
+      "publicationDate": "2023-11-30",
+      "venue": "",
+      "externalIds": {"DOI": "10.5555/dac-tables.2023", "CorpusId": 265012345},
+      "citationCount": 2,
+      "influentialCitationCount": 0,
+      "isOpenAccess": true,
+      "openAccessPdf": {
+        "url": "",
+        "status": "BRONZE",
+        "license": null,
+        "disclaimer": "Notice: The following paper fields have been elided by the publisher: {'abstract'}. Paper or abstract available at https://doi.org/10.5555/dac-tables.2023, which is subject to the license by the author or copyright owner provided with this content."
+      },
+      "publicationTypes": ["Dataset"],
+      "abstract": null
+    },
+    {
+      "paperId": "f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2",
+      "title": "Start-ups bet on pulling carbon from the air",
+      "authors": [{"authorId": null, "name": "Mirela Stoyanova-Pike"}],
+      "year": 2020,
+      "publicationDate": null,
+      "venue": "Invented Science News",
+      "externalIds": {"CorpusId": 229012345},
+      "citationCount": null,
+      "influentialCitationCount": null,
+      "isOpenAccess": false,
+      "openAccessPdf": null,
+      "publicationTypes": ["News"],
+      "abstract": "Three companies say direct air capture will cost far less within a decade."
+    }
+  ]
+}

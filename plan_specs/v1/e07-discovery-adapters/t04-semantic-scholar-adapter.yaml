@@ -45,7 +45,34 @@ spec:
     merged.
   priority: 3
   constraints:
-    packages: [debate_core.integrations]
+    packages:
+      - debate_core.integrations
+      # PM ruling 2026-11-09 (v1-e07-t04 brief, ruling 5): semantic_scholar_factory joins the CLI's
+      # discovery factories as Crossref's did, enabled in no profile until the operator's live smoke;
+      # SEMANTIC_SCHOLAR leaves PROVIDERS_WITHOUT_AN_ADAPTER and gets its credential words; the
+      # integrations pinned by hand in test_doctor.py, test_installation.py and
+      # test_container_factories.py follow.
+      - debate_core.application.provider_credentials
+      - packages/debate_cli/src/debate_cli/container.py
+      - packages/debate_cli/tests/commands/test_doctor.py
+      - packages/debate_cli/tests/test_installation.py
+      - packages/debate_cli/tests/test_container_factories.py
+      # v1-e07-t04 session, 2026-11-09 (Deviation, for the PM to confirm): leaving
+      # PROVIDERS_WITHOUT_AN_ADAPTER changes the "no adapter in this build" row that
+      # test_doctor_providers.py pins, and the container test that providers.enabled names
+      # semantic_scholar and builds it (as Crossref's, ruling 5) lives in test_search_command.py.
+      - packages/debate_cli/tests/commands/test_doctor_providers.py
+      - packages/debate_cli/tests/test_search_command.py
+      # v1-e07-t04 session, 2026-11-09 (Deviation, for the PM to confirm): the credentials guide's
+      # table said the key does nothing because this build had no Semantic Scholar adapter.
+      - docs/guides/provider-credentials.md
+    # PM ruling 2026-11-09 (v1-e07-t04 brief, ruling 1): Semantic Scholar's public API page
+    # (semanticscholar.org/product/api, read by the PM 2026-11-09) gives a key 1 request a second on
+    # all endpoints and keyless callers one shared pool of 1,000 a second among all of them, with no
+    # stricter per-user keyless figure. So the adapter paces at Pace(requests=1, interval_seconds=1.0,
+    # concurrency=1) keyed and keyless alike, on the shared Pacer of v1-e07-t10 (ruling 2), and
+    # answers a 429 through http_failures and Retry-After. The description's "stricter default
+    # without a key" is that published pace with 429 handling.
     forbidden:
       - Logging or persisting the API key
       - Live Semantic Scholar calls in CI (respx fixtures only)
@@ -80,7 +107,7 @@ spec:
         secrets never reach a log line, and its tests pass in one process after the
         OpenCaselist and discovery suites.
 status:
-  phase: Pending
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan
@@ -104,12 +131,15 @@ spec:
         name: Record Semantic Scholar fixtures
         description: >-
           Capture paper/search responses with and without open-access PDFs plus a 429 response.
-        outputs: [tests/fixtures/providers/semantic_scholar/]
+        # PM ruling 2026-11-09 (v1-e07-t04 brief, ruling 3): hand-written from Semantic Scholar's public
+        # API documentation, no API call, under OpenAlex's and Crossref's layout with a README; was
+        # tests/fixtures/providers/semantic_scholar/.
+        outputs: [packages/debate_core/tests/fixtures/discovery/semantic_scholar/]
         estimatedEffort: 1h
         acceptanceCriteria:
           - type: artifact_exists
             name: Semantic Scholar fixtures recorded
-            path: tests/fixtures/providers/semantic_scholar/paper_search.json
+            path: packages/debate_core/tests/fixtures/discovery/semantic_scholar/paper_search.json
       - id: keyed-client
         kind: Task
         name: Keyed/unkeyed client with redaction

@@ -1,0 +1,105 @@
+{
+  "total": 1842,
+  "offset": 0,
+  "next": 6,
+  "data": [
+    {
+      "paperId": "3f1c0a9e2b7d4c6e8a0b1c2d3e4f5a6b7c8d9e0f",
+      "title": "Pricing carbon capture under production subsidies",
+      "authors": [
+        {"authorId": "2081234567", "name": "Ilse Marrowby"},
+        {"authorId": "2081234568", "name": "  Tomas   Underhill "}
+      ],
+      "year": 2022,
+      "publicationDate": "2022-05-17",
+      "venue": "Journal of Invented Energy Economics",
+      "externalIds": {
+        "DOI": "10.5555/INVENTED.2022.0417",
+        "PubMed": "35512345",
+        "PubMedCentral": "9012345",
+        "MAG": "4223456789",
+        "CorpusId": 248812345
+      },
+      "citationCount": 57,
+      "influentialCitationCount": 6,
+      "isOpenAccess": true,
+      "openAccessPdf": {
+        "url": "https://publisher.example.org/articles/2022.0417.pdf",
+        "status": "GOLD",
+        "license": "CCBY",
+        "disclaimer": "Notice: Paper or abstract available at https://publisher.example.org/articles/2022.0417, which is subject to the license by the author or copyright owner provided with this content."
+      },
+      "publicationTypes": ["JournalArticle"],
+      "abstract": "Production subsidies change how carbon capture is priced\nand   who pays."
+    },
+    {
+      "paperId": "7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b",
+      "title": "Learning curves for point-source capture: a preprint",
+      "authors": [{"authorId": "2109876543", "name": "Odile Fenwright"}],
+      "year": 2022,
+      "publicationDate": "2022-03-02",
+      "venue": "",
+      "externalIds": {
+        "ArXiv": "2203.01234",
+        "DOI": "10.48550/arXiv.2203.01234",
+        "DBLP": "journals/corr/abs-2203-01234",
+        "CorpusId": 247211234
+      },
+      "citationCount": 4,
+      "influentialCitationCount": 0,
+      "isOpenAccess": true,
+      "openAccessPdf": {
+        "url": "https://arxiv.org/pdf/2203.01234",
+        "status": "GREEN",
+        "license": null,
+        "disclaimer": "Notice: Paper or abstract available at https://arxiv.org/abs/2203.01234, which is subject to the license by the author or copyright owner provided with this content."
+      },
+      "publicationTypes": ["Conference"],
+      "abstract": null
+    },
+    {
+      "paperId": "c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00",
+      "title": "Who captures the subsidy? Incidence in capture-ready plants",
+      "authors": [
+        {"authorId": null, "name": "Rasmus Kettleby"},
+        {"authorId": "2201234567", "name": ""},
+        {"authorId": "2201234568", "name": "Priya Ondaatje"}
+      ],
+      "year": 2021,
+      "publicationDate": null,
+      "venue": "Invented Working Paper Series",
+      "externalIds": {"ArXiv": "2111.04567", "CorpusId": 244012345},
+      "citationCount": 12,
+      "influentialCitationCount": 1,
+      "isOpenAccess": true,
+      "openAccessPdf": {
+        "url": "https://arxiv.org/pdf/2111.04567",
+        "status": "GREEN",
+        "license": null,
+        "disclaimer": "Notice: Paper or abstract available at https://arxiv.org/abs/2111.04567, which is subject to the license by the author or copyright owner provided with this content."
+      },
+      "publicationTypes": null,
+      "abstract": "We estimate who bears the cost of capture subsidies."
+    },
+    {
+      "paperId": "0123456789abcdef0123456789abcdef01234567",
+      "title": null,
+      "authors": [],
+      "year": 2023,
+      "publicationDate": "2023-01-09",
+      "venue": "Journal of Invented Energy Economics",
+      "externalIds": {"DOI": "10.5555/invented.2023.0001", "CorpusId": 255012345},
+      "citationCount": 0,
+      "influentialCitationCount": 0,
+      "isOpenAccess": true,
+      "openAccessPdf": {
+        "url": "https://publisher.example.org/articles/2023.0001.pdf",
+        "status": "GOLD",
+        "license": "CCBY",
+        "disclaimer": "Notice: Paper or abstract available at https://publisher.example.org/articles/2023.0001, which is subject to the license by the author or copyright owner provided with this content."
+      },
+      "publicationTypes": ["Editorial"],
+      "abstract": null
+    }
+  ]
+}

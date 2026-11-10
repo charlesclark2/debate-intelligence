@@ -250,7 +250,7 @@ class PipelineFailureReason(StrEnum):
     """The parse ran past the per-file time limit and its worker was stopped."""
 
     WORKER_CRASHED = "WORKER_CRASHED"
-    """The worker process died while parsing this source."""
+    """The worker process died while holding this source, or never reported ready to parse it."""
 
     PARSER_ERROR = "PARSER_ERROR"
     """The parser raised instead of returning a failure: a parser bug, recorded by class name only."""

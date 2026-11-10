@@ -26,7 +26,8 @@ spec:
     caselist's publish, its counts read against the copy's.
   priority: 2
   constraints:
-    packages: [debate_core.application, debate_core.integrations, debate_cli, packages/debate_core/tests, packages/debate_cli/tests, docs/runbooks]
+    # PM, 2026-11-09: tests/smoke, tests/docs and docs/guides, which the task touched (its review), added.
+    packages: [debate_core.application, debate_core.integrations, debate_cli, packages/debate_core/tests, packages/debate_cli/tests, tests/smoke, tests/docs, docs/runbooks, docs/guides]
     forbidden:
       - A write to any bucket or the data directory in a dry run
       - Network or AWS access in a test

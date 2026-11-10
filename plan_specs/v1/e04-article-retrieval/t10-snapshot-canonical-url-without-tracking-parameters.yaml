@@ -27,7 +27,13 @@ spec:
     forbidden:
       - A live network call in a test
       - A change to a snapshot's stored bytes
-  context: []
+  context:
+    - kind: TaskRef
+      name: v1-e04-t01-url-canonicalization
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e04-t05-article-service
+      relation: dependsOn
   acceptanceCriteria:
     - id: ac1
       description: >-

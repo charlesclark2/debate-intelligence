@@ -1,0 +1,74 @@
+# TASK v1-e32-t62-the-withheld-tags-notes-counts-on-a-line-of-their-own - The note on withheld tags carries its counts on a line of their own, so the scan passes over its text
+# Epic: E32 Argument Landscape Reports | Release: v1.2 (Argument landscape & file building) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e32-t62-the-withheld-tags-notes-counts-on-a-line-of-their-own
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e32-argument-landscape
+  annotations:
+    debate/title: "The note on withheld tags carries its counts on a line of their own, so the scan passes over its text"
+spec:
+  # Filed by the PM, 2026-11-09, from v1-e32-t60's follow-up 1 (the PM's review, 2026-11-08).
+  description: >-
+    v1-e32-t60 passes over report.md's own fixed lines, but the note on withheld tags carries
+    three counts inside its sentence, so it is a scan hit every week (its key's digit masking
+    keeps the accepted digest stable). Put the counts on a line of their own, so the note's
+    sentence is a fixed line the scan passes over and the counts line carries no tournament
+    word. FIXED_LINES and the golden reports follow.
+  priority: 3
+  constraints:
+    packages: [debate_core.arguments, debate_core.application, packages/debate_core/tests, tests/fixtures/landscape]
+    forbidden:
+      - A real tournament, school or team name in a fixture, test, log or report
+      - A line that carries a value passed over by the scan
+  context:
+    - kind: TaskRef
+      name: v1-e32-t60-the-bundle-scan-reads-the-reports-own-words-as-its-own
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        The withheld-tags note's sentence is passed over and its counts stand on a line of
+        their own, by tests on invented names shown failing first, with the golden reports
+        updated.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e32-t62-the-withheld-tags-notes-counts-on-a-line-of-their-own-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e32-argument-landscape
+spec:
+  description: >-
+    The note on withheld tags carries its counts on a line of their own, so the scan passes over
+    its text.
+  goalRef:
+    name: v1-e32-t62-the-withheld-tags-notes-counts-on-a-line-of-their-own
+  graph:
+    nodes:
+      - id: the-withheld-tags-notes-counts-on-a-line
+        kind: Task
+        name: Withheld-tags note
+        description: >-
+          The note on withheld tags carries its counts on a line of their own, so the scan
+          passes over its text.
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Withheld-tags note tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests, -k, landscape_scan or withheld]
+status:
+  phase: Pending

@@ -30,6 +30,12 @@ spec:
     whether the publish refuses such a page or names it and goes on. school_rounds.csv and
     policy 1.23's limits are unchanged; nothing new reaches the circuit-wide report. Wanted
     before the hspolicy26 report is republished from the snapshot after the 2026-11-11 run.
+    (PM amendment 2026-11-09, writing in the rulings of 2026-11-07.) The check covers every
+    school-view page the pilot cuts from schools.md (the front page, each school, each team and each
+    position), not school pages alone; each team's rounds are on a page of its own with the
+    openCaselist link once per team; a page over the budget is named and the publish goes on, and
+    the landscape runbook's step 3 stops the operator on `pages_over_budget` above zero; the
+    renderer moved into debate_core.
   priority: 1
   constraints:
     packages: [debate_core.arguments, debate_core.application, debate_core.domain, debate_api, debate_cli, packages/debate_core/tests, packages/debate_api/tests, packages/debate_cli/tests, tests/smoke, tests/fixtures/landscape, docs/runbooks, docs/guides]

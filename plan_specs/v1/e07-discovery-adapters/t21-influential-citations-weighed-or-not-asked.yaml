@@ -1,0 +1,75 @@
+# TASK v1-e07-t21-influential-citations-weighed-or-not-asked - Semantic Scholar's influential citation count is either weighed by the ranking or no longer asked for
+# Epic: E07 Discovery Provider Adapters | Release: v1.4 (Federated research from the CLI) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e07-t21-influential-citations-weighed-or-not-asked
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.4
+    debate/epic: v1-e07-discovery-adapters
+  annotations:
+    debate/title: "Semantic Scholar's influential citation count is either weighed by the ranking or no longer asked for"
+spec:
+  # Filed by the PM, 2026-11-09, from v1-e07-t04's follow-up 2 (the PM's review, 2026-11-09).
+  description: >-
+    v1-e07-t04 asks Semantic Scholar for `influentialCitationCount`, as its spec listed, but
+    `CandidateResult` has one `citation_count` and nothing reads the influential count. Proposal
+    first: either a domain field the federated ranking can weigh (how, beside the ranking's
+    present features, and what OpenAlex and Crossref give for the same field), or the adapter
+    stops asking for it. Stop for the PM's ruling, then build the ruled one.
+  priority: 3
+  constraints:
+    packages: [debate_core.integrations.discovery, debate_core.domain, debate_core.application, config/federated_ranking.yaml, packages/debate_core/tests]
+    forbidden:
+      - A live provider call in a test
+      - A ranking change without a test on fixtures
+  context:
+    - kind: TaskRef
+      name: v1-e07-t04-semantic-scholar-adapter
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        The proposal is ruled on by the PM before any code.
+    - id: ac2
+      description: >-
+        The ruled change holds, by tests on the adapter's fixtures shown failing first.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e07-t21-influential-citations-weighed-or-not-asked-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.4
+    debate/epic: v1-e07-discovery-adapters
+spec:
+  description: >-
+    Semantic Scholar's influential citation count is either weighed by the ranking or no longer
+    asked for.
+  goalRef:
+    name: v1-e07-t21-influential-citations-weighed-or-not-asked
+  graph:
+    nodes:
+      - id: influential-citations-weighed-or-not-ask
+        kind: Task
+        name: Influential citations
+        description: >-
+          Semantic Scholar's influential citation count is either weighed by the ranking
+          or no longer asked for.
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Influential citations tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests, -k, semantic_scholar or ranking]
+status:
+  phase: Pending

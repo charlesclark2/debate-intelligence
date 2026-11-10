@@ -21,12 +21,18 @@ spec:
     together, so an adapter added later could leave its provider named as having none in `doctor
     --providers`. Add a test that the set is exactly the configured providers the factories do
     not build.
+    (PM note 2026-11-09.) Since v1-e07-t04 merged, PROVIDERS_WITHOUT_AN_ADAPTER is GDELT
+    alone. This task's origin, v1-e41-t22, is in a later release and cannot be listed as a
+    prerequisite; the code it pins is v1-e07-t04's, which is.
   priority: 3
   constraints:
     packages: [debate_core.application, debate_cli, packages/debate_core/tests, packages/debate_cli/tests]
     forbidden:
       - Network access in a test
-  context: []
+  context:
+    - kind: TaskRef
+      name: v1-e07-t04-semantic-scholar-adapter
+      relation: dependsOn
   acceptanceCriteria:
     - id: ac1
       description: >-

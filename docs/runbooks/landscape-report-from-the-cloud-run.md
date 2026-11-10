@@ -81,13 +81,13 @@ if [ "$(date +%u)" = 3 ]; then echo "STOP: it is Wednesday, the cloud run's day"
 ```
 Before it fetches it prints `Fetching <n> raw source(s), <bytes> bytes, that <m> restored manifest(s)
 name; <s> skipped as the suppression list holds them.` Success looks like `exit 0`, then
-`"parsed_version": "2026.10.27-docx-7"` (this build's), and `"fetched"` equal to `"named"` less
+`"parsed_version": "2026.11.03-docx-9"` (this build's), and `"fetched"` equal to `"named"` less
 `"suppressed"`, above zero.
 
-`"parsed_objects": 0` is expected until the parsed store of `2026.10.27-docx-7` is published to the dev
-bucket: the run image deployed on 2026-10-29 was built before the parser bump and parses with
-`2026.10.20-docx-6`, and a restore brings back only this build's version. Step 2 then parses the
-whole caselist. Above zero, step 2 parses only what the copy lacks.
+`"parsed_objects"` above zero is expected from the 2026-11-11 run on, which publishes the parsed store
+of `2026.11.03-docx-9` to the dev bucket; step 2 then parses only what the copy lacks. `0` means this
+build's version is not in the bucket yet (a restore brings back only this build's version), and step 2
+parses the whole caselist.
 
 A stop says the directory is not a copy to publish from. Delete it with step 5 before anything else, and:
 
@@ -109,10 +109,10 @@ Where: your Mac, in the same window
 ```bash
 if env | grep -q '^DEBATE_'; then echo "STOP: DEBATE_ overrides are set in this shell"; elif [ ! -d "$COPY" ]; then echo "STOP: no copy at ${COPY}"; else cd "$HOME" && env DEBATE_ENV=dev DEBATE_STORAGE__DATA_DIR="$COPY" debate-research --json caselist parse --caselist "$CASELIST" --dry-run > /tmp/landscape-parse-dry-run.json; echo "exit $?"; grep -oE '"(version|parser_version|sources|skipped|suppressed|to_parse)": ("[^"]*"|[0-9]+)|"code": "[A-Z_]+"' /tmp/landscape-parse-dry-run.json; fi
 ```
-Success looks like `exit 0`, `"parser_version": "2026.10.27-docx-7"`, and `"sources"` above zero. With
+Success looks like `exit 0`, `"parser_version": "2026.11.03-docx-9"`, and `"sources"` above zero. With
 `"parsed_objects": 0` in step 1, `"to_parse"` equals `"sources"`; with a restored directory, it is
 what that directory lacks, and `0` means the copy is parsed already: go to step 3.
-`"parser_version": "2026.10.20-docx-6"` means the build is older than the parser bump: stop, delete the
+`"parser_version": "2026.10.27-docx-7"` or older means the build is older than the parser bump: stop, delete the
 copy, and install a newer release.
 
 Then the parse, under `caffeinate`:
@@ -124,7 +124,7 @@ Where: your Mac, in the same window
 ```bash
 if env | grep -q '^DEBATE_'; then echo "STOP: DEBATE_ overrides are set in this shell"; elif [ ! -d "$COPY" ]; then echo "STOP: no copy at ${COPY}"; else cd "$HOME" && caffeinate -i env DEBATE_ENV=dev DEBATE_STORAGE__DATA_DIR="$COPY" debate-research --json caselist parse --caselist "$CASELIST" > /tmp/landscape-parse.json; echo "exit $?"; grep -oE '"(version|attempted|parsed|cards|failure_rate|threshold_exceeded|elapsed_seconds)": ("[^"]*"|[0-9.]+|true|false)|"code": "[A-Z_]+"' /tmp/landscape-parse.json; fi
 ```
-Success looks like `exit 0`, `"version"` starting `2026.10.27-docx-7`, `"parsed"` and `"cards"` above
+Success looks like `exit 0`, `"version"` starting `2026.11.03-docx-9`, `"parsed"` and `"cards"` above
 zero, and `"threshold_exceeded": false`. `PARSE_FAILURE_RATE_EXCEEDED` (exit `1`): stop and send the PM
 the file, which holds counts only.
 
@@ -144,16 +144,18 @@ those two caches for step 4 (a build before `v1-e32-t30` keeps none of it); the 
 fill took 551 s on 2026-10-24)
 Where: your Mac, in the same window
 ```bash
-if [ "$(date +%u)" = 3 ]; then echo "STOP: it is Wednesday, the cloud run's day"; elif env | grep -q '^DEBATE_'; then echo "STOP: DEBATE_ overrides are set in this shell"; elif [ ! -d "$COPY" ]; then echo "STOP: no copy at ${COPY}"; elif [ ! -f "$CFG/topics.yaml" ]; then echo "STOP: no topics.yaml in ${CFG}"; else aws sso login --profile debate-dev-evidence && cd "$HOME" && caffeinate -i env DEBATE_ENV=dev debate-research --json landscape report --caselist "$CASELIST" --restored-copy "$COPY" --config-dir "$CFG" --model-mode none --publish --dry-run > /tmp/landscape-dry-run.json; echo "exit $?"; python3 -I -c 'import json, sys; e = json.load(open(sys.argv[1])); d = e.get("data") or (e.get("error") or {}).get("details") or {}; c = d.get("counts") or {}; m = (d.get("classification") or {}).get("model") or {}; s = d.get("scan") or {}; print("code", (e.get("error") or {}).get("code")); print("snapshot", d.get("snapshot"), "parsed_version", d.get("parsed_version"), "stale", (d.get("staleness") or {}).get("stale")); print("sources", c.get("sources"), "cards", c.get("cards"), "counted", c.get("cards_counted"), "positions", c.get("positions")); print("would_ask", m.get("would_ask"), "held_back", m.get("held_back"), "model_calls", d.get("model_calls")); print("scan_hits", len(s.get("hits") or []), "not_yet_accepted", s.get("not_yet_accepted"), "digest", s.get("digest")); print("planned", [one["action"] for one in (d.get("publish") or {}).get("planned") or []]); t = d.get("text_caches") or {}; print("text_caches_read", [(t.get(k) or {}).get("read") for k in ("plan_texts", "analytic_texts")]); p = d.get("pages") or {}; print("pages_checked", p.get("checked"), "pages_over_budget", len(p.get("over_budget") or []), "largest_page", (p.get("largest") or {}).get("kind"), (p.get("largest") or {}).get("bytes"), "largest_position_page", (p.get("largest_position") or {}).get("bytes"), "budget", p.get("budget"))' /tmp/landscape-dry-run.json; fi
+if [ "$(date +%u)" = 3 ]; then echo "STOP: it is Wednesday, the cloud run's day"; elif env | grep -q '^DEBATE_'; then echo "STOP: DEBATE_ overrides are set in this shell"; elif [ ! -d "$COPY" ]; then echo "STOP: no copy at ${COPY}"; elif [ ! -f "$CFG/topics.yaml" ]; then echo "STOP: no topics.yaml in ${CFG}"; else aws sso login --profile debate-dev-evidence && cd "$HOME" && caffeinate -i env DEBATE_ENV=dev debate-research --json landscape report --caselist "$CASELIST" --restored-copy "$COPY" --config-dir "$CFG" --model-mode none --publish --dry-run > /tmp/landscape-dry-run.json; echo "exit $?"; python3 -I -c 'import json, sys; e = json.load(open(sys.argv[1])); d = e.get("data") or (e.get("error") or {}).get("details") or {}; c = d.get("counts") or {}; m = (d.get("classification") or {}).get("model") or {}; s = d.get("scan") or {}; print("code", (e.get("error") or {}).get("code")); print("snapshot", d.get("snapshot"), "parsed_version", d.get("parsed_version"), "stale", (d.get("staleness") or {}).get("stale")); print("sources", c.get("sources"), "cards", c.get("cards"), "counted", c.get("cards_counted"), "positions", c.get("positions")); print("would_ask", m.get("would_ask"), "held_back", m.get("held_back"), "model_calls", d.get("model_calls")); print("scan_hits", len(s.get("hits") or []), "not_yet_accepted", s.get("not_yet_accepted"), "digest", s.get("digest")); print("scan_exempted_lines", sum(one.get("lines") or 0 for one in s.get("exempted") or [])); print("planned", [one["action"] for one in (d.get("publish") or {}).get("planned") or []]); t = d.get("text_caches") or {}; print("text_caches_read", [(t.get(k) or {}).get("read") for k in ("plan_texts", "analytic_texts")]); p = d.get("pages") or {}; print("pages_checked", p.get("checked"), "pages_over_budget", len(p.get("over_budget") or []), "largest_page", (p.get("largest") or {}).get("kind"), (p.get("largest") or {}).get("bytes"), "largest_position_page", (p.get("largest_position") or {}).get("bytes"), "budget", p.get("budget"))' /tmp/landscape-dry-run.json; fi
 ```
 Success looks like:
 
 * `exit 0` and `code None`;
 * `snapshot` the newest week the cloud imported (later than `2026-10-20`), and `parsed_version`
-  starting `2026.10.27-docx-7`;
+  starting `2026.11.03-docx-9`;
 * `stale False`;
 * `sources`, `cards` and `counted` above zero;
 * `would_ask 0`, `held_back 0` and `model_calls 0`;
+* `scan_exempted_lines`: how many of the report's own fixed lines the scan passed over (`v1-e32-t60`),
+  a count the PM records each week; `0` from a build before it;
 * `not_yet_accepted 0`, and `planned` eight entries (seven from a build before `v1-e32-t54`), each
   `UPLOAD` or `UNCHANGED`;
 * `text_caches_read` two numbers, above zero the first time this build reports the caselist (`[None,

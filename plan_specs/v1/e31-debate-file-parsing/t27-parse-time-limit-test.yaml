@@ -20,6 +20,9 @@ spec:
     the wall clock, and at a load average of 30 to 80 six parses time out where one should. Give
     the time limit an injected clock, or a parse that blocks until the test releases it, so the
     test asserts one timeout whatever the load. Not a longer limit.
+    (PM note 2026-11-09.) v1-e31-t38, running now, makes the same test deterministic and was
+    asked to meet this task's ac1 too. The PM closes this task at v1-e31-t38's review: Succeeded
+    if t38's evidence meets ac1, otherwise amended to what is left.
   priority: 3
   constraints:
     packages: [debate_core.application, packages/debate_core/tests]
@@ -27,6 +30,9 @@ spec:
       - Raising the limit or adding a retry to the test
       - Network or AWS access in any test
   context:
+    - kind: TaskRef
+      name: v1-e31-t38-a-parse-workers-time-limit-starts-when-it-is-ready
+      relation: dependsOn
     - kind: TaskRef
       name: v1-e31-t17-parse-retries-and-one-publisher
       relation: dependsOn

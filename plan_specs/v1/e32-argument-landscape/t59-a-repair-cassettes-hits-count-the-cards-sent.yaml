@@ -23,6 +23,10 @@ spec:
     card text. Count a repair cassette's hit as in_input only when its words come from the cards
     the failed call sent, not from the failed answer, and keep every other rule. Tests on
     invented cassettes.
+    (PM note 2026-11-09, from this task's report.) The description's "a repair cassette's input
+    includes the model's own failed answer" is wrong: the repair prompt carries the failed call's
+    rendered prompt, never its answer. The ruled rule, only the cards the failed call sent, covers
+    the real case.
   priority: 3
   constraints:
     packages: [debate_core.application, debate_core.arguments, packages/debate_core/tests]

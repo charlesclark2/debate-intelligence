@@ -1043,6 +1043,8 @@ spec:
       inputs:
         specRef: plan_specs/v1/e40-cloud-caselist-run/t46-a-backfile-without-the-running-parsers-directory-is-named.yaml
         goalRef: v1-e40-t46-a-backfile-without-the-running-parsers-directory-is-named
+      dependsOn:
+      - t09
       acceptanceCriteria:
       - type: command_succeeds
         name: Task spec v1-e40-t46-a-backfile-without-the-running-parsers-directory-is-named reports phase Succeeded

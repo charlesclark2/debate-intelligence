@@ -265,3 +265,13 @@ rules each caught.
    the key move and its check run after the first install that carries this task. Until then live
    searches run from the smoke folder as before.
 7. **Merge:** a plain `scripts/task pr` once `ci` is green. The Goal is `Succeeded`.
+
+## PM note (2026-11-09)
+
+Added by the PM. Nothing above is changed, and this section is not a review.
+
+The operator's key move (Operator follow-ups) has run: `~/.debate-research/dev.env` holds three lines,
+the contact email and the api.data.gov key among them. The OpenAlex key is still read from the main
+clone's `.env` (`dotenv:.env` in `doctor --providers`). The check from an installed build carrying
+this task follows the next dev install, once `2026.11.03-docx-9` is in the buckets after the 2026-11-11
+run.

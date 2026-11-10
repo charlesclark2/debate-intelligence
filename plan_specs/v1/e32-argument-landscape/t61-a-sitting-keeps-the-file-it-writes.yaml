@@ -1,0 +1,75 @@
+# TASK v1-e32-t61-a-sitting-keeps-the-file-it-writes - A labels sitting keeps a copy of the file it writes, not only the one it replaces
+# Epic: E32 Argument Landscape Reports | Release: v1.2 (Argument landscape & file building) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e32-t61-a-sitting-keeps-the-file-it-writes
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e32-argument-landscape
+  annotations:
+    debate/title: "A labels sitting keeps a copy of the file it writes, not only the one it replaces"
+spec:
+  # Filed by the PM, 2026-11-09, from v1-e32-t58's follow-up 1 (the PM's review, 2026-11-07).
+  description: >-
+    v1-e32-t58 keeps a dated copy of the labels file each sitting replaces, but the file a
+    sitting writes has no copy until the next sitting, and on 2026-11-05 the file lost was one a
+    sitting had just written. relabel_coach_sample.py also keeps
+    `<stem>.after-sitting-YYYY-MM-DD-HHMM.csv`, with no sidecar so no command reads it as
+    labels, and never overwrites one. The runbook says how the operator restores a lost file
+    from it: the copy put back, and the sidecar recorded again by the script, never by hand.
+    Tests on invented labels.
+  priority: 3
+  constraints:
+    packages: [scripts, tests/scripts, docs/runbooks]
+    forbidden:
+      - A label, tag or card text from the coach's sample in a test, log, commit or report
+      - A scoring, replay or re-record command that reads an after-sitting copy as labels
+  context:
+    - kind: TaskRef
+      name: v1-e32-t58-the-coach-sample-labels-file-guarded
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        A sitting leaves a dated after-sitting copy that no command reads as labels and
+        nothing overwrites, and the runbook's restore puts a lost file back with its digest
+        recorded by the script, by tests on invented labels shown failing first.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e32-t61-a-sitting-keeps-the-file-it-writes-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e32-argument-landscape
+spec:
+  description: >-
+    A labels sitting keeps a copy of the file it writes, not only the one it replaces.
+  goalRef:
+    name: v1-e32-t61-a-sitting-keeps-the-file-it-writes
+  graph:
+    nodes:
+      - id: a-sitting-keeps-the-file-it-writes
+        kind: Task
+        name: After-sitting copy
+        description: >-
+          A labels sitting keeps a copy of the file it writes, not only the one it
+          replaces.
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: test_passes
+            name: After-sitting copy tests pass
+            command: uv
+            args: [run, pytest, tests/scripts, -k, labels]
+status:
+  phase: Pending

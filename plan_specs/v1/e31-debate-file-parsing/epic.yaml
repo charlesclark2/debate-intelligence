@@ -667,6 +667,7 @@ spec:
         goalRef: v1-e31-t27-parse-time-limit-test
       dependsOn:
       - t17
+      - t38
       acceptanceCriteria:
       - type: command_succeeds
         name: Task spec v1-e31-t27-parse-time-limit-test reports phase Succeeded
@@ -878,6 +879,8 @@ spec:
       inputs:
         specRef: plan_specs/v1/e31-debate-file-parsing/t38-a-parse-workers-time-limit-starts-when-it-is-ready.yaml
         goalRef: v1-e31-t38-a-parse-workers-time-limit-starts-when-it-is-ready
+      dependsOn:
+      - t06
       acceptanceCriteria:
       - type: command_succeeds
         name: Task spec v1-e31-t38-a-parse-workers-time-limit-starts-when-it-is-ready reports phase Succeeded

@@ -217,3 +217,13 @@ there, and the report says so plainly instead of claiming it.
 9. **Merge:** `scripts/task pr --partial` once `ci` is green. The Goal stays `InProgress` until the PM
    reads three task pull requests' slowest parts after the merge (ac2's second half). The operator's
    timing block runs after this pull request's `ci` finishes.
+
+## Operator records (recorded by the PM, 2026-11-09)
+
+Added by the PM. Nothing above is changed, and this section is not a review.
+
+| Criterion | Was | Now | Record |
+|---|---|---|---|
+| ac2, second half: the PM reads three task pull requests' slowest parts after the merge | NOT RUN | PASS | 2026-11-08, three task pull requests' `ci` runs after the merge, read from the operator's output: the slowest pytest part 224 s, against 298 s for the whole-selection dispatch at 440f797 before this task |
+
+Every criterion passes, so the Goal is `Succeeded`.

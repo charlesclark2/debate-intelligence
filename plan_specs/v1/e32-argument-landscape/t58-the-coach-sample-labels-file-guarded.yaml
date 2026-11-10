@@ -44,7 +44,7 @@ spec:
         scoring, replay and re-record command, naming both, and a sitting keeps a dated copy
         and records the new SHA-256, by tests on invented labels shown failing first.
 status:
-  phase: InProgress
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

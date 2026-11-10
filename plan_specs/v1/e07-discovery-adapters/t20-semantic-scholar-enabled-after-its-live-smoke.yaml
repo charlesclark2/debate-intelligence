@@ -1,0 +1,81 @@
+# TASK v1-e07-t20-semantic-scholar-enabled-after-its-live-smoke - Semantic Scholar is enabled in both profiles once its live smoke has passed
+# Epic: E07 Discovery Provider Adapters | Release: v1.4 (Federated research from the CLI) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e07-t20-semantic-scholar-enabled-after-its-live-smoke
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.4
+    debate/epic: v1-e07-discovery-adapters
+  annotations:
+    debate/title: "Semantic Scholar is enabled in both profiles once its live smoke has passed"
+spec:
+  # Filed by the PM, 2026-11-09, from v1-e07-t04's follow-up 1 (the PM's review, 2026-11-09).
+  description: >-
+    v1-e07-t04's adapter is wired into the CLI and enabled in no profile. Once the operator's
+    live smokes, v1-e07-t04's operator follow-ups 1 (without a key) and 2 (with one, if the
+    per-user file holds a key), have passed on an installed build and the PM has recorded them,
+    enable `semantic_scholar` in config/profiles/dev.toml and prod.toml as v1-e07-t13 did for
+    Crossref and the government providers. Update the profiles' comments and the search and
+    provider-credentials guides: what a student without a key sees (the shared pool, one request
+    a second, the later queries of an expanded search answered not asked).
+  priority: 3
+  constraints:
+    packages: [config/profiles, debate_cli, packages/debate_cli/tests, docs/guides]
+    forbidden:
+      - A key or any secret in a profile
+      - Enabling it before its live smoke has passed
+      - A live provider call in a test
+  context:
+    - kind: TaskRef
+      name: v1-e07-t04-semantic-scholar-adapter
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e07-t13-profiles-enable-the-providers-that-passed-their-smoke
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        The operator's live smokes, keyless and (if a key exists) keyed, have passed and are
+        recorded by the PM (operator).
+    - id: ac2
+      description: >-
+        Both profiles enable semantic_scholar and the guides say what a student without a
+        key sees, by tests on the committed profiles shown failing first.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e07-t20-semantic-scholar-enabled-after-its-live-smoke-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.4
+    debate/epic: v1-e07-discovery-adapters
+spec:
+  description: >-
+    Semantic Scholar is enabled in both profiles once its live smoke has passed.
+  goalRef:
+    name: v1-e07-t20-semantic-scholar-enabled-after-its-live-smoke
+  graph:
+    nodes:
+      - id: semantic-scholar-enabled-after-its-live
+        kind: Task
+        name: Semantic Scholar enabled
+        description: >-
+          Semantic Scholar is enabled in both profiles once its live smoke has passed.
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Semantic Scholar enabled tests pass
+            command: uv
+            args: [run, pytest, packages/debate_cli/tests, -k, profile]
+status:
+  phase: Pending

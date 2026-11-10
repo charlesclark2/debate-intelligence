@@ -1,0 +1,74 @@
+# TASK v1-e32-t63-every-scan-kind-passed-over-on-the-reports-own-lines - The bundle scan passes over every kind of term on the report's own fixed lines, not only a tournament
+# Epic: E32 Argument Landscape Reports | Release: v1.2 (Argument landscape & file building) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e32-t63-every-scan-kind-passed-over-on-the-reports-own-lines
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e32-argument-landscape
+  annotations:
+    debate/title: "The bundle scan passes over every kind of term on the report's own fixed lines, not only a tournament"
+spec:
+  # Filed by the PM, 2026-11-09, from v1-e32-t60's follow-up 2 (the PM's review, 2026-11-08).
+  description: >-
+    v1-e32-t60 passes over only a tournament term on report.md's own fixed lines. A fixed line
+    carries no value, so no school, team code or tournament can be on it, yet a team code that
+    is a common word (an `AT` on the `AT:` bullet) is a false hit every week. Pass over every
+    scan kind on an exact fixed line, still by whole-line equality, and count what is passed
+    over by kind in `scan.exempted`. Every line that carries a value is scanned as today.
+  priority: 3
+  constraints:
+    packages: [debate_core.arguments, debate_core.application, debate_cli, packages/debate_core/tests, packages/debate_cli/tests]
+    forbidden:
+      - A real tournament, school or team name in a fixture, test, log or report
+      - A line that carries a value passed over by the scan
+  context:
+    - kind: TaskRef
+      name: v1-e32-t62-the-withheld-tags-notes-counts-on-a-line-of-their-own
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        Every scan kind on an exact fixed line is passed over and counted by kind, while
+        every line carrying a value is scanned as before, by tests on invented names shown
+        failing first.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e32-t63-every-scan-kind-passed-over-on-the-reports-own-lines-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e32-argument-landscape
+spec:
+  description: >-
+    The bundle scan passes over every kind of term on the report's own fixed lines, not only a
+    tournament.
+  goalRef:
+    name: v1-e32-t63-every-scan-kind-passed-over-on-the-reports-own-lines
+  graph:
+    nodes:
+      - id: every-scan-kind-passed-over-on-the-repor
+        kind: Task
+        name: Every kind on fixed lines
+        description: >-
+          The bundle scan passes over every kind of term on the report's own fixed lines,
+          not only a tournament.
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Every kind on fixed lines tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests, -k, landscape_scan]
+status:
+  phase: Pending

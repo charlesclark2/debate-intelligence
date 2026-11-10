@@ -157,6 +157,12 @@ This record covers release v1.7 and its two environments. It decides the pilot o
    is the one first-party file in (a) 3: no third-party scripts, fonts or analytics, and no inline
    script. No Next.js. A Chromebook downloads one HTML page under 150 KB before the card body
    (`v1-e39-t06`). It runs no client-side index or framework.
+   *(PM note 2026-11-09.)* A landscape page counts as its body's bytes plus
+   `PAGE_FRAME_ALLOWANCE`, 28 KiB, for what the site's header, the page's chrome and the script and
+   stylesheet send (`v1-e32-t57`). A `debate_api` test holds every page kind's frame, with a long
+   heading, at or under the allowance, so it fails first when the script or stylesheet outgrows it.
+   The allowance is then raised in that same pull request, to the frame measured there, and never on
+   its own in a later one.
 2. **The [AWS Lambda Web Adapter](https://github.com/awslabs/aws-lambda-web-adapter), not
    Mangum.** The adapter is copied into the image as a Lambda extension (`/opt/extensions`), pinned
    by digest. Version 1.1.0 was current on 2026-10-19. It forwards function URL events to `uvicorn`

@@ -48,7 +48,7 @@ spec:
         plugin tests shown failing first; the PM reads three task pull requests' slowest
         parts after the merge.
 status:
-  phase: InProgress
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

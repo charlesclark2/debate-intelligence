@@ -1,0 +1,78 @@
+# TASK v1-e08-t25-digest-queries-and-the-feeds-every-word-rule - A daily digest's queries find what the feeds carry, measured on a real digest first
+# Epic: E08 Federated Research Workflows | Release: v1.4 (Federated research from the CLI) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e08-t25-digest-queries-and-the-feeds-every-word-rule
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.4
+    debate/epic: v1-e08-research-workflows
+  annotations:
+    debate/title: "A daily digest's queries find what the feeds carry, measured on a real digest first"
+spec:
+  # Filed by the PM, 2026-11-09, from v1-e08-t07's follow-up 2 (the PM's review, 2026-11-09).
+  description: >-
+    The feed provider keeps an item only when every word of a filled template is in its title or
+    summary, and daily's presets fill templates such as `Senate vote count Senate` or `health
+    insurance federal spending debate Congress`, which real headlines may rarely carry whole.
+    First the operator's real politics digest (v1-e08-t07's optional follow-up) gives the new
+    results per query, as counts. Then propose, from those counts only, one of: shorter preset
+    queries for the coach, digest-specific templates, or a looser feed match for digests (the
+    query's own words required, the template's words ranked), and stop for the PM's ruling.
+  priority: 3
+  constraints:
+    packages: [debate_core.application, debate_core.integrations.discovery, config, packages/debate_core/tests, packages/debate_cli/tests, docs/guides]
+    forbidden:
+      - A change to a coach-reviewed template
+      - A title from a real feed in a test, log or report
+      - A live provider call in a test
+  context:
+    - kind: TaskRef
+      name: v1-e08-t07-daily-command
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        The operator's real digest counts are recorded and the proposal is ruled on by the
+        PM before any code (operator).
+    - id: ac2
+      description: >-
+        The ruled change holds, by tests on fixtures shown failing first.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e08-t25-digest-queries-and-the-feeds-every-word-rule-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.4
+    debate/epic: v1-e08-research-workflows
+spec:
+  description: >-
+    A daily digest's queries find what the feeds carry, measured on a real digest first.
+  goalRef:
+    name: v1-e08-t25-digest-queries-and-the-feeds-every-word-rule
+  graph:
+    nodes:
+      - id: digest-queries-and-the-feeds-every-word
+        kind: Task
+        name: Digest queries
+        description: >-
+          A daily digest's queries find what the feeds carry, measured on a real digest
+          first.
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Digest queries tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests, packages/debate_cli/tests, -k, digest or feed]
+status:
+  phase: Pending

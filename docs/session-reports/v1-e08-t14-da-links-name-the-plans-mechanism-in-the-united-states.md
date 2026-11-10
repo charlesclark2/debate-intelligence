@@ -642,3 +642,13 @@ Added by the PM. Nothing above is changed, and this section is not a review.
 | ac1 (part): the coach reviews the new templates (operator) | NOT RUN (operator) | PASS | the coach's answers of 2026-11-04 to the sheet's three questions: (1) the four mechanisms and their phrases approved; he asked why the others are left out, and the PM's answer is the request budget until v1-e08-t10 lands; (2) the politics DA's mechanism queries must also cross the party-popularity templates (popular and unpopular with Republicans and with Democrats), which is new work, filed as `v1-e08-t16` after v1-e08-t10; (3) the anchor rule approved. The PM marked the NHI preset `coach_reviewed` in taxonomy 1.4.0 |
 
 The Goal stays `InProgress` for ac3, the operator's repeated search, after Thursday 2026-11-05's v1-e31-t32 copy. `v1-e08-t16` repeats the blind search once the crossing is in, so each change gets its own before and after.
+
+## Operator records (recorded by the PM, 2026-11-09)
+
+Added by the PM. Nothing above is changed, and this section is not a review.
+
+| Criterion | Was | Now | Record |
+|---|---|---|---|
+| ac3: the operator repeats v1-e08-t05's Policy search and the coach labels it blind; the PM records nDCG@10 and the relevant count against ac6's | NOT RUN | PASS | 2026-11-08, v1.1.0-dev.342: the politics DA's link on national health insurance, saved by the operator and labelled blind by the coach as v1-e08-t05's was (ranked and provider-order top tens merged, sorted by title, no rank shown). **6 relevant of 19 rows** (t05: 3 of 20); nDCG@10 **0.438** ranked against **0.746** in provider order (t05: 0.746 against 0.000). The coach's criterion: a politics DA link card is relevant only when it ties the plan's mechanism to the political fight over a specific bill, since each politics DA turns on its own agenda item |
+
+Every criterion passes, so the Goal is `Succeeded`. More relevant results came back, but the ranking placed them below the providers' own order: that is `v1-e08-t24`. The coach's criterion is `v1-e08-t23`, after `v1-e08-t16`'s crossing.

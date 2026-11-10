@@ -301,6 +301,9 @@ spec:
       inputs:
         specRef: plan_specs/v1/e04-article-retrieval/t10-snapshot-canonical-url-without-tracking-parameters.yaml
         goalRef: v1-e04-t10-snapshot-canonical-url-without-tracking-parameters
+      dependsOn:
+      - t01
+      - t05
       acceptanceCriteria:
       - type: command_succeeds
         name: Task spec v1-e04-t10-snapshot-canonical-url-without-tracking-parameters reports phase Succeeded

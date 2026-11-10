@@ -255,3 +255,13 @@ first, and the smoke check shows the exact failure this closes: an LF re-save th
 5. **Operator follow-up 1** runs before the merge, from this worktree. Its block guards the digest twice
    and makes the file read-only. The PM records it, and the Goal is then `Succeeded`.
 6. **Merge:** `scripts/task pr --partial` once `ci` is green.
+
+## Operator records (recorded by the PM, 2026-11-09)
+
+Added by the PM. Nothing above is changed, and this section is not a review.
+
+| Criterion | Was | Now | Record |
+|---|---|---|---|
+| Operator follow-up 1: the digest of the coach's labels of 2026-11-06 recorded | NOT RUN (operator) | PASS | 2026-11-07, from the task's worktree: the block wrote the sidecar, which records 553374704519fd29…a922, the digest of the 2026-11-06 sitting; it made the labels file read-only and ran --check-sample over the 47 labelled rows. Every scoring, replay and re-record block now accepts the file |
+
+Every criterion passes, so the Goal is `Succeeded`.

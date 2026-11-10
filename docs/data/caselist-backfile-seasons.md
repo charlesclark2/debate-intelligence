@@ -49,9 +49,9 @@ The PM's ruling of 2026-10-25 (Q3): the four complete archives only, under polic
 | Caselist | Season | Imported | Why |
 |---|---|---|---|
 | `hspolicy25` | 2025-26 | **Imported** 2026-11-02 | Complete archive of 2026-06-30 |
-| `hsld25` | 2025-26 | To import, second | Complete archive of 2026-06-30 |
-| `hspolicy24` | 2024-25 | To import, third | Complete archive of 2025-05-06 |
-| `hsld24` | 2024-25 | To import, fourth | Complete archive of 2025-07-01 |
+| `hsld25` | 2025-26 | **Imported** 2026-11-07 | Complete archive of 2026-06-30 |
+| `hspolicy24` | 2024-25 | **Imported** 2026-11-08 | Complete archive of 2025-05-06 |
+| `hsld24` | 2024-25 | **Imported** 2026-11-09 | Complete archive of 2025-07-01 |
 | `hspf25`, `hspf24` | 2025-26, 2024-25 | **Not imported** | Weeklies only (36 and 41), no complete archive. Policy 1.17 imports backfiles from complete archives |
 | `hsld23`, `hspf23`, `hspolicy23` | 2023-24 | **Not imported** | The downloads listing answers HTTP 500: the API serves no archive. Per-round files are not fetched |
 | `hsld22`, `hspf22`, `hspolicy22` | 2022-23 | **Not imported** | The same: HTTP 500, no archive |
@@ -84,7 +84,7 @@ window and budget refusals are shown by the tests (`packages/debate_cli/tests/bu
 
 ## Cloud imports (v1-e40-t09)
 
-_Not yet run._ Each import runs as a task of the dev weekly run's task definition, started by hand
+**All four imported, 2026-11-02 to 2026-11-09.** Each import runs as a task of the dev weekly run's task definition, started by hand
 ([caselist-cloud-run.md, "Backfile imports"](../runbooks/caselist-cloud-run.md#backfile-imports)), one a
 day outside the no-import window, after the operator's return after 2026-11-01. Each row is filled
 from the task's result line: counts only, never a school, team or file name. "Parsed" is parsed,
@@ -98,9 +98,9 @@ the task's volume **105,463,214,080**, beside the 29,687,044,928 it needs.
 | Caselist | Date (Chicago) | Revision | Downloaded bytes | Members | Stored | Suppressed | Held | Sources uploaded | Parsed | Cards | Parsed objects uploaded | Steps (s) |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
 | `hspolicy25` | 2026-11-02, after the 2026-10-31 attempt killed for memory (below) | 13 | 3,958,272,657 | 16,059 | 14,340 | 0 | none | 14,340 | 14,163 (176 unsupported, 1 failed) | 408,460 | 14,343 | restore 4.0, download 65.8, import 207.3, parse 4,882.3, publish 196.4, publish parsed 366.6 |
-| `hsld25` | not yet run | | | | | | | | | | | |
-| `hspolicy24` | not yet run | | | | | | | | | | | |
-| `hsld24` | not yet run | | | | | | | | | | | |
+| `hsld25` | 2026-11-06 to 07, overnight | 15 | 4,366,678,808 | 26,174 | 23,657 | 0 | none | 23,657 | 22,898 (757 unsupported, 2 failed) | 339,559 | 23,660 | restore 4.2, download 108.6, import 320.9, parse 3,797.1, publish 307.0, publish parsed 592.6 |
+| `hspolicy24` | 2026-11-08 | 15 | 2,563,267,685 | 13,638 | 12,309 | 0 | none | 12,309 | 12,164 (140 unsupported, 5 failed) | 340,132 | 12,312 | restore 5.7, download 37.4, import 168.0, parse 3,817.9, publish 156.6, publish parsed 310.3 |
+| `hsld24` | 2026-11-09, started 02:05 | 15 | 3,967,721,058 | 26,255 | 23,973 | 0 | none | 23,973 | 23,261 (708 unsupported, 4 failed) | 338,279 | 23,976 | restore 5.5, download 126.9, import 312.3, parse 3,248.4, publish 310.1, publish parsed 611.7 |
 
 **The first attempt, 2026-10-31.** `hspolicy25` on revision 10 (8 vCPU, 16 GB, 8 parse workers) was
 killed at 71 minutes: ECS recorded `OutOfMemoryError`, exit 137. It logged nothing first and published
@@ -113,5 +113,18 @@ none during the rebuild. The main process's peak was 2.5 GB, for 408,460 cards (
 store, 126,681 cards, peaked at 1.03 GB under `v1-e40-t39`'s compact index): 3.2 times the cards in
 2.4 times the memory. The container's figure, 24.4 GB, counts the page cache on cgroup v1.
 
-**The weekly run after the first import** (ac3): not yet run. Its run id, outcome and minutes, and
-the three weeks before it, go here.
+**The other three, 2026-11-06 to 2026-11-09** (recorded by the PM, 2026-11-09). Each was a task of
+revision 15 (`v1.1.0-dev.380`, parser `2026.11.03-docx-9`), started by hand after its dry run the same
+day, one a day, outside the no-import window. Each exited 0 with `downloaded_bytes` equal to its dry
+run's archive bytes, the archive out of the inbox and no code. The parsed objects uploaded were the
+sources stored plus 3 every time, as hspolicy25's 14,343 of 14,340 were: one object per stored source,
+unsupported and failed ones included, and three of the store's own. The LD archives hold more files
+the parser does not read (757 and 708 unsupported, about 3%, against 1% for Policy), and fewer cards a
+file: hsld24's 23,973 sources gave 338,279 cards, about as many as hspolicy24's 12,309. hsld24's parse
+was the quickest a source, 0.14 s against 0.31 s for hspolicy24. With all four imported,
+`v1-e39-t18` (backfiles in the pilot index) is no longer blocked.
+
+**The weekly run after the first import** (ac3): `20261105T034547Z`, a hand run of the weekly run's
+task definition (revision 11) after the scheduled launch was refused on 2026-11-04: completed,
+03:45:47 to 05:12:57 UTC (87 minutes), recorded in `v1-e40-t09`'s report. **The run after the fourth
+import** is 2026-11-11's, the first docx-9 run; its run id, outcome and minutes go here.

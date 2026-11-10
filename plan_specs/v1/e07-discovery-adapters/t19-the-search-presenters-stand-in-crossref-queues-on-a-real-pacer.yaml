@@ -1,0 +1,75 @@
+# TASK v1-e07-t19-the-search-presenters-stand-in-crossref-queues-on-a-real-pacer - The search presenter's stand-in Crossref queues on the shared pacer, so its health reads as the real adapter's
+# Epic: E07 Discovery Provider Adapters | Release: v1.4 (Federated research from the CLI) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e07-t19-the-search-presenters-stand-in-crossref-queues-on-a-real-pacer
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.4
+    debate/epic: v1-e07-discovery-adapters
+  annotations:
+    debate/title: "The search presenter's stand-in Crossref queues on the shared pacer, so its health reads as the real adapter's"
+spec:
+  # Filed by the PM, 2026-11-09, from v1-e07-t10's follow-up (the PM's review, 2026-11-09).
+  description: >-
+    test_search_presenter.py's stand-in Crossref answers "not asked" without the pacer, so the
+    wrapper counts those answers as successes (`success_count == 3`), where the real adapter's
+    health since v1-e07-t10 reads 1 answered and 2 not asked. Move the stand-in onto a `Pacer`
+    from `debate_core.integrations.discovery.pace` (or build the case from the real adapter on
+    its hand-written fixtures), on virtual time, so the health the test shows is the real one's.
+    The footer lines it pins today stay as they are.
+  priority: 3
+  constraints:
+    packages: [packages/debate_cli/tests]
+    forbidden:
+      - A live provider call or a real sleep in a test
+      - A change to the footer's text
+  context:
+    - kind: TaskRef
+      name: v1-e07-t10-time-waiting-on-a-pace-is-not-a-failure
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        The stand-in's provider health reads as the real adapter's (answered and not asked
+        counted apart) while the footer it pins is unchanged, by the test shown failing
+        first against today's stand-in.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e07-t19-the-search-presenters-stand-in-crossref-queues-on-a-real-pacer-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.4
+    debate/epic: v1-e07-discovery-adapters
+spec:
+  description: >-
+    The search presenter's stand-in Crossref queues on the shared pacer, so its health reads as
+    the real adapter's.
+  goalRef:
+    name: v1-e07-t19-the-search-presenters-stand-in-crossref-queues-on-a-real-pacer
+  graph:
+    nodes:
+      - id: the-search-presenters-stand-in-crossref
+        kind: Task
+        name: Stand-in on the pacer
+        description: >-
+          The search presenter's stand-in Crossref queues on the shared pacer, so its
+          health reads as the real adapter's.
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Stand-in on the pacer tests pass
+            command: uv
+            args: [run, pytest, packages/debate_cli/tests/test_search_presenter.py]
+status:
+  phase: Pending

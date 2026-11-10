@@ -659,6 +659,11 @@ model call. Counts and row numbers only.
 * **The scans:** prompt inputs and cassettes clean. The repair cassettes read not clean only because their
   input holds the model's own failed answer (`v1-e32-t59`); the operator judged all 63 hits ordinary words,
   none a team's name, so the cassettes are kept.
+  *(PM correction 2026-11-09, from `v1-e32-t59`.)* A repair cassette never holds the failed answer: the
+  repair prompt carries the failed call's rendered prompt, and the 63 hits were in its instructions,
+  its preamble and its cards' JSON keys. Since `v1-e32-t59` a repair cassette's hit is `in_input` only
+  when the cards that call sent hold its words, so by that rule all 63 would have been set aside (53 a
+  JSON key, 10 a taxonomy word) and the cassettes read clean, unless one spans two fields of a card.
 * **The coach's two sittings** of the stance rows (2026-11-04, lost to a spreadsheet save, and 2026-11-06)
   agree on 15 of the 19 cards; rows 16, 21, 25 and 57 differ. That is the first measure of how stable the
   stance labels are between sittings, and it bounds what any prompt can score on those rows. 1.3.0 scores 24

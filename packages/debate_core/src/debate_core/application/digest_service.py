@@ -181,6 +181,11 @@ class Digest:
         return tuple(status for outcome in self.outcomes for status in outcome.provider_statuses)
 
     @property
+    def uncounted(self) -> tuple[str, ...]:
+        """The preset's providers left out of the status, as each search left them out (v1-e07-t15)."""
+        return ()
+
+    @property
     def status(self) -> SearchStatus:
         """COMPLETE, PARTIAL or FAILED over every call of every search."""
         return search_status(self.provider_statuses)

@@ -30,6 +30,7 @@ __all__ = [
     "CredentialsFileState",
     "ProviderCredentialReport",
     "ProviderCredentialRow",
+    "missing_credential_cure",
     "provider_credential_report",
 ]
 
@@ -160,3 +161,8 @@ def _row(settings: Settings, name: SearchProviderName) -> ProviderCredentialRow:
     variable = f"{ENV_PREFIX}PROVIDERS{ENV_NESTED_DELIMITER}{words.field.upper()}"
     summary = words.when_set.format(source=source) if is_set else words.when_missing
     return ProviderCredentialRow(name.value, words.label, variable, is_set, source, summary)
+
+
+def missing_credential_cure(provider: str) -> str | None:
+    """What a person does to give `provider` the credential it lacks, or None when it needs none."""
+    return None

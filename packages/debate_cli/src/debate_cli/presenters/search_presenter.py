@@ -33,7 +33,7 @@ features and the explanation.
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Collection, Sequence
 from dataclasses import dataclass
 from typing import Final
 
@@ -136,7 +136,9 @@ def _reason(provider: str, text: str | None) -> str | None:
     return text.removeprefix(f"{provider}: ")
 
 
-def provider_summaries(statuses: Sequence[ProviderStatus]) -> tuple[ProviderSummary, ...]:
+def provider_summaries(
+    statuses: Sequence[ProviderStatus], *, uncounted: Collection[str] = ()
+) -> tuple[ProviderSummary, ...]:
     """One summary per provider, in the order the search first asked each."""
     grouped: dict[str, list[ProviderStatus]] = {}
     for status in statuses:
@@ -176,7 +178,9 @@ def footer_lines(outcome: SearchOutcome) -> list[str]:
     return status_footer_lines(outcome.status, outcome.provider_statuses)
 
 
-def status_footer_lines(status: SearchStatus, statuses: Sequence[ProviderStatus]) -> list[str]:
+def status_footer_lines(
+    status: SearchStatus, statuses: Sequence[ProviderStatus], *, uncounted: Collection[str] = ()
+) -> list[str]:
     """The footer over any calls: one search's, or every search of a daily digest (v1-e08-t07)."""
     return [_HEADINGS[status], *(f"  {summary.line()}" for summary in provider_summaries(statuses))]
 

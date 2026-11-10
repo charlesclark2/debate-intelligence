@@ -59,7 +59,7 @@ because cancelling a call that is still running is the event loop's job.
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Awaitable, Callable, Iterable, Mapping, Sequence
+from collections.abc import Awaitable, Callable, Collection, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Final
@@ -106,7 +106,7 @@ DEFAULT_DEADLINE_SECONDS: Final = 15.0
 provider that times out by itself is reported by its own timeout rather than cut off by this one."""
 
 
-def search_status(statuses: Sequence[ProviderStatus]) -> SearchStatus:
+def search_status(statuses: Sequence[ProviderStatus], *, uncounted: Collection[str] = ()) -> SearchStatus:
     """COMPLETE if every call answered in full, FAILED if none answered, PARTIAL otherwise.
 
     A search that made no calls at all (no provider enabled, or every one asked for is not

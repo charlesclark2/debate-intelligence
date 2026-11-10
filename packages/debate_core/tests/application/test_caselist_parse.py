@@ -23,11 +23,14 @@ below, and `caselist/test_parsed_store_removal.py`.
 
 from __future__ import annotations
 
+import functools
 import gzip
 import hashlib
 import inspect
+import itertools
 import json
 import logging
+import time
 from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
@@ -909,6 +912,8 @@ async def test_the_pool_writes_exactly_what_parsing_in_process_writes(world: Wor
 
 @pytest.mark.anyio
 async def test_a_parse_past_the_time_limit_is_stopped_and_the_run_carries_on(world: World) -> None:
+    """The limit counts from the worker's ready message (`v1-e31-t38`), so how long the spawned
+    interpreter took to start is in no outcome here; the next two tests slow that start on purpose."""
     parser = MisbehavingDebateFileParser(DebateDocxParser(), stall={digest_of("verbatim")}, stall_seconds=60)
     service = world.service(parser, runner=ProcessPoolParseRunner(workers=2, timeout_seconds=1.5))
 
@@ -917,6 +922,113 @@ async def test_a_parse_past_the_time_limit_is_stopped_and_the_run_carries_on(wor
     assert report.failed == {"NOT_A_ZIP": 1, "TIMEOUT": 1}
     assert report.parsed == 2
     assert report.failure_rate == 0.5
+
+
+class SlowToStartParser:
+    """A parser that holds up the start of every worker it is sent to, then defers to `inner`.
+
+    A spawned worker unpickles its parser before it can run anything, so waiting in `__setstate__`
+    is a worker whose interpreter is slow to start: a busy runner, a cold task. The wait is the
+    scenario under test (`v1-e31-t38`), not a pause that lets a test pass. It runs only in the
+    worker; the parent pickles the parser and never unpickles it.
+    """
+
+    def __init__(self, inner: DebateFileParser, *, start_seconds: float) -> None:
+        self._inner = inner
+        self._start_seconds = start_seconds
+
+    def __getstate__(self) -> dict[str, Any]:
+        return {"_inner": self._inner, "_start_seconds": self._start_seconds}
+
+    def __setstate__(self, state: dict[str, Any]) -> None:
+        time.sleep(state["_start_seconds"])
+        self._inner = state["_inner"]
+        self._start_seconds = state["_start_seconds"]
+
+    @property
+    def parser_version(self) -> str:
+        return self._inner.parser_version
+
+    @property
+    def profile_version(self) -> str:
+        return self._inner.profile_version
+
+    def parse(
+        self,
+        content: bytes,
+        source: SourceDocument,
+        *,
+        source_path: str,
+        snapshot: SnapshotDate | None = None,
+        camp: str | None = None,
+    ) -> ParsedDocument | ParseFailure:
+        return self._inner.parse(content, source, source_path=source_path, snapshot=snapshot, camp=camp)
+
+
+#: Longer than the 1.5 s limit below, so a limit counted from the spawn would time out every source.
+START_PAST_THE_TIME_LIMIT_SECONDS: Final = 2.5
+
+
+@pytest.mark.anyio
+async def test_a_worker_slow_to_start_counts_none_of_its_start_against_the_time_limit(world: World) -> None:
+    parser = SlowToStartParser(DebateDocxParser(), start_seconds=START_PAST_THE_TIME_LIMIT_SECONDS)
+    service = world.service(parser, runner=ProcessPoolParseRunner(workers=2, timeout_seconds=1.5))
+
+    report = await service.run(await service.plan(CASELIST))
+
+    assert report.failed == EXPECTED["after_0908"]["failed"]
+    assert report.parsed == EXPECTED["after_0908"]["parsed"]
+
+
+@pytest.mark.anyio
+async def test_a_parse_past_the_time_limit_after_a_slow_start_still_stops_as_a_timeout(world: World) -> None:
+    stalling = MisbehavingDebateFileParser(
+        DebateDocxParser(), stall={digest_of("verbatim")}, stall_seconds=60
+    )
+    parser = SlowToStartParser(stalling, start_seconds=START_PAST_THE_TIME_LIMIT_SECONDS)
+    service = world.service(parser, runner=ProcessPoolParseRunner(workers=2, timeout_seconds=1.5))
+
+    report = await service.run(await service.plan(CASELIST))
+
+    assert report.failed == {"NOT_A_ZIP": 1, "TIMEOUT": 1}
+    assert report.parsed == 2
+
+
+@pytest.mark.anyio
+async def test_a_worker_that_never_reports_ready_fails_its_source_on_its_start_not_the_time_limit(
+    world: World,
+) -> None:
+    """Every worker's start hangs. Each source fails as WORKER_CRASHED and the run finishes.
+
+    The runner reads time only from its clock, and this one moves a day at every read, past the
+    start allowance and the time limit alike, so the run spends no real time waiting on either.
+    A limit counted from the spawn would call every source a TIMEOUT instead.
+    """
+    a_day_per_read = functools.partial(next, itertools.count(0.0, 86_400.0))
+    parser = SlowToStartParser(DebateDocxParser(), start_seconds=3_600)
+    runner = ProcessPoolParseRunner(workers=2, timeout_seconds=1.5, clock=a_day_per_read)
+    service = world.service(parser, runner=runner)
+
+    report = await service.run(await service.plan(CASELIST))
+
+    assert report.failed == {"WORKER_CRASHED": EXPECTED["after_0908"]["sources"]}
+    assert report.parsed == 0
+
+
+@pytest.mark.anyio
+async def test_each_parse_on_a_reused_worker_gets_the_whole_time_limit(world: World) -> None:
+    """One worker parses every source in turn; two of them take 1 s each against a 1.5 s limit.
+
+    Together they run past the limit, so a limit not restarted for the second would stop it.
+    """
+    slow = {digest_of("verbatim"), digest_of("wiki")}
+    parser = MisbehavingDebateFileParser(DebateDocxParser(), stall=slow, stall_seconds=1.0)
+    service = world.service(parser, runner=ProcessPoolParseRunner(workers=1, timeout_seconds=1.5))
+
+    report = await service.run(await service.plan(CASELIST))
+
+    assert report.failed == EXPECTED["after_0908"]["failed"]
+    assert report.parsed == EXPECTED["after_0908"]["parsed"]
 
 
 @pytest.mark.anyio

@@ -472,9 +472,51 @@ if __name__ == "__main__":
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-11-12
 
 **Notes:**
+
+1. **The regression is found and fixed at its cause.** The operator's 12 measured requests isolate the
+   limit to the length of the `search=` parameter: 1,500 characters, in OpenAlex's own words, matching
+   its count on every refusal. They also rule out:
+   - the URL length (1,902 refused, while 2,686 had been allowed under v1-e08-t16's rule);
+   - the group count (25 one-word groups answered);
+   - the key;
+   - the page.
+
+   So v1-e08-t16's offline URL measurement was measuring the wrong limit. The PM missed that in that
+   review, and this task corrects it. `MAX_SEARCH_CHARS = 1_500` carries its figures and date, and the
+   URL cap stays beside it. The 37-query search is now 24 and 13 queries, two requests a page, the first
+   at 1,473 characters, which is the operator's own accepted request.
+2. **ac1 passes.**
+   - **Red:** three runs, each at its assertions (27, 2 and 5 failed). The behaviours that already held
+     are explained.
+   - **Planted breaks:** 21 of 22 caught. The floor-against-ceiling split is rightly left equivalent,
+     since no ruling names which half is larger.
+   - **The bounds are pinned for n = 2, 3, 8 and 37:** a single refused query in at most
+     1 + 2·⌈log₂ n⌉ requests, and a refusal not about size in 3. That matches the PM's amended Q4.
+3. **Rulings 1 to 4 and answers Q1 to Q4 are applied as given.**
+   - A query that could reach outside its group is asked alone, never rewritten, with a note in the
+     footer.
+   - The cost is in the report: a typed `(` on the NHI link search is 9 requests a page.
+   - Other providers are unchanged.
+4. **The deviations are accepted.**
+   - 1 and 2: v1-e08-t10's and v1-e08-t16's pins hold against the measured rule, as ruling 2 requires.
+   - 3: the note goes through `ProviderResponse.notes`. The footer's existing "not counted as partial:"
+     prefix reads oddly before "asked alone"; the follow-up below covers it.
+   - 4: `MAX_QUERIES_PER_SEARCH`'s docstring was left alone, being outside the packages.
+   - 5: the measurement's probe stays in the scratchpad, with its text in the appendix.
+   - 6: the PM's widening.
+5. **Follow-ups, which the PM files in the next batch, E08, p3:**
+   - **The cap's reason.** `MAX_QUERIES_PER_SEARCH` stays 42 but is restated: a cap on a search's
+     queries, which with the 1,500-character limit costs about two OpenAlex requests a page.
+   - **Two pieces of wording:** `ProviderResponse.notes`' docstring, and a note that is not a partial
+     reason reading without the "not counted as partial:" prefix.
+   - **Accented text:** a byte count measured against the character count when it matters.
+   - **Unlocked by this merge:** v1-e08-t16's ac3, the repeated search and the coach's blind labels, runs
+     on the next dev build.
+6. **Merge:** a plain `scripts/task pr` once `ci` is green. The Goal is `Succeeded`. Merge it promptly:
+   until it lands, every NHI politics DA link search on dev loses OpenAlex.

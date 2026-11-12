@@ -21,7 +21,9 @@ abstract is printed. A result's access is `UNKNOWN` until `fetch` or `cut` reads
 From :mod:`debate_cli.exit_codes` (:func:`~debate_cli.exit_codes.exit_code_for_search`):
 
 * `0`: every provider answered in full, and there are results.
-* `1`: no provider was asked, because none of those selected is enabled in `providers.enabled`.
+* `1`: no provider was asked, because each one selected is not configured: not enabled in
+  `providers.enabled`, or enabled without its key. The message names each one with its cure, as the
+  footer does (`v1-e07-t23`).
 * `2`: the command line was wrong: an unknown `--argument`, `--need`, `--topic` or `--var` (the
   message lists the valid ones), `--since` after `--until`, a provider this build does not have,
   or `--need` without `--argument`. Nothing is searched.
@@ -216,7 +218,7 @@ def search(
 
     Exit codes:
     0  complete: every provider answered, with results; with --auto-cut, N cards are VERIFIED
-    1  no provider was asked: none of those selected is enabled
+    1  no provider was asked: each one selected is not enabled or has no key, named with its cure
     2  usage error, for example an unknown --argument (the valid ones are listed) or --since after --until
     3  no provider answered: each failed, timed out or was skipped
     6  partial: results from the providers that answered; the footer names each one that did not

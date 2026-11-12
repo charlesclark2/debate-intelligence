@@ -575,8 +575,11 @@ a search on the topic reports `govinfo: not configured: not counted as partial: 
 and in the JSON's `reasons`. No retry could get more from it, so it is left out of the search's status
 (`v1-e07-t15`): the search exits `0` when the other providers answered (`7` with no results), and `3`
 when none did. A search that names GovInfo with `--providers` asked for it, so there it is still a
-missing answer: `govinfo: not configured: no api.data.gov key (DEBATE_PROVIDERS__API_DATA_GOV_KEY)`,
-and the search exits `6`. GovInfo and the Federal Register are each asked
+missing answer, with the same cure: `govinfo: not configured: no api.data.gov key
+(DEBATE_PROVIDERS__API_DATA_GOV_KEY); get a free key at api.data.gov/signup to ask GovInfo`, and the
+search exits `6` (`v1-e07-t23`). A provider named with `--providers` that `providers.enabled` does not
+list reads `not configured: not enabled in settings (providers.enabled); enable it in
+providers.enabled`, and also makes the search partial. GovInfo and the Federal Register are each asked
 once per query, so the 37-query NHI politics link search sends each 37 requests. api.data.gov allows a
 key 1,000 requests an hour, which is about 27 such searches an hour, and then answers `429` for the
 rest of the hour; the footer says so.
@@ -612,7 +615,7 @@ template queries alone.
 | Exit | Means |
 |---|---|
 | `0` | Every provider asked answered in full, with results. One enabled without its key is named, not counted. |
-| `1` | No provider was asked: none of those selected is enabled (`NO_PROVIDER_ENABLED`). |
+| `1` | No provider was asked: each one selected is not configured, not enabled or without its key (`NO_PROVIDER_ENABLED`). The message names each on a line of its own, as the footer does, with its cure. |
 | `2` | A usage error: an unknown `--argument`, `--need`, `--topic` or `--var` (the valid ones are listed), `--since` after `--until`, a provider this build does not have. Nothing is searched. |
 | `3` | No provider answered (`SEARCH_FAILED`). |
 | `6` | Partial (`SEARCH_PARTIAL`): results from the providers that answered, and the footer names each one that did not. |
@@ -642,8 +645,11 @@ need, into `<preset>-<date>.docx` beside the digest.
 
 A preset's providers are configuration, so they count as the profile's enabled ones do (`v1-e07-t15`):
 `nhi` on a machine without the api.data.gov key names GovInfo with its cure in the footer, and the
-digest is complete if the others answered. A preset provider the profile does not enable at all is
-still `not configured` and makes the digest partial.
+digest is complete if the others answered. So does a preset provider the profile does not enable at
+all (`v1-e07-t23`): the footer names it `not configured: not counted as partial: not enabled in
+settings (providers.enabled); enable it in providers.enabled`. With `--auto-cut`, report.json's
+`partial_providers` names only the providers that made the digest partial; the ones left out of its
+status are still in the JSON's `providers`, with their reasons.
 
 ```console
 $ uv run debate-research daily politics --date 2026-09-17
@@ -653,7 +659,7 @@ $ uv run debate-research daily nhi --window 3d --format json | jq '.data // .err
 | Exit | Means |
 |---|---|
 | `0` | Every provider asked answered; the digest is written, with new results or none. One enabled without its key is named, not counted. |
-| `1` | None of the preset's providers is enabled (`NO_PROVIDER_ENABLED`); nothing is written. |
+| `1` | None of the preset's providers was asked, each one not enabled or without its key (`NO_PROVIDER_ENABLED`); the message names each with its cure, and nothing is written. |
 | `2` | A usage error: an unknown preset (the presets are listed) or a `--window` that is not `1d` to `31d`. |
 | `3` | No provider answered (`SEARCH_FAILED`); nothing is written and nothing is marked listed. |
 | `6` | Partial (`SEARCH_PARTIAL`): the digest is written, and the footer names each provider that did not answer. |

@@ -25,7 +25,8 @@ VERIFIED: each group's top result first, each cut for its own argument and need.
 
 0 complete (with new results or none), 6 partial (the digest is written, and the footer names each
 provider that did not answer), 3 when no provider answered and 1 when none of the preset's providers
-is enabled (no digest is written, and nothing is marked listed), 2 for a usage error such as an
+was asked, each one not enabled or without its key, and each named with its cure (no digest is
+written, and nothing is marked listed), 2 for a usage error such as an
 unknown preset (the message lists the presets). With `--auto-cut`, 8 or 9 when fewer than N cards
 are VERIFIED, as for `search`.
 """
@@ -126,7 +127,7 @@ def daily(
 
     Exit codes:
     0  complete: every provider answered; the digest is written, with new results or none
-    1  no provider was asked: none of the preset's providers is enabled; nothing is written
+    1  no provider was asked: each is not enabled or has no key, named with its cure; nothing is written
     2  usage error, for example an unknown preset (the presets are listed) or a --window that is not 1d to 31d
     3  no provider answered; nothing is written and nothing is marked listed
     6  partial: the digest is written; the footer names each provider that did not answer

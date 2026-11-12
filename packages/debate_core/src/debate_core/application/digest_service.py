@@ -38,7 +38,9 @@ FAILED when none answered. The provider footer is the searches' own record, all 
 The preset's providers are configuration, not a request by name (the PM's ruling 3 on v1-e07-t15): a
 search asks them with `providers_named=False`, so one that settings enable but cannot configure (its
 key missing, as GovInfo's often is) is named with its cure and left out of the status, as it is for a
-plain search. One the environment does not enable at all still makes the digest partial.
+plain search. So, since v1-e07-t23, is one the environment does not enable at all: it is named with
+`enable it in providers.enabled`, and the digest is COMPLETE if the others answered. A digest none of
+whose providers was asked is still FAILED.
 
 ## Feed topics awaiting review
 

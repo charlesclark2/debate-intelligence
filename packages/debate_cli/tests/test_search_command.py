@@ -637,7 +637,15 @@ def test_every_provider_failing_exits_3(seams: Seams) -> None:
     assert lines[:3] == ["Providers: FAILED", "  openalex: error: HTTP 503", "  rss: error: HTTP 503"]
 
 
-def test_a_provider_that_is_not_enabled_is_named_in_the_footer_and_the_search_is_partial(
+SEMANTIC_SCHOLAR_NOT_ENABLED: Final = (
+    "semantic_scholar: not configured: not enabled in settings (providers.enabled); "
+    "enable it in providers.enabled"
+)
+"""A provider named with --providers that the test profile does not enable, named with its cure
+(v1-e07-t23)."""
+
+
+def test_a_named_provider_not_enabled_is_named_not_configured_with_its_cure_and_the_search_is_partial(
     seams: Seams,
 ) -> None:
     result = search("midterm elections", "--since", "2026-09-14", "--providers", "openalex,semantic_scholar")
@@ -646,15 +654,19 @@ def test_a_provider_that_is_not_enabled_is_named_in_the_footer_and_the_search_is
     assert footer(result) == [
         "Providers: PARTIAL, results may be missing",
         "  openalex: ok, 3 results",
-        "  semantic_scholar: not configured: not enabled in settings (providers.enabled)",
+        f"  {SEMANTIC_SCHOLAR_NOT_ENABLED}",
     ]
 
 
-def test_a_search_that_asks_no_enabled_provider_exits_1(seams: Seams) -> None:
+def test_a_search_that_asks_no_enabled_provider_exits_1_naming_it_not_configured_with_its_cure(
+    seams: Seams,
+) -> None:
     result = search("midterm elections", "--providers", "semantic_scholar", "--format", "json")
 
     assert result.exit_code == ExitCode.DOMAIN_FAILURE, result.output
-    assert envelope(result)["error"]["code"] == "NO_PROVIDER_ENABLED"
+    error = envelope(result)["error"]
+    assert (error["code"], error["exit_code"]) == ("NO_PROVIDER_ENABLED", 1)
+    assert error["message"] == f"no provider was asked:\n  {SEMANTIC_SCHOLAR_NOT_ENABLED}"
     assert seams.providers.requests == []
 
 
@@ -1024,7 +1036,7 @@ def test_semantic_scholar_enabled_without_a_key_is_named_with_its_cure_never_ask
     assert SEMANTIC_SCHOLAR_HOST not in {request.url.host for request in seams.providers.requests}
 
 
-def test_semantic_scholar_alone_without_a_key_asks_no_provider_and_names_its_cure(
+def test_semantic_scholar_alone_without_a_key_not_configured_asks_no_provider_and_names_its_cure(
     seams: Seams, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Nothing was asked, so the search answers as one that asks no enabled provider (exit 1,
@@ -1037,13 +1049,19 @@ def test_semantic_scholar_alone_without_a_key_asks_no_provider_and_names_its_cur
     assert result.exit_code == ExitCode.DOMAIN_FAILURE, result.output
     assert footer(result, stream="stderr")[:2] == ["Providers: FAILED", SEMANTIC_SCHOLAR_NOT_COUNTED]
     assert "NO_PROVIDER_ENABLED" in result.stderr
+    assert "is enabled" not in result.stderr
     assert seams.providers.requests == []
+    as_json = search("midterm elections", "--since", "2026-09-14", "--format", "json")
+    error = envelope(as_json)["error"]
+    assert (error["code"], error["exit_code"]) == ("NO_PROVIDER_ENABLED", 1)
+    assert error["message"] == f"no provider was asked:\n{SEMANTIC_SCHOLAR_NOT_COUNTED}"
 
 
-def test_semantic_scholar_named_with_providers_and_without_a_key_keeps_the_search_partial(
+def test_semantic_scholar_named_with_providers_and_without_a_key_not_configured_keeps_the_search_partial(
     seams: Seams, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """A provider a person named is a missing answer (v1-e07-t15's ruling 2): PARTIAL, no cure."""
+    """A provider a person named is a missing answer (v1-e07-t15's ruling 2): PARTIAL. Since v1-e07-t23
+    its reason carries the cure as well."""
     seams.registry_override = False
     monkeypatch.setenv("DEBATE_PROVIDERS__ENABLED", '["openalex", "semantic_scholar"]')
 
@@ -1062,7 +1080,21 @@ def test_semantic_scholar_named_with_providers_and_without_a_key_keeps_the_searc
     assert error["details"]["status"] == "PARTIAL"
     assert [
         (entry["provider"], entry["outcome"], entry["reasons"]) for entry in error["details"]["providers"]
-    ] == [("openalex", "ok", []), ("semantic_scholar", "not configured", [SEMANTIC_SCHOLAR_MISSING_KEY])]
+    ] == [
+        (
+            "openalex",
+            "ok",
+            [],
+        ),
+        (
+            "semantic_scholar",
+            "not configured",
+            [
+                f"{SEMANTIC_SCHOLAR_MISSING_KEY}; request one through the form on Semantic Scholar's "
+                "API page, semanticscholar.org/product/api"
+            ],
+        ),
+    ]
     assert SEMANTIC_SCHOLAR_HOST not in {request.url.host for request in seams.providers.requests}
 
 
@@ -1141,7 +1173,7 @@ def test_govinfo_without_an_api_data_gov_key_is_reported_not_configured_on_its_t
     assert GOVINFO_HOST not in {request.url.host for request in seams.providers.requests}
 
 
-def test_govinfo_named_with_providers_and_not_configured_keeps_the_search_partial(
+def test_govinfo_named_with_providers_and_not_configured_keeps_the_search_partial_and_names_its_cure(
     seams: Seams, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     seams.registry_override = False
@@ -1165,7 +1197,14 @@ def test_govinfo_named_with_providers_and_not_configured_keeps_the_search_partia
         (entry["provider"], entry["outcome"], entry["reasons"]) for entry in error["details"]["providers"]
     ] == [
         ("openalex", "ok", []),
-        ("govinfo", "not configured", ["no api.data.gov key (DEBATE_PROVIDERS__API_DATA_GOV_KEY)"]),
+        (
+            "govinfo",
+            "not configured",
+            [
+                "no api.data.gov key (DEBATE_PROVIDERS__API_DATA_GOV_KEY); "
+                "get a free key at api.data.gov/signup to ask GovInfo"
+            ],
+        ),
     ]
     assert GOVINFO_HOST not in {request.url.host for request in seams.providers.requests}
 

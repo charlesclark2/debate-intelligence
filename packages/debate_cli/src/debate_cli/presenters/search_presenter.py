@@ -18,9 +18,18 @@ search's status. Every provider is named whatever happened to it, so a partial r
   `not configured`, each with the provider's own reason, and `on 2 of 7 queries` when only some of
   its calls failed;
 * `govinfo: not configured: not counted as partial: no api.data.gov key (…); get a free key at
-  api.data.gov/signup to ask GovInfo`, a provider settings enable but cannot configure, which the
-  search left out of its status (`v1-e07-t15`). The outcome names it (`uncounted`); this module only
-  says so, in the footer and in the JSON's `reasons`.
+  api.data.gov/signup to ask GovInfo`, a provider missing only configuration, which the search left
+  out of its status (`v1-e07-t15`, `v1-e07-t23`). The outcome names it (`uncounted`); this module only
+  says so, in the footer and in the JSON's `reasons`. Named with `--providers` it counts, and its line
+  has the same reason and cure without `not counted as partial`.
+
+## When no provider was asked
+
+Every provider selected was not configured, or none was selected, so nothing was asked
+(`NO_PROVIDER_ENABLED`, exit 1). The message names each selected provider on a line of its own, its
+footer line, so each says its own state in `debate_core`'s words: `not enabled in settings
+(providers.enabled); enable it in providers.enabled`, or enabled without its key, with its reason and
+cure (`v1-e07-t23`). The panel prints the same lines once, under `no provider was asked`.
 
 ## Dates
 
@@ -49,6 +58,7 @@ from debate_core.domain import AccessStatus, Article, SearchStatus
 from debate_core.domain.discovery import CandidateResult, DatePrecision, ProviderOutcome, ProviderStatus
 
 __all__ = [
+    "NO_PROVIDER_ASKED",
     "NO_PROVIDER_ENABLED_CODE",
     "NO_RESULTS_CODE",
     "SEARCH_FAILED_CODE",
@@ -57,6 +67,7 @@ __all__ = [
     "SearchProgress",
     "display_date",
     "footer_lines",
+    "no_provider_asked_message",
     "outcome_failure",
     "provider_calls_json",
     "provider_summaries",
@@ -69,6 +80,7 @@ SEARCH_PARTIAL_CODE = "SEARCH_PARTIAL"
 NO_RESULTS_CODE = "NO_RESULTS"
 SEARCH_FAILED_CODE = "SEARCH_FAILED"
 NO_PROVIDER_ENABLED_CODE = "NO_PROVIDER_ENABLED"
+NO_PROVIDER_ASKED: Final = "no provider was asked"
 
 _OUTCOME_WORDS = {
     ProviderOutcome.OK: "ok",
@@ -357,6 +369,18 @@ def _named(summaries: Sequence[ProviderSummary]) -> str:
     return ", ".join(f"{summary.provider} ({summary.outcome})" for summary in summaries)
 
 
+def no_provider_asked_message(heading: str, summaries: Sequence[ProviderSummary]) -> tuple[str, str | None]:
+    """The message of a search, or a digest, that asked no provider, and the panel's line in its place.
+
+    `heading`, then each selected provider's footer line on a line of its own, which says the state
+    `debate_core` recorded for it (`v1-e07-t23`). The panel prints `heading` alone, because its details
+    are those lines. With no provider selected at all, one line says so, for both.
+    """
+    if not summaries:
+        return f"{heading}: no provider is enabled; enable one in providers.enabled", None
+    return heading + ":" + "".join(f"\n  {summary.line()}" for summary in summaries), heading
+
+
 def outcome_failure(
     outcome: SearchOutcome, payload: dict[str, JsonValue], exit_code: ExitCode
 ) -> CommandFailure:
@@ -391,12 +415,14 @@ def outcome_failure(
             panel_details=panel,
             hint="Nothing was found because nothing answered. The same search may work later.",
         )
+    message, panel_message = no_provider_asked_message(NO_PROVIDER_ASKED, summaries)
     return CommandFailure(
         code=NO_PROVIDER_ENABLED_CODE,
-        message=f"no provider was asked: none of {', '.join(panel)} is enabled",
+        message=message,
         exit_code=exit_code,
         details=payload,
         panel_details=panel,
+        panel_message=panel_message,
         hint="Name enabled providers with --providers, or enable them in providers.enabled "
         "(config/profiles/<env>.toml, or DEBATE_PROVIDERS__ENABLED).",
     )

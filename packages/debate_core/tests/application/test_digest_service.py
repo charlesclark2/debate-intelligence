@@ -457,6 +457,26 @@ async def test_a_preset_provider_not_configured_beside_one_that_failed_leaves_th
     assert digest.uncounted == ("crossref",)
 
 
+async def test_a_preset_provider_the_profile_does_not_enable_is_uncounted_and_named_with_its_cure(
+    world: World,
+) -> None:
+    """v1-e07-t23 (the PM's ruling on v1-e07-t15's follow-up 1): a preset provider settings do not enable
+    is configuration too. It is named on every search with `enable it in providers.enabled`, and the
+    digest is COMPLETE and written."""
+    preset = PRESET.evolve(providers=("rss", "google_news"))
+
+    digest = await world.service(world.provider).run(DigestRequest(preset, SEPTEMBER_17), world.write)
+
+    assert digest.status is SearchStatus.COMPLETE
+    assert digest.uncounted == ("google_news",)
+    reasons = {status.error for status in digest.provider_statuses if status.provider == "google_news"}
+    assert reasons == {
+        "google_news: not enabled in settings (providers.enabled); enable it in providers.enabled"
+    }
+    assert len(digest.items) == 4
+    assert digest.file is not None
+
+
 async def test_an_unreadable_seen_set_is_an_error_not_an_empty_set(world: World) -> None:
     world.seen_dir.mkdir(parents=True)
     (world.seen_dir / "politics.json").write_text("{not json", encoding="utf-8")

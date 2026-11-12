@@ -58,8 +58,9 @@ are fixed here rather than at each `raise`:
     finish it; a `1` would say it never could.
 
 A search that no provider answered is a `3`, `RETRIEVAL_FAILURE`, as a failed `fetch` is: the same
-search may succeed later. One that asked no provider at all, because none it named is enabled, is a
-`1`: no retry enables one (:func:`exit_code_for_search`).
+search may succeed later. One that asked no provider at all, because each one selected is not
+configured (not enabled, or enabled without its key), is a `1`: no retry configures one
+(:func:`exit_code_for_search`). Its message names each with its cure (`v1-e07-t23`).
 
 `70` — `INTERNAL_ERROR`
     A bug: an exception the CLI does not model. 70 is `EX_SOFTWARE` from `sysexits.h`.
@@ -244,8 +245,8 @@ def exit_code_for_search(outcome: SearchOutcome) -> ExitCode:
     * COMPLETE with a result: `OK`. COMPLETE with none: `NO_RESULTS`.
     * PARTIAL, with results or without: `SEARCH_PARTIAL`.
     * FAILED: `RETRIEVAL_FAILURE` when a provider was asked and did not answer, and `DOMAIN_FAILURE`
-      when none was asked because none of those selected is enabled (`not_configured`, or no
-      provider at all).
+      when none was asked because each one selected is `not_configured` (not enabled, enabled
+      without its key, or off its topic), or none was selected at all.
     """
     if outcome.status is SearchStatus.COMPLETE:
         return ExitCode.OK if outcome.ranked_candidates else ExitCode.NO_RESULTS

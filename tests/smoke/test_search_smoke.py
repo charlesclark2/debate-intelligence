@@ -132,7 +132,8 @@ def test_a_topic_alone_names_the_government_provider_it_could_not_ask(installed_
     """v1-e07-t07: `--topic` stands alone. Since v1-e07-t13 the dev profile enables both government
     providers, so the reason is GovInfo's missing key, not "not enabled in settings": the build's own
     profile enables it. The Federal Register takes no key, so asking it would leave the machine, and this
-    offline tier does not."""
+    offline tier does not. Since v1-e07-t23 the reason, named with --providers, carries its cure, and the
+    message names GovInfo's state instead of "none of govinfo is enabled"."""
     run = installed_cli.run(
         "--json",
         "search",
@@ -149,9 +150,14 @@ def test_a_topic_alone_names_the_government_provider_it_could_not_ask(installed_
     assert (error["code"], error["exit_code"]) == ("NO_PROVIDER_ENABLED", 1)
     details = error["details"]
     assert isinstance(details, dict)
+    govinfo = (
+        "no api.data.gov key (DEBATE_PROVIDERS__API_DATA_GOV_KEY); "
+        "get a free key at api.data.gov/signup to ask GovInfo"
+    )
     assert [(entry["provider"], entry["outcome"], entry["reasons"]) for entry in details["providers"]] == [
-        ("govinfo", "not configured", ["no api.data.gov key (DEBATE_PROVIDERS__API_DATA_GOV_KEY)"]),
+        ("govinfo", "not configured", [govinfo]),
     ]
+    assert error["message"] == f"no provider was asked:\n  govinfo: not configured: {govinfo}"
     assert "expansion" not in details or details["expansion"] is None
 
 

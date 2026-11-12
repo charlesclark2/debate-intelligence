@@ -25,9 +25,11 @@ report.json always. Each is written in one step, a file beside it renamed into p
 ## Exit codes
 
 0 when N cards are VERIFIED, whatever the search's own status (a partial search's providers are named
-in the footer and in report.json's `partial_providers`). 8 (`AUTO_CUT_SHORT`) when every result was
-tried and fewer were VERIFIED, 9 (`BUDGET_EXCEEDED`) when the budget stopped it short. A search that
-could not give results ends as `search` does, with nothing cut: 1, 3 or 7.
+in the footer and in report.json's `partial_providers`; one the search left out of its status, missing
+only configuration, is in the footer but not in `partial_providers`, `v1-e07-t23`). 8
+(`AUTO_CUT_SHORT`) when every result was tried and fewer were VERIFIED, 9 (`BUDGET_EXCEEDED`) when the
+budget stopped it short. A search that could not give results ends as `search` does, with nothing cut:
+1, 3 or 7.
 """
 
 from __future__ import annotations

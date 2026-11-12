@@ -624,21 +624,31 @@ def test_a_politics_digest_reads_only_the_politics_feeds(seams: Seams) -> None:
     assert set(seams.feeds.requests) == {COURIER_URL, LEDGER_URL}
 
 
-def test_an_nhi_digest_reads_only_the_health_insurance_feeds_and_names_its_unasked_providers(
+NOT_ENABLED_UNCOUNTED: Final = (
+    "not counted as partial: not enabled in settings (providers.enabled); enable it in providers.enabled"
+)
+"""A preset provider the profile does not enable, on every query (v1-e07-t23, the PM's ruling on
+v1-e07-t15's follow-up 1)."""
+
+
+def test_an_nhi_digest_reads_only_the_health_insurance_feeds_and_names_its_uncounted_providers(
     seams: Seams, tmp_path: Path
 ) -> None:
+    """The test profile enables only `rss`. The preset's other four providers are configuration the
+    profile leaves off: named with `enable it in providers.enabled`, not counted, so the digest is
+    COMPLETE (it was PARTIAL until v1-e07-t23)."""
     result = daily("nhi", "--date", "2026-09-17", "--format", "json")
 
     assert set(seams.feeds.requests) == {HEALTH_URL}
-    assert result.exit_code == ExitCode.SEARCH_PARTIAL, result.output
-    details = envelope(result)["error"]["details"]
-    assert details["topic"] == "policy-2026-27-nhi"
-    assert [(p["provider"], p["outcome"]) for p in details["providers"]] == [
-        ("openalex", "not configured"),
-        ("crossref", "not configured"),
-        ("rss", "ok"),
-        ("federal_register", "not configured"),
-        ("govinfo", "not configured"),
+    assert result.exit_code == ExitCode.OK, result.output
+    details = envelope(result)["data"]
+    assert (details["topic"], details["status"]) == ("policy-2026-27-nhi", "COMPLETE")
+    assert [(p["provider"], p["outcome"], p["reasons"]) for p in details["providers"]] == [
+        ("openalex", "not configured", [NOT_ENABLED_UNCOUNTED]),
+        ("crossref", "not configured", [NOT_ENABLED_UNCOUNTED]),
+        ("rss", "ok", []),
+        ("federal_register", "not configured", [NOT_ENABLED_UNCOUNTED]),
+        ("govinfo", "not configured", [NOT_ENABLED_UNCOUNTED]),
     ]
     assert [(group["heading"], [r["title"] for r in group["results"]]) for group in details["groups"]] == [
         (

@@ -42,7 +42,7 @@ spec:
         counted, a named provider without its key is named with its cure and still PARTIAL,
         and partial_providers leaves out uncounted providers, by tests shown failing first.
 status:
-  phase: Pending
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

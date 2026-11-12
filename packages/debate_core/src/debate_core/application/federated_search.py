@@ -35,7 +35,10 @@ how each call ended (:class:`~debate_core.domain.discovery.ProviderOutcome`):
 * any other failure is `error`, including an exception a provider should have translated and did
   not, which is recorded by its type alone because its text was never redacted;
 * a provider the request names that settings do not enable is `not_configured`, and so is one
-  settings enable but cannot build because its key or the contact email is missing.
+  settings enable but cannot build because its key or the contact email is missing. Either way its
+  reason ends with its cure (v1-e07-t23): `enable it in providers.enabled` (:data:`NOT_ENABLED_CURE`)
+  for the first, and for the second the words of
+  :func:`~debate_core.application.provider_credentials.missing_credential_cure`, when it has any.
 
 **One provider never fails the search.** Nothing a provider raises leaves the fan-out: every
 failure becomes that call's record, and the search goes on with the providers that answered.
@@ -47,18 +50,27 @@ Only cancellation of the search itself propagates.
 PARTIAL otherwise. A provider that answered but marked its own answer partial (some of its feeds
 failed) makes the search PARTIAL, because the search did not get everything it asked for.
 
-**A provider settings enable but cannot configure is not counted** (v1-e07-t15, the PM's rulings of
-2026-11-09). GovInfo without the api.data.gov key is the case: no retry can get more from it, so it
-no longer makes every search partial. Its calls stay in the record, `not_configured`, with the
-cure from :func:`~debate_core.application.provider_credentials.missing_credential_cure` after the
-registry's reason, and the outcome lists it in `uncounted` (:meth:`FanOutStage.uncounted`). A
-search in which nothing else answered is still FAILED. Two cases are counted as before:
+**A provider missing only configuration is not counted, unless a person asked for it** (v1-e07-t15,
+the PM's rulings of 2026-11-09; v1-e07-t23, the PM's of 2026-11-11). GovInfo without the api.data.gov
+key is the case: no retry can get more from it, so it no longer makes every search partial. Its
+calls stay in the record, `not_configured`, with its cure after its reason, and the outcome lists it
+in `uncounted` (:meth:`FanOutStage.uncounted`). A search in which nothing else answered is still
+FAILED. "Missing only configuration" is:
+
+* a provider settings enable but cannot build, its key or the contact email missing;
+* a daily preset's provider settings do not enable at all (`providers_named=False`): the coach's
+  preset names it, and the cure is `providers.enabled`.
+
+Two cases are counted as before:
 
 * a provider the request names (`search --providers`): the student asked for it, so missing it is a
-  missing answer, PARTIAL, with today's reason. A request whose `providers` are configuration, a
-  daily preset's (`providers_named=False`), counts like the enabled providers instead;
-* a name settings do not enable at all, and a government provider the search's topic does not list:
-  neither is a missing key.
+  missing answer, PARTIAL, with the same reason and cure. A request whose `providers` are
+  configuration, a daily preset's, counts like the enabled providers instead;
+* a government provider the search's topic does not list, whoever chose it: that is the topic's
+  rule, not a gap in settings.
+
+:func:`partial_providers` names the providers that did not answer in full by the same reckoning, so
+it never names one the status left out.
 
 ## Storage
 
@@ -111,7 +123,9 @@ __all__ = [
     "FanOutStage",
     "FederatedSearchService",
     "NO_TOPICS",
+    "NOT_ENABLED_CURE",
     "SearchTopics",
+    "partial_providers",
     "search_status",
     "selected_providers",
 ]
@@ -119,6 +133,9 @@ __all__ = [
 DEFAULT_DEADLINE_SECONDS: Final = 15.0
 """The overall deadline when none is given: above the providers' own default timeout of 10 s, so a
 provider that times out by itself is reported by its own timeout rather than cut off by this one."""
+
+NOT_ENABLED_CURE: Final = "enable it in providers.enabled"
+"""What cures a provider settings do not enable, after its reason (v1-e07-t23, the PM's words)."""
 
 
 def search_status(statuses: Sequence[ProviderStatus], *, uncounted: Collection[str] = ()) -> SearchStatus:
@@ -128,18 +145,44 @@ def search_status(statuses: Sequence[ProviderStatus], *, uncounted: Collection[s
     of it counts. A search that made no calls at all (no provider enabled, or every one asked for is
     not configured) answered nothing, so it is FAILED.
     """
-    counted = [
+    counted = _counted(statuses, uncounted)
+    answered = [status for status in counted if status.outcome is ProviderOutcome.OK]
+    if not answered:
+        return SearchStatus.FAILED
+    if all(_in_full(status) for status in counted):
+        return SearchStatus.COMPLETE
+    return SearchStatus.PARTIAL
+
+
+def partial_providers(
+    statuses: Sequence[ProviderStatus], *, uncounted: Collection[str] = ()
+) -> tuple[str, ...]:
+    """The providers that did not answer in full, by name, each once, in the order they were first asked.
+
+    Reckoned as :func:`search_status` reckons: the `not_configured` calls of a provider in `uncounted`
+    are left out (v1-e07-t23), and any other call of it counts. So a COMPLETE search has none, and a
+    PARTIAL one names what made it partial. The providers left out stay in `statuses`, with their
+    reasons.
+    """
+    return tuple(
+        dict.fromkeys(status.provider for status in _counted(statuses, uncounted) if not _in_full(status))
+    )
+
+
+def _counted(statuses: Sequence[ProviderStatus], uncounted: Collection[str]) -> list[ProviderStatus]:
+    """Every call but the `not_configured` ones of a provider in `uncounted`."""
+    return [
         status
         for status in statuses
         if not (status.outcome is ProviderOutcome.NOT_CONFIGURED and status.provider in uncounted)
     ]
-    answered = [status for status in counted if status.outcome is ProviderOutcome.OK]
-    if not answered:
-        return SearchStatus.FAILED
-    in_full = all(status.response is not None and not status.response.partial for status in answered)
-    if len(answered) == len(counted) and in_full:
-        return SearchStatus.COMPLETE
-    return SearchStatus.PARTIAL
+
+
+def _in_full(status: ProviderStatus) -> bool:
+    """Whether the call answered, and its answer was not itself partial."""
+    return (
+        status.outcome is ProviderOutcome.OK and status.response is not None and not status.response.partial
+    )
 
 
 @dataclass(frozen=True)
@@ -238,19 +281,21 @@ class FanOutStage:
         )
 
     def uncounted(self, request: SearchRequest) -> tuple[str, ...]:
-        """The selected providers `request`'s status leaves out, by name, in selection order (v1-e07-t15).
+        """The selected providers `request`'s status leaves out, by name, in selection order.
 
-        Those settings enable but could not build (a key or the email missing), when the request names
-        no provider or its list is configuration (`providers_named=False`) and its topic lists them.
-        None when a person named the providers: each one missing is a missing answer.
+        Those missing only configuration, when the request names no provider or its list is
+        configuration (`providers_named=False`), and its topic lists them: settings enable them but
+        could not build them, a key or the email missing (v1-e07-t15), or do not enable them at all,
+        which only a preset's list can select (v1-e07-t23). None when a person named the providers:
+        each one missing is a missing answer.
         """
         if request.providers is not None and request.providers_named:
             return ()
-        unbuilt = self._providers.not_configured
+        built = {provider.name for provider in self._providers.providers}
         return tuple(
             name
             for name in self.selection(request)
-            if name in unbuilt and self._topics.allows(name, request.topic_id)
+            if name not in built and self._topics.allows(name, request.topic_id)
         )
 
     @property
@@ -267,7 +312,6 @@ class FanOutStage:
         unbuilt = self._providers.not_configured
         topic_id = state.request.topic_id
         names = self.selection(state.request)
-        uncounted = self.uncounted(state.request)
         calls = [(query, name) for query in state.queries for name in names]
         finished: dict[int, ProviderStatus] = {}
         started = self._clock.now()
@@ -282,9 +326,7 @@ class FanOutStage:
                         for index in indices:
                             finished[index] = self._not_configured(name, calls[index][0], reason)
                     elif provider is None:
-                        reason = unbuilt.get(name)
-                        if name in uncounted:
-                            reason = _with_cure(name, reason)
+                        reason = _with_cure(name, unbuilt.get(name))
                         for index in indices:
                             finished[index] = self._not_configured(name, calls[index][0], reason)
                     elif isinstance(provider, MultiQuerySearchProvider):
@@ -406,7 +448,7 @@ class FanOutStage:
             query=query,
             outcome=ProviderOutcome.NOT_CONFIGURED,
             elapsed_ms=0.0,
-            error=reason or f"{name}: not enabled in settings (providers.enabled)",
+            error=reason or f"{name}: not enabled in settings (providers.enabled); {NOT_ENABLED_CURE}",
         )
 
     def _elapsed_ms(self, started: datetime) -> float:
@@ -414,7 +456,10 @@ class FanOutStage:
 
 
 def _with_cure(name: str, reason: str | None) -> str | None:
-    """The registry's reason for an unbuilt provider, then what cures it, when anything does."""
+    """The registry's reason for an unbuilt provider, then what cures it, when anything does.
+
+    None for a provider settings do not enable, which the fan-out names with :data:`NOT_ENABLED_CURE`.
+    """
     cure = missing_credential_cure(name)
     if reason is None or cure is None:
         return reason

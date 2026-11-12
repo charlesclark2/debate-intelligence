@@ -230,6 +230,19 @@ def test_an_unfinished_task_named_from_the_same_release_is_a_likely_missing_prer
     ]
 
 
+def test_a_cancelled_task_named_from_an_earlier_release_is_not_a_graph_link(tmp_path: Path) -> None:
+    """The ruling's graph-link kind is a Succeeded task's alone; any other phase is the first kind."""
+    tree = missing_prerequisite_tree()
+    tree.epic("e01").task("t02").phase = "Cancelled"
+    assert warnings(tree, tmp_path) == [
+        (
+            validate_specs.MISSING_PREREQUISITE,
+            f"{E02_T01_FILE}: {E02_T01} names v1-e01-t02 ({E01_T02}, Cancelled in v1.0), which its "
+            "spec.context does not list: list it if this task needs its work first",
+        )
+    ]
+
+
 def test_a_succeeded_task_named_from_an_earlier_release_is_a_graph_link(tmp_path: Path) -> None:
     assert warnings(graph_link_tree(), tmp_path) == [(validate_specs.GRAPH_LINK, GRAPH_LINK_LINE)]
 

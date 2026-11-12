@@ -33,6 +33,15 @@ different values of one identifier: DOI, arXiv id, PMID, OpenAlex id or Semantic
 URL, a shared provider id or matching titles do not overrule two different DOIs. A missing identifier
 is not a different one.
 
+**A shared DOI overrules differing OpenAlex work ids, and nothing else** (v1-e08-t21). OpenAlex
+sometimes lists one paper as two works, one at a repository's PDF and one at its `doi.org` page,
+with one DOI and two work ids. Two groups whose records state the same DOI (normalized by
+:class:`~debate_core.domain.article.ArticleIdentifiers`) are joined although their OpenAlex ids
+differ, and the group then holds both ids, so a record naming either one is that work. The DOI must
+be stated by a record: the arXiv DOI the identifier rule gives an arXiv record (below) does not
+count, so two works that state no DOI never merge by this rule. A shared DOI does not overrule a
+differing arXiv id, PMID or Semantic Scholar id.
+
 **A preprint and its published version stay apart** whenever the records tell them apart. They are
 different versions: text, pagination and peer-review status differ, and a card cites the version it
 was read from, so merging them would let one version's metadata (its venue, its date, its
@@ -72,6 +81,16 @@ provider the earlier wins. Empty values (`None`, no authors, a blank snippet, so
 give way to the next member; `False` for open access and a citation count of 0 are values, not
 empty. `canonical_url` is not in the table: it is the canonical form of the
 merged `url`, from the same provider.
+
+**The fuller record first, for a work held under two OpenAlex ids** (v1-e08-t21). In a group whose
+members carry more than one OpenAlex work id (only the shared-DOI rule makes one), members of one
+provider are taken fuller first, and the earlier first between two equally full ones. A record's
+fullness is how many of the :data:`MERGED_FIELDS` other than `title`, `url` and `canonical_url` it
+gives a value, by the same emptiness test as the precedence: the five identifiers, `source_type`
+(not `other`), `authors`, `publication`, `published_at`, `snippet`, `open_access_url`,
+`open_access` and `citation_count`. Provider order still comes first, and for the date so does its
+precision, so the fuller record's values win wherever it has one, and a field it lacks comes from the
+other copy. Every other group keeps the earlier member first, as before.
 
 Every field with a value names the provider it came from in `field_sources`, and the model refuses
 to be built otherwise: a value with no source, a source for a field with no value, a source that is
@@ -338,6 +357,12 @@ FIELD_PRECEDENCE: Final[Mapping[str, tuple[str, ...]]] = MappingProxyType(
 """For each merged field, the configured providers in the order their value is taken."""
 
 
+_FULLNESS_FIELDS: Final = tuple(
+    field for field in MERGED_FIELDS if field not in ("title", "url", "canonical_url")
+)
+"""The fields whose values are counted to tell the fuller of two records (every record has the rest)."""
+
+
 def _precedence_value(candidate: CandidateResult, field: str) -> object | None:
     """The member's value for `field`, or None when it has none worth taking."""
     value = _member_value(candidate, field)
@@ -346,14 +371,26 @@ def _precedence_value(candidate: CandidateResult, field: str) -> object | None:
     return value
 
 
-def _in_precedence(members: Sequence[CandidateResult], field: str) -> list[CandidateResult]:
-    """`members` in `field`'s provider order; for the date, a more precise one first (v1-e07-t03)."""
+def _fullness(candidate: CandidateResult) -> int:
+    """How many of :data:`_FULLNESS_FIELDS` the record gives a value (v1-e08-t21)."""
+    return sum(1 for field in _FULLNESS_FIELDS if _precedence_value(candidate, field) is not None)
+
+
+def _in_precedence(
+    members: Sequence[CandidateResult], field: str, fullness: Sequence[int] | None = None
+) -> list[CandidateResult]:
+    """`members` in `field`'s provider order; for the date, a more precise one first (v1-e07-t03).
+
+    With `fullness` (one count per member), a fuller member of one provider comes before a thinner
+    one; otherwise, and between equals, the earlier member first.
+    """
     order = FIELD_PRECEDENCE[field]
     ranked = sorted(
         range(len(members)),
         key=lambda index: (
             _coarseness(members[index].date_precision) if field == "published_at" else 0,
             order.index(members[index].provider) if members[index].provider in order else len(order),
+            -fullness[index] if fullness is not None else 0,
             index,
         ),
     )
@@ -370,10 +407,12 @@ def merge_group(members: Sequence[CandidateResult], matched_on: Sequence[MatchRu
     if not members:
         raise ValueError("a merged candidate needs at least one record")
     sources: dict[str, str] = {}
+    openalex_ids = {_openalex_key(member.identifiers) for member in members} - {None}
+    fullness = [_fullness(member) for member in members] if len(openalex_ids) > 1 else None
 
     def chosen(field: str) -> CandidateResult | None:
         """The member whose value `field` takes, recorded as its source; None if no member has one."""
-        for member in _in_precedence(members, field):
+        for member in _in_precedence(members, field, fullness):
             if _precedence_value(member, field) is not None:
                 sources[field] = member.provider
                 return member
@@ -392,7 +431,7 @@ def merge_group(members: Sequence[CandidateResult], matched_on: Sequence[MatchRu
     semantic_scholar_from = chosen("identifiers.semantic_scholar_id")
     source_type_from = chosen("source_type")
     if source_type_from is None:
-        sources["source_type"] = _in_precedence(members, "source_type")[0].provider
+        sources["source_type"] = _in_precedence(members, "source_type", fullness)[0].provider
     authors_from = chosen("authors")
     publication_from = chosen("publication")
     published_at_from = chosen("published_at")
@@ -449,6 +488,13 @@ def _arxiv_key(identifiers: ArticleIdentifiers) -> str | None:
     return None
 
 
+def _openalex_key(identifiers: ArticleIdentifiers) -> str | None:
+    """The OpenAlex work id, bare and upper case, from a URL or a bare id; None when there is none."""
+    if identifiers.openalex_id is None:
+        return None
+    return identifiers.openalex_id.rstrip("/").rsplit("/", 1)[-1].upper()
+
+
 def _identity(candidate: CandidateResult) -> dict[str, str]:
     """The identifiers that must not disagree within a group, by kind, normalized."""
     ids = candidate.identifiers
@@ -462,8 +508,9 @@ def _identity(candidate: CandidateResult) -> dict[str, str]:
         identity["arxiv"] = arxiv
     if ids.pmid is not None:
         identity["pmid"] = str(int(ids.pmid))
-    if ids.openalex_id is not None:
-        identity["openalex"] = ids.openalex_id.rstrip("/").rsplit("/", 1)[-1].upper()
+    openalex = _openalex_key(ids)
+    if openalex is not None:
+        identity["openalex"] = openalex
     if ids.semantic_scholar_id is not None:
         identity["semantic_scholar"] = ids.semantic_scholar_id.strip().casefold()
     return identity
@@ -648,12 +695,24 @@ def _first_author_surname(candidate: CandidateResult) -> str | None:
 # ---------------------------------------------------------------------------------------------
 
 
-class _Groups:
-    """Union-find over record positions that refuses to join groups whose identifiers disagree."""
+_OVERRULED_BY_A_SHARED_DOI: Final = frozenset({"openalex"})
+"""The identifier kinds whose differing values a shared stated DOI overrules (v1-e08-t21)."""
 
-    def __init__(self, identities: Sequence[dict[str, str]]) -> None:
+
+class _Groups:
+    """Union-find over record positions that refuses to join groups whose identifiers disagree.
+
+    Each group keeps, per identifier kind, every value its records hold: one, except for an OpenAlex
+    work id a shared DOI overruled, which can be two or more. Two groups disagree on a kind when both
+    hold it and share none of its values. Each group also keeps the DOI its records state.
+    """
+
+    def __init__(self, identities: Sequence[dict[str, str]], stated_dois: Sequence[str | None]) -> None:
         self._parent = list(range(len(identities)))
-        self._identity = [dict(identity) for identity in identities]
+        self._identity = [
+            {kind: frozenset({value}) for kind, value in identity.items()} for identity in identities
+        ]
+        self._stated_doi = list(stated_dois)
         self._rules: list[set[MatchRule]] = [set() for _ in identities]
 
     def root(self, index: int) -> int:
@@ -667,11 +726,22 @@ class _Groups:
         if left_root == right_root:
             return
         left_identity, right_identity = self._identity[left_root], self._identity[right_root]
-        if any(right_identity.get(kind, value) != value for kind, value in left_identity.items()):
+        left_doi, right_doi = self._stated_doi[left_root], self._stated_doi[right_root]
+        overruled: frozenset[str] = (
+            _OVERRULED_BY_A_SHARED_DOI if left_doi is not None and left_doi == right_doi else frozenset()
+        )
+        if any(
+            kind not in overruled and kind in right_identity and not values & right_identity[kind]
+            for kind, values in left_identity.items()
+        ):
             return
         keep, drop = min(left_root, right_root), max(left_root, right_root)
         self._parent[drop] = keep
-        self._identity[keep] = {**left_identity, **right_identity}
+        self._identity[keep] = {
+            kind: left_identity.get(kind, frozenset()) | right_identity.get(kind, frozenset())
+            for kind in left_identity.keys() | right_identity.keys()
+        }
+        self._stated_doi[keep] = left_doi or right_doi
         self._rules[keep] |= self._rules[drop] | {rule}
 
     def members(self) -> list[tuple[list[int], set[MatchRule]]]:
@@ -739,7 +809,7 @@ def merge_candidates(candidates: Sequence[CandidateResult]) -> tuple[MergedCandi
     In the order each source's first record appears; each candidate's members in input order.
     """
     identities = [_identity(candidate) for candidate in candidates]
-    groups = _Groups(identities)
+    groups = _Groups(identities, [candidate.identifiers.doi for candidate in candidates])
     _join_on_keys(
         groups, [[c.identifiers.doi] if c.identifiers.doi else [] for c in candidates], MatchRule.DOI
     )

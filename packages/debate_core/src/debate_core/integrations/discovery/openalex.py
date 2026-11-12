@@ -91,6 +91,7 @@ __all__ = [
     "OpenAlexProvider",
     "WorksRequest",
     "answered_queries",
+    "asked_alone",
     "candidate_from_work",
     "joined_search",
     "openalex_factory",
@@ -355,6 +356,12 @@ def page_count(query: ProviderQuery) -> int:
 def works_url(parameters: Mapping[str, str]) -> str:
     """The request URL for `parameters`, encoded as the client sends it."""
     return str(httpx.URL(OPENALEX_WORKS_URL, params=dict(parameters)))
+
+
+def asked_alone(text: str) -> bool:
+    """Whether a query is sent in a request of its own (v1-e08-t20). Skeleton: never."""
+    del text
+    return False
 
 
 def joined_search(queries: Sequence[ProviderQuery]) -> str:

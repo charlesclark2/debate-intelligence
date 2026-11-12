@@ -95,6 +95,9 @@ MECHANISM_NEED: Final = "link"
 _ID_PATTERN: Final = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 _VARIABLE_PATTERN: Final = re.compile(r"^[a-z][a-z0-9_]*$")
 _SEMVER_PATTERN: Final = re.compile(r"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$")
+_TEMPLATE_ID_PATTERN: Final = re.compile(
+    r"^([a-z0-9]+(?:-[a-z0-9]+)*)/([a-z0-9]+(?:-[a-z0-9]+)*)/([1-9][0-9]*)$"
+)
 
 
 def normalized_choice(value: str) -> str:
@@ -296,6 +299,13 @@ class MechanismLinkTemplate(DomainModel):
         description="The template: for a DA template its text word for word, otherwise the preset's own."
     )
 
+    @model_validator(mode="after")
+    def _check_fields(self) -> Self:
+        if (self.template_id is None) == (self.argument is None):
+            raise ValueError("a mechanism link template names either a template_id or an argument, not both")
+        template_variables(self.text)
+        return self
+
     @property
     def argument_id(self) -> str:
         """The DA this entry belongs to."""
@@ -389,6 +399,7 @@ class ArgumentTaxonomy(DomainModel):
                     "variables other than query"
                 )
             _check_mechanisms(topic)
+            self._check_mechanism_links(topic)
         return self
 
     def _check_variables(self) -> None:
@@ -465,10 +476,84 @@ class ArgumentTaxonomy(DomainModel):
                         f"{argument.id}/{need_id}: template {template.text!r} names "
                         f"{', '.join(undeclared)}, which variables does not declare"
                     )
+            if len(templates) > MAX_QUERIES_PER_SEARCH:
+                raise ValueError(
+                    f"{argument.id}/{need_id} has {len(templates)} templates; a search asks at most "
+                    f"{MAX_QUERIES_PER_SEARCH}"
+                )
             if not any(template.variables <= ALWAYS_GIVEN_VARIABLES for template in templates):
                 raise ValueError(
                     f"{argument.id}/{need_id}: every template needs a variable a search may not have; "
                     f"at least one may name only {' and '.join(sorted(ALWAYS_GIVEN_VARIABLES))}"
+                )
+
+    def _da(self, argument_id: str) -> Argument | None:
+        return next(
+            (entry for entry in self.arguments if entry.id == argument_id and entry.kind is ArgumentKind.DA),
+            None,
+        )
+
+    def _crossed_template(self, topic: TopicPreset, entry: MechanismLinkTemplate) -> QueryTemplate:
+        """The template `entry` names, refusing one that is not a DA's link template as written, or that
+        names a variable a search may not have."""
+        where = f"topic {topic.id}: the mechanism link template"
+        label = entry.template_id if entry.template_id is not None else repr(entry.text)
+        if entry.template_id is None:
+            template = QueryTemplate(text=entry.text)
+            if self._da(entry.argument_id) is None:
+                raise ValueError(f"{where} {label} names {entry.argument_id}, which is not a DA's id")
+        else:
+            parts = _TEMPLATE_ID_PATTERN.fullmatch(entry.template_id)
+            if parts is None:
+                raise ValueError(f"{where} {label} is not a template id of the form <da>/link/<number>")
+            name, need_id, number = parts.group(1), parts.group(2), int(parts.group(3))
+            argument = self._da(name)
+            if argument is None:
+                raise ValueError(f"{where} {label} names {name}, which is not a DA's id")
+            if need_id != MECHANISM_NEED:
+                raise ValueError(f"{where} {label} is not a link template")
+            links = argument.templates.get(MECHANISM_NEED, ())
+            if number > len(links):
+                raise ValueError(f"{where} {label}: {name} has no link template {number}")
+            template = links[number - 1]
+            if template.text != entry.text:
+                raise ValueError(
+                    f"topic {topic.id}: the template at {label} reads {template.text!r}, not {entry.text!r}"
+                )
+        extra = sorted(template.variables - ALWAYS_GIVEN_VARIABLES)
+        if extra:
+            raise ValueError(
+                f"{where} {label} names {', '.join(extra)}; a crossed template names only "
+                f"{' and '.join(sorted(ALWAYS_GIVEN_VARIABLES))}"
+            )
+        return template
+
+    def _check_mechanism_links(self, topic: TopicPreset) -> None:
+        """Every crossed template is a DA's link template as written, or the preset's own, naming only
+        {query} and {topic}, none twice; and no DA's link search on the topic passes the maximum."""
+        if topic.mechanism_link_templates and not topic.mechanisms:
+            raise ValueError(f"topic {topic.id} names mechanism link templates but no plan mechanisms")
+        seen: set[tuple[str, str]] = set()
+        for entry in topic.mechanism_link_templates:
+            self._crossed_template(topic, entry)
+            key = (entry.argument_id, " ".join(entry.text.casefold().split()))
+            if key in seen:
+                raise ValueError(
+                    f"topic {topic.id} crosses {entry.argument_id}'s template {entry.text!r} twice"
+                )
+            seen.add(key)
+        if not topic.mechanisms:
+            return
+        for argument in self.arguments:
+            if argument.kind is not ArgumentKind.DA or MECHANISM_NEED not in argument.templates:
+                continue
+            asked = len(argument.templates[MECHANISM_NEED]) + len(
+                self.mechanism_link_templates(topic, argument)
+            ) * (1 + len(topic.mechanisms))
+            if asked > MAX_QUERIES_PER_SEARCH:
+                raise ValueError(
+                    f"topic {topic.id}: {argument.id}'s link search would ask {asked} queries; a search asks "
+                    f"at most {MAX_QUERIES_PER_SEARCH}"
                 )
 
     def find_argument(self, name: str) -> Argument | None:
@@ -491,13 +576,30 @@ class ArgumentTaxonomy(DomainModel):
         self, topic: TopicPreset, argument: Argument
     ) -> tuple[tuple[str, QueryTemplate], ...]:
         """The link templates `argument`'s mechanism queries cross on `topic`, each with the template id
-        its queries are recorded under, in order."""
-        number, template = next(
-            (number, template)
-            for number, template in enumerate(argument.templates[MECHANISM_NEED], start=1)
-            if template.variables <= ALWAYS_GIVEN_VARIABLES
-        )
-        return ((f"{argument.id}/{MECHANISM_NEED}/{number}", template),)
+        its queries are recorded under, in order (v1-e08-t16).
+
+        The preset's entries for `argument`: a DA template under its own id, a crossing-only template
+        under `<argument>/link/<topic>-<n>`, numbered among that DA's crossing-only entries. A DA the
+        preset does not name crosses its first link template that names only {query} and {topic}.
+        """
+        entries = [entry for entry in topic.mechanism_link_templates if entry.argument_id == argument.id]
+        if not entries:
+            number, template = next(
+                (number, template)
+                for number, template in enumerate(argument.templates[MECHANISM_NEED], start=1)
+                if template.variables <= ALWAYS_GIVEN_VARIABLES
+            )
+            return ((f"{argument.id}/{MECHANISM_NEED}/{number}", template),)
+        crossed: list[tuple[str, QueryTemplate]] = []
+        own = 0
+        for entry in entries:
+            if entry.template_id is None:
+                own += 1
+                template_id = f"{argument.id}/{MECHANISM_NEED}/{topic.id}-{own}"
+            else:
+                template_id = entry.template_id
+            crossed.append((template_id, self._crossed_template(topic, entry)))
+        return tuple(crossed)
 
     def find_topic(self, topic_id: str) -> TopicPreset | None:
         """The topic preset with this id."""

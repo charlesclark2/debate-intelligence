@@ -1282,12 +1282,12 @@ def test_on_the_committed_profile_without_a_contact_email_crossref_names_the_pub
       before it started.
     * The reserve is the median answer time clamped to at least 1 second and at most half the timeout:
       half of 2 is 1, so it is 1 whatever Crossref's answers take.
-    * All twelve NHI link queries arrive at the start, before the timeline moves, so every query's
-      deadline is the start plus 2 less 1: the start plus 1 second.
+    * All 37 NHI link queries (v1-e08-t16's crossing) arrive at the start, before the timeline moves,
+      so every query's deadline is the start plus 2 less 1: the start plus 1 second.
     * The first is sent at the start. The second's turn is at the start plus 1 second, its deadline:
-      too late, not asked. The third to the twelfth come after it, past the same deadline: not asked.
+      too late, not asked. The third to the 37th come after it, past the same deadline: not asked.
 
-    One request, its one recorded result, eleven not asked; the timeline moves once, by the second's
+    One request, its one recorded result, 36 not asked; the timeline moves once, by the second's
     one-second wait.
     """
     monkeypatch.setenv("DEBATE_PROVIDERS__TIMEOUT_SECONDS", "2")
@@ -1323,7 +1323,7 @@ def test_on_the_committed_profile_without_a_contact_email_crossref_names_the_pub
     assert result.exit_code == ExitCode.SEARCH_PARTIAL, result.output
     assert footer(result) == [
         "Providers: PARTIAL, results may be missing",
-        f"  crossref: partial, 1 result from 12 queries: {PUBLIC_POOL_NOT_ASKED}",
+        f"  crossref: partial, 1 result from 37 queries: {PUBLIC_POOL_NOT_ASKED}",
     ]
     assert hosts_asked(committed_profile) == {CROSSREF_HOST: 1}
     assert pacer_time.clock.now() == NOW + timedelta(seconds=1)

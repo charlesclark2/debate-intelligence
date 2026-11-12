@@ -6,46 +6,191 @@
 | Spec | [`plan_specs/v1/e08-research-workflows/t16-mechanism-queries-cross-the-chosen-link-templates.yaml`](../../plan_specs/v1/e08-research-workflows/t16-mechanism-queries-cross-the-chosen-link-templates.yaml) |
 | Epic / release | `v1-e08-research-workflows` / `v1.4` |
 | Branch | `task/v1-e08-t16-mechanism-queries-cross-the-chosen-link-templates` |
-| Session status | IN PROGRESS: ruled twice on 2026-11-11 and reviewed by the coach; building <!-- COMPLETE / PARTIAL / BLOCKED --> |
+| Session status | COMPLETE: the Goal stays `InProgress` for ac3, the operator's repeated search after the merge <!-- COMPLETE / PARTIAL / BLOCKED --> |
 
 ## Summary
 
-This is the proposal stage. The spec asks for the PM's ruling, and the coach's review of the preset's
-changes, before any code. Nothing but this report has changed. The proposal is
-[below](#proposal-for-the-pms-ruling), and the questions for the PM are under
-[Questions for the PM](#questions-for-the-pm).
+The politics DA's link search on the NHI topic now crosses the link templates the coach chose. It
+was built as the PM ruled twice on 2026-11-11, with the coach's answers applied.
 
-In short:
-- **The NHI preset names the link templates each DA's mechanism queries cross, by template id.** The
-  politics DA crosses political capital and the four party-popularity templates. No reviewed template
-  changes.
-- **The politics DA's link search goes from 12 queries to 32.** On OpenAlex it is still one request
-  per page.
-- **The cap becomes a stated maximum of 42 queries per search.** It is measured from OpenAlex's
-  3,500-character URL limit in `openalex.py`. At 42 the preset can name six mechanisms; the two added
-  ones I recommend are global budgets and single public authority.
-- **Two costs the PM should know before ruling:**
-  - Crossref is still asked one query at a time. On its polite pool it sends at most 28 of a
-    search's queries, so every 32-query search comes back PARTIAL.
-  - The crossing adds no word to the ranking's BM25 terms. Added mechanisms do.
+What a search now asks:
+- **The coach's seven reviewed link queries come first,** unchanged and in order.
+- **Then six templates are crossed, template-major,** each with the resolution's words and with each
+  of the four mechanisms, and each query ends with "United States":
+  1. the coach's own wording, `{query} costs political capital Congress`, a crossing-only template of
+     the preset;
+  2. then link templates 2, 4, 5, 6 and 7.
+- **37 queries in all,** up from 12. They still go to OpenAlex in one request per page.
 
-Prerequisites: `v1-e08-t10` and `v1-e08-t14` are both `Succeeded`. `git diff origin/dev` shows no
-amendment to this spec beyond the `InProgress` phase.
+How it is configured:
+- **The NHI preset lists the choice** in `mechanism_link_templates`, in `config/argument_taxonomy.yaml`
+  1.6.0. The preset is `coach_reviewed`.
+- **A DA template is named by its id and its exact text,** which the loader checks against the DA's
+  entry.
+- **A DA the preset doesn't name** crosses its first link template that names only `{query}` and
+  `{topic}`, as before. The other four Policy DAs are unchanged.
+- **`MAX_QUERIES_PER_SEARCH = 42` replaces the four-mechanism cap.** The loader refuses a preset that
+  takes any DA's link search over it. That leaves 5 queries of room for v1-e08-t23.
+- **No argument entry changed,** and the coach-reviewed guard and its fixture are untouched.
+
+**The cost the PM accepted (ruling 3A):** Crossref can't reach all 37 queries, so this search is
+PARTIAL on Crossref and exits 6. The search README says so.
+
+Evidence:
+- ac1 and ac2 pass. The tests ran red first against a skeleton: 25 failed, all at assertions.
+- 24 mutants were all caught, none by a crash.
+- **ac3 is the operator's after the merge, so the Goal stays `InProgress`.** Its blocks are under
+  [Operator follow-ups](#operator-follow-ups).
+
+For v1-e08-t23: under the 42-query maximum the politics DA's link search on NHI has **5 queries of
+room**, one agenda-item template crossed with the five subjects (PM's ruling 4).
 
 ## Plan nodes
 
 | Node | Status | Notes |
 |---|---|---|
-| `mechanism-queries-cross-the-chosen-link`: Chosen templates | Not started | Waiting for the PM's ruling and the coach's review (ac1) |
+| `mechanism-queries-cross-the-chosen-link`: Chosen templates | Done | Proposal (`802ad91`), two PM rulings and the coach's answers; tests first against a skeleton (`eaaa40a`, `53fe0c6`), red run; implementation (`7afe5a6`); 24 mutants; docs (`4db100f`) |
 
 ## Acceptance criteria
 
 | Criterion | Status | Evidence (command → result) |
 |---|---|---|
-| ac1: the proposal (the per-DA template choice, the mechanism cap and the queries per search) is ruled on by the PM before any code, and the coach reviews the preset's changes (operator) | NOT RUN | Proposal committed with no code (`0c3274d`). The PM ruled on 2026-11-11 ([below](#the-pms-ruling-2026-11-11)). Waiting for the coach's answers to the [review sheet](#review-sheet-for-the-coach) |
-| ac2: a preset names the link templates each DA's mechanism queries cross, and more mechanisms up to the stated maximum, by expansion tests on the recorded fixtures shown failing first, with every reviewed template unchanged | NOT RUN | After the ruling |
-| ac3: the operator repeats the Policy search and the coach labels it blind; the PM records nDCG@10 and the relevant count against v1-e08-t14's ac3 | NOT RUN | The operator's, after the merge |
-| Node: `uv run pytest packages/debate_core/tests/application/test_query_expansion.py` | NOT RUN | After the ruling |
+| ac1: the proposal (the per-DA template choice, the mechanism cap and the queries per search) is ruled on by the PM before any code, and the coach reviews the preset's changes (operator) | PASS | Proposal committed with no code (`802ad91`). The PM ruled on 2026-11-11 ([first ruling](#the-pms-ruling-2026-11-11)). The coach answered the review sheet in the session the same day ([his answers](#the-coachs-answers-2026-11-11)). The PM ruled again on those answers ([second ruling](#the-pms-ruling-after-the-coachs-answers-2026-11-11)). The first code commit, `eaaa40a`, follows both. |
+| ac2: a preset names the link templates each DA's mechanism queries cross, and more mechanisms up to the stated maximum, by expansion tests on the recorded fixtures shown failing first, with every reviewed template unchanged | PASS | Red run [below](#red-run) (25 failed at assertions). Green: `test_query_expansion.py` and `test_search_command.py` give `226 passed in 10.60s`. The tests are listed [below](#what-the-tests-pin). Every reviewed template is unchanged: no argument entry changed, the guard passes, and the committed preset's DA templates are checked against `coach_reviewed_1_5_0.yaml`. |
+| ac3: the operator repeats the Policy search and the coach labels it blind; the PM records nDCG@10 and the relevant count against v1-e08-t14's ac3 | NOT RUN | The operator's, after the merge. The blocks are under [Operator follow-ups](#operator-follow-ups). |
+| Node: `uv run pytest packages/debate_core/tests/application/test_query_expansion.py` | PASS | `.venv/bin/python scripts/hard_stop.py 115 uv run pytest packages/debate_core/tests/application/test_query_expansion.py`: `138 passed in 4.62s`, after the sync |
+
+### Red run
+
+The skeleton was `eaaa40a`, "Crossed link template tests, written first against a skeleton that
+crosses only the default". It had:
+- `mechanism_link_templates` and `MAX_QUERIES_PER_SEARCH`, accepted with no rule on either;
+- the NHI preset's six entries, in taxonomy 1.6.0;
+- the crossing loop, fed only each DA's default template.
+
+```
+.venv/bin/python scripts/hard_stop.py 115 .venv/bin/python -m pytest -n 0 -q --tb=line packages/debate_core/tests/application/test_query_expansion.py packages/debate_cli/tests/test_search_command.py
+```
+
+That gave `25 failed, 201 passed in 10.99s`, every failure at an assertion:
+
+| Count | Failure | Tests |
+|---|---|---|
+| 17 | `DID NOT RAISE InvalidArgumentTaxonomy` | the 16 crossing refusals and the 43-template pair |
+| 5 | The expected queries are missing, or the count is short (`assert 12 == 37`, `assert 12 == (7 + 30)`) | the politics expansion; reviewed-first for the politics DA; typed as a mechanism; only-a-DA's-link; the template-major crossing in the listed order |
+| 2 | The stored search's provider queries are short | the stored search on both repositories |
+| 1 | OpenAlex's joined request is the old 12 | the CLI test |
+
+**The first red run, on `eaaa40a` itself, gave 26 failed.** The extra failure was my own
+mistake, not the skeleton's: the one-request pin expected five DAs, and the taxonomy has nine (four are
+the LD topic's). I corrected the count in `53fe0c6` before any implementation, and the run above is
+after that correction.
+
+**What the red run cannot show.** Six checks passed on the skeleton:
+- the other four DAs' expansions, and reviewed-first for those four;
+- the resolution's words once per crossed template, since the skeleton's default template already
+  asks them once;
+- a DA the preset doesn't name crossing its default;
+- crossing-only templates never asked without the topic;
+- the committed-preset content test;
+- the one-request pin.
+
+Each is proven by a mutant below.
+
+### Mutants
+
+Each mutant was applied to the committed tree and run against the two test files with
+`-n 0 --tb=line`. The file was then restored with `git checkout HEAD --`. The script is kept in the
+scratchpad, not committed. Every catch was at an assertion: no crash line, no collection error. No
+test here uses Hypothesis, so agreement 8's database does not apply.
+
+One batch was stopped by `hard_stop.py` mid-mutant, with the domain file still mutated. I restored it
+from HEAD at once, confirmed the tree clean, and ran the rest in batches of four.
+
+| Mutant | Caught by |
+|---|---|
+| Crossing subject-major, not template-major | 6 tests, the politics expansion among them |
+| Crossing in the DA's template order, not the listed order | the template-major crossing test |
+| Crossed queries asked before the reviewed ones | 17 tests |
+| The resolution's words dropped from the crossing (the forbidden entry) | 23 tests, the resolution-once test among them |
+| Default: the last renderable link template, not the first | 6 tests (the other four DAs, the unnamed DA) |
+| Default: a DA the preset doesn't name crosses nothing | 14 tests |
+| Default: an unnamed DA takes another DA's entries | 10 tests |
+| Crossing-only entry: its DA not checked | the refusal `a crossing-only template of an advantage` |
+| Crossing-only entry: its variables not checked | the refusal `a crossing-only template naming a bill` |
+| Crossing-only entry: numbered from 0 | 5 tests, the politics expansion and the CLI's among them |
+| Crossing-only entry: an id without the topic | 5 tests |
+| Entry shape: both an id and an argument accepted | the refusal `a crossed template with an id and an argument` |
+| DA template: the text check removed | the refusal `a crossed template whose text differs` |
+| DA template: the need not checked | the refusal `a crossed template of another need` |
+| One template crossed twice accepted | the refusal `one template crossed twice` |
+| Crossed templates without mechanisms accepted | the refusal `crossed templates and no mechanisms` |
+| Cap off by one (refuses 42) | the edge test (42 loads) |
+| Cap counts mechanisms without the resolution | both over-the-maximum refusals |
+| Cap counts only named entries (a default DA counts none) | the refusal `a DA link search one query over the maximum` |
+| Cap raised to 43 | 3 tests |
+| Pair template count not checked | the 43-template refusal |
+| YAML: template 3 crossed instead of 2 | 6 tests, the committed-preset test among them |
+| YAML: the coach's own wording dropped | 10 tests |
+| `openalex.py`'s `MAX_URL_CHARS` lowered to 2,500 (the pin's own break) | the one-request pin: `('policy-2026-27-nhi', 'politics-da', 37)` |
+
+### What the tests pin
+
+Every expected query is written by hand from the ruling and the YAML, not produced by the code.
+
+- **The politics DA's whole 37-query expansion on NHI.** The 30 crossed queries are listed one by one
+  (`NHI_POLITICS_CROSSED`), and the reviewed seven come first.
+- **Reviewed first, for every Policy DA.** The politics DA adds 30 and the other four add 5 each.
+- **The resolution's words.** Every crossed template is asked once on them, whatever was typed. This
+  is the forbidden entry.
+- **The crossing on a small taxonomy:**
+  - template-major, in the preset's listed order (3 before 2), not the DA's;
+  - a crossing-only template takes the need's window and an id from the topic;
+  - a DA template keeps its own window;
+  - a DA the preset doesn't name crosses its first renderable template;
+  - crossing-only templates are never asked without the topic.
+- **The maximum at its edge:**
+  - a DA link search of exactly 42 loads, and so does a pair of 42 templates;
+  - 43 is refused both ways;
+  - five mechanisms now load.
+- **Sixteen refusals:**
+  - an alias, an advantage (by id and as a crossing-only template), another need, a malformed id and
+    a number past the DA's templates;
+  - a text that differs, and `{bill}` (by id and as a crossing-only template);
+  - a positional field, a template crossed twice, id and argument both or neither, and crossed
+    templates with no mechanisms;
+  - two over-the-maximum presets.
+- **The committed preset:** its six entries, its review, and each DA template's text against the
+  coach-reviewed record.
+- **One OpenAlex request per page** for all nine DAs' link searches on NHI, at `--max-results 200`,
+  through the adapter's own `works_requests`.
+- **The stored search, on both repositories:** the providers are asked the 30 crossed queries, and
+  their template ids are recorded.
+- **The CLI:** OpenAlex is asked the 37 queries in one joined request, and the JSON carries the 30
+  crossed template ids.
+- **The Crossref public-pool footer (dev and prod profiles):** `1 result from 37 queries`, where it was
+  12.
+
+### Checks before the report
+
+| Check | Result |
+|---|---|
+| `uv run scripts/affected_tests.py` | `303 of 740 test files (40.9%) chosen in 19.8 s from 10 changed files.` |
+| `.venv/bin/python scripts/hard_stop.py 115 uv run scripts/affected_tests.py --run` | Stopped at its 115-second limit. **Over two minutes, so under agreement 10 the affected set is left to the pull request's `ci` check, not handed over.** |
+| The test files that exercise the taxonomy, expansion, search and daily, the discovery adapters, the domain, the changed areas and the always-run list, under `hard_stop.py 115 … pytest -q -n auto -m "not slow and not live and not partition_proof"`. The files: the CLI's `test_search_command.py`, `test_daily_command.py`, `test_app.py`, `test_help_rendering.py` and `test_container_factories.py`; core's `test_query_expansion.py`, `test_daily_presets.py`, `test_digest_service.py`, `test_federated_search.py` and `test_batch_cut_service.py`; `integrations/discovery`; `domain`; `tests/smoke/test_search_smoke.py`; `tests/architecture`, `tests/specs` and `tests/config`; and `tests/scripts`' `test_stamp_build.py`, `test_check_command_blocks.py` and `test_docs_index.py` | `3338 passed in 70.86s` before the sync; **`3343 passed in 39.02s` after it** |
+| `uv run --frozen ruff format --check .` / `ruff check .` | `2056 files already formatted` / `All checks passed!` (after the sync) |
+| `uv run --frozen pyright packages/debate_core packages/debate_cli` | `0 errors, 0 warnings, 0 informations` |
+| `uv run --frozen lint-imports` / `scripts/check_thin_handlers.py` | `Contracts: 20 kept, 0 broken.` / `OK: 74 CLI command and API route handlers within 25 statements` |
+| `scripts/export_schemas.py --check` | `OK: 10 schemas in packages/debate_core/schemas are up to date` (no schema change) |
+| `uv run scripts/validate_specs.py`, docs checks | See [Final checks](#final-checks) |
+
+**The sync.** origin/dev moved during the session: v1-e07-t15 changed when GovInfo without a key
+counts as partial. Its changes overlapped this branch in the search README and `test_search_command.py`.
+- `scripts/task sync` rebased the branch. It pushed nothing, because the branch has never been pushed.
+- The test file rebased cleanly.
+- The README conflicted in the GovInfo paragraph. I kept dev's new wording and applied this task's
+  37-query counts to it.
+- The checks above were run again after the rebase.
 
 ## Proposal for the PM's ruling
 
@@ -553,11 +698,44 @@ crossing-only entry's check, the default template and the cap.
 
 ## Files changed
 
-- This report only (the proposal). No code, configuration or test has changed.
+- **`config/argument_taxonomy.yaml`** (1.5.0 → 1.6.0): the NHI preset's `mechanism_link_templates`,
+  which are the coach's crossing-only wording and the politics DA's templates 2, 4, 5, 6 and 7. The
+  header and the preset comment are updated. No argument entry or family changed.
+- **`packages/debate_core/src/debate_core/domain/argument_taxonomy.py`:**
+  - `MechanismLinkTemplate` and `TopicPreset.mechanism_link_templates`;
+  - `MAX_QUERIES_PER_SEARCH = 42` in place of `MAX_TOPIC_MECHANISMS = 4`, and `MECHANISM_NEED` moved
+    here from the application layer, which still re-exports it;
+  - the loader's crossing rules (`_check_mechanism_links`, `_crossed_template`) and the pair template
+    count;
+  - `ArgumentTaxonomy.mechanism_link_templates`, which resolves a DA's crossed templates and its
+    default.
+- **`packages/debate_core/src/debate_core/application/query_expansion.py`:** the crossing,
+  template-major over the resolved templates; the module docstring.
+- **`packages/debate_core/tests/application/test_query_expansion.py`:**
+  - the tests [above](#what-the-tests-pin);
+  - the version pins moved to 1.6.0;
+  - the "five plan mechanisms" refusal removed, because five now load under the maximum.
+- **`packages/debate_cli/tests/test_search_command.py`:** OpenAlex is asked the 37 queries; the Crossref
+  public-pool footer reads `from 37 queries`, and its worked example is updated.
+- **`packages/debate_cli/README.md`:** in the `search` section, which providers a long search leaves
+  partial and that the footer names them (ruling 3), the GovInfo request count, and the ranking note
+  (ruling 6).
+- **`docs/guides/landscape-taxonomy.md`:** a preset's crossed templates, the text check and the
+  42-query maximum.
+- **`packages/debate_core/README.md`:** the two module rows.
 
 ## Deviations from the spec
 
-None so far.
+1. **`packages/debate_cli/README.md` and `packages/debate_core/README.md` are outside
+   `constraints.packages`.**
+   - The PM's ruling 3 asks for "the search guide". The search command's user documentation is the
+     CLI README's `debate-research search` section: no file under `docs/guides` covers search.
+   - That section already described the 12-query search's Crossref and GovInfo figures, so it had to
+     change anyway.
+   - The core README gets its two one-line rows, as in v1-e08-t14.
+2. **The coach's answers changed the ruled design**, and the PM ruled again before any code. That is
+   recorded above, not a deviation in the build: the crossing-only wording, template 2, today's five
+   political capital queries replaced, and 5 queries left for t23.
 
 ## Decisions and assumptions
 
@@ -566,17 +744,96 @@ None so far.
    query or longer phrases mean longer URLs; section 3's second table gives the margin.
 2. **Model queries are not counted in the maximum.** They are opt-in, and at most five. The headroom
    table shows what they cost.
+3. **The cap counts a DA's link templates as written**, including any that name `{bill}` and may be
+   skipped, so the count is the most that DA's link search can ask.
+4. **A crossing-only template's id** is `<da>/link/<topic id>-<n>`, numbered among that DA's
+   crossing-only entries on the preset. A DA template keeps its own id. Both are suffixed with the
+   subject, as before.
+5. **"The same template twice"** means the same DA and the same text, ignoring case and spacing. A
+   crossing-only template that repeats one of the DA's own is refused too.
+6. **The maximum applies to every DA,** including the four LD de-extinction DAs. On the NHI preset each
+   gets the default crossing, as in v1-e08-t14, so the pin checks nine DAs.
 
 ## Operator follow-ups
 
-None yet. ac3 (the blind repeat of the Policy search) is the operator's, after the merge. Its blocks
-will follow v1-e08-t14's, with the query count and the added template ids updated.
+**ac3: after the merge, on an installed dev build that carries it.** These are the same live calls as
+v1-e08-t14's ac3:
+- OpenAlex: one joined request per page, so two;
+- the publisher feeds;
+- Crossref, which will send only some of the 37 queries (ruling 3A);
+- the Federal Register and GovInfo, 37 requests each.
+
+They write only to dev's local data directory and three files on your Desktop, and print exit codes,
+counts and template ids. No model is called. Each command takes under a minute, then the coach's
+time.
+
+**Operator command 1: check the installed build** (seconds)
+Where: your Mac, any terminal
+```bash
+debate-research --json --version | python3 -I -c 'import json, sys; print(json.load(sys.stdin)["data"]["tag"])'
+```
+Success looks like the tag of the dev pre-release built after this merge. Command 2 proves the build
+carries the change.
+
+**Operator command 2: the Policy NHI search, politics DA link, repeated** (under a minute)
+Where: the same terminal
+```bash
+if env | grep -q '^DEBATE_'; then echo "STOP: DEBATE_ overrides are set in this shell"; else cd "$HOME" && env DEBATE_ENV=dev debate-research --json search "national health insurance" --argument politics-da --need link --topic policy-2026-27-nhi --max-results 200 --save "$HOME/Desktop/search-policy-nhi-crossing.json" > /tmp/search-policy-nhi-crossing.json; echo "exit $?"; python3 -I -c 'import json, sys; e = json.load(open(sys.argv[1])); r = e.get("error") or {}; d = e.get("data") or r.get("details") or {}; x = d.get("expansion") or {}; q = x.get("queries") or []; c = [y.get("template_id") or "" for y in q]; c = [t for t in c if t.count("/") == 3]; print("code", r.get("code"), "exit_code", r.get("exit_code")); print("status", d.get("status"), "results", len(d.get("results") or [])); print("taxonomy", x.get("taxonomy_version"), "queries", len(q), "warning", x.get("warning")); print("crossed", len(c), "templates", sorted({t.rsplit("/", 2)[1] for t in c})); print("providers", [(p["provider"], p["outcome"], p["results"]) for p in d.get("providers") or []])' /tmp/search-policy-nhi-crossing.json; fi
+```
+Success looks like:
+- `exit 6`, with `code SEARCH_PARTIAL exit_code 6`, because Crossref can't reach all 37 queries
+  (ruling 3A). `exit 0` and `code None` is fine too.
+- `status PARTIAL` (or `COMPLETE`) and `results` above zero;
+- `taxonomy 1.6.0 queries 37 warning None`;
+- `crossed 30 templates ['2', '4', '5', '6', '7', 'policy-2026-27-nhi-1']`;
+- `providers` naming `openalex` and `rss`, each with a count, and `crossref` if it is enabled.
+
+**`queries 12` or `taxonomy 1.5.0` means the build predates this merge: stop there and don't make the
+sheet.** Paste back the five lines. The titles stay in the saved file. I ran the summary line on an
+invented envelope in the session scratchpad, and it printed the lines above.
+
+**Operator command 3: the coach's blind sheet and its key** (seconds, then the coach's time)
+Where: the same terminal, after command 2 saved its file. It is v1-e08-t14's block with new file
+names. It writes two files to your Desktop, from the top 10 by the ranking and the top 10 by raw
+provider order (up to 20 rows):
+- **`labels-policy-nhi-crossing.csv`**, for the coach: `item`, `title`, `url` and an empty `relevant`,
+  in title order with no rank;
+- **`key-policy-nhi-crossing.csv`**, for the scoring session only: `item`, `rank`, `provider_order`.
+```bash
+python3 -I -c 'import csv, json, sys; d = json.load(open(sys.argv[1])); r = d["results"]; top = {x["rank"] for x in sorted(r, key=lambda x: x["rank"])[:10]} | {x["rank"] for x in sorted(r, key=lambda x: x["provider_order"])[:10]}; rows = sorted((x for x in r if x["rank"] in top), key=lambda x: ((x["title"] or "").casefold(), x["url"] or "")); s = csv.writer(open(sys.argv[2], "w", newline="")); k = csv.writer(open(sys.argv[3], "w", newline="")); s.writerow(["item", "title", "url", "relevant"]); k.writerow(["item", "rank", "provider_order"]); [(s.writerow([i, x["title"], x["url"], ""]), k.writerow([i, x["rank"], x["provider_order"]])) for i, x in enumerate(rows, start=1)]; print(sys.argv[2], len(rows), "rows; key", sys.argv[3])' "$HOME/Desktop/search-policy-nhi-crossing.json" "$HOME/Desktop/labels-policy-nhi-crossing.csv" "$HOME/Desktop/key-policy-nhi-crossing.csv"
+```
+Success looks like one line naming the labels file, with between 10 and 20 rows, and the key file.
+- The coach gets the labels file only. He marks `relevant` `y` or `n` on each row, under his criterion
+  of 2026-11-08: a politics DA link card is relevant only when it ties the plan's mechanism to the
+  political fight over a specific bill.
+- The key stays with you until he has answered.
+- The filled labels file, the key and the saved search file then go to the PM. The PM records the
+  relevant count, nDCG@10 for the ranking and **nDCG@10 in provider order beside it** (ruling 6),
+  against v1-e08-t14's 6 of 19, 0.438 ranked and 0.746 in provider order.
 
 ## Follow-up work
 
 - **Crossref under a large expanded search (E07): the PM files it (ruling 3).** Every search over
   about 18 to 28 queries is PARTIAL on Crossref's polite pool.
-- **More mechanisms, the coach's later choice (ruling 4).** The team counts are in section 4.
+- **More mechanisms are the coach's later choice (ruling 4).** The team counts are in section 4. Each
+  mechanism costs the politics DA's NHI link search 6 queries, and only 5 are left.
+- **For v1-e08-t23:** 5 queries of room under 42, which is one agenda-item template on five subjects.
+  The crossing takes its template set as one more entry list. Its one rule to relax is the
+  crossing's `{query}`/`{topic}`-only check, for a template that names `{bill}`.
+- **The four LD de-extinction DAs get the mechanism crossing on the NHI preset** (their first link
+  template), as they did under v1-e08-t14. That is not new here, but an LD DA on a Policy topic's
+  preset is probably not wanted. A format check on the fan-out is a small E08 item if the PM wants it.
+
+## Final checks
+
+The Goal stays `InProgress`, because ac3 is open. No `set-phase` was run.
+
+| Check | Result |
+|---|---|
+| `uv run scripts/validate_specs.py` | `OK: 667 files, 41 epics, 604 tasks, 22 releases` |
+| `uv run --frozen python scripts/check_command_blocks.py --base origin/dev` | `OK: no # comments in 700 shell code blocks in 257 Markdown files (1 session reports changed since origin/dev)` |
+| `uv run --frozen python scripts/check_links.py` | `OK: 3760 relative links and anchors in 642 Markdown files` |
+| `uv run --frozen python scripts/docs_index.py --check-descriptions` | `All 69 indexed documents under docs/ have a description` |
 
 ## PM review
 

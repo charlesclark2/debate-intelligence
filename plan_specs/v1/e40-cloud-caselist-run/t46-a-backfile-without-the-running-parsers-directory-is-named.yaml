@@ -38,7 +38,7 @@ spec:
         Each backfile with no directory at the running parser version is named with the
         version it holds, by tests on synthetic stores shown failing first.
 status:
-  phase: Pending
+  phase: InProgress
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

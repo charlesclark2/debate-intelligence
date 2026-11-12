@@ -20,12 +20,16 @@ every `daily` run when the file is loaded, naming the group.
 * A pair with a group: each of its templates whose `queries` include the search's query, filled in,
   with the id `digest/<argument>/<need>/<n>`, its n-th template. When none is for that query the
   digest does not run that search (:class:`~debate_core.application.digest_service.DigestService`).
-* A pair with no group: **the preset's query alone**, with the id
-  `digest/<argument>/<need>/query-alone`, and the digest names the group as asked that way. It never
-  falls back to the taxonomy's templates.
+* A pair with no group: **the taxonomy's templates, exactly as before v1-e08-t25**, and the digest
+  names the group as asked that way, so it is never silent (the PM's ruling C of 2026-11-12). The
+  every-word rule is the feed provider's alone, and a reviewed template does its work against OpenAlex,
+  Crossref and the government sources, so a pair is changed only once it has digest templates: today
+  the politics preset's.
 
-:class:`DigestExpansionStage` is the expand stage of the federated search `daily` runs: it records
-those queries as the search's expansion, for the search's own `since` and `until`.
+:class:`DigestExpansionStage` is the expand stage of the federated search `daily` runs: for a pair with
+a group it records those queries as the search's expansion, for the search's own `since` and `until`;
+for a pair without one it is the taxonomy's own stage,
+:class:`~debate_core.application.query_expansion.QueryExpansionStage`.
 """
 
 from __future__ import annotations
@@ -40,7 +44,8 @@ import yaml
 from pydantic import Field, ValidationError, field_validator, model_validator
 
 from debate_core.application.federated_search_types import SearchState
-from debate_core.application.query_expansion import provider_queries
+from debate_core.application.ports.providers import Clock
+from debate_core.application.query_expansion import QueryExpansionStage, provider_queries
 from debate_core.domain.argument_taxonomy import ArgumentTaxonomy
 from debate_core.domain.base import DomainModel, NonEmptyText
 from debate_core.domain.daily_preset import DailyPresets
@@ -48,7 +53,6 @@ from debate_core.domain.search import ExpandedQuery, QueryOrigin, SearchExpansio
 
 __all__ = [
     "DAILY_TEMPLATES_PATH",
-    "QUERY_ALONE",
     "DigestExpansionStage",
     "DigestQuery",
     "DigestTemplate",
@@ -61,9 +65,6 @@ __all__ = [
 
 DAILY_TEMPLATES_PATH: Final = Path("config") / "daily_templates.yaml"
 """Where the digest templates are committed, relative to the repository root or an installed build's copy."""
-
-QUERY_ALONE: Final = "query-alone"
-"""The last part of the id of a query a pair with no digest templates asks: the preset's query alone."""
 
 QUERY_VARIABLE: Final = "{query}"
 
@@ -139,19 +140,16 @@ class DigestTemplates(DomainModel):
     def group(self, argument: str, need: str) -> DigestTemplateGroup | None:
         return next((g for g in self.groups if (g.argument, g.need) == (argument, need)), None)
 
-    def asks_query_alone(self, argument: str, need: str) -> bool:
-        """Whether the pair has no digest templates, so its searches ask the preset's query alone."""
+    def asks_taxonomy(self, argument: str, need: str) -> bool:
+        """Whether the pair has no digest templates, so its searches ask the taxonomy's, as before."""
         return self.group(argument, need) is None
 
-    def asks_taxonomy(self, argument: str, need: str) -> bool:
-        """Skeleton: the same predicate as :meth:`asks_query_alone`, behaviour unchanged."""
-        return self.asks_query_alone(argument, need)
-
     def queries_for(self, argument: str, need: str, query: str) -> tuple[DigestQuery, ...]:
-        """What a digest's search for `query` on the pair asks: see the module docstring."""
+        """The digest templates a search for `query` on the pair asks; none for a pair without a group,
+        which asks the taxonomy's (:meth:`asks_taxonomy`)."""
         group = self.group(argument, need)
         if group is None:
-            return (DigestQuery(f"digest/{argument}/{need}/{QUERY_ALONE}", QUERY_VARIABLE, query),)
+            return ()
         return tuple(
             DigestQuery(f"digest/{group.pair}/{number}", template.text, template.render(query))
             for number, template in enumerate(group.templates, start=1)
@@ -213,9 +211,10 @@ def _query_problem(group: DigestTemplateGroup, presets: DailyPresets) -> str | N
 class DigestExpansionStage:
     """`daily`'s expand stage: the digest templates' queries, never the taxonomy's (module docstring)."""
 
-    def __init__(self, taxonomy: ArgumentTaxonomy, templates: DigestTemplates) -> None:
+    def __init__(self, taxonomy: ArgumentTaxonomy, templates: DigestTemplates, *, clock: Clock) -> None:
         self._taxonomy = taxonomy
         self._templates = templates
+        self._taxonomys = QueryExpansionStage(taxonomy, clock=clock)
 
     def __repr__(self) -> str:
         return f"DigestExpansionStage(groups={len(self._templates.groups)})"
@@ -225,6 +224,8 @@ class DigestExpansionStage:
         wanted = request.expansion
         if wanted is None:
             raise ValueError("a digest's search is always for an argument and need; this one was not")
+        if self._templates.asks_taxonomy(wanted.argument, wanted.need):
+            return await self._taxonomys.run(state)
         asked = self._templates.queries_for(wanted.argument, wanted.need, request.query)
         if not asked:
             raise ValueError(

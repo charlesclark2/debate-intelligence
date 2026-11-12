@@ -201,7 +201,7 @@ class World:
             InMemorySearchRepository(),
             clock=clock,
             ids=ids,
-            expand=DigestExpansionStage(TAXONOMY, self.templates),
+            expand=DigestExpansionStage(TAXONOMY, self.templates, clock=clock),
             normalize=DedupeStage(),
             rank=StagesInOrder(
                 FederatedRankStage(RANKING, clock=clock),

@@ -15,8 +15,8 @@ the preset's topic, inside the window. Never by the taxonomy's templates, which 
 filled uniqueness template such as `Senate vote count Senate` kept no feed item on 2026-11-12.
 
 * A pair whose group has no template for a query runs no search for it.
-* A pair with no group asks the preset's query alone, and its :class:`DigestGroup` says so
-  (`asked_taxonomy_templates`), so the digest names it.
+* A pair with no group asks the taxonomy's templates exactly as before, and its :class:`DigestGroup`
+  says so (`asked_taxonomy_templates`), so the digest names it (the PM's ruling C of 2026-11-12).
 
 The window is the search's own `since` and `until`.
 
@@ -214,7 +214,7 @@ class DigestGroup:
     """`Politics DA — Uniqueness`: the argument's and the need's labels."""
     items: tuple[DigestItem, ...]
     asked_taxonomy_templates: bool = False
-    """The pair has no digest templates, so its searches asked the preset's queries alone."""
+    """The pair has no digest templates, so its searches asked the taxonomy's, as before v1-e08-t25."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -319,7 +319,7 @@ class DigestService:
                         continue
                     listed.append(item.keys)
                     items.append(item)
-            alone = self._templates.asks_query_alone(pair.argument, pair.need)
+            alone = self._templates.asks_taxonomy(pair.argument, pair.need)
             groups.append(
                 DigestGroup(
                     pair=pair, heading=self._heading(pair), items=tuple(items), asked_taxonomy_templates=alone
@@ -360,7 +360,10 @@ class DigestService:
         return sum(len(self._queries(preset, pair)) for pair in preset.pairs)
 
     def _queries(self, preset: DailyPreset, pair: DailyPair) -> tuple[str, ...]:
-        """The preset's queries a search is run for on `pair`: each that some digest template asks."""
+        """The preset's queries a search is run for on `pair`: all of them for a pair that asks the
+        taxonomy's templates, otherwise each that some digest template is for."""
+        if self._templates.asks_taxonomy(pair.argument, pair.need):
+            return preset.queries
         return tuple(
             query for query in preset.queries if self._templates.queries_for(pair.argument, pair.need, query)
         )

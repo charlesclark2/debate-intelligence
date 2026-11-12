@@ -75,11 +75,11 @@ def _plain(text: str) -> str:
     return _MARKDOWN_SPECIAL.sub(r"\\\1", " ".join(text.split()))
 
 
-QUERY_ALONE_NOTE: Final = (
-    "No digest templates for this group in config/daily_templates.yaml: its searches asked the "
-    "preset's queries alone."
+TAXONOMY_NOTE: Final = (
+    "No digest templates for this pair in config/daily_templates.yaml: its searches asked the "
+    "taxonomy's templates."
 )
-"""Under a group whose pair has no digest templates (v1-e08-t25): it never asks the taxonomy's."""
+"""Under a group whose pair has no digest templates (v1-e08-t25, the PM's ruling C): never silent."""
 
 
 def digest_file_name(digest: Digest, file_format: DigestFormat) -> str:
@@ -153,7 +153,7 @@ def digest_markdown(digest: Digest) -> str:
     for group in digest.groups:
         lines += [f"## {_plain(group.heading)}", ""]
         if group.asked_taxonomy_templates:
-            lines += [f"> {QUERY_ALONE_NOTE}", ""]
+            lines += [f"> {TAXONOMY_NOTE}", ""]
         if not group.items:
             lines += ["No new results.", ""]
         for position, item in enumerate(group.items, start=1):
@@ -241,7 +241,9 @@ def digest_table(digest: Digest) -> TableSpec:
         title = f"PARTIAL: {title}"
     below = [f"Digest: {digest.file}"] if digest.file is not None else []
     below += _review_lines(digest)
-    below += [f"{group.heading}: {QUERY_ALONE_NOTE}" for group in digest.groups if group.asked_taxonomy_templates]
+    below += [
+        f"{group.heading}: {TAXONOMY_NOTE}" for group in digest.groups if group.asked_taxonomy_templates
+    ]
     below += digest_footer(digest)
     return TableSpec(
         title=title,

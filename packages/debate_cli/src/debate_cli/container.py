@@ -1834,7 +1834,9 @@ class ServiceContainer:
         taxonomy = self.argument_taxonomy()
         templates = self.daily_templates()
         service = DigestService(
-            searching=self._federated_search_over(providers, None, DigestExpansionStage(taxonomy, templates)),
+            searching=self._federated_search_over(
+                providers, None, DigestExpansionStage(taxonomy, templates, clock=_PortClock(self.clock()))
+            ),
             seen=FileDigestSeenStore(self.settings.storage.data_dir / DAILY_SEEN_DIRECTORY),
             taxonomy=taxonomy,
             templates=templates,

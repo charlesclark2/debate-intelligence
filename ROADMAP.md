@@ -64,7 +64,7 @@ v2.3's extension work.
 | [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 4 | 125 | 105 | 550 |
 | [v1.2](plan_specs/releases/v1.2.yaml) | Argument landscape & file building | 3 | 99 | 82 | 366 |
 | [v1.3](plan_specs/releases/v1.3.yaml) | URL → verified card | 2 | 24 | 15 | 125 |
-| [v1.4](plan_specs/releases/v1.4.yaml) | Federated research from the CLI | 2 | 48 | 25 | 158 |
+| [v1.4](plan_specs/releases/v1.4.yaml) | Federated research from the CLI | 2 | 48 | 27 | 158 |
 | [v1.5](plan_specs/releases/v1.5.yaml) | V1 quality gate & team pilot | 1 | 7 | 1 | 66 |
 | [v1.6](plan_specs/releases/v1.6.yaml) | Public team website | 3 | 31 | 22 | 169 |
 | [v1.7](plan_specs/releases/v1.7.yaml) | Team evidence search pilot | 1 | 30 | 25 | 100 |
@@ -497,7 +497,7 @@ A student can run `debate-research cut <URL>` and receive a verified, tagged, ci
 | [The search presenter's stand-in Crossref queues on the shared pacer, so its health reads as the real adapter's](plan_specs/v1/e07-discovery-adapters/t19-the-search-presenters-stand-in-crossref-queues-on-a-real-pacer.yaml) `v1-e07-t19-the-search-presenters-stand-in-crossref-queues-on-a-real-pacer` | Pending | 1 | 1.0 |
 | [Semantic Scholar is enabled in both profiles once its live smoke has passed](plan_specs/v1/e07-discovery-adapters/t20-semantic-scholar-enabled-after-its-live-smoke.yaml) `v1-e07-t20-semantic-scholar-enabled-after-its-live-smoke` | Pending | 4 | 1.0 |
 | [Semantic Scholar's influential citation count is either weighed by the ranking or no longer asked for](plan_specs/v1/e07-discovery-adapters/t21-influential-citations-weighed-or-not-asked.yaml) `v1-e07-t21-influential-citations-weighed-or-not-asked` | Pending | 1 | 2.0 |
-| [A paced call checks the breaker and the rate-limit hold when its turn comes, and a 429 backs the provider off exponentially](plan_specs/v1/e07-discovery-adapters/t22-a-paced-call-checks-the-breaker-at-its-turn-and-backs-off-on-429.yaml) `v1-e07-t22-a-paced-call-checks-the-breaker-at-its-turn-and-backs-off-on-429` | Pending | 2 | 3.0 |
+| [A paced call checks the breaker and the rate-limit hold when its turn comes, and a 429 backs the provider off exponentially](plan_specs/v1/e07-discovery-adapters/t22-a-paced-call-checks-the-breaker-at-its-turn-and-backs-off-on-429.yaml) `v1-e07-t22-a-paced-call-checks-the-breaker-at-its-turn-and-backs-off-on-429` | Succeeded | 2 | 3.0 |
 | [A provider missing only configuration is named with its cure wherever it appears, and counts as partial only when a person asked for it](plan_specs/v1/e07-discovery-adapters/t23-configuration-gaps-named-with-their-cure-everywhere.yaml) `v1-e07-t23-configuration-gaps-named-with-their-cure-everywhere` | Pending | 1 | 2.0 |
 
 #### [E08 — Federated Research Workflows](plan_specs/v1/e08-research-workflows/epic.yaml)
@@ -524,7 +524,7 @@ A student can run `debate-research cut <URL>` and receive a verified, tagged, ci
 | [An auto-cut run's report does not replace the last run's in the same directory](plan_specs/v1/e08-research-workflows/t18-auto-cut-report-names-per-run.yaml) `v1-e08-t18-auto-cut-report-names-per-run` | Pending | 2 | 1.0 |
 | [A batching provider's footer counts the distinct works it returned, not one per query](plan_specs/v1/e08-research-workflows/t19-a-batching-providers-footer-counts-distinct-works.yaml) `v1-e08-t19-a-batching-providers-footer-counts-distinct-works` | Pending | 1 | 1.0 |
 | [A typed query with an unbalanced parenthesis or a bare operator cannot change or break the joined search](plan_specs/v1/e08-research-workflows/t20-a-typed-query-that-would-break-the-joined-search.yaml) `v1-e08-t20-a-typed-query-that-would-break-the-joined-search` | Pending | 1 | 2.0 |
-| [Two results sharing a DOI are one work, even under two OpenAlex work ids](plan_specs/v1/e08-research-workflows/t21-a-shared-doi-overrules-differing-openalex-ids.yaml) `v1-e08-t21-a-shared-doi-overrules-differing-openalex-ids` | Pending | 1 | 1.0 |
+| [Two results sharing a DOI are one work, even under two OpenAlex work ids](plan_specs/v1/e08-research-workflows/t21-a-shared-doi-overrules-differing-openalex-ids.yaml) `v1-e08-t21-a-shared-doi-overrules-differing-openalex-ids` | Succeeded | 1 | 1.0 |
 | [The auto-cut report states the whole command's spend beside its own calls' cost](plan_specs/v1/e08-research-workflows/t22-auto-cut-report-states-the-commands-whole-cost.yaml) `v1-e08-t22-auto-cut-report-states-the-commands-whole-cost` | Pending | 1 | 1.0 |
 | [A politics DA's link queries pair the DA's agenda item with the plan's mechanism](plan_specs/v1/e08-research-workflows/t23-politics-da-links-pair-the-agenda-item-with-the-plans-mechanism.yaml) `v1-e08-t23-politics-da-links-pair-the-agenda-item-with-the-plans-mechanism` | Pending | 2 | 4.0 |
 | [On a search of many queries, the ranking keeps the results the coach marks relevant above the providers' own order](plan_specs/v1/e08-research-workflows/t24-the-ranking-keeps-a-multi-query-searchs-relevant-results-up.yaml) `v1-e08-t24-the-ranking-keeps-a-multi-query-searchs-relevant-results-up` | Succeeded | 2 | 4.0 |

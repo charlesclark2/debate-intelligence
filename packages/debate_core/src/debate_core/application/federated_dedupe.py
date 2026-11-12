@@ -704,15 +704,17 @@ class _Groups:
 
     Each group keeps, per identifier kind, every value its records hold: one, except for an OpenAlex
     work id a shared DOI overruled, which can be two or more. Two groups disagree on a kind when both
-    hold it and share none of its values. Each group also keeps the DOI its records state.
+    hold it and share none of its values. A join by the DOI rule joins two groups whose records state
+    one DOI, so it alone skips the kinds in :data:`_OVERRULED_BY_A_SHARED_DOI`. No later rule needs
+    to: two groups that both state one DOI and are still apart after the DOI rule disagree on a kind
+    the DOI does not overrule, and still do.
     """
 
-    def __init__(self, identities: Sequence[dict[str, str]], stated_dois: Sequence[str | None]) -> None:
+    def __init__(self, identities: Sequence[dict[str, str]]) -> None:
         self._parent = list(range(len(identities)))
         self._identity = [
             {kind: frozenset({value}) for kind, value in identity.items()} for identity in identities
         ]
-        self._stated_doi = list(stated_dois)
         self._rules: list[set[MatchRule]] = [set() for _ in identities]
 
     def root(self, index: int) -> int:
@@ -726,10 +728,7 @@ class _Groups:
         if left_root == right_root:
             return
         left_identity, right_identity = self._identity[left_root], self._identity[right_root]
-        left_doi, right_doi = self._stated_doi[left_root], self._stated_doi[right_root]
-        overruled: frozenset[str] = (
-            _OVERRULED_BY_A_SHARED_DOI if left_doi is not None and left_doi == right_doi else frozenset()
-        )
+        overruled = _OVERRULED_BY_A_SHARED_DOI if rule is MatchRule.DOI else frozenset[str]()
         if any(
             kind not in overruled and kind in right_identity and not values & right_identity[kind]
             for kind, values in left_identity.items()
@@ -741,7 +740,6 @@ class _Groups:
             kind: left_identity.get(kind, frozenset()) | right_identity.get(kind, frozenset())
             for kind in left_identity.keys() | right_identity.keys()
         }
-        self._stated_doi[keep] = left_doi or right_doi
         self._rules[keep] |= self._rules[drop] | {rule}
 
     def members(self) -> list[tuple[list[int], set[MatchRule]]]:
@@ -809,7 +807,7 @@ def merge_candidates(candidates: Sequence[CandidateResult]) -> tuple[MergedCandi
     In the order each source's first record appears; each candidate's members in input order.
     """
     identities = [_identity(candidate) for candidate in candidates]
-    groups = _Groups(identities, [candidate.identifiers.doi for candidate in candidates])
+    groups = _Groups(identities)
     _join_on_keys(
         groups, [[c.identifiers.doi] if c.identifiers.doi else [] for c in candidates], MatchRule.DOI
     )

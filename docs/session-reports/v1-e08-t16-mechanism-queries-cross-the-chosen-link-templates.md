@@ -6,7 +6,7 @@
 | Spec | [`plan_specs/v1/e08-research-workflows/t16-mechanism-queries-cross-the-chosen-link-templates.yaml`](../../plan_specs/v1/e08-research-workflows/t16-mechanism-queries-cross-the-chosen-link-templates.yaml) |
 | Epic / release | `v1-e08-research-workflows` / `v1.4` |
 | Branch | `task/v1-e08-t16-mechanism-queries-cross-the-chosen-link-templates` |
-| Session status | IN PROGRESS: proposal written, waiting for the PM's ruling and the coach's review before any code <!-- COMPLETE / PARTIAL / BLOCKED --> |
+| Session status | IN PROGRESS: the PM ruled on 2026-11-11; waiting for the coach's answers to the review sheet before any code <!-- COMPLETE / PARTIAL / BLOCKED --> |
 
 ## Summary
 
@@ -42,7 +42,7 @@ amendment to this spec beyond the `InProgress` phase.
 
 | Criterion | Status | Evidence (command → result) |
 |---|---|---|
-| ac1: the proposal (the per-DA template choice, the mechanism cap and the queries per search) is ruled on by the PM before any code, and the coach reviews the preset's changes (operator) | NOT RUN | Proposal below, committed with no code. Waiting for the ruling, and for the coach's answers to the [review sheet](#review-sheet-for-the-coach) |
+| ac1: the proposal (the per-DA template choice, the mechanism cap and the queries per search) is ruled on by the PM before any code, and the coach reviews the preset's changes (operator) | NOT RUN | Proposal committed with no code (`0c3274d`). The PM ruled on 2026-11-11 ([below](#the-pms-ruling-2026-11-11)). Waiting for the coach's answers to the [review sheet](#review-sheet-for-the-coach) |
 | ac2: a preset names the link templates each DA's mechanism queries cross, and more mechanisms up to the stated maximum, by expansion tests on the recorded fixtures shown failing first, with every reviewed template unchanged | NOT RUN | After the ruling |
 | ac3: the operator repeats the Policy search and the coach labels it blind; the PM records nDCG@10 and the relevant count against v1-e08-t14's ac3 | NOT RUN | The operator's, after the merge |
 | Node: `uv run pytest packages/debate_core/tests/application/test_query_expansion.py` | NOT RUN | After the ruling |
@@ -380,12 +380,44 @@ coach's review. Full proposal: docs/session-reports/v1-e08-t16-mechanism-queries
    order measures what the crossing retrieves while t24 is unbuilt.
 ```
 
+## The PM's ruling (2026-11-11)
+
+The proposal and its questions above are kept as written. The ruling, summarised:
+
+1. **A.** `mechanism_link_templates` names each template by its id and its text, checked on load. The
+   crossing is template-major and comes after the reviewed queries, so today's 12 stay the first 12,
+   in today's order. The ids are as proposed. A DA the preset doesn't name crosses its first link
+   template that names only `{query}` and `{topic}`.
+2. **The politics DA crosses link templates 1, 4, 5, 6 and 7,** not 2 or 3. Its link search goes from
+   12 queries to 32.
+3. **`MAX_QUERIES_PER_SEARCH = 42` replaces `MAX_TOPIC_MECHANISMS = 4`.**
+   - The loader refuses a preset that takes any DA's link search over 42.
+   - A test pins every committed preset's DA link searches to one OpenAlex request per page.
+   - **Crossref: option A.** A search past Crossref's pace is PARTIAL, and that is accepted. The search
+     guide says which providers can't reach every query of a long search, and that the footer names
+     them. Crossref and the partial rule are not changed here; the PM files an E07 task.
+4. **Mechanisms: option (b). Today's four are kept.** The 10 queries of room under 42 are kept for
+   v1-e08-t23's agenda-item templates. Global budgets and single public authority are not added. The
+   team counts in section 4 stay recorded for the coach's later choice.
+5. **The preset's review.** If the coach answers the review sheet before the build, the preset is
+   committed as `coach_reviewed` in 1.6.0 with his answers applied. Otherwise it is
+   `awaiting_coach_review`.
+6. **Accepted.** The guide's ranking note says it, and ac3's record carries provider-order nDCG@10
+   beside the ranked figure.
+
+The build starts once the coach has answered the sheet below. Its tests run red first, then mutants
+on the crossing order, the default template, the text check and the cap.
+
 ## Review sheet for the coach
+
+Revised after the PM's ruling, which settled the mechanism questions: today's four stay. Two questions
+are left.
 
 **What changes.** Your seven politics DA link templates are still asked exactly as you reviewed
 them, first. Today the mechanism queries use only "political capital". With this change, each of
-these five templates is asked on the resolution's words and on each mechanism, every query ending
-with "United States" as you approved:
+these five templates is asked on the resolution's words and on each of the four mechanisms (single
+payer, Medicare for All, public option, Affordable Care Act). Every query ends with "United States",
+as you approved:
 
 1. `{query} political capital` (as today)
 2. `{query} popular with Republicans`
@@ -393,8 +425,8 @@ with "United States" as you approved:
 4. `{query} popular with Democrats`
 5. `{query} unpopular with Democrats`
 
-"Partisan fight Congress" and "unpopular with voters" are not crossed. The other four DAs keep using
-their first link template.
+"Partisan fight Congress" and "unpopular with voters" are not crossed. The other four DAs (midterms,
+economy, spending, federalism) are unchanged.
 
 **The 20 new queries for the ac6 search** (politics DA, link, "national health insurance"), after
 today's 12:
@@ -406,21 +438,15 @@ today's 12:
 | popular with Democrats | `national health insurance popular with Democrats United States` | `single payer popular with Democrats United States` | `Medicare for All popular with Democrats United States` | `public option popular with Democrats United States` | `Affordable Care Act popular with Democrats United States` |
 | unpopular with Democrats | `national health insurance unpopular with Democrats United States` | `single payer unpopular with Democrats United States` | `Medicare for All unpopular with Democrats United States` | `public option unpopular with Democrats United States` | `Affordable Care Act unpopular with Democrats United States` |
 
-**More mechanisms.** The limit is the search's size, not a count of four. One search can carry 42
-queries, so the preset can name six mechanisms. Suggested, by how many teams read them: global
-budgets ("global budgets", 53 teams) and single public authority ("single public authority", 26).
-Each adds five politics queries, one per template above, and one query to each other DA. Medicaid
-expansion, UCC and tiered NHI don't fit unless two others are dropped. The full list with team counts
-is in section 4 of the proposal.
+**Two questions:**
 
-**Four questions:**
+1. Should the mechanism queries cross political capital and the four party-popularity templates, as
+   above?
+2. Should "partisan fight Congress" and "unpopular with voters" stay uncrossed? Crossing them too
+   would add 10 queries (42 in all) and use up the room kept for the next task's agenda-item queries.
 
-1. Cross political capital and the four party-popularity templates, and not "partisan fight
-   Congress" or "unpopular with voters"?
-2. Add global budgets and single public authority? Or none, which keeps room for the agenda-item
-   queries of the next task. Or others?
-3. Keep all four of today's mechanisms? ACA reform is read by one team.
-4. Approve the phrases: "global budgets", "single public authority"?
+**For later, no answer needed:** the counts of teams reading each other aff are in section 4 of the
+proposal, for when you want to add a mechanism.
 
 ## Files changed
 
@@ -445,8 +471,9 @@ will follow v1-e08-t14's, with the query count and the added template ids update
 
 ## Follow-up work
 
-- **Crossref under a large expanded search (E07)**, if the PM rules 3A. Every search over about 18
-  to 28 queries is PARTIAL on Crossref's polite pool.
+- **Crossref under a large expanded search (E07): the PM files it (ruling 3).** Every search over
+  about 18 to 28 queries is PARTIAL on Crossref's polite pool.
+- **More mechanisms, the coach's later choice (ruling 4).** The team counts are in section 4.
 
 ## PM review
 

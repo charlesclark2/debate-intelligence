@@ -11,9 +11,9 @@
 ## Summary
 
 In progress: ac1 (the counts before building). Nothing has been restored, built, published or
-deployed. The first bucket check found hspolicy25 still at `2026.10.27-docx-7`, so measuring is held
-until its cloud rebuild to `2026.11.03-docx-9` and the landscape republish have both finished
-([The measurement so far](#the-measurement-so-far)).
+deployed. The first bucket check found hspolicy25 still at `2026.10.27-docx-7`, so measuring was held.
+The hold was lifted on 2026-11-12 after hspolicy25's cloud rebuild to `2026.11.03-docx-9` finished
+([The measurement so far](#the-measurement-so-far)); the second bucket check is next.
 
 ## Plan nodes
 
@@ -52,6 +52,25 @@ None.
    both finished and the lock is free. Then: the bucket check again (all four backfiles docx-9 only,
    hspolicy25 about 14,343 objects), the restore, the measurements, one block at a time, then the copy
    and every scratch index are deleted (policy 1.18). Every block starts with `cd "${HOME}"`.
+
+**The PM's relay of 2026-11-12, lifting the hold:**
+
+* hspolicy25's rebuild has finished: ECS task `8e203907c93940a99ce84ea6dba01d9a`, started 00:53
+  Chicago on task-definition revision 15 (parser `2026.11.03-docx-9`), run by caselist-cloud-run.md's
+  "Backfile imports" after a clean dry run. Its result line: status ok, applied true,
+  downloaded_bytes 0, sources_skipped 14,340, parsed 14,163, unsupported 176, failed 1, cards
+  408,335, parsed_uploaded 14,343, no code; restore 7.2 s, parse 4,080.9 s, publish 69.6 s,
+  publish_parsed 388.0 s.
+* The landscape republish finished on 2026-11-10.
+* hspolicy25's `2026.10.27-docx-7` directory is still in the bucket; the PM retires it in the next
+  batch. So for hspolicy25 the check reads "docx-9 present and complete", not "docx-9 only".
+* The restore size is recomputed from the second check's real docx-9 bytes (all eight stores), with
+  25% headroom, against the Mac's free space; if it does not fit, measuring stops. The restore takes
+  docx-9 directories only, never a docx-7 one. After measuring, the copy and every scratch index are
+  deleted, and the deletion is recorded with what was removed.
+* Unchanged: no index holding backfile cards is published to dev or prod, and no function is
+  deployed with one, before the PM rules; nothing runs on a Wednesday; no AWS write of any kind; no
+  pull request.
 
 ## The measurement so far
 

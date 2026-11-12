@@ -116,6 +116,16 @@ with 25% headroom, against 119,436,075,008 bytes free. It fits. The installed `d
 (1.1.0.dev413) parses at `2026.11.03-docx-9`, the version a restore takes, so no docx-7 directory is
 restored.
 
+**The first restore stopped when the Mac slept.** Started 11:02 Chicago into `~/t18-measure/copy`
+(the seven caselists, openev with them). The lid was closed at 11:16:47 (`pmset` log: "Clamshell
+Sleep"), which `caffeinate -i` does not prevent; the last file landed at 11:17:41. On a maintenance
+wake at 11:57:52 the restore found no network and ended `STORE_UNAVAILABLE` (exit 3: "Could not
+connect to the endpoint URL" on a `GetObject`). Its release of the lock failed the same way, so the
+lease lapsed at 17:42:59Z; a later take treats a lapsed lease as free by design. It had landed the
+current three caselists whole (8,258, 5,691 and 6,700 files, the bucket's counts) and 183 of
+hspolicy25's files, 12,937,191,424 bytes on disk, no docx-7 directory: about 15 MB/s, so a full
+restore takes about 65 minutes with the lid open. The partial copy is deleted before a second restore.
+
 ## Operator follow-ups
 
 <!-- Commands the operator must run (anything over ~2 minutes), with where to run them, the exact

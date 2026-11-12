@@ -171,6 +171,7 @@ HEAD --`. No Hypothesis property is involved.
 | `.venv/bin/python scripts/hard_stop.py 115 uv run scripts/affected_tests.py --run` | 113 test files selected; stopped at the 115-second limit (exit 124 from the stop) at 59% with no failure mark. **Over two minutes, so under agreement 10 it is left to the pull request's `ci` check, not handed over.** |
 | The changed test directories and the always-run list: `hard_stop.py 115 … pytest -n auto -m "not slow and not live and not partition_proof"` over `packages/debate_core/tests/integrations/discovery`, `test_query_expansion.py`, `test_federated_search.py`, `test_federated_search_articles.py`, the CLI's `test_search_command.py`, `test_search_presenter.py`, `test_app.py`, `test_help_rendering.py`, `test_container_factories.py`, `tests/architecture`, `tests/specs` | `1797 passed in 25.54s` |
 | `uv run ruff format --check .` / `uv run ruff check .` | `2061 files already formatted` / `All checks passed!` |
+| After the PR's `lint` failed: `uv run --frozen ruff format --check .` | The report's appendix (written after the checks above) had one Python line over the limit, which ruff formats inside Markdown; reformatted, then `2064 files already formatted`; `ruff check`, whole-repo `pyright` (`0 errors`) and the command-block check clean |
 | `uv run pyright packages/debate_core packages/debate_cli` | `0 errors, 0 warnings, 0 informations` |
 | `uv run lint-imports` | `Contracts: 20 kept, 0 broken.` |
 | `uv run --frozen python scripts/check_thin_handlers.py` | `OK: 74 CLI command and API route handlers within 25 statements` |
@@ -332,7 +333,9 @@ class Recorder(httpx.AsyncBaseTransport):
         response = await self.inner.handle_async_request(request)
         self.body = await response.aread()
         self.status = response.status_code
-        return httpx.Response(response.status_code, headers=response.headers, content=self.body, request=request)
+        return httpx.Response(
+            response.status_code, headers=response.headers, content=self.body, request=request
+        )
 
     async def aclose(self) -> None:
         await self.inner.aclose()

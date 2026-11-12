@@ -14,8 +14,10 @@
 # queries the template is asked for; left out, it is asked for every query of every preset with the
 # pair. A preset query no template of its group is for is not searched for that pair.
 #
-# A pair with no group here (today, every pair of the nhi preset) asks the preset's query alone, and
-# the digest names the group as asked that way. It never falls back to the taxonomy's templates.
+# A pair with no group here (today, every pair of the nhi preset) asks the taxonomy's templates
+# exactly as before, and the digest names the group as asked that way (the PM's ruling C,
+# 2026-11-12): the every-word rule is the feed provider's alone, and those reviewed templates do their
+# work against OpenAlex, Crossref and the government sources.
 #
 # Adding a template: count it first against the real feeds with scripts/count_digest_feed_matches.py
 # (docs/guides/daily-digests.md, "Counting a template before adding it"), then add it here with the

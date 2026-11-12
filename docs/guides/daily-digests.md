@@ -78,11 +78,11 @@ things happen once, on the first evening after you install a build with this cha
 
 ## What a digest asks: the digest templates
 
-`daily` does not ask the long search templates `search` asks, such as `Senate vote count Senate`. The
-publisher feeds keep a headline only when it has every word of a query, and on 12 November 2026 none
-of the politics preset's ten long queries kept any of the 42 headlines of the day before. A digest
-asks short **digest templates** instead, each the preset's query and one more word, from
-`config/daily_templates.yaml`:
+For the groups that have them, `daily` asks short **digest templates** in place of the long search
+templates `search` asks, such as `Senate vote count Senate`. The publisher feeds keep a headline only
+when it has every word of a query, and on 12 November 2026 none of the politics preset's ten long
+queries kept any of the 42 headlines of the day before. A digest template is the preset's query and
+one more word, from `config/daily_templates.yaml`:
 
 | Group | Asks | Kept on 2026-11-12, 24 hours / 72 hours |
 |---|---|---|
@@ -92,15 +92,17 @@ asks short **digest templates** instead, each the preset's query and one more wo
 `search` is unchanged: it still asks the reviewed templates in `config/argument_taxonomy.yaml`, and
 nothing in that file changed.
 
-**A group with no digest templates** (today, all three of the `nhi` preset's groups) asks the preset's
-query alone, `health insurance`, and the digest says so under the group's heading:
+**A group with no digest templates** (today, all three of the `nhi` preset's groups) asks the reviewed
+templates of `config/argument_taxonomy.yaml`, exactly as it did before digest templates existed, and
+the digest says so under the group's heading:
 
 ```text
-> No digest templates for this group in config/daily_templates.yaml: its searches asked the preset's queries alone.
+> No digest templates for this pair in config/daily_templates.yaml: its searches asked the taxonomy's templates.
 ```
 
-The three `nhi` groups then ask the same query, so what they find is listed once, under the first
-group, and the other two stay empty until they have digest templates of their own.
+Those templates are long, so on the feeds they may keep little; on OpenAlex, Crossref and the
+government sources, which search differently, they do their usual work. Whether a group's feeds are
+starved can be counted with the script below before a digest template is proposed for it.
 
 ## Counting a template before adding it
 
@@ -122,7 +124,8 @@ cd "$HOME" && env DEBATE_ENV=dev "$(uv tool dir)/debate-cli/bin/python" -I "$CHE
 
 It takes under a minute. For the 24 hours and the 72 hours before the run it prints, per filled query,
 how many headlines each would keep: the `taxonomy` rows are what `search` asks, the `digest` rows what
-`daily` asks now, and the `candidate` rows yours. A candidate that keeps something is worth adding:
+`daily` asks now (the taxonomy's again for a group with no digest templates), and the `candidate`
+rows yours. A candidate that keeps something is worth adding:
 put it under its group in `config/daily_templates.yaml` with the date you measured it and its two
 counts as a comment, the way the four there are. A template is always the query and one word; the
 file refuses anything longer when `daily` starts.

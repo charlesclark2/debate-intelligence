@@ -9,7 +9,7 @@ templates for them (`config/daily_templates.yaml`, v1-e08-t25): `bill Congress` 
 bill; `Senate Congress` and `Senate Republicans` for politics DA x Senate; `Senate election` for
 midterms DA x Senate; midterms DA x bill is not searched. The feed provider keeps an item when every
 word of a query is in its title or description, inside the window. The `nhi` preset's pairs have no
-digest templates, so each of its searches asks `health insurance` alone.
+digest templates, so each of its searches asks the taxonomy's uniqueness templates, as before.
 
 | File | Items | What each search keeps |
 |---|---|---|
@@ -17,4 +17,4 @@ digest templates, so each of its searches asks `health insurance` alone.
 | `courier_2026-09-18.xml` | G spending bill heads back to Congress (18 Sep, 11:00), H Senate election polling (17 Sep, 23:15, first listed a day late), then A, B, I, C and F again | with `--window 2d` on 18 Sep: politics x bill: B and G. politics x Senate: I. midterms x Senate: C and H. |
 | `ledger_2026-09-17.xml` | a weekend weather item | nothing |
 | `courier_auto_cut.xml` | B, I and C's titles at three of the HTTP cassettes' pages: the Daily Meridian news article and the Harwell Institute report, whose cards verify, and the Harbor Review page, which is paywalled | as the first file |
-| `health_wire_2026-09-17.xml` | subsidies at the center of the federal spending debate in Congress, states lead on health insurance policy | both, for each of the `nhi` preset's three `health insurance` searches; listed once, in the spending DA group |
+| `health_wire_2026-09-17.xml` | subsidies at the center of the federal spending debate in Congress, states lead on health insurance policy | the `nhi` preset's spending DA and federalism DA uniqueness searches |

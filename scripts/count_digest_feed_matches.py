@@ -25,7 +25,7 @@ prints:
 * per digest template `daily` asks (`digest/...`, `config/daily_templates.yaml`, v1-e08-t25), for
   the queries it is asked for, the items the every-word rule keeps: the build's own file, or this
   checkout's when the build predates it (the first line says which). A pair with no digest
-  templates is counted as `daily` asks it, the preset query alone (`digest/<pair>/query-alone`);
+  templates is counted as `daily` asks it, by the taxonomy's templates (the PM's ruling C);
 * per `--candidate PAIR=TEMPLATE` (`candidate/...`, any number), a template not yet in the file,
   counted for every preset query of the pair, under the every-word rule;
 * per pair and for the whole digest, the distinct items any of its queries keeps under each rule.
@@ -43,7 +43,7 @@ import argparse
 import asyncio
 import sys
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -194,9 +194,10 @@ def the_rows(
                 )
             name = pair_name(pair)
             if name not in digest:
-                rows.append(
-                    template_row("digest", name, preset_query, f"digest/{name}/query-alone", "{query}")
-                )
+                taxonomys = [
+                    r for r in rows if (r.kind, r.pair, r.preset_query) == ("taxonomy", name, preset_query)
+                ]
+                rows.extend(replace(row, kind="digest") for row in taxonomys)
             for number, entry in enumerate(digest.get(name, []), start=1):
                 queries = entry.get("queries")
                 if isinstance(queries, list) and preset_query not in queries:

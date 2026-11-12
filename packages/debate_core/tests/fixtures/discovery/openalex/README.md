@@ -38,3 +38,11 @@ never in a URL.
   the third; the fourth matches none ("Pricing emissions: a review", no abstract), so it goes to all
   three. By hand, the answers are: first query W5550000001, W5550000002, W5550000004; second
   W5550000002, W5550000004; third W5550000003, W5550000004.
+* `works_one_doi_two_work_ids.body.json` (v1-e08-t21) is a `/works` body of six works that
+  `packages/debate_core/tests/application/test_federated_dedupe_shared_doi.py` reads through
+  `candidate_from_work` to test dedupe, not the adapter. The first two are OpenAlex's own duplicate:
+  one DOI, written as a bare lower-case DOI and as an upper-case `doi.org` URL, under two work ids,
+  one at the `doi.org` page (7 fields with values) and one at a repository's PDF (10, with the venue,
+  an abstract and an open copy). The third and fourth agree on title, author and year but carry
+  different DOIs. The fifth and sixth agree on title, author, day and site and carry no DOI (the
+  sixth's `doi` is a URL that is not one, which the adapter drops).

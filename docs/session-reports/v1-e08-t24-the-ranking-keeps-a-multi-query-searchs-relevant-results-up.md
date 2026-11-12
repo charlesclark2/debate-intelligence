@@ -98,6 +98,18 @@ ranks sit at provider positions 117, 441 and 257 in the file, and stops if they 
 score a different search. t14's labels are still read from its sheet and key. If t05's filled sheet
 turns up, putting it on the Desktop as `labels-policy-nhi.csv` makes the block read it instead.
 
+**The second run (2026-11-11) found no t05 search in the dev store.** It stopped with `STOP: the
+store does not hold search-policy-nhi.json's search or its provider record`. It had already passed
+the record check, so ranks 1, 9 and 10 of the Desktop file sit at provider positions 117, 441 and
+257: the file is ac6's search. But that file's search id is not in `~/.debate-research/dev/debate.sqlite3`.
+Before guessing why, the operator runs a read-only check, [Where the two searches are
+stored](#where-the-two-searches-are-stored). It looks in every SQLite file under `~/.debate-research`
+for both searches' ids and lists every stored politics DA search, with only ids, dates, provider
+sets, taxonomy versions and counts. If t05's provider record is in no store, its snippets are gone.
+Then t05's positions can still come from the saved file alone, but its BM25 cannot be recomputed,
+which limits which changes the replay can score on t05. I will put that to the PM rather than decide
+it.
+
 **How nDCG@10 is computed.** A row the coach marked relevant gains 1, and any other row gains 0. The
 ideal ordering puts the sheet's relevant rows first. This reproduces t05's 0.746 from ranks 1, 9 and
 10, and its 0.000 from provider positions 117, 441 and 257. "Provider order" can mean the raw
@@ -166,6 +178,98 @@ PM used.
   The block holds no `#` and no `!` (zsh history expansion), and only ASCII.
 
 ## Operator follow-ups
+
+### Where the two searches are stored
+
+**Operator command: find both searches' stored records** (seconds; no network, no model, writes
+nothing)
+
+Where: your Mac, any terminal. It needs no worktree code and opens each store with `immutable=1`.
+
+```bash
+if env | grep -q '^DEBATE_'; then echo "STOP: DEBATE_ overrides are set in this shell"; else python3 -I -B - "$HOME/.debate-research" "$HOME/Desktop/search-policy-nhi.json" "$HOME/Desktop/search-policy-nhi-mechanisms.json" <<'EOF'
+import json
+import sqlite3
+import sys
+import traceback
+from datetime import datetime
+from pathlib import Path
+
+
+def saved_id(path):
+    if not path.is_file():
+        return None
+    document = json.loads(path.read_text(encoding="utf-8"))
+    if "results" not in document:
+        document = document.get("data") or (document.get("error") or {}).get("details") or {}
+    return document.get("search_id")
+
+
+def main():
+    root = Path(sys.argv[1])
+    wanted = {}
+    for label, name in (("t05", sys.argv[2]), ("t14", sys.argv[3])):
+        search_id = saved_id(Path(name))
+        wanted[search_id] = label
+        print(f"{label}: {Path(name).name} names search {search_id}")
+    stores = sorted(p for p in root.rglob("*") if p.is_file() and p.name.endswith((".sqlite3", ".sqlite", ".db")))
+    print(f"stores under {root.name}: {len(stores)}")
+    for store in stores:
+        stat = store.stat()
+        wal = store.with_name(store.name + "-wal")
+        print(
+            f"--- {store.relative_to(root)}: {stat.st_size} bytes, modified {datetime.fromtimestamp(stat.st_mtime):%Y-%m-%d %H:%M},"
+            f" wal {wal.stat().st_size if wal.is_file() else 'none'}"
+        )
+        connection = sqlite3.connect(store.as_uri() + "?mode=ro&immutable=1", uri=True)
+        try:
+            tables = {row[0] for row in connection.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
+            if "searches" not in tables:
+                print("    no searches table")
+                continue
+            rows = connection.execute("SELECT search_id, created_at, document FROM searches ORDER BY created_at").fetchall()
+            print(f"    searches {len(rows)}, first {rows[0][1][:10] if rows else '-'}, last {rows[-1][1][:10] if rows else '-'}")
+            for search_id, created_at, document in rows:
+                body = json.loads(document)
+                expansion = body.get("expansion") or {}
+                statuses = connection.execute(
+                    "SELECT count(*) FROM search_provider_statuses WHERE search_id = ?", (search_id,)
+                ).fetchone()[0] if "search_provider_statuses" in tables else "no table"
+                results = connection.execute(
+                    "SELECT count(*) FROM search_results WHERE search_id = ?", (search_id,)
+                ).fetchone()[0]
+                if search_id in wanted or expansion.get("argument") == "politics-da":
+                    print(
+                        f"    {wanted.get(search_id, '   ')} {search_id} {created_at[:16]} {body.get('status')}"
+                        f" providers {body.get('provider_set')} taxonomy {expansion.get('taxonomy_version')}"
+                        f" topic {expansion.get('topic_id')} queries {len(expansion.get('queries') or [])}"
+                        f" calls {statuses} results {results}"
+                    )
+        finally:
+            connection.close()
+
+
+try:
+    main()
+except Exception as failure:
+    frames = traceback.extract_tb(failure.__traceback__)
+    own = [frame for frame in frames if frame.filename == "<stdin>"]
+    where = own[-1] if own else frames[-1]
+    print("FAILED:", type(failure).__name__, "at block line", where.lineno, "in", where.name)
+    sys.exit(2)
+EOF
+fi
+```
+
+Success looks like:
+* two lines naming each Desktop file's search id;
+* the number of stores found;
+* for each store, its size, its modification time, its search count, and a line per politics DA
+  search. A line for t05's or t14's search starts with `t05` or `t14`.
+
+Paste back everything it prints. It holds no query text, title or URL.
+
+### Positions of the labelled rows
 
 **Operator command: positions of the labelled rows** (seconds; no network, no model, writes nothing)
 

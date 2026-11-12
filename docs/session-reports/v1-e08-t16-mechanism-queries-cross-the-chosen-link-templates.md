@@ -840,9 +840,48 @@ The Goal stays `InProgress`, because ac3 is open. No `set-phase` was run.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-11-11
 
 **Notes:**
+
+The PM read the preset in the worktree. `config/argument_taxonomy.yaml` 1.6.0 gives the NHI preset
+`mechanism_link_templates` in the ruled order:
+1. the coach's crossing-only `{query} costs political capital Congress`, under `argument: politics-da`;
+2. then templates 2, 4, 5, 6 and 7, each by id and its exact text.
+
+No argument entry changed, and the comments say what the crossing does and the 42-query limit.
+
+1. **ac1 passes.** The proposal was committed with no code. The PM ruled, the coach answered the sheet,
+   and the PM ruled again on his answers. The first code commit follows both rulings, and all four
+   steps are in the report.
+2. **ac2 passes.**
+   - **Red:** 25 failed against the skeleton, every one at an assertion. The session's own miscount
+     (nine DAs, not five) was corrected before any implementation, and it says so.
+   - **The six checks the skeleton passed** are each proved by a mutant.
+   - **Mutants:** all 24 caught at assertions. They include the forbidden case (the resolution's words
+     dropped), the text check, the crossing-only entry's checks, the cap at its edges and the URL pin.
+   - **Hand-written expectations:** every expected query was written out by hand, all 37 of the politics
+     expansion included.
+   - **Nothing reviewed was touched:** `coach_reviewed_1_5_0.yaml` and its guard are as they were.
+   - **The interrupted mutant batch** was restored at once and rerun in smaller batches, and the report
+     says so.
+3. **The sync onto v1-e07-t15 is accepted:** dev's GovInfo wording was kept and this task's counts
+   applied to it.
+4. **Deviation 1 is accepted.** The CLI README's `search` section is where search is documented, so
+   ruling 3's "search guide" means it. The core README rows follow v1-e08-t14's precedent.
+5. **Decisions 1 to 6 are accepted.** Model queries are left out of the cap, with their cost shown. The
+   cap counts `{bill}` templates. The crossing-only ids are as recorded.
+6. **Follow-ups, which the PM files in the next batch:**
+   - **Crossref under a long search** is part of the E07 work already filed (v1-e07-t22) or a task of its
+     own. The PM decides in the batch.
+   - **E08, p3:** a topic preset's mechanism crossing applies only to the DAs of the preset's own format,
+     so the four LD de-extinction DAs are not crossed on the Policy NHI preset.
+   - **The coach's later mechanism choice** stays recorded in section 4.
+7. **ac3 is the operator's**, after the merge, on a dev build that carries it. Its three blocks are in
+   the report. The PM records the relevant count and both nDCG@10 figures against v1-e08-t14's 6 of 19,
+   0.438 ranked and 0.746 in provider order.
+8. **Merge:** `scripts/task pr --partial` once `ci` is green. The Goal stays `InProgress` until ac3 is
+   recorded.

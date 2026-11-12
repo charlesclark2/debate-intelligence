@@ -1,0 +1,95 @@
+# TASK v1-e08-t23-politics-da-links-pair-the-agenda-item-with-the-plans-mechanism - A politics DA's link queries pair the DA's agenda item with the plan's mechanism
+# Epic: E08 Federated Research Workflows | Release: v1.4 (Federated research from the CLI) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e08-t23-politics-da-links-pair-the-agenda-item-with-the-plans-mechanism
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.4
+    debate/epic: v1-e08-research-workflows
+  annotations:
+    debate/title: "A politics DA's link queries pair the DA's agenda item with the plan's mechanism"
+spec:
+  # Filed by the PM, 2026-11-09, from v1-e08-t14's ac3 and the coach's criterion (the operator's labels of 2026-11-08).
+  description: >-
+    The coach labelled v1-e08-t14's repeated Policy search, the politics DA's link on national
+    health insurance, blind on 2026-11-08: 6 relevant of 19 rows. His criterion: a politics DA
+    link card is relevant only when it ties the plan's mechanism to the political fight over a
+    specific piece of legislation, because each politics DA turns on its own agenda item. Today
+    the politics DA's link queries cross the plan's mechanism with generic templates (political
+    capital, and with v1-e08-t16 party popularity) and name no bill. So a politics DA search
+    takes the DA's agenda item, a bill's name or number that the debater types or a preset
+    names, and its link queries pair that agenda item with the plan's mechanism; without an
+    agenda item the search says its link queries are generic. Proposal first: the option's name,
+    how the agenda item enters the queries (new templates, since a coach-reviewed template is
+    never changed), the queries per search, and how it composes with v1-e08-t16's crossing. Stop
+    for the PM's ruling; the coach reviews the new templates (operator). Then the operator
+    repeats the search with a real agenda item and the coach labels it blind, recorded against 6
+    of 19.
+  priority: 2
+  constraints:
+    packages: [debate_core.application, debate_core.domain, debate_cli, config, packages/debate_core/tests, packages/debate_cli/tests, docs/guides]
+    forbidden:
+      - A change to a coach-reviewed template
+      - A live provider call in a test
+      - A school, team code or debater name anywhere
+  context:
+    - kind: TaskRef
+      name: v1-e08-t14-da-links-name-the-plans-mechanism-in-the-united-states
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e08-t16-mechanism-queries-cross-the-chosen-link-templates
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        The proposal is ruled on by the PM and the coach has reviewed the new templates
+        (operator) before they are used.
+    - id: ac2
+      description: >-
+        With an agenda item every politics DA link query carries it and the plan's
+        mechanism, and without one the search says its link queries are generic, by tests on
+        fixtures shown failing first.
+    - id: ac3
+      description: >-
+        The operator repeats the Policy search with a real agenda item and the coach labels
+        it blind; the PM records nDCG@10 and the relevant count against v1-e08-t14's (6 of
+        19) (operator).
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e08-t23-politics-da-links-pair-the-agenda-item-with-the-plans-mechanism-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.4
+    debate/epic: v1-e08-research-workflows
+spec:
+  description: >-
+    A politics DA's link queries pair the DA's agenda item with the plan's mechanism.
+  goalRef:
+    name: v1-e08-t23-politics-da-links-pair-the-agenda-item-with-the-plans-mechanism
+  graph:
+    nodes:
+      - id: politics-da-links-pair-the-agenda-item-w
+        kind: Task
+        name: Agenda item in the link
+        description: >-
+          A politics DA's link queries pair the DA's agenda item with the plan's
+          mechanism.
+        estimatedEffort: 4h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Agenda item in the link tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests, packages/debate_cli/tests, -k, politics or agenda]
+status:
+  phase: Pending

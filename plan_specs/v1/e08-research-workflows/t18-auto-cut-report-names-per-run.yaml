@@ -20,6 +20,10 @@ spec:
     run into the same directory replaces the first run's report. Name the report after the
     bundle (`<bundle>.report.json`) or add a `--report PATH` option, propose which, and keep the
     bundle's own manifest beside it as today. Tests on fixtures.
+    (PM amendment 2026-11-09, from v1-e08-t07's follow-up.) `daily --auto-cut` writes its
+    report.json into the digest directory under the same fixed name, so each day's run replaces the
+    last day's report, and a `search --auto-cut` into the same folder does too. The naming chosen
+    here covers both commands.
   priority: 3
   constraints:
     packages: [debate_cli, debate_core.application, packages/debate_cli/tests, docs/guides]
@@ -27,6 +31,9 @@ spec:
       - Business logic in debate_cli
       - A live network or model call in a test
   context:
+    - kind: TaskRef
+      name: v1-e08-t07-daily-command
+      relation: dependsOn
     - kind: TaskRef
       name: v1-e08-t06-auto-cut
       relation: dependsOn

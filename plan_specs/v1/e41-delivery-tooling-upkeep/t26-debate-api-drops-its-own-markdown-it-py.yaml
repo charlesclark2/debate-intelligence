@@ -1,0 +1,76 @@
+# TASK v1-e41-t26-debate-api-drops-its-own-markdown-it-py - debate_api no longer declares markdown-it-py, which it gets through debate-core
+# Epic: E41 — Delivery Tooling Upkeep | Release: v1.8 (Weekly caselist run in the cloud) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e41-t26-debate-api-drops-its-own-markdown-it-py
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.8
+    debate/epic: v1-e41-delivery-tooling-upkeep
+  annotations:
+    debate/title: "debate_api no longer declares markdown-it-py, which it gets through debate-core"
+spec:
+  # Filed by the PM, 2026-11-09, from v1-e32-t57's follow-up (the PM's review, 2026-11-07).
+  description: >-
+    Since v1-e32-t57 moved the landscape renderer into debate_core, debate-core declares
+    markdown-it-py and debate_api imports it only through debate_core, so debate_api's own
+    declaration in its pyproject.toml (with v1-e39-t17's comment) is redundant, and
+    test_landscape_image.py still pins it. Remove the declaration, its comment and its pin; keep
+    a test that the function's image gets markdown-it-py through debate-core; keep uv.lock in
+    sync with `uv lock`, which needs the network, so hand that one command to the operator if
+    the session cannot run it.
+  priority: 3
+  constraints:
+    packages: [packages/debate_api/pyproject.toml, uv.lock, packages/debate_api/tests]
+    forbidden:
+      - The function's image without markdown-it-py
+      - A version change of any locked package
+  context:
+    - kind: TaskRef
+      name: v1-e32-t57-school-rounds-fit-the-page-budget-and-are-checked-at-report-time
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e39-t17-landscape-pages
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        debate_api declares no markdown-it-py while its image still gets it through
+        debate-core, by the image test shown failing first, with uv.lock in sync.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e41-t26-debate-api-drops-its-own-markdown-it-py-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.8
+    debate/epic: v1-e41-delivery-tooling-upkeep
+spec:
+  description: >-
+    debate_api no longer declares markdown-it-py, which it gets through debate-core.
+  goalRef:
+    name: v1-e41-t26-debate-api-drops-its-own-markdown-it-py
+  graph:
+    nodes:
+      - id: debate-api-drops-its-own-markdown-it-py
+        kind: Task
+        name: markdown-it-py once
+        description: >-
+          debate_api no longer declares markdown-it-py, which it gets through debate-core.
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: test_passes
+            name: markdown-it-py once tests pass
+            command: uv
+            args: [run, pytest, packages/debate_api/tests, -k, image]
+status:
+  phase: Pending

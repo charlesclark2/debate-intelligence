@@ -495,6 +495,7 @@ spec:
         goalRef: v1-e08-t18-auto-cut-report-names-per-run
       dependsOn:
       - t06
+      - t07
       acceptanceCriteria:
       - type: command_succeeds
         name: Task spec v1-e08-t18-auto-cut-report-names-per-run reports phase Succeeded
@@ -582,5 +583,65 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e08-t22-auto-cut-report-states-the-commands-whole-cost
+    - id: t23
+      kind: Task
+      name: 'A politics DA''s link queries pair the DA''s agenda item with the plan''s mechanism'
+      description: >-
+        A politics DA's link queries pair the DA's agenda item with the plan's mechanism.
+      inputs:
+        specRef: plan_specs/v1/e08-research-workflows/t23-politics-da-links-pair-the-agenda-item-with-the-plans-mechanism.yaml
+        goalRef: v1-e08-t23-politics-da-links-pair-the-agenda-item-with-the-plans-mechanism
+      dependsOn:
+      - t14
+      - t16
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e08-t23-politics-da-links-pair-the-agenda-item-with-the-plans-mechanism reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e08-t23-politics-da-links-pair-the-agenda-item-with-the-plans-mechanism
+    - id: t24
+      kind: Task
+      name: 'On a search of many queries, the ranking keeps the results the coach marks relevant above the providers'' own order'
+      description: >-
+        On a search of many queries, the ranking keeps the results the coach marks relevant
+        above the providers' own order.
+      inputs:
+        specRef: plan_specs/v1/e08-research-workflows/t24-the-ranking-keeps-a-multi-query-searchs-relevant-results-up.yaml
+        goalRef: v1-e08-t24-the-ranking-keeps-a-multi-query-searchs-relevant-results-up
+      dependsOn:
+      - t14
+      - t05
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e08-t24-the-ranking-keeps-a-multi-query-searchs-relevant-results-up reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e08-t24-the-ranking-keeps-a-multi-query-searchs-relevant-results-up
+    - id: t25
+      kind: Task
+      name: 'A daily digest''s queries find what the feeds carry, measured on a real digest first'
+      description: >-
+        A daily digest's queries find what the feeds carry, measured on a real digest first.
+      inputs:
+        specRef: plan_specs/v1/e08-research-workflows/t25-digest-queries-and-the-feeds-every-word-rule.yaml
+        goalRef: v1-e08-t25-digest-queries-and-the-feeds-every-word-rule
+      dependsOn:
+      - t07
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e08-t25-digest-queries-and-the-feeds-every-word-rule reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e08-t25-digest-queries-and-the-feeds-every-word-rule
 status:
   phase: Pending

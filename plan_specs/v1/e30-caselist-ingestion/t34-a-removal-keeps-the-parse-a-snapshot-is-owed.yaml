@@ -26,7 +26,8 @@ spec:
     clearing the entry, by tests shown failing first.
   priority: 2
   constraints:
-    packages: [debate_core.application, packages/debate_core/tests, docs/runbooks]
+    # PM, 2026-11-09: the task's bucket-mode test, packages/debate_cli/tests/bucket_mode/test_parse_owed.py, added.
+    packages: [debate_core.application, packages/debate_core/tests, packages/debate_cli/tests/bucket_mode/test_parse_owed.py, docs/runbooks]
     forbidden:
       - A removed file parsed or published again
       - Network or AWS access in a test
@@ -70,6 +71,6 @@ spec:
           - type: test_passes
             name: Removal keeps the parse owed tests pass
             command: uv
-            args: [run, pytest, packages/debate_core/tests, -k, removal and owed]
+            args: [run, pytest, packages/debate_core/tests, packages/debate_cli/tests/bucket_mode/test_parse_owed.py, -k, removal and owed]
 status:
   phase: Pending

@@ -412,6 +412,8 @@ spec:
       inputs:
         specRef: plan_specs/v1/e07-discovery-adapters/t17-providers-without-an-adapter-pinned-to-the-factories.yaml
         goalRef: v1-e07-t17-providers-without-an-adapter-pinned-to-the-factories
+      dependsOn:
+      - t04
       acceptanceCriteria:
       - type: command_succeeds
         name: Task spec v1-e07-t17-providers-without-an-adapter-pinned-to-the-factories reports phase Succeeded
@@ -421,5 +423,85 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e07-t17-providers-without-an-adapter-pinned-to-the-factories
+    - id: t18
+      kind: Task
+      name: 'A paced query released late that then hangs is a failure the circuit breaker hears of'
+      description: >-
+        A paced query released late that then hangs is a failure the circuit breaker hears
+        of.
+      inputs:
+        specRef: plan_specs/v1/e07-discovery-adapters/t18-the-breaker-hears-of-a-released-query-the-searchs-deadline-cut-off.yaml
+        goalRef: v1-e07-t18-the-breaker-hears-of-a-released-query-the-searchs-deadline-cut-off
+      dependsOn:
+      - t10
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e07-t18-the-breaker-hears-of-a-released-query-the-searchs-deadline-cut-off reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e07-t18-the-breaker-hears-of-a-released-query-the-searchs-deadline-cut-off
+    - id: t19
+      kind: Task
+      name: 'The search presenter''s stand-in Crossref queues on the shared pacer, so its health reads as the real adapter''s'
+      description: >-
+        The search presenter's stand-in Crossref queues on the shared pacer, so its health
+        reads as the real adapter's.
+      inputs:
+        specRef: plan_specs/v1/e07-discovery-adapters/t19-the-search-presenters-stand-in-crossref-queues-on-a-real-pacer.yaml
+        goalRef: v1-e07-t19-the-search-presenters-stand-in-crossref-queues-on-a-real-pacer
+      dependsOn:
+      - t10
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e07-t19-the-search-presenters-stand-in-crossref-queues-on-a-real-pacer reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e07-t19-the-search-presenters-stand-in-crossref-queues-on-a-real-pacer
+    - id: t20
+      kind: Task
+      name: 'Semantic Scholar is enabled in both profiles once its live smoke has passed'
+      description: >-
+        Semantic Scholar is enabled in both profiles once its live smoke has passed.
+      inputs:
+        specRef: plan_specs/v1/e07-discovery-adapters/t20-semantic-scholar-enabled-after-its-live-smoke.yaml
+        goalRef: v1-e07-t20-semantic-scholar-enabled-after-its-live-smoke
+      dependsOn:
+      - t04
+      - t13
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e07-t20-semantic-scholar-enabled-after-its-live-smoke reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e07-t20-semantic-scholar-enabled-after-its-live-smoke
+    - id: t21
+      kind: Task
+      name: 'Semantic Scholar''s influential citation count is either weighed by the ranking or no longer asked for'
+      description: >-
+        Semantic Scholar's influential citation count is either weighed by the ranking or no
+        longer asked for.
+      inputs:
+        specRef: plan_specs/v1/e07-discovery-adapters/t21-influential-citations-weighed-or-not-asked.yaml
+        goalRef: v1-e07-t21-influential-citations-weighed-or-not-asked
+      dependsOn:
+      - t04
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e07-t21-influential-citations-weighed-or-not-asked reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e07-t21-influential-citations-weighed-or-not-asked
 status:
   phase: Pending

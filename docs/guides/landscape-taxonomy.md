@@ -51,6 +51,13 @@ the review queue that matching leaves for you (`v1-e32-t02`).
 
 A topic file has at least twelve positions that are not retired, and so does `generic.yaml`.
 
+**`generic-k` is the kritik no named K holds.** In `generic.yaml` it is a card clearly related to a
+kritik that does not fall under any of the named kritiks in the list (your wording of 2026-11-08). It
+is not where a card the matcher is unsure of goes: a card that reads a named K belongs to that K. From
+time to time you review the cards placed under `generic-k`, to find kritiks the landscape has not yet
+recorded. Each one you find becomes a position of its own, with the headings it is read under as its
+aliases ([Add a position](#add-a-position)); `v1-e32-t52`'s guided review is to have a mode for it.
+
 ## An alias is a normalized heading
 
 Teams write one position many ways: `1NC — Spending DA Shell`, `2. spending DA`, `OFF---1NC`. Before

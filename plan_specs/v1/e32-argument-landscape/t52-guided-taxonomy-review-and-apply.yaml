@@ -26,14 +26,27 @@ spec:
     topic's curation is one command for the coach and one for the operator. Real headings appear
     in the operator's terminal only; the decisions file stays on the operator's Mac. Tests with
     scripted keypresses and synthetic candidates.
+    (PM amendment 2026-11-09, from the coach's request of 2026-11-08, recorded under
+    v1-e32-t53 in docs/data/landscape-model-evaluation.md.) Also a generic-k review mode: the coach
+    periodically reviews the cards placed under generic-k (a card clearly related to a kritik
+    that does not fall under any of the named kritiks, as generic.yaml says), to find kritiks the
+    landscape has not recorded. The mode lists the cards placed under generic-k since his last review, one at a time
+    and identified by fingerprint so a decided card is never asked again; for each he decides a new
+    position (with the heading it is read under as its alias), an alias or an override onto an
+    existing position, or "stays generic". The apply step writes them as the guided review's
+    decisions are written, with the version bump the taxonomy guide asks. Card text appears in the
+    operator's terminal only.
   priority: 3
   constraints:
-    packages: [scripts, tests/scripts, debate_core.arguments, debate_core.domain, config/landscape, docs/guides]
+    packages: [scripts, tests/scripts, debate_core.arguments, debate_core.domain, debate_core.application, packages/debate_core/tests, config/landscape, docs/guides]
     forbidden:
       - Real heading text in a fixture, a test or a commit
       - A school, team code or debater name anywhere
       - The apply step changing a released taxonomy version without a bump
   context:
+    - kind: TaskRef
+      name: v1-e32-t53-generic-k-description-for-the-coachs-review
+      relation: dependsOn
     - kind: TaskRef
       name: v1-e32-t06-ld-de-extinction-taxonomy
       relation: dependsOn
@@ -43,6 +56,12 @@ spec:
         The guided review writes a decisions file in a stated schema with stop and resume,
         and the apply step turns it into the configuration, by tests with scripted
         keypresses on synthetic candidates shown failing first.
+    - id: ac2
+      description: >-
+        (PM amendment 2026-11-09) The generic-k review lists only the cards placed under
+        generic-k that have not been decided, by fingerprint, and each decision (new
+        position, alias or override, stays generic) is applied with its version bump, by
+        tests on synthetic placements shown failing first.
 status:
   phase: Pending
 ---

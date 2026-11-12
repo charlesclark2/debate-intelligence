@@ -365,3 +365,13 @@ Three imports remain (hsld25, hspolicy24, hsld24), at most one a day outside the
 Dev's run image carries `2026.11.03-docx-9` since 2026-11-06 (task definition revision 14), so hsld25's
 import may run, outside the no-import window and never while another session holds the dev lock; it is
 parsed once, into docx-9.
+
+## Operator records (recorded by the PM, 2026-11-09)
+
+Added by the PM. Nothing above is changed, and this section is not a review.
+
+| Criterion | Was | Now | Record |
+|---|---|---|---|
+| ac3: the four imports, at most one a day, counts in docs/data | PASS for hspolicy25; three imports and the weekly run after remain | Four imports PASS; the weekly run after the fourth remains | hsld25 2026-11-06/07 overnight, hspolicy24 2026-11-08, hsld24 2026-11-09 (started 02:05 Chicago), each a hand-started task of revision 15 (`v1.1.0-dev.380`, parser `2026.11.03-docx-9`), each after its dry run the same day: status ok, applied, downloaded bytes equal to the dry run's archive bytes, every source stored and uploaded, none held, the archive out of the inbox, no code. Counts in docs/data/caselist-backfile-seasons.md |
+
+The Goal stays `InProgress`: ac3 closes with the weekly run of 2026-11-11, the first after the fourth import, restoring and finishing in its usual time.

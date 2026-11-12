@@ -1157,6 +1157,7 @@ spec:
         goalRef: v1-e32-t52-guided-taxonomy-review-and-apply
       dependsOn:
       - t06
+      - t53
       acceptanceCriteria:
       - type: command_succeeds
         name: Task spec v1-e32-t52-guided-taxonomy-review-and-apply reports phase Succeeded
@@ -1323,5 +1324,64 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e32-t60-the-bundle-scan-reads-the-reports-own-words-as-its-own
+    - id: t61
+      kind: Task
+      name: 'A labels sitting keeps a copy of the file it writes, not only the one it replaces'
+      description: >-
+        A labels sitting keeps a copy of the file it writes, not only the one it replaces.
+      inputs:
+        specRef: plan_specs/v1/e32-argument-landscape/t61-a-sitting-keeps-the-file-it-writes.yaml
+        goalRef: v1-e32-t61-a-sitting-keeps-the-file-it-writes
+      dependsOn:
+      - t58
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e32-t61-a-sitting-keeps-the-file-it-writes reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e32-t61-a-sitting-keeps-the-file-it-writes
+    - id: t62
+      kind: Task
+      name: 'The note on withheld tags carries its counts on a line of their own, so the scan passes over its text'
+      description: >-
+        The note on withheld tags carries its counts on a line of their own, so the scan
+        passes over its text.
+      inputs:
+        specRef: plan_specs/v1/e32-argument-landscape/t62-the-withheld-tags-notes-counts-on-a-line-of-their-own.yaml
+        goalRef: v1-e32-t62-the-withheld-tags-notes-counts-on-a-line-of-their-own
+      dependsOn:
+      - t60
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e32-t62-the-withheld-tags-notes-counts-on-a-line-of-their-own reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e32-t62-the-withheld-tags-notes-counts-on-a-line-of-their-own
+    - id: t63
+      kind: Task
+      name: 'The bundle scan passes over every kind of term on the report''s own fixed lines, not only a tournament'
+      description: >-
+        The bundle scan passes over every kind of term on the report's own fixed lines, not
+        only a tournament.
+      inputs:
+        specRef: plan_specs/v1/e32-argument-landscape/t63-every-scan-kind-passed-over-on-the-reports-own-lines.yaml
+        goalRef: v1-e32-t63-every-scan-kind-passed-over-on-the-reports-own-lines
+      dependsOn:
+      - t62
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e32-t63-every-scan-kind-passed-over-on-the-reports-own-lines reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e32-t63-every-scan-kind-passed-over-on-the-reports-own-lines
 status:
   phase: Pending

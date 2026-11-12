@@ -1,0 +1,88 @@
+# TASK v1-e08-t24-the-ranking-keeps-a-multi-query-searchs-relevant-results-up - On a search of many queries, the ranking keeps the results the coach marks relevant above the providers' own order
+# Epic: E08 Federated Research Workflows | Release: v1.4 (Federated research from the CLI) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e08-t24-the-ranking-keeps-a-multi-query-searchs-relevant-results-up
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.4
+    debate/epic: v1-e08-research-workflows
+  annotations:
+    debate/title: "On a search of many queries, the ranking keeps the results the coach marks relevant above the providers' own order"
+spec:
+  # Filed by the PM, 2026-11-09, from v1-e08-t14's ac3 (the operator's labels of 2026-11-08).
+  description: >-
+    On v1-e08-t14's repeated Policy search the ranking did worse than the providers' own order:
+    nDCG@10 0.438 ranked against 0.746 in provider order, with 6 relevant of 19 rows. On
+    v1-e08-t05's search it had been 0.746 ranked against 0.000. The search now asks many queries
+    at once (v1-e08-t10, and v1-e08-t14's mechanism queries), so the ranking's features may
+    favour results that match many queries loosely over ones that match one link query well.
+    Proposal first, from the labelled sheet's positions only: the operator runs a block that
+    prints, for each row, its ranked position, its provider position, the query that found it
+    and whether the coach marked it relevant (counts and positions, never a title or URL). Say
+    which features moved the relevant results down, and propose a change whose effect is scored
+    offline on both labelled searches (their saved results replayed through the ranking with no
+    provider call, by an operator block). Stop for the PM's ruling, then build it and record
+    both replayed scores beside today's.
+  priority: 2
+  constraints:
+    packages: [debate_core.application, config/federated_ranking.yaml, scripts, packages/debate_core/tests, tests/scripts, docs/data]
+    forbidden:
+      - A title, URL or card text from the coach's sheets in a test, log, commit or report
+      - A live provider call in a test
+      - A ranking change that lowers v1-e08-t05's replayed score
+  context:
+    - kind: TaskRef
+      name: v1-e08-t14-da-links-name-the-plans-mechanism-in-the-united-states
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e08-t05-search-command
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        The operator's positions block has run and the proposal is ruled on by the PM before
+        any code.
+    - id: ac2
+      description: >-
+        The ruled change holds by tests on fixtures shown failing first, and both labelled
+        searches' replayed nDCG@10 are recorded beside today's (operator).
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e08-t24-the-ranking-keeps-a-multi-query-searchs-relevant-results-up-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.4
+    debate/epic: v1-e08-research-workflows
+spec:
+  description: >-
+    On a search of many queries, the ranking keeps the results the coach marks relevant above
+    the providers' own order.
+  goalRef:
+    name: v1-e08-t24-the-ranking-keeps-a-multi-query-searchs-relevant-results-up
+  graph:
+    nodes:
+      - id: the-ranking-keeps-a-multi-query-searchs
+        kind: Task
+        name: Multi-query ranking
+        description: >-
+          On a search of many queries, the ranking keeps the results the coach marks
+          relevant above the providers' own order.
+        estimatedEffort: 4h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Multi-query ranking tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests, -k, ranking]
+status:
+  phase: Pending

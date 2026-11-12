@@ -29,7 +29,10 @@ spec:
     forbidden:
       - A change to which tests CI runs
       - A new network call in CI
-  context: []
+  context:
+    - kind: TaskRef
+      name: v1-e09-t05-e2e-fixture-suite
+      relation: dependsOn
   acceptanceCriteria:
     - id: ac1
       description: >-

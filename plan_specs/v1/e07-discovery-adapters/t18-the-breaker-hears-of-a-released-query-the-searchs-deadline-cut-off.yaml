@@ -1,0 +1,81 @@
+# TASK v1-e07-t18-the-breaker-hears-of-a-released-query-the-searchs-deadline-cut-off - A paced query released late that then hangs is a failure the circuit breaker hears of
+# Epic: E07 Discovery Provider Adapters | Release: v1.4 (Federated research from the CLI) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e07-t18-the-breaker-hears-of-a-released-query-the-searchs-deadline-cut-off
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.4
+    debate/epic: v1-e07-discovery-adapters
+  annotations:
+    debate/title: "A paced query released late that then hangs is a failure the circuit breaker hears of"
+spec:
+  # Filed by the PM, 2026-11-09, from v1-e07-t10's Decision 1 (the PM's review, 2026-11-09).
+  description: >-
+    Since v1-e07-t10 a paced call's timeout counts from its release, so a query its pace
+    releases late (after about 5 s on Crossref's public pool) that then hangs is cut off by the
+    search's 15 s deadline before the wrapper's own timeout. The footer still says timeout, but
+    the cancelled call gives the breaker no verdict. A provider that hangs on every query still
+    opens its breaker from its early queries, so this is about the late ones only. Proposal
+    first: how the wrapper learns what is left of the search's deadline (for example the fan-out
+    passes it through a context variable, and a released call's timeout is capped at it, so the
+    cut-off is the wrapper's own timeout and a failure), or another way, and what a call cut off
+    while still queued counts as (today: not asked). Stop for the PM's ruling.
+  priority: 3
+  constraints:
+    packages: [debate_core.integrations.discovery, debate_core.application, packages/debate_core/tests]
+    forbidden:
+      - A query that was sent and ran slow no longer timing out
+      - Time queued on a pace counted towards a timeout or a latency
+      - A live provider call or a real sleep in a test
+  context:
+    - kind: TaskRef
+      name: v1-e07-t10-time-waiting-on-a-pace-is-not-a-failure
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        The proposal is ruled on by the PM before any code.
+    - id: ac2
+      description: >-
+        A released call that the search's deadline cuts off is a failure the breaker counts,
+        while a call cut off still queued is not, by tests on virtual time shown failing
+        first.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e07-t18-the-breaker-hears-of-a-released-query-the-searchs-deadline-cut-off-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.4
+    debate/epic: v1-e07-discovery-adapters
+spec:
+  description: >-
+    A paced query released late that then hangs is a failure the circuit breaker hears of.
+  goalRef:
+    name: v1-e07-t18-the-breaker-hears-of-a-released-query-the-searchs-deadline-cut-off
+  graph:
+    nodes:
+      - id: the-breaker-hears-of-a-released-query-th
+        kind: Task
+        name: Late release heard
+        description: >-
+          A paced query released late that then hangs is a failure the circuit breaker
+          hears of.
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Late release heard tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/integrations/discovery, -k, resilien or pace]
+status:
+  phase: Pending

@@ -1,0 +1,76 @@
+# TASK v1-e41-t27-a-task-names-its-prerequisites-or-why-it-has-none - The spec validator refuses an unfinished task with no prerequisites unless it says why
+# Epic: E41 — Delivery Tooling Upkeep | Release: v1.8 (Weekly caselist run in the cloud) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e41-t27-a-task-names-its-prerequisites-or-why-it-has-none
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.8
+    debate/epic: v1-e41-delivery-tooling-upkeep
+  annotations:
+    debate/title: "The spec validator refuses an unfinished task with no prerequisites unless it says why"
+spec:
+  # Filed by the PM, 2026-11-09, from the operator's request of 2026-11-09.
+  description: >-
+    Five unfinished tasks listed no prerequisite (v1-e04-t10, v1-e07-t17, v1-e31-t38,
+    v1-e40-t46, v1-e41-t21), and a session started one with nothing to check. validate_specs.py
+    refuses a task Goal that is neither Succeeded nor Cancelled whose spec.context is empty,
+    unless its metadata carries a `debate/no-prerequisite` annotation saying why (the first task
+    of a new epic, say). It also warns, without refusing, when a task's description names
+    another task id that is neither in its context nor in its filing comment.
+    plan_specs/README.md and the task workflow say so. The session edits no spec but test
+    fixtures: the PM gives any spec the check names its prerequisites.
+  priority: 3
+  constraints:
+    packages: [scripts, tests/scripts, tests/specs, plan_specs/README.md, docs/process]
+    forbidden:
+      - A spec other than a test fixture edited by the session
+      - A refusal of a task that names its prerequisites
+  context:
+    - kind: TaskRef
+      name: v1-e01-t05-spec-tooling
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        An unfinished task with an empty context is refused unless annotated with why, and a
+        task id named in a description but not in the context is warned about, by tests on
+        invented specs shown failing first, with dev's specs passing.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e41-t27-a-task-names-its-prerequisites-or-why-it-has-none-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.8
+    debate/epic: v1-e41-delivery-tooling-upkeep
+spec:
+  description: >-
+    The spec validator refuses an unfinished task with no prerequisites unless it says why.
+  goalRef:
+    name: v1-e41-t27-a-task-names-its-prerequisites-or-why-it-has-none
+  graph:
+    nodes:
+      - id: a-task-names-its-prerequisites-or-why-it
+        kind: Task
+        name: Prerequisites named
+        description: >-
+          The spec validator refuses an unfinished task with no prerequisites unless it
+          says why.
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Prerequisites named tests pass
+            command: uv
+            args: [run, pytest, tests/scripts, tests/specs, -k, validate]
+status:
+  phase: Pending

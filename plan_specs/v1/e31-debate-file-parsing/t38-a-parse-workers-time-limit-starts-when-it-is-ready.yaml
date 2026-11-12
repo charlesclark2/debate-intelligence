@@ -29,7 +29,10 @@ spec:
     forbidden:
       - A longer limit in place of the fix
       - A sleep added to make a test pass
-  context: []
+  context:
+    - kind: TaskRef
+      name: v1-e31-t06-parse-pipeline
+      relation: dependsOn
   acceptanceCriteria:
     - id: ac1
       description: >-

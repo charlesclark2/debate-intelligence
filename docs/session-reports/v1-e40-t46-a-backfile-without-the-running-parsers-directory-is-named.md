@@ -212,9 +212,44 @@ checked: ...`, paste it back: that is the permission the decision above says is 
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-11-12
 
 **Notes:**
+
+Accepted. ac1 and the node pass, and the Goal is `Succeeded`.
+
+* **Rulings 1 to 6, checked against `backfile_parser_versions.py`:**
+  * the backfiles come from `caselist.backfile_caselists`, not a hand-written list;
+  * the reference is the newest non-failed run's `restore.parsed_version`, or else this build's
+    version, and the line names which;
+  * a reparse generation of the reference counts as at the reference;
+  * held versions are listed newest first, each once, and a backfile never imported is named as such;
+  * the check is informational: the exit status, verdicts and overdue warning are untouched;
+  * `--json` gains one object and loses nothing.
+* **The red runs are thorough.** The skeletons were built both ways round (names nothing, names
+  everything), so the "not named" cases were shown failing too, not only the named ones. The
+  CLI tests run over the real composition root on moto's S3.
+* **Ruling 6 is answered with the policy itself:** `ListDocumentedEvidencePrefixes` already grants
+  `s3:ListBucket` on `parsed/` and `parsed/*` to the everyday profile, which `caselist retire --bucket`
+  already uses. No IAM change was needed.
+* **Decisions: accepted,** including naming a backfile that holds only a newer version, and passing
+  over failed runs.
+* **Deviations: accepted.** The smoke check is outside this task's packages. The node was run through
+  `.venv/bin/python` under `hard_stop.py`, which is agreement 10's form.
+* **The affected set (308 files)** goes to `ci` under agreement 10.
+* **The branch is behind dev** (e07-t20 and e07-t23 merged or merging since). Neither touches these
+  seven files. If `scripts/task pr` asks for a sync, `scripts/task sync` is all it needs.
+* **The operator's live check** waits for this merge and a dev build carrying it. That build is not
+  installed while any `debate-research` command runs, which today includes v1-e39-t18's restore and
+  measurements. Expected: `All 4 backfile(s) are at parser 2026.11.03-docx-9 (recorded by run …)`,
+  with hspolicy25 not named, because its docx-9 directory now exists beside the docx-7 one. The PM
+  records it.
+* **Follow-ups, into the next PM batch:**
+  * the runbook line in caselist-cloud-run.md, as a PM edit;
+  * the smoke check, as a new E40 task at p3;
+  * the reference window: no change for now, since the line always names its source.
+
+`scripts/task pr`

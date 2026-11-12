@@ -248,9 +248,39 @@ check under agreement 10, with no hand-off.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-11-11
 
 **Notes:**
+
+1. **ac1 passes.**
+   - **First red run:** 25 failed against the old validator. The 4 that passed can't fail against a
+     validator that refuses nothing, and the report says so.
+   - **Second red run, for answer 2:** 3 failed. The constant was renamed in a commit of its own first,
+     so the red run fails on the rule, not on a missing attribute.
+   - **Mutants:** 29 of 30 caught. The one discarded, the first "not exempt" mutant, was rightly found
+     equivalent and rebuilt as another mutant that was caught.
+   - **Dev's tree** passes with the one annotation the PM ruled.
+2. **The deviations are accepted.**
+   - **v2-e19-t04's annotation:** made word for word, in a commit of its own, under the PM's answer 1.
+     The PM's own premise was wrong, because it checked V1 only, and the session found that.
+   - **"Nor in its filing comment" became "nor itself":** the ruling is the later word, and a YAML
+     comment is never parsed.
+   - **The Cancelled kind and its renamed constant:** answer 2.
+3. **The decisions are accepted.**
+   - "Empty" means no dependsOn TaskRef, which is what `scripts/task ready` reads, pinned by the
+     `relatesTo` test.
+   - A reason is a non-empty string after stripping.
+   - A named id that no task declares is not warned about.
+   - There is one warning per pair of task and named id.
+   - Warnings print before the errors and never change the exit code.
+4. **The 17 likely missing prerequisites go to the PM's next batch**, each triaged rather than added
+   blindly. Some of them name a task that follows the one naming it. Two examples:
+   - v1-e07-t22 names v1-e07-t20, which depends on t22;
+   - v1-e38-t01 names its own later steps, t02 and t03.
+
+   Those get no edge. The V2 and V3 ones wait until V2 starts. The 56 graph links are optional, and are
+   added where they make the graph clearer.
+5. **Merge:** a plain `scripts/task pr` once `ci` is green. The Goal is `Succeeded`.

@@ -167,6 +167,31 @@ loads every plist in that folder at login, so a restart reloads it. The Mac's up
 00:28, so it was booted around 22:14 on 2026-11-11, after that Wednesday's 06:00 slot. That fits
 `runs = 0`, but the timeline is inferred, not measured. As the PM ruled, the install waits for the PM.
 
+**The PM's answer (2026-11-12): option A.** The fallback week ended in early November, and no Mac run
+is meant to happen. So the agent is unloaded with the cutover runbook's Step 2 block, verbatim, once the
+landscape republish has finished. It is then disabled, so the unload survives a login. The plist and
+the wrapper stay where they are; `launchctl enable` undoes the disable if a fallback is ever needed.
+The PM files the runbook fix (Step 2 disables, and the fallback week's end retires the plist). It is
+not this task's. Once the operator has run the blocks, launchctl's own lines are recorded here
+(pending).
+
+Unload, the cutover runbook's Step 2, verbatim. Success: `booted out`, `agent unloaded`, and the
+plist's path listed.
+
+```bash
+if pgrep -fl 'debate-research( --json)? caselist pull'; then echo "STOP: a caselist pull is running (above)"; else launchctl bootout "gui/$(id -u)/com.debate-intelligence.caselist-sync" && echo "booted out"; fi
+launchctl print "gui/$(id -u)/com.debate-intelligence.caselist-sync" >/dev/null 2>&1 && echo "STOP: the agent is still loaded" || echo "agent unloaded"
+ls "$HOME/Library/LaunchAgents/com.debate-intelligence.caselist-sync.plist"
+```
+
+Disable, the PM's block. Success: `disabled`, then `"com.debate-intelligence.caselist-sync" =>
+disabled` (or `=> true`, as macOS may print it).
+
+```bash
+launchctl disable "gui/$(id -u)/com.debate-intelligence.caselist-sync" && echo "disabled"
+launchctl print-disabled "gui/$(id -u)" | grep caselist-sync
+```
+
 0. **Install `v1.1.0-dev.413`**, about 2 minutes, from this worktree, after the landscape republish
    has finished. The block stops before installing if any `debate-research` command is running (it
    prints only the PIDs), or if `com.debate-intelligence.caselist-sync` is loaded. The cutover left

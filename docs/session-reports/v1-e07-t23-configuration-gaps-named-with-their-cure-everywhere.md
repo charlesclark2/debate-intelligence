@@ -287,9 +287,39 @@ For the PM:
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-11-12
 
 **Notes:**
+
+Accepted. ac1 and the node pass, and the Goal is `Succeeded`.
+
+* **Scope, checked against the branch:** six commits on dev's tip (`9e77a71`), with the skeleton
+  `1b85a2a` and the red tests `4007759` before the code `937ba2c`. The rule lives in
+  `federated_search.py` (`uncounted`, the cure on every unbuilt reason, `partial_providers()` beside
+  `search_status`). The presenters only render it, as ruled.
+* **The evidence is enough.** The red run had 28 failures, all at assertions. The 17 mutants were all
+  caught. Decision 3 is the most useful note in the report: a property test that passed against the
+  skeleton was found, strengthened, and committed red. Keep doing that.
+* **Decision 1: accepted.** A named provider that is not enabled now carries `enable it in
+  providers.enabled` and stays PARTIAL. The reason repeats itself, but it keeps t15's words and has
+  the `<reason>; <cure>` shape, and the footer, `reasons`, `provider_calls` and the message agree.
+  Wording can be tightened later. Not now.
+* **Decisions 2, 4, 5 and 6: accepted.** On the panel: printing the heading only, with the lines once
+  as details, is right. The empty selection now reads properly instead of `none of  is enabled`. No
+  new JSON field was needed and none was removed. `partial_providers()` in core means it and the
+  status cannot disagree, and the property pins it.
+* **The deviations are accepted.** Item 4 and the guide sentence were the PM's to add, and go into the
+  next PM batch as an amendment to this spec's description and ac1. The eight renamed tests are
+  justified one by one.
+* **The affected set (260 files)** goes to the pull request's `ci` under agreement 10. The report
+  lists what ran within the limit, about 7,500 tests.
+* **Follow-ups, into the next PM batch:**
+  1. the comment in `config/daily_presets.yaml`, in the session's proposed words, as a PM edit;
+  2. and 3. one new E07 task at p3: the NO_PROVIDER_ENABLED hint when every provider is enabled but
+     unbuilt, and the SEARCH_PARTIAL message (`search` and `daily`) listing only the providers
+     `partial_providers` counts.
+
+`scripts/task pr`

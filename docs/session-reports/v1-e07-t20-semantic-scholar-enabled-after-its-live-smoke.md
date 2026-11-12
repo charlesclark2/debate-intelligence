@@ -209,6 +209,13 @@ launchctl print-disabled "gui/$(id -u)" | grep caselist-sync
   the key as set. One request went out and was answered 429. (b) was not run: the PM's rulings
   cover a 429 on the keyless query, not on the keyed one.
 
+* **The key's shape**, checked by the operator with two local commands. Neither used the network,
+  and neither printed the value: one line names the variable, not commented out, the name exact,
+  no quotes, no `export`, no carriage return, no spaces, no `#`. The value is 44 ASCII characters,
+  and the one that is not a letter or digit is a `HYPHEN-MINUS` inside. There is no sign of a paste
+  artefact. Whether 44 is the issued key's length is the operator's to compare (not recorded).
+  The next live request is the PM's call.
+
 0. **Install `v1.1.0-dev.413`**, about 2 minutes, from this worktree, after the landscape republish
    has finished. The block stops before installing if any `debate-research` command is running (it
    prints only the PIDs), or if `com.debate-intelligence.caselist-sync` is loaded. The cutover left

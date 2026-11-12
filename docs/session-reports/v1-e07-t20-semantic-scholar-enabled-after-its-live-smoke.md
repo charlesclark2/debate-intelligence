@@ -118,7 +118,7 @@ through the container: no output and no log record at DEBUG carries the key.
 ## Deviations from the spec
 
 1. **Criterion ids.** The PM's message of 2026-11-12 calls the code criterion "ac2". In the spec it
-   is ac3, and ac2 is the profiles. This report uses the spec's ids.
+   is ac3, and ac2 is the profiles. The PM confirmed the same day: keep the spec's ids.
 
 ## Decisions and assumptions
 
@@ -148,7 +148,47 @@ through the container: no output and no log record at DEBUG carries the key.
 
 ## Operator follow-ups
 
-Both blocks run on the **installed** dev build, not this branch, and each stops before searching
+**First attempt, 2026-11-12.** Block (a) stopped at its own guard: `the installed build is
+v1.1.0-dev.407`. Nothing was searched. The PM's answers of the same day:
+* install `v1.1.0-dev.413`, but only after the operator's landscape republish has finished (its
+  publish and its delete), behind two guards: no `debate-research` command running, and the
+  caselist-sync LaunchAgent not loaded;
+* blocks (a) and (b) are accepted as written;
+* (b) runs once right after (a). If it answers 429, it runs once more in the US afternoon. If
+  that is 429 too, the operator stops and gives the PM both outputs.
+
+**The install guard fires today (checked read-only from the session, 2026-11-12, about 00:40
+Chicago).** `launchctl print gui/<uid>/com.debate-intelligence.caselist-sync` answers: the agent is
+loaded, `state = not running`, `runs = 0`, `last exit code = (never exited)`. It is not in
+`launchctl print-disabled`, its schedule is Weekday 3, 06:00 (Wednesday), and its plist and wrapper
+are dated Oct 25. The likely cause is the cutover runbook's Step 2, which unloads the agent with
+`launchctl bootout` and keeps the plist in `~/Library/LaunchAgents` for the fallback week. launchd
+loads every plist in that folder at login, so a restart reloads it. The Mac's uptime was 2 h 14 min at
+00:28, so it was booted around 22:14 on 2026-11-11, after that Wednesday's 06:00 slot. That fits
+`runs = 0`, but the timeline is inferred, not measured. As the PM ruled, the install waits for the PM.
+
+0. **Install `v1.1.0-dev.413`**, about 2 minutes, from this worktree, after the landscape republish
+   has finished. The block stops before installing if any `debate-research` command is running (it
+   prints only the PIDs), or if `com.debate-intelligence.caselist-sync` is loaded. The cutover left
+   that plist rewritten and not loaded, so **if the block says it is loaded, stop and tell the
+   PM**. The install itself is the runbook's step (caselist-scheduled-sync.md, "Install the
+   build"). Success ends with the build's `complete` line and `The build runs on the Python at …,
+   which uv manages.`, then `installed build: v1.1.0-dev.413`.
+
+   ```bash
+   cd /Users/charlesclark/Documents/debate/debate-intelligence-tool/debate-intelligence-worktrees/v1-e07-t20-semantic-scholar-enabled-after-its-live-smoke
+   if pgrep -f 'debate-research ' > /dev/null; then
+     echo "STOP: a debate-research command is running (PIDs below). Let it finish, then paste the block again:"
+     pgrep -f 'debate-research '
+   elif launchctl print "gui/$(id -u)/com.debate-intelligence.caselist-sync" > /dev/null 2>&1; then
+     echo "STOP: the caselist-sync LaunchAgent is loaded. The cutover left it not loaded: install nothing and tell the PM."
+   else
+     scripts/install_channel.sh v1.1.0-dev.413 2>&1 | tail -5
+     echo "installed build: $(cd ~ && debate-research --json --version | python3 -I -c 'import json, sys; print(json.load(sys.stdin)["data"]["tag"] or "untagged")')"
+   fi
+   ```
+
+Both smoke blocks run on the **installed** dev build, not this branch, and each stops before searching
 unless three things hold:
 * no `DEBATE_` variable is set in the shell (it prints only the names of any that are);
 * no `caselist pull` is running;
@@ -227,11 +267,12 @@ key.
    fi
    ```
 
-2. **(b) One keyless single query**, at a quiet hour: early morning US time is my suggestion, not a
-   measured fact. The key is blanked for the search command alone, and nothing changes in your file.
+2. **(b) One keyless single query**, once right after (a) (the PM, 2026-11-12: the quiet hour is
+   unmeasured). The key is blanked for the search command alone, and nothing changes in your file.
    This must return results. Success is the same as (a): `status: COMPLETE`, `semantic_scholar: ok`,
-   results above zero, `breaker: closed, errors 0`. **If it answers `HTTP 429` again, stop there and
-   paste the output: the PM decides**, and this session enables nothing.
+   results above zero, `breaker: closed, errors 0`. **If it answers `HTTP 429`, run the same block
+   once more in the US afternoon. If that is also 429, stop and give the PM both outputs.** This
+   session enables nothing until the PM has recorded a pass.
 
    ```bash
    cd ~
@@ -281,13 +322,13 @@ key.
 
 ## Follow-up work
 
-1. **For the PM: remove the adapter's keyless mode?** No factory builds it now (Decision 3). Removing
-   `KEYLESS_PACE`, the keyless "not asked" suffix and the keyless kit binding would make the adapter
-   require a key. It is a small E07 change, and this task leaves it alone.
-2. **For the PM: the "none of … is enabled" panel.** When every selected provider is not configured,
-   the panel says `no provider was asked: none of semantic_scholar is enabled` above the line that
-   names the cure. Semantic Scholar *is* enabled; it is not configured. GovInfo alone gets the same
-   words today. That is v1-e07-t15's presenter, outside this task.
+1. **The adapter's keyless mode stays** (the PM, 2026-11-12). Only the factory refuses, and the tests
+   pin both paths. If the shared pool ever proves usable, the PM can rule the factory back in with no
+   new adapter code. Nothing to file.
+2. **The "none of … is enabled" panel.** When every selected provider is not configured, the panel
+   says `no provider was asked: none of semantic_scholar is enabled`. That is wrong for a provider
+   that is enabled but not configured. The PM folds it into v1-e07-t23, which owns not-configured
+   wording everywhere; this task leaves it alone.
 
 ## PM review
 

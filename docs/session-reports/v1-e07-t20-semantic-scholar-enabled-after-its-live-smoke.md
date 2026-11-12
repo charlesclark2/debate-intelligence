@@ -6,19 +6,26 @@
 | Spec | [`plan_specs/v1/e07-discovery-adapters/t20-semantic-scholar-enabled-after-its-live-smoke.yaml`](../../plan_specs/v1/e07-discovery-adapters/t20-semantic-scholar-enabled-after-its-live-smoke.yaml) |
 | Epic / release | `v1-e07-discovery-adapters` / `v1.4` |
 | Branch | `task/v1-e07-t20-semantic-scholar-enabled-after-its-live-smoke` |
-| Session status | IN PROGRESS <!-- COMPLETE / PARTIAL / BLOCKED --> |
+| Session status | PARTIAL <!-- COMPLETE / PARTIAL / BLOCKED --> |
 
 ## Summary
 
 <!-- 3-6 sentences: what was built, how it fits the epic, anything the PM should look at first. -->
 
-**Stopped for the operator's two smokes (the PM's ruling 2 of 2026-11-12).** The code half is done
-(ac3, the PM's "ac2"). Without a key, the factory builds nothing: the registry reports
-`semantic_scholar` as not configured. A search names it with its cure, and does not count it as partial
-when settings enabled it and the search did not name it. With a key it is built and asked at the
-keyed pace, as before. Neither profile enables Semantic Scholar yet. That waits for the keyed smoke
-and the keyless single query below to pass and for the PM to record them (ac1); then the profiles,
-the guides and ac2 follow.
+**PARTIAL: the code half, for a `scripts/task pr --partial` (the PM, 2026-11-12). The Goal stays
+InProgress.** ac3 passes. Without a key, the factory builds nothing: the registry reports
+`semantic_scholar` as not configured. A search names it with its cure, and does not count it as
+partial when settings enabled it and the search did not name it. With a key it is built and asked
+at the keyed pace, as before. No profile enables Semantic Scholar, so this changes nothing a student
+sees today.
+
+ac1 is NOT RUN. The keyed smoke (a) was tried once on `v1.1.0-dev.413`: one request, answered
+HTTP 429 with no Retry-After. The breaker stayed closed with 1 error, and nothing more was sent
+(v1-e07-t22 holding as intended). The key's shape in the per-user file is clean. The PM rules this
+not yet a fair try. Next is one diagnostic request with curl after 13:00 Chicago, then (a) and (b)
+if it answers 200. ac2 (the profiles and the guides) and the node's `-k profile` criterion wait for
+ac1. Also found on the way: the caselist-sync LaunchAgent had come back loaded after a reboot, and
+it is now disabled (under Operator follow-ups).
 
 **Look first at** Decision 1 (the footer's words, the PM's sentence with the variable inserted, as for
 GovInfo) and Decision 3 (the adapter keeps its keyless mode, which no factory builds now).
@@ -27,13 +34,13 @@ GovInfo) and Decision 3 (the adapter keeps its keyless mode, which no factory bu
 
 | Node | Status | Notes |
 |---|---|---|
-| `semantic-scholar-enabled-after-its-live` (Semantic Scholar enabled) | In progress | Code half done: tests red `1732fac`, code `369ff8a`. Waits for the operator's smokes, then the profiles and the guides. |
+| `semantic-scholar-enabled-after-its-live` (Semantic Scholar enabled) | Partial | Code half done: tests red `1732fac`, code `369ff8a`. The profiles and the guides wait for ac1. |
 
 ## Acceptance criteria
 
 | Criterion | Status | Evidence (command → result) |
 |---|---|---|
-| ac1: the operator's live smokes, keyless and keyed, have passed and are recorded by the PM | NOT RUN | Waiting for the operator's blocks under Operator follow-ups, and then for the PM's record. |
+| ac1: the operator's live smokes, keyless and keyed, have passed and are recorded by the PM | NOT RUN | (a) tried once, 2026-11-12, on `v1.1.0-dev.413`: one request, HTTP 429, no Retry-After, breaker closed with 1 error, nothing more sent. The PM rules it not yet a fair try (NOT RUN, not FAIL). (b) runs only after (a) passes. Next is the curl diagnostic under Operator follow-ups. |
 | ac2: both profiles enable semantic_scholar and the guides say what a student without a key sees, by tests on the committed profiles shown failing first | NOT RUN | Waits for ac1 (the spec forbids enabling before the smoke has passed). |
 | ac3: without a key Semantic Scholar is not configured, named with its cure and not counted as partial, and with one it is built and asked, by tests shown failing first | PASS | Red and green below. |
 | Node: `uv run pytest packages/debate_cli/tests -k profile` | NOT RUN | Run once the profiles are enabled. |
@@ -99,6 +106,32 @@ because nothing in this build writes the key to a log line: the key travels only
 httpx logs the URL. t04's adapter test is what pins the protection. My test pins the outcome
 through the container: no output and no log record at DEBUG carries the key.
 
+### Checks before the report
+
+* **Dev** had moved only by the generated-files refresh (`f918c97`), which this branch does not
+  touch. The spec on `origin/dev` differs only in its phase. No sync was needed.
+* **Affected set:** `uv run scripts/affected_tests.py` chose **124 of 744 test files** (16.7%) from
+  8 changed files, smoke, e2e and the partition proof among them. Run once as
+  `.venv/bin/python scripts/hard_stop.py 115 uv run scripts/affected_tests.py --run`: **stopped at its
+  115-second limit at 63%, with about 3,488 passed and none failed before the stop**, and no process
+  left behind. It is over two minutes, so under agreement 10 it is left to the pull request's `ci`.
+* **Within two minutes instead:** `tests/architecture`, `tests/specs`, the three CLI always-run
+  files, the discovery test directory, `test_not_configured_is_not_partial.py`,
+  `test_federated_search.py`, `packages/debate_cli/tests/commands`, `test_search_command.py`,
+  `test_search_presenter_not_configured.py`, `test_installation.py`, `test_config_command.py` and
+  `tests/smoke/test_search_smoke.py`, with `-m "not slow and not live" -n 6` → `2305 passed in
+  46.39s`. Also the one-process run above (`1482 passed`).
+* **Whole-repo checks:**
+  * `uv run --frozen ruff format --check .` → `2064 files already formatted`
+  * `uv run --frozen ruff check .` → `All checks passed!`
+  * `uv run --frozen pyright packages/debate_core packages/debate_cli` → `0 errors, 0 warnings, 0 informations`
+  * `uv run --frozen lint-imports` → `Contracts: 20 kept, 0 broken.`
+  * `scripts/check_thin_handlers.py` → `OK: 74 CLI command and API route handlers within 25 statements`
+  * `uv run scripts/validate_specs.py` → `OK: 669 files, 41 epics, 606 tasks, 22 releases`
+  * `scripts/docs_index.py --check-descriptions` → `All 70 indexed documents under docs/ have a description`
+  * `scripts/check_links.py` → `OK: 3782 relative links and anchors in 648 Markdown files`
+  * `scripts/check_command_blocks.py --base origin/dev` → `OK: no # comments in 702 shell code blocks`
+
 ## Files changed
 
 * `packages/debate_core/src/debate_core/integrations/discovery/semantic_scholar.py`: the factory
@@ -113,12 +146,19 @@ through the container: no output and no log record at DEBUG carries the key.
   * `packages/debate_cli/tests/commands/test_doctor_providers.py`: the two rows.
   * `packages/debate_cli/tests/test_search_command.py`: four new tests (six cases), including the
     redaction check through the container.
+* `docs/guides/provider-credentials.md`: Semantic Scholar's row, without a key (Deviation 2).
 * This report, and the spec's phase (InProgress, set at the start).
 
 ## Deviations from the spec
 
 1. **Criterion ids.** The PM's message of 2026-11-12 calls the code criterion "ac2". In the spec it
    is ac3, and ac2 is the profiles. The PM confirmed the same day: keep the spec's ids.
+2. **One guide row now, not with ac2.** `docs/guides/provider-credentials.md` said Semantic Scholar
+   "is asked without a key, from the pool every keyless caller shares". That stops being true when
+   this code half merges, so its row now says what the code does: not asked, named `not configured`
+   with the cure, not counted as partial, and no profile enables it yet. The guides' full update for
+   ac2 (what a key gives: one request a second, the later queries of an expanded search not asked,
+   a 429 held with backoff) waits for the profiles.
 
 ## Decisions and assumptions
 
@@ -236,6 +276,25 @@ launchctl print-disabled "gui/$(id -u)" | grep caselist-sync
      echo "installed build: $(cd ~ && debate-research --json --version | python3 -I -c 'import json, sys; print(json.load(sys.stdin)["data"]["tag"] or "untagged")')"
    fi
    ```
+
+**Next, the PM's answer of 2026-11-12: one diagnostic request, after 13:00 Chicago.** A key issued
+hours ago may not be active yet, so the 429's message is the point.
+* **200 with `papers: 1`:** (a) runs once through debate-research, then (b) once right after it.
+* **429 or 403:** its message goes to the PM, and nothing more is sent until the PM rules.
+
+The key goes to curl on stdin (`-H @-`), never on a command line or in the output. The block prints
+the status, the `Retry-After` and `x-ratelimit-*` headers, the body's `message` and `code`, and the
+paper count. It never prints a title.
+
+```bash
+cd ~
+OUT=$(mktemp)
+HEAD=$(mktemp)
+grep '^DEBATE_PROVIDERS__SEMANTIC_SCHOLAR_API_KEY=' ~/.debate-research/dev.env | sed 's/^DEBATE_PROVIDERS__SEMANTIC_SCHOLAR_API_KEY=/x-api-key: /' | curl -sS -o "${OUT}" -D "${HEAD}" -w 'HTTP %{http_code}\n' -H @- -G 'https://api.semanticscholar.org/graph/v1/paper/search' --data-urlencode 'query=carbon capture subsidies' --data-urlencode 'limit=1' --data-urlencode 'fields=paperId'
+grep -iE '^(retry-after|x-ratelimit)' "${HEAD}"
+python3 -I -c 'import json, sys; d = json.load(open(sys.argv[1])); print("message:", d.get("message")); print("code:", d.get("code")); print("papers:", len(d.get("data") or []))' "${OUT}"
+rm -f "${OUT}" "${HEAD}"
+```
 
 Both smoke blocks run on the **installed** dev build, not this branch, and each stops before searching
 unless three things hold:
@@ -370,6 +429,15 @@ key.
    ```
 
 ## Follow-up work
+
+0. **The rest of this task, after this partial merge.** The Goal stays InProgress. Once ac1 passes
+   and the PM has recorded it, the task:
+   * enables `semantic_scholar` in `config/profiles/dev.toml` and `prod.toml`, with the profiles'
+     comments;
+   * writes the tests on the committed profiles, shown failing first;
+   * updates the search guide and `docs/guides/provider-credentials.md` with what a key gives;
+   * runs the node's `-k profile` criterion;
+   * sets the Goal to `Succeeded`.
 
 1. **The adapter's keyless mode stays** (the PM, 2026-11-12). Only the factory refuses, and the tests
    pin both paths. If the shared pool ever proves usable, the PM can rule the factory back in with no

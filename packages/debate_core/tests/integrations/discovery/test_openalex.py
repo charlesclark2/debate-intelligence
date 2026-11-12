@@ -43,7 +43,6 @@ from debate_core.integrations.discovery.openalex import (
     rebuild_abstract,
     source_type_for,
     works_parameters,
-    works_url,
 )
 from debate_core.integrations.discovery.redaction import PROTECTED_LOGGERS, logger
 from debate_core.integrations.discovery.registry import ProviderRegistry
@@ -886,7 +885,9 @@ async def test_a_joined_search_too_long_for_one_request_is_split_into_the_fewest
 
 
 @pytest.mark.parametrize(("second", "requests"), [(747, 1), (748, 2)], ids=["1,500 characters", "1,501"])
-async def test_a_joined_search_of_1500_characters_is_one_request_and_of_1501_two(second: int, requests: int) -> None:
+async def test_a_joined_search_of_1500_characters_is_one_request_and_of_1501_two(
+    second: int, requests: int
+) -> None:
     """By hand: "(" + 745 + ")" + " OR " + "(" + 747 + ")" is 1,500 characters, OpenAlex's limit (measured
     2026-11-12); one more character is two requests, each query alone and as typed."""
     texts = ("a" * 745, "b" * second)
@@ -952,8 +953,12 @@ JOINED: Final = (
 """None of these can reach outside its group: lower-case words, operators inside other words or inside a
 quoted phrase, and balanced parentheses."""
 
-ONE_ASKED_ALONE: Final = "1 query asked alone, not joined: an unbalanced parenthesis or double quote, or an AND, OR or NOT"
-TWO_ASKED_ALONE: Final = "2 queries asked alone, not joined: an unbalanced parenthesis or double quote, or an AND, OR or NOT"
+ONE_ASKED_ALONE: Final = (
+    "1 query asked alone, not joined: an unbalanced parenthesis or double quote, or an AND, OR or NOT"
+)
+TWO_ASKED_ALONE: Final = (
+    "2 queries asked alone, not joined: an unbalanced parenthesis or double quote, or an AND, OR or NOT"
+)
 
 
 @pytest.mark.parametrize("text", ASKED_ALONE)
@@ -1042,7 +1047,8 @@ class RefusingWorks:
             return httpx.Response(status)
         number = len(self.requests)
         return httpx.Response(
-            200, json={"results": [{"id": f"https://openalex.org/W{number}", "display_name": f"Work {number}"}]}
+            200,
+            json={"results": [{"id": f"https://openalex.org/W{number}", "display_name": f"Work {number}"}]},
         )
 
     def carried(self) -> list[list[int]]:
@@ -1063,7 +1069,9 @@ def carried(search: str) -> list[str]:
 def numbered_queries(count: int, refused: Collection[int] = ()) -> tuple[ProviderQuery, ...]:
     """`count` queries of one window, each ending in its number; those in `refused` carry "zzrefused"."""
     return tuple(
-        ProviderQuery(query=f"carbon tax {'zzrefused' if number in refused else 'survey'} {number}", filters=ONE_PAGE)
+        ProviderQuery(
+            query=f"carbon tax {'zzrefused' if number in refused else 'survey'} {number}", filters=ONE_PAGE
+        )
         for number in range(count)
     )
 
@@ -1078,7 +1086,9 @@ async def test_a_refused_joined_request_is_split_in_halves_until_the_one_refused
     on only into the half refused beside one answered: 1 + 2 * 3 = 7 requests."""
     served = RefusingWorks(refusing(0))
 
-    answers = await build_over(httpx.MockTransport(served.handle)).search_each(numbered_queries(8, refused=(0,)))
+    answers = await build_over(httpx.MockTransport(served.handle)).search_each(
+        numbered_queries(8, refused=(0,))
+    )
 
     assert served.carried() == [
         [0, 1, 2, 3, 4, 5, 6, 7],
@@ -1105,10 +1115,12 @@ async def test_a_refused_joined_request_is_split_in_halves_until_the_one_refused
 
 
 @pytest.mark.parametrize(("count", "most"), [(2, 3), (3, 5), (8, 7), (37, 13)])
-async def test_finding_one_refused_query_costs_at_most_one_plus_two_per_halving(count: int, most: int) -> None:
+async def test_finding_one_refused_query_costs_at_most_one_plus_two_per_halving(
+    count: int, most: int
+) -> None:
     """The PM's bound: 1 + 2 * ceil(log2 n) requests a page for a request of n queries, reached by the
     query that is halved the most times. Written by hand: ceil(log2) of 2, 3, 8 and 37 is 1, 2, 3, 6."""
-    costs = []
+    costs: list[int] = []
     for bad in range(count):
         served = RefusingWorks(refusing(bad))
         answers = await build_over(httpx.MockTransport(served.handle)).search_each(

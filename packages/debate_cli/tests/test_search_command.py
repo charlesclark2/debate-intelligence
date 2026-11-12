@@ -885,7 +885,7 @@ def test_a_da_link_search_on_the_nhi_topic_asks_openalex_its_links_then_the_chos
             "Medicare for All unpopular with Democrats United States",
             "public option unpopular with Democrats United States",
             "Affordable Care Act unpopular with Democrats United States",
-        )
+        ),
     ]
     queries = envelope(result)["data"]["expansion"]["queries"]
     assert [query["template_id"] for query in queries][7:] == [
@@ -1429,10 +1429,9 @@ def test_a_typed_query_with_an_open_parenthesis_asks_openalex_each_query_alone_a
 
     shown = search(typed, "--argument", "politics-da", "--need", "link")
 
-    assert (
-        "openalex: ok, 21 results from 7 queries: " + ASKED_ALONE_REASON.format(count="7 queries")
-        in " ".join(shown.stdout.split())
-    )
+    assert "openalex: ok, 21 results from 7 queries: " + ASKED_ALONE_REASON.format(
+        count="7 queries"
+    ) in " ".join(shown.stdout.split())
 
 
 def test_a_model_query_with_a_bare_or_is_asked_alone_and_the_template_queries_joined(seams: Seams) -> None:

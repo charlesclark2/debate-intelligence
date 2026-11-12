@@ -31,14 +31,15 @@ comes back short; OpenAlex pages no further than 10,000 works. Each page is one 
 :class:`~debate_core.application.ports.providers.MultiQuerySearchProvider`. :func:`works_requests`
 joins the queries that share their filters into one `search=`, each in parentheses and joined by
 `OR`: OpenAlex ANDs the words of a group, as it does a query asked alone, and a query is kept
-unquoted, as today. A request URL over about 4 KB is refused with `400`, so the joined queries are
-split into the fewest requests whose search stays within :data:`MAX_SEARCH_CHARS` and whose URL stays
-within :data:`MAX_URL_CHARS` (v1-e08-t20). A query that could reach outside its parentheses
-(:func:`asked_alone`) is sent in a request of its own, as typed. A joined request OpenAlex still
-refuses with `400` is split in halves and asked again (:meth:`OpenAlexProvider._halves`). A result says nothing
-about which group it matched (only a relevance score), so :func:`answered_queries` attributes each
-work by the feeds' rule: a query answered it when every one of its words is in the work's title or
-abstract. A work that matches no query's words answered the joined search, and goes to every query
+unquoted, as today. A search over 1,500 characters, or a URL over about 4 KB, is refused with `400`,
+so the joined queries are split into the fewest requests whose search stays within
+:data:`MAX_SEARCH_CHARS` and whose URL stays within :data:`MAX_URL_CHARS` (v1-e08-t20). A query
+that could reach outside its parentheses (:func:`asked_alone`) is sent in a request of its own, as
+typed. A joined request OpenAlex still refuses with `400` is split in halves and asked again
+(:meth:`OpenAlexProvider._halves`). A result says nothing about which group it matched (only a
+relevance score), so :func:`answered_queries` attributes each work by the feeds' rule: a query
+answered it when every one of its words is in the work's title or abstract. A work that matches no
+query's words answered the joined search, and goes to every query
 of its request; one that matches several goes to each of them. When one request of several fails,
 the queries it carried get an empty, partial answer naming why; when all fail, the first failure is
 raised. A rate limit fails the whole call, so that the wrapper holds OpenAlex off as asked.

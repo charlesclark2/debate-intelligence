@@ -519,6 +519,7 @@ def test_the_backoff_constants_are_the_ones_the_module_states() -> None:
         (6, 0.0, 60.0),
         (6, 0.5, 60.0),
         (40, 0.999, 60.0),
+        (2000, 0.5, 60.0),
     ],
     ids=[
         "the first, no jitter",
@@ -532,12 +533,13 @@ def test_the_backoff_constants_are_the_ones_the_module_states() -> None:
         "the sixth reaches the cap",
         "the cap is never passed, jitter or not",
         "the fortieth is still the cap",
+        "two thousand in a row neither overflow nor pass the cap",
     ],
 )
 def test_the_nth_consecutive_429_holds_for_the_doubled_base_lengthened_by_up_to_half_capped(
     consecutive: int, draw: float, expected: float
 ) -> None:
-    """Written by hand: step = min(60, 2 * 2^(n-1)); hold = min(60, step * (1 + draw / 2))."""
+    """Written by hand: step = 2 * 2^(n-1); hold = min(60, step * (1 + draw / 2))."""
     assert rate_limit_hold_seconds(consecutive, draw) == pytest.approx(expected, abs=1e-9)
 
 

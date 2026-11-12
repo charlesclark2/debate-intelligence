@@ -59,7 +59,7 @@ None.
   old permit is released and the breaker is asked again: it refuses with `ProviderCircuitOpen`, or,
   when the breaker has half-opened with no probe out, makes this call the probe.
 * **The backoff.** A 429 with a `Retry-After` holds the provider for exactly those seconds. Without
-  one, the `n`-th consecutive 429 holds it for `step = min(cap, base * 2^(n-1))` lengthened by a
+  one, the `n`-th consecutive 429 holds it for `step = base * 2^(n-1)` lengthened by a
   random fraction up to half of itself, `min(cap, step * (1 + draw / 2))`, `draw` in `[0, 1)` from an
   injected random source. Base 2 s, cap 60 s, reasons in the module. Every 429 counts towards `n`,
   with a `Retry-After` or without; an answer resets `n` to 0; other failures, skips and "not asked"

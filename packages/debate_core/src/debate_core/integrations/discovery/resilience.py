@@ -144,10 +144,11 @@ never longer than the cap.
 def rate_limit_hold_seconds(consecutive: int, draw: float) -> float:
     """The hold after the `consecutive`-th 429 in a row that named no `Retry-After`, for a `draw` in [0, 1).
 
-    `min(cap, step × (1 + draw × jitter))` with `step = min(cap, base × 2^(consecutive − 1))`.
+    `min(cap, step × (1 + draw × jitter))` with `step = base × 2^(consecutive − 1)`. The doublings
+    stop counting at 32, past the cap, so a long run of 429s never overflows a float.
     """
     doublings = min(max(consecutive, 1) - 1, 32)
-    step = min(RATE_LIMIT_HOLD_CAP_SECONDS, RATE_LIMIT_HOLD_BASE_SECONDS * 2**doublings)
+    step = RATE_LIMIT_HOLD_BASE_SECONDS * 2**doublings
     return min(RATE_LIMIT_HOLD_CAP_SECONDS, step * (1 + draw * RATE_LIMIT_HOLD_JITTER))
 
 

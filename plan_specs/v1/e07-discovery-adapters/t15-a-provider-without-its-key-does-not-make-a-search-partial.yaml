@@ -46,7 +46,7 @@ spec:
         longer makes a search partial, a search with no answer stays FAILED, and the ruled
         `--provider` case holds, by tests shown failing first.
 status:
-  phase: InProgress
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

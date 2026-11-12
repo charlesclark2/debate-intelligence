@@ -30,7 +30,7 @@ model in architecture proposal §7, so V2 swaps storage rather than schemas.
 | `enums.py` | `AccessStatus`, `VerificationStatus`, `ProvenanceMode`, `SearchStatus`, `SourceType`, `SpanStyle`, `SpanPurpose`, `CitationFieldSource` |
 | `article.py` | `Article`, `ArticleIdentifiers`, `SourceSnapshot` |
 | `search.py` | `Search`, `SearchFilters`, `SearchResult`, and `SearchExpansion`, how a search's query was expanded (v1-e08-t04) |
-| `argument_taxonomy.py` | `ArgumentTaxonomy`: the arguments, their families' needs, query templates, recency windows and topic presets of `config/argument_taxonomy.yaml`, validated whole (v1-e08-t04-argument-need-expansion; needs per family, v1-e08-t08; a preset's plan mechanisms, v1-e08-t14) |
+| `argument_taxonomy.py` | `ArgumentTaxonomy`: the arguments, their families' needs, query templates, recency windows and topic presets of `config/argument_taxonomy.yaml`, validated whole (v1-e08-t04-argument-need-expansion; needs per family, v1-e08-t08; a preset's plan mechanisms, v1-e08-t14; the link templates they cross and the 42-query maximum, v1-e08-t16) |
 | `card.py` | `Card`, `CardSpan` |
 | `citation.py` | `Citation`, `CitationField[T]` |
 | `schema_export.py` | Renders the published JSON Schemas (no I/O; the script writes them) |
@@ -90,7 +90,7 @@ cross them. Full write-up: [docs/architecture/ports-and-adapters.md](../../docs/
 | `ports/evidence_store.py` | `EvidenceObjectStore` and `ObjectInfo`: evidence stored under a *name* rather than a digest — manifests, reports — plus the key validation both its adapters share (v1-e29-t04) |
 | `services/article_registration.py` | The worked example of the constructor-injection pattern every service follows |
 | `federated_search.py`, `federated_search_types.py` | `FederatedSearchService`: the expand, fan_out, normalize and rank stages of a federated search, the concurrent fan-out under one deadline, and the COMPLETE / PARTIAL / FAILED rule (v1-e08-t01) |
-| `query_expansion.py` | `QueryExpansionStage`, the expand stage: a query turned into the taxonomy's template queries for `--argument` and `--need`, each with its date window, plus a model's validated extra queries when asked for (`search.expand`, fail-open). A DA's link search on a topic preset with plan mechanisms adds a query on the resolution's words and one per mechanism, each naming the country (v1-e08-t14). Loads `config/argument_taxonomy.yaml` (v1-e08-t04) |
+| `query_expansion.py` | `QueryExpansionStage`, the expand stage: a query turned into the taxonomy's template queries for `--argument` and `--need`, each with its date window, plus a model's validated extra queries when asked for (`search.expand`, fail-open). A DA's link search on a topic preset with plan mechanisms crosses the link templates the preset chose (by default its first) with the resolution's words and each mechanism, template-major, each naming the country (v1-e08-t14, v1-e08-t16). Loads `config/argument_taxonomy.yaml` (v1-e08-t04) |
 
 Things worth knowing before you write a service:
 

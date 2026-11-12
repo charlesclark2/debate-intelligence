@@ -62,7 +62,7 @@ spec:
         The operator repeats the Policy search and the coach labels it blind; the PM records
         nDCG@10 and the relevant count against v1-e08-t14's ac3.
 status:
-  phase: Pending
+  phase: InProgress
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

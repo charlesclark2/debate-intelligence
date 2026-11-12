@@ -194,7 +194,11 @@ An alias may stay on the retired position instead of moving, but never on both.
 Search names some affirmative positions too. A topic preset in `config/argument_taxonomy.yaml` lists
 the plan mechanisms a DA's link search adds a query for, each by its aff position's id and label
 (v1-e08-t14). Renaming one of those positions, retiring it or changing its label fails a test until
-the preset says the same.
+the preset says the same. The preset also names the link templates each DA's mechanism queries cross
+(v1-e08-t16). It names one of a DA's own templates by its id and its exact text, so reordering or
+rewording a DA's link templates fails the file's load until the preset says the same. No DA's link
+search on a topic may ask more than 42 queries, the most that still go to OpenAlex in one request, so
+a mechanism added to a preset costs every DA's link search one query per template it crosses.
 
 ## Ids are forever
 

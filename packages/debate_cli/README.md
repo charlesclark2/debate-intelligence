@@ -543,9 +543,16 @@ each enabled provider, whether its key or the email is set and what a search doe
   second instead of three. A search of one query looks the same either way. An expanded search sends
   its queries one a second, and any it cannot send before its timeout come back not asked. The footer
   then says, for example, `crossref: partial, 9 results from 12 queries: not asked: the public pool
-  allows 1 query a second; set a contact email for the polite pool`, and the search exits `6`. On the
-  recorded fixtures the twelve-query NHI link search sends nine of its twelve Crossref queries in about
-  9 seconds without an email, and all twelve in about 4 seconds with one.
+  allows 1 query a second; set a contact email for the polite pool`, and the search exits `6`.
+* **A long expanded search is partial on Crossref even with an email** (`v1-e08-t16`). Crossref is the
+  one enabled provider that cannot reach every query of a long search. OpenAlex is asked every query in
+  one joined request, the feeds are read once, and the Federal Register and GovInfo are asked every query
+  at once. Crossref's pace sends a query only while its answer can still come back in time. The NHI
+  politics DA link search (`--argument politics-da --need link --topic policy-2026-27-nhi`) asks 37
+  queries. On the polite pool Crossref sends at most 28 of them (18 when it answers in 1.5 seconds), and
+  on the public pool at most 9. That search is therefore partial and exits `6`. Its footer names
+  Crossref and says the rest were not asked. The queries Crossref skips are the last ones, the mechanism
+  queries; the results from every other provider are complete.
 * GovInfo without `DEBATE_PROVIDERS__API_DATA_GOV_KEY` is `not configured` on a topic that lists it,
   as below. The footer names it with its cure, and it does not make the search partial.
 
@@ -563,9 +570,17 @@ and in the JSON's `reasons`. No retry could get more from it, so it is left out 
 when none did. A search that names GovInfo with `--providers` asked for it, so there it is still a
 missing answer: `govinfo: not configured: no api.data.gov key (DEBATE_PROVIDERS__API_DATA_GOV_KEY)`,
 and the search exits `6`. GovInfo and the Federal Register are each asked
-once per query, so the twelve-query NHI link search sends each twelve requests. api.data.gov allows a
-key 1,000 requests an hour, which is about 80 such searches an hour, and then answers `429` for the
+once per query, so the 37-query NHI politics link search sends each 37 requests. api.data.gov allows a
+key 1,000 requests an hour, which is about 27 such searches an hour, and then answers `429` for the
 rest of the hour; the footer says so.
+
+**A search of many queries, and the ranking.** BM25, the ranking's term-match feature, scores each result
+against the distinct words of every query the search asked. Crossing a DA's link templates with the
+topic's mechanisms (`v1-e08-t16`) adds no new word but one: the NHI politics link search's 37 queries
+use the words of its earlier 12 plus `costs`. Each mechanism a topic adds brings its own words, and a
+result that uses them anywhere scores for them, whatever its link. On `v1-e08-t14`'s labelled search
+the providers' own order did better than the ranking. Until `v1-e08-t24` reworks how a many-query search
+ranks, compare a result's `rank` with its `provider_order` in `--format json`.
 
 ```console
 $ uv run debate-research search "midterm elections" --since 2026-09-14 --max-results 20

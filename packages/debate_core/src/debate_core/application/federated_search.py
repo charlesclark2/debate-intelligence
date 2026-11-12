@@ -111,7 +111,9 @@ __all__ = [
     "FanOutStage",
     "FederatedSearchService",
     "NO_TOPICS",
+    "NOT_ENABLED_CURE",
     "SearchTopics",
+    "partial_providers",
     "search_status",
     "selected_providers",
 ]
@@ -119,6 +121,9 @@ __all__ = [
 DEFAULT_DEADLINE_SECONDS: Final = 15.0
 """The overall deadline when none is given: above the providers' own default timeout of 10 s, so a
 provider that times out by itself is reported by its own timeout rather than cut off by this one."""
+
+NOT_ENABLED_CURE: Final = "enable it in providers.enabled"
+"""What cures a provider settings do not enable, after its reason (v1-e07-t23, the PM's words)."""
 
 
 def search_status(statuses: Sequence[ProviderStatus], *, uncounted: Collection[str] = ()) -> SearchStatus:
@@ -140,6 +145,19 @@ def search_status(statuses: Sequence[ProviderStatus], *, uncounted: Collection[s
     if len(answered) == len(counted) and in_full:
         return SearchStatus.COMPLETE
     return SearchStatus.PARTIAL
+
+
+def partial_providers(
+    statuses: Sequence[ProviderStatus], *, uncounted: Collection[str] = ()
+) -> tuple[str, ...]:
+    """The providers that did not answer in full, by name, in the order they were first asked."""
+    return tuple(
+        dict.fromkeys(
+            status.provider
+            for status in statuses
+            if status.outcome is not ProviderOutcome.OK or status.response is None or status.response.partial
+        )
+    )
 
 
 @dataclass(frozen=True)

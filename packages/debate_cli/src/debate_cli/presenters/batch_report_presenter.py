@@ -27,13 +27,14 @@ from pathlib import Path
 
 from debate_cli.exit_codes import ExitCode
 from debate_cli.output import CommandFailure, JsonValue, TableSpec
-from debate_cli.presenters.search_presenter import footer_lines, provider_summaries
+from debate_cli.presenters.search_presenter import footer_lines
 from debate_core.application.batch_cut_service import (
     BatchEntry,
     BatchNeed,
     BatchReport,
     BatchStopReason,
 )
+from debate_core.application.federated_search import partial_providers
 from debate_core.application.federated_search_types import SearchOutcome
 
 __all__ = [
@@ -93,11 +94,7 @@ def _cost(value: float | None) -> str:
 
 
 def _partial_providers(outcome: SearchOutcome) -> list[str]:
-    return [
-        summary.provider
-        for summary in provider_summaries(outcome.provider_statuses, uncounted=outcome.uncounted)
-        if summary.outcome != "ok"
-    ]
+    return list(partial_providers(outcome.provider_statuses, uncounted=outcome.uncounted))
 
 
 def _section(entry: BatchEntry) -> str | None:

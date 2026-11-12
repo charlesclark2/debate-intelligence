@@ -40,6 +40,7 @@ from debate_cli.presenters.search_presenter import (
 )
 from debate_core.application.batch_cut_service import BatchReport
 from debate_core.application.digest_service import Digest, DigestItem
+from debate_core.application.federated_search import partial_providers
 from debate_core.domain import SearchStatus
 from debate_core.domain.discovery import ProviderOutcome
 
@@ -303,11 +304,9 @@ def auto_cut_payload(
         "complete": report.complete,
         "stop_reason": report.stop_reason.value,
         "digest_status": digest.status.value,
-        "partial_providers": [
-            summary.provider
-            for summary in provider_summaries(digest.provider_statuses, uncounted=digest.uncounted)
-            if summary.outcome != "ok"
-        ],
+        "partial_providers": list[JsonValue](
+            partial_providers(digest.provider_statuses, uncounted=digest.uncounted)
+        ),
         "cost_usd": report.cost_usd,
         "bundle": str(files.bundle) if files.bundle is not None else None,
         "manifest": str(files.manifest) if files.manifest is not None else None,

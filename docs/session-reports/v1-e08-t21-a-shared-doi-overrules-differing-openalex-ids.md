@@ -193,9 +193,39 @@ None. The affected set runs in the pull request's `ci`.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-11-12
 
 **Notes:**
+
+1. **ac1 passes.**
+   - **Red:** 10 failed before any code change, every one at an assertion, and t10's old pin was among
+     them.
+   - **Green:** 171 passed.
+   - **Mutants:** all 16 caught by the new tests at assertions. The surviving "empty values count"
+     mutant got its own test and was re-run. The two DOI-normalisation mutants were judged by their
+     assertion failures only, not their crashes, as t10's lesson says.
+   - **The fixture:** an OpenAlex body written by hand with invented 10.5555 DOIs, read through the
+     adapter's own `candidate_from_work`. The fuller work comes second, so "take the earlier record"
+     would give the wrong answer, and the test can tell the two apart.
+2. **The rule is as narrow as the spec asks.**
+   - It needs a DOI stated by both records, so the arXiv DOI that dedupe gives an arXiv record doesn't
+     count.
+   - It overrules only the OpenAlex id, never a PMID, arXiv id or Semantic Scholar id.
+   - It applies only to the DOI rule's joins.
+   - Fullness decides only in a group holding two or more OpenAlex ids, so no other merge changes, and a
+     test pins that.
+   - Provider agreement already counts distinct providers, and a test pins it once. So v1-e08-t24's
+     ranking reads the merged work as one OpenAlex finding.
+3. **The decisions are accepted:** the 14-field definition of "fuller", input order as the tie-break,
+   both work ids kept in the merged work, and the open-access copy taken from the existing precedence.
+4. **The deviations are accepted.**
+   - 1, the fixture beside the OpenAlex adapter's, read through its mapping alone.
+   - 2, t10's pin inverted.
+   - 3, the bounded test runner.
+   - 4, no smoke check, since there's no new command.
+5. **The follow-up gets no hand-off of its own.** The next live search of the kind v1-e08-t16's ac3
+   runs, after v1-e08-t20, shows the merge in passing, and no extra block is added for it.
+6. **Merge:** a plain `scripts/task pr` once `ci` is green. The Goal is `Succeeded`.

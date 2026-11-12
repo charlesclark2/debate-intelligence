@@ -84,6 +84,20 @@ was never updated. The block therefore reads either form:
 If a file is missing, it lists the `search-`, `labels-` and `key-policy-nhi*` names on the Desktop
 (file names only) and stops. Rerun it with the right names in place of the defaults.
 
+**The first run (2026-11-11) found no t05 sheet.** The block stopped:
+`STOP: missing ['labels-policy-nhi.csv']`. The Desktop holds `search-policy-nhi.json` and t14's
+three files, but neither a t05 sheet nor a t05 key. The labels do not need the sheet, though. The
+PM's ac6 record in t05's report fixes every one of them:
+* the sheet was the top 10 by rank plus the top 10 by provider order of that saved search, 20 rows;
+* 3 of the 20 were relevant: ranks 1, 9 and 10, at provider positions 117, 441 and 257;
+* the other 17 were not.
+
+So when t05's sheet is missing, the revised block rebuilds those rows from the saved search the way
+t05's command 4 chose them, and marks ranks 1, 9 and 10 relevant. It first checks that those three
+ranks sit at provider positions 117, 441 and 257 in the file, and stops if they do not, so it cannot
+score a different search. t14's labels are still read from its sheet and key. If t05's filled sheet
+turns up, putting it on the Desktop as `labels-policy-nhi.csv` makes the block read it instead.
+
 **How nDCG@10 is computed.** A row the coach marked relevant gains 1, and any other row gains 0. The
 ideal ordering puts the sheet's relevant rows first. This reproduces t05's 0.746 from ranks 1, 9 and
 10, and its 0.000 from provider positions 117, 441 and 257. "Provider order" can mean the raw
@@ -111,7 +125,11 @@ PM used.
 
 ## Deviations from the spec
 
-None.
+1. **t05's labels come from the PM's ac6 record, not from the coach's sheet.** The spec asks for
+   positions from the labelled sheets, and t05's filled sheet is not on the operator's Desktop. The
+   record gives the same labels: 3 relevant of 20 rows, at ranks 1, 9 and 10 (provider positions
+   117, 441 and 257), and the rest not relevant. The block checks those positions against the saved
+   search before it uses them. If the sheet is found, the block reads it instead.
 
 ## Decisions and assumptions
 
@@ -140,6 +158,10 @@ None.
   * Nothing under the synthetic `HOME` changed (file sizes and modification times compared), and
     the worktree stayed clean.
   * It took 0.4 s.
+  * With no t05 sheet, on a synthetic search patched so ranks 1, 9 and 10 sit at provider positions
+    117, 441 and 257, it marked those three relevant and printed nDCG@10 0.746 ranked against 0.000.
+    Unpatched, it stopped with `the saved t05 search is not the one recorded: rank 1 is not at
+    provider position 117`.
 
   The block holds no `#` and no `!` (zsh history expansion), and only ASCII.
 
@@ -150,7 +172,9 @@ None.
 Where: your Mac, any terminal. The block changes into the task worktree itself. It reads:
 * the two saved searches on your Desktop, `search-policy-nhi.json` (t05) and
   `search-policy-nhi-mechanisms.json` (t14);
-* their filled sheets `labels-….csv` and keys `key-….csv`;
+* t14's filled sheet and key (`labels-policy-nhi-mechanisms.csv`, `key-policy-nhi-mechanisms.csv`),
+  and t05's sheet only if one is on the Desktop. Otherwise t05's labels come from the PM's record,
+  as described above;
 * the dev store `~/.debate-research/dev/debate.sqlite3`.
 
 If any of those Desktop files has another name, the block stops and lists what it found. Change the
@@ -167,7 +191,7 @@ import traceback
 from pathlib import Path
 
 RECORDED = {
-    "t05": {"relevant": 3, "rows": 20, "ranked": 0.746, "provider": 0.000},
+    "t05": {"relevant": 3, "rows": 20, "ranked": 0.746, "provider": 0.000, "marked": {1: 117, 9: 441, 10: 257}},
     "t14": {"relevant": 6, "rows": 19, "ranked": 0.438, "provider": 0.746},
 }
 FEATURES = ("bm25", "recency", "source_type", "peer_reviewed", "open_access", "citations", "provider_agreement")
@@ -260,6 +284,24 @@ def labelled_rows(labels_path, key_path, results_by_rank):
     return out, key_note, url_mismatch, order_mismatch
 
 
+def recorded_rows(name, results):
+    marked = RECORDED[name].get("marked")
+    if not marked:
+        raise Stop(f"{name}'s sheet is missing and no record gives its labels")
+    by_rank = {result["rank"]: result for result in results}
+    for rank, order in marked.items():
+        if by_rank.get(rank, {}).get("provider_order") is None or not by_rank[rank]["provider_order"] == order:
+            raise Stop(f"the saved {name} search is not the one recorded: rank {rank} is not at provider position {order}")
+    top = {x["rank"] for x in sorted(results, key=lambda x: x["rank"])[:10]} | {
+        x["rank"] for x in sorted(results, key=lambda x: x["provider_order"])[:10]
+    }
+    rows = [(rank, rank in marked) for rank in sorted(top)]
+    note = "no sheet: rows rebuilt from the saved search, labels from the PM's record (ranks " + ", ".join(
+        f"{rank} at provider position {order}" for rank, order in marked.items()
+    ) + " relevant, provider positions checked)"
+    return rows, note, 0, 0
+
+
 def candidate_key(candidate):
     return (candidate.provider, candidate.provider_record_id, str(candidate.url), candidate.title)
 
@@ -278,7 +320,10 @@ def report(name, data_dir, search_path, labels_path, key_path):
     saved = saved_search(search_path)
     results = saved["results"]
     results_by_rank = {result["rank"]: result for result in results}
-    rows, key_note, url_mismatch, order_mismatch = labelled_rows(labels_path, key_path, results_by_rank)
+    if labels_path.is_file():
+        rows, key_note, url_mismatch, order_mismatch = labelled_rows(labels_path, key_path, results_by_rank)
+    else:
+        rows, key_note, url_mismatch, order_mismatch = recorded_rows(name, results)
 
     database = data_dir / "debate.sqlite3"
     wal = data_dir / "debate.sqlite3-wal"
@@ -480,7 +525,7 @@ def main():
     if not len(paths) == 6:
         raise Stop("expected three paths per search")
     desktop = Path(paths[0]).parent
-    missing = [Path(p).name for i, p in enumerate(paths) if not Path(p).is_file() and i % 3 < 2]
+    missing = [Path(p).name for i, p in enumerate(paths) if not Path(p).is_file() and (i % 3 == 0 or i == 4)]
     if missing:
         found = sorted(
             entry.name
@@ -511,8 +556,8 @@ fi
 **What success looks like:** two sections, `=== t05: …` and `=== t14: …`. In each section:
 * `replay with today's code and table: same rank for N of N saved results, same features for N`,
   ideally with N the same throughout;
-* `sheet: 20 rows` for t05 and `sheet: 19 rows` for t14, with `urls differing from the saved result
-  0`;
+* `sheet: 20 rows (no sheet: rows rebuilt …)` for t05, and `sheet: 19 rows (items joined to …)` for
+  t14 with `urls differing from the saved result 0`;
 * then one line per labelled row, the relevant count, the nDCG@10 line, and `REPRODUCED` on the last
   line.
 

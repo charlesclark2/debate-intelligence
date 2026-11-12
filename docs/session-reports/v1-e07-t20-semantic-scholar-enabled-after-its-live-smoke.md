@@ -192,6 +192,23 @@ launchctl disable "gui/$(id -u)/com.debate-intelligence.caselist-sync" && echo "
 launchctl print-disabled "gui/$(id -u)" | grep caselist-sync
 ```
 
+**Run by the operator, 2026-11-12 (night, Chicago).**
+
+* **The agent, found loaded after a reboot, unloaded and disabled.** Step 2 printed `booted out` and
+  `agent unloaded`, and the plist is still in place. The disable printed `disabled`, then
+  `launchctl print-disabled` printed `"com.debate-intelligence.caselist-sync" => disabled`.
+* **The install.** `Installed debate-research 1.1.0.dev413 from v1.1.0-dev.413` and `installed
+  build: v1.1.0-dev.413`. The check table read `Integrations failing none` and `Integrations import
+  yes`. The runbook's "which uv manages" line fell outside `tail -5`. The session checked the
+  interpreter read-only instead: the tool's Python resolves to uv's own `cpython-3.12.13`. It also
+  checked the installed `semantic_scholar.py`, which sends `x-api-key` whenever a key is set, and the
+  installed `resilience.py`, which carries v1-e07-t22 (`turn_came`, the 2 s backoff base).
+* **(a) The keyed smoke: FAIL.** `status: FAILED`; `semantic_scholar: rate limited, 1 queries, 1
+  failed, 0 results`; `reason: HTTP 429`, with no Retry-After; `results: 0`; `calls not asked: 0 of
+  1`; `breaker: closed, errors 1, skipped 0`. Before the search, `doctor --providers` had reported
+  the key as set. One request went out and was answered 429. (b) was not run: the PM's rulings
+  cover a 429 on the keyless query, not on the keyed one.
+
 0. **Install `v1.1.0-dev.413`**, about 2 minutes, from this worktree, after the landscape republish
    has finished. The block stops before installing if any `debate-research` command is running (it
    prints only the PIDs), or if `com.debate-intelligence.caselist-sync` is loaded. The cutover left

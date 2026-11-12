@@ -1377,7 +1377,9 @@ async def test_govinfo_429_holds_it_for_the_first_backoff_without_sending_again(
     (health,) = registry.health()
     assert health.rate_limited_until is not None
     held_for = health.rate_limited_until - clock.now()
-    assert timedelta(seconds=2) <= held_for < timedelta(seconds=3), "the first backoff: 2 s, up to half longer"
+    assert timedelta(seconds=2) <= held_for < timedelta(seconds=3), (
+        "the first backoff: 2 s, up to half longer"
+    )
 
 
 @pytest.mark.usefixtures("bare_protected_loggers")

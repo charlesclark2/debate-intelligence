@@ -51,7 +51,8 @@ goes out bare and OpenAlex still answers, on a smaller budget: about 100 searche
 **Refusals** go through :func:`~debate_core.integrations.discovery.http_failures.provider_error_for_status`.
 OpenAlex answers `429` both to more requests a second than the plan allows and to a spent daily
 budget, so a spent budget looks like any other rate limit: :class:`ProviderRateLimited`, carrying
-the `Retry-After` when OpenAlex sends one, and the wrapper's cool-down when it does not.
+the `Retry-After` when OpenAlex sends one, and the wrapper's exponential backoff when it does not
+(v1-e07-t22): 2 s, then 4 s, and the third 429 in a row opens the breaker for its cool-down.
 """
 
 from __future__ import annotations

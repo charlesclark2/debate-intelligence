@@ -1414,7 +1414,9 @@ async def test_a_429_holds_crossref_for_its_retry_after_and_one_without_for_the_
     (health,) = cooled.health()
     assert health.rate_limited_until is not None
     held_for = health.rate_limited_until - clock.now()
-    assert timedelta(seconds=2) <= held_for < timedelta(seconds=3), "the first backoff: 2 s, up to half longer"
+    assert timedelta(seconds=2) <= held_for < timedelta(seconds=3), (
+        "the first backoff: 2 s, up to half longer"
+    )
 
 
 async def test_the_registry_answers_the_recorded_search_through_the_wrapper() -> None:

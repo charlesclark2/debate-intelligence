@@ -1097,11 +1097,15 @@ def test_the_nights_shape_of_failures_sends_nothing_once_the_breaker_opens() -> 
     a call, and the four behind it at once. On 2026-11-11 the four after the breaker opened were sent."""
     sent, ended, health = run_in_virtual_time(every_answer_refused(status=503, draw=no_draw))
     assert sent == [0.0, 1.0, 2.0]
-    assert ended == [
-        ("ProviderUnavailable", 0.25),
-        ("ProviderUnavailable", 1.25),
-        ("ProviderUnavailable", 2.25),
-    ] + [("ProviderCircuitOpen", 3.0)] * 5
+    assert (
+        ended
+        == [
+            ("ProviderUnavailable", 0.25),
+            ("ProviderUnavailable", 1.25),
+            ("ProviderUnavailable", 2.25),
+        ]
+        + [("ProviderCircuitOpen", 3.0)] * 5
+    )
     assert (health.error_count, health.skipped_count, health.state) == (3, 5, BreakerState.OPEN)
     assert health.open_until == NOW + timedelta(seconds=2.25 + 60)
 

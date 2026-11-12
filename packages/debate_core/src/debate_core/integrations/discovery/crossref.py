@@ -41,11 +41,14 @@ and an error naming the pool's rate (and, on the public pool, the cure: a contac
 search is PARTIAL and says why (PM rulings of 2026-11-02). The wrapper hears from the pacer that
 the query was queued and never sent, so it counts the answer as "not asked", neither a failure nor
 a latency sample, and counts no queued time towards a sent query's timeout or latency: a query that
-was sent and runs slow still times out `providers.timeout_seconds` after its pace released it.
+was sent and runs slow still times out `providers.timeout_seconds` after its pace released it. A
+query whose turn comes while the wrapper holds Crossref after a 429, or after its breaker has opened,
+is refused at its turn and never sent (v1-e07-t22).
 
 **Refusals** go through :func:`~debate_core.integrations.discovery.http_failures.provider_error_for_status`:
 a `429` is :class:`~debate_core.application.errors.ProviderRateLimited`, held for its `Retry-After`
-when Crossref sends one and for the wrapper's cool-down when it does not (Crossref documents none);
+when Crossref sends one and for the wrapper's exponential backoff when it does not (Crossref
+documents none; v1-e07-t22);
 a `403`, Crossref's answer to a caller it has blocked by hand, is a refusal, `ProviderUnavailable`,
 and like every request here is never retried.
 

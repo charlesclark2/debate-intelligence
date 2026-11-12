@@ -122,9 +122,7 @@ def make_provider(
         failure_threshold=threshold,
         cooldown_seconds=COOLDOWN.total_seconds(),
     )
-    provider = ResilientProvider(
-        inner, policy, clock=clock, secrets=secrets, random_fraction=drawing(draws)
-    )
+    provider = ResilientProvider(inner, policy, clock=clock, secrets=secrets, random_fraction=drawing(draws))
     return provider, inner
 
 
@@ -515,7 +513,7 @@ def test_the_backoff_constants_are_the_ones_the_module_states() -> None:
         (1, 0.999, 2.999),
         (2, 0.0, 4.0),
         (3, 0.25, 9.0),
-        (4, 0.9, 11.6),
+        (4, 0.9, 23.2),
         (5, 0.0, 32.0),
         (5, 0.99, 47.84),
         (6, 0.0, 60.0),

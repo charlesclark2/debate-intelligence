@@ -168,6 +168,15 @@ def test_the_committed_profiles_keep_the_caselist_policy_gate(environment: str, 
     assert settings.field_sources["caselist.api_enabled"] == f"profile:config/profiles/{environment}.toml"
 
 
+@pytest.mark.parametrize("environment", ["dev", "prod"])
+def test_the_committed_profiles_date_digests_in_the_coachs_zone(environment: str, no_dotenv: Path) -> None:
+    """`[daily] time_zone`: the PM's ruling of 2026-11-12 (v1-e08-t25)."""
+    settings = load_settings(environment=environment, env_file=no_dotenv)
+
+    assert settings.daily.time_zone == "America/Chicago"
+    assert settings.field_sources["daily.time_zone"] == f"profile:config/profiles/{environment}.toml"
+
+
 # ---------------------------------------------------------------------------------------------
 # The build channel picks the environment when nothing else does
 # ---------------------------------------------------------------------------------------------

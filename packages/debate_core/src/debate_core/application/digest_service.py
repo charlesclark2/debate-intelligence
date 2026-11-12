@@ -56,6 +56,7 @@ from dataclasses import dataclass, replace
 from datetime import UTC, date, datetime, time, timedelta
 from pathlib import Path
 from typing import Final, Protocol
+from zoneinfo import ZoneInfo
 
 from debate_core.application.batch_cut_service import BatchCandidate, BatchNeed, batch_need
 from debate_core.application.digest_seen_set import DigestSeenSet, DigestSeenStore, SourceKeys, source_keys
@@ -69,6 +70,7 @@ from debate_core.domain.discovery import ProviderStatus
 
 __all__ = [
     "MAX_WINDOW_DAYS",
+    "ONE_DAY",
     "Digest",
     "DigestGroup",
     "DigestItem",
@@ -115,13 +117,36 @@ class DigestWindow:
         return f"{self.days}d"
 
 
+ONE_DAY: Final = DigestWindow()
+"""`--window 1d`, the default: the date alone, or the 24 hours before the run."""
+
+
 @dataclass(frozen=True, slots=True)
 class DigestRequest:
-    """One digest: a preset, the date it is for, and how many days back it looks."""
+    """One digest: a preset, the date it is for, and how many days back it looks.
+
+    Built as it is, it is a `--date` digest: whole UTC days ending with `day`. Built by
+    :meth:`before_the_run`, it is a digest run with no `--date`.
+    """
 
     preset: DailyPreset
     day: date
-    window: DigestWindow = DigestWindow()
+    window: DigestWindow = ONE_DAY
+    run_at: datetime | None = None
+    """When a digest with no `--date` was run; None for a `--date` digest."""
+    zone: ZoneInfo | None = None
+    """The time zone `day` is the run's date in; None for a `--date` digest."""
+
+    @classmethod
+    def before_the_run(
+        cls, preset: DailyPreset, *, now: datetime, zone: ZoneInfo, window: DigestWindow = ONE_DAY
+    ) -> DigestRequest:
+        """The digest run at `now` with no `--date`."""
+        return cls(preset, now.astimezone(UTC).date(), window)
+
+    def bounds(self) -> tuple[datetime, datetime]:
+        """The first and last instant the digest's searches cover."""
+        return self.window.bounds(self.day)
 
 
 @dataclass(frozen=True, slots=True)
@@ -174,6 +199,8 @@ class Digest:
     listed_before: int
     """Distinct sources the searches found that a digest of another date already listed."""
     feed_topics: tuple[FeedTopicReview, ...]
+    zone: ZoneInfo | None = None
+    """The time zone a digest with no `--date` is dated in; None for a `--date` digest."""
     file: Path | None = None
     """Where the digest was written; None until it is, and for a FAILED digest, which is not."""
 
@@ -239,7 +266,7 @@ class DigestService:
         """The digest, without writing it or recording anything: see the module docstring."""
         preset = request.preset
         seen = self._seen.load(preset.name)
-        since, until = request.window.bounds(request.day)
+        since, until = request.bounds()
         listed: list[SourceKeys] = []
         left_out: list[SourceKeys] = []
         outcomes: list[SearchOutcome] = []
@@ -271,6 +298,7 @@ class DigestService:
                 FeedTopicReview(topic, tuple(self._feed_reviews.get(topic, ())))
                 for topic in preset.feed_topics
             ),
+            zone=request.zone,
         )
 
     async def run(self, request: DigestRequest, write: DigestWriter) -> Digest:

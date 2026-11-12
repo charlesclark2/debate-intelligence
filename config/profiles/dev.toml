@@ -112,3 +112,10 @@ backfile_caselists = ["hspolicy25", "hsld25", "hspolicy24", "hsld24"]
 # the Mac's last scheduled run, and the seed comes next (docs/runbooks/caselist-cutover.md). A
 # command that only reads the bucket, or does not touch it, is unchanged.
 run_state = "bucket"
+
+[daily]
+# The coach's time zone (v1-e08-t25, the PM's ruling of 2026-11-12). A `daily` digest run with no
+# --date covers the 24 hours before the run and is dated, named and recorded as listed by the run's
+# date here. --date keeps whole UTC days. An IANA name; one the time zone database does not know
+# stops every command at startup, naming daily.time_zone.
+time_zone = "America/Chicago"

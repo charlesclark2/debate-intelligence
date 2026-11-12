@@ -36,7 +36,7 @@ from __future__ import annotations
 import asyncio
 import json
 from collections.abc import Coroutine
-from datetime import UTC, date, datetime
+from datetime import datetime
 from functools import partial
 from pathlib import Path
 from typing import Annotated, Any, NoReturn
@@ -138,7 +138,7 @@ def daily(
     if file_format is DigestFormat.JSON and not cli.output.is_json:
         cli.output = CliOutput(OutputMode.JSON, verbose=cli.output.verbose)
     chosen = _preset(cli, preset)
-    request = DigestRequest(chosen, _day(cli, day), _window(window))
+    request = _request(cli, chosen, day, _window(window))
     digesting = cli.services.daily_digesting(feed_topics=chosen.feed_topics)
     _progress(cli, ctx, request)
     digest = _run(_digest(digesting, request, partial(_write, digest_dir, file_format)))
@@ -172,11 +172,14 @@ def _preset(cli: CliContext, name: str) -> DailyPreset:
     return found
 
 
-def _day(cli: CliContext, given: datetime | None) -> date:
-    """`--date`, or today in UTC by the container's clock."""
+def _request(
+    cli: CliContext, preset: DailyPreset, given: datetime | None, window: DigestWindow
+) -> DigestRequest:
+    """`--date`'s digest, or with none the one before the run, by the container's clock."""
     if given is not None:
-        return given.date()
-    return cli.services.clock()().astimezone(UTC).date()
+        return DigestRequest(preset, given.date(), window)
+    zone = cli.services.settings.daily.zone
+    return DigestRequest.before_the_run(preset, now=cli.services.clock()(), zone=zone, window=window)
 
 
 def _window(text: str) -> DigestWindow:

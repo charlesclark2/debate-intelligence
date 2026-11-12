@@ -16,9 +16,10 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass, field
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Any, Final
+from zoneinfo import ZoneInfo
 
 import pytest
 
@@ -543,3 +544,170 @@ async def test_an_empty_digest_has_no_auto_cut_candidates(world: World) -> None:
     world.provider.records = {}
 
     assert digest_batch_candidates(await world.run(SEPTEMBER_17)) == ()
+
+
+# ------------------------------------------------------------------------------------------------
+# A digest run with no --date (v1-e08-t25, the PM's ruling of 2026-11-12)
+#
+# With no --date a digest covers the 24 hours before the run, by the injected clock, and is dated by
+# the run's local date in the configured IANA zone; --date keeps whole UTC days and --window widens
+# either. The case behind it is 2026-11-11: a politics digest run at 23:00 in Chicago took the UTC
+# date, 2026-11-12, and searched only the five hours since UTC midnight. Every expected instant is
+# written by hand from the zone's offset on that date: Chicago is UTC-6 in November (CST) and UTC-5
+# from the second Sunday of March to the first Sunday of November (CDT); Los Angeles is UTC-8 in
+# November and Tokyo UTC+9 all year.
+# ------------------------------------------------------------------------------------------------
+
+CHICAGO: Final = ZoneInfo("America/Chicago")
+
+
+def utc(year: int, month: int, day: int, hour: int, minute: int = 0) -> datetime:
+    return datetime(year, month, day, hour, minute, tzinfo=UTC)
+
+
+def test_a_run_at_23_00_in_chicago_is_that_evenings_date_and_its_24_hours() -> None:
+    request = DigestRequest.before_the_run(PRESET, now=utc(2026, 11, 12, 5), zone=CHICAGO)
+
+    assert request.day == date(2026, 11, 11)
+    assert request.bounds() == (utc(2026, 11, 11, 5), utc(2026, 11, 12, 5))
+
+
+def test_a_run_at_07_00_in_chicago_reaches_back_into_the_evening_before() -> None:
+    request = DigestRequest.before_the_run(PRESET, now=utc(2026, 11, 12, 13), zone=CHICAGO)
+
+    assert request.day == date(2026, 11, 12)
+    assert request.bounds() == (utc(2026, 11, 11, 13), utc(2026, 11, 12, 13))
+
+
+def test_on_the_day_the_clocks_fall_back_it_is_still_24_hours_and_that_days_date() -> None:
+    """1 November 2026: 02:00 CDT becomes 01:00 CST. A run at 23:00 CST reaches back to 00:00 CDT, 23
+    hours of the wall clock and 24 of time."""
+    request = DigestRequest.before_the_run(PRESET, now=utc(2026, 11, 2, 5), zone=CHICAGO)
+
+    assert request.day == date(2026, 11, 1)
+    since, until = request.bounds()
+    assert (since, until) == (utc(2026, 11, 1, 5), utc(2026, 11, 2, 5))
+    assert since.astimezone(CHICAGO).replace(tzinfo=None) == datetime(2026, 11, 1, 0, 0)
+
+
+def test_on_the_day_the_clocks_spring_forward_it_is_still_24_hours_and_that_days_date() -> None:
+    """8 March 2026: 02:00 CST becomes 03:00 CDT. A run at 23:00 CDT reaches back to 22:00 CST the
+    evening before."""
+    request = DigestRequest.before_the_run(PRESET, now=utc(2026, 3, 9, 4), zone=CHICAGO)
+
+    assert request.day == date(2026, 3, 8)
+    since, until = request.bounds()
+    assert (since, until) == (utc(2026, 3, 8, 4), utc(2026, 3, 9, 4))
+    assert since.astimezone(CHICAGO).replace(tzinfo=None) == datetime(2026, 3, 7, 22, 0)
+
+
+@pytest.mark.parametrize(
+    ("zone", "now", "day"),
+    [
+        ("America/Los_Angeles", utc(2026, 11, 12, 6), date(2026, 11, 11)),
+        ("Asia/Tokyo", utc(2026, 11, 12, 20), date(2026, 11, 13)),
+    ],
+    ids=["los angeles, where it is still the 11th", "tokyo, where it is already the 13th"],
+)
+def test_another_zone_dates_the_run_by_its_own_clock(zone: str, now: datetime, day: date) -> None:
+    """At 06:00Z on the 12th Chicago's date is the 12th and Los Angeles's the 11th; at 20:00Z UTC's and
+    Chicago's are the 12th and Tokyo's the 13th. The window is the same 24 hours in every zone."""
+    request = DigestRequest.before_the_run(PRESET, now=now, zone=ZoneInfo(zone))
+
+    assert request.day == day
+    assert request.bounds() == (now - timedelta(hours=24), now)
+
+
+def test_a_wider_window_with_no_date_is_that_many_days_of_24_hours_before_the_run() -> None:
+    request = DigestRequest.before_the_run(
+        PRESET, now=utc(2026, 11, 12, 5), zone=CHICAGO, window=DigestWindow(3)
+    )
+
+    assert request.day == date(2026, 11, 11)
+    assert request.bounds() == (utc(2026, 11, 9, 5), utc(2026, 11, 12, 5))
+
+
+def test_a_date_keeps_whole_utc_days_ending_with_it() -> None:
+    request = DigestRequest(PRESET, date(2026, 11, 11), DigestWindow(3))
+
+    assert request.bounds() == (utc(2026, 11, 9, 0), datetime(2026, 11, 11, 23, 59, 59, 999999, tzinfo=UTC))
+    assert (request.run_at, request.zone) == (None, None)
+
+
+def test_a_run_time_with_no_zone_of_its_own_is_refused() -> None:
+    with pytest.raises(ValueError, match="time zone"):
+        DigestRequest.before_the_run(PRESET, now=datetime(2026, 11, 11, 23), zone=CHICAGO)
+
+
+# ------------------------------------------------------------------------------------------------
+# The searches and the seen-set follow the local date
+# ------------------------------------------------------------------------------------------------
+
+
+async def test_every_query_is_asked_for_the_24_hours_and_the_digest_is_dated_in_the_zone(
+    world: World,
+) -> None:
+    request = DigestRequest.before_the_run(PRESET, now=utc(2026, 9, 18, 4), zone=CHICAGO)
+
+    digest = await world.service().run(request, world.write)
+
+    assert {(query.filters.since, query.filters.until) for query in world.provider.asked} == {
+        (utc(2026, 9, 17, 4), utc(2026, 9, 18, 4))
+    }
+    assert (digest.day, digest.since, digest.until, digest.zone) == (
+        date(2026, 9, 17),
+        utc(2026, 9, 17, 4),
+        utc(2026, 9, 18, 4),
+        CHICAGO,
+    )
+    assert digest.file == world.seen_dir.parent / "politics-2026-09-17.md"
+    assert set(world.seen_file()["urls"].values()) == {"2026-09-17"}
+
+
+async def test_the_next_evenings_run_leaves_out_what_this_evenings_listed(world: World) -> None:
+    first = await world.service().run(
+        DigestRequest.before_the_run(PRESET, now=utc(2026, 9, 18, 4), zone=CHICAGO), world.write
+    )
+
+    second = await world.service().run(
+        DigestRequest.before_the_run(PRESET, now=utc(2026, 9, 19, 4), zone=CHICAGO), world.write
+    )
+
+    assert len(first.items) == 4
+    assert (second.day, second.items, second.listed_before) == (date(2026, 9, 18), (), 4)
+
+
+async def test_a_morning_and_an_evening_run_of_one_local_date_are_the_same_digest_twice(world: World) -> None:
+    """Two runs on 18 September, at 07:00 and 23:00 Chicago: the second rewrites the 18th's digest and
+    lists again what the first did, as a second run of a `--date` does (v1-e08-t07's ruling 1)."""
+    morning = await world.service().run(
+        DigestRequest.before_the_run(PRESET, now=utc(2026, 9, 18, 12), zone=CHICAGO), world.write
+    )
+
+    evening = await world.service().run(
+        DigestRequest.before_the_run(PRESET, now=utc(2026, 9, 19, 4), zone=CHICAGO), world.write
+    )
+
+    assert morning.day == evening.day == date(2026, 9, 18)
+    assert evening.listed_before == 0
+    assert {item.ranked.candidate.title for item in evening.items} >= {VOTE.title}
+
+
+async def test_a_source_an_evening_run_recorded_under_the_utc_date_is_listed_once_more_on_that_local_date(
+    world: World,
+) -> None:
+    """The changeover: a build before this one dated a 23:00 Chicago run on 17 September by the UTC
+    date, the 18th, and recorded what it listed under the 18th. The next evening's run is dated the
+    18th by this build, so those sources are the same date's own and are listed again, once; the run
+    after that leaves them out."""
+    await world.run(date(2026, 9, 18))
+
+    changeover = await world.service().run(
+        DigestRequest.before_the_run(PRESET, now=utc(2026, 9, 19, 4), zone=CHICAGO), world.write
+    )
+    after = await world.service().run(
+        DigestRequest.before_the_run(PRESET, now=utc(2026, 9, 20, 4), zone=CHICAGO), world.write
+    )
+
+    assert (changeover.day, len(changeover.items), changeover.listed_before) == (date(2026, 9, 18), 4, 0)
+    assert (after.day, len(after.items), after.listed_before) == (date(2026, 9, 19), 0, 4)

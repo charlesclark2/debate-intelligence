@@ -150,6 +150,8 @@ class Seams:
     articles: ReplayTransport | None = None
     card_router: NeedRecordingRouter | None = None
     crossref: CrossrefAnswers = field(default_factory=CrossrefAnswers)
+    now: datetime = NOW
+    """The container's fixed clock, unless `stepping_clock`."""
     stepping_clock: bool = False
     """A container clock that moves 0.4 s each time it is read, from NOW, in place of the fixed one:
     Crossref's pacer waits on it, and waits for ever on a clock that never moves."""
@@ -181,7 +183,7 @@ def seams(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Seams]:
 
     def with_seams(self: ServiceContainer, **arguments: Any) -> None:
         build(self, **arguments)
-        self.override("clock", SteppingClock() if seams.stepping_clock else lambda: NOW)
+        self.override("clock", SteppingClock() if seams.stepping_clock else lambda: seams.now)
         self.override("topic_feed_lists", FEED_LISTS)
         transport = httpx.MockTransport(seams.feeds.handle)
         self.override("discovery_transport", transport)
@@ -354,6 +356,140 @@ def test_with_no_date_the_digest_is_for_today_by_the_clock(seams: Seams, tmp_pat
 
     assert result.exit_code == ExitCode.OK, result.output
     assert (tmp_path / DIGESTS / "politics-2026-09-17.md").is_file()
+
+
+# ------------------------------------------------------------------------------------------------
+# With no --date: the 24 hours before the run, dated in daily.time_zone (v1-e08-t25's ac3)
+#
+# The fixtures' items are on 17 and 18 September, when Chicago is UTC-5 and Los Angeles UTC-7. A run
+# at 23:00 Chicago on the 17th is 04:00Z on the 18th: the case of 2026-11-11, when the UTC date sent
+# the evening's digest to the next day with only the hours since UTC midnight in it.
+# ------------------------------------------------------------------------------------------------
+
+
+def window_line(markdown: str) -> str:
+    return next(line for line in markdown.splitlines() if line.startswith("- Window: "))
+
+
+def test_with_no_date_a_run_at_23_00_in_chicago_is_that_evenings_digest_of_its_24_hours(
+    seams: Seams, tmp_path: Path
+) -> None:
+    seams.now = datetime(2026, 9, 18, 4, 0, tzinfo=UTC)
+
+    result = daily("politics", "--format", "json", json_output=True)
+
+    assert result.exit_code == ExitCode.OK, result.output
+    data = envelope(result)["data"]
+    assert (data["date"], data["file"], data["new_results"]) == (
+        "2026-09-17",
+        "digests/politics-2026-09-17.json",
+        3,
+    )
+    assert data["window"] == {
+        "days": 1,
+        "since": "2026-09-17T04:00:00+00:00",
+        "until": "2026-09-18T04:00:00+00:00",
+    }
+    assert sorted(path.name for path in (tmp_path / DIGESTS).iterdir()) == ["politics-2026-09-17.json"]
+    seen = seen_set(tmp_path)
+    assert seen is not None
+    assert set(seen["urls"].values()) == {"2026-09-17"}
+
+
+def test_with_no_date_a_run_at_07_00_in_chicago_reaches_into_the_evening_before(
+    seams: Seams, tmp_path: Path
+) -> None:
+    """07:00 Chicago on the 18th is 12:00Z: the window opens at 12:00Z on the 17th, after B (09:30Z)
+    and before A, C and H; G is the 18th's. Each search's own order is the ranking's."""
+    seams.now = datetime(2026, 9, 18, 12, 0, tzinfo=UTC)
+    seams.feeds.courier = "courier_2026-09-18.xml"
+
+    result = daily("politics")
+
+    assert result.exit_code == ExitCode.OK, result.output
+    markdown = (tmp_path / DIGESTS / "politics-2026-09-18.md").read_text(encoding="utf-8")
+    assert window_line(markdown) == (
+        "- Window: 2026-09-17 07:00 to 2026-09-18 07:00 America/Chicago (the 24 hours before the run)"
+    )
+    sections = markdown.split("\n## ")
+    assert [section.splitlines()[0] for section in sections[1:]] == [
+        "Politics DA — Uniqueness",
+        "Midterms DA — Uniqueness",
+        "Providers",
+    ]
+    assert set(re.findall(r"^### \d\. (.+)$", sections[1], re.MULTILINE)) == {
+        "Spending bill will not pass the House, leaders say",
+        "Senate vote count on the stopgap spending measure",
+    }
+    assert set(re.findall(r"^### \d\. (.+)$", sections[2], re.MULTILINE)) == {
+        "Senate midterms polling tightens in three states",
+        "Senate election forecast: Democrats favored to hold the chamber",
+    }
+
+
+def test_with_no_date_and_a_wider_window_it_is_that_many_days_of_24_hours(
+    seams: Seams, tmp_path: Path
+) -> None:
+    seams.now = datetime(2026, 9, 18, 4, 0, tzinfo=UTC)
+
+    result = daily("politics", "--window", "3d")
+
+    assert result.exit_code == ExitCode.OK, result.output
+    markdown = (tmp_path / DIGESTS / "politics-2026-09-17.md").read_text(encoding="utf-8")
+    assert window_line(markdown) == (
+        "- Window: 2026-09-14 23:00 to 2026-09-17 23:00 America/Chicago (the 72 hours before the run)"
+    )
+
+
+@pytest.mark.parametrize(
+    ("zone", "named"),
+    [(None, "politics-2026-09-18.md"), ("America/Los_Angeles", "politics-2026-09-17.md")],
+    ids=["chicago by default, 00:30 on the 18th", "los angeles, 22:30 on the 17th"],
+)
+def test_with_no_date_the_digest_is_dated_in_the_configured_zone(
+    seams: Seams, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, zone: str | None, named: str
+) -> None:
+    """05:30Z on the 18th. Either way the window is 05:30Z on the 17th to 05:30Z on the 18th, which
+    holds B, A and C."""
+    if zone is not None:
+        monkeypatch.setenv("DEBATE_DAILY__TIME_ZONE", zone)
+    seams.now = datetime(2026, 9, 18, 5, 30, tzinfo=UTC)
+
+    result = daily("politics", "--format", "json", json_output=True)
+
+    assert result.exit_code == ExitCode.OK, result.output
+    data = envelope(result)["data"]
+    assert sorted(path.name for path in (tmp_path / DIGESTS).iterdir()) == [named.replace(".md", ".json")]
+    assert (data["window"]["since"], data["window"]["until"], data["new_results"]) == (
+        "2026-09-17T05:30:00+00:00",
+        "2026-09-18T05:30:00+00:00",
+        3,
+    )
+
+
+def test_a_time_zone_the_database_does_not_know_stops_the_run_naming_the_setting(
+    seams: Seams, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("DEBATE_DAILY__TIME_ZONE", "America/Springfield")
+
+    result = daily("politics", "--date", "2026-09-17", json_output=True)
+
+    assert result.exit_code == ExitCode.DOMAIN_FAILURE, result.output
+    error = envelope(result)["error"]
+    assert error["details"]["field"] == "daily.time_zone"
+    assert "daily.time_zone" in error["message"]
+    assert seams.feeds.requests == []
+    assert not (tmp_path / DIGESTS).exists()
+
+
+def test_a_date_keeps_its_whole_utc_day_whatever_the_clock_says(seams: Seams, tmp_path: Path) -> None:
+    seams.now = datetime(2026, 9, 19, 4, 0, tzinfo=UTC)
+
+    result = daily("politics", "--date", "2026-09-17")
+
+    assert result.exit_code == ExitCode.OK, result.output
+    shape, _ = without_why((tmp_path / DIGESTS / "politics-2026-09-17.md").read_text(encoding="utf-8"))
+    assert shape == SEPTEMBER_17_MARKDOWN
 
 
 # ------------------------------------------------------------------------------------------------

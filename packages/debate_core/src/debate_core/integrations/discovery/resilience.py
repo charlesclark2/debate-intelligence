@@ -12,9 +12,28 @@ A federated search asks several providers at once and must not be held hostage b
   :class:`~debate_core.application.errors.ProviderCircuitOpen`, without reaching the provider, for
   :attr:`ResiliencePolicy.cooldown_seconds`. Then it half-opens: exactly one call goes through as a
   probe, and its outcome closes the breaker or opens it for another cool-down;
-* **honours a rate limit.** When the adapter reports
-  :class:`~debate_core.application.errors.ProviderRateLimited`, no call reaches the provider until
-  its `Retry-After` has passed (the cool-down, when it named none);
+* **backs off after a rate limit** (v1-e07-t22). When the adapter reports
+  :class:`~debate_core.application.errors.ProviderRateLimited` (a 429), no call reaches the provider
+  until a hold has passed: the answer's `Retry-After` seconds when it gave them, and otherwise an
+  exponential hold with jitter, :func:`rate_limit_hold_seconds`, that doubles with each 429 in a row
+  from :data:`RATE_LIMIT_HOLD_BASE_SECONDS` up to :data:`RATE_LIMIT_HOLD_CAP_SECONDS`. Every 429
+  counts towards the doubling, with a `Retry-After` or without; an answer resets it, and any other
+  failure, a skip or a "not asked" leaves it as it is. The jitter's fraction comes from the injected
+  `random_fraction`. The hold is the wrapper's, so it applies to every adapter it wraps, paced or
+  not. A call the hold refuses, at its start or at its turn, is a skip (`skipped_count`), never a
+  failure, and does not count as another 429;
+* **checks again when a paced call's turn comes** (v1-e07-t22). A call queued on its adapter's pace
+  took its breaker permit and passed the hold when it started, which can be seconds before it is
+  sent. When its turn comes the pacer asks the wrapper's listener
+  (:meth:`~debate_core.integrations.discovery.pace.PaceListener.turn_came`), which checks the hold
+  and the breaker again. A call the hold would now refuse, or whose breaker has opened since it
+  started, is refused there: the pacer releases nothing and raises the refusal from the adapter's
+  `async with` turn, so its body, the send, never runs, and the adapter's `search` passes the
+  refusal on unchanged. The wrapper knows the exception it raised at the turn and answers it as it
+  answers a call the hold or the breaker refuses at its start: `ProviderRateLimited` or
+  `ProviderCircuitOpen`, a skip, the permit released with no verdict, no latency. A call whose
+  breaker opened and has half-opened since it started is admitted again, and goes as the probe if no
+  probe is out;
 * **classifies failures** into the port's error types. An adapter is supposed to translate its own
   library's exceptions; one that leaks something else is reported as
   :class:`~debate_core.application.errors.ProviderUnavailable` naming the exception's type;
@@ -54,12 +73,14 @@ loop's own, because cancelling a call that is still running is the event loop's 
 from __future__ import annotations
 
 import asyncio
+import random
 import statistics
 from collections import deque
 from collections.abc import Awaitable, Callable, Generator, Iterable, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+from typing import Final
 
 from debate_core.application.errors import (
     ProviderCircuitOpen,
@@ -74,13 +95,61 @@ from debate_core.integrations.discovery.pace import TurnOutcome, listening
 from debate_core.integrations.discovery.redaction import logger, protect_logs, redact_exception_chain
 
 __all__ = [
+    "RATE_LIMIT_HOLD_BASE_SECONDS",
+    "RATE_LIMIT_HOLD_CAP_SECONDS",
+    "RATE_LIMIT_HOLD_JITTER",
     "BreakerPermit",
     "CircuitBreaker",
     "ResiliencePolicy",
     "ResilientMultiQueryProvider",
     "ResilientProvider",
+    "rate_limit_hold_seconds",
     "resilient",
 ]
+
+# The backoff's three constants are this platform's choice, made in v1-e07-t22 when the operator
+# agreed, in requesting a Semantic Scholar API key on 2026-11-11, to back off exponentially. None of
+# them is a limit any provider publishes.
+
+RATE_LIMIT_HOLD_BASE_SECONDS: Final = 2.0
+"""The hold after the first 429 in a row that names no `Retry-After`.
+
+Two seconds is longer than the spacing of every pace an adapter keeps (one second for Semantic
+Scholar and Crossref's public pool, a third of one on Crossref's polite pool), so after a 429 the
+call next in line is never sent on the very next turn. A 429 refuses every query of the search
+still waiting for its turn, so the base is kept short: a search asked a few seconds after one 429
+from a busy shared pool is sent again.
+"""
+
+RATE_LIMIT_HOLD_CAP_SECONDS: Final = 60.0
+"""The longest hold the doubling reaches (the sixth 429 in a row: 2, 4, 8, 16, 32, then 60).
+
+A minute is the breaker's default cool-down (`providers.breaker_cooldown_seconds`), the longest the
+platform otherwise benches a provider, and the hold a 429 without `Retry-After` got before this
+backoff. It outlasts any one search, so a longer cap would only keep a long-running process off a
+provider that has recovered.
+"""
+
+RATE_LIMIT_HOLD_JITTER: Final = 0.5
+"""The most a hold is lengthened by its random fraction, as a share of the doubled hold.
+
+The hold is the doubled step lengthened by `draw × 0.5` of itself, `draw` in [0, 1), then capped:
+never shorter than the step, so the backoff stated here is the least a provider is spared, and
+spread by up to half, so two processes refused at the same moment (two students' searches on one
+keyless pool) do not come back at the same moment. At the cap there is no spread left: a hold is
+never longer than the cap.
+"""
+
+
+def rate_limit_hold_seconds(consecutive: int, draw: float) -> float:
+    """The hold after the `consecutive`-th 429 in a row that named no `Retry-After`, for a `draw` in [0, 1).
+
+    `min(cap, step × (1 + draw × jitter))` with `step = base × 2^(consecutive − 1)`. The doublings
+    stop counting at 32, past the cap, so a long run of 429s never overflows a float.
+    """
+    doublings = min(max(consecutive, 1) - 1, 32)
+    step = RATE_LIMIT_HOLD_BASE_SECONDS * 2**doublings
+    return min(RATE_LIMIT_HOLD_CAP_SECONDS, step * (1 + draw * RATE_LIMIT_HOLD_JITTER))
 
 
 @dataclass(frozen=True, slots=True)
@@ -220,7 +289,8 @@ class ResilientProvider:
 
     A :class:`~debate_core.application.ports.providers.SearchProvider` itself, under the adapter's
     name. `secrets` are the credential and contact-email values configured for discovery; none of
-    them appears in anything this wrapper records, logs, raises or prints.
+    them appears in anything this wrapper records, logs, raises or prints. `random_fraction` is the
+    backoff's random source, a float in [0, 1) per draw; a test passes its own.
     """
 
     def __init__(
@@ -230,6 +300,7 @@ class ResilientProvider:
         *,
         clock: Clock,
         secrets: Iterable[str] = (),
+        random_fraction: Callable[[], float] = random.random,
     ) -> None:
         self._inner = inner
         self._name = inner.name
@@ -250,6 +321,9 @@ class ResilientProvider:
         self._last_error: str | None = None
         self._last_error_at: datetime | None = None
         self._rate_limited_until: datetime | None = None
+        self._random_fraction = random_fraction
+        self._consecutive_rate_limits = 0
+        """429s since the last answer: the backoff's doubling."""
 
     @property
     def name(self) -> str:
@@ -284,8 +358,21 @@ class ResilientProvider:
             self._skipped_count += 1
             logger.debug("discovery provider %s skipped: circuit breaker open", self._name)
             raise
+
+        def at_turn() -> None:
+            """A paced turn has come: refuse it as the hold or the breaker would refuse a new call."""
+            nonlocal permit
+            held = self._hold_refusal()
+            if held is not None:
+                raise held
+            if permit.probe or self._breaker.state is BreakerState.CLOSED:
+                return
+            self._breaker.release(permit)
+            permit = BreakerPermit(probe=False)  # released: never released twice if admit refuses
+            permit = self._breaker.admit(self._name)
+
         deadline = asyncio.timeout(self._policy.timeout_seconds)
-        call = _CallTime(deadline, self._clock)
+        call = _CallTime(deadline, self._clock, at_turn)
         try:
             async with deadline:
                 with call.timing():
@@ -299,6 +386,9 @@ class ResilientProvider:
             self._fail(permit, failure, call, cause=error)
             raise failure from error
         except ProviderError as error:
+            if call.refused_with(error):
+                self._skipped_at_turn(permit, error)
+                raise
             self._fail(permit, error, call)
             raise
         except Exception as error:
@@ -356,17 +446,31 @@ class ResilientProvider:
         )
 
     def _refuse_while_rate_limited(self) -> None:
-        if self._rate_limited_until is None:
-            return
-        remaining = (self._rate_limited_until - self._clock.now()).total_seconds()
-        if remaining <= 0:
-            self._rate_limited_until = None
+        held = self._hold_refusal()
+        if held is None:
             return
         self._skipped_count += 1
         logger.debug("discovery provider %s skipped: rate-limit hold", self._name)
-        raise ProviderRateLimited(
+        raise held
+
+    def _hold_refusal(self) -> ProviderRateLimited | None:
+        """What the hold answers a call now: a refusal with the seconds left, or `None` once it has ended."""
+        if self._rate_limited_until is None:
+            return None
+        remaining = (self._rate_limited_until - self._clock.now()).total_seconds()
+        if remaining <= 0:
+            self._rate_limited_until = None
+            return None
+        return ProviderRateLimited(
             self._name, "holding off as the provider asked", retry_after_seconds=remaining
         )
+
+    def _skipped_at_turn(self, permit: BreakerPermit, refusal: ProviderError) -> None:
+        """A paced call refused when its turn came: a skip, as at its start; nothing was sent."""
+        self._breaker.release(permit)
+        self._skipped_count += 1
+        why = "rate-limit hold" if isinstance(refusal, ProviderRateLimited) else "circuit breaker open"
+        logger.debug("discovery provider %s skipped at its turn: %s", self._name, why)
 
     def _untranslated(self, error: BaseException) -> ProviderUnavailable:
         return ProviderUnavailable(
@@ -377,6 +481,7 @@ class ResilientProvider:
         was = self._breaker.state
         self._breaker.record_success(permit)
         self._success_count += 1
+        self._consecutive_rate_limits = 0
         self._latencies_ms.append(call.latency_ms())
         if was is not BreakerState.CLOSED and self._breaker.state is BreakerState.CLOSED:
             logger.info("discovery provider %s recovered: circuit breaker closed", self._name)
@@ -400,9 +505,14 @@ class ResilientProvider:
         self._last_error = str(failure)
         self._last_error_at = now
         if isinstance(failure, ProviderRateLimited):
+            self._consecutive_rate_limits += 1
             wait = failure.retry_after_seconds
-            hold = timedelta(seconds=self._policy.cooldown_seconds if wait is None else max(wait, 0.0))
-            self._rate_limited_until = now + hold
+            seconds = (
+                rate_limit_hold_seconds(self._consecutive_rate_limits, self._random_fraction())
+                if wait is None
+                else max(wait, 0.0)
+            )
+            self._rate_limited_until = now + timedelta(seconds=seconds)
         logger.warning("discovery provider %s failed: %s", self._name, self._last_error)
         if was is not BreakerState.OPEN and self._breaker.state is BreakerState.OPEN:
             logger.warning(
@@ -427,9 +537,11 @@ class _CallTime:
     timeout runs on; its latency is read from the injected clock, less the time queued.
     """
 
-    def __init__(self, deadline: asyncio.Timeout, clock: Clock) -> None:
+    def __init__(self, deadline: asyncio.Timeout, clock: Clock, at_turn: Callable[[], None]) -> None:
         self._deadline = deadline
         self._clock = clock
+        self._at_turn = at_turn
+        self._refusals: list[ProviderError] = []
         self._loop = asyncio.get_running_loop()
         self._started = clock.now()
         self._waiting = 0
@@ -459,6 +571,18 @@ class _CallTime:
             self._waiting_since = self._clock.now()
             self._waiting_since_loop = self._loop.time()
             self._move_deadline(None)
+
+    def turn_came(self) -> None:
+        """Ask the wrapper whether the call may still be sent; keep what it refused with."""
+        try:
+            self._at_turn()
+        except ProviderError as refusal:
+            self._refusals.append(refusal)
+            raise
+
+    def refused_with(self, error: BaseException) -> bool:
+        """`error` is one this call was refused with at a turn, not the adapter's own failure."""
+        return any(error is refusal for refusal in self._refusals)
 
     def waited(self, outcome: TurnOutcome) -> None:
         if outcome is TurnOutcome.RELEASED:
@@ -505,8 +629,9 @@ class ResilientMultiQueryProvider(ResilientProvider):
         *,
         clock: Clock,
         secrets: Iterable[str] = (),
+        random_fraction: Callable[[], float] = random.random,
     ) -> None:
-        super().__init__(inner, policy, clock=clock, secrets=secrets)
+        super().__init__(inner, policy, clock=clock, secrets=secrets, random_fraction=random_fraction)
         self._each = inner
 
     async def search_each(self, queries: Sequence[ProviderQuery]) -> tuple[ProviderResponse, ...]:
@@ -520,9 +645,16 @@ class ResilientMultiQueryProvider(ResilientProvider):
 
 
 def resilient(
-    inner: SearchProvider, policy: ResiliencePolicy, *, clock: Clock, secrets: Iterable[str] = ()
+    inner: SearchProvider,
+    policy: ResiliencePolicy,
+    *,
+    clock: Clock,
+    secrets: Iterable[str] = (),
+    random_fraction: Callable[[], float] = random.random,
 ) -> ResilientProvider:
     """`inner` wrapped: in a :class:`ResilientMultiQueryProvider` when it answers several queries at once."""
     if isinstance(inner, MultiQuerySearchProvider):
-        return ResilientMultiQueryProvider(inner, policy, clock=clock, secrets=secrets)
-    return ResilientProvider(inner, policy, clock=clock, secrets=secrets)
+        return ResilientMultiQueryProvider(
+            inner, policy, clock=clock, secrets=secrets, random_fraction=random_fraction
+        )
+    return ResilientProvider(inner, policy, clock=clock, secrets=secrets, random_fraction=random_fraction)

@@ -1045,7 +1045,7 @@ async def test_a_429_holds_openalex_for_its_retry_after_without_sending() -> Non
     assert len(replayed.sent()) == 2
 
 
-async def test_a_spent_daily_budget_holds_openalex_for_the_cooldown() -> None:
+async def test_a_spent_daily_budget_holds_openalex_for_the_first_backoff() -> None:
     clock = FixedClock()
     registry, replayed = registry_over("works_daily_budget_spent", clock, breaker_cooldown_seconds=600)
 
@@ -1053,7 +1053,11 @@ async def test_a_spent_daily_budget_holds_openalex_for_the_cooldown() -> None:
         await replayed.provider.search(HEALTH_INSURANCE)
 
     (health,) = registry.health()
-    assert health.rate_limited_until == clock.now() + timedelta(seconds=600)
+    assert health.rate_limited_until is not None
+    held_for = health.rate_limited_until - clock.now()
+    assert timedelta(seconds=2) <= held_for < timedelta(seconds=3), (
+        "the first backoff: 2 s, up to half longer"
+    )
 
 
 async def test_the_registry_answers_the_recorded_search_through_the_wrapper() -> None:

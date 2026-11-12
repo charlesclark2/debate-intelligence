@@ -31,13 +31,16 @@ asked: until the timeout less the reserve, Crossref's rule
 (:class:`~debate_core.integrations.discovery.pace.AnswerTimes`). A query still waiting then is
 never sent. It is answered at its deadline with no results, marked partial, and an error naming the
 pace and, without a key, what a key would and would not do. The wrapper hears from the pacer that
-it was never sent and counts it "not asked", neither a failure nor a latency sample.
+it was never sent and counts it "not asked", neither a failure nor a latency sample. A query whose
+turn comes while the wrapper holds Semantic Scholar after a 429, or after its breaker has opened, is
+refused at its turn and never sent (v1-e07-t22): on 2026-11-11 every keyless request was answered 429
+and the queries behind the first were sent anyway.
 
 **Refusals** go through :func:`~debate_core.integrations.discovery.http_failures.provider_error_for_status`:
 a `429` is :class:`~debate_core.application.errors.ProviderRateLimited`, held for its `Retry-After`
-when one is sent and for the wrapper's cool-down when not; a `403` (a key Semantic Scholar refuses)
-or any other `4xx` is a refusal; a `3xx` is a refusal naming only the host it points to. No request
-is ever retried here.
+when one is sent and for the wrapper's exponential backoff when not (v1-e07-t22); a `403` (a key
+Semantic Scholar refuses) or any other `4xx` is a refusal; a `3xx` is a refusal naming only the host
+it points to. No request is ever retried here.
 
 **The mapping** (:func:`candidate_from_paper`):
 

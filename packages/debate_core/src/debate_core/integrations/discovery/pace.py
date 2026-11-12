@@ -27,6 +27,16 @@ its wait ended (:class:`TurnOutcome`). The wrapper then counts the time queued n
 call's timeout nor towards its latency, and a call its pace answered "not asked" as neither a
 failure nor a latency sample.
 
+**The listener's last word** (v1-e07-t22). A call can wait seconds for its turn, and much can change
+meanwhile: on 2026-11-11 Semantic Scholar answered the first of eight queued queries 429, the
+breaker opened after the third, and the queries behind them were sent anyway, because each had
+passed the breaker and the rate-limit hold when it joined the queue. So when a call's turn comes,
+before the pacer records its start or gives it a slot, it asks the listener
+(:meth:`PaceListener.turn_came`). A listener that raises refuses the call: the pacer records nothing,
+so the next call in line gets its look at once, tells the listener the wait ended
+:attr:`TurnOutcome.REFUSED`, and raises the listener's exception from the `async with`. The block's
+body, the adapter's send, never runs. A turn taken with no listener is never refused.
+
 **When a call is too late to send.** An adapter usually wants a call sent only while its answer
 could still come back within the wrapper's timeout. :class:`AnswerTimes` keeps the time each answer
 took and gives the **reserve** to keep back for one: the median of the last
@@ -155,6 +165,9 @@ class TurnOutcome(StrEnum):
     CANCELLED = "cancelled"
     """It was cancelled while it waited."""
 
+    REFUSED = "refused"
+    """Its turn came, and its listener refused it: it is never sent."""
+
 
 class PaceListener(Protocol):
     """What a pacer tells the code that made a call (the wrapper) about that call's wait."""
@@ -165,6 +178,13 @@ class PaceListener(Protocol):
 
     def waited(self, outcome: TurnOutcome) -> None:
         """The call left the queue, and how."""
+        ...
+
+    def turn_came(self) -> None:
+        """The call's turn has come and it is about to be released: raise to refuse it.
+
+        Whatever this raises is raised from the turn's `async with`, and nothing is sent.
+        """
         ...
 
 
@@ -213,9 +233,9 @@ class Pacer:
         `within` is how many seconds after the call arrived it may still be sent, or a function
         giving that, read on every look.
         """
-        return Turn(lambda: self._wait(within), self._finish)
+        return Turn(lambda listener: self._wait(within, listener), self._finish)
 
-    async def _wait(self, within: float | Callable[[], float]) -> bool:
+    async def _wait(self, within: float | Callable[[], float], listener: PaceListener | None) -> bool:
         arrived = self._clock.now()
         async with self._line:
             while True:
@@ -228,6 +248,8 @@ class Pacer:
                 concurrency = self._pace.concurrency
                 free = concurrency is None or self._in_flight < concurrency
                 if free and now >= ready_at:
+                    if listener is not None:
+                        _ask(listener)
                     self._start(now)
                     return True
                 if free:
@@ -265,10 +287,28 @@ class Pacer:
                 task.cancel()
 
 
+class _Refused(Exception):
+    """A listener refused a call at its turn; carries what it raised, for :class:`Turn` to raise."""
+
+    def __init__(self, refusal: Exception) -> None:
+        super().__init__(str(refusal))
+        self.refusal = refusal
+
+
+def _ask(listener: PaceListener) -> None:
+    """The listener's last word on a call whose turn has come: :class:`_Refused` if it refuses."""
+    try:
+        listener.turn_came()
+    except Exception as refusal:
+        raise _Refused(refusal) from None
+
+
 class Turn:
     """One call's turn on a :class:`Pacer`, as an async context manager that yields whether to send it."""
 
-    def __init__(self, wait: Callable[[], Awaitable[bool]], finish: Callable[[], None]) -> None:
+    def __init__(
+        self, wait: Callable[[PaceListener | None], Awaitable[bool]], finish: Callable[[], None]
+    ) -> None:
         self._wait = wait
         self._finish = finish
         self._sent = False
@@ -278,7 +318,11 @@ class Turn:
         if listener is not None:
             listener.waiting()
         try:
-            self._sent = await self._wait()
+            self._sent = await self._wait(listener)
+        except _Refused as refused:
+            if listener is not None:
+                listener.waited(TurnOutcome.REFUSED)
+            raise refused.refusal from None
         except BaseException:
             if listener is not None:
                 listener.waited(TurnOutcome.CANCELLED)

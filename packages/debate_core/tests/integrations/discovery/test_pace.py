@@ -11,12 +11,18 @@ from __future__ import annotations
 import asyncio
 from collections.abc import Sequence
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Final, Literal
 
 import pytest
 
-from debate_core.application.errors import ProviderTimedOut, ProviderUnavailable
+from debate_core.application.errors import (
+    ProviderCircuitOpen,
+    ProviderError,
+    ProviderRateLimited,
+    ProviderTimedOut,
+    ProviderUnavailable,
+)
 from debate_core.domain.discovery import (
     BreakerState,
     CandidateResult,
@@ -24,7 +30,7 @@ from debate_core.domain.discovery import (
     ProviderQuery,
     ProviderResponse,
 )
-from debate_core.integrations.discovery.pace import Pace, Pacer
+from debate_core.integrations.discovery.pace import Pace, Pacer, TurnOutcome, listening
 from debate_core.integrations.discovery.resilience import (
     ResiliencePolicy,
     ResilientMultiQueryProvider,
@@ -37,8 +43,9 @@ NAME: Final = "paced"
 QUERY: Final = ProviderQuery(query="methane leakage")
 NOT_ASKED: Final = "paced: not asked: its turn came too late"
 
-type Work = float | Literal["fail", "hang"]
-"""What one sent call does: answer after that many seconds, fail after 0.4 s, or never finish."""
+type Work = float | Literal["fail", "hang", "429"]
+"""What one sent call does: answer after that many seconds, fail after 0.4 s, never finish, or be
+refused 0.25 s later with a 429 that states no Retry-After."""
 
 
 def now_seconds() -> float:
@@ -66,6 +73,9 @@ class PacedAdapter:
             work = self.work.pop(0)
             if work == "hang":
                 await asyncio.sleep(3600)
+            if work == "429":
+                await asyncio.sleep(0.25)
+                raise ProviderRateLimited(NAME, "HTTP 429")
             if work == "fail":
                 await asyncio.sleep(0.4)
                 raise ProviderUnavailable(NAME, "HTTP 503")
@@ -84,15 +94,24 @@ class PacedMultiQueryAdapter(PacedAdapter):
 
 
 def wrapped(
-    pace: Pace, work: list[Work], *, timeout_seconds: float = 5.0, within: float = 30.0, threshold: int = 3
+    pace: Pace,
+    work: list[Work],
+    *,
+    timeout_seconds: float = 5.0,
+    within: float = 30.0,
+    threshold: int = 3,
+    cooldown_seconds: float = 60.0,
+    draw: float = 0.0,
 ) -> tuple[ResilientProvider, PacedAdapter]:
-    """A paced adapter in the wrapper, both on the loop's clock. Build it inside the running loop."""
+    """A paced adapter in the wrapper, both on the loop's clock. Build it inside the running loop.
+
+    `draw` is every random fraction the wrapper's backoff draws."""
     clock = EventLoopClock()
     adapter = PacedAdapter(Pacer(pace, clock=clock), work, within=within)
     policy = ResiliencePolicy(
-        timeout_seconds=timeout_seconds, failure_threshold=threshold, cooldown_seconds=60.0
+        timeout_seconds=timeout_seconds, failure_threshold=threshold, cooldown_seconds=cooldown_seconds
     )
-    return ResilientProvider(adapter, policy, clock=clock), adapter
+    return ResilientProvider(adapter, policy, clock=clock, random_fraction=lambda: draw), adapter
 
 
 def query(number: int) -> ProviderQuery:
@@ -363,3 +382,163 @@ def test_a_turn_taken_outside_the_wrapper_reports_to_nobody() -> None:
         return clock.now()
 
     assert run_in_virtual_time(scenario()) == FAKE_EPOCH
+
+
+# --------------------------------------------------------------------------------------------
+# The turn: a queued call checks the breaker and the hold again when its turn comes (v1-e07-t22)
+# --------------------------------------------------------------------------------------------
+
+
+async def ask_all(provider: ResilientProvider, count: int) -> list[tuple[str, float]]:
+    """`count` queries at once; for each, how it ended (an answer, or the error's type) and when."""
+
+    async def one(number: int) -> tuple[str, float]:
+        try:
+            response = await provider.search(query(number))
+        except ProviderError as error:
+            return type(error).__name__, now_seconds()
+        return ("not asked" if response.partial else "answer"), now_seconds()
+
+    return list(await asyncio.gather(*(one(number) for number in range(count))))
+
+
+def test_queued_calls_whose_turn_comes_inside_a_hold_are_skipped_and_never_sent() -> None:
+    """Written by hand. Four queries at once at one a second. The first is sent at 0 s and refused at
+    0.25 s with a 429 and no Retry-After: held 2 s lengthened by a quarter (draw 0.5), until 2.75 s.
+    The second's turn comes at 1 s, inside the hold, so it is refused there and sends nothing; it
+    takes no slot, so the third and fourth get their turns at once and are refused at 1 s too. Each
+    refusal is the hold's answer, ProviderRateLimited with the 1.75 s left, and a skip, not a failure.
+    The 0.5 s timeout counts none of the second spent queued. A fifth query asked when the hold ends
+    is sent at once and answered 0.25 s later."""
+
+    async def scenario() -> tuple[list[tuple[str, float]], list[float | None], ProviderHealth, PacedAdapter]:
+        provider, adapter = wrapped(ONE_A_SECOND, ["429", 0.25], timeout_seconds=0.5, draw=0.5)
+        retry_afters: list[float | None] = []
+
+        async def remember(number: int) -> tuple[str, float]:
+            try:
+                await provider.search(query(number))
+            except ProviderRateLimited as error:
+                retry_afters.append(error.retry_after_seconds)
+                return type(error).__name__, now_seconds()
+            except ProviderError as error:
+                return type(error).__name__, now_seconds()
+            return "answer", now_seconds()
+
+        ended = list(await asyncio.gather(*(remember(number) for number in range(4))))
+        await asyncio.sleep(max(2.75 - now_seconds(), 0.0))
+        ended.append(await remember(4))
+        return ended, retry_afters, provider.health(), adapter
+
+    ended, retry_afters, health, adapter = run_in_virtual_time(scenario())
+    assert adapter.starts == [("query 0", 0.0), ("query 4", 2.75)]
+    assert ended == [("ProviderRateLimited", 0.25)] + [("ProviderRateLimited", 1.0)] * 3 + [("answer", 3.0)]
+    assert retry_afters == [None, 1.75, 1.75, 1.75]
+    assert (health.success_count, health.error_count, health.skipped_count) == (1, 1, 3)
+    assert (health.not_asked_count, health.consecutive_failures, health.state) == (0, 0, BreakerState.CLOSED)
+    assert health.p50_latency_ms == pytest.approx(250.0, abs=0.01)
+
+
+def test_queued_calls_whose_turn_comes_after_the_breaker_opened_are_skipped_and_never_sent() -> None:
+    """Written by hand. Four queries at once at one a second, a threshold of two. The first two are
+    sent at 0 and 1 s and fail 0.4 s later, so the breaker opens at 1.4 s. The third's turn comes at
+    2 s: refused as the open breaker refuses a call, and the fourth at once after it. Neither is sent,
+    and both are skips, not failures."""
+
+    async def scenario() -> tuple[list[tuple[str, float]], list[object], ProviderHealth, PacedAdapter]:
+        provider, adapter = wrapped(ONE_A_SECOND, ["fail", "fail"], threshold=2)
+        retry_ats: list[object] = []
+
+        async def remember(number: int) -> tuple[str, float]:
+            try:
+                await provider.search(query(number))
+            except ProviderCircuitOpen as error:
+                retry_ats.append(error.retry_at)
+                return type(error).__name__, now_seconds()
+            except ProviderError as error:
+                return type(error).__name__, now_seconds()
+            return "answer", now_seconds()
+
+        ended = list(await asyncio.gather(*(remember(number) for number in range(4))))
+        return ended, retry_ats, provider.health(), adapter
+
+    ended, retry_ats, health, adapter = run_in_virtual_time(scenario())
+    assert [start for _, start in adapter.starts] == [0.0, 1.0]
+    assert ended == [
+        ("ProviderUnavailable", 0.4),
+        ("ProviderUnavailable", 1.4),
+        ("ProviderCircuitOpen", 2.0),
+        ("ProviderCircuitOpen", 2.0),
+    ]
+    opened_at = FAKE_EPOCH + timedelta(seconds=1.4)
+    assert retry_ats == [opened_at + timedelta(seconds=60)] * 2
+    assert (health.error_count, health.skipped_count, health.success_count) == (2, 2, 0)
+    assert health.state is BreakerState.OPEN
+
+
+def test_a_queued_call_whose_turn_comes_once_the_breaker_half_opened_is_sent_as_its_probe() -> None:
+    """Written by hand. Three queries at once at one a second, a threshold of one and a 0.5 s
+    cool-down. The first is sent at 0 s and fails at 0.4 s, opening the breaker until 0.9 s. The
+    second's turn comes at 1 s, with the breaker half-open and no probe out: it is admitted again,
+    as the probe, sent, and its answer at 1.2 s closes the breaker. The third is sent at 2 s on a
+    closed breaker."""
+
+    async def scenario() -> tuple[list[tuple[str, float]], ProviderHealth, PacedAdapter]:
+        provider, adapter = wrapped(ONE_A_SECOND, ["fail", 0.2, 0.2], threshold=1, cooldown_seconds=0.5)
+        ended = await ask_all(provider, 3)
+        return ended, provider.health(), adapter
+
+    ended, health, adapter = run_in_virtual_time(scenario())
+    assert [start for _, start in adapter.starts] == [0.0, 1.0, 2.0]
+    assert ended == [("ProviderUnavailable", 0.4), ("answer", 1.2), ("answer", 2.2)]
+    assert health.state is BreakerState.CLOSED
+    assert (health.error_count, health.success_count, health.skipped_count) == (1, 2, 0)
+
+
+@dataclass
+class RefusingListener:
+    """A listener that refuses the first `refusals` turns that come, and records what it hears."""
+
+    refusals: int
+    heard: list[str] = field(default_factory=list[str])
+
+    def waiting(self) -> None:
+        self.heard.append("waiting")
+
+    def waited(self, outcome: TurnOutcome) -> None:
+        self.heard.append(f"waited {outcome.value}")
+
+    def turn_came(self) -> None:
+        self.heard.append(f"turn came at {now_seconds():g}")
+        if self.refusals > 0:
+            self.refusals -= 1
+            raise ProviderRateLimited(NAME, "held at the turn")
+
+
+def test_a_turn_its_listener_refuses_raises_the_refusal_takes_no_start_and_frees_the_next_turn() -> None:
+    """Written by hand. One a second: a call released at 0 s holds the pace. The next waits for 1 s,
+    and its listener refuses it there: entering the turn raises the listener's refusal, the block's
+    body never runs, and the listener hears it ended `refused`. It took no start, so a third call
+    asked at that instant starts at once, at 1 s, not at 2 s."""
+
+    async def scenario() -> tuple[list[str], list[float], list[str]]:
+        clock = EventLoopClock()
+        pacer = Pacer(ONE_A_SECOND, clock=clock)
+        listener = RefusingListener(refusals=1)
+        bodies: list[str] = []
+        starts: list[float] = []
+        async with pacer.turn(within=30.0) as sent:
+            assert sent
+            starts.append(now_seconds())
+        with listening(listener), pytest.raises(ProviderRateLimited, match="held at the turn"):
+            async with pacer.turn(within=30.0):
+                bodies.append("the refused call's body ran")
+        async with pacer.turn(within=30.0) as sent:
+            assert sent
+            starts.append(now_seconds())
+        return listener.heard, starts, bodies
+
+    heard, starts, bodies = run_in_virtual_time(scenario())
+    assert heard == ["waiting", "turn came at 1", "waited refused"]
+    assert starts == [0.0, 1.0]
+    assert bodies == []

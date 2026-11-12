@@ -29,7 +29,8 @@ It is sent as the `X-Api-Key` header, never in the URL or the body, and the fact
 with the log protection. Without one the factory builds nothing and the provider is reported not
 configured. api.data.gov allows a key 1,000 requests an hour (GovInfo states 36,000, 1,200 a minute
 and 40 a second for its own); past that it answers `429` with no `Retry-After`, and the wrapper holds
-GovInfo for its cool-down. A refused key is a `403`, reported as a refusal that names no key.
+GovInfo for its exponential backoff (v1-e07-t22). A refused key is a `403`, reported as a refusal
+that names no key.
 
 **What is kept from a result**:
 

@@ -18,7 +18,7 @@ environment or `.env`, never a committed profile). The Federal Register takes no
   `DEMO_KEY` (30 requests an hour per address) is never used in its place.
 
 api.data.gov allows a key 1,000 requests an hour by default and answers `429` past that, with no
-`Retry-After`; the wrapper then holds the provider for its cool-down.
+`Retry-After`; the wrapper then holds the provider for its exponential backoff (v1-e07-t22).
 """
 
 from __future__ import annotations

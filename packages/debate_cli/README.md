@@ -556,6 +556,13 @@ each enabled provider, whether its key or the email is set and what a search doe
 * GovInfo without `DEBATE_PROVIDERS__API_DATA_GOV_KEY` is `not configured` on a topic that lists it,
   as below. The footer names it with its cure, and it does not make the search partial.
 
+**A provider that answers `429` is held** (`v1-e07-t22`). It is asking us to slow down, so a search
+holds it back: its queries still waiting for their turn are skipped, never sent, the footer names it
+`rate limited`, and the search is partial and exits `6` (`3` when no other provider answered). The
+hold lasts as long as the provider's `Retry-After` says, or else 2 seconds, doubling with each `429`
+in a row up to a minute, and a search a little later asks it again. A provider whose circuit breaker
+has opened is skipped the same way and named `breaker open`.
+
 **Government sources** (`v1-e07-t07`) are asked only by a search on a topic that lists them:
 `--topic policy-2026-27-nhi` asks the Federal Register's rules, proposed rules and notices and GovInfo's
 bills, committee reports, hearings and committee prints, because `config/feeds/health-insurance.yaml`

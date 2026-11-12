@@ -673,6 +673,17 @@ are counts, positions and provider names only.
 
 ## Operator follow-ups
 
+None open. Every operator command this task needed ran on 2026-11-11, and each one's output is
+recorded in the sections above. The four commands are kept word for word under [Operator commands
+that ran](#operator-commands-that-ran-2026-11-11), outside this section. `scripts/task pr` copies
+this section into the pull request body, and with them inside it the body was 67,439 characters,
+over GitHub's limit of 65,536.
+
+## Operator commands that ran (2026-11-11)
+
+They are listed in the order they were written: the store check, the positions block (its third
+version), the built-ranking block and the replay.
+
 ### Where the two searches are stored
 
 **Operator command: find both searches' stored records** (seconds; no network, no model, writes
@@ -1968,6 +1979,12 @@ Paste back everything it prints, `STOP:` or `FAILED:` included.
   and 2026-11-08 and took t05's provider record, snippets included, with it. A blind-labelling
   hand-off (v1-e08-t16's repeat) should also save the search's stored record, so that a later
   ranking change can be replayed on it.
+* **A pull request body over GitHub's limit (E41, delivery tooling).** `scripts/task pr` copies the
+  report's Summary, Acceptance criteria, Operator follow-ups and PM review into the body, and
+  GitHub refuses a body over 65,536 characters. This report's four operator blocks made it 67,439
+  characters, and `gh pr create` failed after the push. `task_helper.py pr-body` could shorten a
+  section past a set length and link to the report instead. For this task, the blocks that ran
+  were moved out of the section unchanged.
 * **t14's ac3 record names the wrong build.** It says `v1.1.0-dev.342`, but the search ran taxonomy
   1.5.0 with 12 queries and five providers (a build after 2026-11-05). This is for the PM's records.
 

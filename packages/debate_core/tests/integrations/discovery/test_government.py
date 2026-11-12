@@ -732,11 +732,12 @@ async def test_key_missing_is_reported_not_configured_for_every_query_not_as_an_
         (status.provider, status.query.query, status.outcome, status.error)
         for status in state.provider_statuses
     ]
+    with_cure = f"{MISSING_KEY}; get a free key at api.data.gov/signup to ask GovInfo"
     assert outcomes == [
         ("federal_register", "a", ProviderOutcome.OK, None),
-        ("govinfo", "a", ProviderOutcome.NOT_CONFIGURED, MISSING_KEY),
+        ("govinfo", "a", ProviderOutcome.NOT_CONFIGURED, with_cure),
         ("federal_register", "b", ProviderOutcome.OK, None),
-        ("govinfo", "b", ProviderOutcome.NOT_CONFIGURED, MISSING_KEY),
+        ("govinfo", "b", ProviderOutcome.NOT_CONFIGURED, with_cure),
     ]
     assert registry.health()[0].provider == "federal_register" and len(registry.health()) == 1
 

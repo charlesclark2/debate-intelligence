@@ -22,7 +22,7 @@ import os
 import re
 from collections.abc import Iterator
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, Final
 
@@ -81,6 +81,14 @@ FEED_LISTS: Final = (
 )
 """The committed presets' two feed topics, at the fixtures' URLs; one politics feed awaits review."""
 
+NOTHING_FOUND: Final = {
+    ("api.openalex.org", "/works"): {"meta": {"count": 0}, "results": []},
+    ("api.crossref.org", "/works"): {"status": "ok", "message-type": "work-list", "message": {"items": []}},
+    ("www.federalregister.gov", "/api/v1/documents.json"): {"count": 0, "results": []},
+}
+"""An answer with nothing in it from each of the NHI preset's other providers, written by hand."""
+GOVINFO_HOST: Final = "api.govinfo.gov"
+
 DIGESTS: Final = Path("digests")
 SENTINEL: Final = "SNIPPETSENTINEL"
 
@@ -94,10 +102,14 @@ class Feeds:
     ledger_status: int = 200
     requests: list[str] = field(default_factory=list[str])
     unrecorded: list[str] = field(default_factory=list[str])
+    scholarly_and_register: bool = False
+    """Answer OpenAlex, Crossref and the Federal Register too, each with nothing found."""
 
     async def handle(self, request: httpx.Request) -> httpx.Response:
         url = str(request.url)
         self.requests.append(url)
+        if self.scholarly_and_register and (request.url.host, request.url.path) in NOTHING_FOUND:
+            return httpx.Response(200, json=NOTHING_FOUND[(request.url.host, request.url.path)])
         answers = {
             COURIER_URL: (self.courier_status, self.courier),
             LEDGER_URL: (self.ledger_status, "ledger_2026-09-17.xml"),
@@ -138,6 +150,20 @@ class Seams:
     articles: ReplayTransport | None = None
     card_router: NeedRecordingRouter | None = None
     crossref: CrossrefAnswers = field(default_factory=CrossrefAnswers)
+    stepping_clock: bool = False
+    """A container clock that moves 0.4 s each time it is read, from NOW, in place of the fixed one:
+    Crossref's pacer waits on it, and waits for ever on a clock that never moves."""
+
+
+class SteppingClock:
+    """NOW, then 0.4 s later at every read: time passes for a pacer, and no test waits for real."""
+
+    def __init__(self) -> None:
+        self._reads = 0
+
+    def __call__(self) -> datetime:
+        self._reads += 1
+        return NOW + timedelta(seconds=0.4 * self._reads)
 
 
 @pytest.fixture
@@ -155,7 +181,7 @@ def seams(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Seams]:
 
     def with_seams(self: ServiceContainer, **arguments: Any) -> None:
         build(self, **arguments)
-        self.override("clock", lambda: NOW)
+        self.override("clock", SteppingClock() if seams.stepping_clock else lambda: NOW)
         self.override("topic_feed_lists", FEED_LISTS)
         transport = httpx.MockTransport(seams.feeds.handle)
         self.override("discovery_transport", transport)
@@ -623,6 +649,52 @@ def test_an_nhi_digest_reads_only_the_health_insurance_feeds_and_names_its_unask
         ("Economy DA — Uniqueness", []),
     ]
     assert (tmp_path / "data" / "daily" / "seen" / "nhi.json").is_file()
+
+
+GOVINFO_NOT_COUNTED: Final = (
+    "govinfo: not configured on 8 of 8 queries: not counted as partial: no api.data.gov key "
+    "(DEBATE_PROVIDERS__API_DATA_GOV_KEY); get a free key at api.data.gov/signup to ask GovInfo"
+)
+
+
+def test_an_nhi_digest_without_the_api_data_gov_key_names_govinfo_not_configured_and_is_complete(
+    seams: Seams, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The coach's preset is configuration, not a request by name (the PM's ruling 3 on v1-e07-t15):
+    GovInfo, enabled with no key, is named with its cure and does not make the digest partial. Every
+    other provider of the preset is enabled and answers. The contact email is an invented one, so that
+    Crossref's pace is not what this test is about."""
+    seams.feeds.scholarly_and_register = True
+    seams.stepping_clock = True
+    monkeypatch.setenv(
+        "DEBATE_PROVIDERS__ENABLED", '["openalex", "crossref", "rss", "federal_register", "govinfo"]'
+    )
+    monkeypatch.setenv("DEBATE_PROVIDERS__CONTACT_EMAIL", "invented-t15@example.org")
+
+    result = daily("nhi", "--date", "2026-09-17", "--format", "json")
+
+    assert result.exit_code == ExitCode.OK, result.output
+    data = envelope(result)["data"]
+    assert data["status"] == "COMPLETE"
+    assert [(p["provider"], p["outcome"], p["reasons"]) for p in data["providers"]] == [
+        ("openalex", "ok", []),
+        ("crossref", "ok", []),
+        ("rss", "ok", []),
+        ("federal_register", "ok", []),
+        ("govinfo", "not configured", [GOVINFO_NOT_COUNTED.split(": ", 2)[2]]),
+    ]
+    assert [(group["heading"], [r["title"] for r in group["results"]]) for group in data["groups"]] == [
+        (
+            "Spending DA — Uniqueness",
+            ["Health insurance subsidies at the center of the federal spending debate in Congress"],
+        ),
+        ("Federalism DA — Uniqueness", ["States lead on health insurance policy as Washington stalls"]),
+        ("Economy DA — Uniqueness", []),
+    ]
+    markdown = Path(data["file"]).read_text(encoding="utf-8")
+    assert "- Status: COMPLETE\n" in markdown
+    assert f"- {GOVINFO_NOT_COUNTED}\n" in markdown
+    assert GOVINFO_HOST not in {httpx.URL(url).host for url in seams.feeds.requests}
 
 
 # ------------------------------------------------------------------------------------------------

@@ -145,8 +145,9 @@ class TermProvider:
 
 
 class ProvidersOnHand:
-    def __init__(self, *providers: SearchProvider) -> None:
+    def __init__(self, *providers: SearchProvider, not_configured: dict[str, str] | None = None) -> None:
         self._providers = providers
+        self._not_configured = not_configured or {}
 
     @property
     def providers(self) -> tuple[SearchProvider, ...]:
@@ -154,7 +155,7 @@ class ProvidersOnHand:
 
     @property
     def not_configured(self) -> dict[str, str]:
-        return {}
+        return self._not_configured
 
     def health(self) -> tuple[ProviderHealth, ...]:
         return ()
@@ -167,11 +168,13 @@ class World:
     feed_reviews: dict[str, tuple[str, ...]] = field(default_factory=dict[str, tuple[str, ...]])
     written: list[Digest] = field(default_factory=list[Digest])
 
-    def service(self, *providers: SearchProvider) -> DigestService:
+    def service(
+        self, *providers: SearchProvider, not_configured: dict[str, str] | None = None
+    ) -> DigestService:
         clock = FixedClock(NOW)
         ids = SequentialIdGenerator("SRCH")
         search = FederatedSearchService(
-            ProvidersOnHand(*(providers or (self.provider,))),
+            ProvidersOnHand(*(providers or (self.provider,)), not_configured=not_configured),
             InMemorySearchRepository(),
             clock=clock,
             ids=ids,
@@ -415,6 +418,43 @@ async def test_a_partial_digest_is_written_and_its_results_count_as_listed(world
     assert len(digest.items) == 4
     assert digest.file is not None
     assert len(world.seen_file()["urls"]) == 4
+
+
+CROSSREF_WITHOUT_ITS_EMAIL: Final = "crossref: no contact email (invented for this test)"
+"""A preset provider settings enable but cannot build. Crossref really searches its public pool without
+an email; the stand-in is unbuilt so the digest's rule is tested apart from GovInfo's topic gate."""
+
+
+async def test_a_preset_provider_without_its_credential_not_configured_is_named_and_not_counted(
+    world: World,
+) -> None:
+    """The coach's preset is configuration (the PM's ruling 3 on v1-e07-t15): counted like the
+    providers the profile enables, so an unbuilt one leaves the digest COMPLETE and is named with its cure."""
+    preset = PRESET.evolve(providers=("rss", "crossref"))
+
+    service = world.service(world.provider, not_configured={"crossref": CROSSREF_WITHOUT_ITS_EMAIL})
+    digest = await service.run(DigestRequest(preset, SEPTEMBER_17), world.write)
+
+    assert digest.status is SearchStatus.COMPLETE
+    assert digest.uncounted == ("crossref",)
+    crossref = {status.error for status in digest.provider_statuses if status.provider == "crossref"}
+    assert crossref == {f"{CROSSREF_WITHOUT_ITS_EMAIL}; set a contact email for Crossref's polite pool"}
+    assert len(digest.items) == 4
+    assert digest.file is not None
+
+
+async def test_a_preset_provider_not_configured_beside_one_that_failed_leaves_the_digest_partial(
+    world: World,
+) -> None:
+    preset = PRESET.evolve(providers=("rss", "openalex", "crossref"))
+
+    service = world.service(
+        world.provider, FailingOpenAlex(), not_configured={"crossref": CROSSREF_WITHOUT_ITS_EMAIL}
+    )
+    digest = await service.run(DigestRequest(preset, SEPTEMBER_17), world.write)
+
+    assert digest.status is SearchStatus.PARTIAL
+    assert digest.uncounted == ("crossref",)
 
 
 async def test_an_unreadable_seen_set_is_an_error_not_an_empty_set(world: World) -> None:

@@ -181,9 +181,50 @@ None. The 358-file affected set runs in the pull request's `ci` under agreement 
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-11-11
 
 **Notes:**
+
+The PM read `parse_workers.py` in the worktree.
+- `_start` gives a new worker a start deadline of spawn time plus `WORKER_START_ALLOWANCE_SECONDS`.
+- `_dispatch` holds the bytes in `waiting` until the worker is ready.
+- The worker's first message, `_READY`, sends them.
+- `_send` sets the parse deadline after the send.
+- `_collect` waits only on busy workers, so the `assert worker.waiting is not None` holds: a busy,
+  unready worker always holds its bytes.
+- An unready worker past its allowance is replaced as `WORKER_CRASHED` before the timeout branch is
+  reached.
+
+1. **ac1 passes.**
+   - The three new tests failed for their own reasons against the unchanged runner (`{'TIMEOUT': 6}`
+     each). The fourth exists for a mutant, and is shown to catch it.
+   - The existing test is shown to depend on spawn speed under the old runner: it fails with every
+     spawn slowed by 2 s. It is independent of spawn speed under the new one, passing at 2 s and 5 s.
+     That was measured with a scratch `sitecustomize.py` kept out of the repository.
+   - Six of six mutants on where the deadline is set are caught at count assertions. The one left
+     unrun is rightly equivalent.
+2. **The decisions are accepted.**
+   - The bytes wait in the parent, so a worker that never starts can't block the parent on a full
+     pipe.
+   - The start allowance is 60 s, against a measured 0.16 s (0.29 s for six at once).
+   - A worker that never starts fails its source as `WORKER_CRASHED`, with a detail that tells it
+     apart. v1-e31-t17's retry of transient failures will treat it as a crash, which is right.
+   - The never-ready test runs on a clock that jumps a day a read.
+   - The slow start is a wait in the test parser's `__setstate__`, which is the scenario under test,
+     not a sleep added to make a test pass.
+   - The docstring widening was reverted to keep the affected set at 358. The PM keeps the session's
+     wording for whichever task next edits `PipelineFailureReason`.
+3. **v1-e31-t27 is not covered.** This report doesn't name it, and has no run under an artificial
+   load. The reused-worker test and the existing time-limit test still depend on real parse time (two
+   1.0 s parses against 1.5 s, and the stall against 1.5 s), so t27's ask still stands: 20 runs under a
+   busy-loop process per core, and a mutant that removes the limit. As this task's prerequisite note
+   said, the PM amends t27 in the next batch to what is left, and it stays where it is.
+4. **The follow-up is noted, not filed:** `_stop`'s 2 s grace for a worker that never reported ready.
+   It costs 2 s once per run, and only after a hung start.
+5. **Merge:** a plain `scripts/task pr` once `ci` is green. The Goal is `Succeeded`. The branch starts
+   before PM batch 2026-11-09, which gave this spec its prerequisite (`v1-e31-t06`). Git merges that
+   with this branch's phase change, which is a separate hunk; if `scripts/task pr` reports a conflict,
+   run `scripts/task sync` first.

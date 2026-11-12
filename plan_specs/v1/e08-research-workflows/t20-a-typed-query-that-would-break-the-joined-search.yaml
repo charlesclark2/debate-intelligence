@@ -27,6 +27,12 @@ spec:
   # AND or NOT is sent in a request of its own, never joined or rewritten, and the footer's OpenAlex
   # line says it was asked alone; other providers unchanged. Tests first and shown failing, then
   # mutants on the split rule, the fallback's recursion and bound, and the typed-query detection.
+  # The PM's answers of 2026-11-12: an odd number of double quotes is asked alone too; any
+  # upper-case AND, OR or NOT outside a quoted phrase sends its query alone; the detection covers
+  # every query, typed, templated or the model's; and ruling 3 is amended: the split recurses only
+  # into a half refused beside an answered half, and stops when both halves are refused (every query
+  # of that request fails as a 400), so one bad query costs at most 1 + 2*ceil(log2 n) requests a
+  # page and a refusal not about size costs 3; only a first page's 400 is split.
   description: >-
     v1-e08-t10 joins a search's queries as `(q1) OR (q2)` in one request. A student's typed
     query with an unbalanced parenthesis, or a bare `OR`, `AND` or `NOT`, now reaches inside
@@ -52,7 +58,7 @@ spec:
         or a bare operator cannot change or fail the other queries of a joined search, by
         tests shown failing first.
 status:
-  phase: InProgress
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

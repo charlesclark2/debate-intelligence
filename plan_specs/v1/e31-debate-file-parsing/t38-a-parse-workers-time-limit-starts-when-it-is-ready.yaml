@@ -39,7 +39,7 @@ spec:
         A worker's limit starts when it reports ready, so a slow spawn times out no source
         while a parse past the limit still stops, by tests shown failing first.
 status:
-  phase: InProgress
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

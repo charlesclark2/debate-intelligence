@@ -56,7 +56,11 @@ This:
    `--partial` is restarted with `scripts/task resume` instead (see
    [Coming back to a partly merged task](#coming-back-to-a-partly-merged-task));
 2. refuses (and cleans up) if any prerequisite is not `Succeeded` on `origin/dev` (`--force`
-   overrides);
+   overrides). That check is only as good as the list, so `scripts/validate_specs.py` refuses an
+   unfinished task whose `spec.context` names no prerequisite, unless a `debate/no-prerequisite`
+   annotation says why it has none. It warns, without refusing, about a task id the description
+   names that the context does not list (`v1-e41-t27`;
+   [plan_specs/README.md](../../plan_specs/README.md#dependencies) has both rules);
 3. sets the task Goal's `status.phase` to `InProgress`, creates
    `docs/session-reports/<task>.md` from the [template](session-report-template.md), and commits both;
 4. writes the kickoff prompt to `<worktree>/.task/prompt.md` (not committed);

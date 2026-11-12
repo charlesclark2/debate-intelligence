@@ -64,6 +64,15 @@ labels:
   cross-epic one (`v1-e41-t07` checks it). A follow-up whose prerequisite ships in a later release
   than the epic it would join goes to the current release's upkeep epic instead (E41, in v1.8), so
   delivery tooling found after v1.0 shipped no longer lands in E01.
+* **Every unfinished task names its prerequisites, or says why it has none** (`v1-e41-t27`).
+  `scripts/validate_specs.py` refuses a task Goal that is neither `Succeeded` nor `Cancelled` and has
+  no `dependsOn` TaskRef in `spec.context`, unless `metadata.annotations` carries
+  `debate/no-prerequisite` with the reason (the first task of a new epic, say). Name the task that
+  built the code the task changes. The validator also warns, never refuses, when an unfinished task's
+  description names another task id that its context does not list. It prints in full the warnings
+  that name an unfinished task of the same or an earlier release, the most likely missing
+  prerequisites, and only counts for a `Succeeded` one (a graph link that could be added) and for one
+  of a later release (never a prerequisite). `--all-warnings` prints those in full too.
 * **Waiting on something outside the repository is `Blocked`.** A task that waits on a quota, an
   operator's run in a later release or the coach's word has `status.phase: Blocked` and an amendment
   naming the condition; `scripts/task ready` lists only `Pending` and `Ready` tasks. The PM sets it

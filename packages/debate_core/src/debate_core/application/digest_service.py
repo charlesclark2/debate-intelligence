@@ -16,7 +16,7 @@ filled uniqueness template such as `Senate vote count Senate` kept no feed item 
 
 * A pair whose group has no template for a query runs no search for it.
 * A pair with no group asks the preset's query alone, and its :class:`DigestGroup` says so
-  (`asked_queries_alone`), so the digest names it.
+  (`asked_taxonomy_templates`), so the digest names it.
 
 The window is the search's own `since` and `until`.
 
@@ -213,7 +213,7 @@ class DigestGroup:
     heading: str
     """`Politics DA — Uniqueness`: the argument's and the need's labels."""
     items: tuple[DigestItem, ...]
-    asked_queries_alone: bool = False
+    asked_taxonomy_templates: bool = False
     """The pair has no digest templates, so its searches asked the preset's queries alone."""
 
 
@@ -322,7 +322,7 @@ class DigestService:
             alone = self._templates.asks_query_alone(pair.argument, pair.need)
             groups.append(
                 DigestGroup(
-                    pair=pair, heading=self._heading(pair), items=tuple(items), asked_queries_alone=alone
+                    pair=pair, heading=self._heading(pair), items=tuple(items), asked_taxonomy_templates=alone
                 )
             )
         return Digest(

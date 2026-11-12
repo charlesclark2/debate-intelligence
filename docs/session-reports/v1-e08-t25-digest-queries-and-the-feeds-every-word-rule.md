@@ -166,11 +166,11 @@ this run. Few `polling` or `forecast` items is what the calendar predicts, which
     the loader, the checks against the taxonomy and the presets, `queries_for` with the fallback, and
     `DigestExpansionStage`.
   * `digest_service.py`: `DigestService` takes the templates, skips a search no template is for, gives
-    each group `asked_queries_alone`, and gains `planned_searches()`.
+    each group `asked_taxonomy_templates`, and gains `planned_searches()`.
   * `container.py`: `daily_templates()`, and daily's federated search built with the digest stage.
     `search` keeps the taxonomy's stage.
   * `daily.py`: the progress line counts the planned searches; the docstring.
-  * `daily_presenter.py`: the note under a group that asked its query alone, and `asked_queries_alone`
+  * `daily_presenter.py`: the note under a group that asked its query alone, and `asked_taxonomy_templates`
     in the JSON group.
   * `config/daily_presets.yaml`: its header comment.
 * **The date default (ac3).**
@@ -293,7 +293,7 @@ included).
 
 Where: your Mac, any terminal
 ```bash
-if env | grep -q '^DEBATE_'; then echo "STOP: DEBATE_ overrides are set in this shell"; elif pgrep -f debate-research > /dev/null; then echo "STOP: a debate-research command is running; wait for it"; else mkdir -p "$HOME/Desktop/daily-check-t25" && cd "$HOME" && env DEBATE_ENV=dev DEBATE_STORAGE__DATA_DIR="$HOME/Desktop/daily-check-t25/data" debate-research --json daily politics --digest-dir "$HOME/Desktop/daily-check-t25" > "$HOME/Desktop/daily-check-t25/daily.json"; echo "exit $?"; python3 -I -c 'import json, sys; e = json.load(open(sys.argv[1])); r = e.get("error") or {}; d = e.get("data") or r.get("details") or {}; w = d.get("window") or {}; print("code", r.get("code"), "status", d.get("status"), "date", d.get("date"), "new", d.get("new_results"), "listed_before", d.get("listed_before")); print("window", w.get("since"), w.get("until")); print("groups", [(g["heading"], len(g["results"]), g.get("asked_queries_alone")) for g in d.get("groups") or []]); print("providers", [(p["provider"], p["outcome"], p["queries"], p["results"]) for p in d.get("providers") or []])' "$HOME/Desktop/daily-check-t25/daily.json"; fi
+if env | grep -q '^DEBATE_'; then echo "STOP: DEBATE_ overrides are set in this shell"; elif pgrep -f debate-research > /dev/null; then echo "STOP: a debate-research command is running; wait for it"; else mkdir -p "$HOME/Desktop/daily-check-t25" && cd "$HOME" && env DEBATE_ENV=dev DEBATE_STORAGE__DATA_DIR="$HOME/Desktop/daily-check-t25/data" debate-research --json daily politics --digest-dir "$HOME/Desktop/daily-check-t25" > "$HOME/Desktop/daily-check-t25/daily.json"; echo "exit $?"; python3 -I -c 'import json, sys; e = json.load(open(sys.argv[1])); r = e.get("error") or {}; d = e.get("data") or r.get("details") or {}; w = d.get("window") or {}; print("code", r.get("code"), "status", d.get("status"), "date", d.get("date"), "new", d.get("new_results"), "listed_before", d.get("listed_before")); print("window", w.get("since"), w.get("until")); print("groups", [(g["heading"], len(g["results"]), g.get("asked_taxonomy_templates")) for g in d.get("groups") or []]); print("providers", [(p["provider"], p["outcome"], p["queries"], p["results"]) for p in d.get("providers") or []])' "$HOME/Desktop/daily-check-t25/daily.json"; fi
 ```
 
 **What success looks like:**

@@ -836,7 +836,7 @@ def test_format_json_writes_the_digest_as_json_and_prints_it(seams: Seams, tmp_p
         ("Senate", "politics-da", "uniqueness"),
         ("Senate", "midterms-da", "uniqueness"),
     ]
-    assert [group["asked_queries_alone"] for group in data["groups"]] == [False, False]
+    assert [group["asked_taxonomy_templates"] for group in data["groups"]] == [False, False]
     assert SENTINEL not in result.stdout
 
 
@@ -913,7 +913,7 @@ group, so the other two are empty."""
 
 def nhi_groups(data: dict[str, Any]) -> list[tuple[str, bool, set[str]]]:
     return [
-        (group["heading"], group["asked_queries_alone"], {result["title"] for result in group["results"]})
+        (group["heading"], group["asked_taxonomy_templates"], {result["title"] for result in group["results"]})
         for group in data["groups"]
     ]
 

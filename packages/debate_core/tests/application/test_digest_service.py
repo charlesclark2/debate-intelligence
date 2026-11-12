@@ -761,7 +761,7 @@ async def test_a_digest_asks_its_templates_ids_and_none_of_the_taxonomys(world: 
         ["digest/politics-da/uniqueness/1", "digest/politics-da/uniqueness/2"],
         ["digest/midterms-da/uniqueness/1", "digest/midterms-da/uniqueness/2"],
     ]
-    assert [group.asked_queries_alone for group in digest.groups] == [False, False]
+    assert [group.asked_taxonomy_templates for group in digest.groups] == [False, False]
 
 
 async def test_a_template_for_some_queries_is_asked_for_those_and_a_query_none_is_for_is_not_searched(
@@ -807,7 +807,7 @@ async def test_a_pair_with_no_digest_templates_asks_its_query_alone_and_says_so(
     assert [(query.template_id, query.template) for query in midterms.queries] == [
         ("digest/midterms-da/uniqueness/query-alone", "{query}")
     ]
-    assert [group.asked_queries_alone for group in digest.groups] == [False, True]
+    assert [group.asked_taxonomy_templates for group in digest.groups] == [False, True]
     assert not {query.query for query in world.provider.asked} & TAXONOMY_UNIQUENESS
 
 
@@ -817,4 +817,4 @@ async def test_with_no_digest_templates_at_all_every_pair_asks_its_query_alone(w
     digest = await world.run(SEPTEMBER_17)
 
     assert [query.query for query in world.provider.asked] == ["bill", "bill"]
-    assert [group.asked_queries_alone for group in digest.groups] == [True, True]
+    assert [group.asked_taxonomy_templates for group in digest.groups] == [True, True]

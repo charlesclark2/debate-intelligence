@@ -152,7 +152,7 @@ def digest_markdown(digest: Digest) -> str:
         lines += [f"> {line}", ""]
     for group in digest.groups:
         lines += [f"## {_plain(group.heading)}", ""]
-        if group.asked_queries_alone:
+        if group.asked_taxonomy_templates:
             lines += [f"> {QUERY_ALONE_NOTE}", ""]
         if not group.items:
             lines += ["No new results.", ""]
@@ -211,7 +211,7 @@ def digest_payload(digest: Digest) -> dict[str, JsonValue]:
                 "argument": group.pair.argument,
                 "need": group.pair.need,
                 "heading": group.heading,
-                "asked_queries_alone": group.asked_queries_alone,
+                "asked_taxonomy_templates": group.asked_taxonomy_templates,
                 "results": [_item_json(position, item) for position, item in enumerate(group.items, start=1)],
             }
             for group in digest.groups
@@ -241,7 +241,7 @@ def digest_table(digest: Digest) -> TableSpec:
         title = f"PARTIAL: {title}"
     below = [f"Digest: {digest.file}"] if digest.file is not None else []
     below += _review_lines(digest)
-    below += [f"{group.heading}: {QUERY_ALONE_NOTE}" for group in digest.groups if group.asked_queries_alone]
+    below += [f"{group.heading}: {QUERY_ALONE_NOTE}" for group in digest.groups if group.asked_taxonomy_templates]
     below += digest_footer(digest)
     return TableSpec(
         title=title,

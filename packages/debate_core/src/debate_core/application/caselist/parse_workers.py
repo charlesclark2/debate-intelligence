@@ -13,6 +13,17 @@ pool. Here each worker is a process with a pipe of its own, so a parse that runs
 ended by terminating that worker and starting another, and the run goes on. A worker that dies
 (out of memory, a crash in a C library) is replaced the same way.
 
+## When the time limit starts
+
+A spawned worker starts a fresh interpreter, imports the parser's modules and unpickles the
+parser before it can read anything, and on a busy machine or a cold task that can take longer
+than a parse. So each worker sends a ready message once it has its parser, and a source's limit
+starts when its worker is ready and is sent the bytes: `timeout_seconds` measures the parse alone
+(`v1-e31-t38`). The start has an allowance of its own, :data:`WORKER_START_ALLOWANCE_SECONDS`; a
+worker not ready within it is replaced, and the source it was holding fails as `WORKER_CRASHED`.
+A source's bytes wait in the parent until its worker is ready, so a worker that never starts
+never leaves the parent blocked on a pipe nobody reads.
+
 ## What a result is
 
 The parser's own answer, a :class:`~debate_core.domain.debate_files.ParsedDocument` or a
@@ -52,11 +63,21 @@ __all__ = [
     "ParseRunner",
     "ProcessPoolParseRunner",
     "SourceLoadError",
+    "WORKER_START_ALLOWANCE_SECONDS",
     "WorkerFailure",
 ]
 
 #: How long a stopping worker is given to exit before it is killed.
 _SHUTDOWN_GRACE_SECONDS: Final = 2.0
+
+#: How long a spawned worker has to start and report ready before it is replaced. Separate from the
+#: per-file time limit, which starts only once the worker is ready (`v1-e31-t38`). A spawn on the
+#: operator's Mac is ready in well under a second, a few seconds under load; this is for a worker
+#: that will never start, not a slow one.
+WORKER_START_ALLOWANCE_SECONDS: Final = 60.0
+
+#: What a worker sends once it is running with its parser, before it reads its first job.
+_READY: Final = "ready"
 
 
 @dataclass(frozen=True, slots=True)
@@ -144,10 +165,18 @@ class InProcessParseRunner:
 
 @dataclass
 class _Worker:
+    """One worker process and the source it holds.
+
+    Until it reports ready, `deadline` is when its start allowance runs out and `waiting` holds the
+    bytes of a source given to it; once ready, `deadline` is when the source it was sent times out.
+    """
+
     process: BaseProcess
     connection: Connection
+    deadline: float
+    ready: bool = False
     job: ParseJob | None = None
-    deadline: float = 0.0
+    waiting: bytes | None = None
 
 
 class ProcessPoolParseRunner:
@@ -226,8 +255,16 @@ class ProcessPoolParseRunner:
         return True, _Loaded(None, b"", failures)
 
     def _dispatch(self, worker: _Worker, job: ParseJob, content: bytes) -> None:
-        worker.connection.send((job, content))
         worker.job = job
+        if worker.ready:
+            self._send(worker, content)
+        else:
+            worker.waiting = content
+
+    def _send(self, worker: _Worker, content: bytes) -> None:
+        """Hand a ready worker its source; the time limit starts here."""
+        worker.connection.send((worker.job, content))
+        worker.waiting = None
         worker.deadline = self._clock() + self._timeout
 
     def _collect(
@@ -237,22 +274,31 @@ class ProcessPoolParseRunner:
         remaining = max(0.0, min(worker.deadline for worker in busy) - self._clock())
         waitables: list[Connection | int] = [worker.connection for worker in busy]
         waitables += [worker.process.sentinel for worker in busy]
-        ready = wait(waitables, timeout=remaining)
+        readable = wait(waitables, timeout=remaining)
         now = self._clock()
         for worker in busy:
             job = worker.job
             assert job is not None
-            if worker.connection in ready or worker.connection.poll():
+            if worker.connection in readable or worker.connection.poll():
                 try:
-                    result: ParseResult = worker.connection.recv()
+                    message: ParseResult | str = worker.connection.recv()
                 except (EOFError, OSError):
-                    result = WorkerFailure(PipelineFailureReason.WORKER_CRASHED, "the worker exited")
+                    message = WorkerFailure(PipelineFailureReason.WORKER_CRASHED, "the worker exited")
                     self._replace(parser, pool, worker)
+                if isinstance(message, str):  # the worker's ready message: the only text one sends
+                    worker.ready = True
+                    assert worker.waiting is not None
+                    self._send(worker, worker.waiting)
+                    continue
                 worker.job = None
-                yield job, result
-            elif worker.process.sentinel in ready or not worker.process.is_alive():
+                yield job, message
+            elif worker.process.sentinel in readable or not worker.process.is_alive():
                 self._replace(parser, pool, worker)
                 yield job, WorkerFailure(PipelineFailureReason.WORKER_CRASHED, "the worker exited")
+            elif not worker.ready and now >= worker.deadline:
+                self._replace(parser, pool, worker)
+                detail = f"not ready within {WORKER_START_ALLOWANCE_SECONDS:g} s"
+                yield job, WorkerFailure(PipelineFailureReason.WORKER_CRASHED, detail)
             elif now >= worker.deadline:
                 self._replace(parser, pool, worker)
                 yield job, WorkerFailure(PipelineFailureReason.TIMEOUT, f"over {self._timeout:g} s")
@@ -264,7 +310,9 @@ class ProcessPoolParseRunner:
         process = self._context.Process(target=_work, args=(theirs, parser), daemon=True)
         process.start()
         theirs.close()
-        return _Worker(process=process, connection=ours)
+        return _Worker(
+            process=process, connection=ours, deadline=self._clock() + WORKER_START_ALLOWANCE_SECONDS
+        )
 
     def _replace(self, parser: DebateFileParser, pool: list[_Worker], worker: _Worker) -> None:
         """Stop a worker that timed out or died, and put a fresh one in its place."""
@@ -300,7 +348,15 @@ def _terminate(worker: _Worker) -> None:
 
 
 def _work(connection: Connection, parser: DebateFileParser) -> None:  # pragma: no cover - runs in a worker
-    """A worker's whole life: parse what arrives until told to stop or the pipe closes."""
+    """A worker's whole life: say it is ready, then parse what arrives until told to stop or the pipe closes.
+
+    By the time this runs the parser has been unpickled, so its modules are imported: ready means
+    the next thing this worker spends time on is a parse.
+    """
+    try:
+        connection.send(_READY)
+    except OSError:
+        return
     while True:
         try:
             message = connection.recv()

@@ -2,7 +2,8 @@
 
 The deciding is `debate_core`'s: :class:`~debate_core.application.digest_service.DigestService` runs
 the preset's searches (`config/daily_presets.yaml`) through `search`'s federated search for the
-window, leaves out what an earlier digest of the preset listed, groups the rest by argument and need,
+window, each asking the digest templates of `config/daily_templates.yaml` and never the taxonomy's
+(v1-e08-t25), leaves out what an earlier digest of the preset listed, groups the rest by argument and need,
 and records them as listed only once the file is written. What is here is the command-line surface:
 the options, writing the file, and the exit code. The Markdown, the JSON and the summary are
 :mod:`debate_cli.presenters.daily_presenter`'s.

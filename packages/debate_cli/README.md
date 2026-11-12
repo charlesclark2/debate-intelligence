@@ -627,7 +627,9 @@ template queries alone.
 of new research for a preset in `config/daily_presets.yaml`: `politics` (politics DA and midterms DA
 uniqueness, from the politics feeds) and `nhi` (the NHI topic's spending, federalism and economy DA
 uniqueness). `DigestService` in `debate_core` runs each of the preset's queries, expanded for each of
-its argument/need pairs, through `search`'s federated search for the window: with `--date`, whole UTC
+its argument/need pairs by the two-word digest templates of `config/daily_templates.yaml` (never the
+taxonomy's, which `search` asks; a pair with none asks the query alone and the digest says so;
+`v1-e08-t25`), through `search`'s federated search for the window: with `--date`, whole UTC
 days ending with it (`--window 1d` to `31d`); with no `--date`, the `--window` days of 24 hours before
 the run, dated by the run's date in `daily.time_zone`, America/Chicago in the committed profiles
 (`v1-e08-t25`; the coach's account is [`docs/guides/daily-digests.md`](../../docs/guides/daily-digests.md)).

@@ -76,9 +76,53 @@ things happen once, on the first evening after you install a build with this cha
 * From the next day on, every digest is named and recorded by your local date, and nothing is listed
   twice.
 
-## Which results a feed contributes
+## What a digest asks: the digest templates
 
-The publisher feeds keep an item only when every word of a filled search template is in its title or
-summary, so a template such as `bill vote count Senate` keeps only headlines that use all four words.
-How many results that leaves on a real day is being measured (v1-e08-t25); until the PM rules on
-that measurement, a quiet digest may mean the templates are too long, not that nothing happened.
+`daily` does not ask the long search templates `search` asks, such as `Senate vote count Senate`. The
+publisher feeds keep a headline only when it has every word of a query, and on 12 November 2026 none
+of the politics preset's ten long queries kept any of the 42 headlines of the day before. A digest
+asks short **digest templates** instead, each the preset's query and one more word, from
+`config/daily_templates.yaml`:
+
+| Group | Asks | Kept on 2026-11-12, 24 hours / 72 hours |
+|---|---|---|
+| Politics DA — Uniqueness | `bill Congress`, `Senate Congress`, `Senate Republicans` | 3 / 3 |
+| Midterms DA — Uniqueness | `Senate election` | 2 / 4 |
+
+`search` is unchanged: it still asks the reviewed templates in `config/argument_taxonomy.yaml`, and
+nothing in that file changed.
+
+**A group with no digest templates** (today, all three of the `nhi` preset's groups) asks the preset's
+query alone, `health insurance`, and the digest says so under the group's heading:
+
+```text
+> No digest templates for this group in config/daily_templates.yaml: its searches asked the preset's queries alone.
+```
+
+The three `nhi` groups then ask the same query, so what they find is listed once, under the first
+group, and the other two stay empty until they have digest templates of their own.
+
+## Counting a template before adding it
+
+`scripts/count_digest_feed_matches.py` counts, against the real feeds, how many of the day's headlines
+a template would keep. It prints counts only, never a headline, summary or link, and writes nothing.
+It runs with the installed build's own Python on the script in a source checkout of the repository,
+from your home folder. Set `CHECKOUT` to that checkout's folder once in the terminal; this example is
+the operator's main checkout:
+
+```bash
+export CHECKOUT="$HOME/Documents/debate/debate-intelligence-tool/debate-intelligence"
+```
+
+Then count one or more candidates, each `PAIR=TEMPLATE`:
+
+```bash
+cd "$HOME" && env DEBATE_ENV=dev "$(uv tool dir)/debate-cli/bin/python" -I "$CHECKOUT/scripts/count_digest_feed_matches.py" politics --candidate "midterms-da/uniqueness={query} polls" --candidate "politics-da/uniqueness={query} filibuster"
+```
+
+It takes under a minute. For the 24 hours and the 72 hours before the run it prints, per filled query,
+how many headlines each would keep: the `taxonomy` rows are what `search` asks, the `digest` rows what
+`daily` asks now, and the `candidate` rows yours. A candidate that keeps something is worth adding:
+put it under its group in `config/daily_templates.yaml` with the date you measured it and its two
+counts as a comment, the way the four there are. A template is always the query and one word; the
+file refuses anything longer when `daily` starts.

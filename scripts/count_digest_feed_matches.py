@@ -1,8 +1,10 @@
 """How many feed items a daily digest's queries keep, query by query, as counts (v1-e08-t25).
 
-Run by the operator with the installed build's Python, from the home folder:
+Run with the installed build's Python, from the home folder, on this script in a checkout
+(docs/guides/daily-digests.md, "Counting a template before adding it"):
 
-    "$(uv tool dir)/debate-cli/bin/python" -I <worktree>/scripts/count_digest_feed_matches.py politics
+    "$(uv tool dir)/debate-cli/bin/python" -I <checkout>/scripts/count_digest_feed_matches.py politics \
+        --candidate "midterms-da/uniqueness={query} polls"
 
 It rebuilds the preset's searches with the build's own code: the preset from the bundled
 `config/daily_presets.yaml`, each query expanded for each pair by the bundled taxonomy
@@ -20,8 +22,12 @@ prints:
   `every_word`, the items today's rule keeps (every word of the filled template in the title or
   summary); `own_words`, the items kept if only the preset query's own words were required; and
   `own_plus_one`, kept if the query's own words and at least one of the template's other words were;
-* per proposed digest template (`digest/...`, new templates, not the taxonomy's), the items the
-  every-word rule keeps;
+* per digest template `daily` asks (`digest/...`, `config/daily_templates.yaml`, v1-e08-t25), for
+  the queries it is asked for, the items the every-word rule keeps: the build's own file, or this
+  checkout's when the build predates it (the first line says which). A pair with no digest
+  templates is counted as `daily` asks it, the preset query alone (`digest/<pair>/query-alone`);
+* per `--candidate PAIR=TEMPLATE` (`candidate/...`, any number), a template not yet in the file,
+  counted for every preset query of the pair, under the every-word rule;
 * per pair and for the whole digest, the distinct items any of its queries keeps under each rule.
 
 The counts are before the search's `max_results` cut (20 for each search). A feed that fails is
@@ -42,6 +48,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import httpx
+import yaml
 
 from debate_cli import package_version
 from debate_cli.build_info import bundled_config_root, settings_loader
@@ -75,11 +82,8 @@ FEEDS_DIRECTORY = Path("config") / "feeds"
 WINDOWS: tuple[tuple[str, timedelta], ...] = (("24h", timedelta(hours=24)), ("72h", timedelta(hours=72)))
 """The two windows, each ending at the run."""
 
-PROPOSED_TEMPLATES: dict[str, tuple[str, ...]] = {
-    "politics-da/uniqueness": ("{query} vote", "{query} Congress", "{query} Republicans"),
-    "midterms-da/uniqueness": ("{query} midterms", "{query} election", "{query} polls"),
-}
-"""Shorter digest templates to count, by pair: proposals for the PM, in no taxonomy."""
+DAILY_TEMPLATES = Path("config") / "daily_templates.yaml"
+"""The digest templates `daily` asks (v1-e08-t25), read as plain YAML so a build that predates them runs."""
 
 
 class SystemClock:
@@ -92,7 +96,8 @@ class Row:
     """One filled query: what it is, and the terms each rule requires of an item."""
 
     kind: str
-    """`taxonomy` for the preset's own searches, `proposed` for a digest template counted here."""
+    """`taxonomy` for the taxonomy's templates (what `search` asks), `digest` for what `daily` asks,
+    `candidate` for a template given with `--candidate`."""
     pair: str
     preset_query: str
     template_id: str
@@ -131,8 +136,35 @@ def config_root(offline: bool) -> Path:
     sys.exit("STOP: this Python is not an installed build (no bundled config); run it with the tool's Python")
 
 
-def the_rows(root: Path, preset: DailyPreset) -> list[Row]:
-    """The preset's filled queries, in the order its digest asks them, then the proposals."""
+def digest_groups(root: Path) -> tuple[str, dict[str, list[dict[str, object]]]]:
+    """Where the digest templates came from (`build`, `checkout` or `none`), and each pair's templates."""
+    checkout = find_repository_root(Path(__file__).resolve().parent)
+    for base in (root, checkout):
+        if base is not None and (base / DAILY_TEMPLATES).is_file():
+            where = "checkout" if base == checkout else "build"
+            document = yaml.safe_load((base / DAILY_TEMPLATES).read_text(encoding="utf-8")) or {}
+            groups = {
+                f"{g['argument']}/{g['need']}": list(g["templates"]) for g in document.get("groups") or []
+            }
+            return where, groups
+    return "none", {}
+
+
+def template_row(kind: str, pair: str, preset_query: str, template_id: str, template: str) -> Row:
+    own = query_terms(preset_query)
+    terms = query_terms(template.replace("{query}", preset_query))
+    return Row(
+        kind, pair, preset_query, template_id, template, terms, own, tuple(t for t in terms if t not in own)
+    )
+
+
+def the_rows(
+    root: Path,
+    preset: DailyPreset,
+    digest: dict[str, list[dict[str, object]]],
+    candidates: list[tuple[str, str]],
+) -> list[Row]:
+    """The preset's filled queries: the taxonomy's, then the digest templates', then the candidates'."""
     taxonomy = load_argument_taxonomy(root / ARGUMENT_TAXONOMY_PATH)
     rows: list[Row] = []
     for pair in preset.pairs:
@@ -160,20 +192,22 @@ def the_rows(root: Path, preset: DailyPreset) -> list[Row]:
                         template_words=tuple(dict.fromkeys(term for term in terms if term not in own)),
                     )
                 )
-            for number, template in enumerate(PROPOSED_TEMPLATES.get(pair_name(pair), ()), start=1):
-                filled = template.replace("{query}", preset_query)
-                terms = query_terms(filled)
+            name = pair_name(pair)
+            if name not in digest:
                 rows.append(
-                    Row(
-                        kind="proposed",
-                        pair=pair_name(pair),
-                        preset_query=preset_query,
-                        template_id=f"digest/{pair_name(pair)}/{number}",
-                        template=template,
-                        every_word=terms,
-                        own_words=own,
-                        template_words=tuple(term for term in terms if term not in own),
-                    )
+                    template_row("digest", name, preset_query, f"digest/{name}/query-alone", "{query}")
+                )
+            for number, entry in enumerate(digest.get(name, []), start=1):
+                queries = entry.get("queries")
+                if isinstance(queries, list) and preset_query not in queries:
+                    continue
+                rows.append(
+                    template_row("digest", name, preset_query, f"digest/{name}/{number}", str(entry["text"]))
+                )
+            mine = [template for wanted, template in candidates if wanted == name]
+            for number, template in enumerate(mine, start=1):
+                rows.append(
+                    template_row("candidate", name, preset_query, f"candidate/{name}/{number}", template)
                 )
     return rows
 
@@ -242,12 +276,23 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Count what a daily digest's queries keep of its feeds.")
     parser.add_argument("preset", nargs="?", default="politics")
     parser.add_argument("--offline", action="store_true", help="read a made-up feed, not the network")
+    parser.add_argument(
+        "--candidate",
+        action="append",
+        default=[],
+        metavar="PAIR=TEMPLATE",
+        help='a template to count, e.g. "midterms-da/uniqueness={query} polls"; repeat for more',
+    )
     arguments = parser.parse_args()
     root = config_root(arguments.offline)
     preset = load_daily_presets(root / DAILY_PRESETS_PATH).find(arguments.preset)
     if preset is None:
         sys.exit(f"STOP: this build has no daily preset {arguments.preset!r}")
-    rows = the_rows(root, preset)
+    candidates = [tuple(text.split("=", 1)) for text in arguments.candidate if "=" in text]
+    if len(candidates) != len(arguments.candidate):
+        sys.exit("STOP: a --candidate is PAIR=TEMPLATE, for example midterms-da/uniqueness={query} polls")
+    where, digest = digest_groups(root)
+    rows = the_rows(root, preset, digest, [(pair, template) for pair, template in candidates])
     feeds = the_feeds(root, preset)
     http = HttpSettings() if arguments.offline else settings_loader()().http
     transport = httpx.MockTransport(offline_feed) if arguments.offline else None
@@ -260,6 +305,7 @@ def main() -> None:
         f"failed {len(failed)} run {now.strftime('%Y-%m-%dT%H:%MZ')}"
         + (" OFFLINE" if arguments.offline else "")
     )
+    print(f"digest templates from the {where}" if where != "none" else "digest templates: none found")
     listed: list[tuple[int, FeedEntry]] = []
     links: set[str] = set()
     for index, (_, outcome) in enumerate(read):

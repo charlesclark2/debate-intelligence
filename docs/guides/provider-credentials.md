@@ -9,7 +9,7 @@ of them work better, or at all, with a credential of your own:
 | `DEBATE_PROVIDERS__CONTACT_EMAIL` | Crossref serves you from its public pool, one query a second instead of three, so a long search can leave some of its Crossref queries unasked. |
 | `DEBATE_PROVIDERS__OPENALEX_API_KEY` | OpenAlex answers keyless, with a lower daily allowance. |
 | `DEBATE_PROVIDERS__API_DATA_GOV_KEY` | GovInfo is not asked. The key is free from api.data.gov. |
-| `DEBATE_PROVIDERS__SEMANTIC_SCHOLAR_API_KEY` | Semantic Scholar is asked without a key, from the pool every keyless caller shares. Searches keep to one query a second with a key or without, so today a key only identifies you. No profile enables Semantic Scholar yet. |
+| `DEBATE_PROVIDERS__SEMANTIC_SCHOLAR_API_KEY` | Semantic Scholar is not asked. A search that has it enabled names it `not configured` with the cure, request a key through the form on Semantic Scholar's API page (semanticscholar.org/product/api), and does not count it as partial. The shared keyless pool refused every request in the operator's smoke of 2026-11-11 (`v1-e07-t20`). No profile enables Semantic Scholar yet. |
 
 **When a provider is held.** A provider that answers `429` is asking us to slow down, and a search
 then holds it back (`v1-e07-t22`): its queries still waiting are skipped, never sent, the footer

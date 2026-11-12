@@ -23,6 +23,7 @@ import heapq
 import io
 import itertools
 import json
+import logging
 import os
 import sqlite3
 from collections.abc import Callable, Iterator, Sequence
@@ -990,6 +991,99 @@ def test_the_container_builds_semantic_scholar_with_its_key_when_providers_enabl
     assert request.headers["x-api-key"] == SEMANTIC_SCHOLAR_KEY
     assert SEMANTIC_SCHOLAR_KEY not in result.stdout + result.stderr
     assert seams.providers.transport.closed == 1
+
+
+SEMANTIC_SCHOLAR_MISSING_KEY: Final = "no Semantic Scholar key (DEBATE_PROVIDERS__SEMANTIC_SCHOLAR_API_KEY)"
+"""The registry's reason without a key, as the footer and the JSON print it (v1-e07-t20)."""
+SEMANTIC_SCHOLAR_NOT_COUNTED: Final = (
+    "  semantic_scholar: not configured: not counted as partial: no Semantic Scholar key "
+    "(DEBATE_PROVIDERS__SEMANTIC_SCHOLAR_API_KEY); request one through the form on Semantic Scholar's "
+    "API page, semanticscholar.org/product/api"
+)
+"""Semantic Scholar enabled without its key, on a search that did not name it: named with its cure and
+not counted as partial (the PM's ruling 1 of 2026-11-12 on v1-e07-t20, as v1-e07-t15 rules)."""
+
+
+@pytest.mark.parametrize("blank", [None, "", "   "], ids=["unset", "empty", "spaces"])
+def test_semantic_scholar_enabled_without_a_key_is_named_with_its_cure_never_asked_and_not_counted(
+    seams: Seams, monkeypatch: pytest.MonkeyPatch, blank: str | None
+) -> None:
+    seams.registry_override = False
+    monkeypatch.setenv("DEBATE_PROVIDERS__ENABLED", '["openalex", "semantic_scholar"]')
+    if blank is not None:
+        monkeypatch.setenv("DEBATE_PROVIDERS__SEMANTIC_SCHOLAR_API_KEY", blank)
+
+    result = search("midterm elections", "--since", "2026-09-14")
+
+    assert result.exit_code == ExitCode.OK, result.output
+    assert footer(result) == [
+        "Providers: COMPLETE",
+        "  openalex: ok, 3 results",
+        SEMANTIC_SCHOLAR_NOT_COUNTED,
+    ]
+    assert SEMANTIC_SCHOLAR_HOST not in {request.url.host for request in seams.providers.requests}
+
+
+def test_semantic_scholar_alone_without_a_key_asks_no_provider_and_names_its_cure(
+    seams: Seams, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Nothing was asked, so the search answers as one that asks no enabled provider (exit 1,
+    `NO_PROVIDER_ENABLED`), and still names Semantic Scholar with its cure."""
+    seams.registry_override = False
+    monkeypatch.setenv("DEBATE_PROVIDERS__ENABLED", '["semantic_scholar"]')
+
+    result = search("midterm elections", "--since", "2026-09-14")
+
+    assert result.exit_code == ExitCode.DOMAIN_FAILURE, result.output
+    assert footer(result, stream="stderr")[:2] == ["Providers: FAILED", SEMANTIC_SCHOLAR_NOT_COUNTED]
+    assert "NO_PROVIDER_ENABLED" in result.stderr
+    assert seams.providers.requests == []
+
+
+def test_semantic_scholar_named_with_providers_and_without_a_key_keeps_the_search_partial(
+    seams: Seams, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A provider a person named is a missing answer (v1-e07-t15's ruling 2): PARTIAL, no cure."""
+    seams.registry_override = False
+    monkeypatch.setenv("DEBATE_PROVIDERS__ENABLED", '["openalex", "semantic_scholar"]')
+
+    result = search(
+        "midterm elections",
+        "--since",
+        "2026-09-14",
+        "--providers",
+        "openalex,semantic_scholar",
+        "--format",
+        "json",
+    )
+
+    assert result.exit_code == ExitCode.SEARCH_PARTIAL, result.output
+    error = envelope(result)["error"]
+    assert error["details"]["status"] == "PARTIAL"
+    assert [
+        (entry["provider"], entry["outcome"], entry["reasons"]) for entry in error["details"]["providers"]
+    ] == [("openalex", "ok", []), ("semantic_scholar", "not configured", [SEMANTIC_SCHOLAR_MISSING_KEY])]
+    assert SEMANTIC_SCHOLAR_HOST not in {request.url.host for request in seams.providers.requests}
+
+
+def test_semantic_scholar_s_key_reaches_no_output_and_no_log_line(
+    seams: Seams, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    """The redaction check of the PM's ruling 1 (v1-e07-t20), through the container: with the key set, a
+    search and `doctor --providers` print it nowhere, and no log record at DEBUG on any logger carries it."""
+    seams.registry_override = False
+    monkeypatch.setenv("DEBATE_PROVIDERS__ENABLED", '["semantic_scholar"]')
+    monkeypatch.setenv("DEBATE_PROVIDERS__SEMANTIC_SCHOLAR_API_KEY", SEMANTIC_SCHOLAR_KEY)
+
+    with caplog.at_level(logging.DEBUG):
+        searched = search("carbon-capture subsidies", "--format", "json")
+        doctored = runner.invoke(create_app(), ["doctor", "--providers"])
+
+    assert searched.exit_code == ExitCode.OK, searched.output
+    assert any(request.url.host == SEMANTIC_SCHOLAR_HOST for request in seams.providers.requests)
+    assert SEMANTIC_SCHOLAR_KEY not in searched.stdout + searched.stderr + doctored.stdout + doctored.stderr
+    assert caplog.records
+    assert all(SEMANTIC_SCHOLAR_KEY not in record.getMessage() for record in caplog.records)
 
 
 def test_the_federal_register_is_asked_only_by_a_search_on_a_topic_that_lists_it(

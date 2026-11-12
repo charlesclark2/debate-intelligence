@@ -27,9 +27,9 @@ import respx
 from pydantic import SecretStr
 
 from debate_core.application.errors import ProviderError, ProviderRateLimited, ProviderUnavailable
-from debate_core.application.federated_search import FanOutStage, search_status
+from debate_core.application.federated_search import FanOutStage, FederatedSearchService, search_status
 from debate_core.application.federated_search_types import SearchRequest, SearchState
-from debate_core.application.ports.providers import SearchProvider
+from debate_core.application.ports.providers import Clock, SearchProvider
 from debate_core.application.settings import HttpSettings, ProviderSettings, SearchProviderName
 from debate_core.domain import SearchStatus
 from debate_core.domain.discovery import (
@@ -45,6 +45,7 @@ from debate_core.domain.search import SearchFilters
 from debate_core.integrations.discovery.pace import Pace
 from debate_core.integrations.discovery.redaction import PROTECTED_LOGGERS, logger
 from debate_core.integrations.discovery.registry import (
+    ProviderNotConfigured,
     ProviderRegistry,
     configured_secrets,
     policy_from_settings,
@@ -64,6 +65,7 @@ from debate_core.integrations.discovery.semantic_scholar import (
     semantic_scholar_factory,
     source_type_for,
 )
+from debate_core.testing.builders import build_candidate_result
 from debate_core.testing.contracts.search_provider import (
     Recording,
     ReplayedProvider,
@@ -73,7 +75,9 @@ from debate_core.testing.contracts.search_provider import (
     TransportFailure,
     load_recording,
 )
-from debate_core.testing.fakes.clock_and_ids import FixedClock
+from debate_core.testing.fakes.clock_and_ids import FixedClock, SequentialIdGenerator
+from debate_core.testing.fakes.persistence import InMemorySearchRepository
+from debate_core.testing.fakes.providers import FakeSearchProvider
 from debate_core.testing.virtual_time import EventLoopClock, run_in_virtual_time
 
 pytestmark = pytest.mark.anyio
@@ -140,14 +144,60 @@ def provider_settings(*, api_key: str | None = API_KEY, **overrides: Any) -> Pro
     )
 
 
+def keyless_adapter(
+    transport: httpx.AsyncBaseTransport,
+    settings: ProviderSettings,
+    *,
+    clock: Clock,
+    sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
+) -> SemanticScholarProvider:
+    """The adapter's own keyless mode, built directly over a client like the factory's.
+
+    Since v1-e07-t20 the factory builds nothing without a key (the registry reports Semantic Scholar not
+    configured), so a test of what the adapter itself does without one builds it here.
+    """
+    client = httpx.AsyncClient(
+        headers={"User-Agent": HttpSettings().user_agent(VERSION)},
+        follow_redirects=False,
+        trust_env=False,
+        transport=transport,
+    )
+    return SemanticScholarProvider(
+        client,
+        api_key=settings.semantic_scholar_api_key,
+        timeout_seconds=settings.timeout_seconds,
+        clock=clock,
+        sleep=sleep,
+    )
+
+
+def adapter_factory(
+    *,
+    clock: Clock,
+    sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
+    transport: httpx.AsyncBaseTransport,
+) -> Callable[[ProviderSettings], SemanticScholarProvider]:
+    """The registry's factory when the settings carry a key, and :func:`keyless_adapter` when they do not."""
+    factory = semantic_scholar_factory(
+        HttpSettings(), version=VERSION, clock=clock, sleep=sleep, transport=transport
+    )
+
+    def build(settings: ProviderSettings) -> SemanticScholarProvider:
+        key = settings.semantic_scholar_api_key
+        if key is None or not key.get_secret_value().strip():
+            return keyless_adapter(transport, settings, clock=clock, sleep=sleep)
+        return factory(settings)
+
+    return build
+
+
 def build_over(
     transport: httpx.AsyncBaseTransport, *, api_key: str | None = API_KEY, **overrides: Any
 ) -> SemanticScholarProvider:
-    """The adapter exactly as the registry builds it, over `transport`, on a clock its sleep moves."""
+    """The adapter as the registry builds it, over `transport`, on a clock its sleep moves; without a key,
+    the adapter's keyless mode, which the factory no longer builds (:func:`adapter_factory`)."""
     clock = FixedClock(NOW)
-    factory = semantic_scholar_factory(
-        HttpSettings(), version=VERSION, clock=clock, sleep=instant_sleep(clock), transport=transport
-    )
+    factory = adapter_factory(clock=clock, sleep=instant_sleep(clock), transport=transport)
     return factory(provider_settings(api_key=api_key, **overrides))
 
 
@@ -732,6 +782,109 @@ async def test_a_search_with_no_results_is_an_empty_answer(document: dict[str, A
 
 
 # --------------------------------------------------------------------------------------------
+# Without a key Semantic Scholar is not configured; with one it is built and asked (v1-e07-t20)
+# --------------------------------------------------------------------------------------------
+
+MISSING_KEY: Final = "semantic_scholar: no Semantic Scholar key (DEBATE_PROVIDERS__SEMANTIC_SCHOLAR_API_KEY)"
+"""The registry's reason when no key is set: the setting to set, never a value (the PM's ruling 1 of
+2026-11-12 on v1-e07-t20)."""
+CURE: Final = "request one through the form on Semantic Scholar's API page, semanticscholar.org/product/api"
+"""What a search says after the reason, as `provider_credentials` words it."""
+
+
+def counting_transport() -> tuple[httpx.MockTransport, list[httpx.Request]]:
+    """A transport that answers every request with an empty paper list and keeps each one."""
+    sent: list[httpx.Request] = []
+
+    def answer(request: httpx.Request) -> httpx.Response:
+        sent.append(request)
+        return httpx.Response(200, json=papers())
+
+    return httpx.MockTransport(answer), sent
+
+
+def the_factory(transport: httpx.AsyncBaseTransport) -> Callable[[ProviderSettings], SearchProvider]:
+    clock = FixedClock(NOW)
+    return semantic_scholar_factory(
+        HttpSettings(), version=VERSION, clock=clock, sleep=instant_sleep(clock), transport=transport
+    )
+
+
+@pytest.mark.parametrize("api_key", [None, "", "   "], ids=["none", "empty", "spaces"])
+def test_without_a_key_the_factory_builds_nothing_and_names_the_setting_to_set(api_key: str | None) -> None:
+    transport, sent = counting_transport()
+
+    with pytest.raises(ProviderNotConfigured) as missing:
+        the_factory(transport)(provider_settings(api_key=api_key))
+
+    assert (missing.value.provider, missing.value.reason) == ("semantic_scholar", MISSING_KEY)
+    assert sent == []
+
+
+def test_without_a_key_the_registry_reports_semantic_scholar_not_configured_and_builds_nothing() -> None:
+    transport, sent = counting_transport()
+
+    registry = ProviderRegistry.from_settings(
+        provider_settings(api_key=None),
+        {SearchProviderName.SEMANTIC_SCHOLAR: the_factory(transport)},
+        clock=FixedClock(NOW),
+    )
+
+    assert registry.providers == ()
+    assert dict(registry.not_configured) == {"semantic_scholar": MISSING_KEY}
+    assert registry.health() == ()
+    assert sent == []
+
+
+def test_without_a_key_a_search_names_semantic_scholar_with_its_cure_and_does_not_count_it() -> None:
+    """The ruling of v1-e07-t15 for a profile-enabled provider that is not configured: named in the record
+    with its cure, never asked, and left out of the status, so OpenAlex's answer makes the search COMPLETE."""
+    transport, sent = counting_transport()
+    clock = FixedClock(NOW)
+    found = build_candidate_result(provider="openalex")
+    registry = ProviderRegistry.from_settings(
+        ProviderSettings(enabled=(SearchProviderName.OPENALEX, SearchProviderName.SEMANTIC_SCHOLAR)),
+        {
+            SearchProviderName.OPENALEX: lambda settings: FakeSearchProvider(
+                "openalex", default_results=(found,)
+            ),
+            SearchProviderName.SEMANTIC_SCHOLAR: the_factory(transport),
+        },
+        clock=clock,
+    )
+    service = FederatedSearchService(
+        registry, InMemorySearchRepository(), clock=clock, ids=SequentialIdGenerator("SRCH")
+    )
+
+    outcome = run_in_virtual_time(service.search(SearchRequest(query="carbon capture subsidies")))
+
+    assert [(status.provider, status.outcome, status.error) for status in outcome.provider_statuses] == [
+        ("openalex", ProviderOutcome.OK, None),
+        ("semantic_scholar", ProviderOutcome.NOT_CONFIGURED, f"{MISSING_KEY}; {CURE}"),
+    ]
+    assert outcome.uncounted == ("semantic_scholar",)
+    assert outcome.status is SearchStatus.COMPLETE
+    assert sent == []
+
+
+def test_with_a_key_the_registry_builds_semantic_scholar_at_the_keyed_pace_and_asks_it() -> None:
+    transport, sent = counting_transport()
+
+    registry = ProviderRegistry.from_settings(
+        provider_settings(),
+        {SearchProviderName.SEMANTIC_SCHOLAR: the_factory(transport)},
+        clock=FixedClock(NOW),
+    )
+    answer = run_in_virtual_time(registry.get("semantic_scholar").search(CARBON_CAPTURE))
+
+    assert dict(registry.not_configured) == {}
+    assert [provider.name for provider in registry.providers] == ["semantic_scholar"]
+    assert (answer.results, answer.partial) == ((), False)
+    [request] = sent
+    assert request.headers["x-api-key"] == API_KEY
+
+
+# --------------------------------------------------------------------------------------------
 # The pace, with a key and without one
 # --------------------------------------------------------------------------------------------
 
@@ -766,9 +919,7 @@ def started_at(
             await asyncio.sleep(answer_seconds)
             return httpx.Response(200, json=papers())
 
-        factory = semantic_scholar_factory(
-            HttpSettings(), version=VERSION, clock=clock, transport=httpx.MockTransport(answer)
-        )
+        factory = adapter_factory(clock=clock, transport=httpx.MockTransport(answer))
         provider = factory(provider_settings(api_key=api_key, timeout_seconds=timeout_seconds))
         await asyncio.gather(*(provider.search(query) for query in queries(count)))
         return started
@@ -804,9 +955,7 @@ def paced_search(
             await asyncio.sleep(answer_seconds)
             return httpx.Response(200, json=papers(a_paper(paperId=f"{len(asked):040x}")))
 
-        factory = semantic_scholar_factory(
-            HttpSettings(), version=VERSION, clock=clock, transport=httpx.MockTransport(answer)
-        )
+        factory = adapter_factory(clock=clock, transport=httpx.MockTransport(answer))
         registry = ProviderRegistry.from_settings(
             provider_settings(api_key=api_key), {SearchProviderName.SEMANTIC_SCHOLAR: factory}, clock=clock
         )
@@ -1044,9 +1193,7 @@ def every_answer_refused(
             headers = {} if retry_after is None else {"Retry-After": retry_after}
             return httpx.Response(status, headers=headers)
 
-        factory = semantic_scholar_factory(
-            HttpSettings(), version=VERSION, clock=clock, transport=httpx.MockTransport(answer)
-        )
+        factory = adapter_factory(clock=clock, transport=httpx.MockTransport(answer))
         settings = provider_settings(api_key=None)
         provider = ResilientProvider(
             factory(settings),
@@ -1135,9 +1282,7 @@ def test_the_nights_search_names_semantic_scholar_rate_limited_on_every_query() 
             await asyncio.sleep(ANSWER_SECONDS)
             return httpx.Response(429)
 
-        factory = semantic_scholar_factory(
-            HttpSettings(), version=VERSION, clock=clock, transport=httpx.MockTransport(answer)
-        )
+        factory = adapter_factory(clock=clock, transport=httpx.MockTransport(answer))
         registry = ProviderRegistry.from_settings(
             provider_settings(api_key=None), {SearchProviderName.SEMANTIC_SCHOLAR: factory}, clock=clock
         )

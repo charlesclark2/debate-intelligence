@@ -64,11 +64,11 @@ v2.3's extension work.
 | [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 4 | 125 | 105 | 550 |
 | [v1.2](plan_specs/releases/v1.2.yaml) | Argument landscape & file building | 3 | 99 | 82 | 366 |
 | [v1.3](plan_specs/releases/v1.3.yaml) | URL → verified card | 2 | 24 | 15 | 125 |
-| [v1.4](plan_specs/releases/v1.4.yaml) | Federated research from the CLI | 2 | 48 | 24 | 158 |
+| [v1.4](plan_specs/releases/v1.4.yaml) | Federated research from the CLI | 2 | 48 | 25 | 158 |
 | [v1.5](plan_specs/releases/v1.5.yaml) | V1 quality gate & team pilot | 1 | 7 | 1 | 66 |
 | [v1.6](plan_specs/releases/v1.6.yaml) | Public team website | 3 | 31 | 22 | 169 |
 | [v1.7](plan_specs/releases/v1.7.yaml) | Team evidence search pilot | 1 | 30 | 25 | 100 |
-| [v1.8](plan_specs/releases/v1.8.yaml) | Weekly caselist run in the cloud | 2 | 74 | 44 | 136 |
+| [v1.8](plan_specs/releases/v1.8.yaml) | Weekly caselist run in the cloud | 2 | 74 | 45 | 136 |
 | [v2.0](plan_specs/releases/v2.0.yaml) | Cloud platform foundation | 3 | 17 | 0 | 164 |
 | [v2.1](plan_specs/releases/v2.1.yaml) | Web app, debate tub & async jobs | 3 | 18 | 0 | 198 |
 | [v2.2](plan_specs/releases/v2.2.yaml) | Research workspace | 2 | 12 | 0 | 117 |
@@ -519,7 +519,7 @@ A student can run `debate-research cut <URL>` and receive a verified, tagged, ci
 | [An expansion on a topic only a feed file names falls back cleanly, and a pair's templates are capped](plan_specs/v1/e08-research-workflows/t13-topic-expansion-fallback-and-templates-per-pair.yaml) `v1-e08-t13-topic-expansion-fallback-and-templates-per-pair` | Pending | 2 | 1.0 |
 | [A disadvantage's link queries name the plan's mechanism and the United States](plan_specs/v1/e08-research-workflows/t14-da-links-name-the-plans-mechanism-in-the-united-states.yaml) `v1-e08-t14-da-links-name-the-plans-mechanism-in-the-united-states` | Succeeded | 2 | 3.0 |
 | [LD research starts broad and narrows from what the first page turns up](plan_specs/v1/e08-research-workflows/t15-ld-research-starts-broad-and-narrows-from-the-first-page.yaml) `v1-e08-t15-ld-research-starts-broad-and-narrows-from-the-first-page` | Pending | 1 | 3.0 |
-| [A DA's mechanism queries cross the link templates the coach chose, and a preset may name more mechanisms](plan_specs/v1/e08-research-workflows/t16-mechanism-queries-cross-the-chosen-link-templates.yaml) `v1-e08-t16-mechanism-queries-cross-the-chosen-link-templates` | Pending | 2 | 3.0 |
+| [A DA's mechanism queries cross the link templates the coach chose, and a preset may name more mechanisms](plan_specs/v1/e08-research-workflows/t16-mechanism-queries-cross-the-chosen-link-templates.yaml) `v1-e08-t16-mechanism-queries-cross-the-chosen-link-templates` | InProgress | 2 | 3.0 |
 | [`--max-cost` is one limit for the whole command, whatever routers it builds](plan_specs/v1/e08-research-workflows/t17-one-max-cost-across-every-router-a-command-builds.yaml) `v1-e08-t17-one-max-cost-across-every-router-a-command-builds` | Succeeded | 1 | 2.0 |
 | [An auto-cut run's report does not replace the last run's in the same directory](plan_specs/v1/e08-research-workflows/t18-auto-cut-report-names-per-run.yaml) `v1-e08-t18-auto-cut-report-names-per-run` | Pending | 2 | 1.0 |
 | [A batching provider's footer counts the distinct works it returned, not one per query](plan_specs/v1/e08-research-workflows/t19-a-batching-providers-footer-counts-distinct-works.yaml) `v1-e08-t19-a-batching-providers-footer-counts-distinct-works` | Pending | 1 | 1.0 |
@@ -527,7 +527,7 @@ A student can run `debate-research cut <URL>` and receive a verified, tagged, ci
 | [Two results sharing a DOI are one work, even under two OpenAlex work ids](plan_specs/v1/e08-research-workflows/t21-a-shared-doi-overrules-differing-openalex-ids.yaml) `v1-e08-t21-a-shared-doi-overrules-differing-openalex-ids` | Pending | 1 | 1.0 |
 | [The auto-cut report states the whole command's spend beside its own calls' cost](plan_specs/v1/e08-research-workflows/t22-auto-cut-report-states-the-commands-whole-cost.yaml) `v1-e08-t22-auto-cut-report-states-the-commands-whole-cost` | Pending | 1 | 1.0 |
 | [A politics DA's link queries pair the DA's agenda item with the plan's mechanism](plan_specs/v1/e08-research-workflows/t23-politics-da-links-pair-the-agenda-item-with-the-plans-mechanism.yaml) `v1-e08-t23-politics-da-links-pair-the-agenda-item-with-the-plans-mechanism` | Pending | 2 | 4.0 |
-| [On a search of many queries, the ranking keeps the results the coach marks relevant above the providers' own order](plan_specs/v1/e08-research-workflows/t24-the-ranking-keeps-a-multi-query-searchs-relevant-results-up.yaml) `v1-e08-t24-the-ranking-keeps-a-multi-query-searchs-relevant-results-up` | Pending | 2 | 4.0 |
+| [On a search of many queries, the ranking keeps the results the coach marks relevant above the providers' own order](plan_specs/v1/e08-research-workflows/t24-the-ranking-keeps-a-multi-query-searchs-relevant-results-up.yaml) `v1-e08-t24-the-ranking-keeps-a-multi-query-searchs-relevant-results-up` | Succeeded | 2 | 4.0 |
 | [A daily digest's queries find what the feeds carry, measured on a real digest first](plan_specs/v1/e08-research-workflows/t25-digest-queries-and-the-feeds-every-word-rule.yaml) `v1-e08-t25-digest-queries-and-the-feeds-every-word-rule` | Pending | 1 | 2.0 |
 
 
@@ -725,7 +725,7 @@ The weekly caselist run (pull, import, publish, parse, search index) runs in the
 | [The cluster comparison's key test does not race a 0.3-second timer](plan_specs/v1/e41-delivery-tooling-upkeep/t24-the-cluster-comparison-key-test-without-a-timer-race.yaml) `v1-e41-t24-the-cluster-comparison-key-test-without-a-timer-race` | Pending | 1 | 1.0 |
 | [.env.example says where the caselist token is kept, not in .env](plan_specs/v1/e41-delivery-tooling-upkeep/t25-env-example-says-where-the-caselist-token-lives.yaml) `v1-e41-t25-env-example-says-where-the-caselist-token-lives` | Pending | 1 | 0.5 |
 | [debate_api no longer declares markdown-it-py, which it gets through debate-core](plan_specs/v1/e41-delivery-tooling-upkeep/t26-debate-api-drops-its-own-markdown-it-py.yaml) `v1-e41-t26-debate-api-drops-its-own-markdown-it-py` | Pending | 2 | 1.0 |
-| [The spec validator refuses an unfinished task with no prerequisites unless it says why](plan_specs/v1/e41-delivery-tooling-upkeep/t27-a-task-names-its-prerequisites-or-why-it-has-none.yaml) `v1-e41-t27-a-task-names-its-prerequisites-or-why-it-has-none` | Pending | 1 | 2.0 |
+| [The spec validator refuses an unfinished task with no prerequisites unless it says why](plan_specs/v1/e41-delivery-tooling-upkeep/t27-a-task-names-its-prerequisites-or-why-it-has-none.yaml) `v1-e41-t27-a-task-names-its-prerequisites-or-why-it-has-none` | Succeeded | 1 | 2.0 |
 
 
 ## V2

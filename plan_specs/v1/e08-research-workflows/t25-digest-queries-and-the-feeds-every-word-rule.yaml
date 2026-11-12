@@ -23,9 +23,15 @@ spec:
     results per query, as counts. Then propose, from those counts only, one of: shorter preset
     queries for the coach, digest-specific templates, or a looser feed match for digests (the
     query's own words required, the template's words ranked), and stop for the PM's ruling.
+    (PM amendment 2026-11-11.) The operator's counts are in: on 2026-11-11 the politics digest
+    asked 10 queries of the politics feeds and found 0 results with no --date, and 1 with --date
+    2026-11-11 --window 3d (v1-e08-t07's operator records). Also in this task: with no --date,
+    `daily` takes the UTC date, so a digest run in the coach's evening covers only the hours since
+    UTC midnight. Propose the default (the coach's local date from a configured time zone, or the 24
+    hours before the run) with the queries, and stop for the ruling.
   priority: 3
   constraints:
-    packages: [debate_core.application, debate_core.integrations.discovery, config, packages/debate_core/tests, packages/debate_cli/tests, docs/guides]
+    packages: [debate_core.application, debate_core.integrations.discovery, debate_cli, config, packages/debate_core/tests, packages/debate_cli/tests, docs/guides]
     forbidden:
       - A change to a coach-reviewed template
       - A title from a real feed in a test, log or report
@@ -42,6 +48,10 @@ spec:
     - id: ac2
       description: >-
         The ruled change holds, by tests on fixtures shown failing first.
+    - id: ac3
+      description: >-
+        (PM amendment 2026-11-11) A digest run with no --date covers the ruled day or hours,
+        not the UTC date's, by tests on an injected clock shown failing first.
 status:
   phase: Pending
 ---

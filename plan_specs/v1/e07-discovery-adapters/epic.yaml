@@ -474,6 +474,8 @@ spec:
       dependsOn:
       - t04
       - t13
+      - t22
+      - t15
       acceptanceCriteria:
       - type: command_succeeds
         name: Task spec v1-e07-t20-semantic-scholar-enabled-after-its-live-smoke reports phase Succeeded
@@ -503,5 +505,46 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e07-t21-influential-citations-weighed-or-not-asked
+    - id: t22
+      kind: Task
+      name: 'A paced call checks the breaker and the rate-limit hold when its turn comes, and a 429 backs the provider off exponentially'
+      description: >-
+        A paced call checks the breaker and the rate-limit hold when its turn comes, and a
+        429 backs the provider off exponentially.
+      inputs:
+        specRef: plan_specs/v1/e07-discovery-adapters/t22-a-paced-call-checks-the-breaker-at-its-turn-and-backs-off-on-429.yaml
+        goalRef: v1-e07-t22-a-paced-call-checks-the-breaker-at-its-turn-and-backs-off-on-429
+      dependsOn:
+      - t10
+      - t04
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e07-t22-a-paced-call-checks-the-breaker-at-its-turn-and-backs-off-on-429 reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e07-t22-a-paced-call-checks-the-breaker-at-its-turn-and-backs-off-on-429
+    - id: t23
+      kind: Task
+      name: 'A provider missing only configuration is named with its cure wherever it appears, and counts as partial only when a person asked for it'
+      description: >-
+        A provider missing only configuration is named with its cure wherever it appears,
+        and counts as partial only when a person asked for it.
+      inputs:
+        specRef: plan_specs/v1/e07-discovery-adapters/t23-configuration-gaps-named-with-their-cure-everywhere.yaml
+        goalRef: v1-e07-t23-configuration-gaps-named-with-their-cure-everywhere
+      dependsOn:
+      - t15
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e07-t23-configuration-gaps-named-with-their-cure-everywhere reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e07-t23-configuration-gaps-named-with-their-cure-everywhere
 status:
   phase: Pending

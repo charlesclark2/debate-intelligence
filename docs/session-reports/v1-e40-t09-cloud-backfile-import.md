@@ -375,3 +375,13 @@ Added by the PM. Nothing above is changed, and this section is not a review.
 | ac3: the four imports, at most one a day, counts in docs/data | PASS for hspolicy25; three imports and the weekly run after remain | Four imports PASS; the weekly run after the fourth remains | hsld25 2026-11-06/07 overnight, hspolicy24 2026-11-08, hsld24 2026-11-09 (started 02:05 Chicago), each a hand-started task of revision 15 (`v1.1.0-dev.380`, parser `2026.11.03-docx-9`), each after its dry run the same day: status ok, applied, downloaded bytes equal to the dry run's archive bytes, every source stored and uploaded, none held, the archive out of the inbox, no code. Counts in docs/data/caselist-backfile-seasons.md |
 
 The Goal stays `InProgress`: ac3 closes with the weekly run of 2026-11-11, the first after the fourth import, restoring and finishing in its usual time.
+
+## Operator records (recorded by the PM, 2026-11-11)
+
+Added by the PM. Nothing above is changed, and this section is not a review.
+
+| Criterion | Was | Now | Record |
+|---|---|---|---|
+| ac3: the weekly run after the fourth import | the weekly run after the fourth remains | PASS | `20261111T120101Z`, the scheduled run of 2026-11-11 (task definition revision 15, parser 2026.11.03-docx-9): completed, 12:00:55 to 13:53:52 UTC (113 minutes; the 2026-11-05 full parse at docx-7 took 87). It restored in 6.7 s with `parsed_objects` 0, as no docx-9 directory existed, and parsed its four caselists in full in 92 minutes (20,746 sources, 392,919 cards, 3 failed); the index took 15 minutes. `took_over` null, `lock_lost` false, the bundle saved (17,170,485 bytes), the lock free with home dev after it. The backfiles were not restored, as the weekly run follows the current caselists only |
+
+Every criterion passes, so the Goal is `Succeeded`.

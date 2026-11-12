@@ -1140,7 +1140,11 @@ want of a directory of the new version, and the operator re-parsed by hand from 
 That is no longer needed. The run's parse stage reason says `parsed in full, as the parsed store
 held no directory of parser version <version>`, and its counts give `full_parses`.
 
-**How long it takes.** No cloud run has parsed in full yet, so this is from the Mac's figures. The
+**How long it takes.** Measured since (recorded by the PM, 2026-11-11): the first full parse at
+`2026.11.03-docx-9`, run `20261111T120101Z`, parsed 20,746 sources of four caselists in 92 minutes,
+and the whole run took 113 minutes, its index stage 15 of them; the full parse at `2026.10.27-docx-7`,
+run `20261105T034547Z`, took 87 minutes in all. The estimate written before either, from the Mac's
+figures, follows. The
 2026-10-11 full parse under `2026.10.10-docx-2` took 1,465 s for 11,126 sources, parse, rebuild and
 publish; on 2026-10-30 hspolicy26 alone took 981 s for 4,342 sources, 1.6 times its 2,657 sources
 and 611 s of 2026-10-11. With every caselist grown alike, a full parse is about 2,400 s, 40 minutes,

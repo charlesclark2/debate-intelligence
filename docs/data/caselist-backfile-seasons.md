@@ -127,4 +127,8 @@ was the quickest a source, 0.14 s against 0.31 s for hspolicy24. With all four i
 **The weekly run after the first import** (ac3): `20261105T034547Z`, a hand run of the weekly run's
 task definition (revision 11) after the scheduled launch was refused on 2026-11-04: completed,
 03:45:47 to 05:12:57 UTC (87 minutes), recorded in `v1-e40-t09`'s report. **The run after the fourth
-import** is 2026-11-11's, the first docx-9 run; its run id, outcome and minutes go here.
+import**, `20261111T120101Z` (recorded by the PM, 2026-11-11): the scheduled run of 2026-11-11 on
+revision 15, the first at `2026.11.03-docx-9`, completed in 113 minutes, 12:00:55 to 13:53:52 UTC. Its
+restore took 6.7 s and brought back no parsed object, since no docx-9 directory existed; it parsed its
+four caselists in full in 92 minutes (20,746 sources, 392,919 cards), left the lock free and saved its
+bundle. The four backfiles, which the weekly run does not follow, changed none of its stages.

@@ -1,0 +1,94 @@
+# TASK v1-e07-t22-a-paced-call-checks-the-breaker-at-its-turn-and-backs-off-on-429 - A paced call checks the breaker and the rate-limit hold when its turn comes, and a 429 backs the provider off exponentially
+# Epic: E07 Discovery Provider Adapters | Release: v1.4 (Federated research from the CLI) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e07-t22-a-paced-call-checks-the-breaker-at-its-turn-and-backs-off-on-429
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.4
+    debate/epic: v1-e07-discovery-adapters
+  annotations:
+    debate/title: "A paced call checks the breaker and the rate-limit hold when its turn comes, and a 429 backs the provider off exponentially"
+spec:
+  # Filed by the PM, 2026-11-11, from the operator's Semantic Scholar smoke of 2026-11-11 and the API-key agreement of the same day.
+  description: >-
+    On 2026-11-11 the operator's keyless Semantic Scholar smoke (v1-e07-t04's operator follow-up
+    1) got HTTP 429 on every request: the single query, and all 7 of the expanded search. The
+    breaker opened after the third failure, yet four more requests were sent, because each query
+    took its breaker permit and passed the rate-limit hold when it joined its pace's queue, not
+    when the pace released it. The same gap holds for Crossref's queue. The same day the
+    operator agreed, in requesting a Semantic Scholar API key, to apply exponential backoff and
+    similar measures to protect its systems. So: (1) a call queued on its pace checks the
+    breaker and the rate-limit hold again when its turn comes, and one they would now refuse is
+    not sent: it is answered as the breaker or the hold answers a call, a skip, never a failure;
+    (2) a 429 holds the provider for Retry-After's seconds when the answer gives them, and
+    otherwise for an exponential hold with jitter, from a stated base, doubling with each
+    consecutive 429 up to a stated cap, and reset by an answer; (3) both apply to every adapter
+    ResilientProvider wraps. The constants and their reasons are in the module, and the search
+    guide says what a student sees. The key is not used until this merges (v1-e07-t20 depends on
+    it).
+  priority: 2
+  constraints:
+    packages: [debate_core.integrations.discovery, debate_core.application, debate_core.domain, packages/debate_core/tests, docs/guides]
+    forbidden:
+      - A request sent to a provider whose breaker is open or whose rate-limit hold has not ended
+      - A live provider call or a real sleep in a test
+      - Time queued on a pace counted towards a timeout or a latency
+  context:
+    - kind: TaskRef
+      name: v1-e07-t10-time-waiting-on-a-pace-is-not-a-failure
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e07-t04-semantic-scholar-adapter
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        A call whose turn comes while the breaker is open or a hold has not ended is not
+        sent and is counted as skipped, and the night's case (eight queries, every answer
+        429) sends no request inside a hold, by tests on virtual time shown failing first.
+    - id: ac2
+      description: >-
+        A 429 holds the provider for Retry-After's seconds, or without it for an exponential
+        hold with jitter from the stated base to the stated cap, reset by an answer, by
+        tests with an injected random source shown failing first, with mutants on the
+        doubling, the cap, the reset and the turn-time check.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e07-t22-a-paced-call-checks-the-breaker-at-its-turn-and-backs-off-on-429-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.4
+    debate/epic: v1-e07-discovery-adapters
+spec:
+  description: >-
+    A paced call checks the breaker and the rate-limit hold when its turn comes, and a 429 backs
+    the provider off exponentially.
+  goalRef:
+    name: v1-e07-t22-a-paced-call-checks-the-breaker-at-its-turn-and-backs-off-on-429
+  graph:
+    nodes:
+      - id: a-paced-call-checks-the-breaker-at-its-t
+        kind: Task
+        name: Back off at the turn
+        description: >-
+          A paced call checks the breaker and the rate-limit hold when its turn comes, and
+          a 429 backs the provider off exponentially.
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Back off at the turn tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/integrations/discovery, -k, resilien or pace or semantic or crossref]
+status:
+  phase: Pending

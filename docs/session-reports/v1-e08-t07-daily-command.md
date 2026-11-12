@@ -405,3 +405,18 @@ after which `test_search_command.py` passed whole.
    before v1-e07-t10 and v1-e07-t04, and v1-e07-t04 also changes `debate_cli/container.py`. So if it merges
    first, run `scripts/task sync` here before the PR, keep both changes, and re-run `test_daily_command.py`,
    `test_search_command.py` and `test_container_factories.py`.
+
+## Operator records (recorded by the PM, 2026-11-11)
+
+Added by the PM. Nothing above is changed, and this section is not a review.
+
+The optional real politics digest ran on 2026-11-11 from `v1.1.0-dev.402`, into a Desktop scratch
+folder used as its data directory:
+
+* with no `--date` (dated 2026-11-12, the UTC date at 23:00 Chicago, so a window of about five hours):
+  exit 0, COMPLETE, `rss ok`, 10 queries, **0 results**;
+* `--date 2026-11-11 --window 3d`: exit 0, COMPLETE, 10 queries, **1 new result** (politics DA 1,
+  midterms DA 0).
+
+The every-word rule, not the window, is what starves the digest (`v1-e08-t25`), and the default date
+is UTC's, not the coach's (added to `v1-e08-t25`).

@@ -23,6 +23,11 @@ spec:
     (PM note 2026-11-09.) v1-e31-t38, running now, makes the same test deterministic and was
     asked to meet this task's ac1 too. The PM closes this task at v1-e31-t38's review: Succeeded
     if t38's evidence meets ac1, otherwise amended to what is left.
+    (PM note 2026-11-11, at v1-e31-t38's review.) v1-e31-t38 starts a source's limit when its
+    worker is ready, so the time-limit tests no longer depend on spawn speed (shown with every spawn
+    slowed by 2 and 5 s). What is left is this task's ac1 as written: the time-limit test and t38's
+    reused-worker test still measure real parse time against 1.5 s, and neither has been run 20
+    times under a busy-loop process per core.
   priority: 3
   constraints:
     packages: [debate_core.application, packages/debate_core/tests]

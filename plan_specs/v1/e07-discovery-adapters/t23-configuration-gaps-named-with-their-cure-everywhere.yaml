@@ -1,0 +1,78 @@
+# TASK v1-e07-t23-configuration-gaps-named-with-their-cure-everywhere - A provider missing only configuration is named with its cure wherever it appears, and counts as partial only when a person asked for it
+# Epic: E07 Discovery Provider Adapters | Release: v1.4 (Federated research from the CLI) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e07-t23-configuration-gaps-named-with-their-cure-everywhere
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.4
+    debate/epic: v1-e07-discovery-adapters
+  annotations:
+    debate/title: "A provider missing only configuration is named with its cure wherever it appears, and counts as partial only when a person asked for it"
+spec:
+  # Filed by the PM, 2026-11-11, from v1-e07-t15's follow-ups 1 to 3 (the PM's review, 2026-11-11).
+  description: >-
+    v1-e07-t15 leaves a provider the profile enables but cannot build, for want of a key or an
+    email, out of the partial reckoning, and names it with its cure. The PM's review ruled its
+    three follow-ups: (1) a daily preset's provider that the profile does not enable at all is
+    configuration too, so it is named with `enable it in providers.enabled` and not counted; (2)
+    a provider a person names with --providers that lacks its key gets the cure in its reason as
+    well, and still makes the search PARTIAL, and the pin in tests/smoke/test_search_smoke.py
+    moves with it; (3) batch report's `partial_providers` leaves out the providers a search did
+    not count, which stay listed in `providers`.
+  priority: 3
+  constraints:
+    packages: [debate_core.application, debate_cli, packages/debate_core/tests, packages/debate_cli/tests, tests/smoke]
+    forbidden:
+      - A provider hidden from the footer, `providers` or `reasons`
+      - A live provider call in a test
+      - Business logic in debate_cli
+  context:
+    - kind: TaskRef
+      name: v1-e07-t15-a-provider-without-its-key-does-not-make-a-search-partial
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        A preset provider the profile does not enable is named with its cure and not
+        counted, a named provider without its key is named with its cure and still PARTIAL,
+        and partial_providers leaves out uncounted providers, by tests shown failing first.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e07-t23-configuration-gaps-named-with-their-cure-everywhere-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.4
+    debate/epic: v1-e07-discovery-adapters
+spec:
+  description: >-
+    A provider missing only configuration is named with its cure wherever it appears, and counts
+    as partial only when a person asked for it.
+  goalRef:
+    name: v1-e07-t23-configuration-gaps-named-with-their-cure-everywhere
+  graph:
+    nodes:
+      - id: configuration-gaps-named-with-their-cure
+        kind: Task
+        name: Cures everywhere
+        description: >-
+          A provider missing only configuration is named with its cure wherever it
+          appears, and counts as partial only when a person asked for it.
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Cures everywhere tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests, packages/debate_cli/tests, -k, not_configured or uncounted or partial_providers]
+status:
+  phase: Pending

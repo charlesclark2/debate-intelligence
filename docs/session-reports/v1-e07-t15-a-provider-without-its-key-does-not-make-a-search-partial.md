@@ -230,9 +230,62 @@ For the PM:
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-11-11
 
 **Notes:**
+
+The PM read the rule in the worktree.
+- `search_status(..., uncounted=)` leaves out only the `NOT_CONFIGURED` calls of an uncounted
+  provider, so any other outcome it had still counts.
+- `FanOutStage.uncounted` returns nothing when a person named the providers, and otherwise the
+  selected providers that the registry could not build and that the topic allows.
+- The cure is appended in the application, so the footer, `reasons` and `provider_calls[].error`
+  carry the same words.
+- `providers_named` defaults to True, which counts a provider. So any caller that doesn't say
+  otherwise keeps today's rule, and only `daily` sets it to False.
+
+This is the rule as ruled on 2026-11-09, and the business logic stays in `debate_core.application`.
+
+1. **ac1 passes.**
+   - Red ran against a skeleton that has the names and no behaviour: 20 failed, each at an assertion.
+     The new tests that already passed are explained as rules that already held.
+   - Green: 140 in the selection, and 421 over the changed files.
+   - All 15 mutants on the partial reckoning are caught. They cover:
+     - leaving out every call against only `not_configured` ones;
+     - named providers left out;
+     - the topic gate;
+     - the cure on named providers;
+     - the stored status;
+     - `daily` asking as named.
+   - The interrupted first mutant loop is reported plainly, its leftover mutant restored, and the run
+     repeated in bounded batches. That is the right handling.
+2. **Rulings 1 to 4 hold.**
+   - GovInfo without a key leaves an NHI search COMPLETE (exit 0) and still names GovInfo with its
+     cure.
+   - `--providers openalex,govinfo` is still PARTIAL, exit 6, with today's reason.
+   - `daily nhi` without the key exits 0, COMPLETE.
+   - Nothing is hidden or reordered.
+   - The PM checked the cure's address: api.data.gov/signup is api.data.gov's key sign-up page (read
+     2026-11-11).
+3. **Deviations accepted.**
+   - The `--providers` proposal was recorded and not stopped on, as the prompt ruled.
+   - `daily` was changed inside the spec's packages.
+   - The option is really `--providers`.
+4. **Decisions accepted.**
+   - The narrow reading: a missing key or email only. Ruling 1 said exactly that; ruling 3 extended
+     it to a preset's providers, not to providers the profile leaves off.
+   - The cure's place and words, and the exit-7 message.
+   - `partial_providers` left unchanged.
+   - The daily test's moving clock, which keeps Crossref's pace out of a test about GovInfo with no
+     real waiting.
+5. **Follow-ups 1 to 3:** the PM files them in the next batch as one E07 task (p3), as ruled here:
+   - **(1) Yes.** A daily preset's provider that the profile does not enable is configuration too.
+     It is named with `enable it in providers.enabled` and not counted.
+   - **(2) Yes.** A named provider without its key gets the cure in its reason too, and stays
+     PARTIAL. The smoke pin moves with it.
+   - **(3) Yes.** `batch report`'s `partial_providers` excludes uncounted providers, since the key's
+     name says partial. They stay listed in `providers`.
+6. **Merge:** a plain `scripts/task pr` once `ci` is green. The Goal is `Succeeded`.

@@ -64,7 +64,7 @@ v2.3's extension work.
 | [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 4 | 125 | 105 | 550 |
 | [v1.2](plan_specs/releases/v1.2.yaml) | Argument landscape & file building | 3 | 99 | 82 | 366 |
 | [v1.3](plan_specs/releases/v1.3.yaml) | URL → verified card | 2 | 24 | 15 | 125 |
-| [v1.4](plan_specs/releases/v1.4.yaml) | Federated research from the CLI | 2 | 48 | 27 | 158 |
+| [v1.4](plan_specs/releases/v1.4.yaml) | Federated research from the CLI | 2 | 48 | 28 | 158 |
 | [v1.5](plan_specs/releases/v1.5.yaml) | V1 quality gate & team pilot | 1 | 7 | 1 | 66 |
 | [v1.6](plan_specs/releases/v1.6.yaml) | Public team website | 3 | 31 | 22 | 169 |
 | [v1.7](plan_specs/releases/v1.7.yaml) | Team evidence search pilot | 1 | 30 | 25 | 100 |
@@ -523,7 +523,7 @@ A student can run `debate-research cut <URL>` and receive a verified, tagged, ci
 | [`--max-cost` is one limit for the whole command, whatever routers it builds](plan_specs/v1/e08-research-workflows/t17-one-max-cost-across-every-router-a-command-builds.yaml) `v1-e08-t17-one-max-cost-across-every-router-a-command-builds` | Succeeded | 1 | 2.0 |
 | [An auto-cut run's report does not replace the last run's in the same directory](plan_specs/v1/e08-research-workflows/t18-auto-cut-report-names-per-run.yaml) `v1-e08-t18-auto-cut-report-names-per-run` | Pending | 2 | 1.0 |
 | [A batching provider's footer counts the distinct works it returned, not one per query](plan_specs/v1/e08-research-workflows/t19-a-batching-providers-footer-counts-distinct-works.yaml) `v1-e08-t19-a-batching-providers-footer-counts-distinct-works` | Pending | 1 | 1.0 |
-| [A typed query with an unbalanced parenthesis or a bare operator cannot change or break the joined search](plan_specs/v1/e08-research-workflows/t20-a-typed-query-that-would-break-the-joined-search.yaml) `v1-e08-t20-a-typed-query-that-would-break-the-joined-search` | Pending | 1 | 2.0 |
+| [A typed query with an unbalanced parenthesis or a bare operator cannot change or break the joined search](plan_specs/v1/e08-research-workflows/t20-a-typed-query-that-would-break-the-joined-search.yaml) `v1-e08-t20-a-typed-query-that-would-break-the-joined-search` | Succeeded | 1 | 2.0 |
 | [Two results sharing a DOI are one work, even under two OpenAlex work ids](plan_specs/v1/e08-research-workflows/t21-a-shared-doi-overrules-differing-openalex-ids.yaml) `v1-e08-t21-a-shared-doi-overrules-differing-openalex-ids` | Succeeded | 1 | 1.0 |
 | [The auto-cut report states the whole command's spend beside its own calls' cost](plan_specs/v1/e08-research-workflows/t22-auto-cut-report-states-the-commands-whole-cost.yaml) `v1-e08-t22-auto-cut-report-states-the-commands-whole-cost` | Pending | 1 | 1.0 |
 | [A politics DA's link queries pair the DA's agenda item with the plan's mechanism](plan_specs/v1/e08-research-workflows/t23-politics-da-links-pair-the-agenda-item-with-the-plans-mechanism.yaml) `v1-e08-t23-politics-da-links-pair-the-agenda-item-with-the-plans-mechanism` | Pending | 2 | 4.0 |

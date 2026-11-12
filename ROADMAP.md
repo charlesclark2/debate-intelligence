@@ -64,7 +64,7 @@ v2.3's extension work.
 | [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 4 | 125 | 105 | 550 |
 | [v1.2](plan_specs/releases/v1.2.yaml) | Argument landscape & file building | 3 | 99 | 82 | 366 |
 | [v1.3](plan_specs/releases/v1.3.yaml) | URL → verified card | 2 | 24 | 15 | 125 |
-| [v1.4](plan_specs/releases/v1.4.yaml) | Federated research from the CLI | 2 | 46 | 23 | 152 |
+| [v1.4](plan_specs/releases/v1.4.yaml) | Federated research from the CLI | 2 | 46 | 24 | 152 |
 | [v1.5](plan_specs/releases/v1.5.yaml) | V1 quality gate & team pilot | 1 | 7 | 1 | 66 |
 | [v1.6](plan_specs/releases/v1.6.yaml) | Public team website | 3 | 31 | 22 | 169 |
 | [v1.7](plan_specs/releases/v1.7.yaml) | Team evidence search pilot | 1 | 30 | 25 | 100 |
@@ -490,7 +490,7 @@ A student can run `debate-research cut <URL>` and receive a verified, tagged, ci
 | [GAO reports and CRS reports can be found by search](plan_specs/v1/e07-discovery-adapters/t12-gao-and-crs-reports.yaml) `v1-e07-t12-gao-and-crs-reports` | Pending | 1 | 3.0 |
 | [The dev and prod profiles enable the discovery providers whose live smoke passed](plan_specs/v1/e07-discovery-adapters/t13-profiles-enable-the-providers-that-passed-their-smoke.yaml) `v1-e07-t13-profiles-enable-the-providers-that-passed-their-smoke` | Succeeded | 2 | 1.0 |
 | [Roll Call's unreadable feed is fixed or dropped, and one feed that keeps failing no longer marks every search partial](plan_specs/v1/e07-discovery-adapters/t14-an-unreadable-feed-found-and-fixed-or-dropped.yaml) `v1-e07-t14-an-unreadable-feed-found-and-fixed-or-dropped` | Succeeded | 1 | 2.0 |
-| [A provider the profile enables but no key configures is named, and no longer makes every search partial](plan_specs/v1/e07-discovery-adapters/t15-a-provider-without-its-key-does-not-make-a-search-partial.yaml) `v1-e07-t15-a-provider-without-its-key-does-not-make-a-search-partial` | Pending | 2 | 2.0 |
+| [A provider the profile enables but no key configures is named, and no longer makes every search partial](plan_specs/v1/e07-discovery-adapters/t15-a-provider-without-its-key-does-not-make-a-search-partial.yaml) `v1-e07-t15-a-provider-without-its-key-does-not-make-a-search-partial` | Succeeded | 2 | 2.0 |
 | [The public-pool footer test counts its results on an injected clock, not the real one](plan_specs/v1/e07-discovery-adapters/t16-public-pool-footer-test-on-an-injected-clock.yaml) `v1-e07-t16-public-pool-footer-test-on-an-injected-clock` | Succeeded | 1 | 2.0 |
 | [The providers named as having no adapter are pinned to the container's discovery factories](plan_specs/v1/e07-discovery-adapters/t17-providers-without-an-adapter-pinned-to-the-factories.yaml) `v1-e07-t17-providers-without-an-adapter-pinned-to-the-factories` | Pending | 1 | 1.0 |
 | [A paced query released late that then hangs is a failure the circuit breaker hears of](plan_specs/v1/e07-discovery-adapters/t18-the-breaker-hears-of-a-released-query-the-searchs-deadline-cut-off.yaml) `v1-e07-t18-the-breaker-hears-of-a-released-query-the-searchs-deadline-cut-off` | Pending | 1 | 2.0 |

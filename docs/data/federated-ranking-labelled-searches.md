@@ -37,7 +37,8 @@ checks those three positions against the saved search before it uses them.
 | The ranking as built in v1-e08-t03 (recency on a 90-day half-life) | at labelling | 0.746 | 3 | 0.438 | 3 |
 | Recency unknown when every query's window is longer than 365 days or any age, with no `--since` (v1-e08-t24, the PM's ruling of 2026-11-11) | replayed by the operator, 2026-11-11 | **0.767**, a lower bound: 1 unseen row in the top ten | 3 | **0.459**, a lower bound: 3 unseen rows in the top ten | 3 |
 
-After v1-e08-t24, the relevant rows sit:
+The built code, run by the operator on 2026-11-11 over the same saved and stored records, gives the
+same two figures. After v1-e08-t24, the relevant rows sit:
 * on t05 at 1, 7 and 9 (they were at 1, 9 and 10);
 * on t14 at 2, 3, 5, 12, 52 and 76 (they were at 2, 3, 8, 25, 39 and 137).
 

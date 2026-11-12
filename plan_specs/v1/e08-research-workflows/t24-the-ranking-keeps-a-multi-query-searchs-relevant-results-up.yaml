@@ -52,7 +52,7 @@ spec:
         The ruled change holds by tests on fixtures shown failing first, and both labelled
         searches' replayed nDCG@10 are recorded beside today's (operator).
 status:
-  phase: InProgress
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

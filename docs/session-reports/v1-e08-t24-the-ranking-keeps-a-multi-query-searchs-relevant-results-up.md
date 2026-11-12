@@ -6,7 +6,7 @@
 | Spec | [`plan_specs/v1/e08-research-workflows/t24-the-ranking-keeps-a-multi-query-searchs-relevant-results-up.yaml`](../../plan_specs/v1/e08-research-workflows/t24-the-ranking-keeps-a-multi-query-searchs-relevant-results-up.yaml) |
 | Epic / release | `v1-e08-research-workflows` / `v1.4` |
 | Branch | `task/v1-e08-t24-the-ranking-keeps-a-multi-query-searchs-relevant-results-up` |
-| Session status | IN PROGRESS: the ruled change is built and tested; waiting on the operator's block for t14's top-ten figures, then the Goal is set `Succeeded` <!-- COMPLETE / PARTIAL / BLOCKED --> |
+| Session status | COMPLETE: the Goal is `Succeeded` <!-- COMPLETE / PARTIAL / BLOCKED --> |
 
 ## Summary
 
@@ -14,8 +14,14 @@ This task is proposal first. **Where it stands:** the PM ruled on 2026-11-11 and
 is built ([The PM's ruling and the build](#the-pms-ruling-2026-11-11-and-the-build)). Recency is
 unknown when every query's window is longer than 365 days, or any age, with no `--since`. The tests
 were shown failing first, and nine mutants were caught. Both replayed scores are recorded in
-`docs/data`. One operator block remains: it reads t14's top-ten figures for the PM's follow-up and
-checks the built code against the replay. The Goal is set `Succeeded` once that output is back.
+`docs/data`. The operator's run of the built code reproduced the replay on both searches:
+* t05 rises from 0.746 to 0.767, and t14 from 0.438 to 0.459, each a lower bound.
+* t14 is still below its provider order (0.746). The PM files that follow-up, and t14's top-ten
+  figures for it are under [Figures for the follow-up](#figures-for-the-follow-up-t14s-top-ten).
+
+The Goal is `Succeeded`. **Look first at** Deviations 3: four CLI auto-cut tests outside the task's
+packages changed with the ruled ranking.
+
 The background from before the ruling follows.
 * **The positions block reproduced both records:** t05 0.746 against 0.000, t14 0.438 against
   0.746.
@@ -481,6 +487,76 @@ property is involved, so agreement 8's database rule does not apply.
 
 **One more test file changed:** the CLI's `search --auto-cut` budget tests (Deviations 3).
 
+## The built ranking, run by the operator (2026-11-11)
+
+The built code reproduces the replay on both searches:
+* **t05**, over its 200 saved results: `recency_counts` says no, and nDCG@10 goes from 0.746 to
+  **0.767**. The relevant rows move from 1, 9 and 10 to 1, 7 and 9, with 1 unseen row in the top
+  ten.
+* **t14**, over its stored record: today's ranking rebuilds 200 of 200, and nDCG@10 goes from 0.438
+  to **0.459**. The relevant rows move from 2, 3, 8, 25, 39 and 137 to 2, 3, 5, 12, 52 and 76, with
+  3 unseen rows in the top ten.
+
+### Figures for the follow-up: t14's top ten
+
+These are for the follow-up the PM files: Crossref-only rows ranked on their abstracts' BM25. They
+are counts, positions and provider names only.
+* **"BM25 raw"** is the ranking's own score over title and snippet.
+* **"title" and "snippet"** are BM25 of that field alone, each scored over the same 2,758 results'
+  titles or snippets.
+* **"words"** is a field's length.
+* **"query words"** is how many of the search's 26 distinct query words the field holds.
+
+**Snippets across t14's 2,758 merged results:**
+
+| Results | With a snippet | From Crossref | From the Federal Register | From OpenAlex | No snippet |
+|---|---|---|---|---|---|
+| 2,758 | 974 | 348 | 438 | 188 | 1,784 |
+
+**Today's top ten** (the ranking that was labelled):
+
+| Rank | Providers | Title from | Snippet from | BM25 (scaled) | BM25 raw | Title BM25 | Snippet BM25 | Title words | Snippet words | Query words in title | in snippet | Recency | Score | Coach |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| 1 | crossref | crossref | crossref | 1.000 | 31.658 | 16.854 | 34.570 | 7 | 189 | 4 | 11 | 0.000 | 0.620 | n |
+| 2 | openalex+crossref | crossref | openalex | 0.800 | 25.318 | 11.444 | 27.542 | 13 | 180 | 5 | 12 | 0.000 | 0.532 | y |
+| 3 | openalex | openalex | openalex | 0.757 | 23.967 | 10.368 | 22.512 | 12 | 178 | 3 | 8 | 0.001 | 0.524 | y |
+| 4 | crossref | crossref | crossref | 0.645 | 20.405 | 11.055 | 19.824 | 16 | 149 | 5 | 9 | 0.370 | 0.495 | n |
+| 5 | crossref | crossref | crossref | 0.848 | 26.846 | 10.422 | 27.731 | 9 | 180 | 3 | 13 | 0.091 | 0.495 | n |
+| 6 | crossref | crossref | crossref | 0.522 | 16.531 | 4.333 | 18.687 | 10 | 188 | 2 | 9 | 0.960 | 0.479 | n |
+| 7 | crossref | crossref | none | 0.408 | 12.931 | 7.658 | 0.000 | 23 | 0 | 4 | 0 | 0.968 | 0.479 | n |
+| 8 | crossref | crossref | crossref | 0.600 | 19.001 | 7.053 | 19.710 | 11 | 171 | 3 | 9 | 0.000 | 0.470 | y |
+| 9 | crossref | crossref | none | 0.375 | 11.873 | 9.667 | 0.000 | 14 | 0 | 5 | 0 | 1.000 | 0.469 | n |
+| 10 | openalex | openalex | openalex | 0.676 | 21.411 | 3.017 | 23.004 | 19 | 154 | 1 | 12 | 0.000 | 0.464 | n |
+
+**The built top ten** (recency unknown):
+
+| Rank | Providers | Title from | Snippet from | BM25 (scaled) | BM25 raw | Title BM25 | Snippet BM25 | Title words | Snippet words | Query words in title | in snippet | Score | Coach |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| 1 | crossref | crossref | crossref | 1.000 | 31.658 | 16.854 | 34.570 | 7 | 189 | 4 | 11 | 0.620 | n |
+| 2 | openalex+crossref | crossref | openalex | 0.800 | 25.318 | 11.444 | 27.542 | 13 | 180 | 5 | 12 | 0.532 | y |
+| 3 | openalex | openalex | openalex | 0.757 | 23.967 | 10.368 | 22.512 | 12 | 178 | 3 | 8 | 0.524 | y |
+| 4 | crossref | crossref | crossref | 0.848 | 26.846 | 10.422 | 27.731 | 9 | 180 | 3 | 13 | 0.482 | n |
+| 5 | crossref | crossref | crossref | 0.600 | 19.001 | 7.053 | 19.710 | 11 | 171 | 3 | 9 | 0.470 | y |
+| 6 | openalex | openalex | openalex | 0.676 | 21.411 | 3.017 | 23.004 | 19 | 154 | 1 | 12 | 0.464 | n |
+| 7 | openalex | openalex | openalex | 0.608 | 19.247 | 4.901 | 21.933 | 7 | 187 | 2 | 10 | 0.452 | unseen |
+| 8 | crossref | crossref | crossref | 0.587 | 18.588 | 7.214 | 21.874 | 12 | 289 | 4 | 10 | 0.446 | unseen |
+| 9 | openalex | openalex | openalex | 0.587 | 18.596 | 5.128 | 20.598 | 4 | 182 | 1 | 6 | 0.443 | unseen |
+| 10 | crossref | crossref | crossref | 0.645 | 20.405 | 11.055 | 19.824 | 16 | 149 | 5 | 9 | 0.440 | n |
+
+**What the figures show,** stated as facts without a proposal:
+* **The snippet carries the score.** Every row of either top ten that has a snippet has a snippet
+  BM25 above its title BM25, and a snippet that holds more of the query words than its title (6 to
+  13 against 1 to 5). A snippet runs 149 to 289 words against a title's 4 to 23.
+* **Most results have no snippet.** Only 974 of the 2,758 results have one. The 1,784 without one
+  are scored on a title of a few words. Only 188 of OpenAlex's results carry a snippet, against 348
+  of Crossref's.
+* **The recency rule removed exactly the snippetless rows.** The two rows with no snippet in
+  today's top ten, ranks 7 and 9, both Crossref-only, are the two that recency lifted (0.968 and
+  1.000). The rule removed both from the top ten.
+* **Crossref-only rows that are not relevant stay at the top.** Ranks 1 and 4 of the built top ten
+  are Crossref-only, not relevant, and score highest on BM25 (1.000 and 0.848) on a snippet that
+  Crossref supplied.
+
 ## Plan nodes
 
 | Node | Status | Notes |
@@ -492,7 +568,7 @@ property is involved, so agreement 8's database rule does not apply.
 | Criterion | Status | Evidence (command → result) |
 |---|---|---|
 | ac1: the operator's positions block has run and the PM has ruled on the proposal before any code | PASS | Positions block ran 2026-11-11 and reproduced both records ([What the positions show](#what-the-positions-show)). Replay the same day ([Replayed figures](#replayed-figures-2026-11-11)). The PM's ruling of 2026-11-11 ([above](#the-pms-ruling-2026-11-11-and-the-build)). The first code commit, `5d03bc1`, comes after it. |
-| ac2: the ruled change holds by tests on fixtures shown failing first, and both searches' replayed nDCG@10 are recorded beside today's (operator) | PASS | Tests shown failing first (8 of 149 at red, at assertions), green 160, nine mutants caught. [`docs/data/federated-ranking-labelled-searches.md`](../data/federated-ranking-labelled-searches.md) records the operator's replay: t05 0.746 → 0.767 (lower bound, 1 unseen row in the top ten) and t14 0.438 → 0.459 (lower bound, 3), beside provider order. |
+| ac2: the ruled change holds by tests on fixtures shown failing first, and both searches' replayed nDCG@10 are recorded beside today's (operator) | PASS | Tests shown failing first (8 of 149 at red, at assertions), green 160, nine mutants caught. [`docs/data/federated-ranking-labelled-searches.md`](../data/federated-ranking-labelled-searches.md) records the operator's replay: t05 0.746 → 0.767 (lower bound, 1 unseen row in the top ten) and t14 0.438 → 0.459 (lower bound, 3), beside provider order. The operator's run of the built code, 2026-11-11, gives the same figures ([The built ranking](#the-built-ranking-run-by-the-operator-2026-11-11)). |
 | Node: `uv run pytest packages/debate_core/tests -k ranking` | PASS | `.venv/bin/python scripts/hard_stop.py 115 .venv/bin/python -m pytest packages/debate_core/tests -k ranking -n 4` → `175 passed in 41.48s` |
 
 ### Closing checks

@@ -124,7 +124,12 @@ connect to the endpoint URL" on a `GetObject`). Its release of the lock failed t
 lease lapsed at 17:42:59Z; a later take treats a lapsed lease as free by design. It had landed the
 current three caselists whole (8,258, 5,691 and 6,700 files, the bucket's counts) and 183 of
 hspolicy25's files, 12,937,191,424 bytes on disk, no docx-7 directory: about 15 MB/s, so a full
-restore takes about 65 minutes with the lid open. The partial copy is deleted before a second restore.
+restore takes about 65 minutes with the lid open.
+
+**The partial copy, deleted** (policy 1.18) by the operator on 2026-11-12, after a check of its
+restored-copy marker: `~/t18-measure` whole, 20,905 files and 12,827,660,288 bytes on disk
+(hspolicy25 183 parsed files, hsld26 8,258, hspolicy26 5,691, hspf26 6,700; the rest the bundle and
+state files). The folder is gone; 119,656,095,744 bytes free after.
 
 ## Operator follow-ups
 

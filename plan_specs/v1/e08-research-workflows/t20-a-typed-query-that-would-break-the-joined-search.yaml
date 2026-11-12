@@ -15,6 +15,18 @@ metadata:
     debate/title: "A typed query with an unbalanced parenthesis or a bare operator cannot change or break the joined search"
 spec:
   # Filed by the PM, 2026-11-05, from v1-e08-t10's review (the PM's follow-up, 2026-11-05).
+  # Widened by the PM, 2026-11-12, to fix a regression, and raised to priority 1: on 2026-11-11
+  # OpenAlex answered v1-e08-t16's 37-query NHI politics-DA link search (v1.1.0-dev.407) with HTTP
+  # 400, failing every query, though its URL (2,686 characters) is under MAX_URL_CHARS. The PM's
+  # rulings: (1) measure what OpenAlex refuses with real requests from the installed build, as an
+  # operator block, and stop once for its output; (2) works_requests splits by the measured rule,
+  # each constant named with its figures and date, and v1-e08-t16's one-request pin holds against
+  # it; (3) a joined request refused with 400 is split in half and each half retried, recursively,
+  # until a single query is refused, which fails as today, with its bound pinned by a test and the
+  # split logged once, counts only; (4) a typed query with an unbalanced parenthesis or a bare OR,
+  # AND or NOT is sent in a request of its own, never joined or rewritten, and the footer's OpenAlex
+  # line says it was asked alone; other providers unchanged. Tests first and shown failing, then
+  # mutants on the split rule, the fallback's recursion and bound, and the typed-query detection.
   description: >-
     v1-e08-t10 joins a search's queries as `(q1) OR (q2)` in one request. A student's typed
     query with an unbalanced parenthesis, or a bare `OR`, `AND` or `NOT`, now reaches inside
@@ -23,7 +35,7 @@ spec:
     its own request, its operators quoted, or refused with a message that says why), and what
     happens when a provider refuses a joined request (a fallback to one request per query, or
     not), and stop for the PM's ruling. Tests on fixtures.
-  priority: 3
+  priority: 1
   constraints:
     packages: [debate_core.application, debate_core.integrations, debate_cli, packages/debate_core/tests, packages/debate_cli/tests]
     forbidden:

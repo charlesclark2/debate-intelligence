@@ -15,6 +15,7 @@ metadata:
   annotations:
     debate/title: Privacy and legal review
     debate/architecture-refs: §14, §19
+    debate/no-prerequisite: "V2's root task, held Blocked until V2 starts: a privacy and legal review that changes no code, so no earlier task built code it changes."
 spec:
   description: >-
     Complete the privacy and legal work §14 requires before school-wide deployment, since high-school users

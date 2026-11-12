@@ -11,6 +11,9 @@ Checks (see plan_specs/README.md for the conventions they enforce):
   * every Task node has typed acceptance criteria with the required fields for its type
   * cross-task prerequisites (Goal.spec.context TaskRef) resolve, never point to a later release,
     and the global task graph is acyclic
+  * a task that is neither Succeeded nor Cancelled names a prerequisite, or says why it has none in a
+    `debate/no-prerequisite` annotation; one whose description names another task id its context
+    does not list is warned about, never refused (v1-e41-t27)
   * every epic lives in exactly one major version and one release, and its Plan lists every task file
   * each Task node in an epic's graph depends on exactly its task's prerequisites: a same-epic one
     through that task's node, a cross-epic one through an External node naming it
@@ -27,6 +30,7 @@ Usage:
   uv run scripts/validate_specs.py                      # validate everything
   uv run scripts/validate_specs.py --require-succeeded NAME   # exit 1 unless NAME's status.phase is Succeeded
   uv run scripts/validate_specs.py --status             # print a status roll-up per release and epic
+  uv run scripts/validate_specs.py --all-warnings       # print every prerequisite warning, not counts
   uv run scripts/validate_specs.py --root DIR           # validate the spec tree under another root
 """
 
@@ -61,6 +65,21 @@ CRITERIA_FIELDS = {
     "custom": {"name"},
 }
 RELEASE_FILE_NAME = re.compile(r"^v(\d+)\.(\d+)$")
+#: The annotation an unfinished task with no prerequisite carries, saying why it has none.
+NO_PREREQUISITE = "debate/no-prerequisite"
+#: A task id as a description writes it (v1-e04-t10), alone or at the start of a task's full name.
+TASK_ID = re.compile(r"\bv\d+-e\d+-t\d+\b")
+# The three kinds of prerequisite warning, in the order they are printed (the PM's ruling, 2026-11-11).
+MISSING_PREREQUISITE = "missing prerequisite"
+GRAPH_LINK = "graph link"
+NEVER_A_PREREQUISITE = "never a prerequisite"
+WARNING_HEADINGS = {
+    MISSING_PREREQUISITE: (
+        "Most likely a missing prerequisite (an unfinished task of the same or an earlier release)"
+    ),
+    GRAPH_LINK: "A graph link that could be added (a Succeeded task of the same or an earlier release)",
+    NEVER_A_PREREQUISITE: "Never a prerequisite (a later release, or Cancelled)",
+}
 # libyaml's parser where PyYAML was built with it, which every wheel PyYAML publishes is; the
 # pure-Python one otherwise. Both are the safe loader and build the same documents. The spec tree
 # is 3 MB of YAML: one read of it took 1.5 s in pure Python and takes 0.2 s this way (v1-e01-t27).
@@ -107,6 +126,8 @@ class SpecTree:
     task_epic: dict[str, str | None] = field(default_factory=dict)
     #: task name -> the task names it lists as prerequisites
     task_prereqs: dict[str, list[str]] = field(default_factory=dict)
+    #: task ids named in unfinished tasks' descriptions and not in their contexts; never refused
+    warnings: list[NamedTask] = field(default_factory=list)
 
     @property
     def specs(self) -> Path:
@@ -117,6 +138,14 @@ class SpecTree:
 
     def phase(self, name: str) -> str:
         return (self.goals.get(name, {}).get("status") or {}).get("phase", "Pending")
+
+
+@dataclass(frozen=True)
+class NamedTask:
+    """One warning: an unfinished task's description names a task its spec.context does not list."""
+
+    kind: str
+    line: str
 
 
 def load_documents(path: Path) -> list[dict]:
@@ -223,6 +252,7 @@ def collect(root: Path) -> SpecTree:
 
     check_epics(tree)
     check_prerequisites(tree)
+    check_named_prerequisites(tree)
     check_epic_graphs(tree)
     check_releases(tree)
     check_closed_goals(tree)
@@ -356,6 +386,91 @@ def check_prerequisites(tree: SpecTree) -> None:
                 )
     if has_cycle(tree.task_prereqs):
         tree.err(tree.specs, "cross-task prerequisite graph contains a cycle")
+
+
+def check_named_prerequisites(tree: SpecTree) -> None:
+    """An unfinished task names a prerequisite or why it has none (v1-e41-t27).
+
+    Five unfinished tasks listed none until the PM's batch of 2026-11-09, and a session started one with
+    nothing to check. A task id its description names but its context does not list is a warning:
+    a task's description names its origin, which may ship in a later release and so can never be listed.
+    """
+    by_id = {match[0]: task for task in tree.task_release if (match := TASK_ID.match(task))}
+    for task in tree.task_release:
+        phase = tree.phase(task)
+        if phase in CLOSED_PHASES or phase not in PHASES:
+            continue  # read_document reports a phase that is not one
+        goal, path = tree.goals[task], tree.names[task]
+        if not tree.task_prereqs[task]:
+            annotations = (goal.get("metadata") or {}).get("annotations") or {}
+            reason = annotations.get(NO_PREREQUISITE)
+            if NO_PREREQUISITE not in annotations:
+                tree.err(
+                    path,
+                    f"task {task} is {phase} and names no prerequisite: list the task that built the code "
+                    f"it changes in spec.context, or say why there is none in a {NO_PREREQUISITE} annotation",
+                )
+            elif not (isinstance(reason, str) and reason.strip()):
+                tree.err(
+                    path,
+                    f"task {task} is {phase} and names no prerequisite, and its {NO_PREREQUISITE} "
+                    "annotation gives no reason: say why there is none, or list the task that built the "
+                    "code it changes in spec.context",
+                )
+        description = str((goal.get("spec") or {}).get("description") or "")
+        named_ids = dict.fromkeys(TASK_ID.findall(description))
+        for named_id in named_ids:
+            named = by_id.get(named_id)
+            if named is None or named == task or named in tree.task_prereqs[task]:
+                continue  # an id no task declares is a former name or an epic's, never another task
+            if warning := named_task_warning(tree, task, named_id, named):
+                tree.warnings.append(warning)
+
+
+def named_task_warning(tree: SpecTree, task: str, named_id: str, named: str) -> NamedTask | None:
+    order = tree.release_order
+    release, named_release = tree.task_release[task], tree.task_release[named]
+    if release not in order or named_release not in order:
+        return None  # read_epic_or_task reports a release with no file
+    path = tree.names[task].relative_to(tree.root)
+    if order.index(named_release) > order.index(release):
+        return NamedTask(
+            NEVER_A_PREREQUISITE,
+            f"{path}: {task} ({release}) names {named_id} ({named}, in {named_release}), a later release: "
+            "it can never be a prerequisite",
+        )
+    named_phase = tree.phase(named)
+    if named_phase == "Cancelled":  # never Succeeded, so listing it would hold the task back for good
+        named_at = f"{named}, Cancelled in {named_release}"
+        return NamedTask(
+            NEVER_A_PREREQUISITE,
+            f"{path}: {task} names {named_id} ({named_at}): it can never be a prerequisite",
+        )
+    head = (
+        f"{path}: {task} names {named_id} ({named}, {named_phase} in {named_release}), "
+        "which its spec.context does not list"
+    )
+    if named_phase == "Succeeded":
+        return NamedTask(GRAPH_LINK, f"{head}: a graph link that could be added")
+    return NamedTask(MISSING_PREREQUISITE, f"{head}: list it if this task needs its work first")
+
+
+def render_warnings(tree: SpecTree, *, in_full: bool) -> list[str]:
+    """The prerequisite warnings: missing prerequisites in full, the other kinds as counts unless in_full."""
+    if not tree.warnings:
+        return []
+    lines = [
+        f"Prerequisite warnings, none refused: {plural(len(tree.warnings), 'task id')} named in an "
+        "unfinished task's description and not in its spec.context"
+    ]
+    for kind, heading in WARNING_HEADINGS.items():
+        kind_lines = [w.line for w in tree.warnings if w.kind == kind]
+        if kind == MISSING_PREREQUISITE or in_full:
+            lines.append(f"  {heading}: {len(kind_lines)}")
+            lines += [f"    {line}" for line in kind_lines]
+        else:
+            lines.append(f"  {heading}: {len(kind_lines)}, --all-warnings prints them")
+    return lines
 
 
 def check_epic_graphs(tree: SpecTree) -> None:
@@ -517,6 +632,11 @@ def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--require-succeeded", metavar="NAME")
     ap.add_argument("--status", action="store_true")
+    ap.add_argument(
+        "--all-warnings",
+        action="store_true",
+        help="print every prerequisite warning, not only the likely missing prerequisites",
+    )
     ap.add_argument("--root", type=Path, default=ROOT, help="repository root holding plan_specs/")
     args = ap.parse_args(argv)
 
@@ -533,6 +653,9 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.status:
         print("\n".join(render_status(tree)))
+
+    if warning_lines := render_warnings(tree, in_full=args.all_warnings):
+        print("\n".join(warning_lines))
 
     if tree.errors:
         print("\n".join(tree.errors))

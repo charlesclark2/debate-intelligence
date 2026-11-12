@@ -32,6 +32,10 @@ class Task:
     graph: list[str] | None = None
     #: node ids the task's node depends on, as written; overrides `graph`
     depends_on: list[str] | None = None
+    #: the Goal's spec.description; None writes the slug, as every other Goal gets its title
+    description: str | None = None
+    #: metadata.annotations written beside debate/title
+    annotations: dict[str, object] = field(default_factory=dict)
 
 
 @dataclass
@@ -212,6 +216,9 @@ def epic_documents(epic: Epic, task_epics: dict[str, Epic]) -> list[dict]:
 def task_documents(epic: Epic, task: Task) -> list[dict]:
     name = epic.task_name(task)
     document = goal(name, task.slug, "task", epic.release, task.phase, epic.name)
+    document["metadata"]["annotations"].update(task.annotations)
+    if task.description is not None:
+        document["spec"]["description"] = task.description
     if task.context:
         document["spec"]["context"] = [
             {"kind": "TaskRef", "name": p, "relation": "dependsOn"} for p in task.context

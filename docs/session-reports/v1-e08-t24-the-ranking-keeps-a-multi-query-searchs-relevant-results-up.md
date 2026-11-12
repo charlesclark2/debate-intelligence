@@ -6,12 +6,17 @@
 | Spec | [`plan_specs/v1/e08-research-workflows/t24-the-ranking-keeps-a-multi-query-searchs-relevant-results-up.yaml`](../../plan_specs/v1/e08-research-workflows/t24-the-ranking-keeps-a-multi-query-searchs-relevant-results-up.yaml) |
 | Epic / release | `v1-e08-research-workflows` / `v1.4` |
 | Branch | `task/v1-e08-t24-the-ranking-keeps-a-multi-query-searchs-relevant-results-up` |
-| Session status | IN PROGRESS: positions read, proposal replayed; waiting on the PM's ruling (ac1) <!-- COMPLETE / PARTIAL / BLOCKED --> |
+| Session status | IN PROGRESS: the ruled change is built and tested; waiting on the operator's block for t14's top-ten figures, then the Goal is set `Succeeded` <!-- COMPLETE / PARTIAL / BLOCKED --> |
 
 ## Summary
 
-This task is proposal first. **Where it stands:** stopped for the PM's ruling, and no code has
-changed.
+This task is proposal first. **Where it stands:** the PM ruled on 2026-11-11 and the ruled change
+is built ([The PM's ruling and the build](#the-pms-ruling-2026-11-11-and-the-build)). Recency is
+unknown when every query's window is longer than 365 days, or any age, with no `--since`. The tests
+were shown failing first, and nine mutants were caught. Both replayed scores are recorded in
+`docs/data`. One operator block remains: it reads t14's top-ten figures for the PM's follow-up and
+checks the built code against the replay. The Goal is set `Succeeded` once that output is back.
+The background from before the ruling follows.
 * **The positions block reproduced both records:** t05 0.746 against 0.000, t14 0.438 against
   0.746.
 * **On t14, recency's 90-day half-life lifted recent Crossref-only rows above relevant ones**,
@@ -392,23 +397,142 @@ t14 0.268, and is withdrawn.
    its stored record (the dev store reset is what lost t05's).
 ````
 
+## The PM's ruling (2026-11-11) and the build
+
+The PM ruled:
+1. **Build 1(a).** Recency counts as unknown when every expanded query's window is longer than
+   `recency.counts_within_days`, or has no limit, and the request has no `--since`.
+   * The key is new in `config/federated_ranking.yaml`, at 365, with its reason in a comment.
+   * Uniqueness, the politics DA's 30-day templates, `--since`, `daily` and plain typed searches
+     are unchanged, each pinned by a test.
+   * Not 1(b), because that changes searches nobody measured.
+2. **Close the task on the ruled change.**
+   * Record both replayed scores in `docs/data` as lower bounds, with their unseen-row counts.
+   * Set the Goal `Succeeded`.
+   * Put t14's top-ten figures in this report for the follow-up the PM files (Crossref-only rows
+     ranked on their abstracts' BM25, p2, proposal first).
+3. **No extra labelling sheet.**
+4. **All three deviations accepted.** The PM files the follow-up: a labelled search's hand-off keeps
+   its stored record, labels and key together outside the dev store.
+
+**What was built:**
+* `recency_counts(expansion, filters, *, counts_within_days)` in
+  `debate_core.application.federated_ranking`. It answers yes:
+  * when the request has a `since`;
+  * when the search was not expanded;
+  * when any expanded query's `recency_days` is at most the limit.
+
+  Otherwise it answers no. A query with no `recency_days` (any age) never counts as short.
+* `rank_merged_candidates` takes an optional `expansion`, None for a typed search. When
+  `recency_counts` says no, recency is None for every result: it contributes nothing and is left
+  out of the explanation.
+* `FederatedRankStage` hands it `state.expansion`.
+* `RecencyParameters` has `counts_within_days` (an integer, at least 1). The table refuses a
+  missing or zero value, as it does every other key.
+
+**Tests on synthetic fixtures**, in `packages/debate_core/tests/application/test_federated_ranking.py`.
+Each expected value is worked out by hand from the half-life (0.5 per 90 days) or the window
+position.
+* The rule:
+  * a five-year window reorders two results and drops recency from their totals and explanations;
+  * any age;
+  * a long window mixed with any age;
+  * 366 days;
+  * the limit read from the table;
+  * the stage hands over the expansion.
+* The unchanged searches, one pin each:
+  * uniqueness at exactly 365 days;
+  * the politics 30-day templates beside a year and beside five years;
+  * `--since` (50 of 140 days);
+  * `daily`'s `since` and `until` (0.2);
+  * a typed search with no expansion (0.5).
+* A seven-case table of `recency_counts`, two refusals of the table, and the committed 365.
+
+**Red, against a skeleton that refuses nothing** (`5d03bc1`). The skeleton has the key, the
+parameter and the argument, and a `recency_counts` that always answers yes. The run was
+`hard_stop.py 115 … pytest test_federated_ranking.py -n 0`, with two results:
+* **8 failed, 141 passed, all 8 at their assertions.** The eight are the five rule tests, the
+  three "unknown" cases of the table (five-years, any-age, just-over-and-any), and the stage test.
+* **Passing at red, by design:** the five pins of unchanged searches and the four "counts" cases of
+  the table (the skeleton keeps today's recency), plus the refusals and the committed-table test
+  (the skeleton has the key).
+
+A first red run also failed `test_score_recency_reads_the_half_life_from_the_table`, because that
+existing test replaces the whole `recency` section and so lacked the new key. That was a crash, not
+a catch. I gave the test the key and reran.
+
+**Green** (`87259cf`): 160 passed over the ranking and article-matching test files.
+
+**Mutants** (nine, `hard_stop.py 115` over a scratch script that edits the module, runs the ranking
+test file and restores it). All nine were caught at assertions; none crashed. No Hypothesis
+property is involved, so agreement 8's database rule does not apply.
+
+| Mutant | Caught by |
+|---|---|
+| Threshold `<=` made `<` | 2 (uniqueness at 365; the table's a-year case) |
+| Threshold hard-coded to 365 | 1 (the limit read from the table) |
+| Threshold reversed (`>=`) | 7 |
+| `--since` exemption removed | 4 (`--since`, `daily`, the table's two `since` cases) |
+| `until` checked in place of `since` | 3 |
+| Any age counted as short | 4 (any age, mixed, the table's two) |
+| "Any query short" made "every query short" | 2 (the politics 30-day pins) |
+| A typed search loses recency | 22 |
+| The stage drops the expansion | 1 |
+
+**One more test file changed:** the CLI's `search --auto-cut` budget tests (Deviations 3).
+
 ## Plan nodes
 
 | Node | Status | Notes |
 |---|---|---|
-| `the-ranking-keeps-a-multi-query-searchs`: Multi-query ranking | Not started | Waiting for ac1: the positions, the proposal and the PM's ruling come first. |
+| `the-ranking-keeps-a-multi-query-searchs`: Multi-query ranking | Done | Red `5d03bc1`, rule `87259cf`, `docs/data` record `ef71faa`, auto-cut tests `e5c7b11`; nine mutants caught. |
 
 ## Acceptance criteria
 
 | Criterion | Status | Evidence (command → result) |
 |---|---|---|
-| ac1: the operator's positions block has run and the PM has ruled on the proposal before any code | NOT RUN (half done) | The positions block ran on 2026-11-11 and reproduced both records ([What the positions show](#what-the-positions-show)). The replay ran the same day ([Replayed figures](#replayed-figures-2026-11-11)). Waiting on the PM's ruling. |
-| ac2: the ruled change holds by tests on fixtures shown failing first, and both searches' replayed nDCG@10 are recorded beside today's (operator) | NOT RUN | After the ruling. |
-| Node: `uv run pytest packages/debate_core/tests -k ranking` | NOT RUN | After the ruling. |
+| ac1: the operator's positions block has run and the PM has ruled on the proposal before any code | PASS | Positions block ran 2026-11-11 and reproduced both records ([What the positions show](#what-the-positions-show)). Replay the same day ([Replayed figures](#replayed-figures-2026-11-11)). The PM's ruling of 2026-11-11 ([above](#the-pms-ruling-2026-11-11-and-the-build)). The first code commit, `5d03bc1`, comes after it. |
+| ac2: the ruled change holds by tests on fixtures shown failing first, and both searches' replayed nDCG@10 are recorded beside today's (operator) | PASS | Tests shown failing first (8 of 149 at red, at assertions), green 160, nine mutants caught. [`docs/data/federated-ranking-labelled-searches.md`](../data/federated-ranking-labelled-searches.md) records the operator's replay: t05 0.746 → 0.767 (lower bound, 1 unseen row in the top ten) and t14 0.438 → 0.459 (lower bound, 3), beside provider order. |
+| Node: `uv run pytest packages/debate_core/tests -k ranking` | PASS | `.venv/bin/python scripts/hard_stop.py 115 .venv/bin/python -m pytest packages/debate_core/tests -k ranking -n 4` → `175 passed in 41.48s` |
+
+### Closing checks
+
+* **The affected set** (`uv run scripts/affected_tests.py`) is **283 test files**, well over two
+  minutes: a 47-file set once ran 269 s. Under agreement 10 it is left to the pull request's `ci`.
+  Within the limit I ran:
+  * the always-run list (`tests/architecture`, `tests/specs` and the CLI's three wiring files):
+    `379 passed in 23.44s`;
+  * the 18 affected files that reach the ranking, search, daily, digest, auto-cut, stamp,
+    installation or config, plus the search, cut and daily smoke checks: `820 passed in 29.33s`.
+    Before the auto-cut fix this run gave `4 failed, 802 passed`: the four budget tests of
+    Deviations 3.
+  * `packages/debate_core/tests/application`, the changed module's whole test directory. It hit the
+    115-second limit twice, at 98 % and 99 % (load 12 on the second). I have no verdict for it, and
+    it is `ci`'s.
+* **Repo-wide checks**, all clean:
+  * `uv run --frozen ruff format --check .`: 2054 files formatted;
+  * `ruff check .`: all checks passed;
+  * `pyright`: 0 errors;
+  * `lint-imports`: 20 contracts kept;
+  * `check_thin_handlers.py`: 74 handlers within 25 statements;
+  * `uv run scripts/validate_specs.py`: OK;
+  * `docs_index.py --check-descriptions`: 70 documents;
+  * `check_links.py`: 3756 links;
+  * `check_command_blocks.py --base origin/dev`: 700 blocks.
 
 ## Files changed
 
-* `docs/session-reports/v1-e08-t24-…md`: this report. No code has changed.
+* `config/federated_ranking.yaml`: `recency.counts_within_days: 365`, with its reason in a
+  comment.
+* `packages/debate_core/src/debate_core/application/federated_ranking.py`: `recency_counts`, the
+  `expansion` argument to `rank_merged_candidates`, the stage handing it over, the new parameter
+  and the module docstring. `federated_ranking_features.py`: the recency docstring.
+* `packages/debate_core/tests/application/test_federated_ranking.py`: the rule's tests, the pins
+  of the unchanged searches, the table cases.
+* `packages/debate_cli/tests/test_search_command.py`: the four auto-cut budget tests (Deviations 3).
+* `docs/data/federated-ranking-labelled-searches.md`: new. The labelled searches and their scores,
+  counts only.
+* `docs/session-reports/v1-e08-t24-…md`: this report.
 
 ## Deviations from the spec
 
@@ -420,6 +544,22 @@ t14 0.268, and is withdrawn.
 2. **t05's positions come from its saved file alone.** Its provider record is in no store (the dev
    store was replaced between 2026-11-02 and 2026-11-08), so its BM25 cannot be recomputed from
    titles and snippets. Its saved feature values are exact. Its word-match columns use titles only.
+3. **Four CLI tests outside the task's packages changed with the ruled behaviour.**
+   `packages/debate_cli/tests` is not in `constraints.packages`.
+   * **What changed:** the CLI's fixture search (`health insurance --argument politics-da --need
+     link`) asks five years, so the rule drops its recency. Its government grant notice, whose
+     citation the fixture does not verify, now ranks above a newer magazine story. `--auto-cut 3`
+     therefore cuts four results for three verified cards, where it cut three.
+   * **What broke:** v1-e08-t17's four budget tests pinned "three cuts, two calls each". On the
+     skeleton's ranking all 23 auto-cut tests pass, so the rule is the cause.
+   * **The fix:** their expected calls are worked out again by hand from the new order:
+     * eight calls with no limit;
+     * under `--expand-llm`, the fourth cut's markup refused, with two cards verified;
+     * the verified entries costing calls 1 and 2, 3 and 4, and 7 and 8;
+     * a cent short, seven calls spent and the eighth refused.
+
+     The budget rule itself is unchanged.
+   * **For the PM:** the PM may want the packages list to name the CLI tests.
 
 ## Decisions and assumptions
 
@@ -976,6 +1116,359 @@ fi
 A `DIFFERS` line, a replay short of N, or a `STOP:` or `FAILED:` line is still worth pasting back
 exactly as printed. **Paste back everything the block prints.** It holds positions, counts, feature
 values, template ids and search ids, and no title, URL, snippet or publisher.
+
+### The built ranking on both searches, and t14's top-ten figures
+
+**Operator command: the built ranking** (seconds; no network, no model, no provider call, writes
+nothing)
+
+Where: your Mac, any terminal; the block changes into the task worktree itself, whose code now
+carries the ruled change. It reads the same files as the earlier blocks. It does three things:
+* **Checks the built code against the replay.** It ranks t05's 200 saved results with the built
+  `recency_counts`, and t14's stored record with the built `rank_merged_candidates`. It prints
+  nDCG@10 today and built for each.
+* **Counts snippets.** It prints how many of t14's results have a snippet, by the provider that
+  supplied it.
+* **Prints, for each row of t14's top ten today and built:**
+  * its rank and providers;
+  * which provider its title and its snippet came from;
+  * its BM25, scaled and raw;
+  * BM25 of its title alone and of its snippet alone, each over the same 2,758 results' titles or
+    snippets;
+  * its title and snippet word counts;
+  * how many of the 26 query words each field holds;
+  * its recency and score;
+  * the coach's mark, or `unseen`.
+
+It prints no title, URL, snippet or publisher.
+
+```bash
+cd /Users/charlesclark/Documents/debate/debate-intelligence-tool/debate-intelligence-worktrees/v1-e08-t24-the-ranking-keeps-a-multi-query-searchs-relevant-results-up
+if env | grep -q '^DEBATE_'; then echo "STOP: DEBATE_ overrides are set in this shell"; elif pgrep -f 'debate-research ' > /dev/null; then echo "STOP: a debate-research command is running; let it finish first"; else .venv/bin/python -I -B - "$HOME/.debate-research/dev" "$HOME/Desktop/search-policy-nhi.json" "$HOME/Desktop/labels-policy-nhi.csv" "$HOME/Desktop/key-policy-nhi.csv" "$HOME/Desktop/search-policy-nhi-mechanisms.json" "$HOME/Desktop/labels-policy-nhi-mechanisms.csv" "$HOME/Desktop/key-policy-nhi-mechanisms.csv" <<'EOF'
+import csv
+import json
+import math
+import sqlite3
+import sys
+import traceback
+from pathlib import Path
+
+RECORDED = {
+    "t05": {"relevant": 3, "rows": 20, "ranked": 0.746, "provider": 0.000, "marked": {1: 117, 9: 441, 10: 257}},
+    "t14": {"relevant": 6, "rows": 19, "ranked": 0.438, "provider": 0.746},
+}
+FEATURES = ("bm25", "recency", "source_type", "peer_reviewed", "open_access", "citations", "provider_agreement")
+SHORT = ("bm25", "rec", "src", "peer", "oa", "cite", "agree")
+
+
+class Stop(Exception):
+    pass
+
+
+def num(value, places=3):
+    return "-" if value is None else f"{value:.{places}f}"
+
+
+def ndcg_at_10(positions, relevant_count):
+    if relevant_count == 0:
+        return None
+    dcg = sum(1 / math.log2(p + 1) for p in positions if p is not None and p <= 10)
+    ideal = sum(1 / math.log2(i + 2) for i in range(min(relevant_count, 10)))
+    return dcg / ideal
+
+
+def saved_search(path):
+    document = json.loads(path.read_text(encoding="utf-8"))
+    if "results" not in document:
+        document = document.get("data") or (document.get("error") or {}).get("details") or {}
+    if not document.get("results") or not document.get("search_id"):
+        raise Stop(f"{path.name} holds no saved search with results")
+    return document
+
+
+def header_of(reader):
+    return [(name or "").strip().lstrip(chr(0xFEFF)).strip().lower() for name in reader.fieldnames or []]
+
+
+def read_rows(path):
+    with path.open(encoding="utf-8-sig", newline="") as handle:
+        reader = csv.DictReader(handle)
+        names = header_of(reader)
+        reader.fieldnames = names
+        return names, list(reader)
+
+
+def relevance(text):
+    word = (text or "").strip().lower()
+    if word in ("y", "yes", "1", "true", "x"):
+        return True
+    if word in ("n", "no", "0", "false"):
+        return False
+    return None
+
+
+def labelled_rows(labels_path, key_path, results_by_rank):
+    names, rows = read_rows(labels_path)
+    if "relevant" not in names:
+        raise Stop(f"{labels_path.name} has no relevant column")
+    if "rank" in names:
+        keyed = {index: (int(row["rank"]), None) for index, row in enumerate(rows)}
+        key_note = "rank column in the sheet"
+    elif "item" in names:
+        if key_path is None or not key_path.is_file():
+            raise Stop(f"{labels_path.name} numbers its rows by item and its key file is missing")
+        key_names, key_rows = read_rows(key_path)
+        if not {"item", "rank", "provider_order"} <= set(key_names):
+            raise Stop(f"{key_path.name} lacks item, rank or provider_order")
+        by_item = {row["item"].strip(): (int(row["rank"]), int(row["provider_order"])) for row in key_rows}
+        keyed = {}
+        for index, row in enumerate(rows):
+            item = (row.get("item") or "").strip()
+            if item not in by_item:
+                raise Stop(f"{labels_path.name}: an item the key does not hold (row {index + 1})")
+            keyed[index] = by_item[item]
+        key_note = f"items joined to {key_path.name}"
+    else:
+        raise Stop(f"{labels_path.name} has neither an item nor a rank column")
+    out = []
+    url_mismatch = 0
+    order_mismatch = 0
+    for index, row in enumerate(rows):
+        rank, key_order = keyed[index]
+        result = results_by_rank.get(rank)
+        if result is None:
+            raise Stop(f"{labels_path.name}: a row names rank {rank}, which the saved search lacks")
+        sheet_url = (row.get("url") or "").strip()
+        if sheet_url and sheet_url not in (result.get("url"), result.get("canonical_url")):
+            url_mismatch += 1
+        if key_order is not None and not key_order == result.get("provider_order"):
+            order_mismatch += 1
+        out.append((rank, relevance(row.get("relevant"))))
+    return out, key_note, url_mismatch, order_mismatch
+
+
+def recorded_rows(name, results):
+    marked = RECORDED[name].get("marked")
+    if not marked:
+        raise Stop(f"{name}'s sheet is missing and no record gives its labels")
+    by_rank = {result["rank"]: result for result in results}
+    for rank, order in marked.items():
+        if by_rank.get(rank, {}).get("provider_order") is None or not by_rank[rank]["provider_order"] == order:
+            raise Stop(f"the saved {name} search is not the one recorded: rank {rank} is not at provider position {order}")
+    top = {x["rank"] for x in sorted(results, key=lambda x: x["rank"])[:10]} | {
+        x["rank"] for x in sorted(results, key=lambda x: x["provider_order"])[:10]
+    }
+    rows = [(rank, rank in marked) for rank in sorted(top)]
+    note = "no sheet: rows rebuilt from the saved search, labels from the PM's record (ranks " + ", ".join(
+        f"{rank} at provider position {order}" for rank, order in marked.items()
+    ) + " relevant, provider positions checked)"
+    return rows, note, 0, 0
+
+
+def candidate_key(candidate):
+    return (candidate.provider, candidate.provider_record_id, str(candidate.url), candidate.title)
+
+
+def load_store(data_dir, search_id):
+    database = data_dir / "debate.sqlite3"
+    wal = data_dir / "debate.sqlite3-wal"
+    if not database.is_file():
+        raise Stop(f"no store at {data_dir.name}/debate.sqlite3")
+    if wal.is_file() and wal.stat().st_size > 0:
+        raise Stop("the store has an unmerged write-ahead log; close every debate-research and rerun")
+    connection = sqlite3.connect(database.as_uri() + "?mode=ro&immutable=1", uri=True)
+    try:
+        search_row = connection.execute("SELECT document FROM searches WHERE search_id = ?", (search_id,)).fetchone()
+        status_rows = connection.execute(
+            "SELECT document FROM search_provider_statuses WHERE search_id = ? ORDER BY position", (search_id,)
+        ).fetchall()
+    finally:
+        connection.close()
+    return search_row, status_rows
+
+
+def labels_for(name, saved, labels_path, key_path):
+    results = saved["results"]
+    results_by_rank = {result["rank"]: result for result in results}
+    if labels_path.is_file():
+        rows, _, _, _ = labelled_rows(labels_path, key_path, results_by_rank)
+    else:
+        rows, _, _, _ = recorded_rows(name, results)
+    labels = {}
+    for rank, relevant in rows:
+        result = results_by_rank[rank]
+        labels[result.get("canonical_url") or result.get("url")] = relevant
+    return labels, sum(1 for _, relevant in rows if relevant)
+
+
+def score_line(label, keys, labels, relevant_count):
+    positions = [i for i, key in enumerate(keys, start=1) if labels.get(key)]
+    unseen = sum(1 for key in keys[:10] if key not in labels)
+    print(
+        f"  {label}: nDCG@10 {num(ndcg_at_10(positions, relevant_count))}, relevant in top ten"
+        f" {sum(1 for p in positions if p <= 10)}, unseen rows in top ten {unseen}, relevant at"
+        f" {','.join(str(p) for p in positions)}"
+    )
+
+
+def built_t05(saved, labels, relevant_count):
+    from debate_core.application.federated_ranking import (
+        FEDERATED_RANKING_CONFIG_PATH,
+        load_federated_ranking_config,
+        recency_counts,
+    )
+    from debate_core.domain import SearchFilters
+    from datetime import datetime
+
+    from debate_core.domain.search import SearchExpansion
+
+    config = load_federated_ranking_config(FEDERATED_RANKING_CONFIG_PATH)
+    expansion = SearchExpansion.model_validate(saved["expansion"])
+    filters = SearchFilters.model_validate(saved["filters"])
+    counts = recency_counts(expansion, filters, counts_within_days=config.recency.counts_within_days)
+    weights = {f: config.weights.weight_of(f) for f in FEATURES}
+
+    def total(result):
+        features = result.get("features") or {}
+        return sum(
+            weights[f] * features[f]
+            for f in FEATURES
+            if features.get(f) is not None and (counts or not f == "recency")
+        )
+
+    def key_of(result):
+        published = result.get("published_at")
+        stamp = datetime.fromisoformat(published).timestamp() if published else 0.0
+        return (-total(result), published is None, -stamp, result.get("canonical_url") or result.get("url") or "")
+
+    order = sorted(saved["results"], key=key_of)
+    print("=== t05: built ranking over its 200 saved results (no stored record) ===")
+    print(f"recency counts under the committed table: {counts}")
+    score_line("today (saved ranks)", [r.get("canonical_url") or r.get("url") for r in sorted(saved["results"], key=lambda r: r["rank"])], labels, relevant_count)
+    score_line("built", [r.get("canonical_url") or r.get("url") for r in order], labels, relevant_count)
+    print()
+
+
+def built_t14(saved, labels, relevant_count, search_row, status_rows):
+    from debate_core.application.federated_dedupe import merge_candidates
+    from debate_core.application.federated_ranking import (
+        FEDERATED_RANKING_CONFIG_PATH,
+        load_federated_ranking_config,
+        rank_merged_candidates,
+        recency_counts,
+    )
+    from debate_core.application.federated_ranking_features import bm25_scores, query_terms, ranking_tokens
+    from debate_core.domain import Search
+    from debate_core.domain.discovery import ProviderOutcome, ProviderStatus
+
+    config = load_federated_ranking_config(FEDERATED_RANKING_CONFIG_PATH)
+    search = Search.model_validate_json(search_row[0])
+    statuses = [ProviderStatus.model_validate_json(row[0]) for row in status_rows]
+    candidates = [c for s in statuses if s.response is not None for c in s.response.results]
+    merged = merge_candidates(candidates)
+    answered = len({s.provider for s in statuses if s.outcome is ProviderOutcome.OK})
+    query_texts = list(dict.fromkeys(s.query.query for s in statuses))
+    common = dict(queries=query_texts, filters=search.filters, answered_providers=answered, now=search.created_at, config=config)
+    today = rank_merged_candidates(merged, **common)
+    built = rank_merged_candidates(merged, expansion=search.expansion, **common)
+    counts = recency_counts(search.expansion, search.filters, counts_within_days=config.recency.counts_within_days)
+
+    kept = [c for c in merged if not search.filters.source_types or c.source_type in search.filters.source_types]
+    union = query_terms(query_texts)
+    titles = [ranking_tokens(c.title) for c in kept]
+    snippets = [ranking_tokens(c.snippet or "") for c in kept]
+    title_bm25 = bm25_scores(titles, union, k1=config.bm25.k1, b=config.bm25.b)
+    snippet_bm25 = bm25_scores(snippets, union, k1=config.bm25.k1, b=config.bm25.b)
+    index_of = {id(c): i for i, c in enumerate(kept)}
+
+    def key(entry):
+        return entry.candidate.canonical_url or entry.candidate.url
+
+    print("=== t14: built ranking over its stored record ===")
+    print(f"recency counts under the committed table: {counts}; merged {len(merged)}; distinct query words {len(union)}")
+    saved_keys = [r.get("canonical_url") or r.get("url") for r in sorted(saved["results"], key=lambda r: r["rank"])]
+    print(f"today's ranking rebuilt: {sum(1 for a, b in zip(today, saved_keys) if key(a) == b)} of {len(saved_keys)} saved ranks in place")
+    score_line("today", [key(e) for e in today], labels, relevant_count)
+    score_line("built", [key(e) for e in built], labels, relevant_count)
+    have_snippet = sum(1 for s in snippets if s)
+    print(f"results with a snippet: {have_snippet} of {len(kept)}; by provider:")
+    by_provider = {}
+    for c in kept:
+        source = c.field_sources.get("snippet") if c.snippet else None
+        by_provider.setdefault(source or "none", 0)
+        by_provider[source or "none"] += 1
+    print("   ", sorted(by_provider.items()))
+    for label, ranking in (("today", today), ("built", built)):
+        print(f"--- {label}'s top ten ---")
+        print(
+            "rank providers              title-from  snippet-from  bm25   raw     title-bm25 snippet-bm25"
+            "  title-words snippet-words  terms-in-title terms-in-snippet  recency  score  label"
+        )
+        for entry in ranking[:10]:
+            c = entry.candidate
+            i = index_of[id(c)]
+            title_terms = sum(1 for t in union if t in set(titles[i]))
+            snippet_terms = sum(1 for t in union if t in set(snippets[i]))
+            mark = labels.get(key(entry), "unseen")
+            mark = "y" if mark is True else ("n" if mark is False else mark)
+            print(
+                f"{entry.rank:>4} {'+'.join(c.providers):<22} {c.field_sources.get('title', '-'):<11}"
+                f" {(c.field_sources.get('snippet') if c.snippet else '-') or '-':<12}"
+                f" {num(entry.features['bm25'])} {entry.lexical_score or 0:7.3f} {title_bm25[i]:10.3f} {snippet_bm25[i]:12.3f}"
+                f"  {len(titles[i]):>11} {len(snippets[i]):>13}  {title_terms:>14} {snippet_terms:>16}"
+                f"  {num(entry.features['recency']):>7} {entry.total_score:6.3f}  {mark}"
+            )
+    print()
+
+
+def main():
+    data_dir = Path(sys.argv[1]).expanduser()
+    paths = sys.argv[2:]
+    if not len(paths) == 6:
+        raise Stop("expected three paths per search")
+    missing = [Path(p).name for i, p in enumerate(paths) if not Path(p).is_file() and (i % 3 == 0 or i == 4)]
+    if missing:
+        raise Stop(f"missing {missing}")
+    t05_paths = [Path(p) for p in paths[0:3]]
+    t14_paths = [Path(p) for p in paths[3:6]]
+    t05 = saved_search(t05_paths[0])
+    labels, count = labels_for("t05", t05, t05_paths[1], t05_paths[2] if t05_paths[2].is_file() else None)
+    built_t05(t05, labels, count)
+    t14 = saved_search(t14_paths[0])
+    labels, count = labels_for("t14", t14, t14_paths[1], t14_paths[2] if t14_paths[2].is_file() else None)
+    search_row, status_rows = load_store(data_dir, t14["search_id"])
+    if search_row is None or not status_rows:
+        raise Stop("the store does not hold t14's search")
+    built_t14(t14, labels, count, search_row, status_rows)
+
+
+try:
+    main()
+except Stop as stop:
+    print("STOP:", stop)
+    sys.exit(1)
+except Exception as failure:
+    frames = traceback.extract_tb(failure.__traceback__)
+    own = [frame for frame in frames if frame.filename == "<stdin>"]
+    where = own[-1] if own else frames[-1]
+    print("FAILED:", type(failure).__name__, "at block line", where.lineno, "in", where.name)
+    sys.exit(2)
+EOF
+fi
+```
+
+Success looks like:
+* **t05:** `recency counts under the committed table: False`, then `today` at nDCG@10 0.746 and
+  `built` at **0.767** (relevant at 1, 7 and 9).
+* **t14:**
+  * the same `False`;
+  * `today's ranking rebuilt: 200 of 200`;
+  * `today` at 0.438 and `built` at **0.459** (relevant at 2, 3, 5, 12, 52 and 76; 3 unseen rows in
+    the top ten);
+  * the snippet counts;
+  * two ten-row tables.
+
+Paste back everything it prints, `STOP:` or `FAILED:` included.
 
 ### Replay of the proposal and the alternatives
 

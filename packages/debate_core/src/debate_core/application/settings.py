@@ -114,7 +114,7 @@ from fnmatch import fnmatchcase
 from pathlib import Path
 from typing import Any, Final, cast
 from urllib.parse import urlsplit
-from zoneinfo import ZoneInfo
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from pydantic import (
     BaseModel,
@@ -1398,6 +1398,18 @@ class DailySettings(SettingsGroup):
             "the run and is named for the run's date here."
         ),
     )
+
+    @field_validator("time_zone")
+    @classmethod
+    def _a_zone_the_database_knows(cls, value: str) -> str:
+        """Refused at load, never at a digest's first run; the message does not repeat the value."""
+        try:
+            ZoneInfo(value)
+        except (ZoneInfoNotFoundError, ValueError, OSError):
+            raise ValueError(
+                "is not a time zone the IANA time zone database knows; give a name such as America/Chicago"
+            ) from None
+        return value
 
     @property
     def zone(self) -> ZoneInfo:

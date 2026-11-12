@@ -9,8 +9,18 @@ renders the digest and writes its file; this module decides what is in it and wh
 For each of the preset's pairs, in the preset's order, and each of its queries, in order, one
 federated search (:class:`~debate_core.application.federated_search.FederatedSearchService`, the one
 `search` runs) asks the preset's providers the query expanded for that argument and need, on the
-preset's topic, inside the window: from the start of the first day to the end of `--date`, in UTC.
-The window is the search's own `since` and `until`, so it overrules every template's recency window.
+preset's topic, inside the window. The window is the search's own `since` and `until`, so it
+overrules every template's recency window.
+
+## The window and the date
+
+With `--date D` the window is whole UTC days: from the start of the first day to the end of D, `--window`
+days in all, and the digest is D's. With no `--date` (:meth:`DigestRequest.before_the_run`, the PM's
+ruling of 2026-11-12, v1-e08-t25) it is the `--window` days of 24 hours before the run, by the
+injected clock, and the digest is dated by the run's date in `daily.time_zone`: a run at 23:00 in
+Chicago is that evening's digest of the day before it, not the next UTC date's. A day is 24 hours
+even when the zone's clocks change that day. The date names the file and is the date the seen-set
+records, so two runs on one local date are that date's digest twice, as two runs of one `--date` are.
 The service is built for the preset's feed topics alone (the container's job), so a politics digest
 never reads the health-insurance feeds. The searches run one after another; each is stored as
 `search` stores it.
@@ -108,6 +118,11 @@ class DigestWindow:
             raise ValueError(f"{text!r} is not a window: give days, 1d to {MAX_WINDOW_DAYS}d")
         return cls(int(found.group(1)))
 
+    @property
+    def span(self) -> timedelta:
+        """The window as a length of time: 24 hours a day, whatever a clock in any zone does."""
+        return timedelta(days=self.days)
+
     def bounds(self, day: date) -> tuple[datetime, datetime]:
         """The first instant of the window's first day and the last of `day`, in UTC."""
         first = day - timedelta(days=self.days - 1)
@@ -141,12 +156,18 @@ class DigestRequest:
     def before_the_run(
         cls, preset: DailyPreset, *, now: datetime, zone: ZoneInfo, window: DigestWindow = ONE_DAY
     ) -> DigestRequest:
-        """The digest run at `now` with no `--date`."""
-        return cls(preset, now.astimezone(UTC).date(), window)
+        """The digest run at `now` with no `--date`: `window` days of 24 hours before `now`, dated by
+        `now`'s date in `zone`. `ValueError` for a `now` with no time zone of its own, which could be
+        any instant."""
+        if now.utcoffset() is None:
+            raise ValueError("a digest's run time needs a time zone of its own, or it could be any instant")
+        return cls(preset, now.astimezone(zone).date(), window, run_at=now.astimezone(UTC), zone=zone)
 
     def bounds(self) -> tuple[datetime, datetime]:
-        """The first and last instant the digest's searches cover."""
-        return self.window.bounds(self.day)
+        """The first and last instant the digest's searches cover, in UTC."""
+        if self.run_at is None:
+            return self.window.bounds(self.day)
+        return self.run_at - self.window.span, self.run_at
 
 
 @dataclass(frozen=True, slots=True)

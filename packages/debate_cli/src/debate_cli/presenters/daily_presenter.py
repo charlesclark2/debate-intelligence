@@ -86,8 +86,16 @@ def digest_footer(digest: Digest) -> list[str]:
 
 
 def _window_words(digest: Digest) -> str:
-    first, last = digest.since.date().isoformat(), digest.until.date().isoformat()
+    """`2026-09-17 (1 day, UTC)` for a `--date` digest; with no `--date`, the run's hours in its zone:
+    `2026-09-17 07:00 to 2026-09-18 07:00 America/Chicago (the 24 hours before the run)`."""
     days = digest.window.days
+    if digest.zone is not None:
+        first, last = (
+            moment.astimezone(digest.zone).strftime("%Y-%m-%d %H:%M")
+            for moment in (digest.since, digest.until)
+        )
+        return f"{first} to {last} {digest.zone.key} (the {24 * days} hours before the run)"
+    first, last = digest.since.date().isoformat(), digest.until.date().isoformat()
     span = first if first == last else f"{first} to {last}"
     return f"{span} ({days} {'day' if days == 1 else 'days'}, UTC)"
 

@@ -7,6 +7,13 @@ and records them as listed only once the file is written. What is here is the co
 the options, writing the file, and the exit code. The Markdown, the JSON and the summary are
 :mod:`debate_cli.presenters.daily_presenter`'s.
 
+## The date and the window
+
+`--date D` searches whole UTC days ending with D, `--window` days in all. With no `--date` the digest
+covers the `--window` days of 24 hours before the run, by the container's clock, and is dated by the
+run's date in `daily.time_zone` (America/Chicago in the committed profiles; v1-e08-t25, the PM's ruling
+of 2026-11-12). The date names the file and is the date the seen-set records.
+
 ## Files
 
 `<digest dir>/<preset>-<date>.md`, or `.json` with `--format json`; the directory is `digests` in the
@@ -91,11 +98,17 @@ def daily(
     day: Annotated[
         datetime | None,
         typer.Option(
-            "--date", formats=[DATE_FORMAT], help="The date the digest is for. Default: today, UTC."
+            "--date",
+            formats=[DATE_FORMAT],
+            help="The date the digest is for, in whole UTC days. Default: the 24 hours before the run, "
+            "dated by the run's date in daily.time_zone.",
         ),
     ] = None,
     window: Annotated[
-        str, typer.Option("--window", help="How many days, ending with --date, to search: 1d to 31d.")
+        str,
+        typer.Option(
+            "--window", help="How many days to search, ending with --date or with the run: 1d to 31d."
+        ),
     ] = "1d",
     file_format: Annotated[
         DigestFormat,

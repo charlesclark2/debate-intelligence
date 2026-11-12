@@ -319,7 +319,7 @@ class DigestService:
                         continue
                     listed.append(item.keys)
                     items.append(item)
-            alone = False  # skeleton: never named
+            alone = self._templates.asks_query_alone(pair.argument, pair.need)
             groups.append(
                 DigestGroup(
                     pair=pair, heading=self._heading(pair), items=tuple(items), asked_queries_alone=alone
@@ -361,7 +361,9 @@ class DigestService:
 
     def _queries(self, preset: DailyPreset, pair: DailyPair) -> tuple[str, ...]:
         """The preset's queries a search is run for on `pair`: each that some digest template asks."""
-        return preset.queries  # skeleton: every query, as before
+        return tuple(
+            query for query in preset.queries if self._templates.queries_for(pair.argument, pair.need, query)
+        )
 
     def _request(
         self, preset: DailyPreset, pair: DailyPair, query: str, since: datetime, until: datetime

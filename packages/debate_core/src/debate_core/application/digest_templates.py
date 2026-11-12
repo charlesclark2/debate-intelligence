@@ -87,7 +87,11 @@ class DigestTemplate(DomainModel):
     @field_validator("text")
     @classmethod
     def _two_words(cls, value: str) -> str:
-        return value  # skeleton: refuses nothing
+        if not _TWO_WORDS.fullmatch(value):
+            raise ValueError(
+                "a digest template is the query and one word, `{query} <word>` or `<word> {query}`"
+            )
+        return value
 
     def asked_for(self, query: str) -> bool:
         """Whether a search for `query` asks this template."""
@@ -128,7 +132,8 @@ class DigestTemplates(DomainModel):
     def _each_pair_once(self) -> Self:
         pairs = [group.pair for group in self.groups]
         twice = sorted({pair for pair in pairs if pairs.count(pair) > 1})
-        del twice  # skeleton: refuses nothing
+        if twice:
+            raise ValueError(f"a pair has one group of templates; listed more than once: {', '.join(twice)}")
         return self
 
     def group(self, argument: str, need: str) -> DigestTemplateGroup | None:
@@ -166,7 +171,6 @@ def check_digest_templates(
     templates: DigestTemplates, presets: DailyPresets, taxonomy: ArgumentTaxonomy, *, source: str
 ) -> DigestTemplates:
     """`templates`, once every group's pair is the taxonomy's and every listed query a preset's."""
-    return templates  # skeleton: checks nothing
     for group in templates.groups:
         problem = _pair_problem(group, taxonomy) or _query_problem(group, presets)
         if problem is not None:
@@ -213,12 +217,6 @@ class DigestExpansionStage:
         return f"DigestExpansionStage(groups={len(self._templates.groups)})"
 
     async def run(self, state: SearchState) -> SearchState:
-        from datetime import UTC, datetime
-
-        from debate_core.application.query_expansion import expand_with_templates
-
-        skeleton = expand_with_templates(self._taxonomy, state.request, now=datetime.now(UTC))
-        return state.evolve(queries=provider_queries(skeleton, state.request.filters), expansion=skeleton)
         request = state.request
         wanted = request.expansion
         if wanted is None:

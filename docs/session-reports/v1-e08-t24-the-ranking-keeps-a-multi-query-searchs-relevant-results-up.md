@@ -6,14 +6,24 @@
 | Spec | [`plan_specs/v1/e08-research-workflows/t24-the-ranking-keeps-a-multi-query-searchs-relevant-results-up.yaml`](../../plan_specs/v1/e08-research-workflows/t24-the-ranking-keeps-a-multi-query-searchs-relevant-results-up.yaml) |
 | Epic / release | `v1-e08-research-workflows` / `v1.4` |
 | Branch | `task/v1-e08-t24-the-ranking-keeps-a-multi-query-searchs-relevant-results-up` |
-| Session status | IN PROGRESS: positions read and the proposal written; waiting on the operator's replay, then the PM's ruling <!-- COMPLETE / PARTIAL / BLOCKED --> |
+| Session status | IN PROGRESS: positions read, proposal replayed; waiting on the PM's ruling (ac1) <!-- COMPLETE / PARTIAL / BLOCKED --> |
 
 ## Summary
 
-This task is proposal first. **Where it stands:** the positions block has run (both records
-reproduced), the analysis and the proposal are written ([What the positions show](#what-the-positions-show),
-[The proposal](#the-proposal)), and the replay block waits for the operator. **The proposal:** measure
-recency inside the window the search asked its providers for, not against a 90-day half-life.
+This task is proposal first. **Where it stands:** stopped for the PM's ruling, and no code has
+changed.
+* **The positions block reproduced both records:** t05 0.746 against 0.000, t14 0.438 against
+  0.746.
+* **On t14, recency's 90-day half-life lifted recent Crossref-only rows above relevant ones**,
+  inside the five-year window the coach set for links. Loose matching of many queries did not
+  separate relevant rows from the rest ([What the positions show](#what-the-positions-show)).
+* **My first proposal fails the replay.** Recency as a position in that window lowered t05 to 0.605,
+  which is forbidden, and t14 to 0.268. I withdraw it.
+* **The revised recommendation:** recency does not count when every query's window is longer than
+  a year. It replays at t05 0.767 and t14 0.459 ([Replayed figures](#replayed-figures-2026-11-11)).
+* **It does not reach the Goal on t14**, whose provider order scores 0.746. The questions for the PM
+  are under [Questions for the PM](#questions-for-the-pm).
+
 The rest of this summary is from before the positions came back. The block prints, for every row of the two labelled Policy sheets
 (v1-e08-t05's ac6 and v1-e08-t14's ac3), the row's ranked and provider positions, the query that
 found it, every ranking feature and the coach's mark, and then nDCG@10 both ways. Only the operator
@@ -258,6 +268,130 @@ scores lower than it may deserve. The replay prints how many it brings in.
 * **The provider position:** on both searches, the position in the call that first returned the
   result. A later call may hold it higher, and the replay does not look.
 
+## Replayed figures (2026-11-11)
+
+The operator's replay block ran with no provider call. Both searches rebuild today's order in full
+(200 of 200 saved ranks in place) and use a five-year window (1,826 days, one start for every
+query).
+* **t05** is replayed over its 200 saved results.
+* **t14** is replayed over all 2,758 merged results.
+
+nDCG@10 against the coach's labels. "Top ten" is the relevant count in the top ten; "new" is how
+many rows the coach never saw enter the top ten. Those count as not relevant, so a score with new
+rows is a lower bound.
+
+| Variant | t05 nDCG@10 | t05 top ten | t05 new | t14 nDCG@10 | t14 top ten | t14 new |
+|---|---|---|---|---|---|---|
+| Today | **0.746** | 3 | 0 | **0.438** | 3 | 0 |
+| Window recency (the proposal) | 0.605 | 2 | 1 | 0.268 | 2 | 5 |
+| No recency | **0.767** | 3 | 1 | **0.459** | 3 | 3 |
+| Provider position 0.02 | 0.746 | 3 | 0 | 0.438 | 3 | 0 |
+| Provider position 0.05 | 0.746 | 3 | 0 | 0.438 | 3 | 0 |
+| Provider position 0.10 | 0.437 | 2 | 1 | 0.430 | 3 | 2 |
+| Provider position 0.20 | 0.296 | 1 | 1 | 0.420 | 2 | 4 |
+| Window recency + provider position 0.02 | 0.605 | 2 | 1 | 0.268 | 2 | 5 |
+| Window recency + provider position 0.05 | 0.605 | 2 | 1 | 0.282 | 2 | 5 |
+| Window recency + provider position 0.10 | 0.432 | 2 | 1 | 0.321 | 2 | 5 |
+| Window recency + provider position 0.20 | 0.296 | 1 | 1 | 0.410 | 2 | 5 |
+| Provider order (recorded baseline) | 0.000 | 0 | | 0.746 | 4 | |
+
+Where the relevant rows land:
+* t05 today: 1, 9 and 10. With no recency: 1, 7 and 9.
+* t14 today: 2, 3, 8, 25, 39 and 137. With no recency: 2, 3, 5, 12, 52 and 76.
+
+**What the figures say:**
+1. **The proposal fails.**
+   * Window recency lowers t05 (0.746 to 0.605, its rank-9 row falling to 31st), which the spec
+     forbids. It lowers t14 further still (0.438 to 0.268).
+   * Spreading recency over five years lifts many results the coach never saw: five of them enter
+     t14's top ten. The relevant rows do not rise with them.
+   * I withdraw it.
+2. **No recency is the only variant that raises both searches:** t05 0.767, t14 0.459.
+   * It is a lower bound on both, because rows the coach never saw enter both top tens (1 on t05,
+     3 on t14).
+   * On t14 it is still far below provider order's 0.746. No measured change gets t14's ranking
+     above the providers' own order, which is this task's Goal.
+3. **The providers' own position does not help.**
+   * At 0.02 and 0.05 it changes neither top ten.
+   * At 0.10 and above it lowers t05 (forbidden) and does not raise t14.
+   * OpenAlex's joined order does not carry over into the score this way.
+
+## Revised recommendation
+
+**Recency does not count when the search's window is long.** The rule: when a search's request sets
+no `since` and every one of its expanded queries was asked with a window longer than
+`recency.counts_within_days` (365, in `config/federated_ranking.yaml`) or with no window at all,
+recency is unknown for every result. It then contributes nothing and is not mentioned in the
+explanation. "Unknown is not 0", as for every other feature.
+
+What the rule touches, and what it leaves alone:
+* **Affected:** link, internal link, answers (five years) and impact (any age), as asked through
+  `--argument` and `--need`.
+* **Unchanged:**
+  * uniqueness (one year) and the politics DA's 30-day templates keep today's recency;
+  * a search with its own `--since`, and `daily` (which sets `since` and `until`), keep window
+    recency;
+  * a typed search with no expansion keeps the 90-day half-life.
+
+On these two searches it is exactly the replayed "no recency": both windows are 1,826 days. So:
+* t05 rises from 0.746 to **0.767** and t14 from 0.438 to **0.459**;
+* neither score is lowered.
+
+**The rule does not reach the Goal on t14.** It removes the one feature the positions blame and
+that a replay could test. The rest of t14's gap is outside what this round measured. The plain
+fact: six of the seven rows in t14's top ten that the coach marked not relevant are Crossref-only
+results. Rank 1 has BM25 1.000 from its abstract. Closing the gap needs its own proposal and replay
+on t14's stored record, which is the one labelled record left. I propose that as a follow-up rather
+than widening this task.
+
+### Questions for the PM
+
+````text
+PM questions from v1-e08-t24 (multi-query ranking), session of 2026-11-11. Four. Details:
+docs/session-reports/v1-e08-t24-the-ranking-keeps-a-multi-query-searchs-relevant-results-up.md,
+"What the positions show", "Replayed figures" and "Revised recommendation".
+
+Background. Positions reproduced both records (t05 0.746 vs 0.000; t14 0.438 vs 0.746). t05's
+search is gone from the dev store (store replaced between 11-02 and 11-08), so t05 was scored from
+its saved file and the PM's ac6 labels; t14 from its full stored record. On t14, recency's 90-day
+half-life lifted three recent Crossref-only rows above relevant ones, inside the five-year window
+the coach set for links; "many loose query matches" did not separate relevant rows from the rest.
+My first proposal (recency as a position in that window) replayed at t05 0.605 (forbidden) and
+t14 0.268, and is withdrawn.
+
+1. Which change to build?
+   (a) Recency is unknown when every expanded query's window is longer than 365 days or any age,
+       and the request has no --since (new key recency.counts_within_days: 365). Replayed: t05
+       0.746 -> 0.767, t14 0.438 -> 0.459 (both lower bounds: 1 and 3 unseen rows enter the top ten).
+       Uniqueness, the politics 30-day templates, --since, daily and plain typed searches unchanged.
+   (b) Recency weight 0 everywhere. Same two figures, but it also drops recency from uniqueness,
+       --since and daily searches, which nobody measured.
+   (c) Build nothing now; a second proposal round on t14's remaining gap first.
+   Recommendation: (a). It is the only measured change that raises both searches, it is scoped to
+   the windows where the coach said age does not matter, and it leaves every unmeasured search alone.
+
+2. The Goal is not reached on t14 (0.459 vs provider order 0.746). How should the task close?
+   (a) Build 1(a), record both replayed scores, and file a follow-up for t14's gap: six of the
+       seven not-relevant rows in its top ten are Crossref-only (rank 1 has BM25 1.000 from its
+       abstract), proposal first, replayed on t14's stored record.
+   (b) Keep this task open for that second round.
+   Recommendation: (a). The rule stands on its own figures, and the next question is a different
+   feature (how a provider's abstracts score) with only one labelled record to test it on.
+
+3. Unseen rows. The chosen change brings 3 rows the coach never saw into t14's top ten and 1 into
+   t05's. Should he label those 4 blind before the figures are recorded?
+   (a) Yes, by an operator block like t14's sheet (4 rows, item numbers only).
+   (b) No; record the figures as lower bounds, and let v1-e08-t16's repeat search measure afresh.
+   Recommendation: (b). Both figures already rise without them; the labels would only raise them.
+
+4. Deviations, for acceptance: t05's labels taken from the PM's ac6 record (its sheet is not on the
+   Mac; the block checks ranks 1, 9, 10 sit at provider positions 117, 441, 257); t05 replayed over
+   its 200 saved results only; the provider-position feature measured from the first call that
+   returned a result.
+   Recommendation: accept all three. A follow-up I'd file: a labelled search's hand-off should keep
+   its stored record (the dev store reset is what lost t05's).
+````
+
 ## Plan nodes
 
 | Node | Status | Notes |
@@ -268,7 +402,7 @@ scores lower than it may deserve. The replay prints how many it brings in.
 
 | Criterion | Status | Evidence (command → result) |
 |---|---|---|
-| ac1: the operator's positions block has run and the PM has ruled on the proposal before any code | NOT RUN | The positions block ran on 2026-11-11 and reproduced both records ([What the positions show](#what-the-positions-show)). Waiting on the replay, then the PM's ruling. |
+| ac1: the operator's positions block has run and the PM has ruled on the proposal before any code | NOT RUN (half done) | The positions block ran on 2026-11-11 and reproduced both records ([What the positions show](#what-the-positions-show)). The replay ran the same day ([Replayed figures](#replayed-figures-2026-11-11)). Waiting on the PM's ruling. |
 | ac2: the ruled change holds by tests on fixtures shown failing first, and both searches' replayed nDCG@10 are recorded beside today's (operator) | NOT RUN | After the ruling. |
 | Node: `uv run pytest packages/debate_core/tests -k ranking` | NOT RUN | After the ruling. |
 
@@ -1257,7 +1391,16 @@ Paste back everything it prints, `STOP:` or `FAILED:` included.
 
 ## Follow-up work
 
-None yet.
+* **t14's remaining gap (E08, proposal first).** Six of the seven rows in t14's top ten that the
+  coach marked not relevant are Crossref-only. Rank 1 has BM25 1.000 from its abstract. A proposal
+  on how a provider's abstracts score, replayed on t14's stored record, the one labelled record
+  left. It depends on question 2.
+* **A labelled search keeps its stored record (E08).** The dev store was replaced between 2026-11-02
+  and 2026-11-08 and took t05's provider record, snippets included, with it. A blind-labelling
+  hand-off (v1-e08-t16's repeat) should also save the search's stored record, so that a later
+  ranking change can be replayed on it.
+* **t14's ac3 record names the wrong build.** It says `v1.1.0-dev.342`, but the search ran taxonomy
+  1.5.0 with 12 queries and five providers (a build after 2026-11-05). This is for the PM's records.
 
 ## PM review
 

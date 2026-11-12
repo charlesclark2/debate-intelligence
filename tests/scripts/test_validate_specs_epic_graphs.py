@@ -44,6 +44,9 @@ def load_validator() -> ModuleType:
 
 validate_specs = load_validator()
 
+#: Lets a test empty an unfinished task's context without v1-e41-t27's refusal joining its errors.
+NO_PREREQUISITE_REASON = "The graph test empties this context on purpose."
+
 
 def errors(tree: SpecTree, tmp_path: Path) -> list[str]:
     return validate_specs.collect(tree.write(tmp_path / "repo")).errors
@@ -97,6 +100,7 @@ def test_an_external_node_from_the_same_release_passes(tree: SpecTree, tmp_path:
 def test_a_same_epic_edge_missing_from_the_context_is_refused(tree: SpecTree, tmp_path: Path) -> None:
     second = tree.epic("e01").task("t02")
     second.graph, second.context = [E01_T01], []
+    second.annotations = {"debate/no-prerequisite": NO_PREREQUISITE_REASON}  # v1-e41-t27's refusal
     assert errors(tree, tmp_path) == [
         f"{E01_EPIC}: node t02 ({E01_T02}) depends on node t01 ({E01_T01}), "
         f"which {E01_T02}'s spec.context does not list"
@@ -106,6 +110,7 @@ def test_a_same_epic_edge_missing_from_the_context_is_refused(tree: SpecTree, tm
 def test_a_cross_epic_edge_missing_from_the_context_is_refused(tree: SpecTree, tmp_path: Path) -> None:
     later = tree.epic("e02").task("t01")
     later.graph, later.context = [E01_T01], []
+    later.annotations = {"debate/no-prerequisite": NO_PREREQUISITE_REASON}  # v1-e41-t27's refusal
     assert errors(tree, tmp_path) == [
         f"{E02_EPIC}: node t01 ({E02_T01}) depends on node ext-{E01_T01} ({E01_T01}), "
         f"which {E02_T01}'s spec.context does not list"
@@ -207,6 +212,7 @@ def test_a_succeeded_epic_with_an_open_task_is_refused(
 def test_a_succeeded_epic_names_every_open_task(tree: SpecTree, tmp_path: Path) -> None:
     tree.epic("e01").phase = "Succeeded"
     tree.epic("e01").task("t01").phase = "Ready"
+    tree.epic("e01").task("t01").annotations = {"debate/no-prerequisite": NO_PREREQUISITE_REASON}
     assert errors(tree, tmp_path) == [
         f"{E01_EPIC}: epic Goal v1-e01-foundation is Succeeded but its task {E01_T01} is Ready",
         f"{E01_EPIC}: epic Goal v1-e01-foundation is Succeeded but its task {E01_T02} is InProgress",

@@ -207,11 +207,11 @@ def test_exact_doi_merges_a_dx_doi_org_resolver_url_with_a_doi_org_one(written: 
     assert merged.identifiers.doi == "10.5555/nhi.2026.017"
 
 
-def test_exact_doi_does_not_merge_two_openalex_works_that_share_it_under_different_work_ids() -> None:
+def test_exact_doi_merges_two_openalex_works_that_share_it_under_different_work_ids() -> None:
     """The duplicate in v1-e08-t05's live NHI search, with invented values: OpenAlex listed one paper
     as two works, one at a repository PDF and one at its `doi.org` URL, with the same DOI and different
-    work ids. Different values of one identifier keep two records apart whatever else they share, so
-    they stay two results. Changing that is a dedupe rule this task may not change (v1-e08-t10)."""
+    work ids. v1-e08-t10 pinned them as two results; v1-e08-t21 makes a shared DOI overrule differing
+    OpenAlex ids, so they are one (`test_federated_dedupe_shared_doi.py` has the rule's own tests)."""
     repository_copy = paper(
         title="How territorial governance complicates vertical relationships",
         url="https://eprints.example.ac.uk/392/1/392.pdf",
@@ -223,7 +223,7 @@ def test_exact_doi_does_not_merge_two_openalex_works_that_share_it_under_differe
         identifiers=ArticleIdentifiers(doi="10.5555/faam.0054", openalex_id="W7000000002"),
     )
 
-    assert groups((repository_copy, publisher_copy)) == [[0], [1]]
+    assert groups((repository_copy, publisher_copy)) == [[0, 1]]
 
 
 def test_exact_canonical_url_merges_a_story_shared_with_utm_parameters_and_an_amp_path() -> None:

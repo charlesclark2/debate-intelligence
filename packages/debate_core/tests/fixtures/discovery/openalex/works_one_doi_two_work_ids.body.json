@@ -1,0 +1,166 @@
+{
+  "meta": {
+    "count": 6,
+    "db_response_time_ms": 23,
+    "page": 1,
+    "per_page": 25,
+    "groups_count": null
+  },
+  "results": [
+    {
+      "id": "https://openalex.org/W7100000002",
+      "doi": "10.5555/fdt.2025.0031",
+      "display_name": "Fiscal Devolution and the Territorial Politics of Health Budgets",
+      "publication_date": "2025-04-02",
+      "type": "article",
+      "cited_by_count": 0,
+      "open_access": {
+        "is_oa": false,
+        "oa_status": "closed",
+        "oa_url": null,
+        "any_repository_has_fulltext": false
+      },
+      "best_oa_location": null,
+      "primary_location": {
+        "is_oa": false,
+        "landing_page_url": "https://doi.org/10.5555/fdt.2025.0031",
+        "pdf_url": null,
+        "source": null
+      },
+      "authorships": [
+        {"author_position": "first", "author": {"id": "https://openalex.org/A5100000001", "display_name": "Mara Okonjo"}},
+        {"author_position": "last", "author": {"id": "https://openalex.org/A5100000002", "display_name": "Tomas Lindqvist"}}
+      ],
+      "abstract_inverted_index": null
+    },
+    {
+      "id": "https://openalex.org/W7100000001",
+      "doi": "https://doi.org/10.5555/FDT.2025.0031",
+      "display_name": "Fiscal devolution and the territorial politics of health budgets",
+      "publication_date": "2025-04-02",
+      "type": "article",
+      "cited_by_count": 9,
+      "open_access": {
+        "is_oa": true,
+        "oa_status": "green",
+        "oa_url": "https://eprints.example.ac.uk/1207/1/fdt-0031.pdf",
+        "any_repository_has_fulltext": true
+      },
+      "best_oa_location": {
+        "is_oa": true,
+        "landing_page_url": "https://eprints.example.ac.uk/1207/",
+        "pdf_url": "https://eprints.example.ac.uk/1207/1/fdt-0031.pdf",
+        "source": {
+          "id": "https://openalex.org/S4300000001",
+          "display_name": "Invented University Research Repository",
+          "type": "repository"
+        },
+        "license": null,
+        "version": "acceptedVersion"
+      },
+      "primary_location": {
+        "is_oa": true,
+        "landing_page_url": "https://eprints.example.ac.uk/1207/1/fdt-0031.pdf",
+        "pdf_url": "https://eprints.example.ac.uk/1207/1/fdt-0031.pdf",
+        "source": {
+          "id": "https://openalex.org/S4300000001",
+          "display_name": "Invented University Research Repository",
+          "type": "repository"
+        }
+      },
+      "authorships": [
+        {"author_position": "first", "author": {"id": "https://openalex.org/A5100000001", "display_name": "Mara Okonjo"}},
+        {"author_position": "last", "author": {"id": "https://openalex.org/A5100000002", "display_name": "Tomas Lindqvist"}}
+      ],
+      "abstract_inverted_index": {
+        "Devolved": [0],
+        "health": [1],
+        "budgets": [2],
+        "shift": [3],
+        "blame": [4],
+        "between": [5],
+        "tiers.": [6]
+      }
+    },
+    {
+      "id": "https://openalex.org/W7100000003",
+      "doi": "https://doi.org/10.5555/fdt.2025.0032",
+      "display_name": "Hospital budgets under fiscal devolution",
+      "publication_date": "2025-06-10",
+      "type": "article",
+      "cited_by_count": 2,
+      "open_access": {"is_oa": false, "oa_status": "closed", "oa_url": null, "any_repository_has_fulltext": false},
+      "best_oa_location": null,
+      "primary_location": {
+        "is_oa": false,
+        "landing_page_url": "https://doi.org/10.5555/fdt.2025.0032",
+        "pdf_url": null,
+        "source": null
+      },
+      "authorships": [
+        {"author_position": "first", "author": {"id": "https://openalex.org/A5100000001", "display_name": "Mara Okonjo"}}
+      ],
+      "abstract_inverted_index": null
+    },
+    {
+      "id": "https://openalex.org/W7100000004",
+      "doi": "https://doi.org/10.5555/fdt.2025.0033",
+      "display_name": "Hospital budgets under fiscal devolution",
+      "publication_date": "2025-06-10",
+      "type": "article",
+      "cited_by_count": 1,
+      "open_access": {"is_oa": false, "oa_status": "closed", "oa_url": null, "any_repository_has_fulltext": false},
+      "best_oa_location": null,
+      "primary_location": {
+        "is_oa": false,
+        "landing_page_url": "https://doi.org/10.5555/fdt.2025.0033",
+        "pdf_url": null,
+        "source": null
+      },
+      "authorships": [
+        {"author_position": "first", "author": {"id": "https://openalex.org/A5100000001", "display_name": "Mara Okonjo"}}
+      ],
+      "abstract_inverted_index": null
+    },
+    {
+      "id": "https://openalex.org/W7100000005",
+      "doi": null,
+      "display_name": "Regional health boards and the politics of devolution",
+      "publication_date": "2024-11-20",
+      "type": "report",
+      "cited_by_count": 0,
+      "open_access": {"is_oa": false, "oa_status": "closed", "oa_url": null, "any_repository_has_fulltext": false},
+      "best_oa_location": null,
+      "primary_location": {
+        "is_oa": false,
+        "landing_page_url": "https://boards.example.org/reports/regional-health-boards",
+        "pdf_url": null,
+        "source": null
+      },
+      "authorships": [
+        {"author_position": "first", "author": {"id": "https://openalex.org/A5100000002", "display_name": "Tomas Lindqvist"}}
+      ],
+      "abstract_inverted_index": null
+    },
+    {
+      "id": "https://openalex.org/W7100000006",
+      "doi": "https://boards.example.org/not-a-doi",
+      "display_name": "Regional health boards and the politics of devolution",
+      "publication_date": "2024-11-20",
+      "type": "report",
+      "cited_by_count": 0,
+      "open_access": {"is_oa": false, "oa_status": "closed", "oa_url": null, "any_repository_has_fulltext": false},
+      "best_oa_location": null,
+      "primary_location": {
+        "is_oa": false,
+        "landing_page_url": "https://boards.example.org/reports/regional-health-boards?format=print",
+        "pdf_url": null,
+        "source": null
+      },
+      "authorships": [
+        {"author_position": "first", "author": {"id": "https://openalex.org/A5100000002", "display_name": "Tomas Lindqvist"}}
+      ],
+      "abstract_inverted_index": null
+    }
+  ]
+}

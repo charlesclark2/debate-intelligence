@@ -72,7 +72,7 @@ labels:
   description names another task id that its context does not list. It prints in full the warnings
   that name an unfinished task of the same or an earlier release, the most likely missing
   prerequisites, and only counts for a `Succeeded` one (a graph link that could be added) and for one
-  of a later release (never a prerequisite). `--all-warnings` prints those in full too.
+  of a later release or `Cancelled` (never a prerequisite). `--all-warnings` prints those in full too.
 * **Waiting on something outside the repository is `Blocked`.** A task that waits on a quota, an
   operator's run in a later release or the coach's word has `status.phase: Blocked` and an amendment
   naming the condition; `scripts/task ready` lists only `Pending` and `Ready` tasks. The PM sets it

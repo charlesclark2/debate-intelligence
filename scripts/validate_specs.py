@@ -78,7 +78,7 @@ WARNING_HEADINGS = {
         "Most likely a missing prerequisite (an unfinished task of the same or an earlier release)"
     ),
     GRAPH_LINK: "A graph link that could be added (a Succeeded task of the same or an earlier release)",
-    NEVER_A_PREREQUISITE: "Never a prerequisite (a task of a later release)",
+    NEVER_A_PREREQUISITE: "Never a prerequisite (a later release, or Cancelled)",
 }
 # libyaml's parser where PyYAML was built with it, which every wheel PyYAML publishes is; the
 # pure-Python one otherwise. Both are the safe loader and build the same documents. The spec tree
@@ -440,6 +440,12 @@ def named_task_warning(tree: SpecTree, task: str, named_id: str, named: str) -> 
             "it can never be a prerequisite",
         )
     named_phase = tree.phase(named)
+    if named_phase == "Cancelled":  # never Succeeded, so listing it would hold the task back for good
+        named_at = f"{named}, Cancelled in {named_release}"
+        return NamedTask(
+            NEVER_A_PREREQUISITE,
+            f"{path}: {task} names {named_id} ({named_at}): it can never be a prerequisite",
+        )
     head = (
         f"{path}: {task} names {named_id} ({named}, {named_phase} in {named_release}), "
         "which its spec.context does not list"

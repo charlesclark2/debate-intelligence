@@ -230,15 +230,15 @@ def test_an_unfinished_task_named_from_the_same_release_is_a_likely_missing_prer
     ]
 
 
-def test_a_cancelled_task_named_from_an_earlier_release_is_not_a_graph_link(tmp_path: Path) -> None:
-    """The ruling's graph-link kind is a Succeeded task's alone; any other phase is the first kind."""
+def test_a_cancelled_task_named_from_an_earlier_release_is_never_a_prerequisite(tmp_path: Path) -> None:
+    """A Cancelled task is never Succeeded, so listing it would hold the task back (PM, 2026-11-11)."""
     tree = missing_prerequisite_tree()
     tree.epic("e01").task("t02").phase = "Cancelled"
     assert warnings(tree, tmp_path) == [
         (
-            validate_specs.MISSING_PREREQUISITE,
-            f"{E02_T01_FILE}: {E02_T01} names v1-e01-t02 ({E01_T02}, Cancelled in v1.0), which its "
-            "spec.context does not list: list it if this task needs its work first",
+            validate_specs.NEVER_A_PREREQUISITE,
+            f"{E02_T01_FILE}: {E02_T01} names v1-e01-t02 ({E01_T02}, Cancelled in v1.0): "
+            "it can never be a prerequisite",
         )
     ]
 
@@ -314,7 +314,7 @@ def test_a_missing_prerequisite_prints_in_full_and_the_other_kinds_as_counts(
         f"    {THIRD_STEP_LINE}\n"
         "  A graph link that could be added (a Succeeded task of the same or an earlier release): 1, "
         "--all-warnings prints them\n"
-        "  Never a prerequisite (a task of a later release): 1, --all-warnings prints them\n"
+        "  Never a prerequisite (a later release, or Cancelled): 1, --all-warnings prints them\n"
         f"{OK_LINE}\n",
     )
 
@@ -328,7 +328,7 @@ def test_all_warnings_prints_every_kind_in_full(tmp_path: Path, capsys: pytest.C
         f"    {THIRD_STEP_LINE}\n"
         "  A graph link that could be added (a Succeeded task of the same or an earlier release): 1\n"
         f"    {GRAPH_LINK_LINE}\n"
-        "  Never a prerequisite (a task of a later release): 1\n"
+        "  Never a prerequisite (a later release, or Cancelled): 1\n"
         f"    {LATER_RELEASE_LINE}\n"
         f"{OK_LINE}\n",
     )

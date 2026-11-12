@@ -93,6 +93,7 @@ from debate_core.application.settings import ConfigurationError
 from debate_core.domain import DomainModel, SearchFilters, SearchResult, Ulid
 from debate_core.domain.discovery import ProviderOutcome
 from debate_core.domain.enums import SourceType
+from debate_core.domain.search import SearchExpansion
 
 __all__ = [
     "FEDERATED_RANKING_CONFIG_PATH",
@@ -108,6 +109,7 @@ __all__ = [
     "load_federated_ranking_config",
     "parse_federated_ranking_config",
     "rank_merged_candidates",
+    "recency_counts",
     "search_result_for",
 ]
 
@@ -156,9 +158,11 @@ class Bm25Parameters(DomainModel):
 
 
 class RecencyParameters(DomainModel):
-    """Recency without a date window: the age at which a result scores 0.5."""
+    """Recency without a date window: the age at which a result scores 0.5; and the longest
+    expanded-query window in which age still counts (see :func:`recency_counts`)."""
 
     half_life_days: float = Field(gt=0)
+    counts_within_days: int = Field(ge=1)
 
 
 class CitationParameters(DomainModel):
@@ -367,6 +371,13 @@ def _order_key(candidate: MergedCandidate, total: float) -> tuple[float, bool, f
     )
 
 
+def recency_counts(
+    expansion: SearchExpansion | None, filters: SearchFilters, *, counts_within_days: int
+) -> bool:
+    """Whether a result's age counts in this search's ranking."""
+    return True
+
+
 def rank_merged_candidates(
     candidates: Sequence[MergedCandidate],
     *,
@@ -375,6 +386,7 @@ def rank_merged_candidates(
     answered_providers: int,
     now: datetime,
     config: FederatedRankingConfig,
+    expansion: SearchExpansion | None = None,
 ) -> tuple[RankedCandidate, ...]:
     """Score, order, cap and explain `candidates` (see the module docstring).
 
@@ -454,5 +466,6 @@ class FederatedRankStage:
             answered_providers=len(answered),
             now=self._clock.now(),
             config=self._config,
+            expansion=state.expansion,
         )
         return state.evolve(ranked_candidates=ranked)

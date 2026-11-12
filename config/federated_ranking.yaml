@@ -42,6 +42,14 @@ recency:
   # With no date window: a result this many days old scores 0.5, twice as old 0.25. With a
   # window, recency is the result's position in it instead (its start 0, its end 1).
   half_life_days: 90
+  # Age stops counting when every query a search expanded into was asked with a window longer than
+  # this many days, or with none, and the person set no --since (v1-e08-t24). The coach's windows
+  # say how old evidence may be: a link, internal link or answer may be five years old, an impact
+  # any age. Inside such a window a newer result is not a better one, and scoring age there let
+  # results from last week outrank the relevant ones on the labelled NHI link search (nDCG@10
+  # 0.438 -> 0.459 without it). 365 keeps uniqueness (one year) and the politics DA's 30-day
+  # templates as they were; --since, daily and a typed search with no --argument are unchanged.
+  counts_within_days: 365
 
 citations:
   # This many citations or more scores 1; fewer score log(1 + count) / log(1 + saturation).

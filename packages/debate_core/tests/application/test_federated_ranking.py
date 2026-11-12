@@ -39,6 +39,7 @@ from debate_core.application.federated_ranking import (
     load_federated_ranking_config,
     parse_federated_ranking_config,
     rank_merged_candidates,
+    recency_counts,
     search_result_for,
 )
 from debate_core.application.federated_ranking_features import (
@@ -70,6 +71,7 @@ from debate_core.domain.discovery import (
     ProviderStatus,
 )
 from debate_core.domain.enums import SourceType
+from debate_core.domain.search import ExpandedQuery, QueryOrigin, SearchExpansion, WindowSource
 from debate_core.testing.builders import build_search, readable_id
 from debate_core.testing.fakes.clock_and_ids import FixedClock, SequentialIdGenerator
 from debate_core.testing.fakes.persistence import InMemorySearchRepository
@@ -94,6 +96,7 @@ bm25:
   b: 0.75
 recency:
   half_life_days: 90
+  counts_within_days: 365
 citations:
   saturation: 1000
 source_type_values:
@@ -166,6 +169,7 @@ def rank(
     filters: SearchFilters | None = None,
     answered: int = 2,
     config: FederatedRankingConfig = TEST_CONFIG,
+    expansion: SearchExpansion | None = None,
 ) -> tuple[RankedCandidate, ...]:
     return rank_merged_candidates(
         candidates,
@@ -174,6 +178,7 @@ def rank(
         answered_providers=answered,
         now=NOW,
         config=config,
+        expansion=expansion,
     )
 
 
@@ -352,7 +357,7 @@ def test_feature_recency_uses_its_configured_half_life(half_life_days: float, ex
 
 def test_score_recency_reads_the_half_life_from_the_table() -> None:
     sixty_days_old = one(published_at=NOW - timedelta(days=60))
-    short = config_with(recency={"half_life_days": 30})
+    short = config_with(recency={"half_life_days": 30, "counts_within_days": 365})
 
     (entry,) = rank([sixty_days_old], config=short)
 
@@ -535,6 +540,8 @@ def test_score_config_path_is_the_committed_table() -> None:
         ("  b: 0.75\n", "  b: 1.5\n", "bm25.b"),
         ("  k1: 1.2\n", "  k1: -1\n", "bm25.k1"),
         ("  half_life_days: 90\n", "  half_life_days: 0\n", "recency.half_life_days"),
+        ("  counts_within_days: 365\n", "", "recency.counts_within_days"),
+        ("  counts_within_days: 365\n", "  counts_within_days: 0\n", "recency.counts_within_days"),
         ("  saturation: 1000\n", "  saturation: 0\n", "citations.saturation"),
         ("  news: 0.5\n", "", "source_type_values"),
         ("  news: 0.5\n", "  news: 1.5\n", "source_type_values.news"),
@@ -549,6 +556,8 @@ def test_score_config_path_is_the_committed_table() -> None:
         "b-above-one",
         "negative-k1",
         "zero-half-life",
+        "missing-counts-within",
+        "zero-counts-within",
         "zero-saturation",
         "missing-source-type",
         "source-type-above-one",
@@ -1044,12 +1053,14 @@ def state_with(
     statuses: Sequence[ProviderStatus],
     *,
     filters: SearchFilters | None = None,
+    expansion: SearchExpansion | None = None,
 ) -> SearchState:
     request = SearchRequest(query="carbon tax", filters=SearchFilters() if filters is None else filters)
     return SearchState.start(readable_id("SRCH"), request).evolve(
         provider_statuses=tuple(statuses),
         candidates=tuple(member for candidate in merged_candidates for member in candidate.members),
         merged_candidates=tuple(merged_candidates),
+        expansion=expansion,
     )
 
 
@@ -1310,3 +1321,173 @@ def test_relevance_ranking_puts_relevant_items_in_the_top_10_at_least_as_well_as
         print(f"mean nDCG@10: raw {raw_mean:.3f}, ranked {ranked_mean:.3f}")
 
     assert ranked_mean >= raw_mean
+
+
+# --------------------------------------------------------------------------------------------
+# Recency in a search whose every window is long (v1-e08-t24)
+# --------------------------------------------------------------------------------------------
+#
+# The PM's ruling of 2026-11-11: age is unknown when every expanded query was asked with a window
+# longer than recency.counts_within_days (365 in TEST_CONFIG) or with none, and the request has no
+# `since`. Uniqueness (365 days), the politics DA's 30-day templates, a --since, daily (since and
+# until) and a typed search with no expansion keep the recency they had. Every value below is worked
+# out by hand from the half-life (0.5 per 90 days) or the window position.
+
+
+def expansion_of(*windows: int | None, since: datetime | None = None) -> SearchExpansion:
+    """An expansion with one template query per window: `recency_days` as given, None for any age.
+
+    Each query's `since` is counted back from NOW, as the expand stage does, unless `since` gives
+    the request's own, which then replaces every window's.
+    """
+    queries = tuple(
+        ExpandedQuery(
+            query="carbon tax" if index == 0 else f"carbon tax template {index}",
+            origin=QueryOrigin.TEMPLATE,
+            template_id=f"politics-da/link/{index + 1}",
+            template="{query}",
+            since=since if since is not None else (None if days is None else NOW - timedelta(days=days)),
+            recency_days=days,
+            window=WindowSource.REQUEST if since is not None else WindowSource.NEED,
+        )
+        for index, days in enumerate(windows)
+    )
+    return SearchExpansion(
+        taxonomy_version="9.9.9",
+        argument="politics-da",
+        need="link",
+        variables={"query": "carbon tax"},
+        queries=queries,
+    )
+
+
+def ninety_days_old() -> MergedCandidate:
+    return one(published_at=NOW - timedelta(days=90))
+
+
+def recency_of(
+    expansion: SearchExpansion | None,
+    *,
+    filters: SearchFilters | None = None,
+    config: FederatedRankingConfig = TEST_CONFIG,
+) -> float | None:
+    (only,) = rank([ninety_days_old()], filters=filters, expansion=expansion, config=config)
+    return only.features["recency"]
+
+
+def test_ranking_recency_is_unknown_when_every_query_asks_a_window_longer_than_the_table_allows() -> None:
+    expansion = expansion_of(1826, 1826)
+    newest = one(title="Emissions policy", url="https://example.org/new", published_at=NOW)
+    relevant = one(title="Carbon tax", url="https://example.org/old", published_at=NOW - timedelta(days=1826))
+    config = config_with(
+        weights={name: {"bm25": 0.5, "recency": 1.0}.get(name, 0.0) for name in FEATURE_NAMES}
+    )
+    queries = [query.query for query in expansion.queries]
+
+    today = rank([newest, relevant], query=queries, config=config)
+    ruled = rank([newest, relevant], query=queries, config=config, expansion=expansion)
+
+    assert urls(today) == ["https://example.org/new", "https://example.org/old"]
+    assert [entry.total_score for entry in today] == pytest.approx([1.0, 0.5 + 0.5 ** (1826 / 90)])
+    assert urls(ruled) == ["https://example.org/old", "https://example.org/new"]
+    assert [entry.total_score for entry in ruled] == pytest.approx([0.5, 0.0])
+    assert [entry.features["recency"] for entry in ruled] == [None, None]
+    assert [entry.contributions["recency"] for entry in ruled] == [0.0, 0.0]
+    assert [entry.explanation for entry in ruled] == [
+        "strong term match",
+        "no feature contributed to the score",
+    ]
+
+
+def test_ranking_recency_is_unknown_when_every_query_accepts_any_age() -> None:
+    assert recency_of(expansion_of(None, None)) is None
+
+
+def test_ranking_recency_is_unknown_when_the_queries_mix_long_windows_and_any_age() -> None:
+    assert recency_of(expansion_of(1826, None)) is None
+
+
+def test_ranking_recency_is_unknown_one_day_past_the_tables_limit() -> None:
+    assert recency_of(expansion_of(366)) is None
+
+
+def test_ranking_recency_counts_at_the_tables_limit_as_uniqueness_asks() -> None:
+    """Uniqueness's one-year window is exactly 365 days: recency is the half-life's, as before."""
+    assert recency_of(expansion_of(365)) == pytest.approx(0.5)
+
+
+def test_ranking_recency_counts_when_one_query_has_a_short_window_as_the_politics_templates_do() -> None:
+    """The politics DA's uniqueness: 30-day templates beside the need's year, and a long query too."""
+    assert recency_of(expansion_of(30, 30, 365)) == pytest.approx(0.5)
+    assert recency_of(expansion_of(30, 1826)) == pytest.approx(0.5)
+
+
+def test_ranking_recency_reads_its_limit_from_the_table() -> None:
+    wider = config_with(recency={"half_life_days": 90, "counts_within_days": 2000})
+
+    assert recency_of(expansion_of(1826), config=wider) == pytest.approx(0.5)
+
+
+def test_ranking_recency_counts_in_a_long_window_when_the_person_set_since() -> None:
+    """A --since is the person's own window: recency is the position in it (50 of 140 days)."""
+    since = NOW - timedelta(days=140)
+    filters = SearchFilters(since=since)
+
+    assert recency_of(expansion_of(1826, 1826, since=since), filters=filters) == pytest.approx(50 / 140)
+
+
+def test_ranking_recency_counts_in_a_daily_search_which_sets_since_and_until() -> None:
+    """daily asks with its own since and until: the 90-day-old result sits 10 days into a 50-day window."""
+    since, until = NOW - timedelta(days=100), NOW - timedelta(days=50)
+    filters = SearchFilters(since=since, until=until)
+
+    assert recency_of(expansion_of(None, since=since), filters=filters) == pytest.approx(0.2)
+
+
+def test_ranking_recency_counts_in_a_typed_search_with_no_expansion() -> None:
+    assert recency_of(None) == pytest.approx(0.5)
+
+
+@pytest.mark.parametrize(
+    ("windows", "since", "counts"),
+    [
+        ((1826,), None, False),
+        ((None,), None, False),
+        ((366, None), None, False),
+        ((365,), None, True),
+        ((30, 1826), None, True),
+        ((1826,), NOW - timedelta(days=10), True),
+        ((None,), NOW - timedelta(days=10), True),
+    ],
+    ids=["five-years", "any-age", "just-over-and-any", "a-year", "short-and-long", "since-long", "since-any"],
+)
+def test_ranking_recency_counts_decides_from_the_windows_and_the_requests_since(
+    windows: tuple[int | None, ...], since: datetime | None, counts: bool
+) -> None:
+    filters = SearchFilters(since=since)
+
+    assert recency_counts(expansion_of(*windows, since=since), filters, counts_within_days=365) is counts
+    assert recency_counts(None, filters, counts_within_days=365) is True
+
+
+def test_the_rank_stage_hands_the_expansion_to_the_ranking() -> None:
+    study = ninety_days_old()
+
+    (plain,) = asyncio.run(
+        FederatedRankStage(TEST_CONFIG, clock=FixedClock(NOW)).run(state_with([study], [status("openalex")]))
+    ).ranked_candidates
+    (long_windows,) = asyncio.run(
+        FederatedRankStage(TEST_CONFIG, clock=FixedClock(NOW)).run(
+            state_with([study], [status("openalex")], expansion=expansion_of(1826))
+        )
+    ).ranked_candidates
+
+    assert plain.features["recency"] == pytest.approx(0.5)
+    assert long_windows.features["recency"] is None
+
+
+def test_score_config_in_the_repository_counts_recency_within_a_year() -> None:
+    """The committed table: the PM's 365 (v1-e08-t24's ruling)."""
+    config = load_federated_ranking_config(REPOSITORY / FEDERATED_RANKING_CONFIG_PATH)
+
+    assert config.recency.counts_within_days == 365

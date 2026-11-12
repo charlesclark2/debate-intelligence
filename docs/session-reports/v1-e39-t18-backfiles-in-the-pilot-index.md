@@ -96,6 +96,26 @@ With hspolicy25 at its docx-7 size (13,510,680,041, from the backfile runbook), 
 is about 58.9 GB, 73.6 GB with 25% headroom, against 112,754,421,760 bytes free on the Mac (memory
 19,327,352,832 bytes; Docker VM 8,221,937,664 bytes, 11 CPUs, aarch64).
 
+**The second bucket check**, run by the operator on 2026-11-12 (a Thursday) after the hold was lifted,
+with the lock free. Every store is complete at `2026.11.03-docx-9`, each with its `occurrences.jsonl`;
+hspolicy25's object count is the rebuild's parsed_uploaded exactly.
+
+| Store | docx-9 objects | docx-9 bytes | Version directories |
+|---|---|---|---|
+| hspolicy25 | 14,343 | 13,525,536,662 | docx-7 (retired next batch) and docx-9 |
+| hsld25 | 23,660 | 10,986,908,792 | docx-9 only |
+| hspolicy24 | 12,312 | 10,791,735,497 | docx-9 only |
+| hsld24 | 23,976 | 11,104,528,527 | docx-9 only |
+| hsld26 | 8,258 | 4,128,943,216 | docx-7 and docx-9 |
+| hspolicy26 | 5,691 | 6,220,607,735 | docx-7 and docx-9 |
+| hspf26 | 6,700 | 1,956,072,676 | docx-7 and docx-9 |
+| openev | 110 | 201,266,870 | docx-7 and docx-9 |
+
+The restore size, recomputed: 58,915,599,975 docx-9 bytes across the eight stores, 73,644,499,968
+with 25% headroom, against 119,436,075,008 bytes free. It fits. The installed `debate-research`
+(1.1.0.dev413) parses at `2026.11.03-docx-9`, the version a restore takes, so no docx-7 directory is
+restored.
+
 ## Operator follow-ups
 
 <!-- Commands the operator must run (anything over ~2 minutes), with where to run them, the exact

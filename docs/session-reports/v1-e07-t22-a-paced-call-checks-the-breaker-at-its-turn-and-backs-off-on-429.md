@@ -231,9 +231,48 @@ None.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-11-12
 
 **Notes:**
+
+The PM read the constants in `resilience.py`: `RATE_LIMIT_HOLD_BASE_SECONDS` 2.0,
+`RATE_LIMIT_HOLD_CAP_SECONDS` 60.0 and `RATE_LIMIT_HOLD_JITTER` 0.5, each with its reason, and none
+written as a provider's published limit.
+
+1. **ac1 passes.**
+   - **Red:** 26 failed against a skeleton that changes nothing, every one at an assertion.
+   - **The night's case**, on the real Semantic Scholar adapter on virtual time: one request at 0 s,
+     then seven refused at their turns as skips. On 2026-11-11, eight were sent. A ninth query goes out
+     when the hold ends.
+   - **The breaker at the turn**, shown with 503s: three sent, then five refused once the breaker opens.
+   - **The session's own test fix:** it found that instant mock answers couldn't show a check at the
+     turn, and gave the mocks real latency. That's the right correction, and it is written down.
+2. **ac2 passes.**
+   - **The holds**, written by hand with an injected random source: 2, 4, 8, 16, 32, 60 and 60; jitter
+     only ever lengthens a hold; an answer resets the doubling; `Retry-After` is kept to the second and
+     counts in the doubling.
+   - **The mutants:** 19 of 20 caught. The step's own cap was rightly found equivalent and removed. The
+     overflow guard that removal exposed is pinned by a run of two thousand 429s.
+   - **The stale-bytecode result** on the first pass was found and the run repeated, which is good
+     practice.
+3. **No port changed.**
+   - `PaceListener.turn_came` and `TurnOutcome.REFUSED` keep v1-e07-t10's shape.
+   - A refusal raised in `Turn.__aenter__` never enters the adapter's send.
+   - The wrapper counts its own refusal as a skip, recognised by identity, so it is not counted as a
+     failure, a latency sample or another 429.
+4. **This meets the operator's Semantic Scholar agreement of 2026-11-11.** That's exponential backoff with
+   jitter, `Retry-After` honoured, no request inside a hold, and nothing sent once the breaker opens. So
+   v1-e07-t20 and the keyed smoke (v1-e07-t04's operator follow-up 2) may go ahead once this merges, and
+   the next batch records the agreement as met.
+5. **The deviations are accepted.** The CLI README paragraph is the PM's ruling 4. No smoke check was
+   added, because nothing a student sees changed, only how many requests go out.
+6. **Follow-ups, which the PM files in the next batch:**
+   - **E07, p3:** an adapter that knows its 429 means a spent budget gives a longer hold of its own. This
+     is OpenAlex's daily budget and api.data.gov's hourly allowance, which now get three requests in
+     about six seconds before the breaker opens, where before they got one a minute.
+   - **A note for the first paced multi-query adapter:** use a `TaskGroup`, so a refusal at one turn
+     cancels the rest. The PM writes it into E07's epic notes; it is not a task.
+7. **Merge:** a plain `scripts/task pr` once `ci` is green. The Goal is `Succeeded`.

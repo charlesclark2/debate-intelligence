@@ -6,77 +6,81 @@
 | Spec | [`plan_specs/v1/e08-research-workflows/t25-digest-queries-and-the-feeds-every-word-rule.yaml`](../../plan_specs/v1/e08-research-workflows/t25-digest-queries-and-the-feeds-every-word-rule.yaml) |
 | Epic / release | `v1-e08-research-workflows` / `v1.4` |
 | Branch | `task/v1-e08-t25-digest-queries-and-the-feeds-every-word-rule` |
-| Session status | PARTIAL: the operator's counts are in (2026-11-12); stopped for the PM's ruling on the queries |
+| Session status | COMPLETE |
 
 ## Summary
 
-This session did the two things the PM's brief of 2026-11-12 allowed before the stop.
+The task is done in three steps.
 
-* **The measurement.** [`scripts/count_digest_feed_matches.py`](../../scripts/count_digest_feed_matches.py)
-  runs on the operator's installed dev build. It reads the politics preset's real feeds once, into an
-  in-memory cache, and writes nothing. For the 24-hour and 72-hour windows it prints counts only, for
-  each filled query by its template id and pair: what today's every-word rule keeps, what the query's
-  own words alone keep, what the query's own words plus any one of the template's words keep, and what
-  six proposed shorter digest templates keep. The operator ran it on 2026-11-12 (build
-  1.1.0.dev413) and pasted the output straight into the session. Under today's rule every query kept
-  0 items in both windows. The proposal is under [Proposal](#proposal-from-the-counts): new two-word
-  digest templates, 4 items in 24 hours and 6 in 72. It waits for the PM's ruling, and there is no
-  code for it before that.
-* **The ruled date default (ac3).** With no `--date`, a digest now covers the 24 hours before the run,
-  by the injected clock. It is dated by the run's date in the new setting `daily.time_zone`, which is
-  America/Chicago in the dev and prod profiles. `--date` and `--window` keep their meaning. An unknown
-  zone is refused when the settings load, naming `daily.time_zone`. 23 new tests were shown failing
-  against a skeleton that refused nothing and kept the UTC rule, and they pass now.
+* **Measured first (ac1).** I wrote
+  [`scripts/count_digest_feed_matches.py`](../../scripts/count_digest_feed_matches.py), which prints
+  counts only. The operator ran it on 2026-11-12 (build 1.1.0.dev413, 23:21Z) on the politics feeds.
+  Under the every-word rule, every one of the ten filled taxonomy queries kept 0 items, in the 24 hours
+  (42 items) and in the 72 hours (59). The counts are recorded below, all four strategies and both
+  windows. The PM ruled the same day for new two-word digest templates.
+* **The ruled change (ac2).** `daily` now asks the digest templates in
+  [`config/daily_templates.yaml`](../../config/daily_templates.yaml), and never the taxonomy's. The
+  file holds the ruled four: `bill Congress`, `Senate Congress`, `Senate Republicans`,
+  `Senate election`. These are unchanged: `search`, the feed provider's every-word rule, and all 456
+  coach-reviewed templates (now pinned by test). A pair with no digest templates asks the preset's
+  query alone, and the digest names that group. That covers the `nhi` preset today. 34 tests were
+  shown failing against a skeleton first, and 4 planted breaks were caught by the guard tests.
+* **The date default (ac3), as ruled before the stop.** With no `--date`, a digest covers the 24 hours
+  before the run and is dated in `daily.time_zone`, which is America/Chicago.
 
-The Goal stays **InProgress**: ac1 needs the operator's run and the PM's ruling, and ac2 is the ruled
-change, which is not built. For the PM, look first at the changeover note under Decisions (2). It is
-what a coach with digests already named by UTC date sees once.
+Every criterion passes, so the Goal is **Succeeded**. One operator follow-up waits for the merge: one
+real `daily politics` on a dev build that carries this change. For the PM, look first at the `nhi`
+consequence of the fallback (Decisions 9 and the question below).
 
 ## Plan nodes
 
 | Node | Status | Notes |
 |---|---|---|
-| `digest-queries-and-the-feeds-every-word` (Digest queries) | IN PROGRESS | The measurement script and the ruled date default (ac3) are done. The query proposal (ac1) waits for the operator's counts and the ruling, and the ruled change (ac2) comes after it. The node's test command passes today (below). It has to pass again once ac2 is built. |
+| `digest-queries-and-the-feeds-every-word` (Digest queries) | DONE | In order: the measurement script; the date default (ac3); the operator's counts and the proposal; the PM's ruling of 2026-11-12; the digest templates (ac2). The node's test command passes after ac2 (below). |
 
 ## Acceptance criteria
 
 | Criterion | Status | Evidence (command → result) |
 |---|---|---|
-| ac1: the operator's real digest counts are recorded, and the PM rules on the proposal before any code (operator) | NOT RUN (counts recorded; ruling pending) | The counts are recorded under [Measured counts](#measured-counts-2026-11-12), and the operator's whole output is in the appendix. The proposal is written; the PM's ruling is pending. Offline check of the script: `.venv/bin/python -I scripts/count_digest_feed_matches.py politics --offline`, run from `$HOME`. It printed every section, and I hand-checked its counts against the four made-up items. For example, in the 72-hour window `Senate midterms polling` keeps 0 under every-word, because the item says "polls", and 1 under own-plus-one. |
-| ac2: the ruled change holds, by tests on fixtures shown failing first | NOT RUN | No ruling yet, and no code before one (the PM's brief). |
-| ac3: a digest run with no `--date` covers the ruled hours, not the UTC date's, by tests on an injected clock shown failing first | PASS | **Red** (commits `5a9c1b5` and `1a77ae4`): the tests ran against a skeleton with the new API that still took the UTC date and whole UTC days, and an unvalidated `daily.time_zone`. `pytest -n 0 --tb=line` over `test_digest_service.py`, `test_daily_command.py`, `test_settings.py` and `test_settings_environments.py` gave **23 failed, 162 passed**. Every failure was on an assertion, for example `assert datetime.date(2026, 11, 12) == datetime.date(2026, 11, 11)` (23:00 Chicago), `assert ['politics-2026-09-18.json'] == ['politics-2026-09-17.json']` (Los Angeles), `'- Window: … (1 day, UTC)' == '- Window: …fore the run)'` (07:00 Chicago), and `DID NOT RAISE ConfigurationError` (each unknown zone). The 3-day CLI test first crashed with FileNotFoundError. I changed it to assert the file list first, and it then failed on `['politics-2026-09-18.md'] == ['politics-2026-09-17.md']`. **Green** (`1049ff1`): the same files, with the configuration-gaps presenter tests, gave **192 passed in 3.14 s**. **Mutants**: (a) the CLI ignores the setting and hard-codes Chicago: caught by `test_with_no_date_the_digest_is_dated_in_the_configured_zone[los angeles…]`; (b) a no-date window of 24 hours whatever `--window` says: caught by `test_a_wider_window_with_no_date…` (core) and `test_with_no_date_and_a_wider_window…` (CLI). The four cases asked for: 23:00 Chicago is 2026-11-11 with 05:00Z–05:00Z (`test_a_run_at_23_00_in_chicago…`, and in the CLI `test_with_no_date_a_run_at_23_00_in_chicago…`). 07:00 Chicago (`…07_00…`, both). Both changeover days: 1 November, when the clocks fall back, and 8 March, when they spring forward (`test_on_the_day_the_clocks_fall_back…`, `…spring_forward…`). A non-default zone: Los Angeles and Tokyo in core, Los Angeles in the CLI. |
-| Node: "Digest queries tests pass" (`uv run pytest packages/debate_core/tests packages/debate_cli/tests -k "digest or feed"`) | PASS (for what is built) | `.venv/bin/python scripts/hard_stop.py 115 .venv/bin/python -m pytest -q packages/debate_core/tests packages/debate_cli/tests -k "digest or feed" -m "not slow and not live"` → **507 passed in 68.17 s**, exit 0. To be run again after ac2. |
+| ac1: the operator's real digest counts are recorded, and the PM rules on the proposal before any code (operator) | PASS | The operator ran the Operator follow-ups block on 2026-11-12T23:21Z (build 1.1.0.dev413, 4 of 4 feeds read, exit 0). The counts for all four strategies and both windows are under [Measured counts](#measured-counts-2026-11-12), and the whole output is in the appendix. The proposal is [Proposal from the counts](#proposal-from-the-counts). The PM ruled for option A on 2026-11-12, and the PM records the ruling. No query code came before the ruling: the first ac2 commit is `eada0db`, after it. Before the run I checked the script offline from `$HOME` against four made-up items and worked the counts out by hand. |
+| ac2: the ruled change holds, by tests on fixtures shown failing first | PASS | **Red** (`eada0db`, the skeleton): the stage still asked the taxonomy's templates, the loader and the checks refused nothing, and no group fell back. `pytest -n 0 --tb=line` over `test_digest_service.py`, `test_digest_templates.py`, `test_feeds.py`, `test_daily_command.py` and `tests/scripts/test_stamp_build.py` gave **34 failed, 233 passed**. Every failure was an assertion or a "did not raise". Examples: `assert ['bill vote c…ot pass', …] == ['bill Congre…ate election']` (daily asks the digest templates); `assert {'Congress sp…on risk', …} == {'health insurance'}` (nhi asks its query alone); `DID NOT RAISE DigestTemplateError` for each refused template, pair and query; the hand-written 17th and 18th digests, `'… 10 queries\n' == '… 4 queries\n'`. **Green** (`864aa74`): the same files gave **267 passed**. **Guards**, which hold before and after the change by design, were shown failing on a planted break each, every break restored from HEAD: (1) `search` given the digest stage → `test_search_still_asks_the_taxonomys_uniqueness_templates` failed, `['Senate Cong… Republicans'] == ['Senate vote…ill not pass']`; (2) one reviewed template edited (`will not pass` → `won't pass`) → `test_every_coach_reviewed_template_is_byte_for_byte_as_it_was` and `test_the_uniqueness_templates_daily_used_to_ask_are_unchanged_for_search` failed; (3) the every-word rule loosened to any word → 3 cases of `test_a_digest_templates_two_words_are_both_required_by_the_same_every_word_rule` failed; (4) a group with no templates falling back silently to the taxonomy → 5 tests failed, the two core fallback tests and three nhi CLI tests. The ruling's six points and their tests: digest templates asked, `test_daily_asks_the_digest_templates_and_none_of_the_taxonomys_uniqueness_templates`, `test_a_digest_asks_its_templates_ids_and_none_of_the_taxonomys`; `search` unchanged, `test_search_still_asks…`; every-word unchanged, `test_a_digest_templates_two_words_are_both_required…`; reviewed templates pinned, `test_every_coach_reviewed_template_is_byte_for_byte_as_it_was` (35 arguments, 456 templates, sha256); groups apart, `test_the_two_groups_list_what_their_own_templates_found_and_nothing_twice`; the stated fallback, `test_a_pair_with_no_digest_templates_asks_its_query_alone_and_says_so`, `test_with_no_digest_templates_at_all…`, `test_a_group_with_no_digest_templates_asks_its_query_alone_and_the_digest_says_so`. |
+| ac3: a digest run with no `--date` covers the ruled hours, not the UTC date's, by tests on an injected clock shown failing first | PASS | **Red** (commits `5a9c1b5` and `1a77ae4`): the tests ran against a skeleton with the new API that still took the UTC date and whole UTC days, and an unvalidated `daily.time_zone`. `pytest -n 0 --tb=line` over `test_digest_service.py`, `test_daily_command.py`, `test_settings.py` and `test_settings_environments.py` gave **23 failed, 162 passed**. Every failure was on an assertion, for example `assert datetime.date(2026, 11, 12) == datetime.date(2026, 11, 11)` (23:00 Chicago), `assert ['politics-2026-09-18.json'] == ['politics-2026-09-17.json']` (Los Angeles), `'- Window: … (1 day, UTC)' == '- Window: …fore the run)'` (07:00 Chicago), and `DID NOT RAISE ConfigurationError` (each unknown zone). The 3-day CLI test first crashed with FileNotFoundError; I changed it to assert the file list first, and it then failed on `['politics-2026-09-18.md'] == ['politics-2026-09-17.md']`. **Green** (`1049ff1`): **192 passed**. **Mutants**: (a) the CLI hard-codes Chicago instead of reading the setting: caught by the Los Angeles case; (b) a 24-hour window whatever `--window` says: caught in core and in the CLI. The four cases asked for: 23:00 Chicago (2026-11-11, 05:00Z to 05:00Z), 07:00 Chicago, both changeover days (1 November, when the clocks fall back, and 8 March, when they spring forward), and a non-default zone (Los Angeles and Tokyo). With ac2 the CLI cases' expected items changed with the fixtures (B, I, C), and they still pass. |
+| Node: "Digest queries tests pass" (`uv run pytest packages/debate_core/tests packages/debate_cli/tests -k "digest or feed"`) | PASS | `.venv/bin/python scripts/hard_stop.py 115 .venv/bin/python -m pytest -q packages/debate_core/tests packages/debate_cli/tests -k "digest or feed" -m "not slow and not live"` after ac2 → **545 passed in 41.77 s**, exit 0. |
 
 ### Checks before the report
 
-* `uv run scripts/affected_tests.py`: **748 of 748 test files (100.0%)**. The root conftest imports
-  `debate_core.application.settings`, which changed. That is the whole selection, so per agreement 10
-  I ran nothing more of it and it is left to the pull request's `ci`. Within the two minutes I ran:
+* `uv run scripts/affected_tests.py`: **749 of 749 test files (100.0%)**, from 28 changed files. The
+  root conftest imports `debate_core.application.settings`, which changed. That is the whole
+  selection, so per agreement 10 it is left to the pull request's `ci`. Within the two minutes I ran
+  35 paths, each checked with `ls -d` first:
   * the always-run list (`tests/architecture`, `tests/specs`, `test_app.py`, `test_help_rendering.py`,
     `test_container_factories.py`);
-  * the docs checks (`tests/docs`, `test_check_command_blocks.py`, `test_docs_index.py`);
-  * every test of the changed modules (`test_digest_service.py`, `test_daily_presets.py`,
-    `test_run_state_saves_held_digests.py`, `test_daily_command.py`, the configuration-gaps presenter
-    tests, `tests/smoke/test_daily_smoke.py`);
+  * the docs checks;
+  * every test of the changed modules (`test_digest_service.py`, `test_digest_templates.py`,
+    `test_daily_presets.py`, `test_run_state_saves_held_digests.py`, `test_feeds.py`,
+    `test_daily_command.py`, the configuration-gaps presenter tests, `tests/smoke/test_daily_smoke.py`);
+  * `search`'s command and presenter tests, because the container's federated-search builder changed;
+  * `test_installation.py`;
   * every test that reads the whole settings or the committed profiles (all nine `test_settings*.py`,
     `test_config_command.py`, `test_version.py`, `test_routing_file_checked_at_startup.py`,
     `test_per_user_credentials_and_a_missing_working_folder.py`, `tests/smoke/test_cli_smoke.py`,
-    `test_factory.py`, `tests/scripts/test_stamp_build.py`).
+    `test_factory.py`);
+  * `tests/scripts/test_stamp_build.py`.
 
-  All 30 paths were checked with `ls -d` first. Result: `pytest -q -n 6 -m "not slow and not live"`
-  → **1240 passed in 34.01 s**.
-* `packages/debate_core/tests/application` as a whole, the changed modules' directory, did not finish
-  inside 115 seconds at a load of about 7 (`hard_stop` exit 124). It is in CI's whole selection.
-* `uv run ruff format --check .` → `2075 files already formatted`. `uv run ruff check .` → `All checks
+  Result: `pytest -q -n 6 -m "not slow and not live"` → **1496 passed in 44.94 s**.
+* `packages/debate_core/tests/application` as a whole did not finish inside 115 seconds earlier in
+  the session (`hard_stop` exit 124), so it is in CI's whole selection.
+* `uv run ruff format --check .` → `2077 files already formatted`. `uv run ruff check .` → `All checks
   passed!`
-* `uv run pyright packages/debate_core packages/debate_cli tests/smoke tests/architecture` → `0 errors`.
-  `uv run pyright scripts/count_digest_feed_matches.py` → `0 errors`.
+* `uv run pyright packages/debate_core packages/debate_cli tests/smoke tests/architecture
+  scripts/count_digest_feed_matches.py scripts/stamp_build.py` → `0 errors`.
 * `uv run lint-imports` → `Contracts: 20 kept, 0 broken`. `uv run scripts/check_thin_handlers.py` →
   `OK: 74 CLI command and API route handlers within 25 statements`.
-* `uv run scripts/check_command_blocks.py` → OK (697 blocks). `uv run scripts/check_links.py` → OK.
+* `uv run scripts/check_command_blocks.py --base origin/dev` → OK (703 blocks, this report included).
+  `uv run scripts/check_links.py` → OK.
 * `uv run scripts/validate_specs.py` → `OK: 669 files, 41 epics, 606 tasks, 22 releases`.
-* The new smoke check was shown failing: with `time_zone = "America/Denver"` planted in `dev.toml` it
-  failed `assert 'America/Denver' == 'America/Chicago'`. I restored the file from HEAD afterwards.
+* The ac3 smoke check was shown failing earlier with `time_zone = "America/Denver"` planted in
+  `dev.toml`.
 
 ## Measured counts (2026-11-12)
 
@@ -121,6 +125,11 @@ What the rows show:
 
 ## Proposal from the counts
 
+**Ruled by the PM, 2026-11-12: option A**, digest-specific templates, with the four that kept
+something as the first list. Not B, because its extra items are unseen (counts only) and it merges
+the groups. Not C, because it is unmeasured, and the function-word rule is more to get right than A's
+list. The rest of this section is the proposal as it was written.
+
 **Recommended: new digest-specific templates, two words each** (`{query}` plus one strong word),
 asked by `daily` in place of the taxonomy's uniqueness templates. The every-word rule and the
 coach-reviewed templates stay as they are, and so does `search`.
@@ -151,32 +160,54 @@ this run. Few `polling` or `forecast` items is what the calendar predicts, which
 
 ## Files changed
 
-* **`scripts/count_digest_feed_matches.py`** (new): the operator's per-query count.
-* **`packages/debate_core/src/debate_core/application/digest_service.py`**: `DigestRequest` gains
-  `run_at`, `zone`, `before_the_run()` and `bounds()`, `DigestWindow.span`, `Digest.zone` and
-  `ONE_DAY`. The module docstring has a section on the window and the date.
-* **`packages/debate_core/src/debate_core/application/settings.py`**: `DailySettings` with
-  `time_zone`, validated against the IANA database at load, and `Settings.daily`.
-* **`config/profiles/dev.toml`, `prod.toml`**: `[daily] time_zone = "America/Chicago"`.
-* **`packages/debate_cli/src/debate_cli/commands/daily.py`**: builds the request from the clock and
-  the zone when there is no `--date`. The help for `--date` and `--window`, and the docstring, say so.
-* **`packages/debate_cli/src/debate_cli/presenters/daily_presenter.py`**: a no-date digest's
-  `Window` line gives the hours in the zone.
-* **Tests**: `test_digest_service.py` (12 tests), `test_daily_command.py` (6 tests and a settable
-  clock), `test_settings.py` (3 tests over 10 cases), `test_settings_environments.py` (2 cases),
-  `tests/smoke/test_daily_smoke.py` (1).
-* **Docs**: `docs/guides/daily-digests.md` (new, for the coach) and the `daily` section of
+* **The digest templates (ac2).**
+  * `config/daily_templates.yaml` (new): the ruled four, each with its measured counts as a comment.
+  * `packages/debate_core/src/debate_core/application/digest_templates.py` (new): the file's model,
+    the loader, the checks against the taxonomy and the presets, `queries_for` with the fallback, and
+    `DigestExpansionStage`.
+  * `digest_service.py`: `DigestService` takes the templates, skips a search no template is for, gives
+    each group `asked_queries_alone`, and gains `planned_searches()`.
+  * `container.py`: `daily_templates()`, and daily's federated search built with the digest stage.
+    `search` keeps the taxonomy's stage.
+  * `daily.py`: the progress line counts the planned searches; the docstring.
+  * `daily_presenter.py`: the note under a group that asked its query alone, and `asked_queries_alone`
+    in the JSON group.
+  * `config/daily_presets.yaml`: its header comment.
+* **The date default (ac3).**
+  * `digest_service.py`: `DigestRequest.before_the_run()` and `bounds()`, `DigestWindow.span`, and
+    `Digest.zone`.
+  * `settings.py`: `DailySettings.time_zone`.
+  * `config/profiles/dev.toml`, `prod.toml`: `[daily] time_zone`.
+  * `daily.py`: the help and the request.
+  * `daily_presenter.py`: the `Window` line.
+* **Bundling.** `scripts/stamp_build.py` and `tests/scripts/test_stamp_build.py`: a published build
+  carries `config/daily_templates.yaml`, and `check-wheels` requires it.
+* **The measurement.** `scripts/count_digest_feed_matches.py` (new). It now counts the committed
+  digest templates and any `--candidate`, counts only.
+* **Tests.**
+  * `test_digest_templates.py` (new, 23 cases).
+  * `test_digest_service.py`: the world asks test-written digest templates; 4 new ac2 tests and 12
+    ac3 tests.
+  * `test_feeds.py`: 1 test over 6 cases.
+  * `test_daily_command.py`: 6 new ac2 tests (8 cases) and 6 ac3 tests, with the expectations
+    rewritten by hand.
+  * `test_settings.py`, `test_settings_environments.py`, and `tests/smoke/test_daily_smoke.py` (ac3).
+  * The fixtures `courier_2026-09-17.xml` (new item I), `courier_2026-09-18.xml` (G and H retitled, I
+    listed again) and `courier_auto_cut.xml` (the second item retitled), with their README.
+* **Docs.** `docs/guides/daily-digests.md` (new): the window and the zone, the digest templates, the
+  fallback, and "Counting a template before adding it" with its block. Also the `daily` section of
   `packages/debate_cli/README.md`.
 
 ## Deviations from the spec
 
-1. **The ac3 ruling is in the PM's brief of 2026-11-12, not yet in the spec.** The spec's description
-   still says "propose the default … and stop for the ruling". I built the brief's rule as written.
-   The spec wants the ruling added to its amendments.
-2. **Two paths outside `constraints.packages`.**
-   * `scripts/count_digest_feed_matches.py`: the brief allows "a small script under scripts/".
-   * `tests/smoke/test_daily_smoke.py`: agreement 5 asks every user-facing change to update its smoke
-     checks, and `daily --help` and `config show` changed.
+1. **The rulings are in the PM's brief and rulings of 2026-11-12, not yet in the spec.** The PM's
+   next batch amends the spec.
+2. **Paths outside `constraints.packages`**, which the PM's next batch adds:
+   * `scripts/count_digest_feed_matches.py` (the brief allows it);
+   * `tests/smoke/test_daily_smoke.py` (agreement 5);
+   * `scripts/stamp_build.py` and `tests/scripts/test_stamp_build.py`. A published build reads only
+     the config files `stamp_build.py` bundles, so without them an installed `daily` could not find
+     its templates.
 
 ## Decisions and assumptions
 
@@ -216,8 +247,69 @@ this run. Few `polling` or `forecast` items is what the calendar predicts, which
      taxonomy, so no coach-reviewed template changes.
    * Shorter preset queries are not a separate option to count: the politics preset's queries are
      already one word each (`bill`, `Senate`), so every extra word comes from the templates.
+8. **The four are exactly four.** A template's `queries` lists the preset queries it is asked for.
+   So `{query} Republicans` and `{query} election` are asked for `Senate` alone, because `bill
+   Republicans` and `bill election` kept nothing. A pair whose group has no template for a query runs
+   no search for it: midterms DA x `bill`. The politics digest asks 4 queries in 3 searches. It used
+   to ask 10 in 4.
+9. **The fallback is "its query alone, named"**, which is one of the two the ruling offered. A pair
+   with no group asks the preset's query alone. It is recorded as
+   `digest/<argument>/<need>/query-alone`, and the digest says under the group's heading that its
+   searches asked the preset's queries alone. It never asks the taxonomy's templates. I chose this
+   over "none asked and named" because of `nhi`, all of whose pairs have no group: with none asked,
+   every `nhi` digest would ask no provider and exit 1 without writing anything. The cost is real
+   too. The three `nhi` searches all ask `health insurance`, of OpenAlex, Crossref, the feeds and the
+   government sources, so their results are listed once, under the spending DA group, and the other
+   two groups stay empty. Before this, `nhi` asked the reviewed spending, federalism and economy
+   templates. The PM question below asks about this.
+10. **A template is the query and one word, enforced.** The file refuses anything else when it
+    loads: three words, the query alone, a filled query, the query twice. That keeps the measured
+    rule from drifting back to long queries.
+11. **The pin on the reviewed templates** is a sha256 of every coach-reviewed argument's templates
+    (text and window) as canonical JSON: 35 arguments and 456 templates, taxonomy 1.6.0 as on dev. It
+    is written beside a hand-written list of the two uniqueness pairs `daily` used to ask. A change to
+    any byte of any reviewed template's text fails it, and so does a change to a window.
+12. **The fixtures changed with the rule, written by hand.** I added item I ("Senate Republicans block
+    the stopgap") on the 17th so that politics x Senate finds something. I retitled G and H on the 18th
+    so that the next-date test still has new items, and retitled the auto-cut feed's second item so the
+    three cassette pages are still found in the same order. Item A stays as a witness: only the
+    taxonomy's `Senate vote count Senate` would keep it, and the digest does not list it.
+
 
 ## Operator follow-ups
+
+### After this merges: one real politics digest with no --date
+
+This is the PM's follow-up (2026-11-12), under a minute. It needs a dev pre-release that carries this
+branch, installed with `scripts/install_channel.sh`. It stops without doing anything if `DEBATE_`
+overrides are set, or if any `debate-research` command is running (v1-e39-t18's pilot-index work
+included).
+
+* **What it reads.** The politics feeds, over the network.
+* **What it writes.** Only to a scratch folder on your Desktop, `daily-check-t25`, which is both the
+  data directory and the digest directory. The real dev seen-set and feed cache are untouched. The
+  digest file and the JSON, which hold titles, stay in that folder.
+* **What it prints.** Counts only.
+
+Where: your Mac, any terminal
+```bash
+if env | grep -q '^DEBATE_'; then echo "STOP: DEBATE_ overrides are set in this shell"; elif pgrep -f debate-research > /dev/null; then echo "STOP: a debate-research command is running; wait for it"; else mkdir -p "$HOME/Desktop/daily-check-t25" && cd "$HOME" && env DEBATE_ENV=dev DEBATE_STORAGE__DATA_DIR="$HOME/Desktop/daily-check-t25/data" debate-research --json daily politics --digest-dir "$HOME/Desktop/daily-check-t25" > "$HOME/Desktop/daily-check-t25/daily.json"; echo "exit $?"; python3 -I -c 'import json, sys; e = json.load(open(sys.argv[1])); r = e.get("error") or {}; d = e.get("data") or r.get("details") or {}; w = d.get("window") or {}; print("code", r.get("code"), "status", d.get("status"), "date", d.get("date"), "new", d.get("new_results"), "listed_before", d.get("listed_before")); print("window", w.get("since"), w.get("until")); print("groups", [(g["heading"], len(g["results"]), g.get("asked_queries_alone")) for g in d.get("groups") or []]); print("providers", [(p["provider"], p["outcome"], p["queries"], p["results"]) for p in d.get("providers") or []])' "$HOME/Desktop/daily-check-t25/daily.json"; fi
+```
+
+**What success looks like:**
+
+* `exit 0`, `code None` and `status COMPLETE`;
+* `date` is today's date in Chicago;
+* `window` is the 24 hours ending at about the time you ran it, in UTC;
+* `new` is in the low single digits;
+* `groups` lists both `Politics DA — Uniqueness` and `Midterms DA — Uniqueness`, each with `False`
+  (it has digest templates);
+* `providers` is `[('rss', 'ok', 4, N)]`: 4 queries.
+
+`new 0`, or a group with 0, is an answer on a quiet day, not a failure. `exit 6` names a feed in
+`providers` that did not answer. Paste the `exit` line and the four lines after it back to the PM.
+
+### Done, 2026-11-12: the per-query counts
 
 **Done, 2026-11-12:** the operator ran the block below and pasted the output into the session. It
 exited 0 and its counts are recorded above. The block stays here because a second run, with other
@@ -247,7 +339,9 @@ if env | grep -q '^DEBATE_'; then echo "STOP: DEBATE_ overrides are set in this 
   without `OFFLINE`;
 * each feed's row has `listed` above zero;
 * there are two sections, `window 24h` and `window 72h`, each with 22 query rows (10 `taxonomy`, 12
-  `proposed`) and six `distinct items kept` rows;
+  `proposed`) and six `distinct items kept` rows. That was the script as it ran then; it now prints
+  `digest` and `candidate` rows instead of `proposed` (the guide's "Counting a template before adding
+  it");
 * the last line is `exit 0`.
 
 **How to read it.**
@@ -261,67 +355,45 @@ if env | grep -q '^DEBATE_'; then echo "STOP: DEBATE_ overrides are set in this 
 
 ## Follow-up work
 
-* **The ruled query change** (this task's ac2), after the PM's ruling on the proposal above. If digest
-  templates are ruled: new templates in a place only `daily` reads, with tests on synthetic fixtures
-  shown failing first.
+* **Digest templates for `nhi` (E08).** Its three pairs ask `health insurance` alone and collapse into
+  one group (Decisions 9). The script counts `nhi`'s feed candidates: `count_digest_feed_matches.py nhi
+  --candidate "spending-da/uniqueness={query} spending"`. It does not count what OpenAlex, Crossref or
+  the government sources would return, so a template's worth on those providers is not measured.
+* **Re-measure the midterms templates after the season turns.** The 2026-11-12 counts came nine days
+  after the midterms. `{query} polls` and `{query} midterms` kept nothing then, and may not later.
 * **`daily` by a scheduler.** If the coach ever schedules `daily`, the scheduled run's time decides
   the hours covered. A run at a fixed local hour now gives back-to-back 24-hour windows with no gap.
-  Under the UTC date it did not. Nothing to do now.
 
 ### Questions for the PM
 
 ````text
-PM questions from v1-e08-t25 (digest queries and the every-word rule), session of 2026-11-12. The
-operator's per-query counts are in (build 1.1.0.dev413, 2026-11-12T23:21Z, all four politics feeds
-read, exit 0); the operator pasted them into the session directly. ac3 (the date default) is built
-as you ruled. The session is stopped for ruling 1.
+PM question from v1-e08-t25 (digest queries), session of 2026-11-12, after your rulings. Built as
+ruled, every criterion passes, and the Goal is Succeeded; this one question changes one rule if you
+answer B.
 
-The counts, distinct items kept by the whole politics digest, 24 hours / 72 hours (42 / 59 items in
-the windows):
-- today's every-word rule: 0 / 0. All 10 filled queries keep 0 in both windows.
-- the query's own words alone (bill, Senate): 11 / 14. The politics group, the midterms group and the
-  whole digest all count the same 11 / 14, so they are the same items, and the midterms group would
-  be empty (a source is listed once, in its first group).
-- own words plus any one template word: 10 / 13 (politics 10 / 12, midterms 2 / 4). Inflated by the
-  templates' function words: `Senate likely to pass Congress` keeps 7, yet `Senate Congress` keeps 1.
-- six proposed two-word digest templates: 4 / 6 (politics 3 / 3, midterms 2 / 4). Hits:
-  `bill Congress` 1 / 1, `Senate Congress` 1 / 1, `Senate Republicans` 1 / 1, `Senate election`
-  2 / 4. `vote`, `midterms`, `polls`, `bill Republicans` and `bill election` kept 0.
-
-1. Which change for the digest's queries?
+1. The fallback for a pair with no digest templates, which you asked me to state. I chose "its query
+   alone, named": the search asks the preset's query alone, and the digest says so under the group's
+   heading. It never asks the taxonomy's templates. Today that is every pair of the nhi preset: its
+   spending, federalism and economy DA searches each ask "health insurance" alone, of OpenAlex,
+   Crossref, the feeds and the government sources. What they find is listed once, under the spending
+   DA group, and the other two groups are empty. Before, nhi asked the reviewed templates for each
+   pair.
    Options:
-   (A) New digest-specific templates, two words each ({query} plus one strong word), asked by daily
-       in place of the taxonomy's uniqueness templates; the every-word rule, search and every
-       coach-reviewed template unchanged. Measured: 0 -> 4 items a day, 6 over three days, groups kept
-       apart. The coach extends the list; the script counts a candidate in under a minute.
-   (B) A looser feed match for digests: the query's own words required, the template's words
-       ranked. Measured: 11 / 14, but the two groups become one list.
-   (C) Own words plus one of the template's content words (function words such as to, will, not
-       skipped). Keeps the groups apart and the reviewed templates; not measured. One more operator
-       run, under a minute, would count it before you rule.
-   Shorter preset queries are not an option: bill and Senate are one word each already.
-   Recommendation: A, with the four candidates that kept something (bill Congress, Senate Congress,
-   Senate Republicans, Senate election) as the first list. If you would rather weigh C first, I add
-   its column to the script and hand the operator the same block again.
-   Context for the midterms numbers: the midterms were 2026-11-03, so few polling or forecast items
-   is expected this week under any rule.
+   (A) As built: nhi keeps producing a digest, named as asking its query alone, until nhi gets digest
+       templates of its own.
+   (B) None asked and named: a pair with no digest templates asks nothing, and the digest names it.
+       Every nhi digest then asks no provider, exits 1 and writes nothing until it has templates.
+   Recommendation: A, and a follow-up task for nhi's digest templates, counted with the script for
+   the feeds. The script does not count OpenAlex or Crossref, so those would be unmeasured.
 
-2. The changeover for digests already named by UTC date. Suppose an evening run with the older build
-   named its file for the next date, D. The first run on local date D with this build replaces that
-   file, and lists again whichever of its results are still in the 24 hours. This happens once; the
-   guide tells the coach to rename the file first to keep it.
-   Options: (A) as built and documented; (B) refuse to replace a digest file this build did not
-   write. That needs a marker in the file, because the seen-set does not record which rule dated it.
-   Recommendation: A. It is one file, once, and the coach is told.
-
-FYI, proceeding as built unless you say otherwise:
-- daily.time_zone's built-in default is America/Chicago too, not UTC, so the test profile and a
-  build with no profile also date by the coach's zone.
-- The ruling isn't in the spec yet (Deviations 1). scripts/ and tests/smoke/ are outside
-  constraints.packages: the brief allows the script, and agreement 5 asks for the smoke check
-  (Deviations 2).
-- The affected set is the whole selection (settings.py feeds the root conftest), so it is CI's. I
-  ran the always-run list and every test of the changed modules and of the settings: 1240 passed.
+FYI, as built:
+- The ruled four are exactly four: a template's `queries` names the preset queries it is asked for,
+  so bill Republicans and bill election (0 / 0) are not asked, and midterms DA x bill runs no search.
+  The politics digest now asks 4 queries in 3 searches (it asked 10 in 4).
+- scripts/stamp_build.py and its test bundle config/daily_templates.yaml into published builds, which
+  is two more paths outside constraints.packages (Deviations 2).
+- The post-merge operator follow-up block is in the report: one real `daily politics` with no --date,
+  writing only to a Desktop scratch folder. It stops while any debate-research command is running.
 ````
 
 ## Appendix: the operator's output, 2026-11-12

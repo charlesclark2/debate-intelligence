@@ -64,11 +64,11 @@ v2.3's extension work.
 | [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 4 | 125 | 105 | 550 |
 | [v1.2](plan_specs/releases/v1.2.yaml) | Argument landscape & file building | 3 | 99 | 82 | 366 |
 | [v1.3](plan_specs/releases/v1.3.yaml) | URL → verified card | 2 | 24 | 15 | 125 |
-| [v1.4](plan_specs/releases/v1.4.yaml) | Federated research from the CLI | 2 | 46 | 24 | 152 |
+| [v1.4](plan_specs/releases/v1.4.yaml) | Federated research from the CLI | 2 | 48 | 24 | 158 |
 | [v1.5](plan_specs/releases/v1.5.yaml) | V1 quality gate & team pilot | 1 | 7 | 1 | 66 |
 | [v1.6](plan_specs/releases/v1.6.yaml) | Public team website | 3 | 31 | 22 | 169 |
 | [v1.7](plan_specs/releases/v1.7.yaml) | Team evidence search pilot | 1 | 30 | 25 | 100 |
-| [v1.8](plan_specs/releases/v1.8.yaml) | Weekly caselist run in the cloud | 2 | 74 | 43 | 136 |
+| [v1.8](plan_specs/releases/v1.8.yaml) | Weekly caselist run in the cloud | 2 | 74 | 44 | 136 |
 | [v2.0](plan_specs/releases/v2.0.yaml) | Cloud platform foundation | 3 | 17 | 0 | 164 |
 | [v2.1](plan_specs/releases/v2.1.yaml) | Web app, debate tub & async jobs | 3 | 18 | 0 | 198 |
 | [v2.2](plan_specs/releases/v2.2.yaml) | Research workspace | 2 | 12 | 0 | 117 |
@@ -495,8 +495,10 @@ A student can run `debate-research cut <URL>` and receive a verified, tagged, ci
 | [The providers named as having no adapter are pinned to the container's discovery factories](plan_specs/v1/e07-discovery-adapters/t17-providers-without-an-adapter-pinned-to-the-factories.yaml) `v1-e07-t17-providers-without-an-adapter-pinned-to-the-factories` | Pending | 1 | 1.0 |
 | [A paced query released late that then hangs is a failure the circuit breaker hears of](plan_specs/v1/e07-discovery-adapters/t18-the-breaker-hears-of-a-released-query-the-searchs-deadline-cut-off.yaml) `v1-e07-t18-the-breaker-hears-of-a-released-query-the-searchs-deadline-cut-off` | Pending | 1 | 2.0 |
 | [The search presenter's stand-in Crossref queues on the shared pacer, so its health reads as the real adapter's](plan_specs/v1/e07-discovery-adapters/t19-the-search-presenters-stand-in-crossref-queues-on-a-real-pacer.yaml) `v1-e07-t19-the-search-presenters-stand-in-crossref-queues-on-a-real-pacer` | Pending | 1 | 1.0 |
-| [Semantic Scholar is enabled in both profiles once its live smoke has passed](plan_specs/v1/e07-discovery-adapters/t20-semantic-scholar-enabled-after-its-live-smoke.yaml) `v1-e07-t20-semantic-scholar-enabled-after-its-live-smoke` | Pending | 2 | 1.0 |
+| [Semantic Scholar is enabled in both profiles once its live smoke has passed](plan_specs/v1/e07-discovery-adapters/t20-semantic-scholar-enabled-after-its-live-smoke.yaml) `v1-e07-t20-semantic-scholar-enabled-after-its-live-smoke` | Pending | 4 | 1.0 |
 | [Semantic Scholar's influential citation count is either weighed by the ranking or no longer asked for](plan_specs/v1/e07-discovery-adapters/t21-influential-citations-weighed-or-not-asked.yaml) `v1-e07-t21-influential-citations-weighed-or-not-asked` | Pending | 1 | 2.0 |
+| [A paced call checks the breaker and the rate-limit hold when its turn comes, and a 429 backs the provider off exponentially](plan_specs/v1/e07-discovery-adapters/t22-a-paced-call-checks-the-breaker-at-its-turn-and-backs-off-on-429.yaml) `v1-e07-t22-a-paced-call-checks-the-breaker-at-its-turn-and-backs-off-on-429` | Pending | 2 | 3.0 |
+| [A provider missing only configuration is named with its cure wherever it appears, and counts as partial only when a person asked for it](plan_specs/v1/e07-discovery-adapters/t23-configuration-gaps-named-with-their-cure-everywhere.yaml) `v1-e07-t23-configuration-gaps-named-with-their-cure-everywhere` | Pending | 1 | 2.0 |
 
 #### [E08 — Federated Research Workflows](plan_specs/v1/e08-research-workflows/epic.yaml)
 
@@ -653,7 +655,7 @@ The weekly caselist run (pull, import, publish, parse, search index) runs in the
 | [Cut over: the cloud run takes the schedule and the Mac stops](plan_specs/v1/e40-cloud-caselist-run/t06-cutover.yaml) `v1-e40-t06-cutover` | Succeeded | 4 | 2.0 |
 | [The evidence bucket itself refuses an unconditional write of the run lock](plan_specs/v1/e40-cloud-caselist-run/t07-lock-writes-conditional-at-the-bucket.yaml) `v1-e40-t07-lock-writes-conditional-at-the-bucket` | InProgress | 1 | 1.0 |
 | [A week a killed run published is parsed by the next run, not left for the next import](plan_specs/v1/e40-cloud-caselist-run/t08-parse-owed.yaml) `v1-e40-t08-parse-owed` | Succeeded | 1 | 3.0 |
-| [The backfile imports run once each in the cloud, not on the operator's machine](plan_specs/v1/e40-cloud-caselist-run/t09-cloud-backfile-import.yaml) `v1-e40-t09-cloud-backfile-import` | InProgress | 2 | 3.0 |
+| [The backfile imports run once each in the cloud, not on the operator's machine](plan_specs/v1/e40-cloud-caselist-run/t09-cloud-backfile-import.yaml) `v1-e40-t09-cloud-backfile-import` | Succeeded | 2 | 3.0 |
 | [A restored working copy that brings the raw sources a hand prod publish needs](plan_specs/v1/e40-cloud-caselist-run/t10-restore-with-sources.yaml) `v1-e40-t10-restore-with-sources` | Succeeded | 1 | 2.0 |
 | [The dev lock held for good when the weekly run's home moves to prod](plan_specs/v1/e40-cloud-caselist-run/t11-run-home-moved-holder.yaml) `v1-e40-t11-run-home-moved-holder` | Succeeded | 1 | 2.0 |
 | [A held upload a cloud task records reaches the bucket, not only its working copy](plan_specs/v1/e40-cloud-caselist-run/t12-held-upload-records-reach-the-bucket.yaml) `v1-e40-t12-held-upload-records-reach-the-bucket` | Succeeded | 1 | 3.0 |

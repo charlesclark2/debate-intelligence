@@ -829,7 +829,8 @@ def test_a_da_link_search_on_the_nhi_topic_asks_openalex_its_links_then_the_chos
     """v1-e08-t16, the PM's ruling after the coach's answers: the politics DA's seven reviewed link
     queries as they are, then the coach's own wording and templates 2, 4, 5, 6 and 7, each on the
     resolution's words and each of the four mechanisms, naming the United States. The 37 go to OpenAlex
-    in one joined request (v1-e08-t10)."""
+    joined (v1-e08-t10) in two requests: OpenAlex refuses a search over 1,500 characters, and the first 24
+    are 1,473 of them, the first 25 1,536 (the operator's measurement, v1-e08-t20, 2026-11-12)."""
     result = search(
         "national health insurance",
         "--argument",
@@ -869,6 +870,8 @@ def test_a_da_link_search_on_the_nhi_topic_asks_openalex_its_links_then_the_chos
             "Affordable Care Act popular with Republicans United States",
             "national health insurance unpopular with Republicans United States",
             "single payer unpopular with Republicans United States",
+        ),
+        joined(
             "Medicare for All unpopular with Republicans United States",
             "public option unpopular with Republicans United States",
             "Affordable Care Act unpopular with Republicans United States",

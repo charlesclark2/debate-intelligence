@@ -53,7 +53,7 @@ from debate_core.domain.argument_taxonomy import (
 from debate_core.domain.caselist.values import Event
 from debate_core.domain.model_contracts import ModelProvider, TaskClass
 from debate_core.domain.search import ExpandedQuery, QueryOrigin, SearchExpansion, WindowSource
-from debate_core.integrations.discovery.openalex import works_requests
+from debate_core.integrations.discovery.openalex import MAX_SEARCH_CHARS, works_requests
 from debate_core.integrations.local import SqliteDatabase, SqliteSearchRepository
 from debate_core.integrations.models.fake_router import FAKE_MODEL_ID, FakeModelRouter
 from debate_core.integrations.models.prompt_registry import PromptRegistry
@@ -1788,12 +1788,15 @@ def test_the_committed_taxonomy_nhi_topic_crosses_the_politics_templates_the_coa
             assert reviewed_links[number - 1]["text"] == entry.text, entry.template_id
 
 
-def test_every_da_link_search_on_a_committed_preset_is_one_openalex_request_per_page(
+def test_every_da_link_search_on_a_committed_preset_is_the_fewest_openalex_requests_per_page(
     committed: ArgumentTaxonomy,
 ) -> None:
-    """The PM's ruling on v1-e08-t16: MAX_QUERIES_PER_SEARCH stands for one joined OpenAlex request per
-    page (openalex.py's MAX_URL_CHARS), so every DA's link search on every preset with mechanisms, on the
-    topic's own words at the most results a search takes, fits one."""
+    """v1-e08-t16's pin, held against what OpenAlex was measured to refuse (v1-e08-t20, 2026-11-12): a
+    search over 1,500 characters. The politics DA's 37 link queries on the NHI preset go as 24 and 13,
+    because the operator's requests found the first 24 joined are 1,473 characters, answered, and the
+    first 25 are 1,536, refused. Every other DA's link search there is seven or eight queries, one
+    request. Every request fits both limits."""
+    fewest = {("policy-2026-27-nhi", "politics-da"): [24, 13]}
     checked = 0
     for topic in committed.topics:
         if not topic.mechanisms:
@@ -1811,7 +1814,12 @@ def test_every_da_link_search_on_a_committed_preset_is_one_openalex_request_per_
             )
             expansion = expand(request, committed)
             requests = works_requests(provider_queries(expansion, filters))
-            assert len(requests) == 1, (topic.id, argument.id, len(expansion.queries))
+            carried = [len(request.answers) for request in requests]
+            expected = fewest.get((topic.id, argument.id), [len(expansion.queries)])
+            assert carried == expected, (topic.id, argument.id, carried)
+            assert all(len(request.query.query) <= MAX_SEARCH_CHARS for request in requests)
+            if carried == [24, 13]:
+                assert len(requests[0].query.query) == 1_473
             assert len(expansion.queries) <= MAX_QUERIES_PER_SEARCH, (topic.id, argument.id)
             checked += 1
     assert checked == 9

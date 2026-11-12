@@ -32,7 +32,10 @@ comes back short; OpenAlex pages no further than 10,000 works. Each page is one 
 joins the queries that share their filters into one `search=`, each in parentheses and joined by
 `OR`: OpenAlex ANDs the words of a group, as it does a query asked alone, and a query is kept
 unquoted, as today. A request URL over about 4 KB is refused with `400`, so the joined queries are
-split into the fewest requests whose URL stays within :data:`MAX_URL_CHARS`. A result says nothing
+split into the fewest requests whose search stays within :data:`MAX_SEARCH_CHARS` and whose URL stays
+within :data:`MAX_URL_CHARS` (v1-e08-t20). A query that could reach outside its parentheses
+(:func:`asked_alone`) is sent in a request of its own, as typed. A joined request OpenAlex still
+refuses with `400` is split in halves and asked again (:meth:`OpenAlexProvider._halves`). A result says nothing
 about which group it matched (only a relevance score), so :func:`answered_queries` attributes each
 work by the feeds' rule: a query answered it when every one of its words is in the work's title or
 abstract. A work that matches no query's words answered the joined search, and goes to every query
@@ -84,6 +87,7 @@ from debate_core.integrations.discovery.redaction import logger, protect_logs
 __all__ = [
     "MAX_PAGED_RESULTS",
     "MAX_PER_PAGE",
+    "MAX_SEARCH_CHARS",
     "MAX_URL_CHARS",
     "OPENALEX_WORKS_URL",
     "PROVIDER_NAME",
@@ -116,9 +120,24 @@ MAX_PER_PAGE: Final = 100
 MAX_PAGED_RESULTS: Final = 10_000
 """The furthest `page=` paging reaches: page × per_page may not pass it (help.openalex.org/api/paging)."""
 
+MAX_SEARCH_CHARS: Final = 1_500
+"""The longest `search=` sent, in characters: OpenAlex refuses a longer one with `400`.
+
+Measured by the operator on 2026-11-12 (v1-e08-t20), on v1.1.0-dev.407 with the free key, joining the
+first N of the NHI politics DA link search's 37 queries: 24 (a search of 1,473 characters, a URL of
+1,835) were answered and 25 (1,536 and 1,902) refused, with "Your search is too long (1536 characters;
+the limit is 1500)". The same 25 were refused without the key and on page 2; their words in 13 groups
+(1,476 characters) and 25 groups of one word each (338) were answered, so neither the number of OR
+groups nor the URL is what OpenAlex refused. OpenAlex says a paid plan takes longer searches. The 37
+queries' 2,272 characters, under :data:`MAX_URL_CHARS` at 2,686 of URL, were refused on 2026-11-11."""
+
 MAX_URL_CHARS: Final = 3_500
 """The longest request URL sent. OpenAlex refuses one over about 4 KB with `400` and suggests splitting
-an `OR` list into chunks (developers.openalex.org/guides/searching, read by the PM 2026-11-04)."""
+an `OR` list into chunks (developers.openalex.org/guides/searching, read by the PM 2026-11-04).
+
+Kept beside :data:`MAX_SEARCH_CHARS`, which binds first on plain text (1,500 characters of search came
+to about 1,860 of URL in the measurement of 2026-11-12): a search whose characters encode long, such
+as accented letters at six URL characters each, can reach this one first."""
 
 SELECTED_FIELDS: Final = (
     "id",
@@ -415,10 +434,11 @@ class WorksRequest:
 
 
 def works_requests(queries: Sequence[ProviderQuery]) -> tuple[WorksRequest, ...]:
-    """The fewest joined searches that ask every query: one per filters, split to fit :data:`MAX_URL_CHARS`.
+    """The fewest joined searches that ask every query: one per filters, split to fit OpenAlex's limits.
 
     Queries with the same filters (date window, result cap) share a request, in the order they
-    first appear; each request's URL, at its last page, stays within the limit. A query too long to
+    first appear; each request's search stays within :data:`MAX_SEARCH_CHARS` and its URL, at its last
+    page, within :data:`MAX_URL_CHARS`. The split is greedy in order, so it is the fewest. A query too long to
     fit with any other is a request of its own, as it would be asked alone. A query
     :func:`asked_alone` names is a request of its own, after its filters' joined requests.
     """
@@ -433,7 +453,7 @@ def works_requests(queries: Sequence[ProviderQuery]) -> tuple[WorksRequest, ...]
             if position in alone:
                 continue
             trial = [*chunk, position]
-            if chunk and len(works_url(_last_page_parameters(queries, trial))) > MAX_URL_CHARS:
+            if chunk and not _fits(queries, trial):
                 requests.append(_request(queries, chunk))
                 chunk = [position]
             else:
@@ -447,6 +467,13 @@ def works_requests(queries: Sequence[ProviderQuery]) -> tuple[WorksRequest, ...]
 def _request(queries: Sequence[ProviderQuery], positions: Sequence[int]) -> WorksRequest:
     asked = [queries[position] for position in positions]
     return WorksRequest(ProviderQuery(query=joined_search(asked), filters=asked[0].filters), tuple(positions))
+
+
+def _fits(queries: Sequence[ProviderQuery], positions: Sequence[int]) -> bool:
+    """Whether one request may carry the queries at `positions`: its search and its URL within the limits."""
+    if len(_request(queries, positions).query.query) > MAX_SEARCH_CHARS:
+        return False
+    return len(works_url(_last_page_parameters(queries, positions))) <= MAX_URL_CHARS
 
 
 def _last_page_parameters(queries: Sequence[ProviderQuery], positions: Sequence[int]) -> dict[str, str]:

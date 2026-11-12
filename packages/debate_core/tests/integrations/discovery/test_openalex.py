@@ -32,6 +32,7 @@ from debate_core.domain.discovery import BreakerState, CandidateResult, Provider
 from debate_core.domain.enums import SourceType
 from debate_core.domain.search import SearchFilters
 from debate_core.integrations.discovery.openalex import (
+    MAX_SEARCH_CHARS,
     MAX_URL_CHARS,
     OPENALEX_WORKS_URL,
     OpenAlexProvider,
@@ -841,23 +842,31 @@ THIRTY_TWO: Final = (*NHI_LINK_QUERIES, *(f"{m} {t} United States" for m in MECH
 AC6_WINDOW: Final = SearchFilters(since=datetime(2021, 11, 3, tzinfo=UTC), max_results=200)
 
 
-@pytest.mark.parametrize("texts", [NHI_LINK_QUERIES, THIRTY_TWO], ids=["12 queries", "32 queries"])
-async def test_a_12_or_32_query_search_is_one_request_per_page(texts: tuple[str, ...]) -> None:
-    """The PM's figures: both fit under 3,500 characters, so each is one request per page (two pages
-    for `--max-results 200`)."""
-    assert len(texts) in (12, 32)
+@pytest.mark.parametrize(
+    ("texts", "pages"),
+    [(NHI_LINK_QUERIES, ["1", "2"]), (THIRTY_TWO, ["1", "2", "1", "2"])],
+    ids=["12 queries", "32 queries"],
+)
+async def test_a_12_query_search_is_one_request_per_page_and_a_32_query_search_two(
+    texts: tuple[str, ...], pages: list[str]
+) -> None:
+    """The 12 joined are 727 characters of search, so one request a page (two pages for `--max-results
+    200`). The 32 are more than the 1,500 OpenAlex takes (24 of the 37 NHI link queries already make
+    1,473, measured 2026-11-12), so two a page: v1-e08-t10's one request a page held for 32 by the URL
+    alone, which is not what OpenAlex limits."""
     served = PagedWorks({1: numbered_works(1, 100), 2: numbered_works(101, 100)})
     queries = [ProviderQuery(query=text, filters=AC6_WINDOW) for text in texts]
 
     await build_over(httpx.MockTransport(served.handle)).search_each(queries)
 
-    assert [request.url.params["page"] for request in served.requests] == ["1", "2"]
-    assert {request.url.params["search"].count(") OR (") for request in served.requests} == {len(texts) - 1}
+    assert [request.url.params["page"] for request in served.requests] == pages
+    assert sum(len(carried(request.url.params["search"])) for request in served.requests) == 2 * len(texts)
+    assert max(len(request.url.params["search"]) for request in served.requests) <= MAX_SEARCH_CHARS
     assert max(len(str(request.url)) for request in served.requests) <= MAX_URL_CHARS
 
 
-async def test_a_joined_search_too_long_for_one_url_is_split_into_the_fewest_requests_that_fit() -> None:
-    """96 queries do not fit in one 3,500-character URL. Each request fits, and none could have taken the
+async def test_a_joined_search_too_long_for_one_request_is_split_into_the_fewest_requests_that_fit() -> None:
+    """96 queries do not fit in one 1,500-character search. Each request fits, and none could have taken the
     next request's first query: the split is greedy, so it is the fewest, and keeps the queries' order."""
     texts = [f"{text} survey {number}" for number in range(8) for text in NHI_LINK_QUERIES]
     queries = [ProviderQuery(query=text, filters=AC6_WINDOW) for text in texts]
@@ -869,11 +878,43 @@ async def test_a_joined_search_too_long_for_one_url_is_split_into_the_fewest_req
     assert len(joined) >= 2
     carried = [search.removeprefix("(").removesuffix(")").split(") OR (") for search in joined]
     assert [text for chunk in carried for text in chunk] == texts
+    assert all(len(search) <= MAX_SEARCH_CHARS for search in joined)
     assert all(len(str(request.url)) <= MAX_URL_CHARS for request in served.requests)
     for chunk, following in zip(carried, carried[1:], strict=False):
         grown = [ProviderQuery(query=text, filters=AC6_WINDOW) for text in [*chunk, following[0]]]
-        joined = ProviderQuery(query=joined_search(grown), filters=AC6_WINDOW)
-        assert len(works_url(works_parameters(joined, page=2))) > MAX_URL_CHARS
+        assert len(joined_search(grown)) > MAX_SEARCH_CHARS
+
+
+@pytest.mark.parametrize(("second", "requests"), [(747, 1), (748, 2)], ids=["1,500 characters", "1,501"])
+async def test_a_joined_search_of_1500_characters_is_one_request_and_of_1501_two(second: int, requests: int) -> None:
+    """By hand: "(" + 745 + ")" + " OR " + "(" + 747 + ")" is 1,500 characters, OpenAlex's limit (measured
+    2026-11-12); one more character is two requests, each query alone and as typed."""
+    texts = ("a" * 745, "b" * second)
+    served = PagedWorks({1: []})
+
+    await build_over(httpx.MockTransport(served.handle)).search_each(
+        [ProviderQuery(query=text, filters=ONE_PAGE) for text in texts]
+    )
+
+    searches = [request.url.params["search"] for request in served.requests]
+    assert len(searches) == requests
+    assert searches == ([f"({texts[0]}) OR ({texts[1]})"] if requests == 1 else list(texts))
+    assert len(searches[0]) == (1_500 if requests == 1 else 745)
+
+
+async def test_a_search_of_accented_words_is_split_by_its_url_before_its_length() -> None:
+    """By hand: "é" and "è" are six URL characters each (%C3%A9). Two queries of 280 make a search of 568
+    characters, far under 1,500, but 3,360 URL characters for their letters alone, over 3,500 with the rest
+    of the URL: two requests. Each alone is 1,680 of them, which fits."""
+    texts = ("é" * 280, "è" * 280)
+    served = PagedWorks({1: []})
+
+    await build_over(httpx.MockTransport(served.handle)).search_each(
+        [ProviderQuery(query=text, filters=ONE_PAGE) for text in texts]
+    )
+
+    assert [request.url.params["search"] for request in served.requests] == list(texts)
+    assert len(f"({texts[0]}) OR ({texts[1]})") == 568
 
 
 # --------------------------------------------------------------------------------------------

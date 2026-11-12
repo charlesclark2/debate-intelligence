@@ -1814,7 +1814,7 @@ def test_every_da_link_search_on_a_committed_preset_is_one_openalex_request_per_
             assert len(requests) == 1, (topic.id, argument.id, len(expansion.queries))
             assert len(expansion.queries) <= MAX_QUERIES_PER_SEARCH, (topic.id, argument.id)
             checked += 1
-    assert checked == 5
+    assert checked == 9
 
 
 def service_over(

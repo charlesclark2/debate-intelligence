@@ -423,28 +423,30 @@ def test_the_two_groups_list_what_their_own_templates_found_and_nothing_twice(se
     }
 
 
-def test_a_group_with_no_digest_templates_asks_its_query_alone_and_the_digest_says_so(
+def test_an_nhi_pair_with_no_digest_templates_asks_the_taxonomys_templates_as_on_dev_and_says_so(
     seams: Seams, tmp_path: Path
 ) -> None:
-    """The nhi preset's three pairs have no digest templates: each search asks `health insurance` alone,
-    never the taxonomy's spending, federalism or economy templates, and the digest names each group."""
+    """The PM's ruling C (2026-11-12): a pair with no digest templates asks the taxonomy's uniqueness
+    templates exactly as before this task, keeps its groups apart, and the digest names it."""
     result = daily("nhi", "--date", "2026-09-17", "--format", "json", json_output=True)
 
     assert result.exit_code == ExitCode.OK, result.output
     data = envelope(result)["data"]
-    assert {call["query"] for call in data["provider_calls"]} == {"health insurance"}
-    assert [call["query"] for call in data["provider_calls"] if call["provider"] == "rss"] == [
-        "health insurance"
-    ] * 3
+    assert [
+        call["query"] for call in data["provider_calls"] if call["provider"] == "rss"
+    ] == NHI_QUERIES_ON_DEV
     assert nhi_groups(data) == NHI_GROUPS
     assert daily("nhi", "--date", "2026-09-17").exit_code == ExitCode.OK
     markdown = (tmp_path / DIGESTS / "nhi-2026-09-17.md").read_text(encoding="utf-8")
-    note = (
-        "> No digest templates for this group in config/daily_templates.yaml: its searches asked the "
-        "preset's queries alone."
-    )
     for heading in ("Spending DA — Uniqueness", "Federalism DA — Uniqueness", "Economy DA — Uniqueness"):
-        assert f"## {heading}\n\n{note}\n" in markdown
+        assert f"## {heading}\n\n{TAXONOMY_NOTE}\n" in markdown
+
+
+def test_a_politics_digest_carries_no_such_line(seams: Seams, tmp_path: Path) -> None:
+    assert daily("politics", "--date", "2026-09-17").exit_code == ExitCode.OK
+
+    markdown = (tmp_path / DIGESTS / "politics-2026-09-17.md").read_text(encoding="utf-8")
+    assert "No digest templates" not in markdown
 
 
 @pytest.mark.parametrize(
@@ -898,22 +900,41 @@ NHI_GROUPS: Final = [
     (
         "Spending DA — Uniqueness",
         True,
-        {
-            "Health insurance subsidies at the center of the federal spending debate in Congress",
-            "States lead on health insurance policy as Washington stalls",
-        },
+        ["Health insurance subsidies at the center of the federal spending debate in Congress"],
     ),
-    ("Federalism DA — Uniqueness", True, set[str]()),
-    ("Economy DA — Uniqueness", True, set[str]()),
+    ("Federalism DA — Uniqueness", True, ["States lead on health insurance policy as Washington stalls"]),
+    ("Economy DA — Uniqueness", True, []),
 ]
-"""The nhi preset's pairs have no digest templates (v1-e08-t25), so each of its three searches asks
-`health insurance` alone. Both health-wire items have both words; each is listed once, in the first
-group, so the other two are empty."""
+"""The nhi preset's pairs have no digest templates, so each asks the taxonomy's uniqueness templates as
+before v1-e08-t25 (the PM's ruling C of 2026-11-12), and the digest names each. The groups are dev's
+own, as `test_daily_command.py` pinned them on dev at 5c71e42."""
+
+NHI_QUERIES_ON_DEV: Final = [
+    "health insurance federal spending debate Congress",
+    "Congress spending restraint health insurance",
+    "states lead health insurance policy",
+    "health insurance state innovation federalism",
+    "health insurance clean federal and state separation now",
+    "health insurance federalism healthy now",
+    "health insurance economic growth forecast",
+    "health insurance recession risk",
+]
+"""What `daily nhi --date 2026-09-17` asked the feeds on dev at 5c71e42, before this task: recorded by
+running dev's own code in a scratch worktree on 2026-11-12, not from this branch's output."""
+
+TAXONOMY_NOTE: Final = (
+    "> No digest templates for this pair in config/daily_templates.yaml: its searches asked the "
+    "taxonomy's templates."
+)
 
 
-def nhi_groups(data: dict[str, Any]) -> list[tuple[str, bool, set[str]]]:
+def nhi_groups(data: dict[str, Any]) -> list[tuple[str, bool | None, list[str]]]:
     return [
-        (group["heading"], group["asked_taxonomy_templates"], {result["title"] for result in group["results"]})
+        (
+            group["heading"],
+            group.get("asked_taxonomy_templates"),
+            [result["title"] for result in group["results"]],
+        )
         for group in data["groups"]
     ]
 
@@ -942,7 +963,7 @@ def test_an_nhi_digest_reads_only_the_health_insurance_feeds_and_names_its_uncou
 
 
 GOVINFO_NOT_COUNTED: Final = (
-    "govinfo: not configured on 3 of 3 queries: not counted as partial: no api.data.gov key "
+    "govinfo: not configured on 8 of 8 queries: not counted as partial: no api.data.gov key "
     "(DEBATE_PROVIDERS__API_DATA_GOV_KEY); get a free key at api.data.gov/signup to ask GovInfo"
 )
 

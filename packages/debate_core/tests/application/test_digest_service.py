@@ -796,25 +796,58 @@ async def test_a_template_for_some_queries_is_asked_for_those_and_a_query_none_i
     ]
 
 
-async def test_a_pair_with_no_digest_templates_asks_its_query_alone_and_says_so(world: World) -> None:
+ASKED_ON_DEV: Final = [
+    "bill vote count Senate",
+    "bill likely to pass Congress",
+    "bill will not pass",
+    "bill midterms polling",
+    "bill election forecast",
+]
+"""What this file's `test_every_query_is_the_pairs_expansion_asked_inside_the_window` pinned on dev at
+5c71e42, before this task: the taxonomy's uniqueness templates for `bill`, in order."""
+
+
+async def test_a_pair_with_no_digest_templates_asks_the_taxonomys_templates_and_says_so(world: World) -> None:
+    """The PM's ruling C (2026-11-12): never the query alone, and never silently."""
     world.templates = DigestTemplates(groups=TEMPLATES.groups[:1])
 
     digest = await world.run(SEPTEMBER_17)
 
-    assert [query.query for query in world.provider.asked] == ["bill vote", "bill pass", "bill"]
+    assert [query.query for query in world.provider.asked] == ["bill vote", "bill pass", *ASKED_ON_DEV[3:]]
     midterms = digest.outcomes[1].search.expansion
     assert midterms is not None
     assert [(query.template_id, query.template) for query in midterms.queries] == [
-        ("digest/midterms-da/uniqueness/query-alone", "{query}")
+        ("midterms-da/uniqueness/1", "{topic} midterms polling"),
+        ("midterms-da/uniqueness/2", "{query} election forecast"),
     ]
     assert [group.asked_taxonomy_templates for group in digest.groups] == [False, True]
-    assert not {query.query for query in world.provider.asked} & TAXONOMY_UNIQUENESS
 
 
-async def test_with_no_digest_templates_at_all_every_pair_asks_its_query_alone(world: World) -> None:
+async def test_a_pair_with_digest_templates_never_also_asks_the_taxonomys(world: World) -> None:
+    world.templates = DigestTemplates(groups=TEMPLATES.groups[:1])
+
+    digest = await world.run(SEPTEMBER_17)
+
+    politics = digest.outcomes[0].search.expansion
+    assert politics is not None
+    assert [query.query for query in politics.queries] == ["bill vote", "bill pass"]
+    assert not {query.query for query in politics.queries} & set(ASKED_ON_DEV)
+
+
+async def test_with_no_digest_templates_at_all_every_pair_asks_as_it_did_before(world: World) -> None:
     world.templates = DigestTemplates()
 
     digest = await world.run(SEPTEMBER_17)
 
-    assert [query.query for query in world.provider.asked] == ["bill", "bill"]
+    assert [query.query for query in world.provider.asked] == ASKED_ON_DEV
     assert [group.asked_taxonomy_templates for group in digest.groups] == [True, True]
+    assert groups(digest) == [
+        (
+            "Politics DA — Uniqueness",
+            {"Senate vote count on the invented spending bill", "Invented farm bill likely to pass Congress"},
+        ),
+        (
+            "Midterms DA — Uniqueness",
+            {"Midterms polling and the invented bill", "Election forecast moves toward the House majority"},
+        ),
+    ]

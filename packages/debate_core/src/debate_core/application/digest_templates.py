@@ -143,6 +143,10 @@ class DigestTemplates(DomainModel):
         """Whether the pair has no digest templates, so its searches ask the preset's query alone."""
         return self.group(argument, need) is None
 
+    def asks_taxonomy(self, argument: str, need: str) -> bool:
+        """Skeleton: the same predicate as :meth:`asks_query_alone`, behaviour unchanged."""
+        return self.asks_query_alone(argument, need)
+
     def queries_for(self, argument: str, need: str, query: str) -> tuple[DigestQuery, ...]:
         """What a digest's search for `query` on the pair asks: see the module docstring."""
         group = self.group(argument, need)

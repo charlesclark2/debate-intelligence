@@ -69,16 +69,20 @@ def test_the_committed_file_asks_the_ruled_four_of_the_politics_preset() -> None
 
 
 @pytest.mark.parametrize("argument", ["spending-da", "federalism-da", "economy-da"])
-def test_the_nhi_presets_pairs_have_none_and_ask_the_query_alone(argument: str) -> None:
+def test_the_nhi_presets_pairs_have_none_and_ask_the_taxonomys_templates(argument: str) -> None:
+    """The PM's ruling C (2026-11-12): no digest templates of its own, so the search asks the
+    taxonomy's, and there is no digest query for it."""
     templates = load_digest_templates(REPOSITORY / DAILY_TEMPLATES_PATH)
 
-    assert templates.asks_query_alone(argument, "uniqueness")
-    [alone] = templates.queries_for(argument, "uniqueness", "health insurance")
-    assert (alone.template_id, alone.template, alone.query) == (
-        f"digest/{argument}/uniqueness/query-alone",
-        "{query}",
-        "health insurance",
-    )
+    assert templates.asks_taxonomy(argument, "uniqueness")
+    assert templates.queries_for(argument, "uniqueness", "health insurance") == ()
+
+
+def test_a_pair_with_digest_templates_does_not_ask_the_taxonomys() -> None:
+    templates = load_digest_templates(REPOSITORY / DAILY_TEMPLATES_PATH)
+
+    assert not templates.asks_taxonomy("politics-da", "uniqueness")
+    assert not templates.asks_taxonomy("midterms-da", "uniqueness")
 
 
 # ------------------------------------------------------------------------------------------------

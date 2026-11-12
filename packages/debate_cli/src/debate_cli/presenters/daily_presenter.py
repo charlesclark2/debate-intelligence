@@ -30,10 +30,12 @@ from debate_cli.exit_codes import ExitCode
 from debate_cli.output import CommandFailure, JsonValue, TableSpec
 from debate_cli.presenters.batch_report_presenter import AutoCutFiles, AutoCutSettings, entry_json
 from debate_cli.presenters.search_presenter import (
+    NO_PROVIDER_ASKED,
     NO_PROVIDER_ENABLED_CODE,
     SEARCH_FAILED_CODE,
     SEARCH_PARTIAL_CODE,
     display_date,
+    no_provider_asked_message,
     provider_calls_json,
     provider_summaries,
     status_footer_lines,
@@ -232,7 +234,8 @@ def digest_table(digest: Digest) -> TableSpec:
 
 def exit_code_for_digest(digest: Digest) -> ExitCode:
     """0 for a complete digest, new results or none; 6 partial; 3 when nothing answered; 1 when nothing
-    was asked, because none of the preset's providers is enabled."""
+    was asked, because every one of the preset's providers is not configured (not enabled, or enabled
+    without its key)."""
     if digest.status is SearchStatus.COMPLETE:
         return ExitCode.OK
     if digest.status is SearchStatus.PARTIAL:
@@ -275,12 +278,16 @@ def digest_failure(digest: Digest, payload: dict[str, JsonValue], exit_code: Exi
             panel_details=panel,
             hint="Nothing was marked as listed. The same digest may work later.",
         )
+    message, panel_message = no_provider_asked_message(
+        f"{NO_PROVIDER_ASKED}, so no digest was written", summaries
+    )
     return CommandFailure(
         code=NO_PROVIDER_ENABLED_CODE,
-        message=f"no provider was asked: none of {', '.join(panel)} is enabled, so no digest was written",
+        message=message,
         exit_code=exit_code,
         details=payload,
         panel_details=panel,
+        panel_message=panel_message,
         hint="Enable the preset's providers in providers.enabled "
         "(config/profiles/<env>.toml, or DEBATE_PROVIDERS__ENABLED).",
     )

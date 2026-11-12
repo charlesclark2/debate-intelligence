@@ -111,11 +111,11 @@ class SearchRequest(DomainModel):
         default=True,
         exclude_if=lambda named: named,
         description=(
-            "Whether `providers` are names a person asked for (`search --providers`): one that settings "
-            "enable but cannot configure is then a missing answer, and the search is PARTIAL. False for a "
-            "list that is configuration, such as a daily preset's, which counts like the enabled providers: "
-            "such a provider is named and left out of the status (v1-e07-t15). Left out of the JSON when "
-            "True, so a request without it serializes as before."
+            "Whether `providers` are names a person asked for (`search --providers`): one missing only "
+            "configuration (not enabled, or enabled without its key or the email) is then a missing answer, "
+            "and the search is PARTIAL. False for a list that is configuration, such as a daily preset's: "
+            "such a provider is named with its cure and left out of the status (v1-e07-t15, v1-e07-t23). "
+            "Left out of the JSON when True, so a request without it serializes as before."
         ),
     )
     expansion: ExpansionRequest | None = Field(
@@ -320,9 +320,9 @@ class SearchOutcome:
     ranked_candidates: tuple[RankedCandidate, ...] = ()
     articles: tuple[Article, ...] = ()
     uncounted: tuple[str, ...] = ()
-    """The providers left out of the status (v1-e07-t15): enabled, but settings cannot configure them
-    (a key or the email is missing), and the search did not name them. Each is still in
-    `provider_statuses`, `not_configured`, with its cure."""
+    """The providers left out of the status, missing only configuration, that no person named: enabled
+    but unbuilt, a key or the email missing (v1-e07-t15), or a preset's provider settings do not enable
+    (v1-e07-t23). Each is still in `provider_statuses`, `not_configured`, with its cure."""
 
     @property
     def status(self) -> SearchStatus:

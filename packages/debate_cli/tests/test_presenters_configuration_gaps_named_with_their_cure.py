@@ -232,7 +232,7 @@ def test_search_auto_cut_partial_providers_leaves_out_an_uncounted_provider_stil
     None
 ):
     outcome = outcome_of(openalex_and_failing_rss(), SearchRequest(query="health insurance", topic_id=NHI))
-    assert outcome.uncounted == ("semantic_scholar", "govinfo")
+    assert outcome.uncounted == ("govinfo", "semantic_scholar")
 
     report = report_payload(
         REPORT, outcome, BatchNeed("Politics DA", "Link", "Politics DA — Link"), SETTINGS, FILES
@@ -243,8 +243,8 @@ def test_search_auto_cut_partial_providers_leaves_out_an_uncounted_provider_stil
     assert [(entry["provider"], entry["outcome"]) for entry in providers] == [
         ("openalex", "ok"),
         ("rss", "error"),
-        ("semantic_scholar", "not configured"),
         ("govinfo", "not configured"),
+        ("semantic_scholar", "not configured"),
     ]
 
 

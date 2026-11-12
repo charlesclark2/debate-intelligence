@@ -452,9 +452,44 @@ key.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-11-12
 
 **Notes:**
+
+Accepted for a partial merge (`scripts/task pr --partial`). The Goal stays InProgress: ac3 passes,
+while ac1, ac2 and the node's `-k profile` criterion wait for the live smokes.
+
+* **ac3, checked against the branch.** `semantic_scholar_factory` raises `ProviderNotConfigured` with
+  `missing_key_reason()` when the key is unset, empty or spaces, before any client is built. The
+  reason names the variable and never a value. `provider_credentials.py` carries the PM's cure in
+  both the doctor row and the footer. The red commit `1732fac` comes before the code commit `369ff8a`,
+  with 13 failures at assertions, grouped by reason. The five mutants were all caught. The note on the
+  fifth is the right reading: the container test pins the outcome, and t04's adapter test pins the
+  protection. The branch is on dev's tip (`d121fab`) and touches no profile, so nothing a student
+  sees changes until ac2.
+* **Decisions 1 to 4: accepted.**
+  * The footer is the PM's sentence with the variable inserted, the GovInfo shape.
+  * The cure on the doctor row is accepted: `doctor --providers` is where a student checks their setup.
+  * Keeping the adapter's keyless mode matches the PM's ruling of 2026-11-12 (Follow-up 1).
+  * A blank key is no key.
+* **Deviation 2: accepted.** The guide row has to change when this half merges, or the guide would
+  describe a keyless pool that no factory builds.
+* **The keyed attempt (a).** The operator records call it FAIL. The PM records it as ac1 NOT RUN, not
+  FAIL: one request, HTTP 429 with no Retry-After, on a key issued hours earlier. The breaker stayed
+  closed and nothing more was sent, which is v1-e07-t22 working as agreed with Semantic Scholar. The
+  next live request is the curl diagnostic after 13:00 Chicago. If it answers 200, (a) runs and then
+  (b), each once. A 429 or 403 goes to the PM, and nothing more is sent. The PM records the outcome in
+  the next batch. This report is not edited after its pull request opens.
+* **Into the next PM batch:**
+  * the caselist-sync LaunchAgent, found loaded after a reboot, then unloaded and disabled;
+  * the cutover runbook fix: Step 2 disables the agent, and the fallback week's end retires the plist;
+  * Follow-up 2, the "none of … is enabled" wording for an enabled provider that is not configured,
+    folded into v1-e07-t23.
+* **The rest of the task, after this merge:** the profiles, the guides' account of what a key gives,
+  the tests on the committed profiles shown failing first, and `-k profile`. The session resumes them
+  only after the PM has recorded ac1 as passed.
+
+`scripts/task pr --partial`

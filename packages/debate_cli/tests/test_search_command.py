@@ -1805,8 +1805,12 @@ def usage_records(data_dir: Path) -> list[dict[str, Any]]:
 
 
 def cuts_alone(seams: Seams, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> list[float]:
-    """What each call of the three cuts costs, measured by a run with no limit and no `--expand-llm`, in
-    a data directory of its own so the run under test fetches and cuts everything afresh."""
+    """What each call of the four cuts costs, measured by a run with no limit and no `--expand-llm`, in
+    a data directory of its own so the run under test fetches and cuts everything afresh.
+
+    Four cuts for three verified cards: since v1-e08-t24 the politics DA's link search, whose queries
+    all ask five years, ranks by no recency, so the fixture's government grant notice (whose citation
+    does not verify) comes before the newer magazine story and is cut third."""
     measured = tmp_path / "measured"
     (measured / "out").mkdir(parents=True)
     monkeypatch.setenv("DEBATE_STORAGE__DATA_DIR", str(measured / "data"))
@@ -1814,7 +1818,7 @@ def cuts_alone(seams: Seams, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) ->
     monkeypatch.setenv("DEBATE_STORAGE__DATA_DIR", str(tmp_path / "data"))
     assert result.exit_code == ExitCode.OK, result.output
     records = usage_records(measured / "data")
-    assert [record["prompt_id"] for record in records] == ["card.select", "card.markup"] * 3
+    assert [record["prompt_id"] for record in records] == ["card.select", "card.markup"] * 4
     return [record["estimated_cost_usd"] for record in records]
 
 
@@ -1848,8 +1852,9 @@ def test_expand_llm_and_auto_cut_stop_at_one_budget_for_the_whole_command(
     assert len({record["run_id"] for record in records}) == 1
     expansion, *card_calls = records
     assert expansion["prompt_id"] == EXPAND_PROMPT_ID
-    # The third cut's markup call, which would have taken the command past the limit, was refused.
-    assert [record["prompt_id"] for record in card_calls] == ["card.select", "card.markup"] * 2 + [
+    # The fourth cut's markup call, which would have taken the command past the limit, was refused;
+    # the third cut is the unverified one, so two cards are verified.
+    assert [record["prompt_id"] for record in card_calls] == ["card.select", "card.markup"] * 3 + [
         "card.select"
     ]
     report = report_json(tmp_path)
@@ -1883,9 +1888,10 @@ def test_a_one_router_auto_cut_spends_up_to_its_max_cost_as_before(
     report = report_json(tmp_path)
     assert report["verified"] == 3
     # v1-e08-t06's attribution: each cut's entry costs its own two calls, and the report their sum.
+    # The third cut (calls 5 and 6) is the unverified one.
     verified = [entry for entry in report["entries"] if entry["status"] == "VERIFIED"]
     assert [entry["cost_usd"] for entry in verified] == pytest.approx(
-        [cuts[0] + cuts[1], cuts[2] + cuts[3], cuts[4] + cuts[5]]
+        [cuts[0] + cuts[1], cuts[2] + cuts[3], cuts[6] + cuts[7]]
     )
     assert report["cost_usd"] == pytest.approx(sum(cuts))
 
@@ -1899,12 +1905,12 @@ def test_a_one_router_auto_cut_a_cent_short_of_its_max_cost_is_refused_as_before
     result = auto_cut(tmp_path / "bundle.docx", "--concurrency", "1", "--max-cost", repr(limit))
 
     assert result.exit_code == ExitCode.BUDGET_EXCEEDED, result.output
-    spent = sum(cuts[:5])
-    assert [record["estimated_cost_usd"] for record in usage_records(tmp_path / "data")] == cuts[:5]
+    spent = sum(cuts[:7])
+    assert [record["estimated_cost_usd"] for record in usage_records(tmp_path / "data")] == cuts[:7]
     assert refusal(report_json(tmp_path)) == (
         f"model call to anthropic.claude-sonnet-5-5 refused: the per-run budget is ${limit:.4f}, "
         f"${spent:.4f} is already spent or held, ${limit - spent:.4f} remains, and this call could cost "
-        f"up to ${cuts[5]:.4f}"
+        f"up to ${cuts[7]:.4f}"
     )
 
 

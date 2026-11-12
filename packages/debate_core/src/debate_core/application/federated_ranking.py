@@ -22,6 +22,12 @@ the key.
 `total = sum(weight[f] * value[f])` over the features whose value is known. An unknown feature
 contributes 0 and is not mentioned in the explanation: "no provider said" is not "no".
 
+Recency is unknown for every result of a search whose age does not count (:func:`recency_counts`,
+v1-e08-t24): one expanded by argument and need with no `--since`, where every query was asked with
+a window longer than `recency.counts_within_days` or with none. On v1-e08-t14's labelled NHI link
+search, whose queries all ask five years, the half-life lifted results from last week above the ones
+the coach marked relevant.
+
 ## The order
 
 1. The user's filters first: `source_types` (when it names any), then BM25 is scaled over what is
@@ -93,6 +99,7 @@ from debate_core.application.settings import ConfigurationError
 from debate_core.domain import DomainModel, SearchFilters, SearchResult, Ulid
 from debate_core.domain.discovery import ProviderOutcome
 from debate_core.domain.enums import SourceType
+from debate_core.domain.search import SearchExpansion
 
 __all__ = [
     "FEDERATED_RANKING_CONFIG_PATH",
@@ -108,6 +115,7 @@ __all__ = [
     "load_federated_ranking_config",
     "parse_federated_ranking_config",
     "rank_merged_candidates",
+    "recency_counts",
     "search_result_for",
 ]
 
@@ -156,9 +164,11 @@ class Bm25Parameters(DomainModel):
 
 
 class RecencyParameters(DomainModel):
-    """Recency without a date window: the age at which a result scores 0.5."""
+    """Recency without a date window: the age at which a result scores 0.5; and the longest
+    expanded-query window in which age still counts (see :func:`recency_counts`)."""
 
     half_life_days: float = Field(gt=0)
+    counts_within_days: int = Field(ge=1)
 
 
 class CitationParameters(DomainModel):
@@ -367,6 +377,26 @@ def _order_key(candidate: MergedCandidate, total: float) -> tuple[float, bool, f
     )
 
 
+def recency_counts(
+    expansion: SearchExpansion | None, filters: SearchFilters, *, counts_within_days: int
+) -> bool:
+    """Whether a result's age counts in this search's ranking (v1-e08-t24).
+
+    It does not when the request sets no `since` and every query the search expanded into was asked
+    with a window longer than `counts_within_days`, or with none (any age). Those windows are the
+    coach's word that evidence that old is as good as new: a link may be five years old, an impact
+    any age. A person's own `since` (and `daily`'s), any query whose window is at most
+    `counts_within_days` (uniqueness's year, the politics DA's 30-day templates) and a search that
+    was not expanded keep recency as it was.
+    """
+    if filters.since is not None or expansion is None:
+        return True
+    return any(
+        query.recency_days is not None and query.recency_days <= counts_within_days
+        for query in expansion.queries
+    )
+
+
 def rank_merged_candidates(
     candidates: Sequence[MergedCandidate],
     *,
@@ -375,12 +405,14 @@ def rank_merged_candidates(
     answered_providers: int,
     now: datetime,
     config: FederatedRankingConfig,
+    expansion: SearchExpansion | None = None,
 ) -> tuple[RankedCandidate, ...]:
     """Score, order, cap and explain `candidates` (see the module docstring).
 
     `queries` is every query asked (the expanded ones too), `answered_providers` the number of
     distinct providers that answered, and `now` the time recency is measured from when the
-    filters set no `until`.
+    filters set no `until`. `expansion` is how the search was expanded, None for a typed search:
+    when :func:`recency_counts` says age does not count, recency is unknown for every result.
     """
     kept = [
         candidate
@@ -393,6 +425,7 @@ def rank_merged_candidates(
     )
     best = max(raw_bm25, default=0.0)
     reference = filters.until if filters.until is not None else now
+    age_counts = recency_counts(expansion, filters, counts_within_days=config.recency.counts_within_days)
 
     scored: list[tuple[MergedCandidate, float, float | None, FeatureVector, dict[str, float]]] = []
     for candidate, raw in zip(kept, raw_bm25, strict=True):
@@ -403,7 +436,9 @@ def rank_merged_candidates(
                 reference=reference,
                 since=filters.since,
                 half_life_days=config.recency.half_life_days,
-            ),
+            )
+            if age_counts
+            else None,
             source_type=source_type_value(candidate.source_type, config.source_type_values),
             peer_reviewed=peer_reviewed(candidate),
             open_access=open_access(candidate),
@@ -454,5 +489,6 @@ class FederatedRankStage:
             answered_providers=len(answered),
             now=self._clock.now(),
             config=self._config,
+            expansion=state.expansion,
         )
         return state.evolve(ranked_candidates=ranked)

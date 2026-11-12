@@ -9,7 +9,8 @@ Each feature, and when it is unknown:
 * `bm25`: Okapi BM25 of the title and snippet against the query terms, scaled so the best result in
   the set is 1. Unknown when the query has no terms.
 * `recency`: the result's position in the date window, or a half-life decay without one. Unknown
-  when the result is undated.
+  when the result is undated, and for every result of a search whose age does not count
+  (:func:`~debate_core.application.federated_ranking.recency_counts`).
 * `source_type`: the configured value of its category. Always known.
 * `peer_reviewed`: always unknown, because no provider reports it yet.
 * `open_access`: 1 when a provider names an open copy or says one exists, 0 when the provider

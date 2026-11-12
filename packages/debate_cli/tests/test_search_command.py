@@ -1024,18 +1024,20 @@ def test_semantic_scholar_enabled_without_a_key_is_named_with_its_cure_never_ask
     assert SEMANTIC_SCHOLAR_HOST not in {request.url.host for request in seams.providers.requests}
 
 
-def test_semantic_scholar_alone_without_a_key_is_a_failed_search_that_names_its_cure(
+def test_semantic_scholar_alone_without_a_key_asks_no_provider_and_names_its_cure(
     seams: Seams, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Nothing else was asked, so nothing answered: FAILED, as v1-e07-t15 rules, still named with its cure."""
+    """Nothing was asked, so the search answers as one that asks no enabled provider (exit 1,
+    `NO_PROVIDER_ENABLED`), and still names Semantic Scholar with its cure."""
     seams.registry_override = False
     monkeypatch.setenv("DEBATE_PROVIDERS__ENABLED", '["semantic_scholar"]')
 
     result = search("midterm elections", "--since", "2026-09-14")
 
-    assert result.exit_code == ExitCode.RETRIEVAL_FAILURE, result.output
-    assert footer(result, stream="stderr") == ["Providers: FAILED", SEMANTIC_SCHOLAR_NOT_COUNTED]
-    assert SEMANTIC_SCHOLAR_HOST not in {request.url.host for request in seams.providers.requests}
+    assert result.exit_code == ExitCode.DOMAIN_FAILURE, result.output
+    assert footer(result, stream="stderr")[:2] == ["Providers: FAILED", SEMANTIC_SCHOLAR_NOT_COUNTED]
+    assert "NO_PROVIDER_ENABLED" in result.stderr
+    assert seams.providers.requests == []
 
 
 def test_semantic_scholar_named_with_providers_and_without_a_key_keeps_the_search_partial(

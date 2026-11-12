@@ -96,6 +96,10 @@ class _Words:
 
 _KEYLESS: Final = "no key needed"
 _NO_ADAPTER: Final = "no adapter in this build"
+_SEMANTIC_SCHOLAR_CURE: Final = (
+    "request one through the form on Semantic Scholar's API page, semanticscholar.org/product/api"
+)
+"""Semantic Scholar is not configured without a key (v1-e07-t20): the PM's words of 2026-11-12."""
 
 _WORDS: Final[dict[SearchProviderName, _Words]] = {
     SearchProviderName.OPENALEX: _Words(
@@ -115,9 +119,9 @@ _WORDS: Final[dict[SearchProviderName, _Words]] = {
     SearchProviderName.SEMANTIC_SCHOLAR: _Words(
         "Semantic Scholar",
         "semantic_scholar_api_key",
-        "API key set ({source})",
-        "no Semantic Scholar key: the shared pool, paced at one request a second",
-        "set a Semantic Scholar key",
+        "API key set ({source}): asked at one request a second",
+        f"no Semantic Scholar key: Semantic Scholar not asked; {_SEMANTIC_SCHOLAR_CURE}",
+        _SEMANTIC_SCHOLAR_CURE,
     ),
     SearchProviderName.RSS: _Words("RSS feeds"),
     SearchProviderName.GOOGLE_NEWS: _Words("Google News"),
@@ -132,8 +136,10 @@ _WORDS: Final[dict[SearchProviderName, _Words]] = {
     ),
 }
 """Every provider's words. The OpenAlex row gives no daily figure: those are OpenAlex's prices, not this
-build's (the PM's ruling on `v1-e41-t22`, Q5). Semantic Scholar's row names no limit of its own either: the
-adapter keeps one request a second with a key and without (v1-e07-t04)."""
+build's (the PM's ruling on `v1-e41-t22`, Q5). Semantic Scholar's row gives the adapter's own pace, one
+request a second (v1-e07-t04), and without a key says it is not asked and how to get one: the shared
+keyless pool refused every request on the operator's smoke of 2026-11-11, so no factory builds it without
+one (v1-e07-t20)."""
 
 PROVIDERS_WITHOUT_AN_ADAPTER: Final = frozenset({SearchProviderName.GDELT})
 """Names settings accept that this build has no adapter for: the composition root's discovery

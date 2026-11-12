@@ -18,7 +18,16 @@ api.semanticscholar.org/api-docs/graph, read 2026-11-09.
 **The key.** When `providers.semantic_scholar_api_key` is set it is sent as the `x-api-key` header,
 never in a URL, so httpx's request log line never carries it. The constructor still registers it
 with :func:`~debate_core.integrations.discovery.redaction.protect_logs`, and no message this module
-writes names it. Without a key the request goes out with no such header.
+writes names it.
+
+**Without a key Semantic Scholar is not configured** (v1-e07-t20, the PM's amendment of 2026-11-11).
+On the operator's keyless smoke of that day the shared pool refused every request with `429`, the
+first included, so it is not usable for the team. :func:`semantic_scholar_factory` raises
+:class:`~debate_core.integrations.discovery.registry.ProviderNotConfigured` when no key is set
+(unset, empty or spaces), and the registry records Semantic Scholar as not configured, with
+:func:`missing_key_reason`, instead of building it: a search names it with its cure and, when settings
+enabled it and the search did not name it, does not count it as partial (v1-e07-t15). The adapter
+itself still takes `api_key=None` and then sends no header, but no factory builds it so.
 
 **The pace** (PM ruling of 2026-11-09). Semantic Scholar's API page (semanticscholar.org/product/api,
 read by the PM 2026-11-09) gives a key 1 request a second on every endpoint, and keyless callers one
@@ -92,6 +101,7 @@ from debate_core.domain.enums import SourceType
 from debate_core.integrations.discovery.http_failures import provider_error_for_status, redirect_failure
 from debate_core.integrations.discovery.pace import AnswerTimes, Pace, Pacer, Sleep
 from debate_core.integrations.discovery.redaction import logger, protect_logs
+from debate_core.integrations.discovery.registry import ProviderNotConfigured
 
 __all__ = [
     "API_KEY_HEADER",
@@ -102,8 +112,10 @@ __all__ = [
     "PROVIDER_NAME",
     "REQUESTED_FIELDS",
     "SOURCE_TYPE_BY_PUBLICATION_TYPE",
+    "SEMANTIC_SCHOLAR_KEY_VARIABLE",
     "SemanticScholarProvider",
     "candidate_from_paper",
+    "missing_key_reason",
     "paper_search_parameters",
     "searchable_query",
     "semantic_scholar_factory",
@@ -140,6 +152,9 @@ MAX_PER_REQUEST: Final = 100
 
 API_KEY_HEADER: Final = "x-api-key"
 """The header a key travels in."""
+
+SEMANTIC_SCHOLAR_KEY_VARIABLE: Final = "DEBATE_PROVIDERS__SEMANTIC_SCHOLAR_API_KEY"
+"""The environment variable that sets `providers.semantic_scholar_api_key`."""
 
 # semanticscholar.org/product/api, read by the PM 2026-11-09: an API key's introductory rate is 1
 # request a second on all endpoints; unauthenticated callers share 1,000 a second among all of them
@@ -445,6 +460,11 @@ class SemanticScholarProvider:
         return tuple(candidate for candidate in candidates if candidate is not None)
 
 
+def missing_key_reason() -> str:
+    """What a search reports for Semantic Scholar when no key is set: the setting to set, never a value."""
+    return f"{PROVIDER_NAME}: no Semantic Scholar key ({SEMANTIC_SCHOLAR_KEY_VARIABLE})"
+
+
 def semantic_scholar_factory(
     http: HttpSettings,
     *,
@@ -455,14 +475,19 @@ def semantic_scholar_factory(
 ) -> Callable[[ProviderSettings], SemanticScholarProvider]:
     """The registry's factory for `semantic_scholar`: an adapter over a client built from the HTTP settings.
 
-    The client identifies the platform with the article fetcher's User-Agent, keeps no cookies,
-    follows no redirect and reads nothing from the environment (no `~/.netrc`, no proxy). Its own
-    timeouts are the HTTP settings'; the wrapper's `providers.timeout_seconds` bounds the whole call,
-    and the pacer reads it to know when a query is too late to send. `sleep` and `transport` are for
-    tests, which pass virtual time and a mock.
+    Raises :class:`~debate_core.integrations.discovery.registry.ProviderNotConfigured` when no key is
+    set (unset, empty or spaces), so the registry records Semantic Scholar as not configured and builds
+    nothing (v1-e07-t20). The client identifies the platform with the article fetcher's User-Agent,
+    keeps no cookies, follows no redirect and reads nothing from the environment (no `~/.netrc`, no
+    proxy). Its own timeouts are the HTTP settings'; the wrapper's `providers.timeout_seconds` bounds
+    the whole call, and the pacer reads it to know when a query is too late to send. `sleep` and
+    `transport` are for tests, which pass virtual time and a mock.
     """
 
     def build(settings: ProviderSettings) -> SemanticScholarProvider:
+        secret = settings.semantic_scholar_api_key
+        if secret is None or not secret.get_secret_value().strip():
+            raise ProviderNotConfigured(PROVIDER_NAME, missing_key_reason())
         client = httpx.AsyncClient(
             headers={"User-Agent": http.user_agent(version)},
             timeout=httpx.Timeout(http.request_timeout_seconds, connect=http.connect_timeout_seconds),

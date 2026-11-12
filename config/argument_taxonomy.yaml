@@ -33,7 +33,9 @@
 # entry changes. Version 1.5.0 (v1-e32-t06) adds the LD de-extinction topic preset, whose topic is
 # taken word for word from its committed resolution, and six of the topic's own LD arguments, each a
 # contention of its landscape taxonomy; the coach approved the preset and all six on 2026-11-05, none
-# changed. No other argument entry changes.
+# changed. No other argument entry changes. Version 1.6.0 (v1-e08-t16, the coach's answers of
+# 2026-11-11) gives the NHI preset the link templates the politics DA's mechanism queries cross; no
+# argument entry changes.
 #
 # Ids: an argument the Policy landscape taxonomy also counts (config/landscape/taxonomies/) uses the
 # landscape's id, and says so in landscape_id. The spelling in the task spec is an alias
@@ -41,7 +43,7 @@
 #
 # Schema 2 (v1-e08-t08): `families`, each with its kinds and needs, replaces the one `needs` list.
 schema_version: 2
-taxonomy_version: 1.5.0
+taxonomy_version: 1.6.0
 
 variables:
   query: What the debater typed as the search query.
@@ -1195,12 +1197,21 @@ arguments:
 #
 # Plan mechanisms (v1-e08-t14, the PM's ruling of 2026-11-04): the coach's rule is that generic
 # resolution links are fine, but links are usually to the mechanism of the plan text. So a DA's link
-# search on a topic that lists mechanisms asks its link templates as they are, and then adds, from
-# the DA's first link template that names only {query} and {topic}, one query on the resolution's
-# words and one per mechanism, each ending with the country unless it already names it. A topic
-# lists at most four. Each names the affirmative position in config/landscape/taxonomies/ it stands
-# for (a test checks the id, its side and its label) and the phrase a search names it with, which is
-# the coach's to edit. Phrases hold no digits.
+# search on a topic that lists mechanisms asks its link templates as they are, first, and then
+# crosses link templates with the resolution's words and with each mechanism, each query ending with
+# the country unless it already names it. Each mechanism names the affirmative position in
+# config/landscape/taxonomies/ it stands for (a test checks the id, its side and its label) and the
+# phrase a search names it with, which is the coach's to edit. Phrases hold no digits.
+#
+# Which templates are crossed (v1-e08-t16): mechanism_link_templates lists them per DA, in order,
+# each either one of the DA's own link templates by its id and its text word for word (the load
+# fails if the text there differs, so a reordered entry is never crossed by mistake) or a
+# crossing-only template of the preset's own, naming its DA by `argument`, which a search without
+# the topic never asks. Either names only {query} and {topic}. A DA not listed crosses its first link
+# template that names only {query} and {topic}. The crossing is template-major: the first template
+# on the resolution's words and every mechanism, then the next. No DA's link search on the topic may
+# ask more than 42 queries (its link templates plus crossed templates x (1 + mechanisms)): the most
+# that still go to OpenAlex in one joined request per page.
 topics:
   - id: policy-2026-27-nhi
     format: POLICY
@@ -1213,6 +1224,15 @@ topics:
       - {landscape_id: medicare-for-all-aff, label: Medicare for all, phrase: Medicare for All}
       - {landscape_id: public-option-aff, label: Public option, phrase: public option}
       - {landscape_id: aca-reform-aff, label: ACA reform, phrase: Affordable Care Act}
+    # The coach's answers of 2026-11-11: his own wording on political capital, then his partisan
+    # fight and party-popularity templates; not "unpopular with voters". 7 + 6 x 5 = 37 queries.
+    mechanism_link_templates:
+      - {argument: politics-da, text: "{query} costs political capital Congress"}
+      - {template_id: politics-da/link/2, text: "{query} partisan fight Congress"}
+      - {template_id: politics-da/link/4, text: "{query} popular with Republicans"}
+      - {template_id: politics-da/link/5, text: "{query} unpopular with Republicans"}
+      - {template_id: politics-da/link/6, text: "{query} popular with Democrats"}
+      - {template_id: politics-da/link/7, text: "{query} unpopular with Democrats"}
   - id: ld-2026-nov-dec-de-extinction
     format: LD
     review: coach_reviewed

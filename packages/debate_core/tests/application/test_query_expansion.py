@@ -40,13 +40,20 @@ from debate_core.application.query_expansion import (
     expand_with_templates,
     load_argument_taxonomy,
     parse_argument_taxonomy,
+    provider_queries,
 )
 from debate_core.application.structured_output import StructuredOutputGuard
 from debate_core.domain import SearchFilters
-from debate_core.domain.argument_taxonomy import ArgumentTaxonomy, ReviewStatus
+from debate_core.domain.argument_taxonomy import (
+    MAX_QUERIES_PER_SEARCH,
+    ArgumentKind,
+    ArgumentTaxonomy,
+    ReviewStatus,
+)
 from debate_core.domain.caselist.values import Event
 from debate_core.domain.model_contracts import ModelProvider, TaskClass
 from debate_core.domain.search import ExpandedQuery, QueryOrigin, SearchExpansion, WindowSource
+from debate_core.integrations.discovery.openalex import works_requests
 from debate_core.integrations.local import SqliteDatabase, SqliteSearchRepository
 from debate_core.integrations.models.fake_router import FAKE_MODEL_ID, FakeModelRouter
 from debate_core.integrations.models.prompt_registry import PromptRegistry
@@ -315,7 +322,7 @@ COACH_REVIEWED_FILE = (
 def test_the_committed_taxonomy_validates_and_every_argument_has_a_template_for_each_need_of_its_family(
     committed: ArgumentTaxonomy,
 ) -> None:
-    assert committed.taxonomy_version == "1.5.0"
+    assert committed.taxonomy_version == "1.6.0"
     assert {family.id: [need.id for need in family.needs] for family in committed.families} == FAMILY_NEEDS
     for argument in committed.arguments:
         family = committed.family_of(argument)
@@ -696,14 +703,6 @@ def test_the_committed_taxonomy_resolves_the_spec_spellings_and_typed_variants(
             id="one name meaning two needs",
         ),
         pytest.param(
-            topic_with(
-                variables={"topic": "preset subject", "country": "Testland"},
-                mechanisms=[plan_mechanism(name) for name in ("alpha", "beta", "gamma", "delta", "epsilon")],
-            ),
-            ["topic test-topic names 5 plan mechanisms; a topic names at most 4"],
-            id="five plan mechanisms",
-        ),
-        pytest.param(
             topic_with(mechanisms=[plan_mechanism("alpha")]),
             ["topic test-topic names plan mechanisms, so it sets country"],
             id="plan mechanisms and no country",
@@ -871,7 +870,7 @@ def test_template_expansion_of_politics_da_link_on_health_insurance(committed: A
     expansion = expand(request_for("health insurance", argument="politics-da", need="link"), committed)
     since = NOW - timedelta(days=1826)
     assert expansion == SearchExpansion(
-        taxonomy_version="1.5.0",
+        taxonomy_version="1.6.0",
         argument="politics-da",
         need="link",
         variables={"query": "health insurance", "topic": "health insurance"},
@@ -1017,11 +1016,184 @@ def nhi_link(query: str = RESOLUTION, argument: str = "politics-da", **expansion
     return request_for(query, argument=argument, need="link", topic_id=NHI, **expansion)
 
 
-def test_template_expansion_of_politics_da_link_on_the_nhi_topic_adds_its_mechanisms_in_the_united_states(
+NHI_SUBJECTS = (
+    "resolution",
+    "single-payer-aff",
+    "medicare-for-all-aff",
+    "public-option-aff",
+    "aca-reform-aff",
+)
+"""The subjects every crossed template is asked on: the resolution's words, then the four mechanisms."""
+
+NHI_POLITICS_CROSSED = [
+    # The coach's own wording (2026-11-11), a crossing-only template of the NHI preset.
+    (
+        "national health insurance costs political capital Congress United States",
+        "politics-da/link/policy-2026-27-nhi-1/resolution",
+        "{query} costs political capital Congress",
+    ),
+    (
+        "single payer costs political capital Congress United States",
+        "politics-da/link/policy-2026-27-nhi-1/single-payer-aff",
+        "{query} costs political capital Congress",
+    ),
+    (
+        "Medicare for All costs political capital Congress United States",
+        "politics-da/link/policy-2026-27-nhi-1/medicare-for-all-aff",
+        "{query} costs political capital Congress",
+    ),
+    (
+        "public option costs political capital Congress United States",
+        "politics-da/link/policy-2026-27-nhi-1/public-option-aff",
+        "{query} costs political capital Congress",
+    ),
+    (
+        "Affordable Care Act costs political capital Congress United States",
+        "politics-da/link/policy-2026-27-nhi-1/aca-reform-aff",
+        "{query} costs political capital Congress",
+    ),
+    # Link template 2.
+    (
+        "national health insurance partisan fight Congress United States",
+        "politics-da/link/2/resolution",
+        "{query} partisan fight Congress",
+    ),
+    (
+        "single payer partisan fight Congress United States",
+        "politics-da/link/2/single-payer-aff",
+        "{query} partisan fight Congress",
+    ),
+    (
+        "Medicare for All partisan fight Congress United States",
+        "politics-da/link/2/medicare-for-all-aff",
+        "{query} partisan fight Congress",
+    ),
+    (
+        "public option partisan fight Congress United States",
+        "politics-da/link/2/public-option-aff",
+        "{query} partisan fight Congress",
+    ),
+    (
+        "Affordable Care Act partisan fight Congress United States",
+        "politics-da/link/2/aca-reform-aff",
+        "{query} partisan fight Congress",
+    ),
+    # Link template 4.
+    (
+        "national health insurance popular with Republicans United States",
+        "politics-da/link/4/resolution",
+        "{query} popular with Republicans",
+    ),
+    (
+        "single payer popular with Republicans United States",
+        "politics-da/link/4/single-payer-aff",
+        "{query} popular with Republicans",
+    ),
+    (
+        "Medicare for All popular with Republicans United States",
+        "politics-da/link/4/medicare-for-all-aff",
+        "{query} popular with Republicans",
+    ),
+    (
+        "public option popular with Republicans United States",
+        "politics-da/link/4/public-option-aff",
+        "{query} popular with Republicans",
+    ),
+    (
+        "Affordable Care Act popular with Republicans United States",
+        "politics-da/link/4/aca-reform-aff",
+        "{query} popular with Republicans",
+    ),
+    # Link template 5.
+    (
+        "national health insurance unpopular with Republicans United States",
+        "politics-da/link/5/resolution",
+        "{query} unpopular with Republicans",
+    ),
+    (
+        "single payer unpopular with Republicans United States",
+        "politics-da/link/5/single-payer-aff",
+        "{query} unpopular with Republicans",
+    ),
+    (
+        "Medicare for All unpopular with Republicans United States",
+        "politics-da/link/5/medicare-for-all-aff",
+        "{query} unpopular with Republicans",
+    ),
+    (
+        "public option unpopular with Republicans United States",
+        "politics-da/link/5/public-option-aff",
+        "{query} unpopular with Republicans",
+    ),
+    (
+        "Affordable Care Act unpopular with Republicans United States",
+        "politics-da/link/5/aca-reform-aff",
+        "{query} unpopular with Republicans",
+    ),
+    # Link template 6.
+    (
+        "national health insurance popular with Democrats United States",
+        "politics-da/link/6/resolution",
+        "{query} popular with Democrats",
+    ),
+    (
+        "single payer popular with Democrats United States",
+        "politics-da/link/6/single-payer-aff",
+        "{query} popular with Democrats",
+    ),
+    (
+        "Medicare for All popular with Democrats United States",
+        "politics-da/link/6/medicare-for-all-aff",
+        "{query} popular with Democrats",
+    ),
+    (
+        "public option popular with Democrats United States",
+        "politics-da/link/6/public-option-aff",
+        "{query} popular with Democrats",
+    ),
+    (
+        "Affordable Care Act popular with Democrats United States",
+        "politics-da/link/6/aca-reform-aff",
+        "{query} popular with Democrats",
+    ),
+    # Link template 7.
+    (
+        "national health insurance unpopular with Democrats United States",
+        "politics-da/link/7/resolution",
+        "{query} unpopular with Democrats",
+    ),
+    (
+        "single payer unpopular with Democrats United States",
+        "politics-da/link/7/single-payer-aff",
+        "{query} unpopular with Democrats",
+    ),
+    (
+        "Medicare for All unpopular with Democrats United States",
+        "politics-da/link/7/medicare-for-all-aff",
+        "{query} unpopular with Democrats",
+    ),
+    (
+        "public option unpopular with Democrats United States",
+        "politics-da/link/7/public-option-aff",
+        "{query} unpopular with Democrats",
+    ),
+    (
+        "Affordable Care Act unpopular with Democrats United States",
+        "politics-da/link/7/aca-reform-aff",
+        "{query} unpopular with Democrats",
+    ),
+]
+"""The politics DA's 30 crossed link queries on NHI, written by hand from the preset (the PM's ruling
+after the coach's answers, 2026-11-11): the coach's own wording, then templates 2, 4, 5, 6 and 7, each
+on the resolution's words and then each mechanism. Not template 3, "unpopular with voters"."""
+
+
+def test_template_expansion_of_politics_da_link_on_the_nhi_topic_crosses_the_coachs_templates(
     committed: ArgumentTaxonomy,
 ) -> None:
-    """The ac6 search: the coach's seven link templates as he reviewed them, then the first of them on the
-    resolution's words and on each of the four mechanisms, each ending with the United States."""
+    """The ac6 search: the coach's seven link templates as he reviewed them, first and in order, then
+    the six templates he chose crossed template-major with the resolution's words and the four
+    mechanisms, each ending with the United States: 37 queries."""
 
     def link(text: str, template_id: str, template: str) -> ExpandedQuery:
         return template_query(
@@ -1031,7 +1203,7 @@ def test_template_expansion_of_politics_da_link_on_the_nhi_topic_adds_its_mechan
     expansion = expand(nhi_link(), committed)
 
     assert expansion == SearchExpansion(
-        taxonomy_version="1.5.0",
+        taxonomy_version="1.6.0",
         argument="politics-da",
         need="link",
         topic_id=NHI,
@@ -1072,33 +1244,31 @@ def test_template_expansion_of_politics_da_link_on_the_nhi_topic_adds_its_mechan
                 "politics-da/link/7",
                 "{query} unpopular with Democrats",
             ),
-            link(
-                "national health insurance political capital United States",
-                "politics-da/link/1/resolution",
-                "{query} political capital",
-            ),
-            link(
-                "single payer political capital United States",
-                "politics-da/link/1/single-payer-aff",
-                "{query} political capital",
-            ),
-            link(
-                "Medicare for All political capital United States",
-                "politics-da/link/1/medicare-for-all-aff",
-                "{query} political capital",
-            ),
-            link(
-                "public option political capital United States",
-                "politics-da/link/1/public-option-aff",
-                "{query} political capital",
-            ),
-            link(
-                "Affordable Care Act political capital United States",
-                "politics-da/link/1/aca-reform-aff",
-                "{query} political capital",
-            ),
+            *(link(text, template_id, template) for text, template_id, template in NHI_POLITICS_CROSSED),
         ),
     )
+    assert len(expansion.queries) == 37
+
+
+def test_template_mechanism_queries_keep_the_resolutions_words_as_one_query_per_crossed_template(
+    committed: ArgumentTaxonomy,
+) -> None:
+    """The forbidden entry: every crossed template is asked once on the resolution's own words, whatever
+    was typed, and its other queries are on the mechanisms."""
+    for argument in ("politics-da", "midterms-da", "economy-da", "spending-da", "federalism-da"):
+        expansion = expand(nhi_link("something else entirely", argument=argument), committed)
+        crossed = [
+            query for query in expansion.queries if query.template_id and query.template_id.count("/") == 3
+        ]
+        prefixes = list(
+            dict.fromkeys(query.template_id.rsplit("/", 1)[0] for query in crossed if query.template_id)
+        )
+        assert len(crossed) == len(prefixes) * len(NHI_SUBJECTS), argument
+        for prefix in prefixes:
+            on_resolution = [query for query in crossed if query.template_id == f"{prefix}/resolution"]
+            assert len(on_resolution) == 1, prefix
+            assert on_resolution[0].query.startswith(f"{RESOLUTION} "), prefix
+            assert "something else entirely" not in on_resolution[0].query, prefix
 
 
 @pytest.mark.parametrize(
@@ -1202,16 +1372,18 @@ def test_template_expansion_of_every_other_da_link_on_the_nhi_topic_adds_its_mec
 
 
 @pytest.mark.parametrize(
-    "argument", ["politics-da", "midterms-da", "economy-da", "spending-da", "federalism-da"]
+    ("argument", "added"),
+    [("politics-da", 30), ("midterms-da", 5), ("economy-da", 5), ("spending-da", 5), ("federalism-da", 5)],
 )
 def test_template_mechanism_queries_follow_the_reviewed_ones_which_are_asked_as_without_the_topic(
-    committed: ArgumentTaxonomy, argument: str
+    committed: ArgumentTaxonomy, argument: str, added: int
 ) -> None:
-    """The coach's reviewed queries are asked exactly as today, first, and at most five are added."""
+    """The coach's reviewed queries are asked exactly as without the topic, first and in order; the
+    politics DA crosses six templates with five subjects, every other DA its first template."""
     today = expand(request_for(RESOLUTION, argument=argument, need="link"), committed).queries
     on_topic = expand(nhi_link(argument=argument), committed).queries
     assert on_topic[: len(today)] == today
-    assert len(on_topic) == len(today) + 5
+    assert len(on_topic) == len(today) + added
 
 
 def test_template_mechanism_queries_ask_the_resolutions_words_whatever_was_typed(
@@ -1228,11 +1400,7 @@ def test_template_mechanism_queries_ask_the_resolutions_words_whatever_was_typed
         "Medicare for All unpopular with Republicans",
         "Medicare for All popular with Democrats",
         "Medicare for All unpopular with Democrats",
-        "national health insurance political capital United States",
-        "single payer political capital United States",
-        "Medicare for All political capital United States",
-        "public option political capital United States",
-        "Affordable Care Act political capital United States",
+        *(text for text, _, _ in NHI_POLITICS_CROSSED),
     ]
 
 
@@ -1243,8 +1411,9 @@ def test_template_mechanism_queries_are_added_only_to_a_das_link_on_a_topic_with
         request = request_for(RESOLUTION, argument=argument, need=need, topic_id=topic)
         return len(expand(request, taxonomy).queries)
 
-    assert count(committed, "politics-da", "link", NHI) == 12
+    assert count(committed, "politics-da", "link", NHI) == 37
     assert count(committed, "politics-da", "link", None) == 7
+    assert count(committed, "midterms-da", "link", NHI) == 7
     for argument, need in [
         ("politics-da", "uniqueness"),
         ("politics-da", "internal-link"),
@@ -1340,6 +1509,314 @@ def test_template_mechanism_queries_keep_the_searchs_own_since(mechanisms: Argum
     assert {(query.since, query.window) for query in added} == {(since, WindowSource.REQUEST)}
 
 
+# The link templates a DA's mechanism queries cross (v1-e08-t16) ---------------------------------
+
+
+def crossing_taxonomy(entries: list[dict[str, Any]] | None = None, **topic: Any) -> dict[str, Any]:
+    """mechanism_taxonomy with a second DA (its first link template needs a bill, so its default is its
+    second) and, on test-topic, `entries` as its crossed templates: by default a crossing-only one, then
+    the DA's templates 3 and 2, in that order."""
+    document = mechanism_taxonomy()
+    document["arguments"].append(
+        {
+            "id": "second-da",
+            "label": "Second DA",
+            "kind": "da",
+            "formats": ["POLICY"],
+            "review": "awaiting_coach_review",
+            "templates": {
+                "uniqueness": [{"text": "{query} second now"}],
+                "impact": [{"text": "{query} second impact"}],
+                "link": [{"text": "{bill} second-da link"}, {"text": "{query} second-da link"}],
+            },
+        }
+    )
+    document["topics"][0]["mechanism_link_templates"] = (
+        [
+            {"argument": "test-da", "text": "{query} own crossing"},
+            {"template_id": "test-da/link/3", "text": "{topic} second link"},
+            {"template_id": "test-da/link/2", "text": "{query} link"},
+        ]
+        if entries is None
+        else entries
+    )
+    document["topics"][0].update(topic)
+    return document
+
+
+@pytest.fixture(scope="module")
+def crossing() -> ArgumentTaxonomy:
+    return parsed(crossing_taxonomy())
+
+
+def test_template_mechanism_queries_cross_the_chosen_templates_template_major_in_the_listed_order(
+    crossing: ArgumentTaxonomy,
+) -> None:
+    """The reviewed queries first; then each chosen template, in the preset's order (not the DA's), on
+    the resolution's words and each mechanism. A crossing-only template takes the need's window and an
+    id of the topic's; a DA template keeps its own window and id."""
+    expansion = expand(request_for("typed words", need="link", topic_id="test-topic"), crossing)
+    need = NOW - timedelta(days=30)
+    own = NOW - timedelta(days=90)
+
+    def at_need(text: str, template_id: str, template: str) -> ExpandedQuery:
+        return template_query(text, template_id, template, days=30, window=WindowSource.NEED, since=need)
+
+    def at_own(text: str, template_id: str, template: str) -> ExpandedQuery:
+        return template_query(text, template_id, template, days=90, window=WindowSource.TEMPLATE, since=own)
+
+    assert expansion.skipped_templates == ("test-da/link/1",)
+    assert expansion.queries == (
+        at_own("typed words link", "test-da/link/2", "{query} link"),
+        at_need("preset subject second link", "test-da/link/3", "{topic} second link"),
+        at_need(
+            "preset subject own crossing Testland",
+            "test-da/link/test-topic-1/resolution",
+            "{query} own crossing",
+        ),
+        at_need(
+            "alpha plan own crossing Testland", "test-da/link/test-topic-1/alpha-aff", "{query} own crossing"
+        ),
+        at_need(
+            "beta plan in Testland own crossing", "test-da/link/test-topic-1/beta-aff", "{query} own crossing"
+        ),
+        at_need("preset subject second link Testland", "test-da/link/3/resolution", "{topic} second link"),
+        at_need("alpha plan second link Testland", "test-da/link/3/alpha-aff", "{topic} second link"),
+        at_need("beta plan in Testland second link", "test-da/link/3/beta-aff", "{topic} second link"),
+        at_own("preset subject link Testland", "test-da/link/2/resolution", "{query} link"),
+        at_own("alpha plan link Testland", "test-da/link/2/alpha-aff", "{query} link"),
+        at_own("beta plan in Testland link", "test-da/link/2/beta-aff", "{query} link"),
+    )
+
+
+def test_template_mechanism_queries_of_a_da_the_preset_does_not_name_cross_its_first_renderable_template(
+    crossing: ArgumentTaxonomy,
+) -> None:
+    """second-da is not named: it crosses its second link template, the first that names only {query}
+    and {topic}, and none of test-da's choices."""
+    expansion = expand(
+        request_for("typed words", argument="second-da", need="link", topic_id="test-topic"), crossing
+    )
+    assert [(query.query, query.template_id) for query in expansion.queries] == [
+        ("typed words second-da link", "second-da/link/2"),
+        ("preset subject second-da link Testland", "second-da/link/2/resolution"),
+        ("alpha plan second-da link Testland", "second-da/link/2/alpha-aff"),
+        ("beta plan in Testland second-da link", "second-da/link/2/beta-aff"),
+    ]
+
+
+def test_template_crossing_only_templates_are_never_asked_without_the_topic(
+    crossing: ArgumentTaxonomy,
+) -> None:
+    without = expand(request_for("typed words", need="link"), crossing)
+    assert [(query.query, query.template_id) for query in without.queries] == [
+        ("typed words link", "test-da/link/2"),
+        ("typed words second link", "test-da/link/3"),
+    ]
+
+
+def many_mechanisms(count: int) -> list[dict[str, str]]:
+    """`count` distinct mechanisms whose names and phrases hold no digit."""
+    letters = "abcdefghijklmnopqrstuvwxyz"
+    return [plan_mechanism(f"m{letters[number // 26]}{letters[number % 26]}") for number in range(count)]
+
+
+def test_the_taxonomy_takes_a_preset_whose_largest_da_link_search_is_the_most_a_search_asks() -> None:
+    """test-da has 3 link templates; crossing one template with the resolution and 38 mechanisms gives
+    3 + 39 = 42 queries, the maximum; five mechanisms, more than v1-e08-t14's four, load too."""
+    at_the_edge = parsed(crossing_taxonomy([], mechanisms=many_mechanisms(38)))
+    request = request_for("typed words", need="link", topic_id="test-topic", variables={"bill": "the bill"})
+    assert len(expand(request, at_the_edge).queries) == 42
+    assert len(parsed(crossing_taxonomy([], mechanisms=many_mechanisms(5))).topics[0].mechanisms) == 5
+    document = crossing_taxonomy()
+    document["arguments"][0]["templates"]["uniqueness"] = [
+        {"text": "{query} now"},
+        *({"text": f"{{query}} {entry['phrase']}"} for entry in many_mechanisms(41)),
+    ]
+    assert len(parsed(document).arguments[0].templates["uniqueness"]) == 42
+
+
+@pytest.mark.parametrize(
+    ("document", "words"),
+    [
+        pytest.param(
+            crossing_taxonomy([], mechanisms=many_mechanisms(39)),
+            ["topic test-topic: test-da's link search would ask 43 queries; a search asks at most 42"],
+            id="a DA link search one query over the maximum",
+        ),
+        pytest.param(
+            crossing_taxonomy(
+                [
+                    {"template_id": "test-da/link/2", "text": "{query} link"},
+                    {"template_id": "test-da/link/3", "text": "{topic} second link"},
+                ],
+                mechanisms=many_mechanisms(19),
+            ),
+            ["topic test-topic: test-da's link search would ask 43 queries; a search asks at most 42"],
+            id="two crossed templates one query over the maximum",
+        ),
+        pytest.param(
+            crossing_taxonomy([{"template_id": "tda/link/2", "text": "{query} link"}]),
+            ["topic test-topic: the mechanism link template tda/link/2 names tda, which is not a DA's id"],
+            id="a crossed template named by an alias",
+        ),
+        pytest.param(
+            crossing_taxonomy([{"template_id": "test-advantage/link/1", "text": "{query} link"}]),
+            ["names test-advantage, which is not a DA's id"],
+            id="a crossed template of an advantage",
+        ),
+        pytest.param(
+            crossing_taxonomy([{"argument": "test-advantage", "text": "{query} own"}]),
+            ["names test-advantage, which is not a DA's id"],
+            id="a crossing-only template of an advantage",
+        ),
+        pytest.param(
+            crossing_taxonomy([{"template_id": "test-da/uniqueness/1", "text": "{query} now"}]),
+            ["the mechanism link template test-da/uniqueness/1 is not a link template"],
+            id="a crossed template of another need",
+        ),
+        pytest.param(
+            crossing_taxonomy([{"template_id": "test-da/link", "text": "{query} link"}]),
+            ["the mechanism link template test-da/link is not a template id of the form <da>/link/<number>"],
+            id="a crossed template id with no number",
+        ),
+        pytest.param(
+            crossing_taxonomy([{"template_id": "test-da/link/4", "text": "{query} link"}]),
+            ["the mechanism link template test-da/link/4: test-da has no link template 4"],
+            id="a crossed template number past the DA's templates",
+        ),
+        pytest.param(
+            crossing_taxonomy([{"template_id": "test-da/link/2", "text": "{query} links"}]),
+            ["the template at test-da/link/2 reads '{query} link', not '{query} links'"],
+            id="a crossed template whose text differs",
+        ),
+        pytest.param(
+            crossing_taxonomy([{"template_id": "test-da/link/1", "text": "{bill} link"}]),
+            [
+                "the mechanism link template test-da/link/1 names bill; a crossed template names only "
+                "query and topic"
+            ],
+            id="a crossed DA template naming a bill",
+        ),
+        pytest.param(
+            crossing_taxonomy([{"argument": "test-da", "text": "{bill} own crossing"}]),
+            [
+                "the mechanism link template '{bill} own crossing' names bill; a crossed template names only "
+                "query and topic"
+            ],
+            id="a crossing-only template naming a bill",
+        ),
+        pytest.param(
+            crossing_taxonomy([{"argument": "test-da", "text": "{0} own crossing"}]),
+            ["has the field {0}"],
+            id="a crossing-only template with a positional field",
+        ),
+        pytest.param(
+            crossing_taxonomy(
+                [
+                    {"template_id": "test-da/link/2", "text": "{query} link"},
+                    {"argument": "test-da", "text": "{query}  Link"},
+                ]
+            ),
+            ["topic test-topic crosses test-da's template '{query}  Link' twice"],
+            id="one template crossed twice",
+        ),
+        pytest.param(
+            crossing_taxonomy(
+                [{"template_id": "test-da/link/2", "argument": "test-da", "text": "{query} link"}]
+            ),
+            ["names either a template_id or an argument, not both"],
+            id="a crossed template with an id and an argument",
+        ),
+        pytest.param(
+            crossing_taxonomy([{"text": "{query} link"}]),
+            ["names either a template_id or an argument, not both"],
+            id="a crossed template with neither an id nor an argument",
+        ),
+        pytest.param(
+            crossing_taxonomy(mechanisms=[]),
+            ["topic test-topic names mechanism link templates but no plan mechanisms"],
+            id="crossed templates and no mechanisms",
+        ),
+    ],
+)
+def test_a_taxonomy_whose_mechanism_link_templates_break_a_rule_is_refused_when_it_loads(
+    document: dict[str, Any], words: list[str]
+) -> None:
+    with pytest.raises(InvalidArgumentTaxonomy) as refused:
+        parsed(document)
+    message = str(refused.value)
+    assert message.startswith("test taxonomy")
+    for word in words:
+        assert word in message
+
+
+def test_a_taxonomy_with_more_templates_for_one_pair_than_a_search_asks_is_refused() -> None:
+    document = crossing_taxonomy()
+    document["arguments"][0]["templates"]["uniqueness"] = [
+        {"text": "{query} now"},
+        *({"text": f"{{query}} {entry['phrase']}"} for entry in many_mechanisms(42)),
+    ]
+    with pytest.raises(
+        InvalidArgumentTaxonomy, match="test-da/uniqueness has 43 templates; a search asks at most 42"
+    ):
+        parsed(document)
+
+
+def test_the_committed_taxonomy_nhi_topic_crosses_the_politics_templates_the_coach_chose(
+    committed: ArgumentTaxonomy,
+) -> None:
+    """The coach's answers of 2026-11-11: his own wording, then his templates 2, 4, 5, 6 and 7, each as he
+    reviewed it (checked against the reviewed record, not only the committed file); not 3."""
+    topic = next(topic for topic in committed.topics if topic.id == "policy-2026-27-nhi")
+    assert topic.review is ReviewStatus.COACH_REVIEWED
+    assert [(entry.template_id, entry.argument, entry.text) for entry in topic.mechanism_link_templates] == [
+        (None, "politics-da", "{query} costs political capital Congress"),
+        ("politics-da/link/2", None, "{query} partisan fight Congress"),
+        ("politics-da/link/4", None, "{query} popular with Republicans"),
+        ("politics-da/link/5", None, "{query} unpopular with Republicans"),
+        ("politics-da/link/6", None, "{query} popular with Democrats"),
+        ("politics-da/link/7", None, "{query} unpopular with Democrats"),
+    ]
+    reviewed_file = yaml.safe_load(COACH_REVIEWED_FILE.read_text(encoding="utf-8"))
+    reviewed_links = next(entry for entry in reviewed_file["arguments"] if entry["id"] == "politics-da")[
+        "templates"
+    ]["link"]
+    for entry in topic.mechanism_link_templates:
+        if entry.template_id is not None:
+            number = int(entry.template_id.rsplit("/", 1)[1])
+            assert reviewed_links[number - 1]["text"] == entry.text, entry.template_id
+
+
+def test_every_da_link_search_on_a_committed_preset_is_one_openalex_request_per_page(
+    committed: ArgumentTaxonomy,
+) -> None:
+    """The PM's ruling on v1-e08-t16: MAX_QUERIES_PER_SEARCH stands for one joined OpenAlex request per
+    page (openalex.py's MAX_URL_CHARS), so every DA's link search on every preset with mechanisms, on the
+    topic's own words at the most results a search takes, fits one."""
+    checked = 0
+    for topic in committed.topics:
+        if not topic.mechanisms:
+            continue
+        for argument in committed.arguments:
+            if argument.kind is not ArgumentKind.DA:
+                continue
+            filters = SearchFilters(max_results=200)
+            request = request_for(
+                topic.variables["topic"],
+                argument=argument.id,
+                need="link",
+                topic_id=topic.id,
+                filters=filters,
+            )
+            expansion = expand(request, committed)
+            requests = works_requests(provider_queries(expansion, filters))
+            assert len(requests) == 1, (topic.id, argument.id, len(expansion.queries))
+            assert len(expansion.queries) <= MAX_QUERIES_PER_SEARCH, (topic.id, argument.id)
+            checked += 1
+    assert checked == 5
+
+
 def service_over(
     provider: FakeSearchProvider, stage: QueryExpansionStage, searches: SearchRepository | None = None
 ) -> FederatedSearchService:
@@ -1411,25 +1888,14 @@ def test_template_mechanism_queries_are_asked_of_every_provider_and_recorded_on_
 
     filters = SearchFilters(since=LINK_SINCE, max_results=10)
     assert [(query.query, query.filters) for query in provider.queries][7:] == [
-        (f"{subject} political capital United States", filters)
-        for subject in (
-            RESOLUTION,
-            "single payer",
-            "Medicare for All",
-            "public option",
-            "Affordable Care Act",
-        )
+        (text, filters) for text, _, _ in NHI_POLITICS_CROSSED
     ]
-    assert len(provider.queries) == 12
+    assert len(provider.queries) == 37
     stored = asyncio.run(searches.get(outcome.search.search_id))
     expected = expand(request, committed)
     assert stored.expansion == expected
     assert [query.template_id for query in expected.queries][7:] == [
-        "politics-da/link/1/resolution",
-        "politics-da/link/1/single-payer-aff",
-        "politics-da/link/1/medicare-for-all-aff",
-        "politics-da/link/1/public-option-aff",
-        "politics-da/link/1/aca-reform-aff",
+        template_id for _, template_id, _ in NHI_POLITICS_CROSSED
     ]
 
 

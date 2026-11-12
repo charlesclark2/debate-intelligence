@@ -823,12 +823,13 @@ def test_the_stored_search_records_its_expansion(seams: Seams, data_dir: Path) -
     )
 
 
-def test_a_da_link_search_on_the_nhi_topic_asks_openalex_its_links_then_the_mechanisms_in_the_united_states(
+def test_a_da_link_search_on_the_nhi_topic_asks_openalex_its_links_then_the_chosen_crossing(
     seams: Seams,
 ) -> None:
-    """v1-e08-t14, the PM's ruling: the politics DA's seven reviewed link queries as they are, then the
-    first of them on the resolution's words and on each of the topic's four plan mechanisms, each
-    naming the United States. Since v1-e08-t10 the twelve go to OpenAlex in one joined request."""
+    """v1-e08-t16, the PM's ruling after the coach's answers: the politics DA's seven reviewed link
+    queries as they are, then the coach's own wording and templates 2, 4, 5, 6 and 7, each on the
+    resolution's words and each of the four mechanisms, naming the United States. The 37 go to OpenAlex
+    in one joined request (v1-e08-t10)."""
     result = search(
         "national health insurance",
         "--argument",
@@ -851,20 +852,70 @@ def test_a_da_link_search_on_the_nhi_topic_asks_openalex_its_links_then_the_mech
             "national health insurance unpopular with Republicans",
             "national health insurance popular with Democrats",
             "national health insurance unpopular with Democrats",
-            "national health insurance political capital United States",
-            "single payer political capital United States",
-            "Medicare for All political capital United States",
-            "public option political capital United States",
-            "Affordable Care Act political capital United States",
+            "national health insurance costs political capital Congress United States",
+            "single payer costs political capital Congress United States",
+            "Medicare for All costs political capital Congress United States",
+            "public option costs political capital Congress United States",
+            "Affordable Care Act costs political capital Congress United States",
+            "national health insurance partisan fight Congress United States",
+            "single payer partisan fight Congress United States",
+            "Medicare for All partisan fight Congress United States",
+            "public option partisan fight Congress United States",
+            "Affordable Care Act partisan fight Congress United States",
+            "national health insurance popular with Republicans United States",
+            "single payer popular with Republicans United States",
+            "Medicare for All popular with Republicans United States",
+            "public option popular with Republicans United States",
+            "Affordable Care Act popular with Republicans United States",
+            "national health insurance unpopular with Republicans United States",
+            "single payer unpopular with Republicans United States",
+            "Medicare for All unpopular with Republicans United States",
+            "public option unpopular with Republicans United States",
+            "Affordable Care Act unpopular with Republicans United States",
+            "national health insurance popular with Democrats United States",
+            "single payer popular with Democrats United States",
+            "Medicare for All popular with Democrats United States",
+            "public option popular with Democrats United States",
+            "Affordable Care Act popular with Democrats United States",
+            "national health insurance unpopular with Democrats United States",
+            "single payer unpopular with Democrats United States",
+            "Medicare for All unpopular with Democrats United States",
+            "public option unpopular with Democrats United States",
+            "Affordable Care Act unpopular with Democrats United States",
         )
     ]
     queries = envelope(result)["data"]["expansion"]["queries"]
     assert [query["template_id"] for query in queries][7:] == [
-        "politics-da/link/1/resolution",
-        "politics-da/link/1/single-payer-aff",
-        "politics-da/link/1/medicare-for-all-aff",
-        "politics-da/link/1/public-option-aff",
-        "politics-da/link/1/aca-reform-aff",
+        "politics-da/link/policy-2026-27-nhi-1/resolution",
+        "politics-da/link/policy-2026-27-nhi-1/single-payer-aff",
+        "politics-da/link/policy-2026-27-nhi-1/medicare-for-all-aff",
+        "politics-da/link/policy-2026-27-nhi-1/public-option-aff",
+        "politics-da/link/policy-2026-27-nhi-1/aca-reform-aff",
+        "politics-da/link/2/resolution",
+        "politics-da/link/2/single-payer-aff",
+        "politics-da/link/2/medicare-for-all-aff",
+        "politics-da/link/2/public-option-aff",
+        "politics-da/link/2/aca-reform-aff",
+        "politics-da/link/4/resolution",
+        "politics-da/link/4/single-payer-aff",
+        "politics-da/link/4/medicare-for-all-aff",
+        "politics-da/link/4/public-option-aff",
+        "politics-da/link/4/aca-reform-aff",
+        "politics-da/link/5/resolution",
+        "politics-da/link/5/single-payer-aff",
+        "politics-da/link/5/medicare-for-all-aff",
+        "politics-da/link/5/public-option-aff",
+        "politics-da/link/5/aca-reform-aff",
+        "politics-da/link/6/resolution",
+        "politics-da/link/6/single-payer-aff",
+        "politics-da/link/6/medicare-for-all-aff",
+        "politics-da/link/6/public-option-aff",
+        "politics-da/link/6/aca-reform-aff",
+        "politics-da/link/7/resolution",
+        "politics-da/link/7/single-payer-aff",
+        "politics-da/link/7/medicare-for-all-aff",
+        "politics-da/link/7/public-option-aff",
+        "politics-da/link/7/aca-reform-aff",
     ]
 
 

@@ -18,8 +18,9 @@ how recent the evidence for each need should be:
 * :class:`QueryTemplate` — query text with variables such as `{query}`, `{topic}` and `{bill}`,
   and, when the need's default does not fit, a window of its own.
 * :class:`TopicPreset` — the values a topic gives its variables, taken from what is committed
-  (`config/landscape/topics.yaml`'s resolutions), never from memory, and the plan mechanisms of its
-  affirmatives (:class:`TopicMechanism`, v1-e08-t14) that a DA's link search names.
+  (`config/landscape/topics.yaml`'s resolutions), never from memory, the plan mechanisms of its
+  affirmatives (:class:`TopicMechanism`, v1-e08-t14) that a DA's link search names, and the link
+  templates each DA's mechanism queries cross (:class:`MechanismLinkTemplate`, v1-e08-t16).
 
 :class:`ArgumentTaxonomy` validates the whole file when it loads. Every argument has templates for
 exactly its family's needs, and every (argument, need) pair has at least one template that needs
@@ -52,10 +53,12 @@ from debate_core.domain.caselist.values import Event
 __all__ = [
     "ALWAYS_GIVEN_VARIABLES",
     "ARGUMENT_TAXONOMY_SCHEMA_VERSION",
-    "MAX_TOPIC_MECHANISMS",
+    "MAX_QUERIES_PER_SEARCH",
+    "MECHANISM_NEED",
     "Argument",
     "ArgumentKind",
     "ArgumentTaxonomy",
+    "MechanismLinkTemplate",
     "Need",
     "NeedFamily",
     "QueryTemplate",
@@ -75,10 +78,19 @@ ALWAYS_GIVEN_VARIABLES: Final = frozenset({"query", "topic"})
 """The variables every expansion has a value for: the search's own query, and its topic, which is
 the request's or its topic preset's and otherwise the query itself."""
 
-MAX_TOPIC_MECHANISMS: Final = 4
-"""The most plan mechanisms a topic preset names (the PM's ruling on v1-e08-t14): a DA's link search
-on the topic adds one query per mechanism and one on the resolution's words, so at most five, while
-every query is still one request to every provider."""
+MAX_QUERIES_PER_SEARCH: Final = 42
+"""The most template queries one search asks (the PM's ruling on v1-e08-t16).
+
+Since v1-e08-t10 OpenAlex is asked every query of a search in one joined request per page, split
+only when its URL passes 3,500 characters (`openalex.py`'s `MAX_URL_CHARS`). Measured on the
+committed politics DA link templates at `--max-results 200`, 42 queries fit one request with room for
+a typed query of about 100 characters, and 47 leave no room for a typed query or a model's extra
+queries. A topic preset's mechanisms and crossed templates may not take any DA's link search past
+it, and no (argument, need) pair has more templates than it. A model's extra queries
+(`--expand-llm`, at most five) are not counted."""
+
+MECHANISM_NEED: Final = "link"
+"""The need whose queries a topic's plan mechanisms are crossed with: a DA's link (v1-e08-t14)."""
 
 _ID_PATTERN: Final = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 _VARIABLE_PATTERN: Final = re.compile(r"^[a-z][a-z0-9_]*$")
@@ -263,6 +275,36 @@ class TopicMechanism(DomainModel):
     )
 
 
+class MechanismLinkTemplate(DomainModel):
+    """One link template a DA's mechanism queries cross on a topic (v1-e08-t16).
+
+    Either one of the DA's own link templates, named by its id (`politics-da/link/4`) with its text,
+    which the loader checks so that a reordered entry is refused rather than silently crossing another
+    template; or a crossing-only template of the preset's own, naming its DA by `argument`, which no
+    search without the topic asks. Either names only `{query}` and `{topic}`.
+    """
+
+    template_id: NonEmptyText | None = Field(
+        default=None,
+        description="A DA link template's id, as a search records it: `politics-da/link/4`.",
+    )
+    argument: Slug | None = Field(
+        default=None,
+        description="For a crossing-only template, the id of the DA whose mechanism queries cross it.",
+    )
+    text: NonEmptyText = Field(
+        description="The template: for a DA template its text word for word, otherwise the preset's own."
+    )
+
+    @property
+    def argument_id(self) -> str:
+        """The DA this entry belongs to."""
+        if self.argument is not None:
+            return self.argument
+        assert self.template_id is not None
+        return self.template_id.split("/", 1)[0]
+
+
 class TopicPreset(DomainModel):
     """The variable values one topic gives every expansion on it, and its affirmatives' mechanisms."""
 
@@ -275,8 +317,15 @@ class TopicPreset(DomainModel):
     mechanisms: tuple[TopicMechanism, ...] = Field(
         default=(),
         description=(
-            "The plan mechanisms a DA's link search on the topic names, in order, at most "
-            "MAX_TOPIC_MECHANISMS; none means its link searches are the templates' alone."
+            "The plan mechanisms a DA's link search on the topic names, in order; none means its "
+            "link searches are the templates' alone."
+        ),
+    )
+    mechanism_link_templates: tuple[MechanismLinkTemplate, ...] = Field(
+        default=(),
+        description=(
+            "The link templates each DA's mechanism queries cross, in order; a DA not named crosses "
+            "its first link template that names only {query} and {topic}."
         ),
     )
 
@@ -286,15 +335,10 @@ def _repeated(values: Iterable[str]) -> list[str]:
 
 
 def _check_mechanisms(topic: TopicPreset) -> None:
-    """A topic names at most :data:`MAX_TOPIC_MECHANISMS` distinct mechanisms in words, and, when it
-    names any, the topic and the country their queries are built on."""
+    """A topic's mechanisms are distinct and in words, and, when it names any, it sets the topic and
+    the country their queries are built on."""
     if not topic.mechanisms:
         return
-    if len(topic.mechanisms) > MAX_TOPIC_MECHANISMS:
-        raise ValueError(
-            f"topic {topic.id} names {len(topic.mechanisms)} plan mechanisms; a topic names at most "
-            f"{MAX_TOPIC_MECHANISMS}"
-        )
     missing = [name for name in ("topic", "country") if name not in topic.variables]
     if missing:
         raise ValueError(f"topic {topic.id} names plan mechanisms, so it sets {' and '.join(missing)}")
@@ -442,6 +486,18 @@ class ArgumentTaxonomy(DomainModel):
         """The need of `argument`'s family that `name` is the id or an alias of; None for any other,
         including another family's need."""
         return self.family_of(argument).find_need(name)
+
+    def mechanism_link_templates(
+        self, topic: TopicPreset, argument: Argument
+    ) -> tuple[tuple[str, QueryTemplate], ...]:
+        """The link templates `argument`'s mechanism queries cross on `topic`, each with the template id
+        its queries are recorded under, in order."""
+        number, template = next(
+            (number, template)
+            for number, template in enumerate(argument.templates[MECHANISM_NEED], start=1)
+            if template.variables <= ALWAYS_GIVEN_VARIABLES
+        )
+        return ((f"{argument.id}/{MECHANISM_NEED}/{number}", template),)
 
     def find_topic(self, topic_id: str) -> TopicPreset | None:
         """The topic preset with this id."""

@@ -27,15 +27,21 @@ Two templates that render the same query are asked once.
 
 The coach's rule (2026-11-02): generic resolution links are fine, but links are usually to the
 mechanism of the plan text. So a DA's link search on a topic preset that names plan mechanisms
-(v1-e08-t14) asks the link templates as above, unchanged, and then adds, from the DA's first link
-template that names only `{query}` and `{topic}`:
+(v1-e08-t14) asks the link templates as above, unchanged and first, and then crosses the link
+templates the preset chose for that DA (v1-e08-t16,
+:meth:`~debate_core.domain.argument_taxonomy.ArgumentTaxonomy.mechanism_link_templates`) with:
 
-1. one query on the resolution's words, the preset's `topic`, whatever was typed;
-2. one query per mechanism, on its phrase, in the preset's order (at most four).
+1. the resolution's words, the preset's `topic`, whatever was typed;
+2. each mechanism's phrase, in the preset's order.
 
-Each ends with the preset's `country` unless it already names it, and is recorded under the
+The crossing is template-major: the first chosen template on every subject, then the next. A DA the
+preset does not name crosses its first link template that names only `{query}` and `{topic}`. Each
+query ends with the preset's `country` unless it already names it, and is recorded under the
 template's id with `/resolution` or the mechanism's landscape id after it
-(`politics-da/link/1/medicare-for-all-aff`). Every other search is unchanged.
+(`politics-da/link/4/medicare-for-all-aff`, or `politics-da/link/policy-2026-27-nhi-1/resolution`
+for one of the preset's own crossing-only templates). The preset may not take any DA's link search
+past :data:`~debate_core.domain.argument_taxonomy.MAX_QUERIES_PER_SEARCH`. Every other search is
+unchanged.
 
 ## A model's extra queries (`--expand-llm`)
 
@@ -74,7 +80,7 @@ from debate_core.application.ports.providers import Clock
 from debate_core.application.settings import ConfigurationError
 from debate_core.application.structured_output import StructuredOutputGuard
 from debate_core.domain.argument_taxonomy import (
-    ALWAYS_GIVEN_VARIABLES,
+    MECHANISM_NEED,
     Argument,
     ArgumentKind,
     ArgumentTaxonomy,
@@ -138,9 +144,6 @@ DEFAULT_MAX_MODEL_QUERIES: Final = 3
 
 MAX_MODEL_QUERY_WORDS: Final = 12
 """The longest query a model may suggest, in words: a search query, not a sentence of evidence."""
-
-MECHANISM_NEED: Final = "link"
-"""The need of a DA whose search names the topic's plan mechanisms (v1-e08-t14)."""
 
 _MAX_SCHEMA_QUERIES: Final = 5
 """The most suggestions :class:`QueryExpansion` holds, whatever the stage asks for."""
@@ -303,25 +306,27 @@ def _naming(text: str, country: str) -> str:
 
 
 def _mechanism_queries(
-    argument: Argument, need: Need, topic: TopicPreset, filters: SearchFilters, now: datetime
+    taxonomy: ArgumentTaxonomy,
+    argument: Argument,
+    need: Need,
+    topic: TopicPreset,
+    filters: SearchFilters,
+    now: datetime,
 ) -> list[ExpandedQuery]:
-    """A DA's link queries on the resolution's words and on each of the topic's plan mechanisms."""
-    number, template = next(
-        (number, template)
-        for number, template in enumerate(argument.templates[need.id], start=1)
-        if template.variables <= ALWAYS_GIVEN_VARIABLES
-    )
+    """A DA's link queries crossing its chosen templates with the resolution's words and each of the
+    topic's plan mechanisms, template-major."""
     subjects = [("resolution", topic.variables["topic"])]
     subjects += [(mechanism.landscape_id, mechanism.phrase) for mechanism in topic.mechanisms]
     return [
         _template_query(
             _naming(template.render({"query": subject, "topic": subject}), topic.variables["country"]),
             template,
-            f"{argument.id}/{need.id}/{number}/{suffix}",
+            f"{template_id}/{suffix}",
             need,
             filters,
             now,
         )
+        for template_id, template in taxonomy.mechanism_link_templates(topic, argument)
         for suffix, subject in subjects
     ]
 
@@ -354,7 +359,7 @@ def expand_with_templates(
         and argument.kind is ArgumentKind.DA
         and need.id == MECHANISM_NEED
     ):
-        candidates += _mechanism_queries(argument, need, topic, request.filters, now)
+        candidates += _mechanism_queries(taxonomy, argument, need, topic, request.filters, now)
     queries: list[ExpandedQuery] = []
     seen: set[str] = set()
     for candidate in candidates:

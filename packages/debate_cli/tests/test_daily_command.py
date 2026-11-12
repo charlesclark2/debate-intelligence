@@ -435,7 +435,8 @@ def test_with_no_date_and_a_wider_window_it_is_that_many_days_of_24_hours(
     result = daily("politics", "--window", "3d")
 
     assert result.exit_code == ExitCode.OK, result.output
-    markdown = (tmp_path / DIGESTS / "politics-2026-09-17.md").read_text(encoding="utf-8")
+    assert sorted(path.name for path in (tmp_path / DIGESTS).iterdir()) == ["politics-2026-09-17.md"]
+    markdown =(tmp_path / DIGESTS / "politics-2026-09-17.md").read_text(encoding="utf-8")
     assert window_line(markdown) == (
         "- Window: 2026-09-14 23:00 to 2026-09-17 23:00 America/Chicago (the 72 hours before the run)"
     )

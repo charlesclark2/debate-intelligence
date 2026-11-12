@@ -6,7 +6,7 @@
 | Spec | [`plan_specs/v1/e08-research-workflows/t16-mechanism-queries-cross-the-chosen-link-templates.yaml`](../../plan_specs/v1/e08-research-workflows/t16-mechanism-queries-cross-the-chosen-link-templates.yaml) |
 | Epic / release | `v1-e08-research-workflows` / `v1.4` |
 | Branch | `task/v1-e08-t16-mechanism-queries-cross-the-chosen-link-templates` |
-| Session status | IN PROGRESS: the coach's answers (2026-11-11) differ from the PM's ruling; waiting for the PM again before any code <!-- COMPLETE / PARTIAL / BLOCKED --> |
+| Session status | IN PROGRESS: ruled twice on 2026-11-11 and reviewed by the coach; building <!-- COMPLETE / PARTIAL / BLOCKED --> |
 
 ## Summary
 
@@ -519,6 +519,37 @@ Unchanged from your ruling: id + text check for DA templates, the default for an
 42 maximum and its loader rule and pin, Crossref option A with the guide note, today's four
 mechanisms, provider-order nDCG in ac3.
 ```
+
+## The PM's ruling after the coach's answers (2026-11-11)
+
+Summarised; the build follows it.
+
+1. **Template 2 is crossed:** the coach's answer stands over ruling 2. The politics DA's mechanism
+   queries cross, in this order: the coach's new wording `{query} costs political capital Congress`,
+   then link templates 2, 4, 5, 6 and 7. Template 3 is not crossed.
+2. **Option A.** The new wording is a crossing-only entry in the NHI preset's
+   `mechanism_link_templates`. It has its own text and no DA template id, it is checked on load to
+   name only `{query}` and `{topic}`, and it is recorded as
+   `politics-da/link/policy-2026-27-nhi-1/<subject>`.
+   - No argument entry changes, and `coach_reviewed_1_5_0.yaml` and its guard are untouched.
+   - Searches without `--topic` are unchanged.
+   - The preset is committed `coach_reviewed` in 1.6.0, with the coach's answers recorded here.
+3. **Ruling 1 is amended.** The coach's seven reviewed queries come first, unchanged and in order.
+   The crossing follows, template-major in point 1's order. Today's five "political capital"
+   mechanism queries become the new wording's.
+4. **Accepted: 37 politics link queries,** one OpenAlex request per page (2,686 of 3,500 characters).
+   `MAX_QUERIES_PER_SEARCH` stays 42, which leaves 5 queries for v1-e08-t23, and the report says so
+   for t23.
+
+Everything else in the first ruling stands:
+- the id plus text check for DA templates, and the default for a DA the preset doesn't name;
+- the cap's loader rule and its pin;
+- Crossref option A, with the guide's note;
+- today's four mechanisms;
+- provider-order nDCG@10 beside the ranked figure in ac3.
+
+The build runs its tests first and shows them failing, then mutants on the crossing order, the
+crossing-only entry's check, the default template and the cap.
 
 ## Files changed
 

@@ -1976,9 +1976,54 @@ Paste back everything it prints, `STOP:` or `FAILED:` included.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-11-11
 
 **Notes:**
+
+1. **ac1 passes.**
+   - The positions block reproduced both records exactly.
+   - The replay scored every variant before any code, and the first code commit (`5d03bc1`) follows
+     the ruling.
+   - The session withdrew its own first proposal on the replay's evidence (t05 0.605, which the spec
+     forbids), which is the process working as intended.
+   - It also took care with the coach's data:
+     - every block prints positions and template ids, never a title or URL;
+     - exceptions print their type, never their message;
+     - the store is opened `immutable=1`;
+     - the blocks were rehearsed on an invented store first.
+2. **ac2 passes.**
+   - **Red:** 8 failed against a skeleton that always counts recency, each at its assertion. The one
+     crash in the first red run, an existing test missing the new key, was fixed and the run repeated.
+   - **Green:** 160.
+   - **Mutants:** all 9 caught, including the 365 boundary, the `--since` exemption and "any query
+     short".
+   - **The record:** `docs/data/federated-ranking-labelled-searches.md` holds both replayed scores as
+     lower bounds, with their unseen-row counts, beside provider order.
+   - **The check against real data:** the operator's run of the built code reproduced the replay.
+3. **The ruled change is scoped as ruled.**
+   - Recency is unknown only when the request has no `--since` and every expanded query's window is over
+     365 days or has no limit.
+   - Uniqueness, the 30-day templates, `--since`, `daily` and typed searches are each pinned unchanged.
+4. **Deviations accepted.**
+   - 1, t05's labels from the PM's record, checked against the saved search.
+   - 2, t05 from its saved file alone.
+   - 3, the four `search --auto-cut` budget tests: the ruled ranking reorders the CLI fixture, so
+     `--auto-cut 3` now cuts four results for three verified cards. Their expected calls were worked
+     out again by hand, and the budget rule is unchanged. The PM adds `packages/debate_cli/tests` to the
+     spec's packages in the next batch.
+5. **Follow-ups, which the PM files in the next batch:**
+   - **E08, p2, proposal first: t14's remaining gap,** with the ranking still at 0.459 against provider
+     order's 0.746. The figures above show that a snippet carries the score. A 149-to-289-word Crossref
+     abstract outscores a 4-to-23-word title, while 1,784 of 2,758 results have no snippet at all. So
+     the proposal weighs how a provider's abstract counts, for example field-weighted BM25 or a capped
+     snippet contribution. It is replayed on t14's stored record, and on v1-e08-t16's ac3 search once
+     that search can run again: tonight's attempt lost OpenAlex to an HTTP 400 on the joined request,
+     which is filed separately.
+   - **E08, p3:** a labelled search's hand-off keeps its stored record, labels and key together outside
+     the dev store (t05's was lost with the store).
+   - **The record's build tag for t14's ac3 (`v1.1.0-dev.342`) is a slip:** the search ran taxonomy
+     1.5.0 with 12 queries. The PM corrects it in the next batch.
+6. **Merge:** a plain `scripts/task pr` once `ci` is green. The Goal is `Succeeded`.

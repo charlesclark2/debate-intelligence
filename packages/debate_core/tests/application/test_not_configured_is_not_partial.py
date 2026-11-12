@@ -322,7 +322,10 @@ def test_providers_named_not_configured_rule_is_left_out_of_a_requests_json_unle
         ("govinfo", GOVINFO_CURE),
         ("crossref", "set a contact email for Crossref's polite pool"),
         ("openalex", "set an OpenAlex key for a higher daily allowance"),
-        ("semantic_scholar", "set a Semantic Scholar key"),
+        (
+            "semantic_scholar",
+            "request one through the form on Semantic Scholar's API page, semanticscholar.org/product/api",
+        ),
         ("rss", None),
         ("federal_register", None),
         ("gdelt", None),

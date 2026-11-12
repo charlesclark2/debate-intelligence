@@ -14,7 +14,7 @@ import os
 import re
 from collections.abc import Iterator
 from pathlib import Path
-from typing import Any
+from typing import Any, Final
 
 import boto3  # noqa: F401  # plain doctor's integration check imports it; at module top its urllib3 IPv6 probe runs before pytest-socket
 import pytest
@@ -154,6 +154,13 @@ def test_a_blank_value_counts_as_missing(installation: Path, monkeypatch: pytest
     assert "GovInfo no GovInfo key: GovInfo not asked" in rows
 
 
+SEMANTIC_SCHOLAR_WITHOUT_A_KEY: Final = (
+    "Semantic Scholar no Semantic Scholar key: Semantic Scholar not asked; request one through the form on "
+    "Semantic Scholar's API page, semanticscholar.org/product/api"
+)
+"""Semantic Scholar's row without a key: not configured since v1-e07-t20, so not asked, and the cure."""
+
+
 def test_providers_this_build_has_no_adapter_for_say_so_and_keyless_ones_need_none(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -163,7 +170,7 @@ def test_providers_this_build_has_no_adapter_for_say_so_and_keyless_ones_need_no
 
     assert rows == [
         "Credentials file ~/.debate-research/dev.env: not there",
-        "Semantic Scholar no Semantic Scholar key: the shared pool, paced at one request a second",
+        SEMANTIC_SCHOLAR_WITHOUT_A_KEY,
         "Google News no key needed",
         "GDELT no adapter in this build",
         "GovInfo no GovInfo key: GovInfo not asked",
@@ -173,7 +180,8 @@ def test_providers_this_build_has_no_adapter_for_say_so_and_keyless_ones_need_no
 def test_a_semantic_scholar_key_is_named_by_its_source_and_a_blank_one_counts_as_missing(
     installation: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Semantic Scholar has an adapter since v1-e07-t04: its row says whether its key is set."""
+    """Semantic Scholar has an adapter since v1-e07-t04: its row says whether its key is set, and since
+    v1-e07-t20 that without one it is not asked, with the cure."""
     monkeypatch.setenv("DEBATE_PROVIDERS__ENABLED", '["semantic_scholar"]')
     per_user_file(installation, f"DEBATE_PROVIDERS__SEMANTIC_SCHOLAR_API_KEY={KEY}")
 
@@ -181,10 +189,8 @@ def test_a_semantic_scholar_key_is_named_by_its_source_and_a_blank_one_counts_as
     monkeypatch.setenv("DEBATE_PROVIDERS__SEMANTIC_SCHOLAR_API_KEY", "  ")
     _, blank, _ = provider_rows()
 
-    assert keyed[1:] == [f"Semantic Scholar API key set ({SOURCE})"]
-    assert blank[1:] == [
-        "Semantic Scholar no Semantic Scholar key: the shared pool, paced at one request a second"
-    ]
+    assert keyed[1:] == [f"Semantic Scholar API key set ({SOURCE}): asked at one request a second"]
+    assert blank[1:] == [SEMANTIC_SCHOLAR_WITHOUT_A_KEY]
     assert_no_value(result)
 
 

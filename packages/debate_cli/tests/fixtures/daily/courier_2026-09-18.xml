@@ -5,15 +5,15 @@
     <link>https://news.example.org/politics</link>
     <description>Invented coverage for the daily command's tests.</description>
     <item>
-      <title>Spending bill will not pass the House, leaders say</title>
+      <title>Spending bill heads back to Congress, leaders say</title>
       <link>https://news.example.org/2026/09/18/spending-bill</link>
       <guid isPermaLink="false">daily-g</guid>
       <pubDate>Fri, 18 Sep 2026 11:00:00 +0000</pubDate>
       <description>SNIPPETSENTINEL A whip count is circulating.</description>
     </item>
     <item>
-      <title>Senate midterms polling tightens in three states</title>
-      <link>https://news.example.org/2026/09/17/senate-midterms-polling</link>
+      <title>Senate election polling tightens in three states</title>
+      <link>https://news.example.org/2026/09/17/senate-election-polling</link>
       <guid isPermaLink="false">daily-h</guid>
       <pubDate>Thu, 17 Sep 2026 23:15:00 +0000</pubDate>
       <description>SNIPPETSENTINEL Listed in the feed a day late.</description>
@@ -31,6 +31,13 @@
       <guid isPermaLink="false">daily-b</guid>
       <pubDate>Thu, 17 Sep 2026 09:30:00 +0000</pubDate>
       <description>SNIPPETSENTINEL Negotiators reached terms.</description>
+    </item>
+    <item>
+      <title>Senate Republicans block the stopgap spending measure</title>
+      <link>https://news.example.org/2026/09/17/senate-republicans</link>
+      <guid isPermaLink="false">daily-i</guid>
+      <pubDate>Thu, 17 Sep 2026 11:00:00 +0000</pubDate>
+      <description>SNIPPETSENTINEL The motion failed.</description>
     </item>
     <item>
       <title>Senate election forecast: Democrats favored to hold the chamber</title>

@@ -153,7 +153,7 @@ def daily(
     chosen = _preset(cli, preset)
     request = _request(cli, chosen, day, _window(window))
     digesting = cli.services.daily_digesting(feed_topics=chosen.feed_topics)
-    _progress(cli, ctx, request)
+    _progress(cli, ctx, request, digesting)
     digest = _run(_digest(digesting, request, partial(_write, digest_dir, file_format)))
     payload = {**digest_payload(digest), "file": str(digest.file) if digest.file is not None else None}
     exit_code = exit_code_for_digest(digest)
@@ -202,9 +202,9 @@ def _window(text: str) -> DigestWindow:
         raise typer.BadParameter(str(invalid), param_hint="--window") from None
 
 
-def _progress(cli: CliContext, ctx: typer.Context, request: DigestRequest) -> None:
+def _progress(cli: CliContext, ctx: typer.Context, request: DigestRequest, digesting: DailyDigesting) -> None:
     preset = request.preset
-    searches = len(preset.pairs) * len(preset.queries)
+    searches = digesting.service.planned_searches(preset)
     cli.output.event_line(
         command_name(ctx),
         "digesting",

@@ -27,6 +27,7 @@ import pytest
 from pydantic import BaseModel
 
 from debate_core.application.budget import UnpricedModelError
+from debate_core.application.digest_templates import DAILY_TEMPLATES_PATH, load_digest_templates
 from debate_core.application.federated_ranking import (
     FEDERATED_RANKING_CONFIG_PATH,
     load_federated_ranking_config,
@@ -150,6 +151,7 @@ def test_stamp_bundles_the_committed_profiles_and_routing_files(checkout: Path, 
     ) == [
         "argument_taxonomy.yaml",
         "daily_presets.yaml",
+        "daily_templates.yaml",
         "federated_ranking.yaml",
         "format_profiles/flow.yaml",
         "format_profiles/plain.yaml",
@@ -176,6 +178,7 @@ def test_stamp_bundles_the_taxonomy_and_ranking_table_search_reads_unchanged(
         "config/argument_taxonomy.yaml",
         "config/federated_ranking.yaml",
         "config/daily_presets.yaml",
+        "config/daily_templates.yaml",
     ):
         bundled = checkout / sb.BUNDLED_CONFIG / relative
         assert bundled.read_bytes() == (REPO_ROOT / relative).read_bytes(), relative
@@ -213,6 +216,9 @@ def test_the_bundled_search_configuration_loads_as_search_loads_it(checkout: Pat
     topics = load_feed_directory(root / "config" / "feeds")
     assert topics == load_feed_directory(REPO_ROOT / "config" / "feeds")
     assert len(topics) >= 2
+    templates = load_digest_templates(root / DAILY_TEMPLATES_PATH)
+    assert templates == load_digest_templates(REPO_ROOT / DAILY_TEMPLATES_PATH)
+    assert templates.groups, "daily asks these in place of the taxonomy's templates (v1-e08-t25)"
 
 
 @pytest.mark.parametrize(
@@ -221,6 +227,7 @@ def test_the_bundled_search_configuration_loads_as_search_loads_it(checkout: Pat
         ("config/argument_taxonomy.yaml", "argument_taxonomy.yaml"),
         ("config/federated_ranking.yaml", "federated_ranking.yaml"),
         ("config/daily_presets.yaml", "daily_presets.yaml"),
+        ("config/daily_templates.yaml", "daily_templates.yaml"),
         ("config/feeds", "feed lists"),
     ],
 )
@@ -399,6 +406,7 @@ def test_a_wheel_without_cuts_prompts_or_its_default_format_profile_is_refused(
         "debate_cli/_bundled_config/config/argument_taxonomy.yaml",
         "debate_cli/_bundled_config/config/federated_ranking.yaml",
         "debate_cli/_bundled_config/config/daily_presets.yaml",
+        "debate_cli/_bundled_config/config/daily_templates.yaml",
         "debate_cli/_bundled_config/config/feeds/health-insurance.yaml",
         "debate_cli/_bundled_config/config/feeds/politics.yaml",
         "debate_cli/_bundled_config/prompts/search/expand.md",

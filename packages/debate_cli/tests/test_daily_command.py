@@ -255,9 +255,9 @@ SEPTEMBER_17_MARKDOWN: Final = (
     )
     + "\n### 2. "
     + item(
-        "Senate vote count on the stopgap spending measure",
+        "Senate Republicans block the stopgap spending measure",
         "2026-09-17",
-        "https://news.example.org/2026/09/17/senate-vote-count",
+        "https://news.example.org/2026/09/17/senate-republicans",
     )
     + "\n## Midterms DA — Uniqueness\n"
     "\n"
@@ -271,11 +271,13 @@ SEPTEMBER_17_MARKDOWN: Final = (
     "\n"
     "Providers: COMPLETE\n"
     "\n"
-    "- rss: ok, 3 results from 10 queries\n"
+    "- rss: ok, 3 results from 4 queries\n"
 )
-"""`daily politics --date 2026-09-17`, by hand from `courier_2026-09-17.xml`: politics x bill keeps B,
-politics x Senate keeps A (E is a week old), midterms x Senate keeps C. Ten queries: three politics DA
-templates and two midterms DA templates for each of the two queries."""
+"""`daily politics --date 2026-09-17`, by hand from `courier_2026-09-17.xml` and the committed
+`config/daily_templates.yaml` (v1-e08-t25): politics x bill asks `bill Congress` and keeps B; politics
+x Senate asks `Senate Congress` and `Senate Republicans` and keeps I; midterms x Senate asks `Senate
+election` and keeps C; midterms x bill is not searched, no template being for `bill`. Four queries.
+A, which the taxonomy's `Senate vote count Senate` would keep, is not listed."""
 
 SEPTEMBER_18_MARKDOWN: Final = (
     "# Politics daily digest: 2026-09-18\n"
@@ -291,7 +293,7 @@ SEPTEMBER_18_MARKDOWN: Final = (
     "\n"
     "### 1. "
     + item(
-        "Spending bill will not pass the House, leaders say",
+        "Spending bill heads back to Congress, leaders say",
         "2026-09-18",
         "https://news.example.org/2026/09/18/spending-bill",
     )
@@ -299,17 +301,17 @@ SEPTEMBER_18_MARKDOWN: Final = (
     "\n"
     "### 1. "
     + item(
-        "Senate midterms polling tightens in three states",
+        "Senate election polling tightens in three states",
         "2026-09-17",
-        "https://news.example.org/2026/09/17/senate-midterms-polling",
+        "https://news.example.org/2026/09/17/senate-election-polling",
     )
     + "\n## Providers\n"
     "\n"
     "Providers: COMPLETE\n"
     "\n"
-    "- rss: ok, 5 results from 10 queries\n"
+    "- rss: ok, 5 results from 4 queries\n"
 )
-"""`daily politics --date 2026-09-18 --window 2d` after the 17th's: B, A and C are in the window again
+"""`daily politics --date 2026-09-18 --window 2d` after the 17th's: B, I and C are in the window again
 and were listed on the 17th, so they are left out; G is new, and so is H, dated the 17th but first in
 the feed on the 18th."""
 
@@ -332,7 +334,7 @@ def test_daily_politics_writes_the_dated_digest_grouped_by_argument_and_need(
     assert sorted(path.name for path in (tmp_path / DIGESTS).iterdir()) == ["politics-2026-09-17.md"]
     assert "Digest: digests/politics-2026-09-17.md" in result.stdout
     assert "Providers: COMPLETE" in result.stdout
-    assert "rss: ok, 3 results from 10 queries" in result.stdout
+    assert "rss: ok, 3 results from 4 queries" in result.stdout
     assert SENTINEL not in markdown + result.output
 
 
@@ -356,6 +358,131 @@ def test_with_no_date_the_digest_is_for_today_by_the_clock(seams: Seams, tmp_pat
 
     assert result.exit_code == ExitCode.OK, result.output
     assert (tmp_path / DIGESTS / "politics-2026-09-17.md").is_file()
+
+
+# ------------------------------------------------------------------------------------------------
+# The digest templates, never the taxonomy's (v1-e08-t25's ac2, the PM's ruling of 2026-11-12)
+# ------------------------------------------------------------------------------------------------
+
+DIGEST_QUERIES: Final = ["bill Congress", "Senate Congress", "Senate Republicans", "Senate election"]
+"""What the committed `config/daily_templates.yaml` asks of the politics preset: the ruling's four."""
+
+UNIQUENESS_QUERIES: Final = [
+    "bill vote count Senate",
+    "bill likely to pass Congress",
+    "bill will not pass",
+    "Senate vote count Senate",
+    "Senate likely to pass Congress",
+    "Senate will not pass",
+    "bill midterms polling",
+    "bill election forecast",
+    "Senate midterms polling",
+    "Senate election forecast",
+]
+"""The ten queries the taxonomy's politics DA and midterms DA uniqueness templates fill for the preset."""
+
+
+def test_daily_asks_the_digest_templates_and_none_of_the_taxonomys_uniqueness_templates(seams: Seams) -> None:
+    result = daily("politics", "--date", "2026-09-17", "--format", "json", json_output=True)
+
+    assert result.exit_code == ExitCode.OK, result.output
+    data = envelope(result)["data"]
+    asked = [call["query"] for call in data["provider_calls"]]
+    assert asked == DIGEST_QUERIES
+    assert not set(asked) & set(UNIQUENESS_QUERIES)
+    titles = {result["title"] for group in data["groups"] for result in group["results"]}
+    assert "Senate vote count on the stopgap spending measure" not in titles
+
+
+def test_search_still_asks_the_taxonomys_uniqueness_templates(seams: Seams) -> None:
+    result = runner.invoke(
+        create_app(), ["--json", "search", "Senate", "--argument", "politics-da", "--need", "uniqueness"]
+    )
+
+    document = envelope(result)
+    data = document["data"] if document["data"] is not None else document["error"]["details"]
+    assert [query["query"] for query in data["expansion"]["queries"]] == UNIQUENESS_QUERIES[3:6]
+    assert [query["template_id"] for query in data["expansion"]["queries"]] == [
+        "politics-da/uniqueness/1",
+        "politics-da/uniqueness/2",
+        "politics-da/uniqueness/3",
+    ]
+
+
+def test_the_two_groups_list_what_their_own_templates_found_and_nothing_twice(seams: Seams) -> None:
+    result = daily("politics", "--date", "2026-09-17", "--format", "json", json_output=True)
+
+    data = envelope(result)["data"]
+    found = {group["heading"]: [r["url"] for r in group["results"]] for group in data["groups"]}
+    assert found == {
+        "Politics DA — Uniqueness": [
+            "https://news.example.org/2026/09/17/farm-bill?utm_source=feed",
+            "https://news.example.org/2026/09/17/senate-republicans",
+        ],
+        "Midterms DA — Uniqueness": ["https://news.example.org/2026/09/17/senate-forecast"],
+    }
+
+
+def test_a_group_with_no_digest_templates_asks_its_query_alone_and_the_digest_says_so(
+    seams: Seams, tmp_path: Path
+) -> None:
+    """The nhi preset's three pairs have no digest templates: each search asks `health insurance` alone,
+    never the taxonomy's spending, federalism or economy templates, and the digest names each group."""
+    result = daily("nhi", "--date", "2026-09-17", "--format", "json", json_output=True)
+
+    assert result.exit_code == ExitCode.OK, result.output
+    data = envelope(result)["data"]
+    assert {call["query"] for call in data["provider_calls"]} == {"health insurance"}
+    assert [call["query"] for call in data["provider_calls"] if call["provider"] == "rss"] == [
+        "health insurance"
+    ] * 3
+    assert nhi_groups(data) == NHI_GROUPS
+    assert daily("nhi", "--date", "2026-09-17").exit_code == ExitCode.OK
+    markdown = (tmp_path / DIGESTS / "nhi-2026-09-17.md").read_text(encoding="utf-8")
+    note = (
+        "> No digest templates for this group in config/daily_templates.yaml: its searches asked the "
+        "preset's queries alone."
+    )
+    for heading in ("Spending DA — Uniqueness", "Federalism DA — Uniqueness", "Economy DA — Uniqueness"):
+        assert f"## {heading}\n\n{note}\n" in markdown
+
+
+@pytest.mark.parametrize(
+    ("change", "named"),
+    [
+        (
+            lambda document: document["groups"][0]["templates"].append({"text": "{query} vote count"}),
+            "a digest template is the query and one word",
+        ),
+        (
+            lambda document: document["groups"][1].update(argument="elections"),
+            "group elections/uniqueness: the taxonomy has no argument with the id 'elections'; did you "
+            "mean 'midterms-da'",
+        ),
+        (
+            lambda document: document["groups"][1]["templates"][0].update(queries=["Senate", "House"]),
+            "is for the query 'House', which no preset with this pair asks",
+        ),
+    ],
+    ids=["a three-word template", "an alias for the argument", "a query no preset asks"],
+)
+def test_a_digest_templates_file_that_does_not_load_stops_every_run_naming_it(
+    seams: Seams, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, change: Any, named: str
+) -> None:
+    repository = Path(__file__).resolve().parents[3]
+    document = yaml.safe_load((repository / "config" / "daily_templates.yaml").read_text(encoding="utf-8"))
+    change(document)
+    templates = tmp_path / "daily_templates.yaml"
+    templates.write_text(yaml.safe_dump(document, sort_keys=False), encoding="utf-8")
+    monkeypatch.setattr(container_module, "DAILY_TEMPLATES_PATH", templates)
+
+    result = daily("politics", "--date", "2026-09-17", json_output=True)
+
+    assert result.exit_code == ExitCode.DOMAIN_FAILURE, result.output
+    error = envelope(result)["error"]
+    assert named in " ".join(error["message"].split())
+    assert str(templates) in error["message"]
+    assert seams.feeds.requests == []
 
 
 # ------------------------------------------------------------------------------------------------
@@ -400,7 +527,7 @@ def test_with_no_date_a_run_at_07_00_in_chicago_reaches_into_the_evening_before(
     seams: Seams, tmp_path: Path
 ) -> None:
     """07:00 Chicago on the 18th is 12:00Z: the window opens at 12:00Z on the 17th, after B (09:30Z)
-    and before A, C and H; G is the 18th's. Each search's own order is the ranking's."""
+    and I (11:00Z) and before C and H; G is the 18th's. Each search's own order is the ranking's."""
     seams.now = datetime(2026, 9, 18, 12, 0, tzinfo=UTC)
     seams.feeds.courier = "courier_2026-09-18.xml"
 
@@ -418,11 +545,10 @@ def test_with_no_date_a_run_at_07_00_in_chicago_reaches_into_the_evening_before(
         "Providers",
     ]
     assert set(re.findall(r"^### \d\. (.+)$", sections[1], re.MULTILINE)) == {
-        "Spending bill will not pass the House, leaders say",
-        "Senate vote count on the stopgap spending measure",
+        "Spending bill heads back to Congress, leaders say",
     }
     assert set(re.findall(r"^### \d\. (.+)$", sections[2], re.MULTILINE)) == {
-        "Senate midterms polling tightens in three states",
+        "Senate election polling tightens in three states",
         "Senate election forecast: Democrats favored to hold the chamber",
     }
 
@@ -451,7 +577,7 @@ def test_with_no_date_the_digest_is_dated_in_the_configured_zone(
     seams: Seams, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, zone: str | None, named: str
 ) -> None:
     """05:30Z on the 18th. Either way the window is 05:30Z on the 17th to 05:30Z on the 18th, which
-    holds B, A and C."""
+    holds B, I and C."""
     if zone is not None:
         monkeypatch.setenv("DEBATE_DAILY__TIME_ZONE", zone)
     seams.now = datetime(2026, 9, 18, 5, 30, tzinfo=UTC)
@@ -522,7 +648,7 @@ def test_the_seen_set_is_in_the_data_directory_by_canonical_url_and_never_beside
         "urls": {
             "https://news.example.org/2026/09/17/farm-bill": "2026-09-17",
             "https://news.example.org/2026/09/17/senate-forecast": "2026-09-17",
-            "https://news.example.org/2026/09/17/senate-vote-count": "2026-09-17",
+            "https://news.example.org/2026/09/17/senate-republicans": "2026-09-17",
         },
         "dois": {},
     }
@@ -681,10 +807,10 @@ def test_format_json_writes_the_digest_as_json_and_prints_it(seams: Seams, tmp_p
                     "https://news.example.org/2026/09/17/farm-bill?utm_source=feed",
                 ),
                 (
-                    "Senate vote count on the stopgap spending measure",
+                    "Senate Republicans block the stopgap spending measure",
                     "The Example Courier",
                     "2026-09-17",
-                    "https://news.example.org/2026/09/17/senate-vote-count",
+                    "https://news.example.org/2026/09/17/senate-republicans",
                 ),
             ],
         ),
@@ -702,15 +828,15 @@ def test_format_json_writes_the_digest_as_json_and_prints_it(seams: Seams, tmp_p
     ]
     assert data["feed_topics"] == [{"topic": "politics", "awaiting_coach_review": ["The Example Courier"]}]
     assert data["providers"] == [
-        {"provider": "rss", "outcome": "ok", "queries": 10, "failed": 0, "results": 3, "reasons": []}
+        {"provider": "rss", "outcome": "ok", "queries": 4, "failed": 0, "results": 3, "reasons": []}
     ]
-    assert len(data["provider_calls"]) == 10
+    assert len(data["provider_calls"]) == 4
     assert [(s["query"], s["argument"], s["need"]) for s in data["searches"]] == [
         ("bill", "politics-da", "uniqueness"),
         ("Senate", "politics-da", "uniqueness"),
-        ("bill", "midterms-da", "uniqueness"),
         ("Senate", "midterms-da", "uniqueness"),
     ]
+    assert [group["asked_queries_alone"] for group in data["groups"]] == [False, False]
     assert SENTINEL not in result.stdout
 
 
@@ -726,7 +852,7 @@ def test_a_feed_that_fails_makes_the_digest_partial_and_the_footer_says_so(
     markdown = (tmp_path / DIGESTS / "politics-2026-09-17.md").read_text(encoding="utf-8")
     footer = markdown[markdown.index("## Providers") :].splitlines()
     assert footer[2] == "Providers: PARTIAL, results may be missing"
-    assert footer[4].startswith("- rss: partial, 3 results from 10 queries: ")
+    assert footer[4].startswith("- rss: partial, 3 results from 4 queries: ")
     assert "The Example Ledger" in footer[4]
     assert "- Status: PARTIAL" in markdown
     assert "Providers: PARTIAL, results may be missing" in result.stdout
@@ -768,6 +894,30 @@ NOT_ENABLED_UNCOUNTED: Final = (
 v1-e07-t15's follow-up 1)."""
 
 
+NHI_GROUPS: Final = [
+    (
+        "Spending DA — Uniqueness",
+        True,
+        {
+            "Health insurance subsidies at the center of the federal spending debate in Congress",
+            "States lead on health insurance policy as Washington stalls",
+        },
+    ),
+    ("Federalism DA — Uniqueness", True, set[str]()),
+    ("Economy DA — Uniqueness", True, set[str]()),
+]
+"""The nhi preset's pairs have no digest templates (v1-e08-t25), so each of its three searches asks
+`health insurance` alone. Both health-wire items have both words; each is listed once, in the first
+group, so the other two are empty."""
+
+
+def nhi_groups(data: dict[str, Any]) -> list[tuple[str, bool, set[str]]]:
+    return [
+        (group["heading"], group["asked_queries_alone"], {result["title"] for result in group["results"]})
+        for group in data["groups"]
+    ]
+
+
 def test_an_nhi_digest_reads_only_the_health_insurance_feeds_and_names_its_uncounted_providers(
     seams: Seams, tmp_path: Path
 ) -> None:
@@ -787,19 +937,12 @@ def test_an_nhi_digest_reads_only_the_health_insurance_feeds_and_names_its_uncou
         ("federal_register", "not configured", [NOT_ENABLED_UNCOUNTED]),
         ("govinfo", "not configured", [NOT_ENABLED_UNCOUNTED]),
     ]
-    assert [(group["heading"], [r["title"] for r in group["results"]]) for group in details["groups"]] == [
-        (
-            "Spending DA — Uniqueness",
-            ["Health insurance subsidies at the center of the federal spending debate in Congress"],
-        ),
-        ("Federalism DA — Uniqueness", ["States lead on health insurance policy as Washington stalls"]),
-        ("Economy DA — Uniqueness", []),
-    ]
+    assert nhi_groups(details) == NHI_GROUPS
     assert (tmp_path / "data" / "daily" / "seen" / "nhi.json").is_file()
 
 
 GOVINFO_NOT_COUNTED: Final = (
-    "govinfo: not configured on 8 of 8 queries: not counted as partial: no api.data.gov key "
+    "govinfo: not configured on 3 of 3 queries: not counted as partial: no api.data.gov key "
     "(DEBATE_PROVIDERS__API_DATA_GOV_KEY); get a free key at api.data.gov/signup to ask GovInfo"
 )
 
@@ -830,14 +973,7 @@ def test_an_nhi_digest_without_the_api_data_gov_key_names_govinfo_not_configured
         ("federal_register", "ok", []),
         ("govinfo", "not configured", [GOVINFO_NOT_COUNTED.split(": ", 2)[2]]),
     ]
-    assert [(group["heading"], [r["title"] for r in group["results"]]) for group in data["groups"]] == [
-        (
-            "Spending DA — Uniqueness",
-            ["Health insurance subsidies at the center of the federal spending debate in Congress"],
-        ),
-        ("Federalism DA — Uniqueness", ["States lead on health insurance policy as Washington stalls"]),
-        ("Economy DA — Uniqueness", []),
-    ]
+    assert nhi_groups(data) == NHI_GROUPS
     again = daily("nhi", "--date", "2026-09-17")
     assert again.exit_code == ExitCode.OK, again.output
     markdown = (tmp_path / DIGESTS / "nhi-2026-09-17.md").read_text(encoding="utf-8")

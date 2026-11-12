@@ -8,9 +8,17 @@ renders the digest and writes its file; this module decides what is in it and wh
 
 For each of the preset's pairs, in the preset's order, and each of its queries, in order, one
 federated search (:class:`~debate_core.application.federated_search.FederatedSearchService`, the one
-`search` runs) asks the preset's providers the query expanded for that argument and need, on the
-preset's topic, inside the window. The window is the search's own `since` and `until`, so it
-overrules every template's recency window.
+`search` runs, with `daily`'s own expand stage) asks the preset's providers the query expanded for
+that argument and need by the **digest templates**, `config/daily_templates.yaml`
+(:mod:`~debate_core.application.digest_templates`, the PM's ruling of 2026-11-12, v1-e08-t25), on
+the preset's topic, inside the window. Never by the taxonomy's templates, which `search` asks: a
+filled uniqueness template such as `Senate vote count Senate` kept no feed item on 2026-11-12.
+
+* A pair whose group has no template for a query runs no search for it.
+* A pair with no group asks the preset's query alone, and its :class:`DigestGroup` says so
+  (`asked_queries_alone`), so the digest names it.
+
+The window is the search's own `since` and `until`.
 
 ## The window and the date
 
@@ -70,6 +78,7 @@ from zoneinfo import ZoneInfo
 
 from debate_core.application.batch_cut_service import BatchCandidate, BatchNeed, batch_need
 from debate_core.application.digest_seen_set import DigestSeenSet, DigestSeenStore, SourceKeys, source_keys
+from debate_core.application.digest_templates import DigestTemplates
 from debate_core.application.federated_ranking import RankedCandidate
 from debate_core.application.federated_search import search_status
 from debate_core.application.federated_search_types import ExpansionRequest, SearchOutcome, SearchRequest
@@ -204,6 +213,8 @@ class DigestGroup:
     heading: str
     """`Politics DA — Uniqueness`: the argument's and the need's labels."""
     items: tuple[DigestItem, ...]
+    asked_queries_alone: bool = False
+    """The pair has no digest templates, so its searches asked the preset's queries alone."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -275,12 +286,15 @@ class DigestService:
         searching: DigestSearching,
         seen: DigestSeenStore,
         taxonomy: ArgumentTaxonomy,
+        templates: DigestTemplates,
         feed_reviews: Mapping[str, Sequence[str]] | None = None,
     ) -> None:
-        """`feed_reviews`: for each feed topic, the publishers of its feeds still awaiting review."""
+        """`templates`: the digest templates the search's expand stage asks, the same ones.
+        `feed_reviews`: for each feed topic, the publishers of its feeds still awaiting review."""
         self._searching = searching
         self._seen = seen
         self._taxonomy = taxonomy
+        self._templates = templates
         self._feed_reviews = dict(feed_reviews or {})
 
     async def build(self, request: DigestRequest) -> Digest:
@@ -294,7 +308,7 @@ class DigestService:
         groups: list[DigestGroup] = []
         for pair in preset.pairs:
             items: list[DigestItem] = []
-            for query in preset.queries:
+            for query in self._queries(preset, pair):
                 outcome = await self._searching.search(self._request(preset, pair, query, since, until))
                 outcomes.append(outcome)
                 for item in self._items(outcome, query):
@@ -305,7 +319,12 @@ class DigestService:
                         continue
                     listed.append(item.keys)
                     items.append(item)
-            groups.append(DigestGroup(pair=pair, heading=self._heading(pair), items=tuple(items)))
+            alone = False  # skeleton: never named
+            groups.append(
+                DigestGroup(
+                    pair=pair, heading=self._heading(pair), items=tuple(items), asked_queries_alone=alone
+                )
+            )
         return Digest(
             preset=preset,
             day=request.day,
@@ -335,6 +354,14 @@ class DigestService:
         seen: DigestSeenSet = self._seen.load(request.preset.name)
         self._seen.save(seen.with_listed((item.keys for item in digest.items), request.day))
         return replace(digest, file=path)
+
+    def planned_searches(self, preset: DailyPreset) -> int:
+        """How many searches the preset's digest runs: one per pair and query a digest template is for."""
+        return sum(len(self._queries(preset, pair)) for pair in preset.pairs)
+
+    def _queries(self, preset: DailyPreset, pair: DailyPair) -> tuple[str, ...]:
+        """The preset's queries a search is run for on `pair`: each that some digest template asks."""
+        return preset.queries  # skeleton: every query, as before
 
     def _request(
         self, preset: DailyPreset, pair: DailyPair, query: str, since: datetime, until: datetime

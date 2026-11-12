@@ -32,6 +32,12 @@ from debate_core.application.digest_service import (
     DigestWindow,
     digest_batch_candidates,
 )
+from debate_core.application.digest_templates import (
+    DigestExpansionStage,
+    DigestTemplate,
+    DigestTemplateGroup,
+    DigestTemplates,
+)
 from debate_core.application.errors import ProviderUnavailable
 from debate_core.application.federated_dedupe import DedupeStage
 from debate_core.application.federated_ranking import (
@@ -45,7 +51,6 @@ from debate_core.application.federated_search_types import StagesInOrder
 from debate_core.application.ports.providers import SearchProvider
 from debate_core.application.query_expansion import (
     ARGUMENT_TAXONOMY_PATH,
-    QueryExpansionStage,
     load_argument_taxonomy,
 )
 from debate_core.domain import AccessStatus, ArticleIdentifiers, SearchStatus, SourceType
@@ -76,9 +81,25 @@ PRESET: Final = DailyPreset(
     providers=("rss",),
     feed_topics=("politics",),
 )
-"""Politics DA uniqueness expands `bill` into `bill vote count Senate`, `bill likely to pass Congress`
-and `bill will not pass` (its `{bill} whip count` needs a bill); midterms DA uniqueness into
-`bill midterms polling` and `bill election forecast` (taxonomy 1.5.0)."""
+"""Under :data:`TEMPLATES`, politics DA uniqueness asks `bill vote` and `bill pass`, and midterms DA
+uniqueness `bill polling` and `bill forecast`."""
+
+TEMPLATES: Final = DigestTemplates(
+    groups=(
+        DigestTemplateGroup(
+            argument="politics-da",
+            need="uniqueness",
+            templates=(DigestTemplate(text="{query} vote"), DigestTemplate(text="{query} pass")),
+        ),
+        DigestTemplateGroup(
+            argument="midterms-da",
+            need="uniqueness",
+            templates=(DigestTemplate(text="{query} polling"), DigestTemplate(text="{query} forecast")),
+        ),
+    )
+)
+"""The test's digest templates (v1-e08-t25), written here rather than read from
+`config/daily_templates.yaml`, as the preset is, so the coach's edits there do not move these tests."""
 
 
 def news(slug: str, title: str, day: int) -> CandidateResult:
@@ -113,10 +134,10 @@ BOTH_GROUPS: Final = news("pass-forecast", "Bill likely to pass and the election
 """Matches a politics DA template and a midterms DA template: found by both groups' searches."""
 
 DAY_ONE: Final = {
-    "vote count": [VOTE],
-    "likely to pass": [PASS],
-    "election forecast": [FORECAST],
-    "midterms polling": [PAPER],
+    "vote": [VOTE],
+    "pass": [PASS],
+    "forecast": [FORECAST],
+    "polling": [PAPER],
 }
 
 
@@ -167,6 +188,7 @@ class World:
     provider: TermProvider
     seen_dir: Path
     feed_reviews: dict[str, tuple[str, ...]] = field(default_factory=dict[str, tuple[str, ...]])
+    templates: DigestTemplates = TEMPLATES
     written: list[Digest] = field(default_factory=list[Digest])
 
     def service(
@@ -179,7 +201,7 @@ class World:
             InMemorySearchRepository(),
             clock=clock,
             ids=ids,
-            expand=QueryExpansionStage(TAXONOMY, clock=clock),
+            expand=DigestExpansionStage(TAXONOMY, self.templates),
             normalize=DedupeStage(),
             rank=StagesInOrder(
                 FederatedRankStage(RANKING, clock=clock),
@@ -192,6 +214,7 @@ class World:
             searching=search,
             seen=FileDigestSeenStore(self.seen_dir),
             taxonomy=TAXONOMY,
+            templates=self.templates,
             feed_reviews=self.feed_reviews,
         )
 
@@ -264,11 +287,10 @@ async def test_every_query_is_the_pairs_expansion_asked_inside_the_window(world:
     await world.run(SEPTEMBER_17)
 
     assert [query.query for query in world.provider.asked] == [
-        "bill vote count Senate",
-        "bill likely to pass Congress",
-        "bill will not pass",
-        "bill midterms polling",
-        "bill election forecast",
+        "bill vote",
+        "bill pass",
+        "bill polling",
+        "bill forecast",
     ]
     window = {(query.filters.since, query.filters.until) for query in world.provider.asked}
     assert window == {
@@ -283,7 +305,7 @@ async def test_a_wider_window_starts_that_many_days_back(world: World) -> None:
 
 
 async def test_a_source_two_groups_find_is_listed_once_in_the_first(world: World) -> None:
-    world.provider.records = {"likely to pass": [BOTH_GROUPS], "election forecast": [BOTH_GROUPS, FORECAST]}
+    world.provider.records = {"pass": [BOTH_GROUPS], "forecast": [BOTH_GROUPS, FORECAST]}
 
     digest = await world.run(SEPTEMBER_17)
 
@@ -309,7 +331,7 @@ async def test_a_groups_results_keep_their_searchs_rank_order(world: World) -> N
 
 async def test_the_next_date_omits_what_the_previous_day_listed(world: World) -> None:
     await world.run(SEPTEMBER_17)
-    world.provider.records["vote count"].append(NEW_VOTE)
+    world.provider.records["vote"].append(NEW_VOTE)
 
     digest = await world.run(SEPTEMBER_18)
 
@@ -322,7 +344,7 @@ async def test_the_next_date_omits_what_the_previous_day_listed(world: World) ->
 
 async def test_a_result_seen_under_its_doi_is_omitted_at_another_url(world: World) -> None:
     await world.run(SEPTEMBER_17)
-    world.provider.records = {"midterms polling": [PAPER_AT_PUBLISHER]}
+    world.provider.records = {"polling": [PAPER_AT_PUBLISHER]}
 
     digest = await world.run(SEPTEMBER_18)
 
@@ -337,10 +359,10 @@ async def test_a_source_merged_from_two_urls_is_seen_at_either(world: World) -> 
         update={"identifiers": ArticleIdentifiers(openalex_id="W4410000099")}
     )
     mirror = first.model_copy(update={"url": "https://mirror.example.com/reports/midterms-polling"})
-    world.provider.records = {"midterms polling": [first, mirror]}
+    world.provider.records = {"polling": [first, mirror]}
     [listed] = (await world.run(SEPTEMBER_17)).items
     assert listed.ranked.candidate.canonical_url == "https://news.example.org/2026/09/17/report"
-    world.provider.records = {"midterms polling": [mirror]}
+    world.provider.records = {"polling": [mirror]}
 
     digest = await world.run(SEPTEMBER_18)
 
@@ -359,7 +381,7 @@ async def test_the_seen_set_records_each_canonical_url_and_doi_under_the_date_th
     world: World,
 ) -> None:
     await world.run(SEPTEMBER_17)
-    world.provider.records["vote count"].append(NEW_VOTE)
+    world.provider.records["vote"].append(NEW_VOTE)
     await world.run(SEPTEMBER_18)
 
     assert world.seen_file() == {
@@ -711,3 +733,88 @@ async def test_a_source_an_evening_run_recorded_under_the_utc_date_is_listed_onc
 
     assert (changeover.day, len(changeover.items), changeover.listed_before) == (date(2026, 9, 18), 4, 0)
     assert (after.day, len(after.items), after.listed_before) == (date(2026, 9, 19), 0, 4)
+
+
+# ------------------------------------------------------------------------------------------------
+# The digest templates, never the taxonomy's (v1-e08-t25's ac2, the PM's ruling of 2026-11-12)
+# ------------------------------------------------------------------------------------------------
+
+TAXONOMY_UNIQUENESS: Final = {
+    "bill vote count Senate",
+    "bill likely to pass Congress",
+    "bill will not pass",
+    "bill midterms polling",
+    "bill election forecast",
+}
+"""What the taxonomy's uniqueness templates fill `bill` into for the two pairs, written by hand."""
+
+TWO_QUERIES: Final = PRESET.evolve(queries=("bill", "Senate"))
+
+
+async def test_a_digest_asks_its_templates_ids_and_none_of_the_taxonomys(world: World) -> None:
+    digest = await world.run(SEPTEMBER_17)
+
+    asked = [query.query for query in world.provider.asked]
+    assert not set(asked) & TAXONOMY_UNIQUENESS
+    expansions = [outcome.search.expansion for outcome in digest.outcomes]
+    assert [[query.template_id for query in expansion.queries] for expansion in expansions if expansion] == [
+        ["digest/politics-da/uniqueness/1", "digest/politics-da/uniqueness/2"],
+        ["digest/midterms-da/uniqueness/1", "digest/midterms-da/uniqueness/2"],
+    ]
+    assert [group.asked_queries_alone for group in digest.groups] == [False, False]
+
+
+async def test_a_template_for_some_queries_is_asked_for_those_and_a_query_none_is_for_is_not_searched(
+    world: World,
+) -> None:
+    world.templates = DigestTemplates(
+        groups=(
+            DigestTemplateGroup(
+                argument="politics-da",
+                need="uniqueness",
+                templates=(DigestTemplate(text="{query} vote", queries=("Senate",)),),
+            ),
+            DigestTemplateGroup(
+                argument="midterms-da", need="uniqueness", templates=(DigestTemplate(text="{query} polling"),)
+            ),
+        )
+    )
+    service = world.service()
+
+    digest = await service.run(DigestRequest(TWO_QUERIES, SEPTEMBER_17), world.write)
+
+    assert [query.query for query in world.provider.asked] == [
+        "Senate vote",
+        "bill polling",
+        "Senate polling",
+    ]
+    assert [outcome.search.query for outcome in digest.outcomes] == ["Senate", "bill", "Senate"]
+    assert service.planned_searches(TWO_QUERIES) == 3
+    assert groups(digest) == [
+        ("Politics DA — Uniqueness", {"Senate vote count on the invented spending bill"}),
+        ("Midterms DA — Uniqueness", {"Midterms polling and the invented bill"}),
+    ]
+
+
+async def test_a_pair_with_no_digest_templates_asks_its_query_alone_and_says_so(world: World) -> None:
+    world.templates = DigestTemplates(groups=TEMPLATES.groups[:1])
+
+    digest = await world.run(SEPTEMBER_17)
+
+    assert [query.query for query in world.provider.asked] == ["bill vote", "bill pass", "bill"]
+    midterms = digest.outcomes[1].search.expansion
+    assert midterms is not None
+    assert [(query.template_id, query.template) for query in midterms.queries] == [
+        ("digest/midterms-da/uniqueness/query-alone", "{query}")
+    ]
+    assert [group.asked_queries_alone for group in digest.groups] == [False, True]
+    assert not {query.query for query in world.provider.asked} & TAXONOMY_UNIQUENESS
+
+
+async def test_with_no_digest_templates_at_all_every_pair_asks_its_query_alone(world: World) -> None:
+    world.templates = DigestTemplates()
+
+    digest = await world.run(SEPTEMBER_17)
+
+    assert [query.query for query in world.provider.asked] == ["bill", "bill"]
+    assert [group.asked_queries_alone for group in digest.groups] == [True, True]

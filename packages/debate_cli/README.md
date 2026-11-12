@@ -147,7 +147,7 @@ rather than writing an integer.
 | 2 | `USAGE_ERROR` | The command line was wrong: unknown command or option, missing argument, no command given. Nothing was executed. |
 | 3 | `RETRIEVAL_FAILURE` | Something the command depends on did not answer, so there is no answer yet. An external provider — search, fetch, a model — failed or rate-limited the call, or a store could not be read or written: it was unavailable, the SSO session for it expired, or it refused access (the operating system refusing a data directory included). The same command may well succeed later. |
 | 4 | `CARD_UNVERIFIED` | `cut` made a card and the evidence verifier did not pass it: the card was saved and written `UNVERIFIED`, with its banner, and each reason was printed. Never `0`, and not `1`, so a script can tell a card that needs a person's look from a cut that could not run (`v1-e06-t06`). |
-| 6 | `SEARCH_PARTIAL` | `search` returned what it found while at least one provider it asked did not answer in full: it failed, timed out, was rate-limited, had its breaker open, was not configured or answered only partly. The footer names each one. A partial search with no rows is a `6` too (`v1-e08-t05`). `daily` exits `6` the same way, with its digest written (`v1-e08-t07`). |
+| 6 | `SEARCH_PARTIAL` | `search` returned what it found while at least one provider it asked did not answer in full: it failed, timed out, was rate-limited, had its breaker open, was not configured or answered only partly. The footer names each one. A partial search with no rows is a `6` too (`v1-e08-t05`). A provider the profile enables without its key, which `search` did not name with `--providers`, is named but not counted (`v1-e07-t15`). `daily` exits `6` the same way, with its digest written (`v1-e08-t07`). |
 | 7 | `NO_RESULTS` | `search` asked every provider, every one answered in full, and nothing matched. |
 | 8 | `AUTO_CUT_SHORT` | `search --auto-cut N` (or `daily --auto-cut N`) made fewer than N VERIFIED cards: every result was tried, and the rest were inaccessible, not verified or could not be cut. What was cut is written (`v1-e08-t06`). |
 | 9 | `BUDGET_EXCEEDED` | `search --auto-cut N` stopped short of N VERIFIED cards because the budget guard refused a model call (`--max-cost`, a daily or monthly limit, or a model with no price while a limit is set). The cards already cut are written. |
@@ -547,7 +547,7 @@ each enabled provider, whether its key or the email is set and what a search doe
   recorded fixtures the twelve-query NHI link search sends nine of its twelve Crossref queries in about
   9 seconds without an email, and all twelve in about 4 seconds with one.
 * GovInfo without `DEBATE_PROVIDERS__API_DATA_GOV_KEY` is `not configured` on a topic that lists it,
-  as below, and that search exits `6` too.
+  as below. The footer names it with its cure, and it does not make the search partial.
 
 **Government sources** (`v1-e07-t07`) are asked only by a search on a topic that lists them:
 `--topic policy-2026-27-nhi` asks the Federal Register's rules, proposed rules and notices and GovInfo's
@@ -556,8 +556,13 @@ lists both for that topic. A search with no `--topic` never asks them, and neith
 `providers.enabled` does not list them; enabling them in the profiles changed neither rule. The Federal
 Register takes no key. GovInfo needs a free
 api.data.gov key in `DEBATE_PROVIDERS__API_DATA_GOV_KEY`, from https://api.data.gov/signup/. Without one,
-a search on the topic reports `govinfo: not configured: govinfo: no api.data.gov key
-(DEBATE_PROVIDERS__API_DATA_GOV_KEY)` and exits `6`. GovInfo and the Federal Register are each asked
+a search on the topic reports `govinfo: not configured: not counted as partial: no api.data.gov key
+(DEBATE_PROVIDERS__API_DATA_GOV_KEY); get a free key at api.data.gov/signup to ask GovInfo`, in the footer
+and in the JSON's `reasons`. No retry could get more from it, so it is left out of the search's status
+(`v1-e07-t15`): the search exits `0` when the other providers answered (`7` with no results), and `3`
+when none did. A search that names GovInfo with `--providers` asked for it, so there it is still a
+missing answer: `govinfo: not configured: no api.data.gov key (DEBATE_PROVIDERS__API_DATA_GOV_KEY)`,
+and the search exits `6`. GovInfo and the Federal Register are each asked
 once per query, so the twelve-query NHI link search sends each twelve requests. api.data.gov allows a
 key 1,000 requests an hour, which is about 80 such searches an hour, and then answers `429` for the
 rest of the hour; the footer says so.
@@ -584,12 +589,12 @@ template queries alone.
 
 | Exit | Means |
 |---|---|
-| `0` | Every provider answered in full, with results. |
+| `0` | Every provider asked answered in full, with results. One enabled without its key is named, not counted. |
 | `1` | No provider was asked: none of those selected is enabled (`NO_PROVIDER_ENABLED`). |
 | `2` | A usage error: an unknown `--argument`, `--need`, `--topic` or `--var` (the valid ones are listed), `--since` after `--until`, a provider this build does not have. Nothing is searched. |
 | `3` | No provider answered (`SEARCH_FAILED`). |
 | `6` | Partial (`SEARCH_PARTIAL`): results from the providers that answered, and the footer names each one that did not. |
-| `7` | Every provider answered, and nothing matched (`NO_RESULTS`). |
+| `7` | Every provider asked answered, and nothing matched (`NO_RESULTS`). |
 
 ## `debate-research daily`
 
@@ -613,6 +618,11 @@ the digest file is, so a run that fails marks nothing seen. `--auto-cut N` then 
 as `search --auto-cut` does, each group's top result first and each card cut for its own argument and
 need, into `<preset>-<date>.docx` beside the digest.
 
+A preset's providers are configuration, so they count as the profile's enabled ones do (`v1-e07-t15`):
+`nhi` on a machine without the api.data.gov key names GovInfo with its cure in the footer, and the
+digest is complete if the others answered. A preset provider the profile does not enable at all is
+still `not configured` and makes the digest partial.
+
 ```console
 $ uv run debate-research daily politics --date 2026-09-17
 $ uv run debate-research daily nhi --window 3d --format json | jq '.data // .error.details | .groups[] | [.heading, (.results | length)]'
@@ -620,7 +630,7 @@ $ uv run debate-research daily nhi --window 3d --format json | jq '.data // .err
 
 | Exit | Means |
 |---|---|
-| `0` | Every provider answered; the digest is written, with new results or none. |
+| `0` | Every provider asked answered; the digest is written, with new results or none. One enabled without its key is named, not counted. |
 | `1` | None of the preset's providers is enabled (`NO_PROVIDER_ENABLED`); nothing is written. |
 | `2` | A usage error: an unknown preset (the presets are listed) or a `--window` that is not `1d` to `31d`. |
 | `3` | No provider answered (`SEARCH_FAILED`); nothing is written and nothing is marked listed. |

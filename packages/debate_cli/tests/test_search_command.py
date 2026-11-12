@@ -969,6 +969,14 @@ def test_the_federal_register_is_asked_only_by_a_search_on_a_topic_that_lists_it
     assert request.url.params["conditions[term]"] == "health insurance"
 
 
+GOVINFO_NOT_COUNTED: Final = (
+    "  govinfo: not configured: not counted as partial: no api.data.gov key "
+    "(DEBATE_PROVIDERS__API_DATA_GOV_KEY); get a free key at api.data.gov/signup to ask GovInfo"
+)
+"""GovInfo enabled without its key, on a search that did not name it: named with its cure, and not
+counted as partial (the PM's ruling 1 on v1-e07-t15)."""
+
+
 def test_govinfo_without_an_api_data_gov_key_is_reported_not_configured_on_its_topic(
     seams: Seams, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -980,13 +988,53 @@ def test_govinfo_without_an_api_data_gov_key_is_reported_not_configured_on_its_t
 
     assert without_topic.exit_code == ExitCode.OK, without_topic.output
     assert footer(without_topic) == ["Providers: COMPLETE", "  openalex: ok, 3 results"]
-    assert on_topic.exit_code == ExitCode.SEARCH_PARTIAL, on_topic.output
-    assert footer(on_topic) == [
-        "Providers: PARTIAL, results may be missing",
-        "  openalex: ok, 3 results",
-        "  govinfo: not configured: no api.data.gov key (DEBATE_PROVIDERS__API_DATA_GOV_KEY)",
+    assert on_topic.exit_code == ExitCode.OK, on_topic.output
+    assert footer(on_topic) == ["Providers: COMPLETE", "  openalex: ok, 3 results", GOVINFO_NOT_COUNTED]
+    assert GOVINFO_HOST not in {request.url.host for request in seams.providers.requests}
+
+
+def test_govinfo_named_with_providers_and_not_configured_keeps_the_search_partial(
+    seams: Seams, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    seams.registry_override = False
+    monkeypatch.setenv("DEBATE_PROVIDERS__ENABLED", '["openalex", "govinfo"]')
+
+    result = search(
+        "health insurance",
+        "--topic",
+        "policy-2026-27-nhi",
+        "--providers",
+        "openalex,govinfo",
+        "--format",
+        "json",
+    )
+
+    assert result.exit_code == ExitCode.SEARCH_PARTIAL, result.output
+    error = envelope(result)["error"]
+    assert error["code"] == "SEARCH_PARTIAL"
+    assert error["details"]["status"] == "PARTIAL"
+    assert [
+        (entry["provider"], entry["outcome"], entry["reasons"]) for entry in error["details"]["providers"]
+    ] == [
+        ("openalex", "ok", []),
+        ("govinfo", "not configured", ["no api.data.gov key (DEBATE_PROVIDERS__API_DATA_GOV_KEY)"]),
     ]
     assert GOVINFO_HOST not in {request.url.host for request in seams.providers.requests}
+
+
+def test_govinfo_not_configured_beside_a_provider_that_failed_is_still_a_failed_search(
+    seams: Seams, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    seams.registry_override = False
+    seams.providers.openalex_status = 503
+    monkeypatch.setenv("DEBATE_PROVIDERS__ENABLED", '["openalex", "govinfo"]')
+
+    result = search("health insurance", "--topic", "policy-2026-27-nhi")
+
+    assert result.exit_code == ExitCode.RETRIEVAL_FAILURE, result.output
+    lines = footer(result, stream="stderr")
+    assert lines[0] == "Providers: FAILED"
+    assert GOVINFO_NOT_COUNTED in lines
 
 
 def test_govinfo_with_its_key_is_asked_on_its_topic_with_the_key_in_a_header_only(
@@ -1086,7 +1134,7 @@ def test_on_the_committed_profile_a_contact_email_puts_crossref_in_the_polite_po
     assert INVENTED_CONTACT_EMAIL not in result.stdout + result.stderr
 
 
-def test_on_the_committed_profile_a_search_on_the_nhi_topic_without_a_key_reports_govinfo_not_configured(
+def test_on_the_committed_profile_an_nhi_search_without_a_key_names_govinfo_not_configured_and_is_complete(
     committed_profile: Seams,
 ) -> None:
     """The Federal Register takes no key and answers; GovInfo has none and is never asked. The topic's
@@ -1094,14 +1142,14 @@ def test_on_the_committed_profile_a_search_on_the_nhi_topic_without_a_key_report
     topic."""
     result = search("health insurance", "--topic", "policy-2026-27-nhi")
 
-    assert result.exit_code == ExitCode.SEARCH_PARTIAL, result.output
+    assert result.exit_code == ExitCode.OK, result.output
     assert footer(result) == [
-        "Providers: PARTIAL, results may be missing",
+        "Providers: COMPLETE",
         "  openalex: ok, 3 results",
         "  crossref: ok, 1 result",
         "  rss: ok, 2 results",
         "  federal_register: ok, 1 result",
-        "  govinfo: not configured: no api.data.gov key (DEBATE_PROVIDERS__API_DATA_GOV_KEY)",
+        GOVINFO_NOT_COUNTED,
     ]
     assert hosts_asked(committed_profile)[FEDERAL_REGISTER_HOST] == 1
     assert GOVINFO_HOST not in hosts_asked(committed_profile)

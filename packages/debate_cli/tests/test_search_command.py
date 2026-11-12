@@ -829,7 +829,8 @@ def test_a_da_link_search_on_the_nhi_topic_asks_openalex_its_links_then_the_chos
     """v1-e08-t16, the PM's ruling after the coach's answers: the politics DA's seven reviewed link
     queries as they are, then the coach's own wording and templates 2, 4, 5, 6 and 7, each on the
     resolution's words and each of the four mechanisms, naming the United States. The 37 go to OpenAlex
-    in one joined request (v1-e08-t10)."""
+    joined (v1-e08-t10) in two requests: OpenAlex refuses a search over 1,500 characters, and the first 24
+    are 1,473 of them, the first 25 1,536 (the operator's measurement, v1-e08-t20, 2026-11-12)."""
     result = search(
         "national health insurance",
         "--argument",
@@ -869,6 +870,8 @@ def test_a_da_link_search_on_the_nhi_topic_asks_openalex_its_links_then_the_chos
             "Affordable Care Act popular with Republicans United States",
             "national health insurance unpopular with Republicans United States",
             "single payer unpopular with Republicans United States",
+        ),
+        joined(
             "Medicare for All unpopular with Republicans United States",
             "public option unpopular with Republicans United States",
             "Affordable Care Act unpopular with Republicans United States",
@@ -882,7 +885,7 @@ def test_a_da_link_search_on_the_nhi_topic_asks_openalex_its_links_then_the_chos
             "Medicare for All unpopular with Democrats United States",
             "public option unpopular with Democrats United States",
             "Affordable Care Act unpopular with Democrats United States",
-        )
+        ),
     ]
     queries = envelope(result)["data"]["expansion"]["queries"]
     assert [query["template_id"] for query in queries][7:] == [
@@ -1395,6 +1398,54 @@ def test_expand_llm_adds_the_models_validated_queries(seams: Seams) -> None:
     assert seams.providers.openalex_queries() == [
         joined(*POLITICS_LINK_QUERIES, "health insurance midterm stakes")
     ]
+
+
+ASKED_ALONE_REASON: Final = (
+    "not counted as partial: {count} asked alone, not joined: an unbalanced parenthesis or double quote, "
+    "or an AND, OR or NOT"
+)
+"""The footer's OpenAlex reason for queries asked alone (v1-e08-t20, the PM's ruling 4)."""
+
+
+def test_a_typed_query_with_an_open_parenthesis_asks_openalex_each_query_alone_and_says_so(
+    seams: Seams,
+) -> None:
+    """Every politics link template carries the typed query, so each of the seven goes alone, as typed;
+    the feed is read once, as before. Each lone query gets all three works of the fixture: 21."""
+    typed = "health insurance (reform"
+    alone = [query.replace("health insurance", typed) for query in POLITICS_LINK_QUERIES]
+
+    result = search(typed, "--argument", "politics-da", "--need", "link", "--format", "json")
+
+    assert result.exit_code == ExitCode.OK, result.output
+    assert sorted(seams.providers.openalex_queries()) == sorted(alone)
+    assert [str(request.url) for request in seams.providers.requests].count(FEED_URL) == 1
+    [openalex] = [entry for entry in envelope(result)["data"]["providers"] if entry["provider"] == "openalex"]
+    assert (openalex["outcome"], openalex["results"], openalex["reasons"]) == (
+        "ok",
+        21,
+        [ASKED_ALONE_REASON.format(count="7 queries")],
+    )
+
+    shown = search(typed, "--argument", "politics-da", "--need", "link")
+
+    assert "openalex: ok, 21 results from 7 queries: " + ASKED_ALONE_REASON.format(
+        count="7 queries"
+    ) in " ".join(shown.stdout.split())
+
+
+def test_a_model_query_with_a_bare_or_is_asked_alone_and_the_template_queries_joined(seams: Seams) -> None:
+    model_query = "health insurance OR Medicaid midterm stakes"
+    seams.router.enqueue({"queries": [{"query": model_query, "rationale": "What the midterms mean for it."}]})
+
+    result = search(
+        "health insurance", "--argument", "politics-da", "--need", "link", "--expand-llm", "--format", "json"
+    )
+
+    assert result.exit_code == ExitCode.OK, result.output
+    assert seams.providers.openalex_queries() == [joined(*POLITICS_LINK_QUERIES), model_query]
+    [openalex] = [entry for entry in envelope(result)["data"]["providers"] if entry["provider"] == "openalex"]
+    assert openalex["reasons"] == [ASKED_ALONE_REASON.format(count="1 query")]
 
 
 def test_expand_llm_that_cannot_reach_a_model_prints_the_expansions_warning(seams: Seams) -> None:

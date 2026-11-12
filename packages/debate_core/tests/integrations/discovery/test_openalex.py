@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import json
 import logging
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Collection, Iterator
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta, timezone
 from pathlib import Path
@@ -32,16 +32,17 @@ from debate_core.domain.discovery import BreakerState, CandidateResult, Provider
 from debate_core.domain.enums import SourceType
 from debate_core.domain.search import SearchFilters
 from debate_core.integrations.discovery.openalex import (
+    MAX_SEARCH_CHARS,
     MAX_URL_CHARS,
     OPENALEX_WORKS_URL,
     OpenAlexProvider,
+    asked_alone,
     candidate_from_work,
     joined_search,
     openalex_factory,
     rebuild_abstract,
     source_type_for,
     works_parameters,
-    works_url,
 )
 from debate_core.integrations.discovery.redaction import PROTECTED_LOGGERS, logger
 from debate_core.integrations.discovery.registry import ProviderRegistry
@@ -840,23 +841,31 @@ THIRTY_TWO: Final = (*NHI_LINK_QUERIES, *(f"{m} {t} United States" for m in MECH
 AC6_WINDOW: Final = SearchFilters(since=datetime(2021, 11, 3, tzinfo=UTC), max_results=200)
 
 
-@pytest.mark.parametrize("texts", [NHI_LINK_QUERIES, THIRTY_TWO], ids=["12 queries", "32 queries"])
-async def test_a_12_or_32_query_search_is_one_request_per_page(texts: tuple[str, ...]) -> None:
-    """The PM's figures: both fit under 3,500 characters, so each is one request per page (two pages
-    for `--max-results 200`)."""
-    assert len(texts) in (12, 32)
+@pytest.mark.parametrize(
+    ("texts", "pages"),
+    [(NHI_LINK_QUERIES, ["1", "2"]), (THIRTY_TWO, ["1", "2", "1", "2"])],
+    ids=["12 queries", "32 queries"],
+)
+async def test_a_12_query_search_is_one_request_per_page_and_a_32_query_search_two(
+    texts: tuple[str, ...], pages: list[str]
+) -> None:
+    """The 12 joined are 727 characters of search, so one request a page (two pages for `--max-results
+    200`). The 32 are more than the 1,500 OpenAlex takes (24 of the 37 NHI link queries already make
+    1,473, measured 2026-11-12), so two a page: v1-e08-t10's one request a page held for 32 by the URL
+    alone, which is not what OpenAlex limits."""
     served = PagedWorks({1: numbered_works(1, 100), 2: numbered_works(101, 100)})
     queries = [ProviderQuery(query=text, filters=AC6_WINDOW) for text in texts]
 
     await build_over(httpx.MockTransport(served.handle)).search_each(queries)
 
-    assert [request.url.params["page"] for request in served.requests] == ["1", "2"]
-    assert {request.url.params["search"].count(") OR (") for request in served.requests} == {len(texts) - 1}
+    assert [request.url.params["page"] for request in served.requests] == pages
+    assert sum(len(carried(request.url.params["search"])) for request in served.requests) == 2 * len(texts)
+    assert max(len(request.url.params["search"]) for request in served.requests) <= MAX_SEARCH_CHARS
     assert max(len(str(request.url)) for request in served.requests) <= MAX_URL_CHARS
 
 
-async def test_a_joined_search_too_long_for_one_url_is_split_into_the_fewest_requests_that_fit() -> None:
-    """96 queries do not fit in one 3,500-character URL. Each request fits, and none could have taken the
+async def test_a_joined_search_too_long_for_one_request_is_split_into_the_fewest_requests_that_fit() -> None:
+    """96 queries do not fit in one 1,500-character search. Each request fits, and none could have taken the
     next request's first query: the split is greedy, so it is the fewest, and keeps the queries' order."""
     texts = [f"{text} survey {number}" for number in range(8) for text in NHI_LINK_QUERIES]
     queries = [ProviderQuery(query=text, filters=AC6_WINDOW) for text in texts]
@@ -868,11 +877,366 @@ async def test_a_joined_search_too_long_for_one_url_is_split_into_the_fewest_req
     assert len(joined) >= 2
     carried = [search.removeprefix("(").removesuffix(")").split(") OR (") for search in joined]
     assert [text for chunk in carried for text in chunk] == texts
+    assert all(len(search) <= MAX_SEARCH_CHARS for search in joined)
     assert all(len(str(request.url)) <= MAX_URL_CHARS for request in served.requests)
     for chunk, following in zip(carried, carried[1:], strict=False):
         grown = [ProviderQuery(query=text, filters=AC6_WINDOW) for text in [*chunk, following[0]]]
-        joined = ProviderQuery(query=joined_search(grown), filters=AC6_WINDOW)
-        assert len(works_url(works_parameters(joined, page=2))) > MAX_URL_CHARS
+        assert len(joined_search(grown)) > MAX_SEARCH_CHARS
+
+
+@pytest.mark.parametrize(("second", "requests"), [(747, 1), (748, 2)], ids=["1,500 characters", "1,501"])
+async def test_a_joined_search_of_1500_characters_is_one_request_and_of_1501_two(
+    second: int, requests: int
+) -> None:
+    """By hand: "(" + 745 + ")" + " OR " + "(" + 747 + ")" is 1,500 characters, OpenAlex's limit (measured
+    2026-11-12); one more character is two requests, each query alone and as typed."""
+    texts = ("a" * 745, "b" * second)
+    served = PagedWorks({1: []})
+
+    await build_over(httpx.MockTransport(served.handle)).search_each(
+        [ProviderQuery(query=text, filters=ONE_PAGE) for text in texts]
+    )
+
+    searches = [request.url.params["search"] for request in served.requests]
+    assert len(searches) == requests
+    assert searches == ([f"({texts[0]}) OR ({texts[1]})"] if requests == 1 else list(texts))
+    assert len(searches[0]) == (1_500 if requests == 1 else 745)
+
+
+async def test_a_search_of_accented_words_is_split_by_its_url_before_its_length() -> None:
+    """By hand: "é" and "è" are six URL characters each (%C3%A9). Two queries of 280 make a search of 568
+    characters, far under 1,500, but 3,360 URL characters for their letters alone, over 3,500 with the rest
+    of the URL: two requests. Each alone is 1,680 of them, which fits."""
+    texts = ("é" * 280, "è" * 280)
+    served = PagedWorks({1: []})
+
+    await build_over(httpx.MockTransport(served.handle)).search_each(
+        [ProviderQuery(query=text, filters=ONE_PAGE) for text in texts]
+    )
+
+    assert [request.url.params["search"] for request in served.requests] == list(texts)
+    assert len(f"({texts[0]}) OR ({texts[1]})") == 568
+
+
+# --------------------------------------------------------------------------------------------
+# A query that could break a joined search is asked alone (v1-e08-t20, the PM's rulings of 2026-11-12)
+# --------------------------------------------------------------------------------------------
+
+ASKED_ALONE: Final = (
+    "health insurance (reform",
+    "health insurance reform)",
+    "health) insurance (reform",
+    'single "payer',
+    '"single payer" "public option',
+    "Medicare OR Medicaid",
+    "AND health insurance",
+    "health insurance NOT",
+    "NOT",
+    "(Medicare OR Medicaid)",
+    '"public option" OR Medicaid',
+    "Medicare OR(Medicaid)",
+    '"single payer"AND Medicaid',
+)
+"""Each sends its query alone: an unbalanced parenthesis (by count, or one closed before it opens), an
+odd number of double quotes, or an upper-case AND, OR or NOT outside a quoted phrase."""
+
+JOINED: Final = (
+    "health insurance",
+    "Medicare or Medicaid",
+    "and not or",
+    "Oregon ANDROID NOTICE ORBIT",
+    '"Medicare OR Medicaid"',
+    '"single payer" health insurance',
+    "(health insurance) reform",
+    "Medicaid's not-for-profit plans",
+)
+"""None of these can reach outside its group: lower-case words, operators inside other words or inside a
+quoted phrase, and balanced parentheses."""
+
+ONE_ASKED_ALONE: Final = (
+    "1 query asked alone, not joined: an unbalanced parenthesis or double quote, or an AND, OR or NOT"
+)
+TWO_ASKED_ALONE: Final = (
+    "2 queries asked alone, not joined: an unbalanced parenthesis or double quote, or an AND, OR or NOT"
+)
+
+
+@pytest.mark.parametrize("text", ASKED_ALONE)
+def test_a_query_that_could_reach_outside_its_group_is_asked_alone(text: str) -> None:
+    assert asked_alone(text) is True
+
+
+@pytest.mark.parametrize("text", JOINED)
+def test_a_query_that_stays_inside_its_group_is_joined(text: str) -> None:
+    assert asked_alone(text) is False
+
+
+async def test_a_query_with_an_open_parenthesis_is_sent_alone_as_typed_and_the_others_joined() -> None:
+    """By hand from the fixture (its README): without the second query, "W…2" matches only the first, and
+    "W…4" neither, so it goes to both; the query asked alone gets every work of its own request."""
+    lone = ProviderQuery(query="carbon tax (unpopular", filters=CARBON_WINDOW)
+    queries = (CARBON_QUERIES[0], lone, CARBON_QUERIES[2])
+    served = JoinedWorks()
+
+    answers = await build_over(httpx.MockTransport(served.handle)).search_each(queries)
+
+    assert [request.url.params["search"] for request in served.requests] == [
+        "(carbon tax revenue) OR (border adjustment)",
+        "carbon tax (unpopular",
+    ]
+    assert dict(served.requests[1].url.params) == {
+        "search": "carbon tax (unpopular",
+        "filter": "from_publication_date:2022-01-01",
+        "per_page": "20",
+        "select": SELECT,
+    }
+    assert [[result.provider_record_id for result in answer.results] for answer in answers] == [
+        ["W5550000001", "W5550000002", "W5550000004"],
+        ["W5550000001", "W5550000002", "W5550000003", "W5550000004"],
+        ["W5550000003", "W5550000004"],
+    ]
+    assert [(answer.partial, answer.notes) for answer in answers] == [
+        (False, ()),
+        (False, (ONE_ASKED_ALONE,)),
+        (False, ()),
+    ]
+
+
+async def test_queries_with_a_bare_operator_or_a_lone_quote_are_each_sent_alone_and_never_rewritten() -> None:
+    texts = ("carbon tax OR levy", 'carbon "border adjustment', "carbon tax revenue")
+    queries = tuple(ProviderQuery(query=text, filters=CARBON_WINDOW) for text in texts)
+    served = JoinedWorks()
+
+    answers = await build_over(httpx.MockTransport(served.handle)).search_each(queries)
+
+    assert sorted(request.url.params["search"] for request in served.requests) == sorted(texts)
+    assert [answer.notes for answer in answers] == [(TWO_ASKED_ALONE,), (TWO_ASKED_ALONE,), ()]
+
+
+async def test_a_search_of_one_query_with_an_open_parenthesis_is_sent_as_typed_with_no_note() -> None:
+    served = JoinedWorks()
+
+    answer = await build_over(httpx.MockTransport(served.handle)).search(
+        ProviderQuery(query="carbon tax (unpopular", filters=CARBON_WINDOW)
+    )
+
+    assert [request.url.params["search"] for request in served.requests] == ["carbon tax (unpopular"]
+    assert (answer.partial, answer.notes) == (False, ())
+
+
+# --------------------------------------------------------------------------------------------
+# A joined request OpenAlex refuses with 400 is split in halves (v1-e08-t20, the PM's ruling Q4)
+# --------------------------------------------------------------------------------------------
+
+REFUSED: Final = "HTTP 400: the provider refused the request"
+ONE_PAGE: Final = SearchFilters(max_results=20)
+
+
+class RefusingWorks:
+    """Answers `/works` with `status_for(search)` when it gives one, and otherwise with one work named
+    after the request's number; keeps every request."""
+
+    def __init__(self, status_for: Callable[[list[str]], int | None]) -> None:
+        self._status_for = status_for
+        self.requests: list[httpx.Request] = []
+
+    def handle(self, request: httpx.Request) -> httpx.Response:
+        self.requests.append(request)
+        status = self._status_for(carried(request.url.params["search"]))
+        if status is not None:
+            return httpx.Response(status)
+        number = len(self.requests)
+        return httpx.Response(
+            200,
+            json={"results": [{"id": f"https://openalex.org/W{number}", "display_name": f"Work {number}"}]},
+        )
+
+    def carried(self) -> list[list[int]]:
+        """The number of each query every request carried, in the order sent."""
+        return [
+            [int(text.rsplit(" ", 1)[1]) for text in carried(request.url.params["search"])]
+            for request in self.requests
+        ]
+
+
+def carried(search: str) -> list[str]:
+    """The queries a `search=` carries: one as it is, or several parenthesised and joined by OR."""
+    if search.startswith("(") and search.endswith(")"):
+        return search.removeprefix("(").removesuffix(")").split(") OR (")
+    return [search]
+
+
+def numbered_queries(count: int, refused: Collection[int] = ()) -> tuple[ProviderQuery, ...]:
+    """`count` queries of one window, each ending in its number; those in `refused` carry "zzrefused"."""
+    return tuple(
+        ProviderQuery(
+            query=f"carbon tax {'zzrefused' if number in refused else 'survey'} {number}", filters=ONE_PAGE
+        )
+        for number in range(count)
+    )
+
+
+def refusing(*numbers: int) -> Callable[[list[str]], int | None]:
+    """400 to any request that carries one of the queries `numbers`."""
+    return lambda texts: 400 if any(int(text.rsplit(" ", 1)[1]) in numbers for text in texts) else None
+
+
+async def test_a_refused_joined_request_is_split_in_halves_until_the_one_refused_query_is_found() -> None:
+    """By hand: 8 queries, the first refused. Each split asks the first half and then the second, and goes
+    on only into the half refused beside one answered: 1 + 2 * 3 = 7 requests."""
+    served = RefusingWorks(refusing(0))
+
+    answers = await build_over(httpx.MockTransport(served.handle)).search_each(
+        numbered_queries(8, refused=(0,))
+    )
+
+    assert served.carried() == [
+        [0, 1, 2, 3, 4, 5, 6, 7],
+        [0, 1, 2, 3],
+        [4, 5, 6, 7],
+        [0, 1],
+        [2, 3],
+        [0],
+        [1],
+    ]
+    assert [(len(answer.results), answer.partial, answer.error) for answer in answers] == [
+        (0, True, REFUSED),
+        *[(1, False, None)] * 7,
+    ]
+    assert [[result.provider_record_id for result in answer.results] for answer in answers[1:]] == [
+        ["W7"],
+        ["W5"],
+        ["W5"],
+        ["W3"],
+        ["W3"],
+        ["W3"],
+        ["W3"],
+    ]
+
+
+@pytest.mark.parametrize(("count", "most"), [(2, 3), (3, 5), (8, 7), (37, 13)])
+async def test_finding_one_refused_query_costs_at_most_one_plus_two_per_halving(
+    count: int, most: int
+) -> None:
+    """The PM's bound: 1 + 2 * ceil(log2 n) requests a page for a request of n queries, reached by the
+    query that is halved the most times. Written by hand: ceil(log2) of 2, 3, 8 and 37 is 1, 2, 3, 6."""
+    costs: list[int] = []
+    for bad in range(count):
+        served = RefusingWorks(refusing(bad))
+        answers = await build_over(httpx.MockTransport(served.handle)).search_each(
+            numbered_queries(count, refused=(bad,))
+        )
+        assert [answer.error for answer in answers] == [REFUSED if n == bad else None for n in range(count)]
+        costs.append(len(served.requests))
+    assert max(costs) == most
+
+
+@pytest.mark.parametrize("count", [2, 8, 37])
+async def test_a_request_whose_two_halves_are_both_refused_stops_there_and_fails_as_a_400(count: int) -> None:
+    """The PM's ruling: when both halves are refused the refusal is not about size, so three requests and no
+    more; the request's every query fails, and as the search's only request it raises, as today."""
+    served = RefusingWorks(lambda texts: 400)
+
+    with pytest.raises(ProviderUnavailable, match=f"^openalex: {REFUSED}$"):
+        await build_over(httpx.MockTransport(served.handle)).search_each(numbered_queries(count))
+
+    assert len(served.requests) == 3
+
+
+async def test_two_refused_halves_deeper_in_the_split_stop_there_and_fail_their_queries() -> None:
+    """By hand: queries 0 and 2 refused. The first half is refused beside an answered second, so it is
+    split; both its halves are refused, so the split stops and queries 0 to 3 fail. Five requests."""
+    served = RefusingWorks(refusing(0, 2))
+
+    answers = await build_over(httpx.MockTransport(served.handle)).search_each(
+        numbered_queries(8, refused=(0, 2))
+    )
+
+    assert served.carried() == [[0, 1, 2, 3, 4, 5, 6, 7], [0, 1, 2, 3], [4, 5, 6, 7], [0, 1], [2, 3]]
+    assert [answer.error for answer in answers] == [REFUSED] * 4 + [None] * 4
+
+
+async def test_a_refused_half_beside_a_half_that_failed_otherwise_is_not_split_further() -> None:
+    """Only a half refused beside an answered one is split again. Here the other half answers 503, so the
+    refused half's queries fail as a 400 and the other's as a 503; a query in another window answers."""
+    other = ProviderQuery(query="border adjustment 9", filters=CARBON_WINDOW)
+
+    def status_for(texts: list[str]) -> int | None:
+        if "carbon tax zzrefused 0" in texts:
+            return 400
+        return 503 if "carbon tax survey 3" in texts else None
+
+    served = RefusingWorks(status_for)
+
+    answers = await build_over(httpx.MockTransport(served.handle)).search_each(
+        (*numbered_queries(4, refused=(0,)), other)
+    )
+
+    assert len(served.requests) == 4
+    assert [(answer.partial, answer.error) for answer in answers] == [
+        (True, REFUSED),
+        (True, REFUSED),
+        (True, "HTTP 503"),
+        (True, "HTTP 503"),
+        (False, None),
+    ]
+
+
+async def test_a_single_query_refused_with_400_fails_as_today_in_one_request() -> None:
+    served = RefusingWorks(lambda texts: 400)
+
+    with pytest.raises(ProviderUnavailable, match=f"^openalex: {REFUSED}$"):
+        await build_over(httpx.MockTransport(served.handle)).search(numbered_queries(1)[0])
+
+    assert len(served.requests) == 1
+
+
+async def test_a_joined_request_refused_otherwise_than_with_400_is_not_split() -> None:
+    served = RefusingWorks(lambda texts: 403)
+
+    with pytest.raises(ProviderUnavailable, match="^openalex: HTTP 403: the provider refused the request$"):
+        await build_over(httpx.MockTransport(served.handle)).search_each(numbered_queries(4))
+
+    assert len(served.requests) == 1
+
+
+async def test_a_400_on_a_later_page_keeps_the_pages_read_and_is_not_split() -> None:
+    served = PagedWorks({1: numbered_works(1, 100), 2: 400})
+    queries = [ProviderQuery(query=f"carbon tax survey {number}", filters=AC6_WINDOW) for number in range(2)]
+
+    answers = await build_over(httpx.MockTransport(served.handle)).search_each(queries)
+
+    assert [request.url.params["page"] for request in served.requests] == ["1", "2"]
+    assert [(len(answer.results), answer.error) for answer in answers] == [
+        (100, f"page 2 of 2 failed: {REFUSED}"),
+        (100, f"page 2 of 2 failed: {REFUSED}"),
+    ]
+
+
+async def test_a_rate_limit_while_splitting_fails_the_whole_call() -> None:
+    def status_for(texts: list[str]) -> int | None:
+        return 400 if len(texts) == 4 else 429
+
+    served = RefusingWorks(status_for)
+
+    with pytest.raises(ProviderRateLimited):
+        await build_over(httpx.MockTransport(served.handle)).search_each(numbered_queries(4))
+
+    assert len(served.requests) == 2
+
+
+async def test_a_split_is_logged_once_with_counts_only(caplog: pytest.LogCaptureFixture) -> None:
+    served = RefusingWorks(refusing(0))
+    with caplog.at_level(logging.INFO, logger="debate_core.integrations.discovery"):
+        await build_over(httpx.MockTransport(served.handle)).search_each(numbered_queries(8, refused=(0,)))
+
+    split = [record for record in caplog.records if "split" in record.getMessage()]
+    assert [record.getMessage() for record in split] == [
+        "openalex: a joined request of 8 queries was refused with HTTP 400 and split in halves: "
+        "6 more requests, 7 queries answered, 1 refused"
+    ]
+    assert split[0].name == logger.name
+    assert not any("carbon" in record.getMessage() for record in caplog.records)
 
 
 def test_the_openalex_provider_answers_several_queries_at_once() -> None:

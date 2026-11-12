@@ -31,11 +31,15 @@ comes back short; OpenAlex pages no further than 10,000 works. Each page is one 
 :class:`~debate_core.application.ports.providers.MultiQuerySearchProvider`. :func:`works_requests`
 joins the queries that share their filters into one `search=`, each in parentheses and joined by
 `OR`: OpenAlex ANDs the words of a group, as it does a query asked alone, and a query is kept
-unquoted, as today. A request URL over about 4 KB is refused with `400`, so the joined queries are
-split into the fewest requests whose URL stays within :data:`MAX_URL_CHARS`. A result says nothing
-about which group it matched (only a relevance score), so :func:`answered_queries` attributes each
-work by the feeds' rule: a query answered it when every one of its words is in the work's title or
-abstract. A work that matches no query's words answered the joined search, and goes to every query
+unquoted, as today. A search over 1,500 characters, or a URL over about 4 KB, is refused with `400`,
+so the joined queries are split into the fewest requests whose search stays within
+:data:`MAX_SEARCH_CHARS` and whose URL stays within :data:`MAX_URL_CHARS` (v1-e08-t20). A query
+that could reach outside its parentheses (:func:`asked_alone`) is sent in a request of its own, as
+typed. A joined request OpenAlex still refuses with `400` is split in halves and asked again
+(:meth:`OpenAlexProvider._halves`). A result says nothing about which group it matched (only a
+relevance score), so :func:`answered_queries` attributes each work by the feeds' rule: a query
+answered it when every one of its words is in the work's title or abstract. A work that matches no
+query's words answered the joined search, and goes to every query
 of its request; one that matches several goes to each of them. When one request of several fails,
 the queries it carried get an empty, partial answer naming why; when all fail, the first failure is
 raised. A rate limit fails the whole call, so that the wrapper holds OpenAlex off as asked.
@@ -58,6 +62,7 @@ the `Retry-After` when OpenAlex sends one, and the wrapper's exponential backoff
 from __future__ import annotations
 
 import math
+import re
 import time
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
@@ -83,6 +88,7 @@ from debate_core.integrations.discovery.redaction import logger, protect_logs
 __all__ = [
     "MAX_PAGED_RESULTS",
     "MAX_PER_PAGE",
+    "MAX_SEARCH_CHARS",
     "MAX_URL_CHARS",
     "OPENALEX_WORKS_URL",
     "PROVIDER_NAME",
@@ -91,6 +97,8 @@ __all__ = [
     "OpenAlexProvider",
     "WorksRequest",
     "answered_queries",
+    "asked_alone",
+    "asked_alone_note",
     "candidate_from_work",
     "joined_search",
     "openalex_factory",
@@ -113,9 +121,24 @@ MAX_PER_PAGE: Final = 100
 MAX_PAGED_RESULTS: Final = 10_000
 """The furthest `page=` paging reaches: page × per_page may not pass it (help.openalex.org/api/paging)."""
 
+MAX_SEARCH_CHARS: Final = 1_500
+"""The longest `search=` sent, in characters: OpenAlex refuses a longer one with `400`.
+
+Measured by the operator on 2026-11-12 (v1-e08-t20), on v1.1.0-dev.407 with the free key, joining the
+first N of the NHI politics DA link search's 37 queries: 24 (a search of 1,473 characters, a URL of
+1,835) were answered and 25 (1,536 and 1,902) refused, with "Your search is too long (1536 characters;
+the limit is 1500)". The same 25 were refused without the key and on page 2; their words in 13 groups
+(1,476 characters) and 25 groups of one word each (338) were answered, so neither the number of OR
+groups nor the URL is what OpenAlex refused. OpenAlex says a paid plan takes longer searches. The 37
+queries' 2,272 characters, under :data:`MAX_URL_CHARS` at 2,686 of URL, were refused on 2026-11-11."""
+
 MAX_URL_CHARS: Final = 3_500
 """The longest request URL sent. OpenAlex refuses one over about 4 KB with `400` and suggests splitting
-an `OR` list into chunks (developers.openalex.org/guides/searching, read by the PM 2026-11-04)."""
+an `OR` list into chunks (developers.openalex.org/guides/searching, read by the PM 2026-11-04).
+
+Kept beside :data:`MAX_SEARCH_CHARS`, which binds first on plain text (1,500 characters of search came
+to about 1,860 of URL in the measurement of 2026-11-12): a search whose characters encode long, such
+as accented letters at six URL characters each, can reach this one first."""
 
 SELECTED_FIELDS: Final = (
     "id",
@@ -357,6 +380,45 @@ def works_url(parameters: Mapping[str, str]) -> str:
     return str(httpx.URL(OPENALEX_WORKS_URL, params=dict(parameters)))
 
 
+def asked_alone(text: str) -> bool:
+    """Whether a query is sent in a request of its own, never joined with others (v1-e08-t20).
+
+    Inside `(q1) OR (q2)` a query's text could reach outside its own parentheses: an unbalanced
+    parenthesis (by count, or one closed before it is opened), an odd number of double quotes, or
+    an upper-case `AND`, `OR` or `NOT` word outside a quoted phrase (OpenAlex reads only upper case).
+    Such a query is asked alone and as typed, so it means what it would mean asked alone, and it
+    cannot change or fail the others. A parenthesis inside a quoted phrase still counts: asking a
+    query alone is never wrong, only one request dearer.
+    """
+    if text.count('"') % 2:
+        return True
+    depth = 0
+    for character in text:
+        if character == "(":
+            depth += 1
+        elif character == ")":
+            depth -= 1
+            if depth < 0:
+                return True
+    if depth:
+        return True
+    return _OPERATOR_WORD.search(_QUOTED_PHRASE.sub(" ", text)) is not None
+
+
+_QUOTED_PHRASE: Final = re.compile(r'"[^"]*"')
+_OPERATOR_WORD: Final = re.compile(r'(?<![^\s()"])(?:AND|OR|NOT)(?![^\s()"])')
+"""An operator as a word of its own: bounded by the text's ends, spaces, parentheses or quotes."""
+
+
+def asked_alone_note(count: int) -> str:
+    """The note each query asked alone carries, which the footer prints once."""
+    noun = "query" if count == 1 else "queries"
+    return (
+        f"{count} {noun} asked alone, not joined: an unbalanced parenthesis or double quote, "
+        "or an AND, OR or NOT"
+    )
+
+
 def joined_search(queries: Sequence[ProviderQuery]) -> str:
     """One `search=` for `queries`: a single query as it is, several each in parentheses, joined by `OR`."""
     if len(queries) == 1:
@@ -373,32 +435,46 @@ class WorksRequest:
 
 
 def works_requests(queries: Sequence[ProviderQuery]) -> tuple[WorksRequest, ...]:
-    """The fewest joined searches that ask every query: one per filters, split to fit :data:`MAX_URL_CHARS`.
+    """The fewest joined searches that ask every query: one per filters, split to fit OpenAlex's limits.
 
     Queries with the same filters (date window, result cap) share a request, in the order they
-    first appear; each request's URL, at its last page, stays within the limit. A query too long to
-    fit with any other is a request of its own, as it would be asked alone.
+    first appear; each request's search stays within :data:`MAX_SEARCH_CHARS` and its URL, at its last
+    page, within :data:`MAX_URL_CHARS`. The split is greedy in order, so it is the fewest. A query too long to
+    fit with any other is a request of its own, as it would be asked alone. A query
+    :func:`asked_alone` names is a request of its own, after its filters' joined requests.
     """
     groups: dict[object, list[int]] = {}
     for position, query in enumerate(queries):
         groups.setdefault(query.filters, []).append(position)
     requests: list[WorksRequest] = []
     for positions in groups.values():
+        alone = [position for position in positions if asked_alone(queries[position].query)]
         chunk: list[int] = []
         for position in positions:
+            if position in alone:
+                continue
             trial = [*chunk, position]
-            if chunk and len(works_url(_last_page_parameters(queries, trial))) > MAX_URL_CHARS:
+            if chunk and not _fits(queries, trial):
                 requests.append(_request(queries, chunk))
                 chunk = [position]
             else:
                 chunk = trial
-        requests.append(_request(queries, chunk))
+        if chunk:
+            requests.append(_request(queries, chunk))
+        requests.extend(_request(queries, (position,)) for position in alone)
     return tuple(requests)
 
 
 def _request(queries: Sequence[ProviderQuery], positions: Sequence[int]) -> WorksRequest:
     asked = [queries[position] for position in positions]
     return WorksRequest(ProviderQuery(query=joined_search(asked), filters=asked[0].filters), tuple(positions))
+
+
+def _fits(queries: Sequence[ProviderQuery], positions: Sequence[int]) -> bool:
+    """Whether one request may carry the queries at `positions`: its search and its URL within the limits."""
+    if len(_request(queries, positions).query.query) > MAX_SEARCH_CHARS:
+        return False
+    return len(works_url(_last_page_parameters(queries, positions))) <= MAX_URL_CHARS
 
 
 def _last_page_parameters(queries: Sequence[ProviderQuery], positions: Sequence[int]) -> dict[str, str]:
@@ -466,23 +542,23 @@ class OpenAlexProvider:
         failures: list[ProviderError] = []
         attributed = {"one": 0, "several": 0, "none": 0}
         for request in requests:
-            try:
-                candidates, shortfall = await self._pages(request.query)
-            except ProviderRateLimited:
-                raise
-            except ProviderError as error:
-                failures.append(error)
-                for position in request.answers:
-                    errors[position] = _reason(error)
-                continue
-            for position in request.answers:
-                errors[position] = shortfall
-            for candidate in candidates:
-                matched = _matching(candidate, queries, request.answers)
-                if len(request.answers) > 1:
-                    attributed["one" if len(matched) == 1 else "several" if matched else "none"] += 1
-                for position in matched or request.answers:
-                    found[position].append(candidate)
+            parts = await self._ask(queries, request.answers)
+            failed = [part.failure for part in parts if part.failure is not None]
+            if len(failed) == len(parts):
+                failures.append(failed[0])
+            for part in parts:
+                if part.failure is not None:
+                    for position in part.positions:
+                        errors[position] = _reason(part.failure)
+                    continue
+                for position in part.positions:
+                    errors[position] = part.shortfall
+                for candidate in part.candidates:
+                    matched = _matching(candidate, queries, part.positions)
+                    if len(part.positions) > 1:
+                        attributed["one" if len(matched) == 1 else "several" if matched else "none"] += 1
+                    for position in matched or part.positions:
+                        found[position].append(candidate)
         if failures and len(failures) == len(requests):
             raise failures[0]
         if len(queries) > 1:
@@ -495,6 +571,8 @@ class OpenAlexProvider:
                 attributed["several"],
                 attributed["none"],
             )
+        alone = [len(queries) > 1 and asked_alone(query.query) for query in queries]
+        notes = (asked_alone_note(sum(alone)),) if any(alone) else ()
         elapsed_ms = (time.perf_counter() - started) * 1000
         return tuple(
             ProviderResponse(
@@ -503,25 +581,80 @@ class OpenAlexProvider:
                 elapsed_ms=elapsed_ms,
                 partial=errors[position] is not None,
                 error=errors[position],
+                notes=notes if alone[position] else (),
             )
             for position, query in enumerate(queries)
         )
 
+    async def _ask(self, queries: Sequence[ProviderQuery], positions: tuple[int, ...]) -> list[_Asked]:
+        """One request for the queries at `positions`; split in halves when OpenAlex refuses a joined
+        one's first page with `400` (the PM's ruling on v1-e08-t20), and the split logged once."""
+        asked = await self._attempt(queries, positions)
+        if not asked.refused or len(positions) == 1:
+            return [asked]
+        parts, sent = await self._halves(queries, positions)
+        answered = sum(len(part.positions) for part in parts if part.failure is None)
+        refused = sum(len(part.positions) for part in parts if part.refused)
+        logger.info(
+            "%s: a joined request of %d queries was refused with HTTP 400 and split in halves: "
+            "%d more requests, %d queries answered, %d refused",
+            self.name,
+            len(positions),
+            sent,
+            answered,
+            refused,
+        )
+        return parts
+
+    async def _halves(
+        self, queries: Sequence[ProviderQuery], positions: tuple[int, ...]
+    ) -> tuple[list[_Asked], int]:
+        """The two halves of a refused request, each asked, and how many requests that took.
+
+        A half refused beside an answered half is split again, until a single query is refused, which
+        fails as it would asked alone. When both halves are refused the refusal is not about size: the
+        split stops, and every query of the request fails as a `400`. So one refused query of n costs
+        at most 1 + 2 * ceil(log2 n) requests a page, and a refusal that is not about size costs 3.
+        """
+        middle = (len(positions) + 1) // 2
+        first = await self._attempt(queries, positions[:middle])
+        second = await self._attempt(queries, positions[middle:])
+        if first.refused and second.failure is None and len(first.positions) > 1:
+            parts, sent = await self._halves(queries, first.positions)
+            return [*parts, second], 2 + sent
+        if second.refused and first.failure is None and len(second.positions) > 1:
+            parts, sent = await self._halves(queries, second.positions)
+            return [first, *parts], 2 + sent
+        return [first, second], 2
+
+    async def _attempt(self, queries: Sequence[ProviderQuery], positions: tuple[int, ...]) -> _Asked:
+        """Every page of one request for the queries at `positions`; a rate limit is raised."""
+        try:
+            candidates, shortfall = await self._pages(_request(queries, positions).query)
+        except _Refused as refusal:
+            return _Asked(positions, failure=refusal.failure, refused=True)
+        except ProviderRateLimited:
+            raise
+        except ProviderError as error:
+            return _Asked(positions, failure=error)
+        return _Asked(positions, tuple(candidates), shortfall)
+
     async def _pages(self, query: ProviderQuery) -> tuple[list[CandidateResult], str | None]:
         """Every page `query` asks for, until `max_results` works or a short page.
 
-        A failure on the first page is raised; on a later one, the pages already read are kept and the
-        failure is returned as the reason the answer is partial.
+        A failure on the first page is raised (a `400` as :class:`_Refused`); on a later one, the pages
+        already read are kept and the failure is returned as the reason the answer is partial.
         """
         pages = page_count(query)
         candidates: list[CandidateResult] = []
         for page in range(1, pages + 1):
             try:
                 works, sent = await self._page(query, page if pages > 1 else None)
-            except ProviderError as error:
+            except (ProviderError, _Refused) as error:
                 if page == 1:
                     raise
-                return candidates, f"page {page} of {pages} failed: {_reason(error)}"
+                failure = error.failure if isinstance(error, _Refused) else error
+                return candidates, f"page {page} of {pages} failed: {_reason(failure)}"
             candidates.extend(works)
             if len(candidates) >= query.filters.max_results or sent < MAX_PER_PAGE:
                 break
@@ -543,6 +676,8 @@ class OpenAlexProvider:
         failure = provider_error_for_status(
             self.name, response.status_code, response.headers, now=self._clock.now()
         )
+        if failure is not None and response.status_code == 400:
+            raise _Refused(failure)
         if failure is not None:
             raise failure
         return self._read(response)
@@ -560,6 +695,29 @@ class OpenAlexProvider:
         listed = cast(list[dict[str, Any]], works)
         candidates = (candidate_from_work(work) for work in listed)
         return [candidate for candidate in candidates if candidate is not None], len(listed)
+
+
+class _Refused(Exception):
+    """A request OpenAlex refused with `400`, which a joined request answers by splitting in halves.
+
+    Private to this module: what fails a query is :attr:`failure`, today's `ProviderUnavailable`.
+    """
+
+    def __init__(self, failure: ProviderError) -> None:
+        super().__init__(str(failure))
+        self.failure = failure
+
+
+@dataclass(frozen=True, slots=True)
+class _Asked:
+    """What one request, or one half of a split, gave the queries at `positions`."""
+
+    positions: tuple[int, ...]
+    candidates: tuple[CandidateResult, ...] = ()
+    shortfall: str | None = None
+    failure: ProviderError | None = None
+    refused: bool = False
+    """Whether `failure` is a first page refused with `400`."""
 
 
 def _reason(error: ProviderError) -> str:

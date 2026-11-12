@@ -54,6 +54,7 @@ loop's own, because cancelling a call that is still running is the event loop's 
 from __future__ import annotations
 
 import asyncio
+import random
 import statistics
 from collections import deque
 from collections.abc import Awaitable, Callable, Generator, Iterable, Sequence
@@ -74,13 +75,26 @@ from debate_core.integrations.discovery.pace import TurnOutcome, listening
 from debate_core.integrations.discovery.redaction import logger, protect_logs, redact_exception_chain
 
 __all__ = [
+    "RATE_LIMIT_HOLD_BASE_SECONDS",
+    "RATE_LIMIT_HOLD_CAP_SECONDS",
+    "RATE_LIMIT_HOLD_JITTER",
     "BreakerPermit",
     "CircuitBreaker",
     "ResiliencePolicy",
     "ResilientMultiQueryProvider",
     "ResilientProvider",
+    "rate_limit_hold_seconds",
     "resilient",
 ]
+
+RATE_LIMIT_HOLD_BASE_SECONDS = 2.0
+RATE_LIMIT_HOLD_CAP_SECONDS = 60.0
+RATE_LIMIT_HOLD_JITTER = 0.5
+
+
+def rate_limit_hold_seconds(consecutive: int, draw: float) -> float:
+    """SKELETON: the hold before this task, the default cool-down."""
+    return 60.0
 
 
 @dataclass(frozen=True, slots=True)
@@ -230,6 +244,7 @@ class ResilientProvider:
         *,
         clock: Clock,
         secrets: Iterable[str] = (),
+        random_fraction: Callable[[], float] = random.random,
     ) -> None:
         self._inner = inner
         self._name = inner.name
@@ -460,6 +475,9 @@ class _CallTime:
             self._waiting_since_loop = self._loop.time()
             self._move_deadline(None)
 
+    def turn_came(self) -> None:
+        """SKELETON."""
+
     def waited(self, outcome: TurnOutcome) -> None:
         if outcome is TurnOutcome.RELEASED:
             self._released += 1
@@ -505,8 +523,9 @@ class ResilientMultiQueryProvider(ResilientProvider):
         *,
         clock: Clock,
         secrets: Iterable[str] = (),
+        random_fraction: Callable[[], float] = random.random,
     ) -> None:
-        super().__init__(inner, policy, clock=clock, secrets=secrets)
+        super().__init__(inner, policy, clock=clock, secrets=secrets, random_fraction=random_fraction)
         self._each = inner
 
     async def search_each(self, queries: Sequence[ProviderQuery]) -> tuple[ProviderResponse, ...]:
@@ -520,9 +539,16 @@ class ResilientMultiQueryProvider(ResilientProvider):
 
 
 def resilient(
-    inner: SearchProvider, policy: ResiliencePolicy, *, clock: Clock, secrets: Iterable[str] = ()
+    inner: SearchProvider,
+    policy: ResiliencePolicy,
+    *,
+    clock: Clock,
+    secrets: Iterable[str] = (),
+    random_fraction: Callable[[], float] = random.random,
 ) -> ResilientProvider:
     """`inner` wrapped: in a :class:`ResilientMultiQueryProvider` when it answers several queries at once."""
     if isinstance(inner, MultiQuerySearchProvider):
-        return ResilientMultiQueryProvider(inner, policy, clock=clock, secrets=secrets)
-    return ResilientProvider(inner, policy, clock=clock, secrets=secrets)
+        return ResilientMultiQueryProvider(
+            inner, policy, clock=clock, secrets=secrets, random_fraction=random_fraction
+        )
+    return ResilientProvider(inner, policy, clock=clock, secrets=secrets, random_fraction=random_fraction)

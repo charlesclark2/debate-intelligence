@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from collections.abc import Coroutine, Sequence
+from collections.abc import Callable, Coroutine, Sequence
 from datetime import timedelta
 from typing import Any, Literal
 
@@ -26,11 +26,15 @@ from debate_core.application.ports.providers import MultiQuerySearchProvider
 from debate_core.domain.discovery import BreakerState, CandidateResult, ProviderQuery, ProviderResponse
 from debate_core.integrations.discovery.redaction import redact
 from debate_core.integrations.discovery.resilience import (
+    RATE_LIMIT_HOLD_BASE_SECONDS,
+    RATE_LIMIT_HOLD_CAP_SECONDS,
+    RATE_LIMIT_HOLD_JITTER,
     BreakerPermit,
     CircuitBreaker,
     ResiliencePolicy,
     ResilientMultiQueryProvider,
     ResilientProvider,
+    rate_limit_hold_seconds,
     resilient,
 )
 from debate_core.testing.fakes.clock_and_ids import FAKE_EPOCH, FixedClock
@@ -110,6 +114,7 @@ def make_provider(
     threshold: int = 3,
     timeout_seconds: float = 5.0,
     secrets: tuple[str, ...] = (),
+    draws: Sequence[float] = (),
 ) -> tuple[ResilientProvider, ScriptedProvider]:
     inner = ScriptedProvider(clock, outcomes)
     policy = ResiliencePolicy(
@@ -117,7 +122,21 @@ def make_provider(
         failure_threshold=threshold,
         cooldown_seconds=COOLDOWN.total_seconds(),
     )
-    return ResilientProvider(inner, policy, clock=clock, secrets=secrets), inner
+    provider = ResilientProvider(
+        inner, policy, clock=clock, secrets=secrets, random_fraction=drawing(draws)
+    )
+    return provider, inner
+
+
+def drawing(draws: Sequence[float]) -> Callable[[], float]:
+    """The injected random source: `draws` in order, and a test that draws more than it gave fails."""
+    left = list(draws)
+
+    def draw() -> float:
+        assert left, "the wrapper drew a random fraction the test did not give it"
+        return left.pop(0)
+
+    return draw
 
 
 # --------------------------------------------------------------------------------------------
@@ -475,16 +494,182 @@ def test_a_rate_limit_holds_every_call_until_retry_after_has_passed() -> None:
     assert inner.calls == 2
 
 
-def test_a_rate_limit_without_retry_after_holds_for_the_cool_down() -> None:
+# --------------------------------------------------------------------------------------------
+# The backoff: a 429 without Retry-After holds the provider for a doubling, jittered hold
+# --------------------------------------------------------------------------------------------
+
+
+def test_the_backoff_constants_are_the_ones_the_module_states() -> None:
+    assert (RATE_LIMIT_HOLD_BASE_SECONDS, RATE_LIMIT_HOLD_CAP_SECONDS, RATE_LIMIT_HOLD_JITTER) == (
+        2.0,
+        60.0,
+        0.5,
+    )
+
+
+@pytest.mark.parametrize(
+    ("consecutive", "draw", "expected"),
+    [
+        (1, 0.0, 2.0),
+        (1, 0.5, 2.5),
+        (1, 0.999, 2.999),
+        (2, 0.0, 4.0),
+        (3, 0.25, 9.0),
+        (4, 0.9, 11.6),
+        (5, 0.0, 32.0),
+        (5, 0.99, 47.84),
+        (6, 0.0, 60.0),
+        (6, 0.5, 60.0),
+        (40, 0.999, 60.0),
+    ],
+    ids=[
+        "the first, no jitter",
+        "the first, a quarter longer",
+        "the first, almost half longer",
+        "the second doubles",
+        "the third doubles again, an eighth longer",
+        "the fourth, 45% longer",
+        "the fifth, no jitter",
+        "the fifth, almost half longer and still under the cap",
+        "the sixth reaches the cap",
+        "the cap is never passed, jitter or not",
+        "the fortieth is still the cap",
+    ],
+)
+def test_the_nth_consecutive_429_holds_for_the_doubled_base_lengthened_by_up_to_half_capped(
+    consecutive: int, draw: float, expected: float
+) -> None:
+    """Written by hand: step = min(60, 2 * 2^(n-1)); hold = min(60, step * (1 + draw / 2))."""
+    assert rate_limit_hold_seconds(consecutive, draw) == pytest.approx(expected, abs=1e-9)
+
+
+def limited_without_retry_after() -> ProviderRateLimited:
+    return ProviderRateLimited("openalex", "HTTP 429")
+
+
+def held_for(provider: ResilientProvider, clock: FixedClock) -> float | None:
+    """How many seconds from now the provider's health says it is held."""
+    until = provider.health().rate_limited_until
+    return None if until is None else (until - clock.now()).total_seconds()
+
+
+def test_consecutive_429s_without_retry_after_double_the_hold_up_to_the_cap() -> None:
+    """Seven 429s in a row, no jitter, each call sent the moment the last hold ends: held 2, 4, 8,
+    16, 32, then 60 and 60 s. A call 0.1 s before a hold ends is refused and sends nothing."""
     clock = FixedClock()
-    provider, inner = make_provider(clock, [ProviderRateLimited("openalex"), answer()], threshold=5)
+    provider, inner = make_provider(
+        clock, [limited_without_retry_after() for _ in range(7)], threshold=100, draws=[0.0] * 7
+    )
+    holds: list[float | None] = []
+    for _ in range(7):
+        with pytest.raises(ProviderRateLimited):
+            run(provider.search(QUERY))
+        hold = held_for(provider, clock)
+        holds.append(hold)
+        assert hold is not None
+        clock.advance(timedelta(seconds=hold - 0.1))
+        with pytest.raises(ProviderRateLimited):
+            run(provider.search(QUERY))
+        clock.advance(timedelta(seconds=0.1))
+    assert holds == [2.0, 4.0, 8.0, 16.0, 32.0, 60.0, 60.0]
+    assert inner.calls == 7
+    health = provider.health()
+    assert (health.error_count, health.skipped_count, health.state) == (7, 7, BreakerState.CLOSED)
+
+
+def test_the_jitter_lengthens_each_hold_by_the_drawn_fraction_of_half_of_it() -> None:
+    clock = FixedClock()
+    provider, _ = make_provider(
+        clock, [limited_without_retry_after() for _ in range(3)], threshold=100, draws=[0.5, 0.1, 0.8]
+    )
+    holds: list[float | None] = []
+    for _ in range(3):
+        with pytest.raises(ProviderRateLimited):
+            run(provider.search(QUERY))
+        hold = held_for(provider, clock)
+        holds.append(hold)
+        assert hold is not None
+        clock.advance(timedelta(seconds=hold))
+    assert holds == pytest.approx([2.5, 4.2, 11.2], abs=1e-6)
+
+
+def test_an_answer_resets_the_doubling() -> None:
+    """429, 429, an answer, 429: held 2, then 4, then 2 again (8 had the answer not reset it)."""
+    clock = FixedClock()
+    outcomes: list[Outcome] = [
+        limited_without_retry_after(),
+        limited_without_retry_after(),
+        answer(),
+        limited_without_retry_after(),
+    ]
+    provider, inner = make_provider(clock, outcomes, threshold=100, draws=[0.0] * 3)
+    holds: list[float | None] = []
+    for outcome in outcomes:
+        if isinstance(outcome, ProviderResponse):
+            run(provider.search(QUERY))
+            continue
+        with pytest.raises(ProviderRateLimited):
+            run(provider.search(QUERY))
+        hold = held_for(provider, clock)
+        holds.append(hold)
+        assert hold is not None
+        clock.advance(timedelta(seconds=hold))
+    assert holds == [2.0, 4.0, 2.0]
+    assert inner.calls == 4
+
+
+def test_another_failure_between_429s_neither_resets_nor_adds_to_the_doubling() -> None:
+    """429, a 503, 429: the second 429 is the second in a row, held 4 s."""
+    clock = FixedClock()
+    outcomes: list[Outcome] = [
+        limited_without_retry_after(),
+        ProviderUnavailable("openalex", "HTTP 503"),
+        limited_without_retry_after(),
+    ]
+    provider, _ = make_provider(clock, outcomes, threshold=100, draws=[0.0, 0.0])
     with pytest.raises(ProviderRateLimited):
         run(provider.search(QUERY))
-    clock.advance(COOLDOWN - timedelta(seconds=1))
+    clock.advance(timedelta(seconds=2))
+    with pytest.raises(ProviderUnavailable):
+        run(provider.search(QUERY))
+    with pytest.raises(ProviderRateLimited):
+        run(provider.search(QUERY))
+    assert held_for(provider, clock) == 4.0
+
+
+def test_a_call_the_hold_refuses_does_not_count_as_another_429() -> None:
+    """429 (held 2 s), a call refused 1 s in, then the next 429 at 2 s: held 4 s, not 8."""
+    clock = FixedClock()
+    outcomes: list[Outcome] = [limited_without_retry_after(), limited_without_retry_after()]
+    provider, inner = make_provider(clock, outcomes, threshold=100, draws=[0.0, 0.0])
     with pytest.raises(ProviderRateLimited):
         run(provider.search(QUERY))
     clock.advance(timedelta(seconds=1))
-    run(provider.search(QUERY))
+    with pytest.raises(ProviderRateLimited):
+        run(provider.search(QUERY))
+    clock.advance(timedelta(seconds=1))
+    with pytest.raises(ProviderRateLimited):
+        run(provider.search(QUERY))
+    assert held_for(provider, clock) == 4.0
+    assert inner.calls == 2
+
+
+def test_a_429_with_retry_after_holds_for_its_seconds_and_draws_nothing_but_counts_in_the_doubling() -> None:
+    """Retry-After: 5, then a 429 without one: held exactly 5 s with no draw, then 4 s, the second
+    429 in a row."""
+    clock = FixedClock()
+    outcomes: list[Outcome] = [
+        ProviderRateLimited("openalex", "HTTP 429", retry_after_seconds=5.0),
+        limited_without_retry_after(),
+    ]
+    provider, inner = make_provider(clock, outcomes, threshold=100, draws=[0.0])
+    with pytest.raises(ProviderRateLimited):
+        run(provider.search(QUERY))
+    assert held_for(provider, clock) == 5.0
+    clock.advance(timedelta(seconds=5))
+    with pytest.raises(ProviderRateLimited):
+        run(provider.search(QUERY))
+    assert held_for(provider, clock) == 4.0
     assert inner.calls == 2
 
 
@@ -768,3 +953,21 @@ def test_queries_asked_at_once_answered_under_another_name_have_failed() -> None
 
     with pytest.raises(ProviderUnavailable, match="the adapter answered as 'crossref'"):
         run(provider.search_each([QUERY, SECOND_QUERY]))
+
+
+def test_a_hold_applies_to_an_adapter_that_answers_several_queries_at_once() -> None:
+    """The backoff is the wrapper's, so a batched adapter is held the same: 2 s, nothing sent inside."""
+    clock = FixedClock()
+    inner = ScriptedMultiQueryProvider(clock, [limited_without_retry_after(), (answer(), answer())])
+    policy = ResiliencePolicy(failure_threshold=100)
+    provider = resilient(inner, policy, clock=clock, random_fraction=drawing([0.0]))
+    assert isinstance(provider, ResilientMultiQueryProvider)
+    with pytest.raises(ProviderRateLimited):
+        run(provider.search_each((QUERY, SECOND_QUERY)))
+    assert held_for(provider, clock) == 2.0
+    clock.advance(timedelta(seconds=1.9))
+    with pytest.raises(ProviderRateLimited):
+        run(provider.search_each((QUERY, SECOND_QUERY)))
+    clock.advance(timedelta(seconds=0.1))
+    assert len(run(provider.search_each((QUERY, SECOND_QUERY)))) == 2
+    assert len(inner.batches) == 2

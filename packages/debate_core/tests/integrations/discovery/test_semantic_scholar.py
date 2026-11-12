@@ -26,7 +26,7 @@ import pytest
 import respx
 from pydantic import SecretStr
 
-from debate_core.application.errors import ProviderRateLimited, ProviderUnavailable
+from debate_core.application.errors import ProviderError, ProviderRateLimited, ProviderUnavailable
 from debate_core.application.federated_search import FanOutStage, search_status
 from debate_core.application.federated_search_types import SearchRequest, SearchState
 from debate_core.application.ports.providers import SearchProvider
@@ -44,7 +44,12 @@ from debate_core.domain.enums import SourceType
 from debate_core.domain.search import SearchFilters
 from debate_core.integrations.discovery.pace import Pace
 from debate_core.integrations.discovery.redaction import PROTECTED_LOGGERS, logger
-from debate_core.integrations.discovery.registry import ProviderRegistry
+from debate_core.integrations.discovery.registry import (
+    ProviderRegistry,
+    configured_secrets,
+    policy_from_settings,
+)
+from debate_core.integrations.discovery.resilience import ResilientProvider
 from debate_core.integrations.discovery.semantic_scholar import (
     API_KEY_HEADER,
     KEYED_PACE,
@@ -1001,6 +1006,150 @@ async def test_a_429_holds_semantic_scholar_for_its_retry_after_and_sends_nothin
     with pytest.raises(ProviderRateLimited):
         await replayed.provider.search(CARBON_CAPTURE)
     assert len(replayed.sent()) == 1
+
+
+# --------------------------------------------------------------------------------------------
+# The night of 2026-11-11: every keyless request answered 429 (v1-e07-t22)
+# --------------------------------------------------------------------------------------------
+
+
+def no_draw() -> float:
+    raise AssertionError("a 429 with a Retry-After drew a random fraction")
+
+
+ANSWER_SECONDS: Final = 0.25
+"""How long each refusal takes to come back, so the queries behind the first have joined its queue."""
+
+
+def every_answer_refused(
+    *,
+    status: int = 429,
+    retry_after: str | None = None,
+    draw: Callable[[], float],
+    then_at: float | None = None,
+) -> Coroutine[Any, Any, tuple[list[float], list[tuple[str, float]], ProviderHealth]]:
+    """Eight queries at once to the keyless adapter in the registry's wrapper, every answer `status`.
+
+    When each request reached Semantic Scholar, how each query ended (the error's type) and when, on
+    the loop's virtual time, and the health after; with `then_at`, a ninth query asked at that second.
+    """
+
+    async def search() -> tuple[list[float], list[tuple[str, float]], ProviderHealth]:
+        clock = EventLoopClock(NOW)
+        sent: list[float] = []
+
+        async def answer(request: httpx.Request) -> httpx.Response:
+            sent.append((clock.now() - NOW).total_seconds())
+            await asyncio.sleep(ANSWER_SECONDS)
+            headers = {} if retry_after is None else {"Retry-After": retry_after}
+            return httpx.Response(status, headers=headers)
+
+        factory = semantic_scholar_factory(
+            HttpSettings(), version=VERSION, clock=clock, transport=httpx.MockTransport(answer)
+        )
+        settings = provider_settings(api_key=None)
+        provider = ResilientProvider(
+            factory(settings),
+            policy_from_settings(settings),
+            clock=clock,
+            secrets=configured_secrets(settings),
+            random_fraction=draw,
+        )
+
+        async def one(query: ProviderQuery) -> tuple[str, float]:
+            try:
+                await provider.search(query)
+            except ProviderError as error:
+                return type(error).__name__, (clock.now() - NOW).total_seconds()
+            return "answer", (clock.now() - NOW).total_seconds()
+
+        ended = list(await asyncio.gather(*(one(query) for query in queries(8))))
+        if then_at is not None:
+            await asyncio.sleep(then_at - (clock.now() - NOW).total_seconds())
+            ended.append(await one(CARBON_CAPTURE))
+        return sent, ended, provider.health()
+
+    return search()
+
+
+def test_the_nights_case_sends_one_request_and_none_inside_its_hold() -> None:
+    """Written by hand. Eight queries at once at one a second, every answer a 429 with no Retry-After
+    a quarter second after its request, the default 10 s timeout. The first is sent at 0 s and
+    refused at 0.25 s: held 2 s lengthened by a quarter (draw 0.5), until 2.75 s. The second's turn
+    comes at 1 s, inside the hold: refused, never sent, and the six behind it get their turns at once
+    and are refused at 1 s too. One failure, seven skips, the breaker closed. On 2026-11-11 all of
+    them were sent, a second apart. A ninth query asked when the hold ends, at 2.75 s, is sent then;
+    its 429 at 3 s is the second in a row, held 4 s lengthened by a quarter, until 8 s."""
+    sent, ended, health = run_in_virtual_time(every_answer_refused(draw=lambda: 0.5, then_at=2.75))
+    assert sent == [0.0, 2.75]
+    assert ended == [("ProviderRateLimited", 0.25)] + [("ProviderRateLimited", 1.0)] * 7 + [
+        ("ProviderRateLimited", 3.0)
+    ]
+    assert (health.error_count, health.skipped_count, health.success_count) == (2, 7, 0)
+    assert (health.consecutive_failures, health.state) == (2, BreakerState.CLOSED)
+    assert health.rate_limited_until == NOW + timedelta(seconds=8)
+
+
+def test_the_nights_shape_of_failures_sends_nothing_once_the_breaker_opens() -> None:
+    """Written by hand. The same eight queries, every answer a 503 a quarter second after its request,
+    so nothing is held. Requests go at 0, 1 and 2 s, and the third failure opens the breaker at
+    2.25 s. The fourth query's turn comes at 3 s with the breaker open: refused as the breaker refuses
+    a call, and the four behind it at once. On 2026-11-11 the four after the breaker opened were sent."""
+    sent, ended, health = run_in_virtual_time(every_answer_refused(status=503, draw=no_draw))
+    assert sent == [0.0, 1.0, 2.0]
+    assert ended == [
+        ("ProviderUnavailable", 0.25),
+        ("ProviderUnavailable", 1.25),
+        ("ProviderUnavailable", 2.25),
+    ] + [("ProviderCircuitOpen", 3.0)] * 5
+    assert (health.error_count, health.skipped_count, health.state) == (3, 5, BreakerState.OPEN)
+    assert health.open_until == NOW + timedelta(seconds=2.25 + 60)
+
+
+def test_a_retry_after_holds_semantic_scholar_for_its_seconds_and_its_queue_is_refused_meanwhile() -> None:
+    """Written by hand. Retry-After: 30 on the first answer, at 0.25 s: held until 30.25 s whatever the
+    draw (none is drawn), so the seven queued queries are refused at 1 s and nothing more is sent."""
+    sent, ended, health = run_in_virtual_time(every_answer_refused(retry_after="30", draw=no_draw))
+    assert sent == [0.0]
+    assert ended == [("ProviderRateLimited", 0.25)] + [("ProviderRateLimited", 1.0)] * 7
+    assert health.rate_limited_until == NOW + timedelta(seconds=30.25)
+    assert (health.error_count, health.skipped_count) == (1, 7)
+
+
+def test_the_nights_search_names_semantic_scholar_rate_limited_on_every_query() -> None:
+    """Through the registry and the fan-out, every answer a 429 with no Retry-After: one request, and
+    every one of the eight queries is recorded `rate_limited`, so the footer names the provider rate
+    limited and a search with no other provider fails. The first hold is at least 2 s, so the count
+    does not depend on the draw."""
+
+    async def search() -> tuple[list[str], SearchState]:
+        clock = EventLoopClock(NOW)
+        asked: list[str] = []
+
+        async def answer(request: httpx.Request) -> httpx.Response:
+            asked.append(request.url.params["query"])
+            await asyncio.sleep(ANSWER_SECONDS)
+            return httpx.Response(429)
+
+        factory = semantic_scholar_factory(
+            HttpSettings(), version=VERSION, clock=clock, transport=httpx.MockTransport(answer)
+        )
+        registry = ProviderRegistry.from_settings(
+            provider_settings(api_key=None), {SearchProviderName.SEMANTIC_SCHOLAR: factory}, clock=clock
+        )
+        stage = FanOutStage(registry, clock=clock, deadline_seconds=15.0)
+        state = SearchState(
+            search_id="01JBX3V5Q8R2T6V0W4X7Y1Z3A5",
+            request=SearchRequest(query="heg answers"),
+            queries=queries(8),
+        )
+        return asked, await stage.run(state)
+
+    asked, searched = run_in_virtual_time(search())
+    assert asked == ["capture query 1"]
+    statuses = searched.provider_statuses
+    assert [status.outcome for status in statuses] == [ProviderOutcome.RATE_LIMITED] * 8
+    assert search_status(statuses) is SearchStatus.FAILED
 
 
 async def test_the_registry_answers_the_recorded_search_through_the_wrapper() -> None:

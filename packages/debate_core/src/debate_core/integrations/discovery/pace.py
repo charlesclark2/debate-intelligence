@@ -155,6 +155,9 @@ class TurnOutcome(StrEnum):
     CANCELLED = "cancelled"
     """It was cancelled while it waited."""
 
+    REFUSED = "refused"
+    """SKELETON."""
+
 
 class PaceListener(Protocol):
     """What a pacer tells the code that made a call (the wrapper) about that call's wait."""
@@ -165,6 +168,10 @@ class PaceListener(Protocol):
 
     def waited(self, outcome: TurnOutcome) -> None:
         """The call left the queue, and how."""
+        ...
+
+    def turn_came(self) -> None:
+        """SKELETON."""
         ...
 
 

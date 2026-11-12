@@ -1367,7 +1367,7 @@ def test_govinfo_key_missing_builds_no_adapter_and_records_it_not_configured(key
     assert (registry.names, dict(registry.not_configured)) == ((), {"govinfo": MISSING_KEY})
 
 
-async def test_govinfo_429_holds_it_for_the_cooldown_without_sending_again() -> None:
+async def test_govinfo_429_holds_it_for_the_first_backoff_without_sending_again() -> None:
     clock = FixedClock()
     registry, replayed = govinfo_registry_over("search_rate_limited", clock, breaker_cooldown_seconds=600)
     for _ in range(2):
@@ -1375,7 +1375,9 @@ async def test_govinfo_429_holds_it_for_the_cooldown_without_sending_again() -> 
             await replayed.provider.search(SINGLE_PAYER)
     assert len(replayed.sent()) == 1
     (health,) = registry.health()
-    assert health.rate_limited_until == clock.now() + timedelta(seconds=600)
+    assert health.rate_limited_until is not None
+    held_for = health.rate_limited_until - clock.now()
+    assert timedelta(seconds=2) <= held_for < timedelta(seconds=3), "the first backoff: 2 s, up to half longer"
 
 
 @pytest.mark.usefixtures("bare_protected_loggers")

@@ -41,7 +41,7 @@ spec:
         task id named in a description but not in the context is warned about, by tests on
         invented specs shown failing first, with dev's specs passing.
 status:
-  phase: InProgress
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

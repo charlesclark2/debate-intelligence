@@ -67,6 +67,7 @@ def record(
     identifiers: ArticleIdentifiers,
     title: str = "Fiscal devolution and the territorial politics of health budgets",
     authors: tuple[str, ...] = ("Mara Okonjo",),
+    source_type: SourceType = SourceType.SCHOLARLY,
     publication: str | None = None,
     snippet: str | None = None,
     citation_count: int | None = None,
@@ -76,7 +77,7 @@ def record(
         title=title,
         url=url,
         identifiers=identifiers,
-        source_type=SourceType.SCHOLARLY,
+        source_type=source_type,
         authors=authors,
         publication=publication,
         published_at=datetime(2025, 4, 2, tzinfo=UTC),
@@ -168,6 +169,28 @@ def test_shared_doi_a_field_the_fuller_record_lacks_comes_from_the_other() -> No
 
     assert merged.url == REPOSITORY_PDF
     assert merged.citation_count == 4
+
+
+def test_shared_doi_empty_values_do_not_make_a_record_fuller() -> None:
+    """No authors, a blank abstract and source type `other` are empty, as the precedence reads them:
+    the earlier copy has 3 values (DOI, work id, date) to the later one's 6, so the later one wins."""
+    empty_valued = record(
+        url=DOI_PAGE,
+        identifiers=ArticleIdentifiers(doi=DOI, openalex_id="W7100000002"),
+        authors=(),
+        source_type=SourceType.OTHER,
+        snippet="   ",
+    )
+    filled = record(
+        url=REPOSITORY_PDF,
+        identifiers=ArticleIdentifiers(doi=DOI, openalex_id="W7100000001"),
+        snippet="An abstract.",
+    )
+
+    merged = one_work((empty_valued, filled))
+
+    assert merged.url == REPOSITORY_PDF
+    assert merged.identifiers.openalex_id == "W7100000001"
 
 
 def test_shared_doi_between_equally_full_records_the_earlier_one_wins() -> None:

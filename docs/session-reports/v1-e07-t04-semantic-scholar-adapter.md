@@ -429,3 +429,14 @@ and the wiring. It is built to the PM's rulings of 2026-11-09, point by point:
 7. **Merge:** a plain `scripts/task pr` once `ci` is green. The Goal is `Succeeded`. `debate_cli/container.py`
    is also changed by v1-e08-t07, so whichever of the two merges second runs `scripts/task sync` first and
    keeps both changes.
+
+## Operator records (recorded by the PM, 2026-11-11)
+
+Added by the PM. Nothing above is changed, and this section is not a review.
+
+| Follow-up | Was | Now | Record |
+|---|---|---|---|
+| 1, the live smoke without a key | optional, after the merge | **FAIL** | 2026-11-11, about 22:50 Chicago, `v1.1.0-dev.402`, Semantic Scholar the only provider, the key blanked: every request answered HTTP 429, the single query (1 of 1, FAILED, breaker closed with 1 error) and the expanded search (7 of 7, FAILED). The breaker opened after the third failure, yet four more requests were sent, because each query passed the breaker and the rate-limit hold when it joined its pace's queue, not when it was released: `v1-e07-t22`. The first request was refused, so the shared keyless pool was refusing us, not our pace |
+| 2, the live smoke with a key | optional | waits | The operator requested a Semantic Scholar API key on 2026-11-11, agreeing among other terms to apply exponential backoff (`v1-e07-t22`). The keyed smoke runs once the key is in `~/.debate-research/dev.env` and `v1-e07-t22` has merged |
+
+Semantic Scholar stays enabled in no profile. `v1-e07-t20` now enables it only with a key.

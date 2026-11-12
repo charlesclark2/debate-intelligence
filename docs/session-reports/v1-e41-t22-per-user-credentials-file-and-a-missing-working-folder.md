@@ -275,3 +275,14 @@ the contact email and the api.data.gov key among them. The OpenAlex key is still
 clone's `.env` (`dotenv:.env` in `doctor --providers`). The check from an installed build carrying
 this task follows the next dev install, once `2026.11.03-docx-9` is in the buckets after the 2026-11-11
 run.
+
+## PM note (2026-11-11)
+
+Added by the PM. Nothing above is changed, and this section is not a review.
+
+**A correction to the note of 2026-11-09:** the OpenAlex key is in `~/.debate-research/dev.env` too,
+not only in the main clone's `.env`. **The installed check passed** on 2026-11-11 from `v1.1.0-dev.402`,
+run from the home folder: `config show` gave the contact email, the OpenAlex key and the api.data.gov
+key as `***` from `user-env:~/.debate-research/dev.env`, and `doctor --providers` read
+`Credentials file ~/.debate-research/dev.env: read`, with OpenAlex keyed, Crossref in its polite pool
+and GovInfo keyed. The Semantic Scholar key is not set.

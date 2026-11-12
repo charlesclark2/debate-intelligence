@@ -23,14 +23,28 @@ spec:
     Crossref and the government providers. Update the profiles' comments and the search and
     provider-credentials guides: what a student without a key sees (the shared pool, one request
     a second, the later queries of an expanded search answered not asked).
+    (PM amendment 2026-11-11, from the operator's keyless smoke of the same day.) Every keyless
+    request was refused with HTTP 429, the first included: the shared pool is not usable for the
+    team. So Semantic Scholar is enabled only with a key. Without one it is not configured: the
+    factory does not build it, and it is named with its cure (request a key through the form on
+    Semantic Scholar's API page) and not counted, as v1-e07-t15 treats GovInfo without its key. ac1
+    reads as the keyed smoke, plus one keyless single query that returns results, run on a quiet day
+    (the operator's API agreement says unauthenticated requests have succeeded). This waits for
+    v1-e07-t22, the backoff the same agreement commits to.
   priority: 3
   constraints:
-    packages: [config/profiles, debate_cli, packages/debate_cli/tests, docs/guides]
+    packages: [config/profiles, debate_core.integrations.discovery, debate_core.application, packages/debate_core/tests, debate_cli, packages/debate_cli/tests, docs/guides]
     forbidden:
       - A key or any secret in a profile
       - Enabling it before its live smoke has passed
       - A live provider call in a test
   context:
+    - kind: TaskRef
+      name: v1-e07-t22-a-paced-call-checks-the-breaker-at-its-turn-and-backs-off-on-429
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e07-t15-a-provider-without-its-key-does-not-make-a-search-partial
+      relation: dependsOn
     - kind: TaskRef
       name: v1-e07-t04-semantic-scholar-adapter
       relation: dependsOn
@@ -46,6 +60,11 @@ spec:
       description: >-
         Both profiles enable semantic_scholar and the guides say what a student without a
         key sees, by tests on the committed profiles shown failing first.
+    - id: ac3
+      description: >-
+        (PM amendment 2026-11-11) Without a key Semantic Scholar is not configured, named
+        with its cure and not counted as partial, and with one it is built and asked, by
+        tests shown failing first.
 status:
   phase: Pending
 ---

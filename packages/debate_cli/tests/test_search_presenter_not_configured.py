@@ -113,7 +113,9 @@ def test_with_no_results_an_uncounted_not_configured_provider_exits_7_and_says_w
     }
 
 
-def test_a_provider_named_with_providers_not_configured_keeps_todays_partial_footer() -> None:
+def test_a_provider_named_with_providers_not_configured_keeps_the_partial_footer_and_gains_its_cure() -> None:
+    """v1-e07-t15's ruling 2 holds (PARTIAL); since v1-e07-t23 the named provider's reason carries the
+    cure too, and still says nothing of `not counted as partial`."""
     outcome = outcome_of(
         SearchRequest(query="health insurance", topic_id=NHI, providers=("openalex", "govinfo"))
     )
@@ -121,6 +123,7 @@ def test_a_provider_named_with_providers_not_configured_keeps_todays_partial_foo
     assert footer_lines(outcome) == [
         "Providers: PARTIAL, results may be missing",
         "  openalex: ok, 1 result",
-        "  govinfo: not configured: no api.data.gov key (DEBATE_PROVIDERS__API_DATA_GOV_KEY)",
+        "  govinfo: not configured: no api.data.gov key (DEBATE_PROVIDERS__API_DATA_GOV_KEY); "
+        "get a free key at api.data.gov/signup to ask GovInfo",
     ]
     assert exit_code_for_search(outcome) is ExitCode.SEARCH_PARTIAL

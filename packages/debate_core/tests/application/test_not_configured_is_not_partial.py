@@ -6,13 +6,14 @@ The PM's rulings of 2026-11-09:
    named in the search's record with its cure and left out of the partial reckoning. A search whose
    other providers all answered is COMPLETE; a search in which nothing answered is still FAILED.
 2. A provider the request names (`search --providers`) keeps today's rule: not configured makes the
-   search PARTIAL, and its reason is today's.
+   search PARTIAL. Since v1-e07-t23 its reason carries the cure as well.
 3. A list that is configuration (a daily preset's, `providers_named=False`) counts like the enabled
    providers.
 
-Only a provider settings enable without its credential is left out. A name settings do not enable at
-all, or a government provider its topic does not list, still makes the search PARTIAL whoever chose
-it. Expected values are written by hand (working agreement 6).
+A government provider its topic does not list still makes the search PARTIAL whoever chose it. A name
+settings do not enable at all did too, until v1-e07-t23 left it out of a preset's reckoning
+(`test_configuration_gaps_named_with_their_cure.py`). Expected values are written by hand (working
+agreement 6).
 """
 
 from __future__ import annotations
@@ -240,7 +241,7 @@ def test_a_provider_named_by_the_request_without_its_key_not_configured_keeps_th
 
     assert records(outcome) == [
         ("openalex", ProviderOutcome.OK, None),
-        ("govinfo", ProviderOutcome.NOT_CONFIGURED, MISSING_KEY),
+        ("govinfo", ProviderOutcome.NOT_CONFIGURED, WITH_CURE),
     ]
     assert outcome.uncounted == ()
     assert outcome.status is SearchStatus.PARTIAL
@@ -267,18 +268,23 @@ def test_a_preset_list_without_a_providers_key_not_configured_is_left_out_like_a
     assert outcome.status is SearchStatus.COMPLETE
 
 
-def test_a_preset_list_naming_a_provider_settings_do_not_enable_is_still_partial_not_configured() -> None:
-    """Not enabled at all is not a missing key: the narrow reading of ruling 1, recorded in the report."""
+def test_a_preset_list_naming_a_provider_settings_do_not_enable_is_uncounted_not_configured() -> None:
+    """Not enabled at all was counted under v1-e07-t15's narrow reading of ruling 1; v1-e07-t23 (the PM's
+    ruling on its follow-up 1) makes it configuration too, named with `enable it in providers.enabled`."""
     request = SearchRequest(query="health insurance", providers=("openalex", "gdelt"), providers_named=False)
 
     outcome, _ = search(two_answering(), request)
 
     assert records(outcome) == [
         ("openalex", ProviderOutcome.OK, None),
-        ("gdelt", ProviderOutcome.NOT_CONFIGURED, "gdelt: not enabled in settings (providers.enabled)"),
+        (
+            "gdelt",
+            ProviderOutcome.NOT_CONFIGURED,
+            "gdelt: not enabled in settings (providers.enabled); enable it in providers.enabled",
+        ),
     ]
-    assert outcome.uncounted == ()
-    assert outcome.status is SearchStatus.PARTIAL
+    assert outcome.uncounted == ("gdelt",)
+    assert outcome.status is SearchStatus.COMPLETE
 
 
 def test_a_preset_list_naming_a_government_provider_off_its_topic_is_still_partial_not_configured() -> None:

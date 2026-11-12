@@ -329,7 +329,9 @@ def test_fan_out_reports_a_requested_provider_that_settings_do_not_enable_as_not
         ("gdelt", ProviderOutcome.NOT_CONFIGURED),
         ("openalex", ProviderOutcome.OK),
     ]
-    assert outcome.provider_statuses[0].error == "gdelt: not enabled in settings (providers.enabled)"
+    assert outcome.provider_statuses[0].error == (
+        "gdelt: not enabled in settings (providers.enabled); enable it in providers.enabled"
+    )
     assert outcome.status is SearchStatus.PARTIAL
     assert outcome.search.provider_set == ("gdelt", "openalex")
 

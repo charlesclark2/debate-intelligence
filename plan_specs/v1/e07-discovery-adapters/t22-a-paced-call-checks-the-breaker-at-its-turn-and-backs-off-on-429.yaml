@@ -58,7 +58,7 @@ spec:
         tests with an injected random source shown failing first, with mutants on the
         doubling, the cap, the reset and the turn-time check.
 status:
-  phase: Pending
+  phase: InProgress
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

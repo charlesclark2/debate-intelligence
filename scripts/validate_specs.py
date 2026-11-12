@@ -72,13 +72,13 @@ TASK_ID = re.compile(r"\bv\d+-e\d+-t\d+\b")
 # The three kinds of prerequisite warning, in the order they are printed (the PM's ruling, 2026-11-11).
 MISSING_PREREQUISITE = "missing prerequisite"
 GRAPH_LINK = "graph link"
-LATER_RELEASE = "later release"
+NEVER_A_PREREQUISITE = "never a prerequisite"
 WARNING_HEADINGS = {
     MISSING_PREREQUISITE: (
         "Most likely a missing prerequisite (an unfinished task of the same or an earlier release)"
     ),
     GRAPH_LINK: "A graph link that could be added (a Succeeded task of the same or an earlier release)",
-    LATER_RELEASE: "Never a prerequisite (a task of a later release)",
+    NEVER_A_PREREQUISITE: "Never a prerequisite (a task of a later release)",
 }
 # libyaml's parser where PyYAML was built with it, which every wheel PyYAML publishes is; the
 # pure-Python one otherwise. Both are the safe loader and build the same documents. The spec tree
@@ -435,7 +435,7 @@ def named_task_warning(tree: SpecTree, task: str, named_id: str, named: str) -> 
     path = tree.names[task].relative_to(tree.root)
     if order.index(named_release) > order.index(release):
         return NamedTask(
-            LATER_RELEASE,
+            NEVER_A_PREREQUISITE,
             f"{path}: {task} ({release}) names {named_id} ({named}, in {named_release}), a later release: "
             "it can never be a prerequisite",
         )

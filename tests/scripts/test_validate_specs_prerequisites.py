@@ -248,7 +248,9 @@ def test_a_succeeded_task_named_from_an_earlier_release_is_a_graph_link(tmp_path
 
 
 def test_a_task_named_from_a_later_release_is_never_a_prerequisite(tmp_path: Path) -> None:
-    assert warnings(later_release_tree(), tmp_path) == [(validate_specs.LATER_RELEASE, LATER_RELEASE_LINE)]
+    assert warnings(later_release_tree(), tmp_path) == [
+        (validate_specs.NEVER_A_PREREQUISITE, LATER_RELEASE_LINE)
+    ]
 
 
 def test_a_named_task_is_warned_about_once(tmp_path: Path) -> None:

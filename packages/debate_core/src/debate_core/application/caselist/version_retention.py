@@ -216,6 +216,16 @@ class VersionDirectoryRetention:
         self._place = place
         self._parser_version = parser_version
 
+    @property
+    def place(self) -> VersionDirectoryPlace:
+        """Where it lists and retires; `caselist runs --remote` lists backfiles there (`v1-e40-t46`)."""
+        return self._place
+
+    @property
+    def parser_version(self) -> str:
+        """This build's parser version, every directory's standing is judged against."""
+        return self._parser_version
+
     async def plan(
         self,
         *,

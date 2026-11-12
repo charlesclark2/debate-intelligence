@@ -65,6 +65,18 @@ every other run and for a run with no details. They are
 :func:`~debate_core.application.sync_runs.banner_words`, decided as the banner's title is, by the
 same rule as the verdict.
 
+## Backfiles behind the parser (`v1-e40-t46`)
+
+With `--remote`, lines below the table name each backfile (`caselist.backfile_caselists`) whose
+parsed store in the bucket has no directory at the reference parser version, with the parser
+versions it does hold, newest first, or as not imported; or say in one line that all of them are at
+it. The reference is the parser version the newest run shown that did not fail recorded restoring
+the parsed store at, or this build's, and the line says which. The rule is
+:mod:`debate_core.application.caselist.backfile_parser_versions`. It is informational: the exit
+status, the verdicts and the overdue warning are as they were. `--json` gives it as
+`backfile_parser_versions`, or `null` without `--remote`, and when the bucket refused the listing,
+which the lines then say.
+
 ## A skipped run (`v1-e40-t29`)
 
 A pull refused because the weekly run's home moved to prod did nothing by design, and its details say
@@ -82,10 +94,16 @@ from typing import Annotated, Final, cast
 
 import typer
 
+from debate_cli.container import ServiceContainer
 from debate_cli.context import cli_context, command_name
 from debate_cli.exit_codes import codes_exit_as_a_retrieval_failure
 from debate_cli.output import JsonValue, TableSpec
 from debate_cli.parses_owed import parses_owed
+from debate_core.application.caselist.backfile_parser_versions import (
+    backfile_parser_versions,
+    reference_version,
+)
+from debate_core.application.errors import StoreAccessDenied
 from debate_core.application.sync_runs import (
     RecordedRun,
     SyncRunHistory,
@@ -116,6 +134,7 @@ def runs(
     overdue = history.overdue(records, now)
     source = "bucket" if remote else "local log"
     owed, owed_sentence = parses_owed(cli.services, remote=remote)
+    behind, behind_lines = _backfiles_behind(cli.services, recorded) if remote else (None, ())
     payload: dict[str, JsonValue] = {
         "environment": settings.environment.value,
         "source": source,
@@ -123,6 +142,7 @@ def runs(
         "overdue": overdue,
         "runs": [_run_as_json(run) for run in recorded],
         "parses_owed": owed,
+        "backfile_parser_versions": behind,
     }
     cli.output.success(
         command_name(ctx),
@@ -144,8 +164,30 @@ def runs(
             caption=_caption(history, days, overdue)
             + _parse_sentence(records[0] if records else None)
             + (f" {owed_sentence}" if owed_sentence else ""),
+            lines_below=behind_lines,
         ),
     )
+
+
+def _backfiles_behind(
+    services: ServiceContainer, recorded: list[RecordedRun]
+) -> tuple[JsonValue, tuple[str, ...]]:
+    """The backfiles with no parsed-store directory at the reference version, in the bucket (`v1-e40-t46`).
+
+    Listed in the place `caselist retire --bucket` lists, with the everyday profile. A listing the
+    bucket refuses is `null` and said so: informational, it never changes the exit status.
+    """
+    retention = services.version_retention(bucket=True)
+    reference = reference_version(recorded, build_version=retention.parser_version)
+    try:
+        found = asyncio.run(
+            backfile_parser_versions(
+                retention.place, backfiles=services.settings.caselist.backfile_caselists, reference=reference
+            )
+        )
+    except StoreAccessDenied as refused:
+        return None, (f"The backfiles' parser versions were not checked: {refused}.",)
+    return cast("JsonValue", found.as_json()), found.lines()
 
 
 def _row(run: RecordedRun) -> list[str]:

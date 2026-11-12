@@ -95,7 +95,7 @@ def _cost(value: float | None) -> str:
 def _partial_providers(outcome: SearchOutcome) -> list[str]:
     return [
         summary.provider
-        for summary in provider_summaries(outcome.provider_statuses)
+        for summary in provider_summaries(outcome.provider_statuses, uncounted=outcome.uncounted)
         if summary.outcome != "ok"
     ]
 

@@ -79,7 +79,7 @@ def digest_file_name(digest: Digest, file_format: DigestFormat) -> str:
 
 def digest_footer(digest: Digest) -> list[str]:
     """The provider status footer over every call of every search: `search`'s own lines."""
-    return status_footer_lines(digest.status, digest.provider_statuses)
+    return status_footer_lines(digest.status, digest.provider_statuses, uncounted=digest.uncounted)
 
 
 def _window_words(digest: Digest) -> str:
@@ -205,7 +205,10 @@ def digest_payload(digest: Digest) -> dict[str, JsonValue]:
             }
             for outcome in digest.outcomes
         ],
-        "providers": [summary.as_json() for summary in provider_summaries(digest.provider_statuses)],
+        "providers": [
+            summary.as_json()
+            for summary in provider_summaries(digest.provider_statuses, uncounted=digest.uncounted)
+        ],
         "provider_calls": provider_calls_json(digest.provider_statuses),
     }
 
@@ -240,14 +243,14 @@ def exit_code_for_digest(digest: Digest) -> ExitCode:
 def _named(digest: Digest, outcomes: Sequence[str]) -> str:
     return ", ".join(
         f"{summary.provider} ({summary.outcome})"
-        for summary in provider_summaries(digest.provider_statuses)
+        for summary in provider_summaries(digest.provider_statuses, uncounted=digest.uncounted)
         if summary.outcome in outcomes or not outcomes
     )
 
 
 def digest_failure(digest: Digest, payload: dict[str, JsonValue], exit_code: ExitCode) -> CommandFailure:
     """The failure a digest that did not end `OK` reports, carrying the whole digest as its details."""
-    summaries = provider_summaries(digest.provider_statuses)
+    summaries = provider_summaries(digest.provider_statuses, uncounted=digest.uncounted)
     panel = {summary.provider: summary.line().removeprefix(f"{summary.provider}: ") for summary in summaries}
     if exit_code is ExitCode.SEARCH_PARTIAL:
         missing = [summary for summary in summaries if summary.outcome != "ok"]
@@ -302,7 +305,7 @@ def auto_cut_payload(
         "digest_status": digest.status.value,
         "partial_providers": [
             summary.provider
-            for summary in provider_summaries(digest.provider_statuses)
+            for summary in provider_summaries(digest.provider_statuses, uncounted=digest.uncounted)
             if summary.outcome != "ok"
         ],
         "cost_usd": report.cost_usd,

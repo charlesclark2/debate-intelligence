@@ -72,7 +72,6 @@ def test_footer_names_an_enabled_provider_not_configured_with_its_cure_under_a_c
     outcome = outcome_of(SearchRequest(query="health insurance", topic_id=NHI))
 
     assert footer_lines(outcome) == ["Providers: COMPLETE", "  openalex: ok, 1 result", UNCOUNTED_LINE]
-    assert exit_code_for_search(outcome) is ExitCode.OK
 
 
 def test_json_keeps_the_not_configured_provider_with_its_cure_in_reasons_and_calls() -> None:

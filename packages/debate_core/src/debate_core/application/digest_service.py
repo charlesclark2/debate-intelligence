@@ -35,6 +35,11 @@ The digest's status is :func:`~debate_core.application.federated_search.search_s
 call of every search: COMPLETE, PARTIAL when any provider failed on any search or answered in part,
 FAILED when none answered. The provider footer is the searches' own record, all of it.
 
+The preset's providers are configuration, not a request by name (the PM's ruling 3 on v1-e07-t15): a
+search asks them with `providers_named=False`, so one that settings enable but cannot configure (its
+key missing, as GovInfo's often is) is named with its cure and left out of the status, as it is for a
+plain search. One the environment does not enable at all still makes the digest partial.
+
 ## Feed topics awaiting review
 
 A feed topic with a feed whose `review:` is still `awaiting_coach_review` is read like any other, and
@@ -183,12 +188,12 @@ class Digest:
     @property
     def uncounted(self) -> tuple[str, ...]:
         """The preset's providers left out of the status, as each search left them out (v1-e07-t15)."""
-        return ()
+        return tuple(dict.fromkeys(name for outcome in self.outcomes for name in outcome.uncounted))
 
     @property
     def status(self) -> SearchStatus:
         """COMPLETE, PARTIAL or FAILED over every call of every search."""
-        return search_status(self.provider_statuses)
+        return search_status(self.provider_statuses, uncounted=self.uncounted)
 
     @property
     def items(self) -> tuple[DigestItem, ...]:
@@ -287,6 +292,7 @@ class DigestService:
             query=query,
             filters=SearchFilters(since=since, until=until, max_results=preset.max_results),
             providers=preset.providers,
+            providers_named=False,
             expansion=ExpansionRequest(argument=pair.argument, need=pair.need, topic_id=preset.topic),
             topic_id=preset.topic,
         )

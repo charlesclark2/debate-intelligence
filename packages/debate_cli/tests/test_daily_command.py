@@ -691,9 +691,11 @@ def test_an_nhi_digest_without_the_api_data_gov_key_names_govinfo_not_configured
         ("Federalism DA — Uniqueness", ["States lead on health insurance policy as Washington stalls"]),
         ("Economy DA — Uniqueness", []),
     ]
-    markdown = Path(data["file"]).read_text(encoding="utf-8")
+    again = daily("nhi", "--date", "2026-09-17")
+    assert again.exit_code == ExitCode.OK, again.output
+    markdown = (tmp_path / DIGESTS / "nhi-2026-09-17.md").read_text(encoding="utf-8")
     assert "- Status: COMPLETE\n" in markdown
-    assert f"- {GOVINFO_NOT_COUNTED}\n" in markdown
+    assert markdown.endswith(f"- {GOVINFO_NOT_COUNTED}\n")
     assert GOVINFO_HOST not in {httpx.URL(url).host for url in seams.feeds.requests}
 
 

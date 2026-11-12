@@ -16,7 +16,11 @@ search's status. Every provider is named whatever happened to it, so a partial r
   (`v1-e07-t14`). It goes after the provider's other reasons, in the JSON's `reasons` too;
 * `openalex: timeout: no answer within 10s`, or `error`, `rate limited`, `breaker open`,
   `not configured`, each with the provider's own reason, and `on 2 of 7 queries` when only some of
-  its calls failed.
+  its calls failed;
+* `govinfo: not configured: not counted as partial: no api.data.gov key (…); get a free key at
+  api.data.gov/signup to ask GovInfo`, a provider settings enable but cannot configure, which the
+  search left out of its status (`v1-e07-t15`). The outcome names it (`uncounted`); this module only
+  says so, in the footer and in the JSON's `reasons`.
 
 ## Dates
 
@@ -127,7 +131,8 @@ class ProviderSummary:
 
 
 NOT_PARTIAL: Final = "not counted as partial:"
-"""What precedes a shortfall the provider reported without making its answer partial (v1-e07-t14)."""
+"""What precedes a shortfall the provider reported without making its answer partial (v1-e07-t14), and
+the reason of a provider the search's status left out (v1-e07-t15)."""
 
 
 def _reason(provider: str, text: str | None) -> str | None:
@@ -139,7 +144,11 @@ def _reason(provider: str, text: str | None) -> str | None:
 def provider_summaries(
     statuses: Sequence[ProviderStatus], *, uncounted: Collection[str] = ()
 ) -> tuple[ProviderSummary, ...]:
-    """One summary per provider, in the order the search first asked each."""
+    """One summary per provider, in the order the search first asked each.
+
+    The reasons of a provider in `uncounted`, which the search's status left out, follow
+    :data:`NOT_PARTIAL`.
+    """
     grouped: dict[str, list[ProviderStatus]] = {}
     for status in statuses:
         grouped.setdefault(status.provider, []).append(status)
@@ -158,6 +167,8 @@ def provider_summaries(
             outcome = "ok"
             texts = []
         reasons = tuple(dict.fromkeys(reason for text in texts if (reason := _reason(provider, text))))
+        if failed and provider in uncounted:
+            reasons = tuple(f"{NOT_PARTIAL} {reason}" for reason in reasons)
         notes = (note for call in answered if call.response is not None for note in call.response.notes)
         reasons += tuple(dict.fromkeys(f"{NOT_PARTIAL} {note}" for note in notes))
         summaries.append(
@@ -175,14 +186,15 @@ def provider_summaries(
 
 def footer_lines(outcome: SearchOutcome) -> list[str]:
     """The provider status footer: a heading naming the status, then one line per provider."""
-    return status_footer_lines(outcome.status, outcome.provider_statuses)
+    return status_footer_lines(outcome.status, outcome.provider_statuses, uncounted=outcome.uncounted)
 
 
 def status_footer_lines(
     status: SearchStatus, statuses: Sequence[ProviderStatus], *, uncounted: Collection[str] = ()
 ) -> list[str]:
     """The footer over any calls: one search's, or every search of a daily digest (v1-e08-t07)."""
-    return [_HEADINGS[status], *(f"  {summary.line()}" for summary in provider_summaries(statuses))]
+    summaries = provider_summaries(statuses, uncounted=uncounted)
+    return [_HEADINGS[status], *(f"  {summary.line()}" for summary in summaries)]
 
 
 def provider_calls_json(statuses: Sequence[ProviderStatus]) -> list[JsonValue]:
@@ -291,7 +303,10 @@ def search_payload(outcome: SearchOutcome) -> dict[str, JsonValue]:
             _result_json(ranked, articles.get(ranked.rank), outcome.candidates)
             for ranked in outcome.ranked_candidates
         ],
-        "providers": [summary.as_json() for summary in provider_summaries(outcome.provider_statuses)],
+        "providers": [
+            summary.as_json()
+            for summary in provider_summaries(outcome.provider_statuses, uncounted=outcome.uncounted)
+        ],
         "provider_calls": provider_calls_json(outcome.provider_statuses),
         "provider_health": [health.model_dump(mode="json") for health in outcome.provider_health],
     }
@@ -346,7 +361,7 @@ def outcome_failure(
     outcome: SearchOutcome, payload: dict[str, JsonValue], exit_code: ExitCode
 ) -> CommandFailure:
     """The failure a search that did not end `OK` reports, carrying the whole search as its details."""
-    summaries = provider_summaries(outcome.provider_statuses)
+    summaries = provider_summaries(outcome.provider_statuses, uncounted=outcome.uncounted)
     panel = {summary.provider: summary.line().removeprefix(f"{summary.provider}: ") for summary in summaries}
     if exit_code is ExitCode.SEARCH_PARTIAL:
         missing = [summary for summary in summaries if summary.outcome != "ok"]
@@ -361,7 +376,7 @@ def outcome_failure(
     if exit_code is ExitCode.NO_RESULTS:
         return CommandFailure(
             code=NO_RESULTS_CODE,
-            message=f'every provider answered, and nothing matched "{outcome.search.query}"',
+            message=f'every provider asked answered, and nothing matched "{outcome.search.query}"',
             exit_code=exit_code,
             details=payload,
             panel_details=panel,

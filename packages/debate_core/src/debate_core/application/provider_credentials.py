@@ -90,6 +90,8 @@ class _Words:
     field: str | None = None
     when_set: str = ""
     when_missing: str = ""
+    cure: str | None = None
+    """What gives the provider its credential, as a search's footer says it after the missing one."""
 
 
 _KEYLESS: Final = "no key needed"
@@ -101,25 +103,32 @@ _WORDS: Final[dict[SearchProviderName, _Words]] = {
         "openalex_api_key",
         "API key set ({source}): with a key",
         "no OpenAlex key: keyless (a lower daily allowance)",
+        "set an OpenAlex key for a higher daily allowance",
     ),
     SearchProviderName.CROSSREF: _Words(
         "Crossref",
         "contact_email",
         "contact email set ({source}): Crossref's polite pool",
         "no contact email: Crossref's public pool",
+        "set a contact email for Crossref's polite pool",
     ),
     SearchProviderName.SEMANTIC_SCHOLAR: _Words(
         "Semantic Scholar",
         "semantic_scholar_api_key",
         "API key set ({source})",
         "no Semantic Scholar key: the shared pool, paced at one request a second",
+        "set a Semantic Scholar key",
     ),
     SearchProviderName.RSS: _Words("RSS feeds"),
     SearchProviderName.GOOGLE_NEWS: _Words("Google News"),
     SearchProviderName.GDELT: _Words("GDELT"),
     SearchProviderName.FEDERAL_REGISTER: _Words("Federal Register"),
     SearchProviderName.GOVINFO: _Words(
-        "GovInfo", "api_data_gov_key", "api.data.gov key set ({source})", "no GovInfo key: GovInfo not asked"
+        "GovInfo",
+        "api_data_gov_key",
+        "api.data.gov key set ({source})",
+        "no GovInfo key: GovInfo not asked",
+        "get a free key at api.data.gov/signup to ask GovInfo",
     ),
 }
 """Every provider's words. The OpenAlex row gives no daily figure: those are OpenAlex's prices, not this
@@ -164,5 +173,13 @@ def _row(settings: Settings, name: SearchProviderName) -> ProviderCredentialRow:
 
 
 def missing_credential_cure(provider: str) -> str | None:
-    """What a person does to give `provider` the credential it lacks, or None when it needs none."""
-    return None
+    """What a person does to give `provider` the credential it lacks, or None when it needs none.
+
+    `provider` is a settings name; one this build does not know needs nothing. A search names an
+    enabled provider that is not configured with these words after its reason (v1-e07-t15).
+    """
+    try:
+        name = SearchProviderName(provider)
+    except ValueError:
+        return None
+    return _WORDS[name].cure

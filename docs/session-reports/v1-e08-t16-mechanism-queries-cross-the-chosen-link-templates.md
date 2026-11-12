@@ -6,7 +6,7 @@
 | Spec | [`plan_specs/v1/e08-research-workflows/t16-mechanism-queries-cross-the-chosen-link-templates.yaml`](../../plan_specs/v1/e08-research-workflows/t16-mechanism-queries-cross-the-chosen-link-templates.yaml) |
 | Epic / release | `v1-e08-research-workflows` / `v1.4` |
 | Branch | `task/v1-e08-t16-mechanism-queries-cross-the-chosen-link-templates` |
-| Session status | IN PROGRESS: the PM ruled on 2026-11-11; waiting for the coach's answers to the review sheet before any code <!-- COMPLETE / PARTIAL / BLOCKED --> |
+| Session status | IN PROGRESS: the coach's answers (2026-11-11) differ from the PM's ruling; waiting for the PM again before any code <!-- COMPLETE / PARTIAL / BLOCKED --> |
 
 ## Summary
 
@@ -447,6 +447,78 @@ today's 12:
 
 **For later, no answer needed:** the counts of teams reading each other aff are in section 4 of the
 proposal, for when you want to add a mechanism.
+
+## The coach's answers (2026-11-11)
+
+Given by the operator in the session, to the sheet above and to two follow-up questions I asked
+because the first answers could be read two ways:
+
+1. **Which templates the mechanism queries cross:** political capital, partisan fight Congress, and
+   the four party-popularity templates. "Unpopular with voters" is not crossed.
+2. **The political capital wording:** the mechanism queries use a new wording, `{query} costs
+   political capital Congress`, which **replaces** `{query} political capital` in the crossing. His
+   seven reviewed queries on what the debater typed are unchanged.
+
+**Where this differs from the PM's ruling, so the build waits for the PM again:**
+- **Template 2 is crossed.** Ruling 2 said not 2 or 3; the coach says 2, not 3.
+- **The crossing includes a template that does not exist yet.** Ruling 1 names templates by a DA
+  entry's id and text, so the new wording needs a home. It must not change a reviewed template.
+- **Today's 12 no longer stay the first 12.** Ruling 1 kept them as the prefix. Under the coach's
+  answer the reviewed 7 stay first and in order, but today's five `… political capital United States`
+  mechanism queries are replaced.
+- **Less room for v1-e08-t23.** Ruling 4 kept 10 queries of room under 42; this leaves 5.
+
+**Measured** with the same scripts: 7 reviewed + 6 crossed templates × 5 subjects = **37 queries**.
+That is one OpenAlex request per page (the longest URL is 2,686 of 3,500), with room for a typed query
+up to 141 characters. The only new BM25 term is `costs`. If the new wording went on the politics DA
+entry instead, every politics link search would ask it: 38 on NHI (2,754), leaving 4, too few for
+one agenda-item template on five subjects.
+
+The PM's questions are under
+[Questions for the PM after the coach's answers](#questions-for-the-pm-after-the-coachs-answers).
+
+## Questions for the PM after the coach's answers
+
+```text
+v1-e08-t16, after the coach's answers (2026-11-11). Still no code.
+
+The coach answered the review sheet (his follow-ups asked in the session, recorded in the report):
+the politics DA's mechanism queries cross "{query} costs political capital Congress" (a NEW wording,
+replacing "{query} political capital" in the crossing), "{query} partisan fight Congress" (template
+2) and the four party-popularity templates (4 to 7); not "unpopular with voters" (3). His seven
+reviewed queries stay as they are. That differs from your ruling in four ways, so I am holding the
+build:
+
+1. Template 2 is crossed (ruling 2 said not 2 or 3). Apply the coach's answer? (recommended: yes,
+   ruling 5 applies his answers.)
+
+2. Where the new wording lives.
+   A. On the NHI preset, as a crossing-only template: a mechanism_link_templates entry with its own
+      text and no DA template id (the loader checks it names only {query} and {topic}); recorded as
+      politics-da/link/policy-2026-27-nhi-1/<subject>. No argument entry changes, the guard and its
+      fixture are untouched, searches without --topic are unchanged; the preset is committed
+      coach_reviewed in 1.6.0, since the coach wrote the wording (recommended).
+   B. On the politics DA entry as an 8th link template, named by id like the others. The entry
+      changes (he approves it, but the guard fixture coach_reviewed_1_5_0.yaml must be refreshed in
+      this task), and every politics link search, with or without a topic, asks it too: 7 -> 8
+      reviewed queries; 38 on NHI.
+
+3. Today's 12 as the first 12 (ruling 1). Under the coach's answer the reviewed 7 stay first and in
+   order, and today's five "... political capital United States" mechanism queries are replaced by
+   "... costs political capital Congress United States". Amend ruling 1 to "the reviewed queries
+   first, unchanged" (recommended), keeping template-major order in the listed order: the new
+   wording, 2, 4, 5, 6, 7.
+
+4. Size and room for v1-e08-t23. Measured: 7 + 6 x 5 = 37 queries, one OpenAlex request per page
+   (2,686 of 3,500 URL characters; typed queries up to 141 characters fit); new BM25 term: "costs"
+   only. Under 42 that leaves 5 queries (ruling 4 kept 10): one agenda-item template on five
+   subjects. With 2B it is 38 and 4 left, too few for one. Accept 37 and 5 left, keeping 42?
+   (recommended: yes.)
+
+Unchanged from your ruling: id + text check for DA templates, the default for an unnamed DA, the
+42 maximum and its loader rule and pin, Crossref option A with the guide note, today's four
+mechanisms, provider-order nDCG in ac3.
+```
 
 ## Files changed
 

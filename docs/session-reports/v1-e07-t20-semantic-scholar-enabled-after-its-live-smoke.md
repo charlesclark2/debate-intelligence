@@ -532,9 +532,9 @@ wait for the PM to say that v1-e39-t18's work on the operator's Mac has finished
 carrying this branch is installed. ac2 (dev enables `semantic_scholar`, narrowed by the amendment) and the
 node's `-k profile` criterion wait for ac1.
 
-**Look first at** Deviation 3 (the footer names the opt-in only when the search asked Semantic Scholar, not
-on every search with it built) and Deviation 4 (the opt-in is read from a variable or a `.env` too, like
-every setting; only the profiles are pinned). Both are questions in the relay block.
+**Look first at** Deviations 3 and 4, which the PM ruled on 2026-11-12 (Decisions 6 and 7). Both stand as
+built: the footer names the opt-in only on a search that asked Semantic Scholar, and the opt-in may be set
+wherever any setting may be, except a committed profile.
 
 ### Plan nodes
 
@@ -711,13 +711,13 @@ opt-in".
    (`--providers openalex,crossref`, or a topic that leaves it out) sends no key. Saying "Semantic Scholar
    asked over HTTP" there would be untrue, so its footer says nothing about HTTP, and a test pins that.
    `doctor --providers` follows the PM's words exactly: it names the opt-in whenever Semantic Scholar is
-   built. The relay block asks the PM which rule they want.
+   built. The PM ruled this as built on 2026-11-12 (Decision 6).
 4. **The opt-in is read from a variable or a `.env` too.** The amendment says it is "set only in a
    person's own credentials file and never in a committed profile". The PM's ruling for this session
    adds it to `USER_CREDENTIAL_VARIABLES` and pins the profiles, and it is what I built. Like every
    setting, the opt-in can also come from `DEBATE_PROVIDERS__SEMANTIC_SCHOLAR_INSECURE_HTTP` in the shell
    or a `.env`. The CLI tests set it that way. Refusing it from those places would be a new rule for one
-   setting. The relay block asks whether the PM wants that rule.
+   setting. The PM ruled this as built on 2026-11-12 (Decision 7).
 5. **The daily digest's footer is not wired.** No preset in `config/daily_presets.yaml` asks Semantic
    Scholar, so the line could never appear there and could not be tested. I removed the digest property
    I had started on, rather than leave code no test reaches. A preset that adds Semantic Scholar would
@@ -742,6 +742,16 @@ opt-in".
 5. **The guides call the opt-in the operator's choice for their own key**, say what crossing the network
    unencrypted means, and say that it comes out with v1-e07-t26, whose spec refuses a file that still
    sets it.
+6. **The PM's ruling on Q1, 2026-11-12: option A, as built.** The footer line "Semantic Scholar asked over
+   HTTP: the key is sent unencrypted" appears only on a search that asked Semantic Scholar. A search that
+   left it out sent no key and says nothing about HTTP. `doctor --providers` names the opt-in whenever
+   Semantic Scholar is built (enabled, with a key, and the opt-in on). Pinned by
+   `test_with_the_http_opt_in_a_search_that_does_not_ask_semantic_scholar_says_nothing_of_http` and by the
+   doctor tests. Nothing changed.
+7. **The PM's ruling on Q2, 2026-11-12: option A, as built.** The opt-in may be set wherever any setting
+   may be (the per-user file, an exported variable, a `.env`) except a committed profile. That exception
+   is pinned by `test_no_committed_profile_sets_semantic_scholar_s_http_opt_in`. The guides point people
+   to the per-user file. Nothing changed.
 
 ### Operator follow-ups (resumed, 2026-11-12): written, not run
 
@@ -858,6 +868,9 @@ failing first, the guides' account of what a key gives, and the node's `-k profi
 Goal can be Succeeded.
 
 ### Questions for the PM (relay block)
+
+Answered by the PM on 2026-11-12: Q1 A and Q2 A, both as built (Decisions 6 and 7). The block is kept as
+it was asked.
 
 ```text
 v1-e07-t20 (resumed 2026-11-12), two questions on ac4. Both are built as recommended; either answer is a small change.

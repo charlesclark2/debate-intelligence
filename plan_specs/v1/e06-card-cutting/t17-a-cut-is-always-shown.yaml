@@ -49,7 +49,7 @@ spec:
         verifies untouched, and ' ... ' reads as the marker while '...' without spaces does
         not, by tests on synthetic exports shown failing first.
 status:
-  phase: Pending
+  phase: InProgress
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

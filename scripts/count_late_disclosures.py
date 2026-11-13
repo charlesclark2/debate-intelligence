@@ -2,21 +2,21 @@
 """Late disclosures in one snapshot, counted: their share and the topic-word check (`v1-e32-t51`).
 
 A disclosure is late when its tournament spelling was first seen in a snapshot dated before the start of
-the topic range covering the snapshot, and holds none of that topic's own tournament entry spellings
-(`debate_core.application.landscape_late_disclosures` has the rule). For hsld26's snapshot of 2026-11-10:
-spellings first seen on or before 2026-11-03, Florida Blue Key's excluded.
+the topic range covering the snapshot, no tournament entry matches it, and it holds none of that topic's
+own entry spellings (`debate_core.domain.landscape.TopicMap.is_late`). For hsld26's snapshot of
+2026-11-10: spellings first seen on or before 2026-11-03, Florida Blue Key's excluded. Where the range's
+`late_disclosures_on_earlier_topic` key is on, they are counted on the earlier topic, and `moved_to` says so.
 
-The topic-word check classes each source by the words its cards' tags and headings hold. The words are
-given here, never kept in code, and decide nothing:
+The topic-word check classes each source by the words its cards' tags and headings hold: each topic's
+`check_words` in topics.yaml, or the words given here (both options, or neither). They decide nothing:
 
     uv run python scripts/count_late_disclosures.py --data-dir <restored copy> --caselist hsld26 \
-        --snapshot 2026-11-10 --topic-word de-extinct --other-topic-word "space col" \
-        --other-topic-word coloniz
+        --snapshot 2026-11-17
 
-It prints one JSON object of counts, dates, public configuration and the late tournament spellings two
-schools or more use that hold no school or team-code word; every other spelling is counted, not named.
-No tag, heading, path, school or team code is printed. It reads the manifests, the suppression list and
-the parsed store, opens no database, writes nothing and calls no model. Exit 2 refuses, on stderr.
+It prints one JSON object of counts, dates and public configuration. It names no tournament (the PM's
+ruling of 2026-11-12), and prints no tag, heading, path, school or team code. It reads the manifests,
+the suppression list and the parsed store, opens no database, writes nothing and calls no model. Exit 2
+refuses, on stderr.
 """
 
 from __future__ import annotations
@@ -59,7 +59,9 @@ async def _run(arguments: argparse.Namespace) -> dict[str, object]:
         topic_map=load_topic_map(arguments.config_dir / TOPICS_FILE),
         caselist=arguments.caselist,
         snapshot=arguments.snapshot,
-        words=TopicWords(topic=tuple(arguments.topic_word), other=tuple(arguments.other_topic_word)),
+        words=TopicWords(topic=tuple(arguments.topic_word), other=tuple(arguments.other_topic_word))
+        if arguments.topic_word
+        else None,
         version=arguments.version,
     )
     return {**counted.as_json(), "runtime_seconds": round(time.perf_counter() - started, 1)}
@@ -75,14 +77,14 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument(
         "--topic-word",
         action="append",
-        required=True,
-        help="A word of the snapshot's topic; repeat for more.",
+        default=[],
+        help="A word of the snapshot's topic; repeat for more. Default: topics.yaml's check_words.",
     )
     parser.add_argument(
         "--other-topic-word",
         action="append",
-        required=True,
-        help="A word of the topic late files would be on; repeat for more.",
+        default=[],
+        help="A word of the earlier topic; repeat for more. Given with --topic-word, or neither.",
     )
     parser.add_argument(
         "--config-dir",
@@ -92,6 +94,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     parser.add_argument("--version", help="The parsed store's version directory. Default: the newest.")
     arguments = parser.parse_args(argv)
+    if bool(arguments.topic_word) != bool(arguments.other_topic_word):
+        parser.error("give --topic-word and --other-topic-word together, or neither")
     try:
         result = asyncio.run(_run(arguments))
     except (DomainError, ValueError, OSError) as error:

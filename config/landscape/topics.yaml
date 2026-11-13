@@ -9,6 +9,13 @@
 # one of its spellings is on that topic, whatever the snapshot's range says (v1-e32-t06). A snapshot no
 # range covers is on its one entry's topic, and a report on it reads only the entry's disclosures.
 #
+# A range may say late_disclosures_on_earlier_topic: a disclosure in its snapshots whose tournament spelling
+# was first seen before the range began, that no entry matches and that holds none of its topic's entry
+# spellings, is on the topic of the caselist's range before it (the PM's ruling of 2026-11-12, v1-e32-t51).
+# On hsld26's 2026-11-10 snapshot that was 356 of 1,639 disclosures, nearly all space colonization files.
+# check_words are a topic's words that the late-disclosure line in the report checks tags and headings
+# for; a check only, they place no disclosure. label is the topic's name in the report's sentences.
+#
 # A resolution is written exactly as the coach gave it, and only when the coach has given it.
 schema_version: 1
 topics:
@@ -26,6 +33,8 @@ topics:
   # September-October 2026 LD and PF topics: kept so earlier snapshots resolve, with no taxonomy.
   - id: ld-2026-sep-oct-space-colonization
     event: LD
+    label: Space colonization
+    check_words: [space col, coloniz]
     caselists:
       - caselist: hsld26
         from: 2026-09-01
@@ -43,10 +52,13 @@ topics:
     resolution: >-
       Resolved: De-extinction is unethical
     taxonomy_version: 1.0.0
+    label: De-extinction
+    check_words: [de-extinct]
     caselists:
       - caselist: hsld26
         from: 2026-11-06
         to: 2026-12-31
+        late_disclosures_on_earlier_topic: true
     tournaments:
       - caselist: hsld26
         name: Florida Blue Key Speech and Debate Tournament

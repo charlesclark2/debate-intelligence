@@ -11,7 +11,9 @@ module builds them from this machine's stores:
   the topic in `topics.yaml`, and, when a `through` date is given, is dated on or before it: the store
   as it stood at that snapshot (the position classifier, `v1-e32-t02`). A disclosure resolves by its
   snapshot's range, or first by a tournament entry its filename's tournament matches
-  (:meth:`~debate_core.domain.landscape.TopicMap.resolve_disclosure`, `v1-e32-t06`);
+  (:meth:`~debate_core.domain.landscape.TopicMap.resolve_disclosure`, `v1-e32-t06`), and in a range that
+  says so a late disclosure (its tournament spelling first seen, among the caselist's live disclosures,
+  before the range began) is on the earlier topic (`v1-e32-t51`);
 * **the snapshots on the topic only through a tournament entry** are listed with how many of their
   live disclosures the entry put on the topic and how many they hold in all, so that a report on one
   says it reads part of a week (the PM's ruling of 2026-11-05);
@@ -54,7 +56,7 @@ from debate_core.application.ports.parsed_store import DocumentRecord, ParsedSto
 from debate_core.application.ports.suppression import SuppressionList, SuppressionState
 from debate_core.arguments.landscape.seeding import SeedCard, SeedSource, SeedTeam
 from debate_core.domain.caselist import Disclosure
-from debate_core.domain.landscape import Topic, TopicMap, TournamentEntrySnapshot
+from debate_core.domain.landscape import Topic, TopicMap, TournamentEntrySnapshot, first_seen_spellings
 
 __all__ = ["SeedReading", "SeedingCannotStart", "read_seed_sources"]
 
@@ -133,10 +135,17 @@ async def read_seed_sources(
                 if read.team_code != UNKNOWN_TEAM_CODE:
                     codes.add(read.team_code)
     state = await load_suppression_state(suppression)
+    first_seen = first_seen_spellings(
+        (disclosure.provenance_date, parse_disclosure_path(disclosure.path, event=topic.event).tournament)
+        for enumerated in disclosed.values()
+        for disclosure in live_disclosures(enumerated, state)
+    )
 
     def on_the_topic(disclosure: Disclosed) -> bool:
         tournament = parse_disclosure_path(disclosure.path, event=topic.event).tournament
-        resolved = topics.resolve_disclosure(caselist, disclosure.provenance_date, tournament)
+        resolved = topics.resolve_disclosure(
+            caselist, disclosure.provenance_date, tournament, first_seen=first_seen
+        )
         return resolved is not None and resolved.topic_id == topic.id
 
     entry_snapshots = _tournament_entry_snapshots(

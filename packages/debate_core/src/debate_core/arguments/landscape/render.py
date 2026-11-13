@@ -97,7 +97,7 @@ from debate_core.arguments.landscape.aff_assignment import (
     TRANSITION_PLAN_CARRY_METHOD,
     TRANSITION_PLAN_TEXT_METHOD,
 )
-from debate_core.domain.landscape import PositionKind, PositionSide
+from debate_core.domain.landscape import LateDisclosures, PositionKind, PositionSide
 from debate_core.domain.landscape_pages import Anchors
 from debate_core.domain.landscape_report import (
     CHAIN_ROLES,
@@ -669,6 +669,7 @@ def _header_section(report: LandscapeReport, trends: LandscapeTrends | None = No
         "",
         *_short_history(trends),
         *_part_of_a_week(trends),
+        *_late_disclosures(header.late_disclosures),
         _ReportLines.ABOUT_HEADING,
         "",
         "| | |",
@@ -1200,6 +1201,35 @@ def _part_of_a_week(trends: LandscapeTrends | None) -> list[str]:
         "entry names, not the whole week.",
         "",
     ]
+
+
+def _late_disclosures(late: LateDisclosures | None) -> list[str]:
+    """The line beside "Part of a week" when the snapshot's range has an earlier topic, even at 0 (t51).
+
+    It names no tournament: only how many disclosures name one first disclosed before this topic began.
+    """
+    if late is None:
+        return []
+    percent = _percent(late.late, late.disclosures)
+    share = f"{late.late:,} of {late.disclosures:,} disclosures this week ({percent})"
+    began = f"name a tournament first disclosed before this topic began on {late.range_from.isoformat()}"
+    if late.moved:
+        line = f"**Earlier topic:** {share} {began}, and are counted on {late.earlier_topic}, not here."
+    else:
+        line = f"**Late disclosures:** {share} {began}, and are counted here."
+    if late.this_topic_only is not None and late.earlier_topic_only is not None and late.late_sources:
+        files = f"Of their {_count(late.late_sources, 'file')}"
+        if late.moved:
+            line += (
+                f" {files}, {late.this_topic_only:,} hold only this topic's words in tags and headings, and "
+                f"{late.earlier_topic_only:,} only the earlier topic's."
+            )
+        else:
+            line += (
+                f" {files}, {late.earlier_topic_only:,} hold only the earlier topic's words in tags and "
+                f"headings, and {late.this_topic_only:,} only this topic's."
+            )
+    return [line, ""]
 
 
 def _partial_base(trends: LandscapeTrends) -> str:

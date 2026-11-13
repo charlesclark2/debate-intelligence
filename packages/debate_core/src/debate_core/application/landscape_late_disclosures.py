@@ -1,75 +1,61 @@
 """Late disclosures: a snapshot's disclosures from tournaments its topic's range began after (`v1-e32-t51`).
 
-`topics.yaml` puts hsld26 on de-extinction from the snapshot of 2026-11-10 by its range: every disclosure
-there is on the topic unless a tournament entry says otherwise (`v1-e32-t06`). A file disclosed late, from
-a space colonization tournament before 2026-11-06, is counted on de-extinction all the same. The PM's
-ruling of 2026-11-05 (Q2) was to count them, not to pre-list those tournaments. This module counts them
-for one snapshot, from this machine's manifests and parsed store, in counts only:
+`topics.yaml` puts hsld26 on de-extinction from the snapshot of 2026-11-10 by its range. A file disclosed
+late, from a space colonization tournament before 2026-11-06, would be counted on de-extinction too. On
+2026-11-10 that was 356 of 1,639 disclosures. The PM's ruling of 2026-11-12 (Q1) put them on the earlier
+topic by spelling history, behind a key on the range (:meth:`~debate_core.domain.landscape.TopicMap.is_late`
+and :meth:`~debate_core.domain.landscape.TopicMap.resolve_disclosure`). This module counts them for one
+snapshot, from this machine's manifests and parsed store, for `scripts/count_late_disclosures.py` and for
+the landscape report's line (Q2), in counts only:
 
-* **the snapshot** must be on its topic by a range (not only through a tournament entry). Its range's
-  first day is the cut: a disclosure is **late** when its tournament spelling (:func:`tournament_key`)
-  was first seen, among the caselist's live disclosures, in a snapshot dated before that day, and the
-  spelling holds no spelling of the topic's own tournament entries (Florida Blue Key's, on its topic
-  already). A disclosure naming no tournament is never late.
-* **its share** is of the snapshot's live disclosures, on any topic or none.
+* **the snapshot** must be on its topic by a range, and the caselist must have an earlier topic's range.
+* **late** is the domain's test: the spelling was first seen, among the caselist's live disclosures, in
+  a snapshot before the range began, no tournament entry matches the disclosure, and the spelling holds
+  none of the topic's own entry spellings. Whether the range moves them is the domain's too: `moved_to`
+  names the earlier topic when it does.
+* **the share** is of the snapshot's live disclosures, on any topic or none.
 * **the topic-word check** classes each source of the snapshot by the words its cards' tags and headings
-  hold: the topic's words, the other topic's, both, neither, or not parsed. The words are the caller's,
-  given on the command line, never a list in code; and the class decides nothing. It is the check the PM
-  asked for, beside the count, on the late disclosures and on the rest of the snapshot's on-topic ones.
-* **spellings** are named only where two schools or more disclosed under them and no word of a caselist
-  school or team code is in them (the landscape report's withholding words, :func:`caselist_words`);
-  the others are counted, not named.
+  hold: this topic's, the earlier topic's, both, neither, or not parsed. The words are each topic's
+  `check_words` in `topics.yaml` unless the caller gives its own. They decide nothing.
 
-Nothing here writes, logs or returns a tag, a heading, a path, a school or a team code. The reading is
+No tournament spelling is named (the PM's Q3 ruling of 2026-11-12): only how many there are. Nothing here
+writes, logs or returns a tag, a heading, a path, a school, a team code or a tournament. The reading is
 read-only: manifests, the suppression list and the parsed store are only read.
 """
 
 from __future__ import annotations
 
-from collections import Counter, defaultdict
-from collections.abc import Iterable, Mapping, Sequence
+from collections import Counter
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from datetime import date
 from enum import StrEnum
 from typing import Final
 
-from pydantic import ValidationError
-
 from debate_core.application.caselist.evidence_listing import LocalEvidence
-from debate_core.application.caselist.parse_sources import (
-    Disclosed,
-    EnumeratedSource,
-    enumerate_sources,
-    live_disclosures,
-)
+from debate_core.application.caselist.parse_sources import enumerate_sources, live_disclosures
 from debate_core.application.caselist.path_parser import UNKNOWN_SCHOOL, parse_disclosure_path
 from debate_core.application.caselist.suppression import load_suppression_state
 from debate_core.application.errors import DomainError
 from debate_core.application.ports.parsed_store import DocumentRecord, ParsedStore, SourceOutcome
 from debate_core.application.ports.suppression import SuppressionList
-from debate_core.arguments.landscape.link_chains import MINIMUM_WITHHELD_WORD, caselist_words, is_withheld
-from debate_core.domain.caselist import Disclosure
-from debate_core.domain.landscape import Topic, TopicMap, tournament_key
+from debate_core.domain.landscape import LateDisclosures, TopicMap, first_seen_spellings, tournament_key
 
 __all__ = [
     "LateDisclosureCount",
     "LateDisclosuresCannotBeCounted",
-    "SpellingCount",
     "TopicWords",
     "WordClass",
     "count_late_disclosures",
 ]
 
-MINIMUM_SCHOOLS_TO_NAME: Final = 2
-"""A spelling is named only when this many schools disclosed under it; fewer, it is counted only."""
-
 
 class LateDisclosuresCannotBeCounted(DomainError):
-    """The snapshot is not in the store, or no topic's range covers it."""
+    """The snapshot is not in the store, no range covers it, or the caselist has no earlier topic."""
 
 
 class WordClass(StrEnum):
-    """What one source's tags and headings hold, of the topic's words and the other topic's."""
+    """What one source's tags and headings hold, of this topic's words and the earlier topic's."""
 
     TOPIC_ONLY = "topic words only"
     BOTH = "both"
@@ -80,7 +66,7 @@ class WordClass(StrEnum):
 
 @dataclass(frozen=True, slots=True)
 class TopicWords:
-    """The check's words: the snapshot topic's, and the topic late files would really be on."""
+    """The check's words: the snapshot topic's, and the earlier topic's."""
 
     topic: tuple[str, ...]
     other: tuple[str, ...]
@@ -113,18 +99,9 @@ class GroupCheck:
     sources: dict[str, int] = field(default_factory=_word_classes)
 
 
-@dataclass(frozen=True, slots=True)
-class SpellingCount:
-    """One late spelling: named only when :data:`MINIMUM_SCHOOLS_TO_NAME` schools use it and none is in it."""
-
-    spelling: str
-    first_seen: date
-    schools: int
-    """Schools whose live disclosures of the caselist, in any snapshot, carry the spelling."""
-    disclosures: int
-    sources: int
-    word_classes: dict[str, int]
-    """This spelling's late sources by word class."""
+LATE: Final = "late"
+ENTRY: Final = "tournament entry spellings"
+OTHER: Final = "other"
 
 
 @dataclass(frozen=True, slots=True)
@@ -135,6 +112,10 @@ class LateDisclosureCount:
     snapshot: date
     newest_snapshot: date
     topic_id: str
+    earlier_topic_id: str
+    earlier_topic_name: str
+    moved: bool
+    """True when the range puts late disclosures on the earlier topic (its key in `topics.yaml`)."""
     range_from: date
     first_seen_through: date | None
     """The newest snapshot dated before `range_from`: a late spelling was first seen on or before it."""
@@ -145,7 +126,7 @@ class LateDisclosureCount:
     """The snapshot's live disclosures, on any topic or none: the share's whole."""
     sources: int
     off_topic: int
-    """Of `disclosures`, those a tournament entry puts on another topic, or on none."""
+    """Of `disclosures`, those not late that are not on the topic: another topic's entry's, or none."""
     no_tournament: int
     entry_spelling_disclosures: int
     late_disclosures: int
@@ -153,25 +134,38 @@ class LateDisclosureCount:
     late_schools: int
     late_spellings: int
     late_by_first_seen: dict[str, int]
-    check: dict[str, GroupCheck]
-    """`late`, `tournament entry spellings` and `other`: the snapshot's on-topic disclosures, partitioned."""
-    named_spellings: tuple[SpellingCount, ...]
-    one_school_spellings: tuple[int, int]
-    """Late spellings fewer than two schools use, not named: (spellings, disclosures)."""
-    school_word_spellings: tuple[int, int]
-    """Late spellings two schools or more use that hold a school or team-code word, not named."""
+    check: dict[str, GroupCheck] | None
+    """`late`, `tournament entry spellings` and `other`, the snapshot's disclosures not off the topic;
+    None when no words were given and `topics.yaml` gives a topic none."""
 
     @property
     def late_share(self) -> float:
         return self.late_disclosures / self.disclosures if self.disclosures else 0.0
 
+    def for_the_report(self) -> LateDisclosures:
+        """The report's line: the count, its share's whole, and the late sources' check."""
+        late = self.check[LATE].sources if self.check is not None else None
+        return LateDisclosures(
+            snapshot=self.snapshot,
+            range_from=self.range_from,
+            earlier_topic=self.earlier_topic_name,
+            moved=self.moved,
+            disclosures=self.disclosures,
+            late=self.late_disclosures,
+            late_sources=self.late_sources,
+            this_topic_only=late[WordClass.TOPIC_ONLY] if late is not None else None,
+            earlier_topic_only=late[WordClass.OTHER_ONLY] if late is not None else None,
+        )
+
     def as_json(self) -> dict[str, object]:
-        """Counts, dates, public configuration and the spellings that may be named: nothing else."""
+        """Counts, dates and public configuration: no tournament, school, team code, tag or heading."""
         return {
             "caselist": self.caselist,
             "snapshot": self.snapshot.isoformat(),
             "newest_snapshot": self.newest_snapshot.isoformat(),
             "topic": self.topic_id,
+            "earlier_topic": self.earlier_topic_id,
+            "moved_to": self.earlier_topic_id if self.moved else None,
             "range_from": self.range_from.isoformat(),
             "first_seen_through": self.first_seen_through.isoformat() if self.first_seen_through else None,
             "tournament_entry_spellings": list(self.entry_spellings),
@@ -189,37 +183,13 @@ class LateDisclosureCount:
                 "share": round(self.late_share, 4),
                 "by_first_seen": dict(self.late_by_first_seen),
             },
-            "topic_word_check": {
+            "topic_word_check": None
+            if self.check is None
+            else {
                 group: {"disclosures": dict(one.disclosures), "sources": dict(one.sources)}
                 for group, one in self.check.items()
             },
-            "late_spellings_named": [
-                {
-                    "spelling": one.spelling,
-                    "first_seen": one.first_seen.isoformat(),
-                    "schools": one.schools,
-                    "disclosures": one.disclosures,
-                    "sources": one.sources,
-                    "sources_by_word_class": dict(one.word_classes),
-                }
-                for one in self.named_spellings
-            ],
-            "late_spellings_not_named": {
-                "fewer_than_two_schools": {
-                    "spellings": self.one_school_spellings[0],
-                    "disclosures": self.one_school_spellings[1],
-                },
-                "holding_a_school_or_team_code_word": {
-                    "spellings": self.school_word_spellings[0],
-                    "disclosures": self.school_word_spellings[1],
-                },
-            },
         }
-
-
-LATE: Final = "late"
-ENTRY: Final = "tournament entry spellings"
-OTHER: Final = "other"
 
 
 @dataclass(frozen=True, slots=True)
@@ -231,7 +201,6 @@ class _Read:
     tournament: str | None
     key: str
     school: str
-    disclosure: Disclosure
 
 
 async def count_late_disclosures(
@@ -242,19 +211,21 @@ async def count_late_disclosures(
     topic_map: TopicMap,
     caselist: str,
     snapshot: date,
-    words: TopicWords,
+    words: TopicWords | None = None,
     version: str | None = None,
 ) -> LateDisclosureCount:
-    """`caselist`'s late disclosures in `snapshot`, with their share and the topic-word check."""
-    resolved = topic_map.resolve(caselist, snapshot)
-    if resolved is None or resolved.tournament_entries_only:
+    """`caselist`'s late disclosures in `snapshot`, with their share and the topic-word check.
+
+    Without `words`, the check reads each topic's `check_words`; with none on either topic, it is skipped.
+    """
+    cut = topic_map.late_cut(caselist, snapshot)
+    if cut is None:
         raise LateDisclosuresCannotBeCounted(
-            f"no topic's range covers {caselist}'s snapshot of {snapshot.isoformat()}"
+            f"no topic's range covers {caselist}'s snapshot of {snapshot.isoformat()} with an earlier "
+            "topic's range before it"
         )
-    topic = topic_map.topic(resolved.topic_id)
-    covering = topic.range_covering(caselist, snapshot)
-    if covering is None:  # pragma: no cover - resolve() found this range
-        raise LateDisclosuresCannotBeCounted(f"{topic.id} has no range covering {snapshot.isoformat()}")
+    if words is None and cut.topic.check_words and cut.earlier.check_words:
+        words = TopicWords(topic=cut.topic.check_words, other=cut.earlier.check_words)
     enumerated = await enumerate_sources(local, caselist)
     every_date = {disclosed.provenance_date for source in enumerated for disclosed in source.disclosures}
     if snapshot not in every_date:
@@ -262,55 +233,59 @@ async def count_late_disclosures(
             f"the store holds no manifest of {caselist}'s snapshot of {snapshot.isoformat()}"
         )
     state = await load_suppression_state(suppression)
-    read = [
-        _read(caselist, source, disclosed, topic)
-        for source in enumerated
-        for disclosed in live_disclosures(source, state)
-    ]
-    entry_spellings = tuple(dict.fromkeys(s for entry in topic.tournaments for s in entry.spellings))
-    first_seen = _first_seen(read)
-    schools_by_key = _schools_by_key(read)
-    texts_by_key = _texts_by_key(read)
-    withholding = caselist_words(one.disclosure for one in read)
+    read: list[_Read] = []
+    for source in enumerated:
+        for disclosed in live_disclosures(source, state):
+            parsed = parse_disclosure_path(disclosed.path, event=cut.topic.event)
+            read.append(
+                _Read(
+                    sha256=source.sha256,
+                    when=disclosed.provenance_date,
+                    tournament=parsed.tournament,
+                    key=tournament_key(parsed.tournament),
+                    school=parsed.school.casefold() if parsed.school != UNKNOWN_SCHOOL else "",
+                )
+            )
+    first_seen = first_seen_spellings((one.when, one.tournament) for one in read)
+    entry_spellings = tuple(dict.fromkeys(s for entry in cut.topic.tournaments for s in entry.spellings))
 
     week = [one for one in read if one.when == snapshot]
-    on_topic: list[_Read] = []
+    grouped: list[tuple[_Read, str]] = []
     off_topic = 0
     for one in week:
-        resolution = topic_map.resolve_disclosure(caselist, snapshot, one.tournament)
-        if resolution is not None and resolution.topic_id == topic.id:
-            on_topic.append(one)
-        else:
+        if topic_map.is_late(caselist, snapshot, one.tournament, first_seen):
+            grouped.append((one, LATE))
+            continue
+        resolution = topic_map.resolve_disclosure(caselist, snapshot, one.tournament, first_seen=first_seen)
+        if resolution is None or resolution.topic_id != cut.topic.id:
             off_topic += 1
+        elif one.key and any(spelling in one.key for spelling in entry_spellings):
+            grouped.append((one, ENTRY))
+        else:
+            grouped.append((one, OTHER))
 
-    def group_of(one: _Read) -> str:
-        if one.key and any(spelling in one.key for spelling in entry_spellings):
-            return ENTRY
-        if one.key and first_seen[one.key] < covering.effective_from:
-            return LATE
-        return OTHER
-
-    grouped = [(one, group_of(one)) for one in on_topic]
     version = await _version(store, caselist, version)
-    classes = await _word_classes_of(store, caselist, version, {one.sha256 for one in week}, words)
-    check = {LATE: GroupCheck(), ENTRY: GroupCheck(), OTHER: GroupCheck()}
-    for one, group in grouped:
-        check[group].disclosures[classes[one.sha256]] += 1
-    for group in check:
-        for digest in {one.sha256 for one, its in grouped if its == group}:
-            check[group].sources[classes[digest]] += 1
+    check: dict[str, GroupCheck] | None = None
+    if words is not None:
+        classes = await _word_classes_of(store, caselist, version, {one.sha256 for one in week}, words)
+        check = {LATE: GroupCheck(), ENTRY: GroupCheck(), OTHER: GroupCheck()}
+        for one, group in grouped:
+            check[group].disclosures[classes[one.sha256]] += 1
+        for group in check:
+            for digest in {one.sha256 for one, its in grouped if its == group}:
+                check[group].sources[classes[digest]] += 1
 
     late = [one for one, group in grouped if group == LATE]
-    named, one_school, school_word = _spellings(
-        late, first_seen, schools_by_key, texts_by_key, withholding, classes
-    )
-    earlier = sorted(day for day in every_date if day < covering.effective_from)
+    earlier = sorted(day for day in every_date if day < cut.range.effective_from)
     return LateDisclosureCount(
         caselist=caselist,
         snapshot=snapshot,
         newest_snapshot=max(every_date),
-        topic_id=topic.id,
-        range_from=covering.effective_from,
+        topic_id=cut.topic.id,
+        earlier_topic_id=cut.earlier.id,
+        earlier_topic_name=cut.earlier.name,
+        moved=cut.range.late_disclosures_on_earlier_topic,
+        range_from=cut.range.effective_from,
         first_seen_through=earlier[-1] if earlier else None,
         entry_spellings=entry_spellings,
         parsed_version=version,
@@ -327,120 +302,12 @@ async def count_late_disclosures(
             day.isoformat(): n for day, n in sorted(Counter(first_seen[one.key] for one in late).items())
         },
         check=check,
-        named_spellings=named,
-        one_school_spellings=one_school,
-        school_word_spellings=school_word,
     )
 
 
 def _reduced(text: str) -> str:
     """Letters and digits without case, as a tournament spelling is reduced (:func:`tournament_key`)."""
     return tournament_key(text)
-
-
-def _read(caselist: str, source: EnumeratedSource, disclosed: Disclosed, topic: Topic) -> _Read:
-    parsed = parse_disclosure_path(disclosed.path, event=topic.event)
-    school = parsed.school.casefold() if parsed.school != UNKNOWN_SCHOOL else ""
-    try:
-        disclosure = Disclosure(
-            source_sha256=source.sha256,
-            caselist=caselist,
-            snapshot=disclosed.provenance_date,
-            event=topic.event,
-            school=parsed.school,
-            team_code=parsed.team_code,
-            side=parsed.side,
-            tournament=parsed.tournament,
-            round_label=parsed.round_label,
-            source_path=disclosed.path,
-            parse_warnings=parsed.warnings,
-        )
-    except ValidationError:
-        # The error's text quotes the path's school and team code, which go nowhere.
-        raise LateDisclosuresCannotBeCounted(
-            f"a disclosure of {caselist}'s snapshot of {disclosed.snapshot} could not be read as one"
-        ) from None
-    return _Read(
-        sha256=source.sha256,
-        when=disclosed.provenance_date,
-        tournament=parsed.tournament,
-        key=tournament_key(parsed.tournament),
-        school=school,
-        disclosure=disclosure,
-    )
-
-
-def _first_seen(read: Iterable[_Read]) -> dict[str, date]:
-    first: dict[str, date] = {}
-    for one in read:
-        if one.key and (one.key not in first or one.when < first[one.key]):
-            first[one.key] = one.when
-    return first
-
-
-def _schools_by_key(read: Iterable[_Read]) -> dict[str, set[str]]:
-    schools: dict[str, set[str]] = defaultdict(set)
-    for one in read:
-        if one.key and one.school:
-            schools[one.key].add(one.school)
-    return schools
-
-
-def _texts_by_key(read: Iterable[_Read]) -> dict[str, set[str]]:
-    texts: dict[str, set[str]] = defaultdict(set)
-    for one in read:
-        if one.key and one.tournament:
-            texts[one.key].add(one.tournament)
-    return texts
-
-
-def _holds_a_caselist_word(key: str, texts: Iterable[str], words: frozenset[str]) -> bool:
-    """A spelling is withheld when a tournament text of it holds a school or team-code word, or the
-    spelling itself holds a school or team-code word long enough to be one (a name run together)."""
-    return any(is_withheld(text, words) for text in texts) or any(
-        word in key for word in words if len(word) >= MINIMUM_WITHHELD_WORD
-    )
-
-
-def _spellings(
-    late: Sequence[_Read],
-    first_seen: Mapping[str, date],
-    schools_by_key: Mapping[str, set[str]],
-    texts_by_key: Mapping[str, set[str]],
-    withholding: frozenset[str],
-    classes: Mapping[str, str],
-) -> tuple[tuple[SpellingCount, ...], tuple[int, int], tuple[int, int]]:
-    by_key: dict[str, list[_Read]] = defaultdict(list)
-    for one in late:
-        by_key[one.key].append(one)
-    named: list[SpellingCount] = []
-    one_school = [0, 0]
-    school_word = [0, 0]
-    for key, ones in by_key.items():
-        if len(schools_by_key.get(key, ())) < MINIMUM_SCHOOLS_TO_NAME:
-            one_school[0] += 1
-            one_school[1] += len(ones)
-            continue
-        if _holds_a_caselist_word(key, texts_by_key.get(key, ()), withholding):
-            school_word[0] += 1
-            school_word[1] += len(ones)
-            continue
-        digests = {one.sha256 for one in ones}
-        word_classes = _word_classes()
-        for digest in digests:
-            word_classes[classes[digest]] += 1
-        named.append(
-            SpellingCount(
-                spelling=key,
-                first_seen=first_seen[key],
-                schools=len(schools_by_key[key]),
-                disclosures=len(ones),
-                sources=len(digests),
-                word_classes=word_classes,
-            )
-        )
-    named.sort(key=lambda one: (-one.disclosures, one.spelling))
-    return tuple(named), (one_school[0], one_school[1]), (school_word[0], school_word[1])
 
 
 async def _version(store: ParsedStore, caselist: str, version: str | None) -> str | None:

@@ -190,6 +190,7 @@ from debate_core.arguments.landscape.source_headings import (
 )
 from debate_core.domain.caselist import Disclosure
 from debate_core.domain.landscape import (
+    LateDisclosures,
     Position,
     PositionKind,
     PositionSide,
@@ -372,6 +373,9 @@ class LandscapeReportInputs:
     tournament_entry_snapshots: Sequence[TournamentEntrySnapshot] = ()
     """The snapshots on the topic only through a tournament entry, with their counts (`v1-e32-t06`), so the
     report says when it reads part of a week and the trends call such a week a partial base."""
+    late_disclosures: LateDisclosures | None = None
+    """The snapshot's late disclosures (`v1-e32-t51`), for the line beside "Part of a week"; None when the
+    snapshot's range has no earlier topic."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -656,6 +660,7 @@ class LandscapeReportService:
                 newest_snapshot=staleness.newest_snapshot,
                 snapshot_age_days=staleness.age_days,
                 archives_awaiting_download=staleness.archives_awaiting_download,
+                late_disclosures=inputs.late_disclosures,
             ),
             positions=tuple(positions),
             top_cards=tuple(top_cards),

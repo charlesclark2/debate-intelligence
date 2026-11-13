@@ -72,7 +72,7 @@ from __future__ import annotations
 
 import re
 from collections import Counter
-from collections.abc import Callable
+from collections.abc import Callable, Iterable, Mapping
 from datetime import date
 from enum import StrEnum
 from typing import Annotated, Final, Literal, Self
@@ -96,8 +96,11 @@ __all__ = [
     "Topic",
     "TopicMap",
     "TopicResolution",
+    "LateCut",
+    "LateDisclosures",
     "TournamentEntry",
     "TournamentEntrySnapshot",
+    "first_seen_spellings",
     "tournament_key",
 ]
 
@@ -374,6 +377,14 @@ class CaselistRange(DomainModel):
     caselist: CaselistSlug = Field(description="The caselist slug, e.g. as the caselist site names it.")
     effective_from: date = Field(alias="from", description="First snapshot date on the topic.")
     effective_to: date = Field(alias="to", description="Last snapshot date on the topic, included.")
+    late_disclosures_on_earlier_topic: bool = Field(
+        default=False,
+        description=(
+            "True puts a late disclosure in this range's snapshots on the topic of the caselist's range "
+            "before this one: one whose tournament spelling was first seen before this range began and "
+            "holds none of this topic's entry spellings (`v1-e32-t51`)."
+        ),
+    )
 
     @model_validator(mode="after")
     def _check_order(self) -> Self:
@@ -442,6 +453,12 @@ class TournamentEntry(DomainModel):
         return self.covers_snapshot(caselist, snapshot) and any(one in key for one in self.spellings)
 
 
+def _has_a_letter_or_digit(word: str) -> str:
+    if not tournament_key(word):
+        raise ValueError(f"the check word {word!r} has no letter or digit")
+    return word
+
+
 def _not_generic(topic_id: str) -> str:
     if topic_id == GENERIC_TOPIC_ID:
         raise ValueError(f"{GENERIC_TOPIC_ID!r} names generic.yaml, not a topic")
@@ -467,6 +484,21 @@ class Topic(DomainModel):
         default=(),
         description="Tournaments on this topic whatever their snapshot's range says (`v1-e32-t06`).",
     )
+    label: NonEmptyText | None = Field(
+        default=None, description="The topic's short name for a report's sentences; its id when None."
+    )
+    check_words: tuple[Annotated[str, AfterValidator(_has_a_letter_or_digit)], ...] = Field(
+        default=(),
+        description=(
+            "Words of this topic that the late-disclosure check looks for in tags and headings, matched by "
+            "letters and digits without case (`v1-e32-t51`). A check only: they place no disclosure."
+        ),
+    )
+
+    @property
+    def name(self) -> str:
+        """The topic's name in a report's sentences: its label, or its id."""
+        return self.label or self.id
 
     def range_covering(self, caselist: str, snapshot: date) -> CaselistRange | None:
         """This topic's range of `caselist` covering `snapshot`, or None."""
@@ -511,6 +543,14 @@ class TopicMap(DomainModel):
                         "so a snapshot between them would be on two topics"
                     )
         self._check_tournament_entries()
+        for topic in self.topics:
+            for one in topic.caselists:
+                if one.late_disclosures_on_earlier_topic and self.earlier_topic(one.caselist, one) is None:
+                    raise ValueError(
+                        f"{one.caselist}: {topic.id}'s range ({one.effective_from} to {one.effective_to}) "
+                        "puts late disclosures on the earlier topic, but no topic has a range of the "
+                        "caselist before it"
+                    )
         return self
 
     def _check_tournament_entries(self) -> None:
@@ -571,13 +611,60 @@ class TopicMap(DomainModel):
                 return _resolution(topic, tournament_entries_only=True)
         return None
 
+    def earlier_topic(self, caselist: str, later: CaselistRange) -> Topic | None:
+        """The topic of `caselist`'s latest range ending before `later` begins; None when there is none."""
+        found = [
+            (one.effective_to, topic)
+            for topic in self.topics
+            for one in topic.caselists
+            if one.caselist == caselist and one.effective_to < later.effective_from
+        ]
+        return max(found, key=lambda pair: pair[0])[1] if found else None
+
+    def late_cut(self, caselist: str, snapshot: date) -> LateCut | None:
+        """The range covering `caselist`'s snapshot, its topic and the topic before it; None without both."""
+        for topic in self.topics:
+            covering = topic.range_covering(caselist, snapshot)
+            if covering is not None:
+                earlier = self.earlier_topic(caselist, covering)
+                return None if earlier is None else LateCut(topic=topic, range=covering, earlier=earlier)
+        return None
+
+    def is_late(
+        self, caselist: str, snapshot: date, tournament: str | None, first_seen: Mapping[str, date]
+    ) -> bool:
+        """One disclosure is late: its snapshot's range has an earlier topic, no tournament entry matches it,
+        its spelling holds none of the range topic's entry spellings, and `first_seen` dates that spelling
+        before the range began. Whether the range moves it is :meth:`resolve_disclosure`'s."""
+        cut = self.late_cut(caselist, snapshot)
+        if cut is None:
+            return False
+        if any(
+            entry.matches(caselist, snapshot, tournament) for one in self.topics for entry in one.tournaments
+        ):
+            return False
+        key = tournament_key(tournament)
+        if not key or any(spelling in key for entry in cut.topic.tournaments for spelling in entry.spellings):
+            return False
+        seen = first_seen.get(key)
+        return seen is not None and seen < cut.range.effective_from
+
     def resolve_disclosure(
-        self, caselist: str, snapshot: date, tournament: str | None
+        self, caselist: str, snapshot: date, tournament: str | None, *, first_seen: Mapping[str, date]
     ) -> TopicResolution | None:
-        """The topic one disclosure is on: a matching entry's, else its snapshot's range's, else None."""
+        """The topic one disclosure is on: a matching entry's; else, when its snapshot's range says so and the
+        disclosure is late (:meth:`is_late`, by `first_seen`, :func:`first_seen_spellings`), the earlier
+        topic's; else its snapshot's range's; else None."""
         for topic in self.topics:
             if any(entry.matches(caselist, snapshot, tournament) for entry in topic.tournaments):
                 return _resolution(topic)
+        cut = self.late_cut(caselist, snapshot)
+        if (
+            cut is not None
+            and cut.range.late_disclosures_on_earlier_topic
+            and self.is_late(caselist, snapshot, tournament, first_seen)
+        ):
+            return _resolution(cut.earlier)
         for topic in self.topics:
             if topic.range_covering(caselist, snapshot) is not None:
                 return _resolution(topic)
@@ -598,6 +685,57 @@ class TournamentEntrySnapshot(DomainModel):
     def _check(self) -> Self:
         if self.disclosures_on_topic > self.disclosures:
             raise ValueError("a snapshot's disclosures on the topic are some of its disclosures")
+        return self
+
+
+class LateCut(DomainModel):
+    """A snapshot's range, its topic, and the topic of the caselist's range before it (`v1-e32-t51`)."""
+
+    topic: Topic
+    range: CaselistRange
+    earlier: Topic
+
+
+def first_seen_spellings(disclosures: Iterable[tuple[date, str | None]]) -> dict[str, date]:
+    """Each tournament spelling (:func:`tournament_key`) with the first snapshot a disclosure carried it in.
+
+    `disclosures` are (snapshot, tournament text) pairs: a caselist's live disclosures, every snapshot.
+    """
+    first: dict[str, date] = {}
+    for snapshot, tournament in disclosures:
+        key = tournament_key(tournament)
+        if key and (key not in first or snapshot < first[key]):
+            first[key] = snapshot
+    return first
+
+
+class LateDisclosures(DomainModel):
+    """A snapshot's late disclosures, for the report's line: counts only, no tournament (`v1-e32-t51`)."""
+
+    snapshot: date
+    range_from: date = Field(
+        description="The first day of the topic's range: late spellings were seen before."
+    )
+    earlier_topic: NonEmptyText = Field(description="The earlier topic's name in the line.")
+    moved: bool = Field(
+        description="True when the range puts them on the earlier topic; False, counted here."
+    )
+    disclosures: int = Field(ge=0, description="The snapshot's live disclosures, on any topic or none.")
+    late: int = Field(ge=0)
+    late_sources: int = Field(ge=0)
+    this_topic_only: int | None = Field(
+        default=None, ge=0, description="Late sources holding only this topic's check words; None unchecked."
+    )
+    earlier_topic_only: int | None = Field(
+        default=None, ge=0, description="Late sources holding only the earlier topic's check words."
+    )
+
+    @model_validator(mode="after")
+    def _check(self) -> Self:
+        if self.late > self.disclosures or self.late_sources > self.late:
+            raise ValueError("late disclosures are some of the snapshot's, and their sources some of them")
+        if (self.this_topic_only is None) != (self.earlier_topic_only is None):
+            raise ValueError("the check gives both topics' counts, or neither")
         return self
 
 

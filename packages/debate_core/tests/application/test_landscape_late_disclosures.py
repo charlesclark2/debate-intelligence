@@ -16,20 +16,20 @@ from pathlib import Path
 
 import pytest
 
-from debate_core.application import landscape_late_disclosures as late_disclosures
 from debate_core.application.caselist.evidence_listing import LocalEvidence
 from debate_core.application.caselist.suppression import RecordedSuppressionList
 from debate_core.application.landscape_late_disclosures import (
+    GroupCheck,
     LateDisclosureCount,
     LateDisclosuresCannotBeCounted,
     TopicWords,
     WordClass,
     count_late_disclosures,
 )
+from debate_core.application.landscape_seeding import read_seed_sources
 from debate_core.application.ports.parsed_store import SourceOutcome
 from debate_core.application.ports.suppression import ReasonCode, SuppressionAction, SuppressionEntry
-from debate_core.domain.caselist import Disclosure
-from debate_core.domain.landscape import TopicMap
+from debate_core.domain.landscape import LateDisclosures, TopicMap
 from debate_core.integrations.local import BLOB_DIRECTORY, FsEvidenceObjectStore
 from debate_core.integrations.local.parsed_store import LocalParsedStore
 from debate_core.testing.fakes.suppression import InMemoryAppendOnlyRecord, empty_suppression_list
@@ -51,7 +51,11 @@ def path(school: str, code: str, side: str, tournament: str, round_number: int) 
     return f"{school}/{code}/{school}-{code}-{side}-{tournament}-Round {round_number}.docx"
 
 
-def topics() -> TopicMap:
+def topics(*, key: bool = False, check_words: bool = False) -> TopicMap:
+    old_words = (
+        {"check_words": ["space col", "coloniz"], "label": "Space colonization"} if check_words else {}
+    )
+    new_words = {"check_words": ["de-extinct"]} if check_words else {}
     return TopicMap.model_validate(
         {
             "schema_version": 1,
@@ -59,12 +63,21 @@ def topics() -> TopicMap:
                 {
                     "id": OLD,
                     "event": "LD",
+                    **old_words,
                     "caselists": [{"caselist": CASELIST, "from": "2026-09-01", "to": "2026-10-31"}],
                 },
                 {
                     "id": NEW,
                     "event": "LD",
-                    "caselists": [{"caselist": CASELIST, "from": "2026-11-06", "to": "2026-12-31"}],
+                    **new_words,
+                    "caselists": [
+                        {
+                            "caselist": CASELIST,
+                            "from": "2026-11-06",
+                            "to": "2026-12-31",
+                            "late_disclosures_on_earlier_topic": key,
+                        }
+                    ],
                     "tournaments": [
                         {
                             "caselist": CASELIST,
@@ -95,6 +108,7 @@ async def count(
     topic_map: TopicMap | None = None,
     suppression: RecordedSuppressionList | None = None,
     version: str | None = None,
+    words: TopicWords | None = WORDS,
 ) -> LateDisclosureCount:
     return await count_late_disclosures(
         store=LocalParsedStore(planted.data_dir),
@@ -103,9 +117,14 @@ async def count(
         topic_map=topic_map or topics(),
         caselist=CASELIST,
         snapshot=date.fromisoformat(snapshot),
-        words=WORDS,
+        words=words,
         version=version,
     )
+
+
+def checked(counted: LateDisclosureCount) -> dict[str, GroupCheck]:
+    assert counted.check is not None
+    return counted.check
 
 
 @pytest.fixture
@@ -177,7 +196,7 @@ async def test_the_topics_own_tournament_entry_spellings_are_not_late(planted: P
     assert counted.entry_spellings == ("harborcity",)
     assert counted.late_disclosures == 0
     assert counted.entry_spelling_disclosures == 2
-    assert counted.check["tournament entry spellings"].disclosures[WordClass.TOPIC_ONLY] == 2
+    assert checked(counted)["tournament entry spellings"].disclosures[WordClass.TOPIC_ONLY] == 2
 
 
 @pytest.mark.anyio
@@ -188,7 +207,7 @@ async def test_a_disclosure_naming_no_tournament_is_never_late(planted: PlantedC
     counted = await count(planted)
 
     assert (counted.disclosures, counted.no_tournament, counted.late_disclosures) == (1, 1, 0)
-    assert counted.check["other"].disclosures[WordClass.OTHER_ONLY] == 1
+    assert checked(counted)["other"].disclosures[WordClass.OTHER_ONLY] == 1
 
 
 @pytest.mark.anyio
@@ -253,7 +272,7 @@ async def test_the_topic_word_check_classes_each_group_by_its_sources_tags_and_h
 
     counted = await count(planted)
 
-    late, other = counted.check["late"], counted.check["other"]
+    late, other = checked(counted)["late"], checked(counted)["other"]
     assert late.sources == {
         "topic words only": 0,
         "both": 1,
@@ -270,57 +289,6 @@ async def test_the_topic_word_check_classes_each_group_by_its_sources_tags_and_h
     }
     assert other.disclosures["topic words only"] == 2
     assert (counted.disclosures, counted.sources) == (6, 5)
-
-
-@pytest.mark.anyio
-async def test_a_spelling_is_named_only_when_two_schools_use_it_and_it_holds_no_school_word(
-    planted: PlantedCaselist,
-) -> None:
-    planted.source(
-        "shared-1", OLD_WORDS, disclosures=[(OCT_27, path("Alder", "AbCd", "Aff", "Lakeside Open", 1))]
-    )
-    planted.source(
-        "shared-2", OLD_WORDS, disclosures=[(OCT_27, path("Brook", "EfGh", "Neg", "Lakeside Open", 1))]
-    )
-    planted.source(
-        "shared-late", OLD_WORDS, disclosures=[(NOV_10, path("Alder", "AbCd", "Neg", "Lakeside Open", 2))]
-    )
-    planted.source(
-        "one-1", OLD_WORDS, disclosures=[(OCT_27, path("Cedar", "IjKl", "Aff", "Cedar Scrimmage", 1))]
-    )
-    planted.source(
-        "one-late", OLD_WORDS, disclosures=[(NOV_10, path("Cedar", "IjKl", "Neg", "Cedar Scrimmage", 2))]
-    )
-    planted.source(
-        "host-1",
-        OLD_WORDS,
-        disclosures=[(OCT_27, path("Birchmoor Academy", "BaXy", "Aff", "BirchmoorClassic", 1))],
-    )
-    planted.source(
-        "host-2", OLD_WORDS, disclosures=[(OCT_27, path("Dune", "MnOp", "Aff", "BirchmoorClassic", 1))]
-    )
-    planted.source(
-        "host-late", OLD_WORDS, disclosures=[(NOV_10, path("Dune", "MnOp", "Neg", "BirchmoorClassic", 2))]
-    )
-    planted.source(
-        "code-1", OLD_WORDS, disclosures=[(OCT_27, path("Elm", "Xy", "Aff", "Xy Invitational", 1))]
-    )
-    planted.source(
-        "code-2", OLD_WORDS, disclosures=[(OCT_27, path("Fern", "QrSt", "Aff", "Xy Invitational", 1))]
-    )
-    planted.source(
-        "code-late", OLD_WORDS, disclosures=[(NOV_10, path("Fern", "QrSt", "Neg", "Xy Invitational", 2))]
-    )
-
-    counted = await count(planted)
-
-    assert [
-        (one.spelling, one.schools, one.disclosures, one.first_seen) for one in counted.named_spellings
-    ] == [("lakesideopen", 2, 1, date(2026, 10, 27))]
-    assert counted.named_spellings[0].word_classes[WordClass.OTHER_ONLY] == 1
-    assert counted.one_school_spellings == (1, 1)
-    assert counted.school_word_spellings == (2, 2)
-    assert counted.late_disclosures == 4
 
 
 @pytest.mark.anyio
@@ -384,26 +352,6 @@ async def test_a_version_the_store_lacks_is_refused(planted: PlantedCaselist) ->
         await count(planted, version="2026.01.01-docx-1")
 
 
-@pytest.mark.anyio
-async def test_a_path_that_is_not_a_disclosure_is_refused_without_its_school_or_code(
-    planted: PlantedCaselist, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    planted.source(
-        "new", NEW_WORDS, disclosures=[(NOV_10, path("Quillfeather", "ZqZq", "Aff", "Pinecrest Open", 1))]
-    )
-
-    def refuse(**fields: object) -> object:
-        return Disclosure.model_validate({**fields, "team_code": ""})
-
-    monkeypatch.setattr(late_disclosures, "Disclosure", refuse)
-    with pytest.raises(LateDisclosuresCannotBeCounted, match="could not be read") as refused:
-        await count(planted)
-
-    assert "quillfeather" not in str(refused.value).casefold()
-    assert "zqzq" not in str(refused.value).casefold()
-    assert refused.value.__cause__ is None and refused.value.__suppress_context__
-
-
 def test_the_check_needs_a_word_on_each_side() -> None:
     with pytest.raises(ValueError, match="needs a word"):
         TopicWords(topic=("de-extinct",), other=())
@@ -419,7 +367,7 @@ def test_the_check_matches_words_by_letters_and_digits_without_case() -> None:
 
 
 @pytest.mark.anyio
-async def test_the_json_holds_counts_and_named_spellings_and_no_school_code_path_tag_or_heading(
+async def test_the_json_holds_counts_and_no_tournament_school_code_path_tag_or_heading(
     planted: PlantedCaselist,
 ) -> None:
     planted.source(
@@ -442,10 +390,129 @@ async def test_the_json_holds_counts_and_named_spellings_and_no_school_code_path
 
     text = json.dumps((await count(planted)).as_json()).casefold()
 
-    for withheld in ("alder", "brookfield", "cedarvale", "abcd", "efgh", "ijkl", "quarry", "round", ".docx"):
+    for withheld in ("alder", "brookfield", "cedarvale", "abcd", "efgh", "ijkl", "round", ".docx"):
         assert withheld not in text
+    for tournament in ("lakeside", "quarry", "scrimmage"):
+        assert tournament not in text
     for card in OLD_WORDS:
         assert card.tag is not None and card.tag.casefold() not in text
         assert all(heading.casefold() not in text for heading in card.section_path)
-    assert '"spelling": "lakesideopen"' in text
+    assert '"spellings": 2' in text
     assert '"share": 0.0' not in text
+
+
+@pytest.mark.anyio
+async def test_with_the_ranges_key_on_the_late_disclosures_are_counted_and_moved_to_the_earlier_topic(
+    planted: PlantedCaselist,
+) -> None:
+    planted.source(
+        "early", OLD_WORDS, disclosures=[(OCT_27, path("Alder", "AbCd", "Aff", "Lakeside Open", 1))]
+    )
+    planted.source(
+        "late", OLD_WORDS, disclosures=[(NOV_10, path("Brook", "EfGh", "Neg", "Lakeside Open", 2))]
+    )
+    planted.source(
+        "new", NEW_WORDS, disclosures=[(NOV_10, path("Cedar", "IjKl", "Aff", "Pinecrest Open", 1))]
+    )
+
+    moved = await count(planted, topic_map=topics(key=True))
+    counted_here = await count(planted)
+
+    for one in (moved, counted_here):
+        assert (one.disclosures, one.late_disclosures, one.off_topic) == (2, 1, 0)
+        assert (one.earlier_topic_id, one.topic_id) == (OLD, NEW)
+    assert (moved.moved, moved.as_json()["moved_to"]) == (True, OLD)
+    assert (counted_here.moved, counted_here.as_json()["moved_to"]) == (False, None)
+
+
+@pytest.mark.anyio
+async def test_without_words_given_the_check_reads_each_topics_check_words(planted: PlantedCaselist) -> None:
+    planted.source(
+        "early", OLD_WORDS, disclosures=[(OCT_27, path("Alder", "AbCd", "Aff", "Lakeside Open", 1))]
+    )
+    planted.source(
+        "late", OLD_WORDS, disclosures=[(NOV_10, path("Brook", "EfGh", "Neg", "Lakeside Open", 2))]
+    )
+    planted.source(
+        "new", NEW_WORDS, disclosures=[(NOV_10, path("Cedar", "IjKl", "Aff", "Pinecrest Open", 1))]
+    )
+
+    from_config = await count(planted, topic_map=topics(key=True, check_words=True), words=None)
+    unchecked = await count(planted, topic_map=topics(key=True), words=None)
+
+    assert from_config.check is not None
+    assert from_config.check["late"].sources[WordClass.OTHER_ONLY] == 1
+    assert from_config.check["other"].sources[WordClass.TOPIC_ONLY] == 1
+    assert from_config.for_the_report() == LateDisclosures(
+        snapshot=date(2026, 11, 10),
+        range_from=date(2026, 11, 6),
+        earlier_topic="Space colonization",
+        moved=True,
+        disclosures=2,
+        late=1,
+        late_sources=1,
+        this_topic_only=0,
+        earlier_topic_only=1,
+    )
+    assert unchecked.check is None and unchecked.as_json()["topic_word_check"] is None
+    assert unchecked.for_the_report().this_topic_only is None
+    assert unchecked.for_the_report().earlier_topic == OLD
+
+
+@pytest.mark.anyio
+async def test_a_caselist_with_no_earlier_topic_has_no_late_disclosure_count(
+    planted: PlantedCaselist,
+) -> None:
+    planted.source(
+        "one", NEW_WORDS, disclosures=[(NOV_10, path("Alder", "AbCd", "Aff", "Pinecrest Open", 1))]
+    )
+    only_one = TopicMap.model_validate(
+        {
+            "schema_version": 1,
+            "topics": [
+                {
+                    "id": NEW,
+                    "event": "LD",
+                    "caselists": [{"caselist": CASELIST, "from": "2026-09-01", "to": "2026-12-31"}],
+                }
+            ],
+        }
+    )
+
+    with pytest.raises(LateDisclosuresCannotBeCounted, match="with an earlier topic's range before it"):
+        await count(planted, topic_map=only_one)
+
+
+@pytest.mark.anyio
+async def test_seeding_with_the_key_on_reads_no_late_disclosure_on_the_newer_topic(
+    planted: PlantedCaselist,
+) -> None:
+    early = planted.source(
+        "early", OLD_WORDS, disclosures=[(OCT_27, path("Alder", "AbCd", "Aff", "Lakeside Open", 1))]
+    )
+    late = planted.source(
+        "late", OLD_WORDS, disclosures=[(NOV_10, path("Brook", "EfGh", "Neg", "Lakeside Open", 2))]
+    )
+    entry = planted.source(
+        "entry", NEW_WORDS, disclosures=[(NOV_10, path("Cedar", "IjKl", "Neg", "Harbor City Classic", 3))]
+    )
+    new = planted.source(
+        "new", NEW_WORDS, disclosures=[(NOV_10, path("Dune", "MnOp", "Aff", "Pinecrest Open", 1))]
+    )
+
+    async def sources(topic_id: str, map_: TopicMap) -> list[str]:
+        reading = await read_seed_sources(
+            store=LocalParsedStore(planted.data_dir),
+            local=local(planted.data_dir),
+            suppression=empty_suppression_list(),
+            topic=map_.topic(topic_id),
+            caselist=CASELIST,
+            through=date(2026, 11, 10),
+            topic_map=map_,
+        )
+        return sorted(source.sha256 for source in reading.sources)
+
+    assert await sources(NEW, topics(key=True)) == sorted([entry, new])
+    assert await sources(OLD, topics(key=True)) == sorted([early, late])
+    assert await sources(NEW, topics()) == sorted([late, entry, new])
+    assert await sources(OLD, topics()) == [early]

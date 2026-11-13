@@ -1248,6 +1248,11 @@ def run_summary(
         "tournament_entry_snapshots": [
             cast("JsonValue", one.model_dump(mode="json")) for one in result.trends.partial_windows
         ],
+        **(
+            {"late_disclosures": cast("JsonValue", header.late_disclosures.model_dump(mode="json"))}
+            if header.late_disclosures is not None
+            else {}
+        ),
         "school_view": {
             "schools": result.schools.schools,
             "team_codes": result.schools.teams,

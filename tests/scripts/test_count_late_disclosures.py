@@ -87,7 +87,14 @@ def test_the_count_is_printed_as_json_and_the_data_directory_is_left_as_it_was(
     }
     assert printed["topic_word_check"]["late"]["sources"]["other topic words only"] == 1
     assert printed["topic_word_check"]["other"]["sources"]["topic words only"] == 2
-    assert [one["spelling"] for one in printed["late_spellings_named"]] == ["lakesideopen"]
+    assert (printed["earlier_topic"], printed["moved_to"]) == (
+        "ld-2026-sep-oct-space-colonization",
+        "ld-2026-sep-oct-space-colonization",
+    )
+    out = json.dumps(printed).casefold()
+    for tournament in ("lakeside", "pinecrest"):
+        assert tournament not in out
+    assert not {"late_spellings_named", "late_spellings_not_named"} & set(printed)
     assert isinstance(printed["runtime_seconds"], float)
 
 
@@ -122,3 +129,37 @@ def test_a_missing_data_directory_is_refused(tmp_path: Path, capsys: pytest.Capt
     assert code == 2
     assert "no data directory" in capsys.readouterr().err
     assert not (tmp_path / "absent").exists()
+
+
+def test_without_word_options_the_check_reads_topics_yaml_check_words(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    plant(tmp_path)
+
+    code = script.main(["--data-dir", str(tmp_path), "--caselist", "hsld26", "--snapshot", "2026-11-10"])
+
+    assert code == 0
+    check = json.loads(capsys.readouterr().out)["topic_word_check"]
+    assert check["late"]["sources"]["other topic words only"] == 1
+    assert check["other"]["sources"]["topic words only"] == 2
+
+
+def test_one_word_option_without_the_other_is_refused(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    with pytest.raises(SystemExit) as refused:
+        script.main(
+            [
+                "--data-dir",
+                str(tmp_path),
+                "--caselist",
+                "hsld26",
+                "--snapshot",
+                "2026-11-10",
+                "--topic-word",
+                "x",
+            ]
+        )
+
+    assert refused.value.code == 2
+    assert "together, or neither" in capsys.readouterr().err

@@ -565,9 +565,47 @@ PM's Q3 ruling (below).
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-11-12
 
 **Notes:**
+
+Accepted for a partial merge (`scripts/task pr --partial`; `scripts/task sync` first if asked). ac2
+passes. ac1 has its 2026-11-10 count and waits for the 2026-11-17 count, on 2026-11-19 or later.
+
+* **The finding is the task's value.** 21.7% of hsld26's 2026-11-10 disclosures were late, and 99% of
+  the late files that hold either topic's words are space colonization. So the de-extinction report has
+  been counting about a fifth of the week on the wrong topic. The rule moves all 356, and the check
+  measures its error at 2 of 336.
+* **The rulings are built as given.**
+  * The rule sits behind its key, on hsld26's de-extinction range only.
+  * A newer-topic entry always wins.
+  * No snapshot before the range moves, Policy never moves, and a key with no earlier topic is refused
+    at load.
+  * The weekly line and the `--json` key show even at 0 and name no tournament.
+  * The script names no spelling.
+* **Decision 1 is a good choice:** a required `first_seen` means a caller cannot silently skip the
+  rule.
+* **The evidence is enough.** The red run on a move-nothing skeleton had 9 failures; the 35 that passed
+  are the "nothing moves" guards, and the 17 mutants prove them. The 2026-11-10 count ran read-only
+  with the copy fingerprinted unchanged.
+* **Q3, handled correctly.** The spellings are gone from this branch's history: the one commit that held
+  them was amended before any later commit and never pushed. The orphaned object stays in the local
+  store until git's normal expiry. That is the operator's to prune if he wishes, never a session's, and
+  it is not required. The one tournament name in dev's history since #837 is removed from the tree by
+  this branch, and dev's history is not rewritten for it.
+* **Deviations 1 to 6: accepted.** The PM's next batch writes Decision 1's amendment into the spec and
+  adds `debate_cli`, `packages/debate_cli/tests` and `tests/scripts` to the packages. The smoke check
+  becomes a follow-up.
+* **The operator blocks are accepted as written.**
+  * The 2026-11-17 count runs on 2026-11-19 or later: hsld26 only, read-only, the lid checked open by
+    `ioreg`, deleted after.
+  * The republish runs after the merge and the next dev deploy, never on a Wednesday. Its before and
+    after dry runs differ only by the key, and the PM reads both prints before the publish.
+* **The affected set** (385 files) goes to `ci` under agreement 10.
+* **Follow-ups, into the next PM batch:** the landscape smoke check (E32, p3); step 3 of the landscape
+  runbook printing `late_disclosures` (a PM doc edit).
+
+`scripts/task pr --partial`

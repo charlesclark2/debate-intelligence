@@ -288,9 +288,45 @@ None.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-11-14
 
 **Notes:**
+
+Accepted. ac1 and the node pass, and the Goal is `Succeeded`.
+
+* **The three items are built as ruled.**
+  * A removed marker is `HIDDEN_CUT` at every join: "fail.The", "holdnever", a marker replaced by a
+    space or an interpolation, and a deletion that takes the marker with it. It has its own detail,
+    empty ranges, and MANUAL_EDIT's exit code (Q1 to Q3).
+  * The PM's mid-word anchor card verifies with its INTERPOLATION_PRESENT warning.
+  * `" ... "` reads as the marker only with whitespace on both sides, and only for the "…" profile.
+    The renderer is unchanged.
+* **The evidence is strong.**
+  * Two red runs, each failing at assertions: 26 of 41 for the comparison and 11 for the verdict, with
+    the wiring reverted and restored by `cmp`.
+  * 25 of 25 mutants caught, including the word-join and punctuation-join mutants the ruling asked
+    for. The count is over agreement 10's cap of about 20, which is accepted because the ruling asked
+    for the extra mutants.
+  * Offsets were counted by hand, and the "lev|ee" miscount was corrected before any logic was
+    written.
+  * Not widening the card-mapping scan's allow-list (Decision 3) was the right call.
+* **Deviations 1 to 6: accepted.**
+  * **1:** the PM amends the spec's packages in the next batch: `debate_core.application`,
+    `packages/debate_core/schemas`, `debate_cli`, `packages/debate_cli/tests` and `docs/evidence`.
+  * **2 and 3:** they follow Q2 and Q3. The two t10 negation tests flip under the same rule as t07's
+    case, which is correct. Their inputs and their NEGATION_REMOVED reading are kept.
+  * **4:** going ahead is accepted. The ruling's stop was meant for a consumer that would read the new
+    code wrongly. `test_card_service.py`'s mapping is a test built to force one deliberate entry per
+    code, and production's `failures_of` already maps an unnamed code to EVIDENCE_UNVERIFIED.
+    Following t07's precedent, the enum value is added within v1 by `export_schemas.py`, with no
+    version bump.
+  * **5 and 6:** accepted. 6 follows the coach's decision of 2026-11-13.
+* **The checks.** The affected set (297 files) goes to `ci` under agreement 10, with the bounded
+  subsets reported green. If `scripts/task pr` asks to sync, `scripts/task sync`.
+* **Follow-up:** an installed-build smoke check that a .docx body with a removed marker reports
+  `HIDDEN_CUT` (agreement 5) goes on the PM's V1.x list, as a p3 under the December rule.
+
+`scripts/task pr`

@@ -479,3 +479,13 @@ Steps 4 to 6 follow the docx-9 run image's full re-parse: the "after" copy's cou
 `~/t32-before` was deleted on 2026-11-06 under data-use policy 1.18, its counts kept in
 `~/t32-before-counts.json`, which is what step 5 compares the after copy's counts with. Step 6 deletes
 the after copy alone.
+
+## Operator records (recorded by the PM, 2026-11-12)
+
+Added by the PM. Nothing above is changed, and this section is not a review.
+
+| Criterion | Was | Now | Record |
+|---|---|---|---|
+| ac2, fourth part: the operator's re-parse written out | NOT RUN | PASS | 2026-11-12, `scripts/count_tags_by_rule.py` from the main clone at dev over v1-e39-t18's restored copy of dev's run state after the 2026-11-11 run (parser `2026.11.03-docx-9`, which carries this task's rule), against `~/t32-before-counts.json` (2026-11-05, docx-7). `tagged_by_unbolded_tail` after: hsld26 23, hspf26 12, hspolicy26 10 (step 2's taken: 23, 8, 10; hspf26 higher by the weeks between). `no_tag` per card: hsld26 1.81% to 1.71%, hspf26 5.17% to 4.98%, hspolicy26 0.97% to 0.99%; `tagged_by_bold_tag` 185 to 196, 1,003 to 1,087, 44 to 45. The after copy holds about 3,000 more sources (a week's disclosures), so the counts compare per card, not one for one. The copy was deleted by v1-e39-t18 under policy 1.18; the two counts files hold counts only |
+
+Every criterion passes, so the Goal is `Succeeded`.

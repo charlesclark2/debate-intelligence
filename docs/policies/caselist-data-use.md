@@ -3,12 +3,12 @@
 
 | | |
 |---|---|
-| Policy version | 1.23 |
-| Status | **Approved**, version 1.23, on the merge of its pull request (approved by Charlie 2026-11-05). See [Approval](#approval). |
+| Policy version | 1.24 |
+| Status | **Approved**, version 1.24, on the merge of its pull request (approved by Charlie 2026-11-12). See [Approval](#approval). |
 | Owner | Charlie Clark (product owner and head coach) |
 | Written by | v1-e30-t01-caselist-data-use-policy implementation session, 2026-09-19 |
 | Applies to | Everything the platform collects from OpenCaselist and OpenEv, and everything derived from it, in every environment |
-| Approved by | Charlie Clark, product owner and head coach, 2026-09-19 (versions 1.0 and 1.1), 2026-10-01 (versions 1.3 and 1.4), 2026-10-10 (versions 1.5 and 1.6), 2026-10-11 (version 1.7), 2026-10-13 (version 1.8), 2026-10-15 (version 1.9), 2026-10-19 (version 1.10), 2026-10-22 (versions 1.11 and 1.12) and 2026-10-24 (versions 1.13, 1.14 and 1.15) and 2026-10-25 (versions 1.16, 1.17 and 1.18) and 2026-10-30 (version 1.19) and 2026-11-01 (versions 1.20 and 1.21) and 2026-11-02 (version 1.22) and 2026-11-05 (version 1.23) |
+| Approved by | Charlie Clark, product owner and head coach, 2026-09-19 (versions 1.0 and 1.1), 2026-10-01 (versions 1.3 and 1.4), 2026-10-10 (versions 1.5 and 1.6), 2026-10-11 (version 1.7), 2026-10-13 (version 1.8), 2026-10-15 (version 1.9), 2026-10-19 (version 1.10), 2026-10-22 (versions 1.11 and 1.12) and 2026-10-24 (versions 1.13, 1.14 and 1.15) and 2026-10-25 (versions 1.16, 1.17 and 1.18) and 2026-10-30 (version 1.19) and 2026-11-01 (versions 1.20 and 1.21) and 2026-11-02 (version 1.22) and 2026-11-05 (version 1.23) and 2026-11-12 (version 1.24) |
 | Next review | Start of the 2027-28 season, or sooner if a source's terms change |
 
 This is the policy that governs how the Debate Intelligence Platform collects, stores, uses and
@@ -371,12 +371,14 @@ evidence-ethics rule first and a traceability rule second: it is what makes
    its provenance line is shown below the cite:
 
    ```
-   [Disclosed: hsld26 2026-09-15 — Maple Grove QX, Aff vs. Riverbend Invitational Round 4]
+   [Disclosed: hsld26 (2026-27) 2026-09-15 — Maple Grove QX, Aff vs. Riverbend Invitational Round 4]
    [OpenEv: Cascade Institute 2026 — Policy, Climate Adv CP]
    ```
 
-   Disclosed cards name caselist slug, snapshot date, school, team code, side, tournament and
-   round. Camp cards name camp, year, event and file title. A built file, a copied card and a
+   Disclosed cards name caselist slug and its season, snapshot date, school, team code, side,
+   tournament and round; the season is written in words after the slug, from the year its season
+   starts (a slug's two digits), as in `[Disclosed: hspolicy25 (2025-26) 2026-03-02 — Maple Grove QX,
+   Aff vs. Riverbend Invitational Round 4]` (version 1.24). Camp cards name camp, year, event and file title. A built file, a copied card and a
    downloaded card carry **no** provenance line: the team's own files are themselves disclosed on
    the caselist, and republishing other schools' names and team codes in them adds nothing the
    team needs (Charlie, 2026-10-22). The provenance travels in the sidecar (rule 3) and, for a
@@ -692,7 +694,7 @@ before the thing it gates.
 
 ## Approval
 
-**Version 1.23 of this policy is approved.** Publishing caselist and OpenEv imports, loading the
+**Version 1.24 of this policy is approved.** Publishing caselist and OpenEv imports, loading the
 real corpus into dev, model classification over real disclosed text, and automated download (E34)
 are unblocked, each still subject to its own conditions in [Gates](#gates). Version 1.1 recorded
 the maintainer's confirmation of scheduled API downloads and the 10-per-minute rate limit.
@@ -937,16 +939,24 @@ the purge and the season window reach the view's new file as they reach the rest
 (`v1-e32-t54`). It loosens a rule, so it needs the coach's approval: Charlie approved version 1.23 on
 2026-11-05, and merging its pull request records the approval below.
 
+Version 1.24 changes [Attribution](#attribution) rule 2, by the coach's decision of 2026-11-12: a
+disclosed card's provenance line names its season in words after the caselist slug, from the year
+the season starts, so a card from an earlier season's backfile (`v1-e39-t18`) says which season it
+came from, and a current card reads the same way. It adds no field about a person, school or team,
+and changes nothing about where the line is shown or who sees it. Charlie approved version 1.24 on
+2026-11-12, and merging its pull request records the approval below. Until the change ships, the
+pilot's lines are unchanged.
+
 The standing rule for every future version: until this table records an approval of that version,
 nothing this policy governs may happen under it.
 
 | Field | Value |
 |---|---|
-| Policy version | 1.23 (2026-11-05); 1.22 (2026-11-02); 1.21 and 1.20 (2026-11-01); 1.19 (2026-10-30); 1.18, 1.17 and 1.16 (2026-10-25); 1.15, 1.14 and 1.13 (2026-10-24); 1.12 and 1.11 (2026-10-22); 1.10 (2026-10-19); 1.9 (2026-10-15); 1.8 (2026-10-13); 1.7 (2026-10-11); 1.6 and 1.5 (2026-10-10); 1.4 and 1.3 approved 2026-10-01, 1.3 including version 1.2's correction to rule 3; 1.0 and 1.1 approved 2026-09-19 |
+| Policy version | 1.24 (2026-11-12); 1.23 (2026-11-05); 1.22 (2026-11-02); 1.21 and 1.20 (2026-11-01); 1.19 (2026-10-30); 1.18, 1.17 and 1.16 (2026-10-25); 1.15, 1.14 and 1.13 (2026-10-24); 1.12 and 1.11 (2026-10-22); 1.10 (2026-10-19); 1.9 (2026-10-15); 1.8 (2026-10-13); 1.7 (2026-10-11); 1.6 and 1.5 (2026-10-10); 1.4 and 1.3 approved 2026-10-01, 1.3 including version 1.2's correction to rule 3; 1.0 and 1.1 approved 2026-09-19 |
 | Approved by | Charlie Clark |
 | Role | Product owner and head coach |
-| Approval date | 2026-11-05 (version 1.23); 2026-11-02 (version 1.22); 2026-11-01 (versions 1.20 and 1.21); 2026-10-30 (version 1.19); 2026-10-25 (versions 1.18, 1.17 and 1.16; 1.15, 1.14 and 1.13: 2026-10-24; 1.12 and 1.11: 2026-10-22; 1.10: 2026-10-19; 1.9: 2026-10-15; 1.8: 2026-10-13; 1.7: 2026-10-11; 1.5 and 1.6: 2026-10-10; 1.3 and 1.4: 2026-10-01; 1.0 and 1.1: 2026-09-19) |
-| Scope of approval | Sections [Scope](#scope) through [Review and change control](#review-and-change-control) of version 1.23, including the [clause register](#clause-register) read 2026-09-19 and the [community disclosure norms](#community-disclosure-norms), both confirmed by Charlie |
+| Approval date | 2026-11-12 (version 1.24); 2026-11-05 (version 1.23); 2026-11-02 (version 1.22); 2026-11-01 (versions 1.20 and 1.21); 2026-10-30 (version 1.19); 2026-10-25 (versions 1.18, 1.17 and 1.16; 1.15, 1.14 and 1.13: 2026-10-24; 1.12 and 1.11: 2026-10-22; 1.10: 2026-10-19; 1.9: 2026-10-15; 1.8: 2026-10-13; 1.7: 2026-10-11; 1.5 and 1.6: 2026-10-10; 1.3 and 1.4: 2026-10-01; 1.0 and 1.1: 2026-09-19) |
+| Scope of approval | Sections [Scope](#scope) through [Review and change control](#review-and-change-control) of version 1.24, including the [clause register](#clause-register) read 2026-09-19 and the [community disclosure norms](#community-disclosure-norms), both confirmed by Charlie |
 | Open questions resolved at approval | **5** — removal contact address is `ctcb57@gmail.com`. **7** — two-season retention stands. **8** — resolved by a PM spec change to v1-e29-t03 / v1-e30-t07. **2** (version 1.1) — maintainer confirmed scheduled API downloads at 10 file downloads per minute. **6** (version 1.10) — the school's activities director and IT approved the tool for students; no district review for the E39 pilot. **4** (version 1.20) — zero retention and no invocation logging recorded, by the coach's decision without a written no-training term |
 | Open questions accepted as known gaps | **1** — OpenCaselist privacy page unread. **3** — OpenEv distribution and per-camp terms unread |
 | Open questions left open | **6** — for the V2 tub only, if its scope goes beyond the pilot's |

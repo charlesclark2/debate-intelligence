@@ -48,7 +48,7 @@ spec:
         not fall on the pr-subset; `parser_version` is bumped with the operator's re-parse
         written out.
 status:
-  phase: InProgress
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

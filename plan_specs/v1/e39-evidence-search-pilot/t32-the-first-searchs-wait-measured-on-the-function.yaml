@@ -1,0 +1,73 @@
+# TASK v1-e39-t32-the-first-searchs-wait-measured-on-the-function - The first search's wait after a cold start is measured on the function itself
+# Epic: E39 — Team Evidence Search (Student Pilot) | Release: v1.7 (Team evidence search pilot) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e39-t32-the-first-searchs-wait-measured-on-the-function
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.7
+    debate/epic: v1-e39-evidence-search-pilot
+  annotations:
+    debate/title: "The first search's wait after a cold start is measured on the function itself"
+spec:
+  # Filed by the PM, 2026-11-12, from v1-e39-t18's follow-up 1 (the PM's review, 2026-11-12).
+  description: >-
+    v1-e39-t18 measured today's index loading in 6.96 s in the function's image on this Mac at
+    1.16 CPUs, at the top of ADR-0019 (c) 7's 6 to 8 s band, and the CPU part (gunzip and two
+    sha256s), not the download, is the long one. Lambda's arm64 cores may be slower.
+    v1-e39-t04's REPORT lines give init only. Propose and run one measurement of the first
+    search's wait after a cold start on dev's function (operator-run, counts and times only),
+    against (c) 7, and say whether the load needs work (for example one hash, or a cheaper
+    decompress) before the index grows further. Stop for the PM's ruling before any change.
+  priority: 3
+  constraints:
+    packages: [debate_core.application, debate_api, packages/debate_api/tests, scripts, docs/runbooks]
+    forbidden:
+      - A card, school or team in what is printed
+      - A deploy by a session
+  context:
+    - kind: TaskRef
+      name: v1-e39-t18-backfiles-in-the-pilot-index
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        The first search's wait on dev's function is measured and recorded against ADR-0019
+        (c) 7, and what follows is ruled by the PM.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e39-t32-the-first-searchs-wait-measured-on-the-function-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.7
+    debate/epic: v1-e39-evidence-search-pilot
+spec:
+  description: >-
+    The first search's wait after a cold start is measured on the function itself.
+  goalRef:
+    name: v1-e39-t32-the-first-searchs-wait-measured-on-the-function
+  graph:
+    nodes:
+      - id: the-first-searchs-wait-measured-on-the-f
+        kind: Task
+        name: First-search wait
+        description: >-
+          The first search's wait after a cold start is measured on the function itself.
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: test_passes
+            name: First-search wait tests pass
+            command: uv
+            args: [run, pytest, packages/debate_api/tests, -k, cold or first_search]
+status:
+  phase: Pending

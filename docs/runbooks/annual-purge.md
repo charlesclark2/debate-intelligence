@@ -615,6 +615,11 @@ names for that year. It has no command either, and goes to the PM the same way.
 removal runbook's P3 reads it, and judged like step 3. The weekly run indexes its own caselists only,
 so an index holding a caselist step 3 would not keep is a finding. Reads only.
 
+**The backfile seasons** (PM note 2026-11-12, `v1-e39-t18`). A purged caselist that is also an
+offered earlier season has an index and a pointer of its own (`reports/tub/search/seasons/<season>.json`).
+Retire it by the evidence search runbook's "Backfile seasons": take it out of `backfile_seasons`,
+delete its pointer, then the removal runbook's P4 deletes its index's versions.
+
 **Operator command** (expected runtime seconds; reads only)
 Where: your Mac, in the purge window, after step 3
 ```bash

@@ -2191,10 +2191,18 @@ nothing, so a tail of two unbolded runs with a space between them is one stretch
 
 ### The re-parse to `docx-8` (operator-run, after the merge)
 
-Not run yet. The cloud run's first run on an image carrying `2026.11.03-docx-8` parses every caselist
-in full (`v1-e40-t08`). Its counts, from a copy of the dev bucket restored before that run and one
-restored after it (`scripts/count_tags_by_rule.py`), are recorded here by whoever closes the task;
-the steps are in `docs/session-reports/v1-e31-t32-bold-in-part-tags.md`, Operator follow-ups.
+Recorded by the PM, 2026-11-12. The rule shipped in `2026.11.03-docx-9`; the run of 2026-11-11 parsed
+every caselist in full at it. `scripts/count_tags_by_rule.py` over a copy restored before (2026-11-05,
+docx-7) and one after (2026-11-12, docx-9):
+
+| Caselist | Sources | Cards | `no_tag` | `tagged_by_bold_tag` | `tagged_by_unbolded_tail` |
+|---|---|---|---|---|---|
+| hsld26 | 6,889 → 8,089 | 105,947 → 125,343 | 1,916 → 2,146 | 185 → 196 | 0 → 23 |
+| hspf26 | 4,143 → 4,681 | 67,217 → 75,421 | 3,478 → 3,751 | 1,003 → 1,087 | 0 → 12 |
+| hspolicy26 | 5,132 → 5,618 | 168,732 → 184,074 | 1,638 → 1,829 | 44 → 45 | 0 → 10 |
+
+The after copy holds a week's more disclosures, so `no_tag` compares per card (1.81% to 1.71%, 5.17%
+to 4.98%, 0.97% to 0.99%). The new rule took what step 2 predicted (23, 8, 10), hspf26 a few more.
 
 ## In-round markers and the short lines between body paragraphs (`v1-e31-t23`)
 

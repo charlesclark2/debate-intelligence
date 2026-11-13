@@ -1,0 +1,76 @@
+# TASK v1-e41-t29-a-pull-requests-ci-runs-the-slow-tests-it-reaches - A pull request's ci runs the slow tests its affected set reaches
+# Epic: E41 — Delivery Tooling Upkeep | Release: v1.8 (Weekly caselist run in the cloud) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e41-t29-a-pull-requests-ci-runs-the-slow-tests-it-reaches
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.8
+    debate/epic: v1-e41-delivery-tooling-upkeep
+  annotations:
+    debate/title: "A pull request's ci runs the slow tests its affected set reaches"
+spec:
+  # Filed by the PM, 2026-11-12, from v1-e08-t26's follow-ups (the PM's review, 2026-11-12).
+  description: >-
+    v1-e08-t24's ranking change broke two slow end-to-end tests that no pull request ran: the PR
+    ci runs 'not slow', and only validate-dev on dev runs the slow tier, so dev was red for a
+    day and protect-main blocked promotion (v1-e08-t26 fixed the tests). Propose how a PR's ci
+    runs the slow test files its affected set reaches (the e2e files take seconds; the
+    planted-break and browser files are heavy): which files, the measured cost per file, and a
+    bound on the PR's added time. Also: a session's 'run the slow tier yourself' brief cannot
+    finish test_affected_tests_planted_breaks.py's case 12 inside the 115 s bound (about 123 s
+    on the operator's Mac), so say what the bound or a hand-off should be; and add to the
+    working agreements the note that a ranking change which moves a fixture search greps
+    tests/integration for the same query. Stop for the PM's ruling before code.
+  priority: 2
+  constraints:
+    packages: [.github/workflows, scripts, tests/scripts, docs/process]
+    forbidden:
+      - A test removed from validate-dev's slow tier
+      - A live call in a test
+  context:
+    - kind: TaskRef
+      name: v1-e08-t24-the-ranking-keeps-a-multi-query-searchs-relevant-results-up
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        The proposal is ruled on, and a PR whose affected set reaches a slow test file runs
+        it in ci, as ruled, shown by a planted break that only a slow test catches.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e41-t29-a-pull-requests-ci-runs-the-slow-tests-it-reaches-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.8
+    debate/epic: v1-e41-delivery-tooling-upkeep
+spec:
+  description: >-
+    A pull request's ci runs the slow tests its affected set reaches.
+  goalRef:
+    name: v1-e41-t29-a-pull-requests-ci-runs-the-slow-tests-it-reaches
+  graph:
+    nodes:
+      - id: a-pull-requests-ci-runs-the-slow-tests-i
+        kind: Task
+        name: Slow tests in PR ci
+        description: >-
+          A pull request's ci runs the slow tests its affected set reaches.
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Slow tests in PR ci tests pass
+            command: uv
+            args: [run, pytest, tests/scripts, -k, slow and affected]
+status:
+  phase: Pending

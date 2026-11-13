@@ -199,6 +199,10 @@ async def test_a_spelling_seen_earlier_only_in_a_suppressed_file_is_not_late(
     planted.source(
         "later", OLD_WORDS, disclosures=[(NOV_10, path("Brook", "EfGh", "Neg", "Lakeside Open", 2))]
     )
+    planted.source("kept", OLD_WORDS, disclosures=[(OCT_27, path("Cedar", "IjKl", "Aff", "Quarry Open", 1))])
+    planted.source(
+        "kept-late", OLD_WORDS, disclosures=[(NOV_10, path("Dune", "MnOp", "Neg", "Quarry Open", 2))]
+    )
     entry = SuppressionEntry(
         action=SuppressionAction.SUPPRESS,
         sha256=removed,
@@ -210,7 +214,7 @@ async def test_a_spelling_seen_earlier_only_in_a_suppressed_file_is_not_late(
 
     counted = await count(planted, suppression=RecordedSuppressionList(record))
 
-    assert counted.late_disclosures == 0
+    assert (counted.disclosures, counted.late_disclosures, counted.late_by_first_seen) == (2, 1, {OCT_27: 1})
 
 
 @pytest.mark.anyio
@@ -296,6 +300,15 @@ async def test_a_spelling_is_named_only_when_two_schools_use_it_and_it_holds_no_
     planted.source(
         "host-late", OLD_WORDS, disclosures=[(NOV_10, path("Dune", "MnOp", "Neg", "BirchmoorClassic", 2))]
     )
+    planted.source(
+        "code-1", OLD_WORDS, disclosures=[(OCT_27, path("Elm", "Xy", "Aff", "Xy Invitational", 1))]
+    )
+    planted.source(
+        "code-2", OLD_WORDS, disclosures=[(OCT_27, path("Fern", "QrSt", "Aff", "Xy Invitational", 1))]
+    )
+    planted.source(
+        "code-late", OLD_WORDS, disclosures=[(NOV_10, path("Fern", "QrSt", "Neg", "Xy Invitational", 2))]
+    )
 
     counted = await count(planted)
 
@@ -304,12 +317,12 @@ async def test_a_spelling_is_named_only_when_two_schools_use_it_and_it_holds_no_
     ] == [("lakesideopen", 2, 1, date(2026, 10, 27))]
     assert counted.named_spellings[0].word_classes[WordClass.OTHER_ONLY] == 1
     assert counted.one_school_spellings == (1, 1)
-    assert counted.school_word_spellings == (1, 1)
-    assert counted.late_disclosures == 3
+    assert counted.school_word_spellings == (2, 2)
+    assert counted.late_disclosures == 4
 
 
 @pytest.mark.anyio
-async def test_a_disclosure_another_topics_entry_takes_is_off_the_topic_and_not_late(
+async def test_a_disclosure_another_topics_entry_takes_is_off_the_topic_but_in_the_shares_whole(
     planted: PlantedCaselist,
 ) -> None:
     planted.source(
@@ -318,6 +331,8 @@ async def test_a_disclosure_another_topics_entry_takes_is_off_the_topic_and_not_
     planted.source(
         "late", OLD_WORDS, disclosures=[(NOV_10, path("Brook", "EfGh", "Neg", "Lakeside Open", 2))]
     )
+    planted.source("seen", OLD_WORDS, disclosures=[(OCT_27, path("Cedar", "IjKl", "Aff", "Quarry Open", 1))])
+    planted.source("taken", OLD_WORDS, disclosures=[(NOV_10, path("Dune", "MnOp", "Neg", "Quarry Open", 2))])
     with_entry = topics().model_dump(by_alias=True)
     with_entry["topics"][0]["tournaments"] = [
         {
@@ -331,8 +346,8 @@ async def test_a_disclosure_another_topics_entry_takes_is_off_the_topic_and_not_
 
     counted = await count(planted, topic_map=TopicMap.model_validate(with_entry))
 
-    assert (counted.disclosures, counted.off_topic, counted.late_disclosures) == (1, 1, 0)
-    assert counted.late_share == 0.0
+    assert (counted.disclosures, counted.off_topic, counted.late_disclosures) == (2, 1, 1)
+    assert counted.late_share == 0.5
 
 
 @pytest.mark.anyio

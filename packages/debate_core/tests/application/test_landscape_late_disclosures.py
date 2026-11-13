@@ -16,6 +16,7 @@ from pathlib import Path
 
 import pytest
 
+from debate_core.application import landscape_late_disclosures as late_disclosures
 from debate_core.application.caselist.evidence_listing import LocalEvidence
 from debate_core.application.caselist.suppression import RecordedSuppressionList
 from debate_core.application.landscape_late_disclosures import (
@@ -27,6 +28,7 @@ from debate_core.application.landscape_late_disclosures import (
 )
 from debate_core.application.ports.parsed_store import SourceOutcome
 from debate_core.application.ports.suppression import ReasonCode, SuppressionAction, SuppressionEntry
+from debate_core.domain.caselist import Disclosure
 from debate_core.domain.landscape import TopicMap
 from debate_core.integrations.local import BLOB_DIRECTORY, FsEvidenceObjectStore
 from debate_core.integrations.local.parsed_store import LocalParsedStore
@@ -380,6 +382,26 @@ async def test_a_version_the_store_lacks_is_refused(planted: PlantedCaselist) ->
 
     with pytest.raises(LateDisclosuresCannotBeCounted, match="no version"):
         await count(planted, version="2026.01.01-docx-1")
+
+
+@pytest.mark.anyio
+async def test_a_path_that_is_not_a_disclosure_is_refused_without_its_school_or_code(
+    planted: PlantedCaselist, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    planted.source(
+        "new", NEW_WORDS, disclosures=[(NOV_10, path("Quillfeather", "ZqZq", "Aff", "Pinecrest Open", 1))]
+    )
+
+    def refuse(**fields: object) -> object:
+        return Disclosure.model_validate({**fields, "team_code": ""})
+
+    monkeypatch.setattr(late_disclosures, "Disclosure", refuse)
+    with pytest.raises(LateDisclosuresCannotBeCounted, match="could not be read") as refused:
+        await count(planted)
+
+    assert "quillfeather" not in str(refused.value).casefold()
+    assert "zqzq" not in str(refused.value).casefold()
+    assert refused.value.__cause__ is None and refused.value.__suppress_context__
 
 
 def test_the_check_needs_a_word_on_each_side() -> None:

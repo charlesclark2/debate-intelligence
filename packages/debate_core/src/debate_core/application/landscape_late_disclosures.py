@@ -33,6 +33,8 @@ from datetime import date
 from enum import StrEnum
 from typing import Final
 
+from pydantic import ValidationError
+
 from debate_core.application.caselist.evidence_listing import LocalEvidence
 from debate_core.application.caselist.parse_sources import (
     Disclosed,
@@ -339,13 +341,8 @@ def _reduced(text: str) -> str:
 def _read(caselist: str, source: EnumeratedSource, disclosed: Disclosed, topic: Topic) -> _Read:
     parsed = parse_disclosure_path(disclosed.path, event=topic.event)
     school = parsed.school.casefold() if parsed.school != UNKNOWN_SCHOOL else ""
-    return _Read(
-        sha256=source.sha256,
-        when=disclosed.provenance_date,
-        tournament=parsed.tournament,
-        key=tournament_key(parsed.tournament),
-        school=school,
-        disclosure=Disclosure(
+    try:
+        disclosure = Disclosure(
             source_sha256=source.sha256,
             caselist=caselist,
             snapshot=disclosed.provenance_date,
@@ -357,7 +354,19 @@ def _read(caselist: str, source: EnumeratedSource, disclosed: Disclosed, topic: 
             round_label=parsed.round_label,
             source_path=disclosed.path,
             parse_warnings=parsed.warnings,
-        ),
+        )
+    except ValidationError:
+        # The error's text quotes the path's school and team code, which go nowhere.
+        raise LateDisclosuresCannotBeCounted(
+            f"a disclosure of {caselist}'s snapshot of {disclosed.snapshot} could not be read as one"
+        ) from None
+    return _Read(
+        sha256=source.sha256,
+        when=disclosed.provenance_date,
+        tournament=parsed.tournament,
+        key=tournament_key(parsed.tournament),
+        school=school,
+        disclosure=disclosure,
     )
 
 

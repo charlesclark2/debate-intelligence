@@ -86,7 +86,9 @@ bad routing file does not stop plain `doctor`, on purpose. It reads one file and
 whether its key or the contact email is set and which source set it, or what a search does without
 it ("no contact email: Crossref's public pool", "no GovInfo key: GovInfo not asked"). A blank value
 counts as missing, as the adapters treat it. It never fails on a row, and it never prints a value,
-only a source label. The rows are
+only a source label. When Semantic Scholar's HTTP opt-in is on and Semantic Scholar is built, one more
+row, `Warning`, says "Semantic Scholar asked over HTTP: the key is sent unencrypted", and the JSON
+carries it under `asked_over_http` (v1-e07-t20). The rows are
 :func:`~debate_core.application.provider_credentials.provider_credential_report`'s; this module only
 renders them.
 
@@ -707,7 +709,12 @@ def _provider_rows(report: Mapping[str, JsonValue]) -> list[list[str]]:
     enabled = cast("list[Mapping[str, JsonValue]]", found["enabled"])
     if not enabled:
         return [*rows, ["Providers", "none enabled (providers.enabled)"]]
-    return rows + [[str(one["label"]), str(one["summary"])] for one in enabled]
+    over_http = cast("list[Mapping[str, JsonValue]]", found.get("asked_over_http") or [])
+    return [
+        *rows,
+        *([str(one["label"]), str(one["summary"])] for one in enabled),
+        *(["Warning", str(one["warning"])] for one in over_http),
+    ]
 
 
 def _as_text(value: JsonValue) -> str:

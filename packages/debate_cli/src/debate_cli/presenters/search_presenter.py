@@ -21,7 +21,11 @@ search's status. Every provider is named whatever happened to it, so a partial r
   api.data.gov/signup to ask GovInfo`, a provider missing only configuration, which the search left
   out of its status (`v1-e07-t15`, `v1-e07-t23`). The outcome names it (`uncounted`); this module only
   says so, in the footer and in the JSON's `reasons`. Named with `--providers` it counts, and its line
-  has the same reason and cure without `not counted as partial`.
+  has the same reason and cure without `not counted as partial`;
+* `Semantic Scholar asked over HTTP: the key is sent unencrypted`, on a line of its own after the
+  provider's, when the person's `providers.semantic_scholar_insecure_http` is on and the search asked
+  Semantic Scholar (`v1-e07-t20`). The JSON's `asked_over_http` carries the same, provider and sentence;
+  it is an empty list otherwise.
 
 ## When no provider was asked
 
@@ -55,13 +59,14 @@ from __future__ import annotations
 
 from collections.abc import Collection, Sequence
 from dataclasses import dataclass
-from typing import Final
+from typing import Final, cast
 
 from debate_cli.exit_codes import ExitCode
 from debate_cli.output import CliOutput, CommandFailure, JsonValue, TableSpec
 from debate_cli.presenters.search_narrowing import SearchCommandLine, narrowing_json, narrowing_lines
 from debate_core.application.federated_ranking import RankedCandidate
 from debate_core.application.federated_search_types import SearchOutcome
+from debate_core.application.provider_credentials import OverHttpNotice
 from debate_core.application.search_narrowing import narrowing_for
 from debate_core.domain import AccessStatus, Article, SearchStatus
 from debate_core.domain.discovery import CandidateResult, DatePrecision, ProviderOutcome, ProviderStatus
@@ -78,6 +83,7 @@ __all__ = [
     "footer_lines",
     "no_provider_asked_message",
     "outcome_failure",
+    "over_http_json",
     "provider_calls_json",
     "provider_summaries",
     "results_table",
@@ -207,15 +213,36 @@ def provider_summaries(
 
 def footer_lines(outcome: SearchOutcome) -> list[str]:
     """The provider status footer: a heading naming the status, then one line per provider."""
-    return status_footer_lines(outcome.status, outcome.provider_statuses, uncounted=outcome.uncounted)
+    return status_footer_lines(
+        outcome.status,
+        outcome.provider_statuses,
+        uncounted=outcome.uncounted,
+        asked_over_http=outcome.asked_over_http,
+    )
 
 
 def status_footer_lines(
-    status: SearchStatus, statuses: Sequence[ProviderStatus], *, uncounted: Collection[str] = ()
+    status: SearchStatus,
+    statuses: Sequence[ProviderStatus],
+    *,
+    uncounted: Collection[str] = (),
+    asked_over_http: Collection[str] = (),
 ) -> list[str]:
-    """The footer over any calls: one search's, or every search of a daily digest (v1-e08-t07)."""
-    summaries = provider_summaries(statuses, uncounted=uncounted)
-    return [_HEADINGS[status], *(f"  {summary.line()}" for summary in summaries)]
+    """The footer over any calls: one search's, or every search of a daily digest (v1-e08-t07).
+
+    A provider in `asked_over_http` has its warning on the line after its own (v1-e07-t20).
+    """
+    lines = [_HEADINGS[status]]
+    for summary in provider_summaries(statuses, uncounted=uncounted):
+        lines.append(f"  {summary.line()}")
+        if summary.provider in asked_over_http:
+            lines.append(f"  {OverHttpNotice.of(summary.provider).warning}")
+    return lines
+
+
+def over_http_json(asked_over_http: Collection[str]) -> list[JsonValue]:
+    """`asked_over_http` as the JSON gives it: each provider with its warning (v1-e07-t20)."""
+    return [cast(JsonValue, OverHttpNotice.of(name).as_json()) for name in asked_over_http]
 
 
 def provider_calls_json(statuses: Sequence[ProviderStatus]) -> list[JsonValue]:
@@ -336,6 +363,7 @@ def search_payload(
         ],
         "provider_calls": provider_calls_json(outcome.provider_statuses),
         "provider_health": [health.model_dump(mode="json") for health in outcome.provider_health],
+        "asked_over_http": over_http_json(outcome.asked_over_http),
     }
 
 

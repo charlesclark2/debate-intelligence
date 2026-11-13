@@ -275,6 +275,7 @@ from debate_core.application.ports.evidence_store import EvidenceObjectStore, Ob
 from debate_core.application.ports.model_router import ModelRouter, RoutingConfigError
 from debate_core.application.ports.notifier import Notifier, NullNotifier
 from debate_core.application.ports.suppression import SuppressionList
+from debate_core.application.provider_credentials import providers_asked_over_http
 from debate_core.application.query_expansion import (
     ARGUMENT_TAXONOMY_PATH,
     QueryExpansionStage,
@@ -1763,6 +1764,7 @@ class ServiceContainer:
             ids=ids,
             deadline_seconds=settings.providers.search_deadline_seconds,
             topics=self._search_topics(),
+            asked_over_http=providers_asked_over_http(settings.providers),
             expand=expand or QueryExpansionStage(taxonomy, clock=clock, guard=guard),
             normalize=DedupeStage(),
             rank=StagesInOrder(

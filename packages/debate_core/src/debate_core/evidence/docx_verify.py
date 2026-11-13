@@ -55,6 +55,14 @@ is read the same way. A hunk that is a manual edit does not report a whole marke
 the card has a cut: that marker is the card's own, and the edit's body range is what the student
 changed.
 
+The card's evidence is tokenized with its omission offsets as token boundaries (`v1-e06-t16`).
+``evidence_text`` joins the kept pieces with nothing between them, so where a piece ends in a word and
+the next starts with one, the card holds one run of letters ("holdflood") where the body shows two
+words either side of the marker ("hold … flood"). Split at the cut, they are the two words the source
+wrote, and the untouched body only adds a marker at a cut. The body is tokenized as Word shows it, so
+a body that takes the marker out and shows "holdflood" has changed two words into one the source
+never wrote, a manual edit, as a deleted space between two words is.
+
 Formatting is never read: underlining, highlighting and sizes are the student's to change, so a markup
 change is not a difference at all. Every other hunk is a :class:`ManualEdit`, with the card range it
 replaced and the body range it holds. A body that keeps none of the card's words is one too: E03
@@ -255,7 +263,7 @@ def body_evidence(card: Card, body_card: BodyCard) -> str:
 
 def compare_body(card: Card, body_text: str, omission_marker: str) -> BodyComparison:
     """Classify every difference between ``card.evidence_text`` and ``body_text`` by the edit policy."""
-    evidence = _tokens(card.evidence_text)
+    evidence = _tokens(card.evidence_text, omission_offsets(card))
     body = _tokens(body_text)
     marker = [token.text for token in _tokens(omission_marker)]
     evidence_units, evidence_bounds = _units(evidence, marker)
@@ -318,8 +326,18 @@ class _Token:
         return len(self.text) >= 2 and self.text[0] == "[" and self.text[-1] == "]"
 
 
-def _tokens(text: str) -> list[_Token]:
-    return [_Token(match.group(), match.start()) for match in _TOKEN.finditer(text)]
+def _tokens(text: str, boundaries: Sequence[int] = ()) -> list[_Token]:
+    """``text`` as tokens, none of which crosses one of ``boundaries`` (offsets into ``text``).
+
+    The card's evidence is tokenized with its omission offsets as boundaries, so the pieces either side
+    of a cut are never one token (`v1-e06-t16`).
+    """
+    edges = [0, *sorted(offset for offset in set(boundaries) if 0 < offset < len(text)), len(text)]
+    return [
+        _Token(match.group(), match.start())
+        for start, end in zip(edges, edges[1:], strict=False)
+        for match in _TOKEN.finditer(text, start, end)
+    ]
 
 
 @dataclass(frozen=True, slots=True)

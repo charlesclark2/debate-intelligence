@@ -1156,10 +1156,16 @@ def test_join_an_untouched_export_whose_cut_joins_two_words_verifies(
     ("change", "evidence_range", "body_range"),
     [
         pytest.param(
-            replace_in_evidence("Engineers", "Engineer"), (0, 9), (0, 8), id="letters-altered-right-before-join-1"
+            replace_in_evidence("Engineers", "Engineer"),
+            (0, 9),
+            (0, 8),
+            id="letters-altered-right-before-join-1",
         ),
         pytest.param(
-            replace_in_evidence("levee ", "levees "), (9, 14), (12, 18), id="letters-altered-right-after-join-1"
+            replace_in_evidence("levee ", "levees "),
+            (9, 14),
+            (12, 18),
+            id="letters-altered-right-after-join-1",
         ),
         pytest.param(
             replace_in_evidence("hold", "holds"), (24, 28), (27, 32), id="letters-altered-right-before-join-2"
@@ -1168,10 +1174,16 @@ def test_join_an_untouched_export_whose_cut_joins_two_words_verifies(
             replace_in_evidence("never", "ever"), (28, 33), (34, 38), id="letters-altered-right-after-join-2"
         ),
         pytest.param(
-            replace_in_evidence("season", "seasons"), (51, 57), (60, 67), id="letters-altered-right-after-join-3"
+            replace_in_evidence("season", "seasons"),
+            (51, 57),
+            (60, 67),
+            id="letters-altered-right-after-join-3",
         ),
         pytest.param(
-            replace_in_evidence("never", "now never"), (28, 28), (34, 38), id="a-word-added-right-after-join-2"
+            replace_in_evidence("never", "now never"),
+            (28, 28),
+            (34, 38),
+            id="a-word-added-right-after-join-2",
         ),
         pytest.param(
             replace_in_evidence("hold", "hold now"), (28, 28), (31, 35), id="a-word-added-right-before-join-2"

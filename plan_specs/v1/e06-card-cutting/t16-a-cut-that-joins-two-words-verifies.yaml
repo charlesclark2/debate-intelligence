@@ -44,7 +44,7 @@ spec:
         two words verifies, and a changed word beside it is still MANUAL_EDIT, by tests on
         synthetic exports shown failing first.
 status:
-  phase: Pending
+  phase: InProgress
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

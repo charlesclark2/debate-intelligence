@@ -62,13 +62,13 @@ v2.3's extension work.
 |---|---|---|---|---|---|
 | [v1.0](plan_specs/releases/v1.0.yaml) | Foundation & verified evidence core | 3 | 55 | 55 | 252 |
 | [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 4 | 125 | 105 | 550 |
-| [v1.2](plan_specs/releases/v1.2.yaml) | Argument landscape & file building | 3 | 99 | 82 | 366 |
-| [v1.3](plan_specs/releases/v1.3.yaml) | URL → verified card | 2 | 24 | 16 | 125 |
-| [v1.4](plan_specs/releases/v1.4.yaml) | Federated research from the CLI | 2 | 48 | 30 | 158 |
+| [v1.2](plan_specs/releases/v1.2.yaml) | Argument landscape & file building | 3 | 99 | 83 | 366 |
+| [v1.3](plan_specs/releases/v1.3.yaml) | URL → verified card | 2 | 25 | 16 | 127 |
+| [v1.4](plan_specs/releases/v1.4.yaml) | Federated research from the CLI | 2 | 51 | 30 | 162 |
 | [v1.5](plan_specs/releases/v1.5.yaml) | V1 quality gate & team pilot | 1 | 7 | 1 | 66 |
 | [v1.6](plan_specs/releases/v1.6.yaml) | Public team website | 3 | 31 | 22 | 169 |
 | [v1.7](plan_specs/releases/v1.7.yaml) | Team evidence search pilot | 1 | 30 | 25 | 100 |
-| [v1.8](plan_specs/releases/v1.8.yaml) | Weekly caselist run in the cloud | 2 | 74 | 46 | 136 |
+| [v1.8](plan_specs/releases/v1.8.yaml) | Weekly caselist run in the cloud | 2 | 77 | 47 | 140 |
 | [v2.0](plan_specs/releases/v2.0.yaml) | Cloud platform foundation | 3 | 17 | 0 | 164 |
 | [v2.1](plan_specs/releases/v2.1.yaml) | Web app, debate tub & async jobs | 3 | 18 | 0 | 198 |
 | [v2.2](plan_specs/releases/v2.2.yaml) | Research workspace | 2 | 12 | 0 | 117 |
@@ -393,13 +393,13 @@ Weekly argument-landscape reports show which positions are being read and with w
 | [A landscape model call can be recorded from a synthetic card with a command](plan_specs/v1/e32-argument-landscape/t48-landscape-report-records-a-synthetic-cassette.yaml) `v1-e32-t48-landscape-report-records-a-synthetic-cassette` | Pending | 1 | 2.0 |
 | [Prompt 1.3.0 and stage one: a card defending its own side's position reads it, and an answer is never the position it answers](plan_specs/v1/e32-argument-landscape/t49-prompt-1-3-0-own-side-answers-and-the-coachs-rulings.yaml) `v1-e32-t49-prompt-1-3-0-own-side-answers-and-the-coachs-rulings` | Succeeded | 1 | 4.0 |
 | [A second labelled sample, held out from tuning, before the bar is read as met](plan_specs/v1/e32-argument-landscape/t50-a-second-labelled-sample-held-out.yaml) `v1-e32-t50-a-second-labelled-sample-held-out` | Pending | 4 | 3.0 |
-| [Late disclosures from tournaments before the de-extinction topic are counted on 2026-11-10 and 2026-11-17, and weekly after](plan_specs/v1/e32-argument-landscape/t51-late-disclosures-from-pre-topic-tournaments-counted.yaml) `v1-e32-t51-late-disclosures-from-pre-topic-tournaments-counted` | Blocked | 1 | 2.0 |
+| [Late disclosures from tournaments before the de-extinction topic are counted on 2026-11-10 and 2026-11-17, and weekly after](plan_specs/v1/e32-argument-landscape/t51-late-disclosures-from-pre-topic-tournaments-counted.yaml) `v1-e32-t51-late-disclosures-from-pre-topic-tournaments-counted` | Pending | 1 | 2.0 |
 | [A seeded taxonomy is reviewed by the coach one question at a time, and the decisions are applied by one command](plan_specs/v1/e32-argument-landscape/t52-guided-taxonomy-review-and-apply.yaml) `v1-e32-t52-guided-taxonomy-review-and-apply` | Pending | 2 | 4.0 |
 | [generic-k's description, rewritten as v1-e32-t49 proposed, for the coach's review](plan_specs/v1/e32-argument-landscape/t53-generic-k-description-for-the-coachs-review.yaml) `v1-e32-t53-generic-k-description-for-the-coachs-review` | Succeeded | 1 | 1.0 |
 | [The per-school view names, under each position, the rounds whose disclosed file holds it](plan_specs/v1/e32-argument-landscape/t54-school-view-names-the-rounds-each-position-was-read-in.yaml) `v1-e32-t54-school-view-names-the-rounds-each-position-was-read-in` | Succeeded | 2 | 4.0 |
 | [Prompt 1.3.1: 1.3.0 without the generic-confidence sentence](plan_specs/v1/e32-argument-landscape/t55-prompt-1-3-1-without-the-generic-confidence-sentence.yaml) `v1-e32-t55-prompt-1-3-1-without-the-generic-confidence-sentence` | Succeeded | 1 | 2.0 |
 | [An analytic text under an answer heading in its own side's file reads its position](plan_specs/v1/e32-argument-landscape/t56-analytic-texts-take-the-own-side-rule.yaml) `v1-e32-t56-analytic-texts-take-the-own-side-rule` | Succeeded | 1 | 2.0 |
-| [The per-school round lists stay inside the page budget all season, and a school page over it is named at report time](plan_specs/v1/e32-argument-landscape/t57-school-rounds-fit-the-page-budget-and-are-checked-at-report-time.yaml) `v1-e32-t57-school-rounds-fit-the-page-budget-and-are-checked-at-report-time` | InProgress | 1 | 4.0 |
+| [The per-school round lists stay inside the page budget all season, and a school page over it is named at report time](plan_specs/v1/e32-argument-landscape/t57-school-rounds-fit-the-page-budget-and-are-checked-at-report-time.yaml) `v1-e32-t57-school-rounds-fit-the-page-budget-and-are-checked-at-report-time` | Succeeded | 1 | 4.0 |
 | [The coach's labels file is guarded: a changed file is refused, and every sitting keeps the file it replaces](plan_specs/v1/e32-argument-landscape/t58-the-coach-sample-labels-file-guarded.yaml) `v1-e32-t58-the-coach-sample-labels-file-guarded` | Succeeded | 1 | 3.0 |
 | [A repair cassette's scan counts a hit as input only when its words come from the cards the failed call sent](plan_specs/v1/e32-argument-landscape/t59-a-repair-cassettes-hits-count-the-cards-sent.yaml) `v1-e32-t59-a-repair-cassettes-hits-count-the-cards-sent` | Succeeded | 1 | 2.0 |
 | [The bundle scan does not count the report's own fixed lines as a tournament's words](plan_specs/v1/e32-argument-landscape/t60-the-bundle-scan-reads-the-reports-own-words-as-its-own.yaml) `v1-e32-t60-the-bundle-scan-reads-the-reports-own-words-as-its-own` | Succeeded | 1 | 2.0 |
@@ -466,6 +466,7 @@ A student can run `debate-research cut <URL>` and receive a verified, tagged, ci
 | [A pasted copy's cite fields can be stated when it is stored, so a card cut from it has a usable cite](plan_specs/v1/e06-card-cutting/t12-pasted-copy-cite-stated-by-the-user.yaml) `v1-e06-t12-pasted-copy-cite-stated-by-the-user` | Succeeded | 1 | 2.0 |
 | [A cite can carry a year-only or year-and-month date without inventing a day](plan_specs/v1/e06-card-cutting/t13-year-and-month-dates-in-a-cite.yaml) `v1-e06-t13-year-and-month-dates-in-a-cite` | Pending | 1 | 2.0 |
 | [A stated cite the domain refuses is reported as a refusal, not an internal error](plan_specs/v1/e06-card-cutting/t14-refused-stated-cite-is-a-refusal.yaml) `v1-e06-t14-refused-stated-cite-is-a-refusal` | Pending | 1 | 1.0 |
+| [A whole-word deletion right after a cut's marker is read as a deletion, not a manual edit](plan_specs/v1/e06-card-cutting/t15-a-deletion-beside-a-cut-marker-is-a-deletion.yaml) `v1-e06-t15-a-deletion-beside-a-cut-marker-is-a-deletion` | Pending | 2 | 2.0 |
 
 
 ### v1.4 — Federated research from the CLI
@@ -499,6 +500,9 @@ A student can run `debate-research cut <URL>` and receive a verified, tagged, ci
 | [Semantic Scholar's influential citation count is either weighed by the ranking or no longer asked for](plan_specs/v1/e07-discovery-adapters/t21-influential-citations-weighed-or-not-asked.yaml) `v1-e07-t21-influential-citations-weighed-or-not-asked` | Pending | 1 | 2.0 |
 | [A paced call checks the breaker and the rate-limit hold when its turn comes, and a 429 backs the provider off exponentially](plan_specs/v1/e07-discovery-adapters/t22-a-paced-call-checks-the-breaker-at-its-turn-and-backs-off-on-429.yaml) `v1-e07-t22-a-paced-call-checks-the-breaker-at-its-turn-and-backs-off-on-429` | Succeeded | 2 | 3.0 |
 | [A provider missing only configuration is named with its cure wherever it appears, and counts as partial only when a person asked for it](plan_specs/v1/e07-discovery-adapters/t23-configuration-gaps-named-with-their-cure-everywhere.yaml) `v1-e07-t23-configuration-gaps-named-with-their-cure-everywhere` | Succeeded | 1 | 2.0 |
+| [The no-provider hint fits a provider enabled but unbuilt, and the partial message names only the providers that count](plan_specs/v1/e07-discovery-adapters/t24-the-no-provider-hint-and-the-partial-message-name-only-what-counts.yaml) `v1-e07-t24-the-no-provider-hint-and-the-partial-message-name-only-what-counts` | Pending | 1 | 1.0 |
+| [Semantic Scholar's bulk search is weighed against relevance search, and its pace keeps a margin under one a second](plan_specs/v1/e07-discovery-adapters/t25-semantic-scholar-bulk-search-weighed-and-a-pace-margin.yaml) `v1-e07-t25-semantic-scholar-bulk-search-weighed-and-a-pace-margin` | Pending | 1 | 2.0 |
+| [Semantic Scholar goes back to HTTPS once its keyed HTTPS endpoint works, and prod enables it](plan_specs/v1/e07-discovery-adapters/t26-semantic-scholar-back-on-https-and-enabled-in-prod.yaml) `v1-e07-t26-semantic-scholar-back-on-https-and-enabled-in-prod` | Blocked | 1 | 1.0 |
 
 #### [E08 — Federated Research Workflows](plan_specs/v1/e08-research-workflows/epic.yaml)
 
@@ -690,10 +694,12 @@ The weekly caselist run (pull, import, publish, parse, search index) runs in the
 | [A cloud run's decision about each listed file is kept past the log's 90 days](plan_specs/v1/e40-cloud-caselist-run/t41-cloud-run-keeps-its-per-file-decisions.yaml) `v1-e40-t41-cloud-run-keeps-its-per-file-decisions` | Pending | 1 | 2.0 |
 | [The run's schedule tries again when AWS refuses to launch the task, and never starts a second run](plan_specs/v1/e40-cloud-caselist-run/t42-schedule-retries-a-refused-launch.yaml) `v1-e40-t42-schedule-retries-a-refused-launch` | Succeeded | 1 | 2.0 |
 | [The weekly run logs each stage as it starts and ends, so a run can be read while it runs](plan_specs/v1/e40-cloud-caselist-run/t43-weekly-run-logs-each-stage.yaml) `v1-e40-t43-weekly-run-logs-each-stage` | Succeeded | 1 | 3.0 |
-| [A scheduled pull refuses to run when the bucket's run log shows a run started within the last hours](plan_specs/v1/e40-cloud-caselist-run/t44-a-scheduled-run-refuses-a-second-run-within-hours.yaml) `v1-e40-t44-a-scheduled-run-refuses-a-second-run-within-hours` | Pending | 1 | 2.0 |
+| [A scheduled pull refuses to run when the bucket's run log shows a run started within the last hours](plan_specs/v1/e40-cloud-caselist-run/t44-a-scheduled-run-refuses-a-second-run-within-hours.yaml) `v1-e40-t44-a-scheduled-run-refuses-a-second-run-within-hours` | Succeeded | 1 | 2.0 |
 | [The run lock tells a test when a writer starts waiting, so the shared-renewal test is not a thread race](plan_specs/v1/e40-cloud-caselist-run/t45-run-lock-offers-a-test-hook-when-a-writer-waits.yaml) `v1-e40-t45-run-lock-offers-a-test-hook-when-a-writer-waits` | Pending | 1 | 1.0 |
 | [A backfile with no directory at the running parser version is named](plan_specs/v1/e40-cloud-caselist-run/t46-a-backfile-without-the-running-parsers-directory-is-named.yaml) `v1-e40-t46-a-backfile-without-the-running-parsers-directory-is-named` | Succeeded | 1 | 1.0 |
 | [Prod receives each backfile once, by hand, before the run's home moves](plan_specs/v1/e40-cloud-caselist-run/t47-prods-one-time-backfile-publish.yaml) `v1-e40-t47-prods-one-time-backfile-publish` | Pending | 2 | 2.0 |
+| [The weekly schedule starts its pull with --scheduled, so the recent-run guard is live](plan_specs/v1/e40-cloud-caselist-run/t48-the-schedule-passes-scheduled.yaml) `v1-e40-t48-the-schedule-passes-scheduled` | Pending | 1 | 2.0 |
+| [A smoke check reads caselist runs --remote's backfile parser line on an installed build](plan_specs/v1/e40-cloud-caselist-run/t49-a-smoke-check-for-the-backfile-parser-line.yaml) `v1-e40-t49-a-smoke-check-for-the-backfile-parser-line` | Pending | 1 | 1.0 |
 
 #### [E41 — Delivery Tooling Upkeep](plan_specs/v1/e41-delivery-tooling-upkeep/epic.yaml)
 
@@ -726,6 +732,7 @@ The weekly caselist run (pull, import, publish, parse, search index) runs in the
 | [.env.example says where the caselist token is kept, not in .env](plan_specs/v1/e41-delivery-tooling-upkeep/t25-env-example-says-where-the-caselist-token-lives.yaml) `v1-e41-t25-env-example-says-where-the-caselist-token-lives` | Pending | 1 | 0.5 |
 | [debate_api no longer declares markdown-it-py, which it gets through debate-core](plan_specs/v1/e41-delivery-tooling-upkeep/t26-debate-api-drops-its-own-markdown-it-py.yaml) `v1-e41-t26-debate-api-drops-its-own-markdown-it-py` | Pending | 2 | 1.0 |
 | [The spec validator refuses an unfinished task with no prerequisites unless it says why](plan_specs/v1/e41-delivery-tooling-upkeep/t27-a-task-names-its-prerequisites-or-why-it-has-none.yaml) `v1-e41-t27-a-task-names-its-prerequisites-or-why-it-has-none` | Succeeded | 1 | 2.0 |
+| [The IANA time zone database ships with the build on every platform, not only Windows](plan_specs/v1/e41-delivery-tooling-upkeep/t28-tzdata-installed-on-every-platform.yaml) `v1-e41-t28-tzdata-installed-on-every-platform` | Pending | 1 | 0.5 |
 
 
 ## V2

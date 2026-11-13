@@ -1483,7 +1483,11 @@ real run, in a window with no leftover `DEBATE_*` override.
     prod; AWS opened a support case for it. The gzip object was 318,115,067 bytes that day. Check
     it with `aws service-quotas get-requested-service-quota-change --request-id <id>`, the id in
     `v1-e39-t10`'s report, and tick this item when it reads `APPROVED`.
-14. **The weekly run's home moves to prod**, by
+14. *(PM note 2026-11-13.)* This item may follow the start of the coach's beta: the beta searches an
+    index published once by hand (items 7 and 8), and the weekly run's move is the largest single
+    piece of the promotion. It is done before Wednesday 2026-11-25's run, never on a Wednesday, and
+    before the student pilot starts.
+    **The weekly run's home moves to prod**, by
     [the cutover runbook's "At the pilot's promotion"](caselist-cutover.md#at-the-pilots-promotion-the-runs-home-moves-to-prod),
     once prod's run is applied and prod's lock is seeded. Dev's lock is then held for good by
     `DEBATE_ENV=dev debate-research caselist move-run-home --execute` (`v1-e40-t11`), after its dry run

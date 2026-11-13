@@ -33,6 +33,7 @@ from typing import TYPE_CHECKING, Any, Final, NoReturn
 import jsonschema
 import pytest
 
+from debate_core.application import sync_runs
 from debate_core.application.caselist.bucket_run import BucketRun, latest_counting_run
 from debate_core.application.caselist.evidence_listing import LocalEvidence
 from debate_core.application.caselist.publish_service import withheld_manifest_reason
@@ -97,6 +98,7 @@ REFUSED_HINT: Final = (
 REFUSED_FIX: Final = "debate-research caselist runs"
 
 STORED = Path(__file__).parent / "stored_run_records"
+RUNBOOK = Path(__file__).resolve().parents[5] / "docs" / "runbooks" / "caselist-cloud-run.md"
 
 
 @pytest.fixture
@@ -451,3 +453,21 @@ def test_the_scheduled_pull_guard_names_the_latest_run_that_counts_not_a_later_r
     assert latest_counting_run([older, counted, refused], now=NOW) == counted
     assert latest_counting_run([refused], now=NOW) is None
     assert latest_counting_run([], now=NOW) is None
+
+
+# ------------------------------------------------------------------------------------------------
+# The runbook says it as the notice does (ruling 4)
+# ------------------------------------------------------------------------------------------------
+
+
+def test_the_cloud_run_runbook_says_what_the_scheduled_pull_guard_says() -> None:
+    text = RUNBOOK.read_text(encoding="utf-8")
+    section = text.split("\n## A scheduled run refused after a recent run\n", 1)[1].split("\n## ", 1)[0]
+    flat = " ".join(section.replace("> ", "").split())
+
+    assert sync_runs.RECENT_RUN_RECORDED_TITLE == REFUSED_TITLE
+    assert REFUSED_TITLE in flat
+    assert f"If the week still needs a run, {CURE}." in flat
+    assert "RECENT_RUN_RECORDED" in flat
+    assert "caselist pull: the bucket's run log could not be read (<class>); the run lock decides" in flat
+    assert "(#a-scheduled-run-refused-after-a-recent-run)" in text, "the retry section points at it"

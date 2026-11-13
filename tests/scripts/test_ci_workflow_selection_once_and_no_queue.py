@@ -124,6 +124,10 @@ def test_the_selection_job_hands_on_its_steps_answer_and_every_part_reads_it() -
         # Which part each whole test file goes to (v1-e41-t17):
         # tests/scripts/test_ci_workflow_durations_recorded_and_restored.py.
         "files_to_parts": f"${{{{ steps.{step['id']}.outputs.files_to_parts }}}}",
+        # The slow-tests job's (v1-e41-t29): tests/scripts/test_ci_slow_tests_the_affected_set_reaches.py.
+        "run_slow": f"${{{{ steps.{step['id']}.outputs.run_slow }}}}",
+        "slow_chromium": f"${{{{ steps.{step['id']}.outputs.slow_chromium }}}}",
+        "slow_test_files": f"${{{{ steps.{step['id']}.outputs.slow_test_files }}}}",
     }
     test = jobs()["test"]
     assert sorted(test["needs"]) == sorted(["changes", SELECTION_JOB])

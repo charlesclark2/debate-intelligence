@@ -141,6 +141,7 @@ from typing import Final, Literal, cast
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from debate_core.application.caselist.publish_plan import InvalidPublishTarget, validate_publish_target
+from debate_core.application.caselist.recent_run import HAND_RUN_CURE, RecentRunRecorded
 from debate_core.application.caselist.run_home_move import NEW_HOME
 from debate_core.application.caselist.run_lock import RunHomeMoved, RunLockHeld, RunLockLost
 from debate_core.application.caselist.status_service import CASELIST_DRIFT
@@ -1094,6 +1095,20 @@ ANOTHER_RUN_HELD_THE_LOCK: Final = (
 person's look is not what it asks for: the run holding the lock is the one that says how it went.
 The runbook quotes both."""
 
+RECENT_RUN_RECORDED_TITLE: Final = "caselist pull skipped: a run started within the last 24 hours"
+"""A scheduled pull refused before the lock because the bucket's run log records a run started within 24
+hours (`v1-e40-t44`). Announced as a run the lock refused is: it exits `1`, its record stays on the
+machine that made it, and the run it found is the one that says how it went. The message names that
+run's id and start and the cure, in the PM's words (:data:`~debate_core.application.caselist.recent_run.
+HAND_RUN_CURE`). The runbook quotes the title."""
+
+
+def _recent_run_recorded(record: SyncRunRecord) -> str:
+    """What a scheduled pull the guard refused says: the run it found, from its message, and the cure."""
+    found = record.error_message or "the bucket's run log records a run started within the last 24 hours"
+    return f"{found}. If the week still needs a run, {HAND_RUN_CURE}."
+
+
 SKIPPED_REFUSALS: Final = (RunHomeMoved,)
 """The refusals that skip a run rather than fail it (`v1-e40-t29`): the lock held for good by the move of
 the weekly run's home to prod (`v1-e40-t11`). Such a run did nothing because nothing is its to do, and
@@ -1482,6 +1497,15 @@ def notifications_for(
                 fix_command=RUNS_COMMAND,
             )
         )
+    elif record.error_class == RecentRunRecorded.__name__:
+        sent.append(
+            Notification(
+                title=RECENT_RUN_RECORDED_TITLE,
+                message=f"{where}: {_recent_run_recorded(record)}",
+                fix_command=RUNS_COMMAND,
+                hint=details.hint,
+            )
+        )
     elif record.error_class == RunLockLost.__name__:
         sent.append(
             Notification(
@@ -1815,6 +1839,7 @@ def banner_words(
     if details.skipped is not None or record.error_class in (
         SyncRunInProgress.__name__,
         RunLockHeld.__name__,
+        RecentRunRecorded.__name__,
     ):
         return LOCK_BANNER_WORDS
     if record.error_class == CaselistAuthExpired.__name__:

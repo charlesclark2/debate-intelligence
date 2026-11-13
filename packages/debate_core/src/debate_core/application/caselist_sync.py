@@ -656,6 +656,7 @@ from debate_core.application.caselist.publish_service import (
     NothingToPublish,
     SourceResult,
 )
+from debate_core.application.caselist.recent_run import RecentRunRecorded
 from debate_core.application.caselist.status_service import (
     CASELIST_DRIFT,
     CaselistStatusService,
@@ -6356,6 +6357,9 @@ def fix_for(error: BaseException, *, bucket_mode: bool = False) -> str | None:
     if isinstance(error, NewerFingerprintTable):
         return error.cloud_fix if bucket_mode else error.fix
     if isinstance(error, KeychainFailure):
+        return error.hint
+    if isinstance(error, RecentRunRecorded):
+        # The run it found and the cure, a hand run (`v1-e40-t44`, the PM's ruling 4).
         return error.hint
     if isinstance(error, CaselistTokenMissing) and not bucket_mode:
         return _TOKEN_MISSING_ON_THIS_MACHINE_FIX

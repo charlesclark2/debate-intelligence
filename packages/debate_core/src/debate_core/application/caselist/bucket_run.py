@@ -41,7 +41,7 @@ import asyncio
 import logging
 import time
 from collections.abc import Callable, Sequence
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Final
 
@@ -124,7 +124,20 @@ class BucketRun:
         be read refuses nothing: the run goes on to the lock, with a warning (the PM's ruling 5).
         Local mode has no bucket run log, and the command refuses `--scheduled` there.
         """
-        return
+        if not self.bucket_mode:
+            return
+        assert self._state_factory is not None
+        try:
+            records = await self._state_factory().recorded_runs()
+        except (DomainError, OSError) as unreadable:
+            logger.warning(
+                "caselist pull: the bucket's run log could not be read (%s); the run lock decides",
+                type(unreadable).__name__,
+            )
+            return
+        recent = latest_counting_run(records, now=self._now())
+        if recent is not None:
+            raise RecentRunRecorded(run_id=recent.run_id, started_at=recent.started_at)
 
     # ------------------------------------------------------------------------------------------
     # 1. The start
@@ -253,10 +266,26 @@ class BucketRun:
 
 
 def latest_counting_run(
-    records: Sequence[SyncRunRecord], *, now: datetime, window: object = RECENT_RUN_WINDOW
+    records: Sequence[SyncRunRecord], *, now: datetime, window: timedelta = RECENT_RUN_WINDOW
 ) -> SyncRunRecord | None:
-    """The latest recorded run that refuses a scheduled pull at `now`, or `None` (`v1-e40-t44`)."""
-    return None
+    """The latest recorded run that refuses a scheduled pull at `now`, or `None` (`v1-e40-t44`).
+
+    The PM's ruling 3 of 2026-11-12: a `caselist pull` of mode `run` that started less than `window`
+    before `now`, whatever its outcome (`incomplete` captured and published its week; a run that raised
+    is recorded with no stage wherever it stopped, so its record cannot tell an early stop from a late
+    one), unless it is a refusal of the run lock or of this guard
+    (:data:`~debate_core.application.landscape_staleness.LOCK_REFUSALS`), which did nothing. A
+    `--publish-pending` pull lists and fetches nothing and does not count. Only `caselist pull` writes
+    this log, so every record in it is one.
+    """
+    counting = [
+        record
+        for record in records
+        if record.mode == "run"
+        and now - record.started_at < window
+        and not (not record.succeeded and record.error_class in LOCK_REFUSALS)
+    ]
+    return max(counting, key=lambda record: record.started_at, default=None)
 
 
 def _restore_details(report: RestoreReport) -> RestoreDetails:

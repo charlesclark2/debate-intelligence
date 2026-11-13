@@ -49,9 +49,10 @@ Any of three things, per caselist. When more than one applies, the banner says e
    (:class:`~debate_core.application.caselist_sync.SyncRunInProgress`), and the bucket's lock held
    by another runner, held for good by the move of the weekly run's home, or naming another home
    (:class:`~debate_core.application.caselist.run_lock.RunLockHeld`, ``RunHomeMoved``,
-   ``RunLockWrongHome``). Such a record is passed over, so the report reads as the last run that
-   ran left it: current, cap-bound or failed. A run that held the lock and then failed (its lease
-   lost, or told to stop) is not a refusal, and reads stopped.
+   ``RunLockWrongHome``), and a scheduled pull refused before the lock after a recent run
+   (``RecentRunRecorded``, `v1-e40-t44`). Such a record is passed over, so the report reads as
+   the last run that ran left it: current, cap-bound or failed. A run that held the lock and then
+   failed (its lease lost, or told to stop) is not a refusal, and reads stopped.
 
    These change nothing, in either direction:
 
@@ -78,6 +79,7 @@ from datetime import date
 from typing import Final
 
 from debate_core.application.caselist.publish_plan import manifest_prefix, snapshot_of_manifest_key
+from debate_core.application.caselist.recent_run import RecentRunRecorded
 from debate_core.application.caselist.run_lock import RunHomeMoved, RunLockHeld, RunLockWrongHome
 from debate_core.application.caselist_sync import StageOutcome, SyncRunInProgress, SyncStage
 from debate_core.application.ports.evidence_store import EvidenceObjectStore
@@ -131,12 +133,15 @@ _STAGE_NAMES: Final = frozenset(str(stage) for stage in SyncStage)
 
 
 LOCK_REFUSALS: Final = frozenset(
-    refusal.__name__ for refusal in (SyncRunInProgress, RunLockHeld, RunHomeMoved, RunLockWrongHome)
+    refusal.__name__
+    for refusal in (SyncRunInProgress, RunLockHeld, RunHomeMoved, RunLockWrongHome, RecentRunRecorded)
 )
 """The error classes of a pull the run lock refused, which did nothing and is no run at all here.
 
 The local lock held by another pull, the bucket's lock held by another runner, the lock held for good
-by the move of the weekly run's home (`v1-e40-t11`), and a lock naming another home. Not the lock's
+by the move of the weekly run's home (`v1-e40-t11`), a lock naming another home, and (`v1-e40-t44`) a
+scheduled pull refused before the lock because the bucket's run log records a run started within 24
+hours (:class:`~debate_core.application.caselist.recent_run.RecentRunRecorded`). Not the lock's
 other errors: :class:`~debate_core.application.caselist.run_lock.RunLockLost` ends a run that held
 the lock and began, and the setup refusals (an unseeded bucket, an unreadable lock, a seeded bucket
 in local mode) say no runner is refreshing this store until a person acts, so a report built on it

@@ -301,9 +301,43 @@ The PM decides whether they become spec changes or new tasks. -->
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-11-12
 
 **Notes:**
+
+Accepted. ac1 (the proposal ruled on, and the guard built) and the node pass, and the Goal is
+`Succeeded`.
+
+* **The rulings are applied as given:**
+  1. N = 24 h, as `RECENT_RUN_WINDOW`.
+  2. `--scheduled`, with its three usage errors at exit 2.
+  3. Only `caselist pull` records count. The answer is pinned both ways: a backfile import writes no
+     record, and `test_only_caselist_pull_writes_the_run_log.py` fails on any new writer.
+  4. `RECENT_RUN_RECORDED` at exit 1, recorded and announced as `RunLockHeld` is, with the cure in
+     the PM's words in the notice, the hint and the runbook.
+  5. An unreadable log goes on to the lock, with a warning.
+* **The evidence is thorough.**
+  * The red run against a guard that refuses nothing: 15 failed and 11 passed in core, and 3 failed
+    in the CLI. The ones that passed are exactly those that must not refuse.
+  * All 18 planted breaks failed at their own assertions. The one that survived (banner words) was
+    caught by a test added for it, and the report says so.
+  * Removing the class from `LOCK_REFUSALS` fails the parametrised cases.
+  * The guard sits before `bracket.start`, so no token is read and OpenCaselist is never called.
+    The planted break that moved it after the lock proves it.
+* **It is safe to merge and deploy now.** Nothing passes `--scheduled` yet, so the guard is inert in
+  the cloud until the Terraform task. The runbook says so, and that sentence comes out with the task.
+* **The branch is behind dev** (e06-t10 has merged since). It shares none of these 16 files. If
+  `scripts/task pr` asks for a sync, `scripts/task sync` is enough.
+* **The affected set** (8,620 tests) goes to `ci` under agreement 10. What ran here covers the guard's
+  neighbours.
+* **Follow-ups, into the next PM batch:**
+  * the Terraform task, filed by the PM with this report's resource change and NOT VERIFIED note
+    verbatim. Its order: release, image push, digest pinned, the PM reads the plan, an apply never on
+    a Wednesday, and AWS's Scheduler documentation read first;
+  * the ClientToken idea, as an unverified note on the epic;
+  * the named limits, which need no task.
+
+`scripts/task pr`

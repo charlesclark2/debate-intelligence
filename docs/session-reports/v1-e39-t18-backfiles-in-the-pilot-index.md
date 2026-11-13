@@ -10,10 +10,15 @@
 
 ## Summary
 
-In progress: ac1 (the counts before building). Nothing has been restored, built, published or
-deployed. The first bucket check found hspolicy25 still at `2026.10.27-docx-7`, so measuring was held.
-The hold was lifted on 2026-11-12 after hspolicy25's cloud rebuild to `2026.11.03-docx-9` finished
-([The measurement so far](#the-measurement-so-far)); the second bucket check is next.
+Stopped for the PM's ruling on the index's shape (ac1 done, ac2 not started). After hspolicy25's
+cloud rebuild to `2026.11.03-docx-9`, the operator restored the dev run's copy with all four
+backfiles, built today's index (byte for byte the one dev publishes) and a combined one, and loaded
+both in the function's image ([The measurement so far](#the-measurement-so-far)). The combined index
+breaks every size and cold-start target of ADR-0019: 3.97 GB of SQLite, 1.46 GB gzip, a 19.1 s load
+against 6.96 s today, a swap needing 185% of the function's storage
+([ac1](#ac1-the-counts-against-the-targets-and-the-options)). Nothing was published or deployed.
+The restored copy and the two scratch indexes are kept, at the PM's request, for two other tasks'
+read-only counts, and are deleted after them (policy 1.18).
 
 ## Plan nodes
 
@@ -29,7 +34,9 @@ The hold was lifted on 2026-11-12 after hspolicy25's cloud rebuild to `2026.11.0
 
 | Criterion | Status | Evidence (command → result) |
 |---|---|---|
-| | | |
+| ac1: counts before building, sent to the PM with the options | PASS | The operator's blocks of 2026-11-12 (restore, two builds, two loads in the image) → [ac1](#ac1-the-counts-against-the-targets-and-the-options); relayed to the PM by the operator |
+| ac2: after the ruling, a backfile card found with its season and provenance line, gone within five minutes of a removal, cold start within ADR-0019; tests failing first | NOT RUN | Waits for the PM's ruling on the shape |
+| backfile-index: `uv run pytest packages/debate_api/tests` | NOT RUN | Waits for the ruling |
 
 ## Files changed
 
@@ -191,6 +198,85 @@ counts as new.
 | hsld24 | 34,135 | 365,777 | 31,999 | 30,734 |
 | All four, distinct ids | 173,441 | 1,538,221 | 150,030 | 144,372 |
 
+Summed per store, 153,307 of the 173,441 backfile documents (88.4%) hold no card a current row
+holds, and 20,134 (11.6%) do.
+
+**Load in the function's image** (`debate-dev-tub:0d81c542…`, dev's merge-commit image, linux/arm64),
+2026-11-12 about 21:50 Chicago, load average about 3.7 before each: `docker run --network none
+--memory 2048m --memory-swap 2048m --cpus 1.16` (the vCPU share Lambda gives 2,048 MB), the
+function's own `SearchIndexHolder` fed by a file-backed source (the scratchpad's `load_probe.py`):
+manifest checks, the gzip object streamed through zlib and both sha256s into the container's `/tmp`,
+the read-only open, then five searches of common words. No download: the load is the CPU part, which
+ADR-0019 (c) 3 overlaps with the download.
+
+| | Current (`f318149882fdd9c5`) | Combined (`8eae91e2afa36c1d`) |
+|---|---|---|
+| Load (first lease) | 6.96 s | 19.10 s |
+| Process peak (`VmHWM`) | 45,016 KiB | 45,020 KiB |
+| Container `memory.peak` | 1,499,865,088 bytes | 2,147,483,648 (the cap), 6,492 `max` events, no OOM kill |
+| Five searches | 19, 15, 14, 12, 82 ms | 121, 221, 112, 83, 433 ms |
+| Container exit | 0 after 8 s | 0 after 20 s |
+
+The process itself stays near 45 MB; what fills the container is the page cache of the file in
+`/tmp`, which in Lambda lives in the function's memory too. The combined file (3.97 GB) cannot stay
+cached in 2 GB: the container sat at its cap, reclaiming, and the searches ran 5 to 15 times slower.
+
+## ac1: the counts against the targets, and the options
+
+| | Current seasons (today's index) | Current plus four backfiles | Target |
+|---|---|---|---|
+| Documents | 63,705 | 237,146 (+173,441) | |
+| Distinct card clusters | 60,503 | 210,533 | |
+| SQLite bytes | 1,043,304,448 | 3,973,885,952 | weekly warning 1,700,000,000 |
+| Gzip bytes | 387,288,605 | 1,462,856,642 | revisit trigger about 800 MB |
+| Download at 1,250 Mbps | 2.5 s | 9.4 s | about 5 s at the trigger |
+| Load in the image | 6.96 s | 19.10 s | first search 6 to 8 s at the ceiling ((c) 7) |
+| Two copies at a swap | 2,086,608,896 (48.6% of 4,096 MB) | 7,947,771,904 (185.0%) | under 4,294,967,296 |
+| Container memory | 1.50 GB peak | at the 2 GB cap | 2,048 MB |
+| Build time, peak memory | 671 s, 1.48 GB | 3,266 s, 4.44 GB | |
+| Documents added per backfile | | hspolicy25 53,883; hsld25 37,009; hspolicy24 48,414; hsld24 34,135 | |
+
+**Which targets the combined index breaks:** all of the size and cold-start ones. The SQLite file is
+234% of the weekly warning; a swap needs 185% of the function's storage (one copy leaves 321 MB); the
+gzip object is 1.83 times the revisit trigger; the load is 19.1 s against the 6 to 8 s (c) 7 allows
+at the ceiling, before the 1 to 2 s app start; and the page cache sits at the 2,048 MB cap, which
+slowed searches 5 to 15 times. **The shrink guard** (`v1-e39-t14`) lets a combined index be
+published, since it only grows; but the weekly stage indexes the run's caselists and openev alone
+(`search_index_stores`), so the next weekly build would drop four stores to 0 documents and be
+refused, and the weekly refresh would stop, unless every weekly run restored (46.4 GB) and indexed
+the backfiles too.
+
+**Today's index, for the record:** within every target, but its 6.96 s load is already at the top of
+(c) 7's band, and Lambda's arm64 cores may be slower than this Mac's. A follow-up below.
+
+**Estimates, not measured** (the combined index's 16,757 bytes a document, gzip ratio 0.368, and the
+two loads' 4.81 to 6.67 s a GB): a backfiles-only index about 2,930,581,504 SQLite bytes and
+1,075,568,037 gzip, loading in about 14 to 20 s; one season's index 572 to 903 MB of SQLite (hsld24
+the smallest, hspolicy25 the largest), 211 to 332 MB gzip, loading in about 3 to 6 s; option 3's index
+about 217,012 documents, 3.64 GB SQLite and 1.34 GB gzip.
+
+The options, as relayed to the PM (the relay in the session's operator message is the same text):
+
+1. **One index.** A student searches every season at once; a backfile card's provenance line says
+   its caselist and snapshot today (`[Disclosed: hspolicy25 <snapshot> — ...]`), plus a season label
+   if the PM wants one. Removal: unchanged, the one suppression list rechecked every five minutes.
+   Cold start: 19.1 s load, every target above broken, and the weekly run must carry the backfiles.
+2. **A separate backfile index, searched on request** ("include earlier seasons"). Default search
+   and its cold start unchanged; the first "include earlier seasons" search on an environment waits
+   about 14 to 20 s. Removal: the second holder reads the same suppression list on the same
+   five-minute check. Storage: live current, the backfile index and a swap of the current one need
+   about 5.0 GB (117% of 4,096 MB), so the storage must rise, and searching both puts about 4 GB of
+   file behind 2 GB of memory.
+3. **Backfiles only for clusters the current seasons lack.** Saves 11.6% of the backfile documents:
+   still about 3.64 GB SQLite, breaking the same targets as option 1, and a removal of the current
+   copy of a card would leave its older copies unindexed.
+4. **Another: one index per backfile season, loaded on request, one held at a time.** A student picks
+   an earlier season to search (for example "2024–25 policy"); default search and its cold start
+   unchanged; the first search of a season waits about 3 to 6 s; live current, one season and a swap
+   need at most about 2.99 GB (69.6% of 4,096 MB). Removal: as option 2. Built once from the backfile
+   stores, which no weekly run changes, so the weekly stage and its shrink guard are untouched; each
+   season's pointer gets the guard of its own.
+
 ## Operator follow-ups
 
 <!-- Commands the operator must run (anything over ~2 minutes), with where to run them, the exact
@@ -203,7 +289,12 @@ None.
 <!-- Bugs, gaps or ideas outside this task's scope, each with the task or epic it belongs to.
 The PM decides whether they become spec changes or new tasks. -->
 
-None.
+* **Today's index already loads at the top of ADR-0019 (c) 7's band.** In the function's image at
+  1.16 CPUs, the 1.04 GB index took 6.96 s to stream through gunzip and both sha256s, before the
+  1 to 2 s app start, and Lambda's arm64 cores may be slower than this Mac's. The ADR's estimate
+  takes the download as the long part (2.5 s here); the CPU part is. `v1-e39-t04`'s `REPORT`
+  lines give init only, not the first search's wait. Belongs to `v1-e39-evidence-search-pilot`
+  (the PM decides whether a measurement of the first search's wait on the function is a task).
 
 ## PM review
 

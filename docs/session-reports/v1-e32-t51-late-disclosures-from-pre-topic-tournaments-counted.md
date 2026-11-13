@@ -10,49 +10,206 @@
 
 ## Summary
 
-<!-- 3-6 sentences: what was built, how it fits the epic, anything the PM should look at first. -->
+**Stopped at step 2 of the PM's order of work (2026-11-12), waiting for the PM to release the copy.**
+The counting rule is in `debate_core.application.landscape_late_disclosures`, and
+`scripts/count_late_disclosures.py` prints it as one JSON object of counts. Both are tested on
+synthetic stores (18 tests), shown red against a skeleton that counts nothing (16 of 17 failed), with
+19 mutants caught. The operator block for the 2026-11-10 count over v1-e39-t18's copy is under
+Operator follow-ups. It is held until the PM says the copy is free. Nothing has been run over the copy,
+and no session command has touched it.
+
+The PM should look first at the rule as built (below): the cut is the topic range's first day; "FBK
+spellings excluded" is read from `topics.yaml`; and spellings are named under a stricter test than
+the brief's (Decision 5). Also at Deviation 1: the block runs from this worktree, not from the main
+clone, because the main clone's `.venv` imports dev's `debate_core`, which does not have this module.
+
+Still to do after the count: the 5% and topic-word judgement and the weekly report line's proposal
+(step 3, for the PM's ruling); then the line itself, red first (ac2), and the 2026-11-17 count's block
+for after the run of 2026-11-18 (step 4). The Goal stays `InProgress`.
+
+## The count, as built (2026-11-12)
+
+For one snapshot of one caselist (`--snapshot 2026-11-10 --caselist hsld26`):
+
+* **The snapshot must be on its topic by a range.** `topics.yaml` gives 2026-11-10 to
+  `ld-2026-nov-dec-de-extinction` by its range, 2026-11-06 to 2026-12-31. A snapshot that only a
+  tournament entry covers (2026-11-03) is refused, and so is a snapshot the store holds no manifest of.
+* **Late** means a live disclosure of the snapshot that resolves to that topic and that meets both of
+  these:
+  * its tournament spelling (`tournament_key`: lower case, letters and digits only) was first seen,
+    among the caselist's live disclosures in any snapshot, in a snapshot dated before the range's first
+    day, 2026-11-06. With weekly Tuesday snapshots that is "on or before 2026-11-03". The JSON prints
+    the newest snapshot before the cut as `first_seen_through`, so the run shows the 2026-11-03 it
+    used;
+  * its spelling holds none of the topic's own tournament-entry spellings, read from `topics.yaml`
+    (`bluekey`, `fbk`). This is "FBK spellings excluded", matched as the entry matches ("holds", Q4).
+
+  A disclosure that names no tournament is never late.
+* **The share** is late disclosures over all the snapshot's live disclosures, on any topic or none.
+* **The topic-word check** classes each source of the snapshot by what its cards' tags and the
+  headings over them hold: the topic's words only, both, the other topic's only, neither, or not parsed
+  (no document in the parsed version read). The words are command-line options, never a list in code:
+  `--topic-word de-extinct`, `--other-topic-word "space col"` and `--other-topic-word coloniz`, the
+  words v1-e32-t06 used. They are matched on letters and digits without case, so `De-Extinction`
+  holds `de-extinct`. The class decides nothing. The JSON gives it for three groups that partition
+  the snapshot's on-topic disclosures: `late`, `tournament entry spellings` (FBK's) and `other`, by
+  disclosure and by source.
+* **Spellings.** A late spelling is named, with its first-seen snapshot, its school count, its
+  disclosures and sources, and its sources' word classes, only when two schools or more disclosed under
+  it (in any snapshot) and it holds no school or team-code word. That word test has two parts: a word
+  of the landscape report's withholding words (`caselist_words`) in any tournament text written for
+  the spelling, or a school word of four letters or more inside the run-together spelling. Every
+  other late spelling is counted, not named, under one of two headings: fewer than two schools, or
+  holding a school or team-code word.
+
+It reads the manifests, the suppression list and the parsed store; it opens no database, writes
+nothing and calls no model. A disclosure that cannot be read as one refuses the whole count, and the
+refusal never quotes the school or team code that pydantic's error text would carry.
 
 ## Plan nodes
 
-<!-- One row per Plan graph node, in the order they were completed. -->
-
 | Node | Status | Notes |
 |---|---|---|
-| | | |
+| late-disclosures-from-pre-topic-tourname | In progress | Steps 1 and 2 of the PM's order done (the count, the held block); 3 and 4 wait on the count and the ruling |
 
 ## Acceptance criteria
 
-<!-- Goal criteria (ac1…) and every node criterion. Status: PASS / FAIL / NOT RUN. -->
-
 | Criterion | Status | Evidence (command → result) |
 |---|---|---|
-| | | |
+| ac1: the counts on 2026-11-10 and 2026-11-17 recorded with their share and the topic-word check, entries proposed if the 5% trigger or the check says so | NOT RUN | The 2026-11-10 count's block is written and held until the PM releases v1-e39-t18's copy (Operator follow-ups). 2026-11-17's snapshot exists only after the run of 2026-11-18. |
+| ac2: the weekly report line, as ruled, by tests on synthetic stores shown failing first | NOT RUN | Waits on the count and the PM's ruling on the line (step 3). |
+| Node: `uv run pytest packages/debate_core/tests -k late_disclosure` | PASS (so far) | `.venv/bin/python scripts/hard_stop.py 115 .venv/bin/python -m pytest packages/debate_core/tests -k late_disclosure -q` → **15 passed in 50.8 s**: this task's 14, plus one in v1-e32-t06's `test_landscape_tournament_entries.py` whose name holds the same words. Run again when the report line lands. |
+
+### Tests, red run and mutants
+
+* **Tests.** `packages/debate_core/tests/application/test_landscape_late_disclosures.py` (15 with the
+  parameters) and `tests/scripts/test_count_late_disclosures.py` (3). The second runs the script over a
+  planted `hsld26` with this checkout's real `topics.yaml`. Its checks: `first_seen_through` is
+  2026-11-03, the entry spellings are `bluekey` and `fbk`, and every file of the data directory has
+  the same bytes after the run. Every expected count was written by hand from what each test plants.
+  `.venv/bin/python scripts/hard_stop.py 115 .venv/bin/python -m pytest <both files> -q -n 0` →
+  **18 passed in 0.23 s**.
+* **Red run** against a skeleton of the module that counts nothing and refuses nothing (the checks'
+  word validation and classing removed too): **16 failed, 1 passed**. The one that passes is the
+  script's own missing-directory refusal, which is not in the module. The first red run, before three
+  tests were strengthened, had 15 failed and 2 passed. The suppressed-file test asserted only that
+  nothing was late, which the skeleton also satisfies, so it now has a live control that must be
+  counted.
+* **Mutants**, 19, each run against the two test files with no bytecode written and the module
+  restored from `HEAD` after. All were caught, each by an assertion:
+
+  | Mutant | Result |
+  |---|---|
+  | The topic's entry spellings not excluded | 2 failed |
+  | Late by the snapshot's date, not the range's first day | 4 failed |
+  | First seen read over suppressed files too | 1 failed |
+  | Off-topic disclosures kept on the topic | 1 failed |
+  | A spelling named with one school | 2 failed |
+  | No run-together school-word test | 1 failed |
+  | No whole-word withholding of tournament texts | 1 failed |
+  | Both empty-tournament guards removed (a disclosure naming no tournament can be late) | 1 failed |
+  | Both words classed as topic only | 2 failed |
+  | Unparsed sources classed as neither | 1 failed |
+  | Sources counted once per disclosure | 1 failed |
+  | The share over on-topic disclosures only | 1 failed |
+  | An entry-only snapshot not refused | 1 failed |
+  | A snapshot the store lacks not refused | 2 failed |
+  | Headings not read | 1 failed |
+  | Tags not read | 1 failed |
+  | Check words matched unreduced | 4 failed |
+  | A disclosure's validation error let through | 1 failed |
+  | That refusal raised with its context kept (`from None` removed) | 1 failed |
+
+  One more, removing only the guard in `_first_seen`, survived. It is equivalent: the late test guards
+  an empty spelling as well. The mutant that removes both guards is in the table.
 
 ## Files changed
 
-<!-- Group by package or directory; one line on why each group changed. -->
+* **`debate_core.application.landscape_late_disclosures`** (new): the count, its JSON and its refusals.
+* **`scripts/count_late_disclosures.py`** (new): reads one data directory's stores by hand and prints the JSON.
+* **Tests**: `packages/debate_core/tests/application/test_landscape_late_disclosures.py` (new) and
+  `tests/scripts/test_count_late_disclosures.py` (new).
 
 ## Deviations from the spec
 
-None.
+1. **The block runs from this worktree, with its `.venv`, not from the main clone at dev's tip.** The
+   PM's brief asked for the main clone. Its `.venv` imports the main clone's `debate_core`
+   (`.../debate-intelligence/packages/debate_core/src`), which does not hold the new module until this
+   branch merges, so the script could not run there. This worktree was started from dev's tip
+   (`3cfd4af`, the main clone's `HEAD` and `origin/dev` on 2026-11-12) and changes no dependency
+   (`uv.lock` and `pyproject.toml` are unchanged). The block prints the commit it ran. If the PM wants
+   the main clone's interpreter anyway, the same block works with
+   `PYTHONPATH=<worktree>/packages/debate_core/src` in front of that interpreter.
+2. **`tests/scripts/test_count_late_disclosures.py` is outside `constraints.packages`.** The list names
+   `scripts` and `packages/debate_core/tests`, and the scripts' tests live in `tests/scripts`. The rule's
+   own tests are in `packages/debate_core/tests`, as the node's criterion runs them.
 
 ## Decisions and assumptions
 
-<!-- Choices the spec left open, with the reasoning. -->
+1. **The rule is in `debate_core.application`, not only in the script,** so that step 4's weekly
+   report line can count with the same function rather than a copy of it.
+2. **The cut is the covering range's first day, not a date in code or on the command line.** "First
+   seen on or before 2026-11-03" and "first seen before 2026-11-06" are the same with weekly Tuesday
+   snapshots. The JSON's `first_seen_through` shows the 2026-11-03 it used.
+3. **"FBK spellings" are the topic's own entry spellings from `topics.yaml`,** matched by "holds", as
+   the entry is matched. Another topic's entry that covers the snapshot takes its disclosures off the
+   topic, and they are counted as `off_topic`, so a later space-colonization entry would show up there.
+4. **First seen among live disclosures only.** A spelling seen earlier only in a suppressed file is not
+   late, because that earlier disclosure no longer counts anywhere.
+5. **Spellings are named under a stricter test than the brief's.** The brief named a spelling more
+   than one school uses. This also withholds one that holds a school or team-code word, because a
+   tournament named after its host school is a school's name: v1-e32-t06 left four such names out of its
+   report (its Deviation 3). Schools are counted across every snapshot, as "uses" means for
+   configuration.
+6. **The parsed version is named in the block** (`--version 2026.11.03-docx-9`, the copy's parser per
+   the brief), so a copy with another version refuses rather than reading a different one.
 
 ## Operator follow-ups
 
-<!-- Commands the operator must run (anything over ~2 minutes), with where to run them, the exact
-command, expected runtime and what success looks like. Also GitHub/AWS settings to change. -->
+1. **The 2026-11-10 count. Held: do not run until the PM says v1-e39-t18's copy is free.** It is
+   read-only and opens no database. It stops if `~/t18-measure/copy` has no restore marker, or if the
+   copy's newest hsld26 manifest is not `2026-11-10.jsonl`. It takes a fingerprint of the copy's files
+   (names, sizes, times) before and after.
 
-None.
+   **Operator command** (expected runtime under a minute, likely about 10 s)
+   Where: any terminal on the Mac
+   ```bash
+   cd /Users/charlesclark/Documents/debate/debate-intelligence-tool/debate-intelligence-worktrees/v1-e32-t51-late-disclosures-from-pre-topic-tournaments-counted
+   COPY="$HOME/t18-measure/copy"
+   NEWEST=$(ls "${COPY}/objects/manifests/hsld26" 2>/dev/null | grep -E '^[0-9]{4}-[0-9]{2}-[0-9]{2}[.]jsonl$' | LC_ALL=C sort | tail -1)
+   if [[ ! -f "${COPY}/debate-research-restored-copy.json" ]]; then
+     echo "STOP: ${COPY} is not a restored copy"
+   elif [[ "${NEWEST}" != "2026-11-10.jsonl" ]]; then
+     echo "STOP: the copy's newest hsld26 manifest is ${NEWEST:-none}, not 2026-11-10.jsonl"
+   else
+     BEFORE=$(find "${COPY}" -type f -print0 | xargs -0 stat -f '%N %z %m' | LC_ALL=C sort | shasum -a 256)
+     git log -1 --format='commit %h'
+     .venv/bin/python scripts/count_late_disclosures.py --data-dir "${COPY}" --caselist hsld26 --snapshot 2026-11-10 --version 2026.11.03-docx-9 --topic-word de-extinct --other-topic-word "space col" --other-topic-word coloniz
+     echo "exit $?"
+     AFTER=$(find "${COPY}" -type f -print0 | xargs -0 stat -f '%N %z %m' | LC_ALL=C sort | shasum -a 256)
+     if [[ "${BEFORE}" == "${AFTER}" ]]; then echo "copy unchanged"; else echo "STOP: the copy changed"; fi
+   fi
+   ```
+   Success looks like this:
+   * a `commit` line, the JSON, `exit 0` and `copy unchanged`;
+   * in the JSON: `"snapshot": "2026-11-10"`, `"newest_snapshot": "2026-11-10"`,
+     `"topic": "ld-2026-nov-dec-de-extinction"`, `"first_seen_through": "2026-11-03"`,
+     `"parsed_version": "2026.11.03-docx-9"`, `"tournament_entry_spellings": ["bluekey", "fbk"]`, and
+     `"disclosures"` above zero.
+
+   Paste the whole output back. It holds counts, dates, public configuration, and only those
+   tournament spellings that two schools or more use and that hold no school or team-code word.
+
+   If it prints `STOP`, paste that line and stop. `exit 2` comes with one `Refused:` line on stderr:
+   paste it. `STOP: the copy changed` cannot come from this script, which writes nothing, so it means
+   something else wrote to the copy during the run. Say so, and the PM decides whether the count stands.
+   The copy is v1-e39-t18's to delete (policy 1.18), not this block's.
+2. **The 2026-11-17 count**, after the run of 2026-11-18: its block is written in step 4, after the
+   PM's ruling.
 
 ## Follow-up work
 
-<!-- Bugs, gaps or ideas outside this task's scope, each with the task or epic it belongs to.
-The PM decides whether they become spec changes or new tasks. -->
-
-None.
+None yet.
 
 ## PM review
 

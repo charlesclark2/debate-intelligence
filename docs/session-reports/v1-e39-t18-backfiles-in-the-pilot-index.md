@@ -156,6 +156,17 @@ dev's published index, as its restored manifest gives it: four stores (hsld26, h
 openev) at docx-9, snapshot 2026-11-10, 63,705 documents (16,710, 26,678, 14,563 and 5,754), 465,001
 occurrence rows read, SQLite 1,043,304,448 bytes, gzip 387,288,605.
 
+**Build 1, current seasons only** (hsld26, hspolicy26, hspf26, openev), from the copy with the
+installed `debate-research` 1.1.0.dev413, 2026-11-12 20:38:25 to 20:49:37 Chicago, on mains power;
+load average 10.61 / 9.09 / 8.65 before it (the Mac was not quiet: build times here are upper
+bounds). Exit 0, 671.16 s real (545.00 user, 41.24 sys), maximum resident set 1,481,129,984 bytes,
+peak memory footprint 1,612,564,232. Index `f318149882fdd9c5`: byte for byte the index dev
+publishes, so the method reproduces the weekly run's build. 63,705 documents (hsld26 16,710,
+hspolicy26 26,678, hspf26 14,563, openev 5,754), 60,503 distinct card clusters, 465,001 occurrence
+rows read, 459,285 occurrences, 166,394 provenance rows, none suppressed, no cluster left out;
+2,088 left out as no card (1,684 cite only, 404 with no cite and under 25 words). SQLite
+1,043,304,448 bytes, gzip 387,288,605; 1,446,481,920 bytes on disk for the folder.
+
 ## Operator follow-ups
 
 <!-- Commands the operator must run (anything over ~2 minutes), with where to run them, the exact

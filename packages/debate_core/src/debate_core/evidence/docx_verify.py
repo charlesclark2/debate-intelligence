@@ -111,6 +111,7 @@ __all__ = [
     "BodyParagraph",
     "CharacterRange",
     "DocumentBody",
+    "HiddenCut",
     "ManualEdit",
     "RemovedNegation",
     "body_evidence",
@@ -199,6 +200,16 @@ class BodyInterpolation:
 
 
 @dataclass(frozen=True, slots=True)
+class HiddenCut:
+    """One of the card's own cuts that the body does not show: no omission marker where it falls."""
+
+    evidence_offset: int
+    """The cut's omission offset in ``evidence_text``."""
+    body_offset: int
+    """Where in the body's evidence the cut's marker should be."""
+
+
+@dataclass(frozen=True, slots=True)
 class BodyComparison:
     """What the body did to the card's evidence, by the edit policy's kinds."""
 
@@ -206,11 +217,13 @@ class BodyComparison:
     interpolations: tuple[BodyInterpolation, ...]
     deletions: tuple[CharacterRange, ...]
     """The card ranges the body leaves out, whether a hunk only removed them or also added a marker."""
+    hidden_cuts: tuple[HiddenCut, ...] = ()
+    """The card's cuts the body shows no marker for, in evidence order (`v1-e06-t17`)."""
 
     @property
     def follows_the_policy(self) -> bool:
         """True when every difference is one the edit policy allows."""
-        return not self.manual_edits
+        return not self.manual_edits and not self.hidden_cuts
 
 
 @dataclass(frozen=True, slots=True)

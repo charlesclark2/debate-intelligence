@@ -1141,3 +1141,47 @@ run "a_name_prefix_without_its_environment_is_refused" {
   expect_failures = [var.name_prefix]
 }
 
+
+# v1-e39-t18: the backfile seasons a student may pick. None by default, and then no variable at all,
+# so the function is planned as before the setting existed.
+run "no_backfile_season_means_no_season_setting" {
+  command = plan
+
+  assert {
+    condition     = !contains(keys(aws_lambda_function.pilot.environment[0].variables), "TUB_BACKFILE_SEASONS")
+    error_message = "With backfile_seasons empty, the function's environment has no TUB_BACKFILE_SEASONS."
+  }
+}
+
+run "backfile_seasons_reach_the_function_in_order" {
+  command = plan
+
+  variables {
+    backfile_seasons = ["hspolicy25", "hsld25"]
+  }
+
+  assert {
+    condition     = aws_lambda_function.pilot.environment[0].variables["TUB_BACKFILE_SEASONS"] == "hspolicy25,hsld25"
+    error_message = "TUB_BACKFILE_SEASONS lists the seasons backfile_seasons names, in its order, comma-separated."
+  }
+}
+
+run "a_backfile_season_named_twice_is_refused" {
+  command = plan
+
+  variables {
+    backfile_seasons = ["hspolicy25", "hspolicy25"]
+  }
+
+  expect_failures = [var.backfile_seasons]
+}
+
+run "a_backfile_season_with_a_path_in_it_is_refused" {
+  command = plan
+
+  variables {
+    backfile_seasons = ["../current"]
+  }
+
+  expect_failures = [var.backfile_seasons]
+}

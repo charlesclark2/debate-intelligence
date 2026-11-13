@@ -146,3 +146,22 @@ variable "accounts_user_names" {
   type        = list(string)
   default     = []
 }
+
+variable "backfile_seasons" {
+  description = <<-EOT
+    Backfile seasons a student may pick on the search page, each searched from its own index at
+    reports/tub/search/seasons/<season>.json (v1-e39-t18, the PM's shape 4), such as
+    ["hspolicy25", "hsld25"]. Empty offers none, and the function's environment then has no
+    TUB_BACKFILE_SEASONS at all. Name a season only once its index is published.
+  EOT
+  type        = list(string)
+  default     = []
+
+  validation {
+    condition = (
+      alltrue([for season in var.backfile_seasons : can(regex("^[a-z]+[0-9]{2}$", season))]) &&
+      length(distinct(var.backfile_seasons)) == length(var.backfile_seasons)
+    )
+    error_message = "backfile_seasons names each season once, by its caselist slug: letters, then two digits, such as hspolicy25."
+  }
+}

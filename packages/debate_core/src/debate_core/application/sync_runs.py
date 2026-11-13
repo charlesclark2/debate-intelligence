@@ -136,6 +136,7 @@ from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from enum import StrEnum
 from pathlib import Path
+from types import MappingProxyType
 from typing import Final, Literal, cast
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
@@ -148,6 +149,7 @@ from debate_core.application.caselist.status_service import CASELIST_DRIFT
 from debate_core.application.caselist_sync import (
     CLOUD_FAILURE_RATE_RUNBOOK,
     REQUIRED_STAGES,
+    TOKEN_UNREADABLE_CODE,
     DriftKind,
     PendingSnapshot,
     RunSummary,
@@ -169,9 +171,10 @@ from debate_core.application.errors import (
     NotFound,
     StoreCredentialsExpired,
     StoreError,
+    error_code_of_class,
     reported_error_code,
 )
-from debate_core.application.ports.caselist_source import CaselistAuthExpired
+from debate_core.application.ports.caselist_source import CaselistAuthExpired, CaselistTokenMissing
 from debate_core.application.ports.evidence_store import EvidenceObjectStore, validate_object_key
 from debate_core.application.ports.notifier import Notification, Notifier
 
@@ -183,11 +186,14 @@ __all__ = [
     "CLOUD_BACKLOG_RUNBOOK",
     "CLOUD_FAILED_PUBLISH_RUNBOOK",
     "CLOUD_FAILED_RUN_RUNBOOK",
+    "CLOUD_NO_TOKEN_CURE",
+    "CLOUD_NO_TOKEN_RUNBOOK",
     "CLOUD_NO_SESSION_CURE",
     "CLOUD_NO_SESSION_RUNBOOK",
     "CLOUD_PUBLISHED_AGAIN_CURE",
     "CLOUD_PUBLISHED_AGAIN_RUNBOOK",
     "CLOUD_PUBLISH_CURE",
+    "CLOUD_TOKEN_CURES",
     "CLOUD_UNFINISHED_RUN_CURE",
     "RUN_HOME_MOVED_FIX",
     "RUN_HOME_MOVED_NOTICE",
@@ -240,6 +246,7 @@ __all__ = [
     "SyncRunOutcome",
     "SyncRunRecord",
     "banner_words",
+    "cloud_cure_for",
     "comparisons_owed_by_the_newest_run",
     "details_for_failure",
     "details_for_summary",
@@ -1380,6 +1387,45 @@ that week (`caselist-cloud-run.md`). The run after the login restores the run st
 as :data:`CLOUD_UNFINISHED_RUN_CURE` says. A backfile import refused for it waits out the no-import
 window, which ends Thursday 00:00. A failed weekly login says so in its own email, with its own fix."""
 
+CLOUD_NO_TOKEN_RUNBOOK: Final = 'caselist-cloud-run.md, "A run with no readable caselist_token"'
+"""The runbook section a bucket-mode run with no caselist_token, or one it cannot read, points to
+(`v1-e40-t40`)."""
+
+CLOUD_NO_TOKEN_CURE: Final = (
+    "the next Wednesday 03:00 login writes a new caselist_token to the token secret, and the run after it "
+    "takes up what this run did not finish, from the run state saved in the bucket; a backfile import "
+    f"refused for it starts again after Thursday 00:00 ({CLOUD_NO_TOKEN_RUNBOOK}); never a login by hand, "
+    "which would be a second login"
+)
+"""The fix of a bucket-mode command that found no caselist_token, or one it cannot read (`v1-e40-t40`), in
+:data:`CLOUD_AUTH_EXPIRED_CURE`'s shape.
+
+The cloud run's token is the token secret's value. The login task writes it every Wednesday at 03:00,
+replacing whatever the secret held, so a secret with no value and one holding something that is not a
+token record this program wrote are both put right by the next login. `caselist auth login`, the Mac's
+fix for no token, and `caselist auth logout` then `login`, its fix for one it cannot read, would be a
+second login that week, and the logout refuses the Secrets Manager backend anyway."""
+
+CLOUD_TOKEN_CURES: Final[Mapping[str, str]] = MappingProxyType(
+    {
+        error_code_of_class(CaselistAuthExpired): CLOUD_AUTH_EXPIRED_CURE,
+        error_code_of_class(CaselistTokenMissing): CLOUD_NO_TOKEN_CURE,
+        TOKEN_UNREADABLE_CODE: CLOUD_NO_TOKEN_CURE,
+    }
+)
+"""The cloud's cure for each error code a bucket-mode command meets over the caselist_token
+(`v1-e40-t40`): the only place a token code's cloud cure comes from.
+
+Each cure gives the Wednesday login and never a login by hand, which the Mac's words for these codes
+give. The command's output (`debate_cli.caselist_token_cures`), its failed-stage hint and a failed
+stage's notice ask this table, through :func:`cloud_cure_for`. A code outside it keeps its own words in
+bucket mode too."""
+
+
+def cloud_cure_for(codes: Iterable[str]) -> str | None:
+    """The cloud cure of the first of `codes` in :data:`CLOUD_TOKEN_CURES`, or `None` when none is there."""
+    return next((CLOUD_TOKEN_CURES[code] for code in codes if code in CLOUD_TOKEN_CURES), None)
+
 
 type RetryRule = Callable[[Sequence[str]], bool]
 """Whether a run that failed on exactly these error codes may succeed on a retry.
@@ -1465,6 +1511,10 @@ def notifications_for(
     details' `bucket_run` says it was (:data:`CLOUD_AUTH_EXPIRED_CURE`), never `caselist auth login`,
     which in the cloud would be a second login. The title and message are unchanged, and so is the
     Mac's notice.
+    So does a failed-stage banner whose stage failed on a code in :data:`CLOUD_TOKEN_CURES`
+    (`v1-e40-t40`), a download refused for an expired login: its fix is that code's cure, never the next
+    cloud run "or one started by hand", which before the Wednesday login is refused again. Its title,
+    message and hint are unchanged, and so is the Mac's notice.
 
     **A skipped run says so, and that nothing needs a person** (`v1-e40-t29`). A pull refused because
     the weekly run's home moved to prod, as its details' `skipped` says, has a notice of its own
@@ -1581,6 +1631,13 @@ def notifications_for(
             for stage, one in zip(failed, said, strict=True)
         )
         hints = list(dict.fromkeys(one.hint for one in said if one is not None and one.hint))
+        # A cloud run's stage failed on a token code: its cure, the Wednesday login, never a run
+        # started by hand before it, which would be refused again (`v1-e40-t40`).
+        token_cure = (
+            cloud_cure_for(code for one in said if one is not None for code in one.error_codes)
+            if bucket is not None
+            else None
+        )
         if required.intersection(failed):
             retried = _retried_by_the_next_run(details.failure_codes, may_succeed_on_retry)
             title, verdict = _verdict(retried, fix_first=_a_fix_comes_first(record, details))
@@ -1593,7 +1650,9 @@ def notifications_for(
                 title=title,
                 message=f"{where}: {named}. {verdict}"
                 + (_WHAT_THE_BUCKET_CONFIRMED_IS_KEPT if cloud_kept else _WHAT_WAS_CAPTURED_IS_KEPT),
-                fix_command=CLOUD_PUBLISH_CURE
+                fix_command=token_cure
+                if token_cure is not None
+                else CLOUD_PUBLISH_CURE
                 if cloud_publish
                 else PUBLISH_PENDING_COMMAND
                 if only_publish

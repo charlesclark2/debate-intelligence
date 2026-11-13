@@ -185,8 +185,6 @@ from collections.abc import Callable, Iterable, Iterator
 from dataclasses import dataclass, field, replace
 from pathlib import Path, PurePosixPath
 
-import ci_slow_tests
-
 DEFAULT_BASE = "origin/dev"
 CI_MARKERS = "not slow and not live"
 
@@ -3071,7 +3069,13 @@ def main(argv: list[str] | None = None) -> int:
 def run_slow_tests(root: Path, tests: list[str]) -> int:
     """The slow tests of the selection, as a pull request's `slow-tests` job runs them (v1-e41-t29):
     the files that may hold one, validate-dev's markers, the tests left to validate-dev deselected,
-    and a skip counted as a failure. 0 when they passed or there were none."""
+    and a skip counted as a failure. 0 when they passed or there were none.
+
+    ci_slow_tests is imported here, not at the top, so this file still loads alone by its path, as the
+    partition proof loads it (tests/scripts/test_ci_workflow_test_job.py), with scripts/ not on
+    sys.path."""
+    import ci_slow_tests
+
     slow_files = [test for test in tests if ci_slow_tests.may_hold_slow_tests(root, test)]
     if not slow_files:
         print("Slow tests: none of the selected files holds one this run takes.", file=sys.stderr)

@@ -87,6 +87,7 @@ from debate_core.application.caselist.evidence_listing import LocalEvidence
 from debate_core.application.caselist.publish_plan import manifest_prefix, snapshot_of_manifest_key
 from debate_core.application.errors import DomainError, NotFound
 from debate_core.application.landscape_bundle_files import REPORTS_PREFIX
+from debate_core.application.landscape_late_disclosures import count_late_disclosures
 from debate_core.application.landscape_model_stage import (
     DEFAULT_MAX_MODEL_ITEMS,
     ModelClassificationStage,
@@ -127,7 +128,7 @@ from debate_core.application.review_queue_order import ReviewQueueOrdering
 from debate_core.application.sync_runs import SyncRunLog
 from debate_core.arguments.landscape.analytic_texts import CounterplanActors
 from debate_core.arguments.landscape.review_queue import DEFAULT_REVIEW_THRESHOLD, ReviewRow
-from debate_core.domain.landscape import Taxonomy, Topic
+from debate_core.domain.landscape import LateDisclosures, Taxonomy, Topic
 from debate_core.domain.landscape_classification import OverrideRules, PositionClassification
 from debate_core.domain.landscape_pages import PAGE_BUDGET, SCHOOL_VIEW_FILE, SchoolViewPageSizes
 from debate_core.domain.landscape_report import LandscapeCard, LandscapeReport
@@ -593,6 +594,7 @@ class LandscapeRunService:
             objects=self._objects, run_log=self._run_log, stale_after_days=self._stale_after_days
         ).check(request.caselist, report_date=self._today())
         snapshot_topics = await self._snapshot_topics(request.caselist, snapshot)
+        late = await self._late_disclosures(request.caselist, snapshot, reading.version)
         topic_range = _topic_range(resolved.topic, request.caselist, snapshot)
         cards = landscape_cards(
             reading.sources,
@@ -621,6 +623,7 @@ class LandscapeRunService:
                 snapshot_topics=snapshot_topics,
                 topic_range=topic_range,
                 tournament_entry_snapshots=reading.tournament_entry_snapshots,
+                late_disclosures=late,
             ),
             staleness,
         )
@@ -675,6 +678,23 @@ class LandscapeRunService:
             bundle_files={name: bundle.files[name] for name in BUNDLE_FILES},
             pages=pages,
         )
+
+    async def _late_disclosures(self, caselist: str, snapshot: date, version: str) -> LateDisclosures | None:
+        """The snapshot's late disclosures for the report's line, counted as the script counts them
+        (`v1-e32-t51`); None when its range has no earlier topic of the caselist."""
+        topics = self._taxonomies.topic_map()
+        if topics.late_cut(caselist, snapshot) is None:
+            return None
+        counted = await count_late_disclosures(
+            store=self._parsed,
+            local=self._local,
+            suppression=self._suppression,
+            topic_map=topics,
+            caselist=caselist,
+            snapshot=snapshot,
+            version=version,
+        )
+        return counted.for_the_report()
 
     async def _snapshot(self, caselist: str, asked: date | None) -> date:
         known = await self._known_caselists()

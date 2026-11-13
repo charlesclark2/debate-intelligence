@@ -77,7 +77,7 @@ def test_a_disclosure_in_the_entry_snapshot_is_on_the_entry_topic_only_when_its_
     tournament: str | None, expected: str | None
 ) -> None:
     topics = transition_map(HARBOR)
-    assert on(topics.resolve_disclosure("hsld99", date(2026, 11, 3), tournament)) == expected
+    assert on(topics.resolve_disclosure("hsld99", date(2026, 11, 3), tournament, first_seen={})) == expected
 
 
 def test_the_entry_snapshot_as_a_whole_is_on_the_entry_topic_and_says_only_the_entry_put_it_there() -> None:
@@ -94,9 +94,9 @@ def test_the_entry_snapshot_as_a_whole_is_on_the_entry_topic_and_says_only_the_e
 @pytest.mark.parametrize("tournament", ["Lakeside Open", "Harbor City Classic", None, ""])
 def test_after_the_entry_window_every_disclosure_resolves_by_its_range(tournament: str | None) -> None:
     topics = transition_map(HARBOR)
-    assert on(topics.resolve_disclosure("hsld99", date(2026, 11, 10), tournament)) == NEW
-    assert on(topics.resolve_disclosure("hsld99", date(2026, 10, 27), tournament)) == OLD
-    assert topics.resolve_disclosure("hsld99", date(2026, 8, 25), tournament) is None
+    assert on(topics.resolve_disclosure("hsld99", date(2026, 11, 10), tournament, first_seen={})) == NEW
+    assert on(topics.resolve_disclosure("hsld99", date(2026, 10, 27), tournament, first_seen={})) == OLD
+    assert topics.resolve_disclosure("hsld99", date(2026, 8, 25), tournament, first_seen={}) is None
 
 
 def test_entries_move_no_snapshot_the_ranges_already_resolve() -> None:
@@ -107,7 +107,7 @@ def test_entries_move_no_snapshot_the_ranges_already_resolve() -> None:
         if day != date(2026, 11, 3):
             assert with_entry.resolve("hsld99", day) == plain.resolve("hsld99", day), day
             for tournament in ("Harbor City Classic", "Lakeside Open", None):
-                assert on(with_entry.resolve_disclosure("hsld99", day, tournament)) == on(
+                assert on(with_entry.resolve_disclosure("hsld99", day, tournament, first_seen={})) == on(
                     plain.resolve("hsld99", day)
                 ), (day, tournament)
         day += timedelta(days=1)
@@ -118,15 +118,23 @@ def test_an_entry_of_another_caselist_moves_nothing_here() -> None:
         entry("Harbor City Classic", ["harborcity"], "2026-11-03", "2026-11-03", "hsld98")
     )
     assert topics.resolve("hsld99", date(2026, 11, 3)) is None
-    assert topics.resolve_disclosure("hsld99", date(2026, 11, 3), "Harbor City Classic") is None
-    assert on(topics.resolve_disclosure("hsld98", date(2026, 11, 3), "Harbor City Classic")) == NEW
+    assert (
+        topics.resolve_disclosure("hsld99", date(2026, 11, 3), "Harbor City Classic", first_seen={}) is None
+    )
+    assert (
+        on(topics.resolve_disclosure("hsld98", date(2026, 11, 3), "Harbor City Classic", first_seen={}))
+        == NEW
+    )
 
 
 def test_an_older_topic_may_claim_a_late_disclosure_in_the_newer_topic_range() -> None:
     late = entry("Lakeside Open", ["lakeside"], "2026-11-10", "2026-12-31")
     topics = transition_map(HARBOR, old_entries=(late,))
-    assert on(topics.resolve_disclosure("hsld99", date(2026, 11, 17), "Lakeside Open")) == OLD
-    assert on(topics.resolve_disclosure("hsld99", date(2026, 11, 17), "Harbor City Classic")) == NEW
+    assert on(topics.resolve_disclosure("hsld99", date(2026, 11, 17), "Lakeside Open", first_seen={})) == OLD
+    assert (
+        on(topics.resolve_disclosure("hsld99", date(2026, 11, 17), "Harbor City Classic", first_seen={}))
+        == NEW
+    )
     assert on(topics.resolve("hsld99", date(2026, 11, 17))) == NEW
 
 

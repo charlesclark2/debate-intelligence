@@ -326,9 +326,47 @@ What the check refuses, naming the topics:
 * two topics' entries covering the same snapshot of a caselist;
 * a spelling that is not lower-case letters and digits.
 
-List only spellings two or more schools use, and never one naming a school or a team. Late disclosures
-of earlier tournaments in later snapshots stay on the snapshot's range topic. The PM counts them each
-week, and adds an entry to the older topic only if they turn out to matter.
+List only spellings two or more schools use, and never one naming a school or a team.
+
+### Files disclosed late from an earlier topic's tournaments
+
+Teams disclose some rounds weeks after the tournament. On hsld26's 2026-11-10 snapshot, the first week
+on de-extinction by its range, 356 of 1,639 disclosures named a tournament first disclosed before the
+topic began on 2026-11-06, and nearly all of them were space colonization files (`v1-e32-t51`). Since
+the PM's ruling of 2026-11-12 a range can put them on the earlier topic:
+
+```yaml
+    label: De-extinction
+    check_words: [de-extinct]
+    caselists:
+      - caselist: hsld26
+        from: 2026-11-06
+        to: 2026-12-31
+        late_disclosures_on_earlier_topic: true
+```
+
+With the key on, a disclosure in the range's snapshots goes to the topic of the caselist's range just
+before this one when all of these hold:
+
+* no tournament entry matches it (an entry always wins);
+* its tournament, reduced as for an entry, holds none of this topic's own entry spellings, so Florida
+  Blue Key's files stay on de-extinction;
+* that spelling was first seen, among the caselist's disclosures, in a snapshot before the range
+  began.
+
+No snapshot before the range moves, and no tournament or school is listed anywhere. A range with no
+earlier topic of its caselist (Policy's season-long one) cannot take the key: the check refuses it.
+
+The report says how many disclosures this was each week, beside "Part of a week", even when it is 0:
+
+> **Earlier topic:** 356 of 1,639 disclosures this week (21.7%) name a tournament first disclosed
+> before this topic began on 2026-11-06, and are counted on Space colonization, not here. Of their 336
+> files, 2 hold only this topic's words in tags and headings, and 277 only the earlier topic's.
+
+The second sentence is the check. It counts the files holding each topic's `check_words` in their tags
+and headings, matched by letters and digits without case. The words place no file. The line uses a
+topic's `label` for its name, or its id when it has none. A rising count of files holding only this
+topic's words means a new tournament is sharing an older one's spelling. Tell the PM.
 
 ## How a card is placed
 

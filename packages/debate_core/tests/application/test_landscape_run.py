@@ -9,6 +9,7 @@ implements, and the CLI's tests run the same publish against moto.
 from __future__ import annotations
 
 import dataclasses
+import json
 from collections.abc import Sequence
 from datetime import UTC, date, datetime
 from pathlib import Path
@@ -945,3 +946,104 @@ async def test_a_team_code_in_a_quoted_text_is_a_scan_hit_in_report_md(world: Sy
     assert [(hit.file, hit.kind, hit.term) for hit in result.scan.hits if CODED_TEXT in hit.line] == [
         ("report.md", ScanKind.TEAM_CODE, "PX")
     ]
+
+
+# ------------------------------------------------------------------------------------------------
+# Late disclosures on the earlier topic, and the report's line (`v1-e32-t51`)
+# ------------------------------------------------------------------------------------------------
+
+
+def _topics_with_an_earlier_topic(*, key: bool, check_words: bool = True) -> str:
+    """synthetic26's topic change of TOPICS_WITH_A_CHANGE, with the late-disclosure key and check words."""
+    earlier = "\n    label: Earlier policy\n    check_words: [states]" if check_words else ""
+    later = "\n    check_words: [single payer]" if check_words else ""
+    keyed = ", late_disclosures_on_earlier_topic: true" if key else ""
+    return f"""\
+schema_version: 1
+topics:
+  - id: policy-earlier-topic
+    event: POLICY{earlier}
+    caselists:
+      - {{caselist: {CASELIST}, from: 2026-09-01, to: 2026-09-08}}
+  - id: {SYNTHETIC_RUN_TOPIC}
+    event: POLICY
+    taxonomy_version: 1.0.0{later}
+    caselists:
+      - {{caselist: {CASELIST}, from: 2026-09-09, to: 2026-12-31{keyed}}}
+"""
+
+
+def _disclose_late(world: SyntheticRun) -> None:
+    """Brindle Valley's 09-08 file disclosed again in 09-15, from a later round of its 09-08 tournament."""
+    manifests = world.data_dir / "objects" / "manifests" / CASELIST
+    first = next(
+        json.loads(line)
+        for line in (manifests / "2026-09-08.jsonl").read_text(encoding="utf-8").splitlines()
+        if "Brindle Valley" in line
+    )
+    late = {**first, "path": "Brindle Valley/ZT/Brindle Valley-ZT-Neg-Lantern Classic-Round 4.docx"}
+    with (manifests / "2026-09-15.jsonl").open("a", encoding="utf-8") as rows:
+        rows.write(json.dumps(late, sort_keys=True) + "\n")
+
+
+async def test_with_the_key_on_a_late_disclosure_is_left_out_and_the_line_says_where_it_went(
+    world: SyntheticRun,
+) -> None:
+    _disclose_late(world)
+    (world.config_dir / "topics.yaml").write_text(_topics_with_an_earlier_topic(key=True), encoding="utf-8")
+
+    result = await _run(_service(world))
+
+    late = result.report.header.late_disclosures
+    assert late is not None
+    assert (late.disclosures, late.late, late.late_sources, late.moved) == (3, 1, 1, True)
+    assert (late.this_topic_only, late.earlier_topic_only) == (0, 1)
+    assert result.classification.counts.sources == 2
+    report = (result.directory / "report.md").read_text(encoding="utf-8")
+    assert (
+        "**Earlier topic:** 1 of 3 disclosures this week (33.3%) name a tournament first disclosed "
+        "before this topic began on 2026-09-09, and are counted on Earlier policy, not here. Of their 1 "
+        "file, 0 hold only this topic's words in tags and headings, and 1 only the earlier topic's.\n"
+    ) in report
+    assert "Lantern" not in report.split("## About this report")[0]
+
+
+async def test_with_the_key_off_the_late_disclosure_is_counted_here_and_the_line_says_so(
+    world: SyntheticRun,
+) -> None:
+    _disclose_late(world)
+    (world.config_dir / "topics.yaml").write_text(_topics_with_an_earlier_topic(key=False), encoding="utf-8")
+
+    result = await _run(_service(world))
+
+    late = result.report.header.late_disclosures
+    assert late is not None and (late.late, late.moved) == (1, False)
+    assert result.classification.counts.sources == 3
+    report = (result.directory / "report.md").read_text(encoding="utf-8")
+    assert (
+        "**Late disclosures:** 1 of 3 disclosures this week (33.3%) name a tournament first disclosed before "
+        "this topic began on 2026-09-09, and are counted here. Of their 1 file, 1 hold only the earlier "
+        "topic's words in tags and headings, and 0 only this topic's.\n"
+    ) in report
+
+
+async def test_the_line_is_shown_at_zero_and_without_check_words_has_no_check(world: SyntheticRun) -> None:
+    (world.config_dir / "topics.yaml").write_text(
+        _topics_with_an_earlier_topic(key=True, check_words=False), encoding="utf-8"
+    )
+
+    result = await _run(_service(world))
+
+    report = (result.directory / "report.md").read_text(encoding="utf-8")
+    assert (
+        "**Earlier topic:** 0 of 2 disclosures this week (0.0%) name a tournament first disclosed before "
+        "this topic began on 2026-09-09, and are counted on policy-earlier-topic, not here.\n"
+    ) in report
+
+
+async def test_a_topic_with_no_earlier_topic_has_no_late_disclosure_line(world: SyntheticRun) -> None:
+    result = await _run(_service(world))
+
+    assert result.report.header.late_disclosures is None
+    report = (result.directory / "report.md").read_text(encoding="utf-8")
+    assert "**Earlier topic:**" not in report and "**Late disclosures:**" not in report

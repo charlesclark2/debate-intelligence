@@ -61,7 +61,13 @@ from pydantic import Field, StringConstraints, model_validator
 from debate_core.domain.base import DomainModel, NonEmptyText, Sha256Hex
 from debate_core.domain.caselist import CaselistSlug
 from debate_core.domain.enums import ProvenanceMode
-from debate_core.domain.landscape import PositionId, PositionKind, PositionSide, TaxonomyVersion
+from debate_core.domain.landscape import (
+    LateDisclosures,
+    PositionId,
+    PositionKind,
+    PositionSide,
+    TaxonomyVersion,
+)
 from debate_core.domain.landscape_texts import LandscapeTexts
 
 __all__ = [
@@ -677,6 +683,13 @@ class ReportHeader(DomainModel):
     newest_snapshot: date = Field(description="The newest snapshot the store holds, per the hook.")
     snapshot_age_days: int = Field(description="Its age on the report date, per the hook.")
     archives_awaiting_download: int = Field(ge=0)
+    late_disclosures: LateDisclosures | None = Field(
+        default=None,
+        description=(
+            "The snapshot's late disclosures, for the report's line (`v1-e32-t51`); None when its range has "
+            "no earlier topic of the caselist."
+        ),
+    )
     provenance_mode: Literal[ProvenanceMode.FILE_IMPORT] = ProvenanceMode.FILE_IMPORT
 
     @model_validator(mode="after")

@@ -36,7 +36,7 @@ FLORIDA_BLUE_KEY = (
     "UF FBK",
     "Florida Blue Key Round Robin",
 )
-OTHER_TOURNAMENTS = ("National Speech and Debate Season Opener", "Mid America Cup", "Harbor City Classic")
+OTHER_TOURNAMENTS = ("National Speech and Debate Season Opener", "Ridgeline Cup", "Harbor City Classic")
 EVERY_TOURNAMENT = (*FLORIDA_BLUE_KEY, *OTHER_TOURNAMENTS, None, "")
 
 
@@ -70,7 +70,7 @@ def test_every_snapshot_through_2026_10_27_resolves_as_it_did_before(topics: Top
             False,
         ), day
         for tournament in EVERY_TOURNAMENT:
-            disclosure = topics.resolve_disclosure(caselist, day, tournament)
+            disclosure = topics.resolve_disclosure(caselist, day, tournament, first_seen={})
             assert (disclosure.topic_id if disclosure else None) == expected, (day, tournament)
         day += timedelta(days=1)
 
@@ -79,7 +79,7 @@ def test_every_snapshot_through_2026_10_27_resolves_as_it_did_before(topics: Top
 def test_a_florida_blue_key_disclosure_in_the_2026_11_03_snapshot_is_on_de_extinction(
     topics: TopicMap, tournament: str
 ) -> None:
-    resolved = topics.resolve_disclosure("hsld26", date(2026, 11, 3), tournament)
+    resolved = topics.resolve_disclosure("hsld26", date(2026, 11, 3), tournament, first_seen={})
     assert resolved is not None
     assert resolved.topic_id == DE_EXTINCTION
 
@@ -88,7 +88,7 @@ def test_a_florida_blue_key_disclosure_in_the_2026_11_03_snapshot_is_on_de_extin
 def test_every_other_disclosure_in_the_2026_11_03_snapshot_is_on_no_topic(
     topics: TopicMap, tournament: str | None
 ) -> None:
-    assert topics.resolve_disclosure("hsld26", date(2026, 11, 3), tournament) is None
+    assert topics.resolve_disclosure("hsld26", date(2026, 11, 3), tournament, first_seen={}) is None
 
 
 def test_the_2026_11_03_snapshot_is_on_de_extinction_only_through_its_tournament_entry(
@@ -108,10 +108,10 @@ def test_from_2026_11_10_every_hsld26_disclosure_is_on_de_extinction_by_its_rang
     topics: TopicMap, tournament: str | None
 ) -> None:
     for day in (date(2026, 11, 10), date(2026, 12, 29)):
-        resolved = topics.resolve_disclosure("hsld26", day, tournament)
+        resolved = topics.resolve_disclosure("hsld26", day, tournament, first_seen={})
         assert resolved is not None
         assert resolved.topic_id == DE_EXTINCTION
-    assert topics.resolve_disclosure("hsld26", date(2027, 1, 5), tournament) is None
+    assert topics.resolve_disclosure("hsld26", date(2027, 1, 5), tournament, first_seen={}) is None
 
 
 def test_the_tournament_entry_lists_only_the_two_public_spellings(topics: TopicMap) -> None:
@@ -123,3 +123,68 @@ def test_the_tournament_entry_lists_only_the_two_public_spellings(topics: TopicM
         date(2026, 11, 3),
         date(2026, 11, 3),
     )
+
+
+# ------------------------------------------------------------------------------------------------
+# Late disclosures on the earlier topic (`v1-e32-t51`, the PM's Q1 ruling of 2026-11-12)
+# ------------------------------------------------------------------------------------------------
+
+SEEN_IN_SEPTEMBER = {"ridgelinecup": date(2026, 9, 15), "harborcityclassic": date(2026, 9, 15)}
+"""A spelling history in which every planted tournament was first seen before either LD topic changed."""
+
+
+def test_only_hsld26s_de_extinction_range_moves_late_disclosures(topics: TopicMap) -> None:
+    keyed = [
+        (topic.id, one.caselist)
+        for topic in topics.topics
+        for one in topic.caselists
+        if one.late_disclosures_on_earlier_topic
+    ]
+    assert keyed == [(DE_EXTINCTION, "hsld26")]
+    cut = topics.late_cut("hsld26", date(2026, 11, 10))
+    assert cut is not None
+    assert (cut.earlier.id, cut.earlier.name, cut.range.effective_from) == (
+        SPACE_COLONIZATION,
+        "Space colonization",
+        date(2026, 11, 6),
+    )
+
+
+def test_the_ld_topics_check_words_are_each_topics_own(topics: TopicMap) -> None:
+    assert topics.topic(DE_EXTINCTION).check_words == ("de-extinct",)
+    assert topics.topic(SPACE_COLONIZATION).check_words == ("space col", "coloniz")
+    assert topics.topic(NHI).check_words == ()
+
+
+@pytest.mark.parametrize("caselist", ["hspolicy26", "hsld26", "hspf26"])
+def test_with_a_spelling_history_every_snapshot_before_2026_11_10_resolves_as_without_one(
+    topics: TopicMap, caselist: str
+) -> None:
+    day = date(2026, 7, 7)
+    while day < date(2026, 11, 10):
+        for tournament in EVERY_TOURNAMENT:
+            assert topics.resolve_disclosure(caselist, day, tournament, first_seen=SEEN_IN_SEPTEMBER) == (
+                topics.resolve_disclosure(caselist, day, tournament, first_seen={})
+            ), (day, tournament)
+        day += timedelta(days=7)
+
+
+def test_from_2026_11_10_a_late_hsld26_disclosure_is_on_space_colonization(topics: TopicMap) -> None:
+    for day in (date(2026, 11, 10), date(2026, 12, 29)):
+        late = topics.resolve_disclosure("hsld26", day, "Ridgeline Cup", first_seen=SEEN_IN_SEPTEMBER)
+        fbk = topics.resolve_disclosure(
+            "hsld26", day, "Florida Blue Key", first_seen={"floridabluekey": date(2026, 11, 3)}
+        )
+        assert late is not None and late.topic_id == SPACE_COLONIZATION
+        assert fbk is not None and fbk.topic_id == DE_EXTINCTION
+
+
+def test_policy_has_no_earlier_topic_and_never_moves(topics: TopicMap) -> None:
+    day = date(2026, 7, 7)
+    while day <= date(2027, 6, 29):
+        assert topics.late_cut("hspolicy26", day) is None
+        resolved = topics.resolve_disclosure(
+            "hspolicy26", day, "Ridgeline Cup", first_seen={"ridgelinecup": date(2026, 1, 6)}
+        )
+        assert resolved is not None and resolved.topic_id == NHI
+        day += timedelta(days=7)

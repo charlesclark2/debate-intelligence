@@ -3131,3 +3131,48 @@ def test_evaluate_check_sample_runs_alone(
     assert result.exit_code == ExitCode.USAGE_ERROR, result.output
     assert _error(result)["code"] == "CHECK_SAMPLE_ASKS_NO_MODEL"
     assert asked == []
+
+
+LATE_DISCLOSURE_TOPICS = f"""\
+schema_version: 1
+topics:
+  - id: policy-earlier-topic
+    event: POLICY
+    label: Earlier policy
+    caselists:
+      - {{caselist: {CASELIST}, from: 2026-09-01, to: 2026-09-08}}
+  - id: policy-synthetic-topic
+    event: POLICY
+    taxonomy_version: 1.0.0
+    caselists:
+      - {{caselist: {CASELIST}, from: 2026-09-09, to: 2026-12-31, late_disclosures_on_earlier_topic: true}}
+"""
+"""synthetic26 with a topic before its taxonomy's and the late-disclosure key (`v1-e32-t51`)."""
+
+
+def test_json_gives_the_late_disclosures_even_at_zero_when_the_range_has_an_earlier_topic(
+    world: SyntheticRun,
+) -> None:
+    (world.config_dir / "topics.yaml").write_text(LATE_DISCLOSURE_TOPICS, encoding="utf-8")
+
+    result = landscape(world, "--caselist", CASELIST)
+
+    assert result.exit_code == ExitCode.OK, result.output
+    assert _data(result)["late_disclosures"] == {
+        "snapshot": "2026-09-15",
+        "range_from": "2026-09-09",
+        "earlier_topic": "Earlier policy",
+        "moved": True,
+        "disclosures": 2,
+        "late": 0,
+        "late_sources": 0,
+        "this_topic_only": None,
+        "earlier_topic_only": None,
+    }
+
+
+def test_json_has_no_late_disclosures_key_when_the_range_has_no_earlier_topic(world: SyntheticRun) -> None:
+    result = landscape(world, "--caselist", CASELIST)
+
+    assert result.exit_code == ExitCode.OK, result.output
+    assert "late_disclosures" not in _data(result)

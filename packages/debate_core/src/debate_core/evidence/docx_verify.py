@@ -43,7 +43,9 @@ and added body tokens between two runs that match. A hunk is allowed when:
   removed, in that hunk or by the card's own omissions; a marker that claims a cut nobody made is not.
 
 The format profile's whole omission marker (``" … "``, its spaces included) is one unit in the diff, in
-the body and in the card alike, and its tokens are put back after it (`v1-e06-t15`). Compared token
+the body and in the card alike, and its tokens are put back after it (`v1-e06-t15`). So is a marker
+typed with other spacing: the marker's sign ("…") with all the whitespace either side of it, as one
+space, none, non-breaking spaces or two spaces each side (`v1-e06-t16`). Compared token
 by token, the marker's spaces could be paired with the card's spaces either side of the word after a
 cut, and Myers then had two equally short edit scripts: one deletes the word, the other reads the
 word before it as moved across the marker, a manual edit. As a unit the marker matches nothing but a
@@ -266,8 +268,9 @@ def compare_body(card: Card, body_text: str, omission_marker: str) -> BodyCompar
     evidence = _tokens(card.evidence_text, omission_offsets(card))
     body = _tokens(body_text)
     marker = [token.text for token in _tokens(omission_marker)]
-    evidence_units, evidence_bounds = _units(evidence, marker)
-    body_units, body_bounds = _units(body, marker)
+    marker_sign = [token.text for token in _tokens(omission_marker.strip())]
+    evidence_units, evidence_bounds = _units(evidence, marker_sign)
+    body_units, body_bounds = _units(body, marker_sign)
     whole = ManualEdit(CharacterRange(0, len(card.evidence_text)), CharacterRange(0, len(body_text)))
     unit_hunks = _diff(
         [unit.text for unit in evidence_units], [unit.text for unit in body_units], MAXIMUM_BODY_EDIT_TOKENS
@@ -350,27 +353,46 @@ class _Hunk:
     added_end: int
 
 
-def _units(tokens: list[_Token], marker: Sequence[str]) -> tuple[list[_Token], list[int]]:
-    """``tokens`` with each run that spells the whole omission ``marker`` made one unit, and where each
-    unit starts in ``tokens`` (one more entry, ``len(tokens)``, closes the last).
+def _units(tokens: list[_Token], marker_sign: Sequence[str]) -> tuple[list[_Token], list[int]]:
+    """``tokens`` with each omission marker made one unit, and where each unit starts in ``tokens`` (one
+    more entry, ``len(tokens)``, closes the last).
 
-    The diff compares units, so a marker's own spaces cannot be paired with the card's spaces: where
-    they could, two edit scripts are equally short, and the one that pairs them reads a word deleted
-    beside a cut as that word moved across it (`v1-e06-t15`).
+    A marker is the profile's marker without its spacing (``marker_sign``, "…") and all the whitespace
+    either side of it (:func:`_marker_width`). The diff compares units, so a marker's own
+    spaces cannot be paired with the card's spaces: where they could, two edit scripts are equally
+    short, and the one that pairs them reads a word deleted beside a cut as that word moved across it
+    (`v1-e06-t15`). The profile's " … " is one such unit, and so is the marker a student typed with
+    other spacing, such as two spaces either side (`v1-e06-t16`).
     """
     units: list[_Token] = []
     bounds: list[int] = []
     index = 0
     while index < len(tokens):
         bounds.append(index)
-        if marker and [token.text for token in tokens[index : index + len(marker)]] == list(marker):
-            units.append(_Token("".join(marker), tokens[index].start))
-            index += len(marker)
+        width = _marker_width(tokens, index, marker_sign)
+        if width:
+            text = "".join(token.text for token in tokens[index : index + width])
+            units.append(_Token(text, tokens[index].start))
+            index += width
         else:
             units.append(tokens[index])
             index += 1
     bounds.append(len(tokens))
     return units, bounds
+
+
+def _marker_width(tokens: Sequence[_Token], index: int, marker_sign: Sequence[str]) -> int:
+    """How many tokens from ``index`` are spaces, then ``marker_sign``, then spaces; 0 if they are not."""
+    end = _past_spaces(tokens, index)
+    if [token.text for token in tokens[end : end + len(marker_sign)]] != list(marker_sign):
+        return 0
+    return _past_spaces(tokens, end + len(marker_sign)) - index
+
+
+def _past_spaces(tokens: Sequence[_Token], index: int) -> int:
+    while index < len(tokens) and tokens[index].is_space:
+        index += 1
+    return index
 
 
 def _expanded(hunks: list[_Hunk], removed_bounds: Sequence[int], added_bounds: Sequence[int]) -> list[_Hunk]:

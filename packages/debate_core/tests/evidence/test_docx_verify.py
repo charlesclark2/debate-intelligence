@@ -1258,3 +1258,77 @@ def test_join_a_negation_deleted_beside_a_join_is_a_warning_on_a_verified_card(
 
     assert is_verified_without_reasons(verdict)
     assert negation_warnings(verdict) == [("NEGATION_REMOVED", evidence_range, snapshot_range)]
+
+
+# A marker typed with other spacing (v1-e06-t15's follow-up 2). The student retypes a marker's run; the
+# card's own space beside it is read as the card's only where the body still has an ordinary space
+# there, so with no ordinary space after the marker, "never " deleted right after join 2 is evidence
+# [28, 34), its space included, and with one there it is "never" [28, 33). A word one further on keeps
+# its own space whatever the marker's spacing: "will " [15, 20) after join 1, "came " [34, 39) after
+# join 2. Two spaces each side of the marker could be paired with the card's spaces either side of
+# "never" and read "came " deleted as a word moved, until the marker's whole spacing was one unit.
+
+OTHER_SPACINGS: Final = (
+    pytest.param(" …", id="one-space-before"),
+    pytest.param("… ", id="one-space-after"),
+    pytest.param("…", id="no-spaces"),
+    pytest.param(" … ", id="non-breaking-spaces"),
+    pytest.param("  …  ", id="two-spaces-each-side"),
+)
+
+
+@pytest.mark.parametrize("spacing", OTHER_SPACINGS)
+def test_join_markers_retyped_with_other_spacing_verify_untouched(
+    join_card: VerifiedExport, spacing: str
+) -> None:
+    """All three markers retyped: each change retypes the first marker still drawn as the profile's."""
+    changes = tuple(retyped_marker(0, spacing) for _ in range(3))
+
+    comparison = marker_comparison(join_card, *changes)
+
+    assert comparison == BodyComparison(manual_edits=(), interpolations=(), deletions=())
+    assert is_verified_without_reasons(join_verdict(join_card, *changes))
+
+
+@pytest.mark.parametrize("spacing", OTHER_SPACINGS)
+@pytest.mark.parametrize(
+    ("marker", "old", "deletion"),
+    [
+        pytest.param(0, "will ", (15, 20), id="one-word-after-join-1"),
+        pytest.param(1, "came ", (34, 39), id="one-word-after-join-2"),
+    ],
+)
+def test_join_a_word_deleted_one_word_after_a_retyped_marker_is_a_deletion(
+    join_card: VerifiedExport, spacing: str, marker: int, old: str, deletion: tuple[int, int]
+) -> None:
+    changes = (retyped_marker(marker, spacing), replace_in_evidence(old, ""))
+
+    comparison = marker_comparison(join_card, *changes)
+
+    assert (comparison.manual_edits, comparison.deletions) == ((), (CharacterRange(*deletion),))
+    assert is_verified_without_reasons(join_verdict(join_card, *changes))
+
+
+@pytest.mark.parametrize(
+    ("spacing", "deletion"),
+    [
+        pytest.param(" …", (28, 34), id="one-space-before"),
+        pytest.param("… ", (28, 33), id="one-space-after"),
+        pytest.param("…", (28, 34), id="no-spaces"),
+        pytest.param(" … ", (28, 34), id="non-breaking-spaces"),
+        pytest.param("  …  ", (28, 33), id="two-spaces-each-side"),
+    ],
+)
+def test_join_a_negation_deleted_right_after_a_retyped_marker_is_a_warning(
+    join_card: VerifiedExport, spacing: str, deletion: tuple[int, int]
+) -> None:
+    """ "never" is snapshot [93, 98) and its space 98; the snapshot range is the deletion's, plus 65."""
+    changes = (retyped_marker(1, spacing), replace_in_evidence("never ", ""))
+
+    comparison = marker_comparison(join_card, *changes)
+
+    assert (comparison.manual_edits, comparison.deletions) == ((), (CharacterRange(*deletion),))
+    verdict = join_verdict(join_card, *changes)
+    assert is_verified_without_reasons(verdict)
+    snapshot = (deletion[0] + 65, deletion[1] + 65)
+    assert negation_warnings(verdict) == [("NEGATION_REMOVED", deletion, snapshot)]

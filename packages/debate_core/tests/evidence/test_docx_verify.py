@@ -787,6 +787,11 @@ def test_negation_warnings_and_interpolations_come_in_body_order(negation_card: 
         ("NEGATION_REMOVED", {"start": 15, "end": 19}, None),
         ("INTERPOLATION_PRESENT", None, 125),
     ]
+    # The ranges are a negation's alone: an interpolation's warning keeps the keys it had before them.
+    assert [sorted(warning) for warning in verdict["warnings"]] == [
+        ["code", "detail", "evidence_offset", "evidence_range", "snapshot_range"],
+        ["code", "detail", "evidence_offset"],
+    ]
 
 
 def test_negation_is_not_read_without_the_cards_snapshot(negation_card: NegationExport) -> None:

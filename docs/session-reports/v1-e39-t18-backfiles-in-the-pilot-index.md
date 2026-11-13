@@ -10,15 +10,16 @@
 
 ## Summary
 
-Stopped for the PM's ruling on the index's shape (ac1 done, ac2 not started). After hspolicy25's
-cloud rebuild to `2026.11.03-docx-9`, the operator restored the dev run's copy with all four
-backfiles, built today's index (byte for byte the one dev publishes) and a combined one, and loaded
-both in the function's image ([The measurement so far](#the-measurement-so-far)). The combined index
-breaks every size and cold-start target of ADR-0019: 3.97 GB of SQLite, 1.46 GB gzip, a 19.1 s load
-against 6.96 s today, a swap needing 185% of the function's storage
-([ac1](#ac1-the-counts-against-the-targets-and-the-options)). Nothing was published or deployed.
-The restored copy and the two scratch indexes are kept, at the PM's request, for two other tasks'
-read-only counts, and are deleted after them (policy 1.18).
+Shape (4) is built: one index per backfile season, loaded when a student picks that season on the
+search page, one held at a time, each from its own pointer `reports/tub/search/seasons/<season>.json`
+with its own shrink guard, and each screened by the one suppression list. Default search, its index,
+its cold start, the weekly stage and its guard are untouched. Tests ran red against a skeleton first
+(27 of 45 failing for their reasons), then green, and all 20 planted mutants and both Terraform
+mutants were caught ([The build](#the-build-shape-4)). ac1's counts were measured and ruled on
+([ac1](#ac1-the-counts-against-the-targets-and-the-options)). **ac2 is PARTIAL:** the after-measurement
+of the real season indexes against ADR-0019's targets is the operator's, written below and not run,
+so the Goal stays InProgress. Nothing was published or deployed, and no backfile index is current
+anywhere. The restored copy and both scratch indexes are deleted (policy 1.18).
 
 ## Plan nodes
 
@@ -26,7 +27,7 @@ read-only counts, and are deleted after them (policy 1.18).
 
 | Node | Status | Notes |
 |---|---|---|
-| | | |
+| backfile-index | PARTIAL | Measured, ruled (shape 4), built and tested; the after-measurement is an operator follow-up |
 
 ## Acceptance criteria
 
@@ -34,17 +35,62 @@ read-only counts, and are deleted after them (policy 1.18).
 
 | Criterion | Status | Evidence (command → result) |
 |---|---|---|
-| ac1: counts before building, sent to the PM with the options | PASS | The operator's blocks of 2026-11-12 (restore, two builds, two loads in the image) → [ac1](#ac1-the-counts-against-the-targets-and-the-options); relayed to the PM by the operator |
-| ac2: after the ruling, a backfile card found with its season and provenance line, gone within five minutes of a removal, cold start within ADR-0019; tests failing first | NOT RUN | Waits for the PM's ruling on the shape |
-| backfile-index: `uv run pytest packages/debate_api/tests` | NOT RUN | Waits for the ruling |
+| ac1: counts before building, sent to the PM with the options | PASS | The operator's blocks of 2026-11-12 (restore, two builds, two loads in the image) → [ac1](#ac1-the-counts-against-the-targets-and-the-options); relayed, and ruled on the same day |
+| ac2 (a): a backfile card is found, shows its season and its provenance line | PASS | `test_search_pages_seasons.py`: `..._is_found_in_its_seasons_search_with_its_season_and_provenance_line`, `..._page_names_its_season_above_its_provenance_line` → pass; red first (400, 404) |
+| ac2 (b): gone within five minutes of a removal | PASS | `test_a_removed_backfile_card_is_gone_from_its_season_within_five_minutes` (4:59 still shown, 5:00 gone from results, page and copy), `test_a_season_first_loaded_after_a_removal_hides_the_card_at_once`, and the container test that every season holder reads the one list → pass; red first |
+| ac2 (c): the cold start stays within ADR-0019's target | PARTIAL | Default search never reaches a season (`test_a_default_search_never_reads_a_season_pointer_or_finds_a_season_card`), so today's cold start is unchanged (6.96 s measured); each season's first-search wait and the storage at a swap are estimated at 3 to 6 s and 2.99 GB, and measured only by the [after-measurement](#operator-follow-ups), NOT RUN |
+| ac2 (d): tests shown failing first | PASS | Red run at `3041f3b` on the skeleton of `73d2c24`: 27 failed, 18 passed (reasons in [The build](#the-build-shape-4)); green at `e7e4954`: 45 passed; 20 of 20 mutants caught |
+| backfile-index: `uv run pytest packages/debate_api/tests` | PASS | `uv run --frozen pytest -q packages/debate_api/tests` → 1164 passed in 11.08 s |
+| Affected set, once (working agreement 10) | NOT RUN in full | `scripts/affected_tests.py --base origin/dev`: 394 of 748 files; run once under `hard_stop.py 115`, stopped at 22% with no failure or error: over two minutes, so left to the pull request's CI |
 
 ## Files changed
 
 <!-- Group by package or directory; one line on why each group changed. -->
 
+* `packages/debate_core/src/debate_core/application/season_indexes.py` (new): the season pointer key,
+  a season's words, and `SeasonIndexes`, the shelf that holds one season's holder at a time.
+* `packages/debate_core/src/debate_core/application/search_index_publish.py`: `season=` publishes to
+  the season's pointer under its own shrink guard, and `SeasonIndexHoldsOtherStores` refuses any other
+  store.
+* `packages/debate_core/src/debate_core/application/search_index_prune.py`: keeps each season
+  pointer's current index and version, deletes its superseded ones, refuses an unreadable or dangling
+  season pointer, and re-reads the season pointers at execute.
+* `packages/debate_core/src/debate_core/application/card_download.py`: a cart leases the current
+  index first, then each season in turn.
+* `packages/debate_core/src/debate_core/integrations/s3/search_index_source.py`: `pointer_key=`.
+* `packages/debate_api/src/debate_api/` (`configuration.py`, `container.py`, `state.py`,
+  `search_pages.py`, `templates/search.html`, `templates/card.html`, `static/app.js`):
+  `TUB_BACKFILE_SEASONS`, a season holder per season under `/tmp/tub-index-seasons`, the *Season*
+  choice, the season searched, "Earlier season:" on a card's page, and the loading line.
+* `packages/debate_cli/src/debate_cli/` (`commands/tub_index.py`, `container.py`): `tub index publish
+  --season`, and `season_index_publish(season)`.
+* Tests: `packages/debate_core/tests/application/test_season_indexes.py`,
+  `test_search_index_publish_season.py`, `test_search_index_prune_seasons.py` (new);
+  `packages/debate_api/tests/test_search_pages_seasons.py` (new) and `conftest.py` (a seasons hook on
+  every world, `SeasonWorld`, two invented seasons); `packages/debate_cli/tests/test_container_factories.py`
+  (a season value).
+* `infrastructure/modules/evidence_search/` (`main.tf`, `variables.tf`, tests): `backfile_seasons`,
+  set on the function only when it names a season; four new offline test runs.
+* `docs/runbooks/evidence-search.md` (Backfile seasons), `docs/runbooks/caselist-removal.md` (P4 keeps
+  each season's current index).
+
 ## Deviations from the spec
 
-None.
+* **ac2 is PARTIAL by design of the ruling.** Q3 makes the after-measurement of the real season
+  indexes the operator's, from a fresh restore; it is written as blocks below and not run, so the
+  Goal is not set to Succeeded.
+* **No change outside the spec's packages.** `debate_core.domain` and `debate_core.testing` are not in
+  `constraints.packages`, so the season key and words live in `debate_core.application.season_indexes`
+  rather than beside `SEARCH_INDEX_POINTER_KEY`, and the test view of a season's pointer is in the API
+  tests' conftest rather than `debate_core.testing.search_index`. A PM may prefer both moved; the
+  move is mechanical.
+* **The prune changed** (`search_index_prune.py`), which the ruling did not name: without it the
+  removal runbook's next P4 would delete every season's index (it keeps only what `current.json`
+  names), and with only that fixed it would never delete a season's superseded copies (gate items 1
+  and 5). It is in `debate_core.application`, inside the spec's packages.
+* **ADR-0019 is not amended**: `docs/adr` is not in the spec's packages. Its (c) 3 and 5 describe one
+  index; a sentence naming the season indexes (one held at a time, its own pointer, the same list) is
+  the PM's to add.
 
 ## Decisions and assumptions
 
@@ -307,12 +353,266 @@ The options, as relayed to the PM (the relay in the session's operator message i
    stores, which no weekly run changes, so the weekly stage and its shrink guard are untouched; each
    season's pointer gets the guard of its own.
 
+## The build (shape 4)
+
+**What a student sees.** With seasons offered (`TUB_BACKFILE_SEASONS`), the search form has a *Season*
+choice: *This season*, the default, then each season as `hspolicy25 (2025-26)`. A search of a season
+says "Searching hspolicy25 (2025-26)." above its results, and searches that season's index alone; a
+season not yet loaded on the environment carries "Loading hspolicy25 (2025-26). The first search of
+an earlier season takes a few seconds.", which `app.js` shows under the form while that search waits.
+A backfile card's page reads "Earlier season: hspolicy25 (2025-26)" above its provenance line, which
+is unchanged ([Q2](#the-provenance-lines-season-for-the-pm-to-carry)). Its copy and its download read
+its season's index. A season not offered is refused (400) as a filter outside its choices is.
+
+**Removal (gate item 1).** Every season's holder reads the one suppression list on the same
+five-minute check as the current index's, so a removed backfile card leaves its season's results, its
+page and its copy within five minutes, and a season first loaded after the removal never shows it.
+The prune keeps each season pointer's current index and deletes its superseded versions, so a
+season rebuilt after a removal leaves no old copy behind P4.
+
+**The red run** (`3041f3b`: the tests on `73d2c24`'s skeleton, whose shelf served no season, whose
+publish ignored its season and whose prune knew none): **27 failed, 18 passed** of 45, each failure for
+its reason: the shelf's `SearchIndexUnavailable` and an offered season it said it did not hold (8);
+an index of another store published, and a season's publish guarded by `current.json`'s index ("would
+shrink", 3); a backfile card 404 on its page, its season's search 400, no season card in results, the
+loading line never cleared (9); a superseded season version kept, a season index deleted, an
+unreadable or dangling season pointer not refused, a moved season pointer not noticed, the last check
+passing a season's current index (7). The 18 that passed on the skeleton are the guards (default
+search reads no season pointer, refusals, configuration, words), each caught by a mutant below.
+
+**Green** at `e7e4954`: 45 passed (then 46 with the container test). Around it: 1,320 passed across the
+prune, publish, shrink-guard, holder and CLI index tests and the whole API test directory; 134 passed
+across the core and CLI index tests and the index smoke test; 22 of 22 Terraform runs offline
+(`mock_provider`, providers from the main checkout's mirror). ruff, pyright (0 errors), lint-imports (20
+kept) and `check_thin_handlers.py` (74 within 25 statements) pass.
+
+**Mutants, 20 of 20 caught** (each planted alone, its tests run under `-n 0 -x`, the file restored from
+`HEAD`; every catch an assertion or an expected refusal, none a crash): a season search reading the
+current index; a search with no season going to a season; a season card looked up in the current
+index; the held season not closed before the next; the held season rebuilt on every lease; no season
+ever loaded; a season's words a year early; a season index of another store published; a season's
+guard reading `current.json`; a season's pointer written to `current.json`; the prune keeping no
+season's index; the prune keeping every version of a season pointer; an unreadable season pointer
+skipped; a dangling season pointer kept; execute not re-reading the season pointers; the last check
+forgetting the seasons; a season named twice in `TUB_BACKFILE_SEASONS`; the season dropped from the
+way back; a cart's season cards sent to the current index; a season's holder built with no
+suppression list. **Terraform, 2 of 2:** `TUB_BACKFILE_SEASONS` always set fails
+`no_backfile_season_means_no_season_setting`; an always-true validation fails
+`a_backfile_season_named_twice_is_refused` with "Missing expected failure".
+
+## The provenance line's season, for the PM to carry
+
+Q2 waits on the coach as the data-use policy's owner, and Attribution rule 2 spells the line out, so
+nothing on the pilot changes before that approval. The amendment's words, for version 1.24:
+
+> Attribution rule 2, the sentence "Disclosed cards name caselist slug, snapshot date, school, team
+> code, side, tournament and round." becomes: "Disclosed cards name caselist slug **and its season**,
+> snapshot date, school, team code, side, tournament and round; the season is written in words after
+> the slug, from the year its season starts: `[Disclosed: hspolicy25 (2025-26) 2026-03-02 — Maple Grove
+> QX, Aff vs. Riverbend Invitational Round 4]`." The example line under rule 2 gains the season the
+> same way: `[Disclosed: hsld26 (2026-27) 2026-09-15 — Maple Grove QX, Aff vs. Riverbend Invitational
+> Round 4]`. Change log: "1.24: a disclosed card's provenance line names its season after the slug
+> (v1-e39-t18, so a backfile card says its season)."
+
+The PM's example read hspolicy25 as 2024-25; the recorded rule (a slug's digits are its starting year)
+makes it 2025-26, as above. Once approved, the change is `occurrence_provenance_line`'s alone, in
+`debate_core.domain.evidence_search`, which this spec's packages do not include: a task of its own,
+or an amendment of this one.
+
 ## Operator follow-ups
 
 <!-- Commands the operator must run (anything over ~2 minutes), with where to run them, the exact
 command, expected runtime and what success looks like. Also GitHub/AWS settings to change. -->
 
-None.
+**ac2's after-measurement** (the PM's Q3): the four season indexes built from a fresh restore and each
+loaded in the function's image, against the targets ac1 used. Under ac1's rules: scratch only
+(`~/t18-after`), nothing published or deployed before the PM rules on the result, never on a
+Wednesday, mains power **with the lid open** for every restore (two restores stopped on clamshell
+sleep on 2026-11-12), counts and sizes only, one block at a time, each starting with `cd "${HOME}"`.
+Then delete the copy and the indexes (policy 1.18) and record it.
+
+Before AM4, the session that runs it writes the probe below to its own scratchpad and puts that
+folder in `Q`. The probe runs the holder every season's index is loaded by, `SearchIndexHolder`; the
+shelf adds no step to a load.
+
+**AM1, the bucket check** (read-only, about 30 s). Success: each store complete at docx-9 with its
+`occurrences.jsonl`, and `FITS`. If hspolicy25's docx-7 directory is gone by then, that is the PM's
+retirement. If a count differs from AM2's expected numbers, change AM2's numbers to these first.
+
+```
+cd "${HOME}"; B=s3://debate-dev-evidence-a7508de8; P=debate-dev-evidence; V=2026.11.03-docx-9; T="$(mktemp)"; tot=0; bad=0; if [ "$(TZ=America/Chicago date +%u)" = 3 ]; then echo "STOP: it is Wednesday in Chicago, the weekly run's day"; elif env | grep -q '^DEBATE_'; then echo "STOP: DEBATE_ variables are set:"; env | grep '^DEBATE_' | cut -d= -f1; elif pgrep -fl 'debate-research.*(caselist (pull|backfile-import|restore-run-state|remove)|tub index)'; then echo "STOP: a debate-research command is running (above)"; elif ! k="$(aws s3 cp "${B}/reports/sync/run-lock.json" - --profile "${P}" 2>"${T}")"; then echo "STOP: the dev run lock could not be read. Its error:"; tail -n 5 "${T}"; elif e="$(printf '%s\n' "${k}" | sed -nE 's/.*"lease_expires_at": *"([^"]*)".*/\1/p')"; cut="$(date -u -v-5M +%Y-%m-%dT%H:%M:%SZ)"; printf '%s\n' "${k}" | grep -q '"state": *"held"' && { [ -z "${e}" ] || [[ "${e}" > "${cut}" ]]; }; then echo "STOP: the dev run lock has a live lease, until ${e:-no expiry}"; else for s in hspolicy25 hsld25 hspolicy24 hsld24 openev; do : > "${T}"; l="$(aws s3 ls --recursive --summarize "${B}/parsed/${s}/${V}/" --profile "${P}" 2>"${T}")"; if [ -s "${T}" ]; then echo "${s}: STOP, the listing failed:"; tail -n 3 "${T}"; bad=1; continue; fi; n="$(printf '%s\n' "${l}" | sed -n 's/.*Total Objects: *//p')"; z="$(printf '%s\n' "${l}" | sed -n 's/.*Total Size: *//p')"; o="$(printf '%s\n' "${l}" | grep -c "parsed/${s}/${V}/occurrences.jsonl$")"; d="$(aws s3 ls "${B}/parsed/${s}/" --profile "${P}" 2>/dev/null | awk '$1 == "PRE" {print $2}' | tr -d / | tr '\n' ' ')"; echo "${s}: ${V} objects ${n:-0}, bytes ${z:-0}, occurrences.jsonl ${o}; version directories: ${d}"; tot=$((tot + ${z:-0})); if [ "${o}" != 1 ]; then bad=1; fi; done; f="$(df -k "${HOME}" | awk 'NR == 2 {printf "%d", $4 * 1024}')"; need=$((tot * 5 / 4)); echo "docx-9 bytes: ${tot}; with 25 percent headroom: ${need}; free bytes on the home volume: ${f}"; if [ "${bad}" != 0 ]; then echo "STOP: a listing failed or a store has no occurrences.jsonl at ${V}"; elif [ "${need}" -gt "${f}" ]; then echo "STOP: the restore would not fit with 25 percent headroom"; else echo "FITS"; fi; fi; rm -f "${T}"
+```
+
+**AM2, the restore** (the four backfiles, openev with them, about 46.6 GB: about 50 minutes at the
+15 MB/s of 2026-11-12; it holds the dev lock). Lid open, charger in. Success: `exit 0`, every store
+`MATCH`, no docx-7 directory.
+
+```
+cd "${HOME}"; M="${HOME}/t18-after"; C="${M}/copy"; B=s3://debate-dev-evidence-a7508de8; P=debate-dev-evidence; V=2026.11.03-docx-9; T="$(mktemp)"; R="$(command -v debate-research)"; if [ "$(TZ=America/Chicago date +%u)" = 3 ]; then echo "STOP: it is Wednesday in Chicago, the weekly run's day"; elif env | grep -q '^DEBATE_'; then echo "STOP: DEBATE_ variables are set:"; env | grep '^DEBATE_' | cut -d= -f1; elif pgrep -fl 'debate-research.*(caselist (pull|backfile-import|restore-run-state|remove)|tub index)'; then echo "STOP: a debate-research command is running (above)"; elif [ -e "${M}" ]; then echo "STOP: ${M} exists already"; elif [ -z "${R}" ]; then echo "STOP: debate-research is not on PATH"; elif [ "$("${R:A:h}/python" -I -c 'from debate_core.integrations.docx_parser import DOCX_PARSER_VERSION as v; print(v)' 2>/dev/null)" != "${V}" ]; then echo "STOP: the installed debate-research does not parse at ${V}"; elif ! pmset -g batt | grep -q "'AC Power'"; then echo "STOP: the Mac is on battery; plug it in and keep the lid open"; elif [ "$(df -k "${HOME}" | awk 'NR == 2 {printf "%d", $4 * 1024}')" -lt 58262470435 ]; then echo "STOP: under 58262470435 bytes free on the home volume"; elif ! k="$(aws s3 cp "${B}/reports/sync/run-lock.json" - --profile "${P}" 2>"${T}")"; then echo "STOP: the dev run lock could not be read. Its error:"; tail -n 5 "${T}"; elif e="$(printf '%s\n' "${k}" | sed -nE 's/.*"lease_expires_at": *"([^"]*)".*/\1/p')"; cut="$(date -u -v-5M +%Y-%m-%dT%H:%M:%SZ)"; printf '%s\n' "${k}" | grep -q '"state": *"held"' && { [ -z "${e}" ] || [[ "${e}" > "${cut}" ]]; }; then echo "STOP: the dev run lock has a live lease, until ${e:-no expiry}"; else echo "restore started $(date -u +%Y-%m-%dT%H:%M:%SZ)"; mkdir -p "${M}"; caffeinate -ims env DEBATE_ENV=dev debate-research --json caselist restore-run-state --into "${C}" --caselist hspolicy25 --caselist hsld25 --caselist hspolicy24 --caselist hsld24 > "${M}/restore.json"; echo "exit $?"; echo "restore ended $(date -u +%Y-%m-%dT%H:%M:%SZ)"; grep -oE '"(parsed_version|parsed_objects|parsed_bytes|manifests|suppression_entries|seconds)": ("[^"]*"|[0-9.]+|null)|"code": "[A-Z_]+"' "${M}/restore.json"; for p in hspolicy25:14343 hsld25:23660 hspolicy24:12312 hsld24:23976 openev:110; do s="${p%%:*}"; w="${p##*:}"; g="$(find "${C}" -path "*/parsed/${s}/${V}/*" -type f | wc -l | tr -d ' ')"; if [ "${g}" = "${w}" ]; then r=MATCH; else r=DIFFERS; fi; echo "${s}: ${V} files ${g}, bucket ${w}, ${r}"; done; echo "docx-7 directories in the copy: $(find "${C}" -type d -name '2026.10.27-docx-7' | wc -l | tr -d ' ')"; df -k "${HOME}" | awk 'NR == 2 {printf "free bytes on the home volume: %d\n", $4 * 1024}'; fi; rm -f "${T}"
+```
+
+**AM3, the four season builds** (local, no AWS: each about 10 to 15 minutes by build 2's rate). Keep
+the Mac quiet. Success: four `exit 0`, each index holding its one store.
+
+```
+cd "${HOME}"; M="${HOME}/t18-after"; C="${M}/copy"; R="$(command -v debate-research)"; Y="${R:A:h}/python"; if [ "$(TZ=America/Chicago date +%u)" = 3 ]; then echo "STOP: it is Wednesday in Chicago, the weekly run's day"; elif env | grep -q '^DEBATE_'; then echo "STOP: DEBATE_ variables are set:"; env | grep '^DEBATE_' | cut -d= -f1; elif pgrep -fl 'debate-research.*(caselist (pull|backfile-import|restore-run-state|remove)|tub index)'; then echo "STOP: a debate-research command is running (above)"; elif [ ! -f "${C}/debate-research-restored-copy.json" ]; then echo "STOP: ${C} is not the restored copy"; elif ! pmset -g batt | grep -q "'AC Power'"; then echo "STOP: the Mac is on battery; plug it in and keep the lid open"; else for s in hspolicy25 hsld25 hspolicy24 hsld24; do O="${M}/index-${s}"; if [ -e "${O}" ]; then echo "${s}: STOP, ${O} exists already"; continue; fi; mkdir -p "${O}"; echo "=== ${s}; load before: $(uptime | sed 's/.*load averages*: //')"; caffeinate -ims /usr/bin/time -l env DEBATE_ENV=dev DEBATE_STORAGE__DATA_DIR="${C}" debate-research --json tub index build --caselist "${s}" --out "${O}" > "${O}/build.json" 2> "${O}/time.txt"; echo "exit $?"; grep -E ' real | maximum resident set size' "${O}/time.txt"; "${Y}" -I -c 'import json, sqlite3, sys, pathlib; e = json.load(open(sys.argv[1])); e["status"] == "ok" or sys.exit("STOP: the build failed: " + e["error"]["code"]); d = e["data"]; m = d["manifest"]; c = m["counts"]; print("index", m["index_id"], "| stores", [one["caselist"] for one in m["stores"]], "| documents", c["documents"], "| occurrences", c["occurrences"], "| sqlite bytes", m["sqlite_file"]["bytes"], "| gzip bytes", m["gzip_object"]["bytes"]); db = sqlite3.connect((pathlib.Path(d["directory"]) / m["sqlite_file"]["name"]).as_uri() + "?mode=ro&immutable=1", uri=True); print("distinct card clusters", db.execute("SELECT count(DISTINCT cluster_id) FROM documents").fetchone()[0])' "${O}/build.json"; done; df -k "${HOME}" | awk 'NR == 2 {printf "free bytes on the home volume: %d\n", $4 * 1024}'; fi
+```
+
+**AM4, the loads in the function's image** (local, `--network none`, 2,048 MB, 1.16 CPUs, about a
+minute). Set `Q` to the folder holding the probe. Success: four `container exit 0`, no `oom_kill`, and
+the storage line under 4,294,967,296 for every season.
+
+```
+cd "${HOME}"; M="${HOME}/t18-after"; Q=PROBE_FOLDER; G="debate-dev-tub:$(docker image ls debate-dev-tub --format '{{.Tag}}' | head -n 1)"; R="$(command -v debate-research)"; Y="${R:A:h}/python"; if [ "$(TZ=America/Chicago date +%u)" = 3 ]; then echo "STOP: it is Wednesday in Chicago, the weekly run's day"; elif env | grep -q '^DEBATE_'; then echo "STOP: DEBATE_ variables are set:"; env | grep '^DEBATE_' | cut -d= -f1; elif [ ! -f "${Q}/load_probe.py" ]; then echo "STOP: the probe is not at ${Q}"; elif ! docker info > /dev/null 2>&1; then echo "STOP: Docker is not running"; elif [ -n "$(docker ps -aq --filter name=t18-after)" ]; then echo "STOP: a t18-after container exists already"; else echo "image ${G}"; for s in hspolicy25 hsld25 hspolicy24 hsld24; do I="$("${Y}" -I -c 'import json, sys; print(json.load(open(sys.argv[1]))["data"]["directory"])' "${M}/index-${s}/build.json")"; echo "=== ${s}; load before: $(uptime | sed 's/.*load averages*: //')"; docker run --rm --name "t18-after-${s}" --network none --memory 2048m --memory-swap 2048m --cpus 1.16 -v "${I}":/index:ro -v "${Q}":/probe:ro --entrypoint python3 "${G}" -I /probe/load_probe.py /index; echo "container exit $?"; "${Y}" -I -c 'import json, sys; m = json.load(open(sys.argv[1]))["data"]["manifest"]; s = m["sqlite_file"]["bytes"]; g = m["gzip_object"]["bytes"]; print("current two copies plus this season:", 2 * 1043304448 + s, "of 4294967296 |", "download at 1,250 Mbps:", round(g / 156250000, 1), "s")' "${M}/index-${s}/build.json"; done; fi
+```
+
+**AM5, the deletion** (policy 1.18, local). Success: `DELETED` and no marker left.
+
+```
+cd "${HOME}"; M="${HOME}/t18-after"; C="${M}/copy"; if pgrep -fl 'debate-research'; then echo "STOP: a debate-research command is running (above)"; elif [ ! -f "${C}/debate-research-restored-copy.json" ]; then echo "STOP: ${C} holds no restored-copy marker"; else echo "removing the restored copy: $(find "${C}" -type f | wc -l | tr -d ' ') files, $(du -sk "${C}" | awk '{printf "%d", $1 * 1024}') bytes on disk"; for s in hspolicy25 hsld25 hspolicy24 hsld24; do I="${M}/index-${s}"; [ -d "${I}" ] && echo "removing the scratch index of ${s}: $(find "${I}" -type f | wc -l | tr -d ' ') files, $(du -sk "${I}" | awk '{printf "%d", $1 * 1024}') bytes on disk"; done; rm -rf "${M}"; if [ -e "${M}" ]; then echo "STOP: ${M} is still there"; else echo "DELETED: ${M} is gone"; fi; echo "restored-copy markers left within depth 4 of home: $(find "${HOME}" -maxdepth 4 -name debate-research-restored-copy.json -not -path "*/Library/*" 2>/dev/null | wc -l | tr -d ' ')"; df -k "${HOME}" | awk 'NR == 2 {printf "free bytes on the home volume: %d\n", $4 * 1024}'; fi
+```
+
+**After the PM rules on the result:** publish each season with `tub index publish --env dev --season
+<season> --index <dir>` from a restored copy, set `backfile_seasons` in dev's root and apply, and
+deploy (the evidence search runbook's [Backfile seasons](../runbooks/evidence-search.md#backfile-seasons-v1-e39-t18)).
+
+The probe, `load_probe.py` (tested in `debate-dev-tub:0d81c542…` on 2026-11-12; prints counts, sizes
+and times only):
+
+```python
+"""Load one built search index the way the pilot's function does, inside its image, and say what it cost.
+
+Run inside the function's image with no network (v1-e39-t18 ac1):
+
+    docker run --rm --network none --memory 2048m --memory-swap 2048m \
+      -v <index dir>:/index:ro -v <probe dir>:/probe:ro --entrypoint python3 <image> -I /probe/load_probe.py /index
+
+`/index` is one directory `tub index build` wrote: `manifest.json` and the gzip object, and optionally
+`suppression-list.jsonl` (the copy's list). The probe serves them through a file-backed
+`SearchIndexSource`, so `SearchIndexHolder` runs its real fetch: the manifest's checks, the gzip object
+streamed through zlib and both sha256s into `/tmp`, and the read-only open. Then a few searches of
+common words.
+
+It prints counts, sizes and times only: never a card, a school, a team, a file name or a result.
+"""
+
+from __future__ import annotations
+
+import hashlib
+import json
+import logging
+import os
+import sys
+import tempfile
+import time
+from collections.abc import Iterator
+from datetime import UTC, datetime
+from pathlib import Path
+
+from debate_core.application.ports.search_index_source import PointerRead
+from debate_core.application.search_index_holder import SearchIndexHolder
+from debate_core.domain.search_index import (
+    SEARCH_INDEX_GZIP_NAME,
+    SEARCH_INDEX_MANIFEST_NAME,
+    SearchIndexManifest,
+    SearchIndexPointer,
+    index_object_key,
+)
+from debate_core.integrations.local.search_index_reader import SqliteSearchIndexReader
+
+CHUNK = 1024 * 1024
+QUERIES = ("economy", "nuclear war", "climate change", "china", "the")
+
+
+class FileSource:
+    """`reports/tub/search/` as three local files: a made-up pointer, the manifest and the gzip object."""
+
+    def __init__(self, directory: Path) -> None:
+        self._manifest_bytes = (directory / SEARCH_INDEX_MANIFEST_NAME).read_bytes()
+        manifest = SearchIndexManifest.model_validate_json(self._manifest_bytes)
+        self._object = directory / SEARCH_INDEX_GZIP_NAME
+        self._suppression = directory / "suppression-list.jsonl"
+        self.manifest = manifest
+        self._pointer = SearchIndexPointer(
+            format_version=manifest.format_version,
+            index_id=manifest.index_id,
+            manifest_key=index_object_key(manifest.index_id, SEARCH_INDEX_MANIFEST_NAME),
+            manifest_sha256=hashlib.sha256(self._manifest_bytes).hexdigest(),
+            object_key=index_object_key(manifest.index_id, SEARCH_INDEX_GZIP_NAME),
+            object_sha256=manifest.gzip_object.sha256,
+            sqlite_sha256=manifest.sqlite_file.sha256,
+        ).to_json_bytes()
+
+    def read_pointer(self, *, if_none_match: str | None) -> PointerRead:
+        if if_none_match == '"pointer"':
+            return PointerRead(body=None, etag=if_none_match)
+        return PointerRead(body=self._pointer, etag='"pointer"')
+
+    def read_object(self, key: str, *, max_bytes: int) -> bytes:
+        if len(self._manifest_bytes) > max_bytes:
+            raise ValueError("manifest too long")
+        return self._manifest_bytes
+
+    def stream_object(self, key: str) -> Iterator[bytes]:
+        with self._object.open("rb") as handle:
+            while chunk := handle.read(CHUNK):
+                yield chunk
+
+    def read_suppression_list(self, *, if_none_match: str | None) -> PointerRead:
+        if if_none_match == '"list"':
+            return PointerRead(body=None, etag=if_none_match)
+        body = self._suppression.read_bytes() if self._suppression.is_file() else b""
+        return PointerRead(body=body, etag='"list"')
+
+
+def status_kib(field: str) -> int:
+    for line in Path("/proc/self/status").read_text().splitlines():
+        if line.startswith(field + ":"):
+            return int(line.split()[1])
+    return -1
+
+
+def cgroup(name: str) -> str:
+    path = Path("/sys/fs/cgroup") / name
+    return path.read_text().strip() if path.is_file() else "unavailable"
+
+
+def main() -> None:
+    logging.basicConfig(level=logging.WARNING, stream=sys.stdout, format="log: %(message)s")
+    logging.getLogger("debate_core.application.search_index_holder").setLevel(logging.INFO)
+    source = FileSource(Path(sys.argv[1]))
+    m = source.manifest
+    print(f"index {m.index_id} format {m.format_version} documents {m.counts.documents}")
+    print(f"sqlite bytes {m.sqlite_file.bytes} gzip bytes {m.gzip_object.bytes}")
+    print(f"documents by store {json.dumps(m.counts.documents_by_store, sort_keys=True)}")
+    print(f"before load: VmHWM {status_kib('VmHWM')} KiB, cgroup memory.current {cgroup('memory.current')}")
+    holder = SearchIndexHolder(
+        source,  # type: ignore[arg-type]
+        directory=Path(tempfile.gettempdir()) / "tub-index",
+        open_reader=lambda path, index_id: SqliteSearchIndexReader(path, index_id=index_id),
+        clock=lambda: datetime.now(UTC),
+        suppression_list=source,  # type: ignore[arg-type]
+    )
+    started = time.perf_counter()
+    with holder.lease() as search:
+        loaded = time.perf_counter() - started
+        print(f"first lease (load) {loaded:.2f} s; VmHWM {status_kib('VmHWM')} KiB, VmRSS {status_kib('VmRSS')} KiB")
+        for query in QUERIES:
+            t0 = time.perf_counter()
+            page = search.search(query)
+            count = (f"{page.count.matches}{'+' if page.count.capped else ''}" if page.count is not None else None)
+            print(f"search {len(query.split())}-word query: {round((time.perf_counter() - t0) * 1000)} ms, "
+                  f"{len(page.hits)} hits on the page, counted {count if count is not None else 'n/a'}")
+    print(f"after searches: VmHWM {status_kib('VmHWM')} KiB, VmRSS {status_kib('VmRSS')} KiB")
+    print(f"cgroup memory.peak {cgroup('memory.peak')} bytes, memory.max {cgroup('memory.max')}")
+    print(f"oom events {cgroup('memory.events').replace(chr(10), ', ')}")
+    holder.close()
+    print(f"probe finished in {time.perf_counter() - started:.2f} s; pid {os.getpid()}")
+
+
+if __name__ == "__main__":
+    main()
+```
 
 ## Follow-up work
 
@@ -325,6 +625,19 @@ The PM decides whether they become spec changes or new tasks. -->
   takes the download as the long part (2.5 s here); the CPU part is. `v1-e39-t04`'s `REPORT`
   lines give init only, not the first search's wait. Belongs to `v1-e39-evidence-search-pilot`
   (the PM decides whether a measurement of the first search's wait on the function is a task).
+
+* **The provenance line's season** (Q2): once the coach approves version 1.24's words above,
+  `occurrence_provenance_line` in `debate_core.domain.evidence_search` writes the season after the
+  slug. Outside this spec's packages. Belongs to `v1-e39-evidence-search-pilot`.
+* **The annual purge and a backfile season.** `docs/runbooks/annual-purge.md` step 5 checks the
+  current index holds no purged caselist; a purged caselist that is an offered season also has its
+  own index and pointer. The retiring steps are in the evidence search runbook's Backfile seasons
+  (take it out of `backfile_seasons`, delete its pointer, P4); step 5 should name them. Belongs to
+  the annual purge's owner.
+* **ADR-0019 (c) 3 and 5** describe one index; a sentence on the season indexes (each its own
+  pointer, one held at a time, the same list) is the PM's to add.
+* **dev moved 21 commits** past this branch's base during the session; `scripts/task sync` before
+  the pull request.
 
 ## PM review
 

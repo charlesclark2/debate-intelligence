@@ -63,7 +63,7 @@ v2.3's extension work.
 | [v1.0](plan_specs/releases/v1.0.yaml) | Foundation & verified evidence core | 3 | 55 | 55 | 252 |
 | [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 4 | 125 | 105 | 550 |
 | [v1.2](plan_specs/releases/v1.2.yaml) | Argument landscape & file building | 3 | 99 | 82 | 366 |
-| [v1.3](plan_specs/releases/v1.3.yaml) | URL → verified card | 2 | 24 | 15 | 125 |
+| [v1.3](plan_specs/releases/v1.3.yaml) | URL → verified card | 2 | 24 | 16 | 125 |
 | [v1.4](plan_specs/releases/v1.4.yaml) | Federated research from the CLI | 2 | 48 | 30 | 158 |
 | [v1.5](plan_specs/releases/v1.5.yaml) | V1 quality gate & team pilot | 1 | 7 | 1 | 66 |
 | [v1.6](plan_specs/releases/v1.6.yaml) | Public team website | 3 | 31 | 22 | 169 |
@@ -461,7 +461,7 @@ A student can run `debate-research cut <URL>` and receive a verified, tagged, ci
 | [Verify DOCX files](plan_specs/v1/e06-card-cutting/t07-verify-docx.yaml) `v1-e06-t07-verify-docx` | Succeeded | 2 | 8.0 |
 | [`cut` can cut a card from the user's own stored copy of an article, with that provenance](plan_specs/v1/e06-card-cutting/t08-cut-from-a-stored-pasted-copy.yaml) `v1-e06-t08-cut-from-a-stored-pasted-copy` | Succeeded | 1 | 3.0 |
 | [`cut` refused for an unrecorded model call says to set DEBATE_MODEL_MODE=live for a real cut](plan_specs/v1/e06-card-cutting/t09-cut-replay-hint-names-live-mode.yaml) `v1-e06-t09-cut-replay-hint-names-live-mode` | Pending | 1 | 0.5 |
-| [`verify` warns when a deletion in a .docx body removes a negation](plan_specs/v1/e06-card-cutting/t10-verify-docx-flags-a-removed-negation.yaml) `v1-e06-t10-verify-docx-flags-a-removed-negation` | Pending | 1 | 1.0 |
+| [`verify` warns when a deletion in a .docx body removes a negation](plan_specs/v1/e06-card-cutting/t10-verify-docx-flags-a-removed-negation.yaml) `v1-e06-t10-verify-docx-flags-a-removed-negation` | Succeeded | 1 | 1.0 |
 | [Exporting a .docx refuses a card whose format profile is not the one it renders in](plan_specs/v1/e06-card-cutting/t11-export-docx-refuses-a-mismatched-profile.yaml) `v1-e06-t11-export-docx-refuses-a-mismatched-profile` | Pending | 1 | 0.5 |
 | [A pasted copy's cite fields can be stated when it is stored, so a card cut from it has a usable cite](plan_specs/v1/e06-card-cutting/t12-pasted-copy-cite-stated-by-the-user.yaml) `v1-e06-t12-pasted-copy-cite-stated-by-the-user` | Succeeded | 1 | 2.0 |
 | [A cite can carry a year-only or year-and-month date without inventing a day](plan_specs/v1/e06-card-cutting/t13-year-and-month-dates-in-a-cite.yaml) `v1-e06-t13-year-and-month-dates-in-a-cite` | Pending | 1 | 2.0 |

@@ -55,7 +55,8 @@ embedded manifest (:func:`~debate_core.evidence.docx_manifest_part.embedded_mani
 and verified exactly as a JSON manifest is, and then its body
 (:func:`~debate_core.evidence.docx_reader.read_document_body`) is compared with each card under the
 edit policy (:mod:`debate_core.evidence.docx_verify`). A card whose body changes its quoted words is
-``MANUAL_EDIT``, and one the body does not hold at all ``BODY_CARD_MISSING``; a bracketed
+``MANUAL_EDIT``, one whose body takes out the omission marker at one of its cuts ``HIDDEN_CUT``
+(`v1-e06-t17`), and one the body does not hold at all ``BODY_CARD_MISSING``; a bracketed
 interpolation is a warning (``INTERPOLATION_PRESENT``) on a card that stays VERIFIED, and so is a
 deletion that removed a negating word (``NEGATION_REMOVED``, `v1-e06-t10`), one per deletion, with its
 range in ``evidence_text`` and in the snapshot. That check reads the words a deletion removed from the
@@ -128,6 +129,7 @@ from debate_core.evidence.docx_verify import (
     BodyCard,
     BodyComparison,
     CharacterRange,
+    HiddenCut,
     RemovedNegation,
     body_evidence,
     compare_body,
@@ -309,14 +311,18 @@ class ReportedReason(BaseModel):
     evidence_range: ReportedRange | None = Field(
         default=None,
         exclude_if=lambda value: value is None,
-        description="For MANUAL_EDIT only: the evidence_text range the body changed. Absent otherwise.",
+        description=(
+            "For MANUAL_EDIT: the evidence_text range the body changed. For HIDDEN_CUT: the cut's "
+            "evidence_text offset, as an empty range. Absent otherwise."
+        ),
     )
     body_range: ReportedRange | None = Field(
         default=None,
         exclude_if=lambda value: value is None,
         description=(
-            "For MANUAL_EDIT only: the range of the body's evidence (its paragraphs joined with a line "
-            "feed) that replaced it. Absent otherwise."
+            "For MANUAL_EDIT: the range of the body's evidence (its paragraphs joined with a line feed) "
+            "that replaced it. For HIDDEN_CUT: where in the body's evidence the cut's omission marker "
+            "should be, as an empty range. Absent otherwise."
         ),
     )
 
@@ -748,7 +754,29 @@ class _BodyCheck:
         comparison = compare_body(card, body_evidence(card, self.body_card), self.omission_marker)
         negations = () if snapshot_text is None else removed_negations(card, comparison, snapshot_text)
         warnings = [*_interpolation_warnings(comparison), *map(_negation_warning, negations)]
-        return _manual_edits(comparison), sorted(warnings, key=_evidence_position)
+        return _body_reasons(comparison), sorted(warnings, key=_evidence_position)
+
+
+def _body_reasons(comparison: BodyComparison) -> tuple[ReportedReason, ...]:
+    """The body's MANUAL_EDIT and HIDDEN_CUT reasons, in evidence order."""
+    reasons = [*_manual_edits(comparison), *map(_hidden_cut, comparison.hidden_cuts)]
+    return tuple(
+        sorted(reasons, key=lambda reason: reason.evidence_range.start if reason.evidence_range else 0)
+    )
+
+
+def _hidden_cut(cut: HiddenCut) -> ReportedReason:
+    evidence, body = cut.evidence_offset, cut.body_offset
+    return ReportedReason(
+        code=ReasonCode.HIDDEN_CUT,
+        detail=(
+            f"the document body hides the card's cut at evidence_text offset {evidence} (body evidence "
+            f"offset {body}): no omission marker stands there, so a reader cannot see that text was cut; "
+            "put the omission marker back where the text was cut"
+        ),
+        evidence_range=ReportedRange(start=evidence, end=evidence),
+        body_range=ReportedRange(start=body, end=body),
+    )
 
 
 def _manual_edits(comparison: BodyComparison) -> tuple[ReportedReason, ...]:

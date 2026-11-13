@@ -377,6 +377,7 @@ reason codes (`--verbose` adds each reason's detail on stderr). `--json` prints 
 | `0` | Every card is VERIFIED. |
 | `1` | The manifest was read and at least one card is UNVERIFIED. Every card is still listed. |
 | `1` (`BODY_CARD_NOT_IN_MANIFEST`) | A .docx's body holds a card its manifest does not list, such as one pasted in by hand. It is listed as UNVERIFIED, by its place in the body. |
+| `1` (`HIDDEN_CUT`) | A .docx's body takes out the omission marker where a card cut text, so a reader cannot see the cut. The card is listed as UNVERIFIED, with the cut's offset. |
 | `2` | A usage error, or a file that is not a card manifest this build reads: not JSON, not valid against `card_manifest.v1.json`, or written by a newer build of debate-research. The failing JSON path is reported and nothing is verified. |
 | `2` (`NO_MANIFEST`) | A .docx with no embedded manifest, such as a hand-cut team file. verify reads only files debate-research exported; nothing is verified. |
 | `3` | Verification could not run, for example because a store could not be read. No card has a verdict. |
@@ -402,7 +403,11 @@ cards in the manifest are verified as above, then the body is read in the format
 name and each card's evidence paragraph is compared with its `evidence_text` under the edit policy:
 
 * deleting whole words or sentences, with or without the profile's ` … ` marker, and changing
-  underlining, highlighting or sizes leave the card VERIFIED;
+  underlining, highlighting or sizes leave the card VERIFIED. The marker may be typed by hand as three
+  full stops with a space either side, ` ... `; without the spaces they are not a marker;
+* each of the card's own cuts must still show its marker. A body that takes one out, on its own or
+  with words deleted beside it, makes the card UNVERIFIED with `HIDDEN_CUT`, the cut's `evidence_text`
+  offset and the body offset where the marker belongs, and the run exits `1`;
 * a bracketed interpolation, `[like this]`, leaves it VERIFIED with the warning
   `INTERPOLATION_PRESENT` and the offset it is read before;
 * a deletion that takes out a word that negates ("not", "never", "nobody", a word ending in "n't", by

@@ -455,7 +455,8 @@
         "SNAPSHOT_REFERENCE_MISMATCH",
         "MANUAL_EDIT",
         "BODY_CARD_MISSING",
-        "BODY_CARD_NOT_IN_MANIFEST"
+        "BODY_CARD_NOT_IN_MANIFEST",
+        "HIDDEN_CUT"
       ],
       "title": "ReasonCode",
       "type": "string"
@@ -517,7 +518,7 @@
             }
           ],
           "default": null,
-          "description": "For MANUAL_EDIT only: the evidence_text range the body changed. Absent otherwise."
+          "description": "For MANUAL_EDIT: the evidence_text range the body changed. For HIDDEN_CUT: the cut's evidence_text offset, as an empty range. Absent otherwise."
         },
         "body_range": {
           "anyOf": [
@@ -529,7 +530,7 @@
             }
           ],
           "default": null,
-          "description": "For MANUAL_EDIT only: the range of the body's evidence (its paragraphs joined with a line feed) that replaced it. Absent otherwise."
+          "description": "For MANUAL_EDIT: the range of the body's evidence (its paragraphs joined with a line feed) that replaced it. For HIDDEN_CUT: where in the body's evidence the cut's omission marker should be, as an empty range. Absent otherwise."
         }
       },
       "required": [

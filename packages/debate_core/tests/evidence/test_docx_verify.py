@@ -60,11 +60,14 @@ from debate_core.evidence.docx_verify import (
     BodyParagraph,
     CharacterRange,
     DocumentBody,
+    HiddenCut,
     ManualEdit,
     body_evidence,
     compare_body,
     match_body_cards,
 )
+from debate_core.evidence.edit_policy import apply_quotation_edit
+from debate_core.evidence.edits import AddInterpolation, QuotationEdit
 from debate_core.evidence.format_profile import load_format_profiles
 from debate_core.evidence.manifest import CardManifest
 from debate_core.testing.fakes.clock_and_ids import FixedClock
@@ -397,9 +400,8 @@ def test_diff_deleting_the_space_between_two_words_is_a_manual_edit(card: Card) 
     [
         FIRST_SENTENCE + MARKER + LAST_PART,
         FIRST_SENTENCE + MARKER.rstrip() + LAST_PART,
-        FIRST_SENTENCE + LAST_PART,
     ],
-    ids=["marker kept, its space doubled", "marker kept", "marker deleted too"],
+    ids=["marker kept, its space doubled", "marker kept"],
 )
 def test_diff_deleting_a_whole_sentence_is_a_deletion_that_follows_the_policy(card: Card, body: str) -> None:
     comparison = compare_body(card, body, MARKER)
@@ -428,11 +430,12 @@ def test_diff_a_marker_where_nothing_was_cut_is_a_manual_edit(card: Card) -> Non
 
 
 def test_diff_the_marker_is_the_profiles_own(card: Card) -> None:
-    """A profile whose marker is three full stops: one typed where words were cut follows the policy."""
+    """A profile whose marker is three full stops: one typed where words were cut follows the policy.
+    Until `v1-e06-t17` the default profile refused the same body; since the coach's decision of
+    2026-11-13 it reads " ... " as its own " … " (test_typed_marker_is_read_for_the_ellipsis_profile_only)."""
     body = FIRST_SENTENCE + " ... " + CRITICS_SENTENCE + LAST_PART
 
     assert compare_body(card, body, " ... ").manual_edits == ()
-    assert compare_body(card, body, MARKER).manual_edits != ()
 
 
 def test_diff_an_added_interpolation_is_reported_where_it_is_read_and_follows_the_policy(card: Card) -> None:
@@ -579,12 +582,20 @@ def verified_export(
     ranges: tuple[tuple[int, int], ...],
     evidence: str,
     card_of: Callable[[Card], Card] = lambda card: card,
+    edits: tuple[QuotationEdit, ...] = (),
 ) -> VerifiedExport:
     """A card cut from ``ranges`` of an invented source, VERIFIED, changed by ``card_of`` and exported to
-    a .docx in the team profile. ``evidence`` is its hand-written ``evidence_text``."""
+    a .docx in the team profile. ``evidence`` is its hand-written ``evidence_text``. Each of ``edits`` is
+    applied first through E03's edit API, and the edited card is verified again (`v1-e06-t17`)."""
     world = VerificationWorld()
     source = world.add_source(source_text)
     card, result = run(world.verifier.verify_and_record(world.cut_card_from_ranges(source, ranges)))
+    for edit in edits:
+        card, result = run(
+            world.verifier.verify_and_record(
+                apply_quotation_edit(card, edit, source.snapshot, source.normalized).card
+            )
+        )
     assert (result.status, card.evidence_text) == (VerificationStatus.VERIFIED, evidence)
     card = card_of(card)
     exporter = ExportService(
@@ -727,10 +738,13 @@ def test_negation_a_deletion_across_the_cards_own_cut_reads_only_the_words_it_re
     negation_card: VerifiedExport,
 ) -> None:
     """Evidence [32, 56) is snapshot [58, 71) and [100, 111); "nothing", in the omission between, was
-    not in the body to remove."""
+    not in the body to remove. The deletion takes the cut's marker with it, so since `v1-e06-t17` (the
+    PM's ruling of 2026-11-14) the card is UNVERIFIED with HIDDEN_CUT at the cut (evidence 45), where the
+    body runs "another " into "have" (body 32); it was VERIFIED before."""
     verdict = docx_verdict(negation_card, across_the_cards_own_cut)
 
-    assert is_verified_without_reasons(verdict)
+    assert verdict["status"] == "UNVERIFIED"
+    assert reason_ranges(verdict) == [("HIDDEN_CUT", (45, 45), (32, 32))]
     assert "warnings" not in verdict
 
 
@@ -748,10 +762,13 @@ def test_negation_one_deletion_across_the_cut_with_a_negation_either_side_is_one
     negation_card: VerifiedExport,
 ) -> None:
     """Evidence [15, 67) is snapshot [41, 71) and [100, 122): "not" in one, "never" in the other, one
-    deletion, so one warning, which spans the omission between."""
+    deletion, so one warning, which spans the omission between. The deletion takes the cut's marker with
+    it: since `v1-e06-t17` (the PM's ruling of 2026-11-14) HIDDEN_CUT at evidence 45, body 15 ("will "
+    then "checked"); it was VERIFIED before."""
     verdict = docx_verdict(negation_card, from_not_to_never_across_the_cut)
 
-    assert is_verified_without_reasons(verdict)
+    assert verdict["status"] == "UNVERIFIED"
+    assert reason_ranges(verdict) == [("HIDDEN_CUT", (45, 45), (15, 15))]
     assert negation_warnings(verdict) == [("NEGATION_REMOVED", (15, 67), (41, 122))]
 
 
@@ -1188,7 +1205,6 @@ def test_join_an_untouched_export_whose_cut_joins_two_words_verifies(
         pytest.param(
             replace_in_evidence("hold", "hold now"), (28, 28), (31, 35), id="a-word-added-right-before-join-2"
         ),
-        pytest.param(retyped_marker(1, ""), (24, 33), (27, 36), id="the-marker-at-join-2-taken-out"),
     ],
 )
 def test_join_a_changed_or_added_word_beside_a_join_is_a_manual_edit(
@@ -1199,9 +1215,8 @@ def test_join_a_changed_or_added_word_beside_a_join_is_a_manual_edit(
 ) -> None:
     """Body ranges: "Engineer" 0-8, before join 1's marker; "levees" 12-18 and "holds" 27-32; "ever" 34-38
     after join 2's marker (31-34); "seasons" 60-67; "now " 34-38 after join 2's marker and " now" 31-35
-    before it, both at evidence 28. Taking join 2's marker out leaves "holdnever" (body 27-36), a word
-    the source never wrote, which is the card's "hold" [24, 28) and "never" [28, 33) changed: the
-    renderer drew them apart, as t07's deleted space between two words is a manual edit."""
+    before it, both at evidence 28. Taking join 2's marker out ("holdnever") was a case here until
+    `v1-e06-t17`, which reads it as a hidden cut (test_hidden_cut_a_marker_taken_out_at_a_word_join)."""
     comparison = marker_comparison(join_card, change)
 
     assert comparison.manual_edits == (
@@ -1332,3 +1347,493 @@ def test_join_a_negation_deleted_right_after_a_retyped_marker_is_a_warning(
     assert is_verified_without_reasons(verdict)
     snapshot = (deletion[0] + 65, deletion[1] + 65)
     assert negation_warnings(verdict) == [("NEGATION_REMOVED", deletion, snapshot)]
+
+
+# --------------------------------------------------------------------------------------------
+# Node cuts always shown (`v1-e06-t17`): a hidden cut is named, a mid-word anchor verifies, and a
+# marker typed as " ... " is the marker
+# --------------------------------------------------------------------------------------------
+#
+# Three sections, each on a card above: t15's marker card (MARKER_SOURCE, whose cuts join a full stop
+# to a capital), t16's join card (JOIN_SOURCE, whose cuts join a word to a word) and t07's news card.
+#
+# Hidden cuts. A body that takes a cut's marker out shows the card's characters with nothing where
+# the cut is. A hidden cut is named by its evidence offset (the cut's omission offset) and the body
+# offset where its marker should be. On the marker card, cut 1 is evidence 12, cut 2 is 57 and cut 3
+# is 76; with one marker taken out, the body offset is the evidence offset plus 3 for each marker still
+# drawn before it, so 12, 60 and 82. On the join card, join 1 is 9 (body 9 with its marker out), join 2
+# is 28 (body 31) and join 3 is 51 (body 57).
+#
+# Interpolation anchors inside a word. Each card here is the join card with an interpolation "s"
+# added through E03's edit API, so the body shows "[s]" (three characters) inside the word:
+#   anchor 11 inside "levee" [9, 14), right after join 1: "le[s]vee" is body 12-20
+#   anchor 30 inside "never" [28, 33), right after join 2: "ne[s]ver" is body 34-42
+#   anchor 54 inside "season" [51, 57), the body's last word: "sea[s]son" is body 60-69
+#
+# Typed markers (the coach's decision of 2026-11-13). Three full stops with whitespace either side read
+# as the profile's marker; without it they are three full stops. On the marker card the dots typed at
+# cut 1 sit at body 12: "..." is 12-15, " ..." and "... " are 12-16, " .... " 12-18. On the join card
+# "..." at join 2 is body 31-34. "another" is marker-card evidence 36-43 and body 39-46; " ... " typed
+# for the space after it puts its dots and the space after them at body 47-51, before "spring" (44).
+
+
+def blanked_run(text: str) -> Callable[[Document], None]:
+    """The one evidence run whose whole text is ``text`` emptied, as deleting it in Word does."""
+
+    def change(document: Document) -> None:
+        [run_] = [each for each in evidence_paragraph(document).runs if each.text == text]
+        run_.text = ""
+
+    return change
+
+
+def anchored_export(anchor: int) -> VerifiedExport:
+    """The join card with the interpolation "s" added at ``anchor`` through E03's edit API, re-verified."""
+    return verified_export(
+        JOIN_SOURCE, JOIN_RANGES, JOIN_EVIDENCE, edits=(AddInterpolation(anchor=anchor, text="s"),)
+    )
+
+
+ANCHORS_INSIDE_WORDS: Final = (
+    pytest.param(
+        11, "Engineers … le[s]vee will not hold … never came to the north … season", id="inside-levee"
+    ),
+    pytest.param(
+        30, "Engineers … levee will not hold … ne[s]ver came to the north … season", id="inside-never"
+    ),
+    pytest.param(
+        54, "Engineers … levee will not hold … never came to the north … sea[s]son", id="inside-season"
+    ),
+)
+
+
+@pytest.mark.parametrize(("anchor", "rendered"), ANCHORS_INSIDE_WORDS)
+def test_anchor_inside_a_word_verifies_on_an_untouched_export(anchor: int, rendered: str) -> None:
+    """The PM's case is "inside-levee": ManualEdit(evidence [9, 14), body [12, 20)) before this node."""
+    export = anchored_export(anchor)
+    assert body_of(export.document).cards[0].paragraphs[-1].text == rendered
+
+    comparison = marker_comparison(export)
+
+    assert comparison == BodyComparison(
+        manual_edits=(),
+        interpolations=(BodyInterpolation(anchor=anchor, length=1, recorded=True),),
+        deletions=(),
+    )
+    verdict = docx_verdict(export, source_words=JOIN_SOURCE_WORDS)
+    assert is_verified_without_reasons(verdict)
+    assert [(item["code"], item["evidence_offset"]) for item in verdict["warnings"]] == [
+        ("INTERPOLATION_PRESENT", anchor)
+    ]
+
+
+@pytest.mark.parametrize(("anchor", "rendered"), ANCHORS_INSIDE_WORDS)
+def test_anchor_inside_a_word_whose_interpolation_the_body_leaves_out_verifies(
+    anchor: int, rendered: str
+) -> None:
+    """The word is the source's again, as an interpolation left out at a word's edge is."""
+    export = anchored_export(anchor)
+
+    comparison = marker_comparison(export, blanked_run("[s]"))
+
+    assert comparison == BodyComparison(manual_edits=(), interpolations=(), deletions=())
+    verdict = docx_verdict(export, blanked_run("[s]"), source_words=JOIN_SOURCE_WORDS)
+    assert is_verified_without_reasons(verdict)
+    assert verdict.get("warnings", []) == []
+
+
+@pytest.mark.parametrize(
+    ("change", "body_range"),
+    [
+        pytest.param(replace_in_evidence("le", ""), (12, 18), id="the-letters-before-the-anchor"),
+        pytest.param(replace_in_evidence("vee will", " will"), (12, 17), id="the-letters-after-the-anchor"),
+    ],
+)
+def test_anchor_inside_a_word_letters_deleted_on_one_side_of_it_are_a_manual_edit(
+    change: Callable[[Document], None], body_range: tuple[int, int]
+) -> None:
+    """ "[s]vee" is body 12-18 and "le[s]" 12-17, both after join 1's marker (9-12): "levee" [9, 14)
+    changed, never a deletion of letters beside an interpolation."""
+    export = anchored_export(11)
+
+    comparison = marker_comparison(export, change)
+
+    assert comparison.manual_edits == (ManualEdit(CharacterRange(9, 14), CharacterRange(*body_range)),)
+    assert comparison.deletions == ()
+    verdict = docx_verdict(export, change, source_words=JOIN_SOURCE_WORDS)
+    assert (verdict["status"], verdict["reason_codes"]) == ("UNVERIFIED", ["MANUAL_EDIT"])
+
+
+def test_anchor_inside_a_word_deleted_with_its_interpolation_is_a_deletion() -> None:
+    """ "levee " right after join 1, as t16's "right-after-join-1" deletes it: "levee" [9, 14)."""
+    export = anchored_export(11)
+    changes = (replace_in_evidence("le", ""), blanked_run("[s]"), replace_in_evidence("vee will", "will"))
+
+    comparison = marker_comparison(export, *changes)
+
+    assert comparison == BodyComparison(
+        manual_edits=(), interpolations=(), deletions=(CharacterRange(9, 14),)
+    )
+    assert is_verified_without_reasons(docx_verdict(export, *changes, source_words=JOIN_SOURCE_WORDS))
+
+
+def test_anchor_a_bracket_inside_a_word_the_card_does_not_record_is_a_manual_edit(
+    join_card: VerifiedExport,
+) -> None:
+    """ "le[s]vee" typed into the join card, which records no interpolation: t16's measured ranges."""
+    change = replace_in_evidence("levee", "le[s]vee")
+
+    comparison = marker_comparison(join_card, change)
+
+    assert comparison.manual_edits == (ManualEdit(CharacterRange(9, 14), CharacterRange(12, 20)),)
+    verdict = join_verdict(join_card, change)
+    assert (verdict["status"], verdict["reason_codes"]) == ("UNVERIFIED", ["MANUAL_EDIT"])
+
+
+NBSP: Final = chr(0xA0)
+SPACED_DOTS: Final = (
+    pytest.param(" ... ", id="one-space-each-side"),
+    pytest.param("  ...  ", id="two-spaces-each-side"),
+    pytest.param(f"{NBSP}...{NBSP}", id="non-breaking-spaces"),
+)
+
+
+@pytest.mark.parametrize("typed", SPACED_DOTS)
+@pytest.mark.parametrize(
+    ("source", "ranges", "evidence", "source_words"),
+    [
+        pytest.param(MARKER_SOURCE, MARKER_RANGES, MARKER_EVIDENCE, MARKER_SOURCE_WORDS, id="marker-card"),
+        pytest.param(JOIN_SOURCE, JOIN_RANGES, JOIN_EVIDENCE, JOIN_SOURCE_WORDS, id="join-card"),
+    ],
+)
+def test_typed_marker_of_spaced_full_stops_at_every_cut_verifies(
+    source: str,
+    ranges: tuple[tuple[int, int], ...],
+    evidence: str,
+    source_words: tuple[str, ...],
+    typed: str,
+) -> None:
+    """All three markers retyped: each change retypes the first marker still drawn as the profile's."""
+    export = verified_export(source, ranges, evidence)
+    changes = tuple(retyped_marker(0, typed) for _ in range(3))
+
+    comparison = marker_comparison(export, *changes)
+
+    assert comparison == BodyComparison(manual_edits=(), interpolations=(), deletions=())
+    assert is_verified_without_reasons(docx_verdict(export, *changes, source_words=source_words))
+
+
+@pytest.mark.parametrize(
+    ("index", "old", "new", "deletion"),
+    [
+        pytest.param(0, "The levee", "levee", (12, 15), id="marker-card-right-after-cut-1"),
+        pytest.param(1, "Repairs ", "", (57, 64), id="marker-card-right-after-cut-2"),
+    ],
+)
+def test_typed_marker_beside_a_word_deleted_on_the_marker_card_is_a_deletion(
+    marker_card: VerifiedExport, index: int, old: str, new: str, deletion: tuple[int, int]
+) -> None:
+    """t15's ranges for the profile's marker: the space after the dots stands for the card's own."""
+    changes = (retyped_marker(index, " ... "), replace_in_evidence(old, new))
+
+    comparison = marker_comparison(marker_card, *changes)
+
+    assert (comparison.manual_edits, comparison.deletions) == ((), (CharacterRange(*deletion),))
+    assert is_verified_without_reasons(marker_verdict(marker_card, *changes))
+
+
+@pytest.mark.parametrize(
+    ("old", "deletion", "negations"),
+    [
+        pytest.param("came ", (34, 39), [], id="one-word-after-join-2"),
+        pytest.param(
+            "never ", (28, 33), [("NEGATION_REMOVED", (28, 33), (93, 98))], id="a-negation-right-after-join-2"
+        ),
+    ],
+)
+def test_typed_marker_beside_a_word_deleted_on_the_join_card_is_a_deletion(
+    join_card: VerifiedExport,
+    old: str,
+    deletion: tuple[int, int],
+    negations: list[tuple[str, tuple[int, int], tuple[int, int]]],
+) -> None:
+    """t16's ranges for the profile's marker; "never" is snapshot [93, 98)."""
+    changes = (retyped_marker(1, " ... "), replace_in_evidence(old, ""))
+
+    comparison = marker_comparison(join_card, *changes)
+
+    assert (comparison.manual_edits, comparison.deletions) == ((), (CharacterRange(*deletion),))
+    verdict = join_verdict(join_card, *changes)
+    assert is_verified_without_reasons(verdict)
+    assert negation_warnings(verdict) == negations
+
+
+@pytest.mark.parametrize(
+    ("card_name", "index", "typed", "evidence_range", "body_range"),
+    [
+        pytest.param("marker", 0, "...", (12, 12), (12, 15), id="no-spaces-at-cut-1"),
+        pytest.param("marker", 0, " ...", (12, 12), (12, 16), id="a-space-before-only-at-cut-1"),
+        pytest.param("marker", 0, "... ", (12, 12), (12, 16), id="a-space-after-only-at-cut-1"),
+        pytest.param("marker", 0, " .... ", (12, 12), (12, 18), id="four-full-stops-at-cut-1"),
+        pytest.param("join", 1, "...", (28, 28), (31, 34), id="no-spaces-at-join-2"),
+    ],
+)
+def test_typed_marker_of_full_stops_without_a_space_each_side_is_a_manual_edit(
+    marker_card: VerifiedExport,
+    join_card: VerifiedExport,
+    card_name: str,
+    index: int,
+    typed: str,
+    evidence_range: tuple[int, int],
+    body_range: tuple[int, int],
+) -> None:
+    export = marker_card if card_name == "marker" else join_card
+    change = retyped_marker(index, typed)
+
+    comparison = marker_comparison(export, change)
+
+    assert comparison.manual_edits == (
+        ManualEdit(CharacterRange(*evidence_range), CharacterRange(*body_range)),
+    )
+    words = MARKER_SOURCE_WORDS if card_name == "marker" else JOIN_SOURCE_WORDS
+    verdict = docx_verdict(export, change, source_words=words)
+    assert (verdict["status"], verdict["reason_codes"]) == ("UNVERIFIED", ["MANUAL_EDIT"])
+
+
+def test_typed_marker_of_spaced_full_stops_where_nothing_was_cut_is_a_manual_edit(
+    marker_card: VerifiedExport,
+) -> None:
+    """ "another ... spring": the dots and the space after them, body 47-51, before "spring" (44)."""
+    change = replace_in_evidence("another spring", "another ... spring")
+
+    comparison = marker_comparison(marker_card, change)
+
+    assert comparison.manual_edits == (ManualEdit(CharacterRange(44, 44), CharacterRange(47, 51)),)
+    verdict = marker_verdict(marker_card, change)
+    assert (verdict["status"], verdict["reason_codes"]) == ("UNVERIFIED", ["MANUAL_EDIT"])
+
+
+def test_typed_marker_is_read_for_the_ellipsis_profile_only(card: Card) -> None:
+    """A profile whose marker is three full stops does not read the ellipsis character as its marker:
+    the coach's decision reads typed full stops as "…", not the other way round."""
+    body = FIRST_SENTENCE + MARKER + CRITICS_SENTENCE + LAST_PART
+
+    assert compare_body(card, body, " ... ").manual_edits != ()
+    assert compare_body(card, body, MARKER).manual_edits == ()
+
+
+@pytest.mark.parametrize(
+    ("index", "hidden"),
+    [
+        pytest.param(0, (12, 12), id="cut-1-fail-then-The"),
+        pytest.param(1, (57, 60), id="cut-2-flood-then-Repairs"),
+        pytest.param(2, (76, 82), id="cut-3-came-then-Nobody"),
+    ],
+)
+def test_hidden_cut_a_marker_taken_out_at_a_punctuation_join(
+    marker_card: VerifiedExport, index: int, hidden: tuple[int, int]
+) -> None:
+    """The body equals the card's characters there ("fail.The"), so nothing else differs."""
+    comparison = marker_comparison(marker_card, retyped_marker(index, ""))
+
+    assert comparison == BodyComparison(
+        manual_edits=(), interpolations=(), deletions=(), hidden_cuts=(HiddenCut(*hidden),)
+    )
+    assert not comparison.follows_the_policy
+
+
+def test_hidden_cut_every_marker_taken_out_is_one_hidden_cut_each(marker_card: VerifiedExport) -> None:
+    """With no marker left, the body is the card's evidence_text and every body offset its own."""
+    changes = tuple(retyped_marker(0, "") for _ in range(3))
+
+    comparison = marker_comparison(marker_card, *changes)
+
+    assert comparison.manual_edits == ()
+    assert comparison.hidden_cuts == (HiddenCut(12, 12), HiddenCut(57, 57), HiddenCut(76, 76))
+
+
+@pytest.mark.parametrize(
+    ("index", "hidden"),
+    [
+        pytest.param(0, (9, 9), id="join-1-Engineerslevee"),
+        pytest.param(1, (28, 31), id="join-2-holdnever"),
+        pytest.param(2, (51, 57), id="join-3-northseason"),
+    ],
+)
+def test_hidden_cut_a_marker_taken_out_at_a_word_join(
+    join_card: VerifiedExport, index: int, hidden: tuple[int, int]
+) -> None:
+    """Until this node "holdnever" was ManualEdit(evidence [24, 33), body [27, 36)), t16's Decision 2: its
+    characters are the card's, and what the body changed is the cut it no longer shows."""
+    comparison = marker_comparison(join_card, retyped_marker(index, ""))
+
+    assert comparison == BodyComparison(
+        manual_edits=(), interpolations=(), deletions=(), hidden_cuts=(HiddenCut(*hidden),)
+    )
+
+
+@pytest.mark.parametrize(
+    ("card_name", "index", "typed", "hidden", "interpolations"),
+    [
+        pytest.param("marker", 0, " ", (12, 12), (), id="a-space-at-cut-1"),
+        pytest.param("join", 1, " ", (28, 31), (), id="a-space-at-join-2"),
+        pytest.param(
+            "marker",
+            0,
+            " [and] ",
+            (12, 12),
+            (BodyInterpolation(anchor=12, length=3, recorded=False),),
+            id="an-interpolation-at-cut-1",
+        ),
+    ],
+)
+def test_hidden_cut_a_marker_replaced_by_something_else(
+    marker_card: VerifiedExport,
+    join_card: VerifiedExport,
+    card_name: str,
+    index: int,
+    typed: str,
+    hidden: tuple[int, int],
+    interpolations: tuple[BodyInterpolation, ...],
+) -> None:
+    """A space where the marker was is not a MANUAL_EDIT for an added space: it is the cut, hidden."""
+    export = marker_card if card_name == "marker" else join_card
+
+    comparison = marker_comparison(export, retyped_marker(index, typed))
+
+    assert comparison == BodyComparison(
+        manual_edits=(), interpolations=interpolations, deletions=(), hidden_cuts=(HiddenCut(*hidden),)
+    )
+
+
+@pytest.mark.parametrize(
+    ("old", "new", "deletion", "hidden"),
+    [
+        pytest.param("The levee", "levee", (12, 16), (12, 12), id="the-word-after-cut-1"),
+        pytest.param(" fail", "", (6, 11), (12, 7), id="the-word-before-cut-1"),
+    ],
+)
+def test_hidden_cut_a_word_deleted_beside_a_cut_with_its_marker(
+    marker_card: VerifiedExport, old: str, new: str, deletion: tuple[int, int], hidden: tuple[int, int]
+) -> None:
+    """ "Levees fail.levee will" deletes "The " [12, 16): no marker is left to stand for its space.
+    "Levees.The levee" deletes " fail" [6, 11), and the full stop that is left sits between the deletion
+    and the cut, so the cut is hidden at "The", body 7."""
+    changes = (retyped_marker(0, ""), replace_in_evidence(old, new))
+
+    comparison = marker_comparison(marker_card, *changes)
+
+    assert comparison == BodyComparison(
+        manual_edits=(),
+        interpolations=(),
+        deletions=(CharacterRange(*deletion),),
+        hidden_cuts=(HiddenCut(*hidden),),
+    )
+
+
+def test_hidden_cut_a_sentence_deleted_with_the_news_cards_marker(card: Card) -> None:
+    """t07's "marker deleted too": the critics' sentence [108, 202) and the cut before it, at 108."""
+    comparison = compare_body(card, FIRST_SENTENCE + LAST_PART, MARKER)
+
+    assert comparison == BodyComparison(
+        manual_edits=(),
+        interpolations=(),
+        deletions=(CharacterRange(108, 202),),
+        hidden_cuts=(HiddenCut(108, 108),),
+    )
+
+
+def test_hidden_cut_none_where_one_marker_is_left_for_the_two_cuts_a_deletion_joins(
+    marker_card: VerifiedExport,
+) -> None:
+    """ "Repairs never came." [57, 76) deleted with cut 3's marker: cut 2's marker still shows the cut."""
+    changes = (retyped_marker(2, ""), replace_in_evidence("Repairs never came.", ""))
+
+    comparison = marker_comparison(marker_card, *changes)
+
+    assert comparison == BodyComparison(
+        manual_edits=(), interpolations=(), deletions=(CharacterRange(57, 76),)
+    )
+    assert is_verified_without_reasons(marker_verdict(marker_card, *changes))
+
+
+def reason_ranges(verdict: dict[str, Any]) -> list[tuple[str, tuple[int, int], tuple[int, int]]]:
+    """Each reason's code, evidence_text range and body range, in the verdict's order."""
+    return [
+        (
+            reason["code"],
+            (reason["evidence_range"]["start"], reason["evidence_range"]["end"]),
+            (reason["body_range"]["start"], reason["body_range"]["end"]),
+        )
+        for reason in verdict["reasons"]
+    ]
+
+
+@pytest.mark.parametrize(
+    ("card_name", "changes", "evidence_offset", "body_offset"),
+    [
+        pytest.param("marker", (retyped_marker(0, ""),), 12, 12, id="punctuation-join-cut-1"),
+        pytest.param("marker", (retyped_marker(2, ""),), 76, 82, id="punctuation-join-cut-3"),
+        pytest.param("join", (retyped_marker(1, ""),), 28, 31, id="word-join-2-holdnever"),
+        pytest.param("join", (retyped_marker(0, ""),), 9, 9, id="word-join-1-at-the-body-start"),
+        pytest.param("marker", (retyped_marker(0, " "),), 12, 12, id="a-space-for-the-marker"),
+        pytest.param(
+            "marker",
+            (retyped_marker(0, ""), replace_in_evidence("The levee", "levee")),
+            12,
+            12,
+            id="a-word-deleted-with-the-marker",
+        ),
+    ],
+)
+def test_hidden_cut_is_an_unverified_card_with_its_offsets(
+    marker_card: VerifiedExport,
+    join_card: VerifiedExport,
+    card_name: str,
+    changes: tuple[Callable[[Document], None], ...],
+    evidence_offset: int,
+    body_offset: int,
+) -> None:
+    """The PM's ruling of 2026-11-14: HIDDEN_CUT, a reason of its own, with empty ranges at the cut."""
+    export = marker_card if card_name == "marker" else join_card
+    words = MARKER_SOURCE_WORDS if card_name == "marker" else JOIN_SOURCE_WORDS
+
+    verdict = docx_verdict(export, *changes, source_words=words)
+
+    assert (verdict["status"], verdict["reason_codes"]) == ("UNVERIFIED", ["HIDDEN_CUT"])
+    assert reason_ranges(verdict) == [
+        ("HIDDEN_CUT", (evidence_offset, evidence_offset), (body_offset, body_offset))
+    ]
+    assert verdict["reasons"][0]["detail"] == (
+        f"the document body hides the card's cut at evidence_text offset {evidence_offset} (body evidence "
+        f"offset {body_offset}): no omission marker stands there, so a reader cannot see that text was cut; "
+        "put the omission marker back where the text was cut"
+    )
+
+
+@pytest.mark.parametrize(
+    ("changes", "expected"),
+    [
+        pytest.param(
+            (retyped_marker(0, ""), replace_in_evidence("came.", "come.")),
+            [("HIDDEN_CUT", (12, 12), (12, 12)), ("MANUAL_EDIT", (71, 75), (74, 78))],
+            id="the-hidden-cut-first",
+        ),
+        pytest.param(
+            (retyped_marker(2, ""), replace_in_evidence("The levee", "A levee")),
+            [("MANUAL_EDIT", (12, 15), (15, 16)), ("HIDDEN_CUT", (76, 76), (80, 80))],
+            id="the-manual-edit-first",
+        ),
+    ],
+)
+def test_hidden_cut_and_a_manual_edit_are_reported_in_evidence_order(
+    marker_card: VerifiedExport,
+    changes: tuple[Callable[[Document], None], ...],
+    expected: list[tuple[str, tuple[int, int], tuple[int, int]]],
+) -> None:
+    """ "come" is body 74-78 with cut 1's marker gone (t15's 77-81 less three); "A" is body 15-16 after cut
+    1's marker; cut 3 at 76 with its marker gone is body 76 + 3 + 3 - 2, "The" (3) having become "A" (1)."""
+    verdict = marker_verdict(marker_card, *changes)
+
+    assert verdict["status"] == "UNVERIFIED"
+    assert reason_ranges(verdict) == expected

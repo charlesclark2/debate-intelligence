@@ -25,6 +25,7 @@ from tests.fixtures.permissions import needs_permissions, refused
 from tests.fixtures.verification.verification_world import run
 from tests.fixtures.verify.docx_world import (
     CRITICS_SENTENCE,
+    MARKER,
     NEWS_CARD_ID,
     NewsExport,
     edited,
@@ -118,6 +119,7 @@ def test_the_help_documents_every_exit_code() -> None:
         "2  usage error, a manifest that fails its JSON Schema, or one from a newer build",
         "NO_MANIFEST for a .docx with no embedded manifest",
         "BODY_CARD_NOT_IN_MANIFEST for a card in a .docx body that its manifest does not list",
+        "HIDDEN_CUT for a cut whose omission marker a .docx body took out",
         "3  verification could not run, for example a store could not be read",
     ):
         assert line in result.stdout
@@ -135,6 +137,8 @@ def test_the_cli_readme_documents_every_exit_code() -> None:
         "path is reported and nothing is verified. |",
         "| `1` (`BODY_CARD_NOT_IN_MANIFEST`) | A .docx's body holds a card its manifest does not list, "
         "such as one pasted in by hand. It is listed as UNVERIFIED, by its place in the body. |",
+        "| `1` (`HIDDEN_CUT`) | A .docx's body takes out the omission marker where a card cut text, so a "
+        "reader cannot see the cut. The card is listed as UNVERIFIED, with the cut's offset. |",
         "| `3` | Verification could not run, for example because a store could not be read. No card "
         "has a verdict. |",
     ):
@@ -728,6 +732,29 @@ def test_docx_a_changed_word_exits_one_with_manual_edit_the_card_and_its_range(
     )
     row = next(line for line in for_a_person.stdout.splitlines() if line.startswith("│ 0CVT"))
     assert "UNVERIFIED" in row and "MANUAL_EDIT at 18-21" in row
+
+
+def test_docx_a_cut_whose_marker_was_taken_out_exits_one_with_hidden_cut_and_its_offsets(
+    tmp_path: Path, docx_world: ExportedDocx
+) -> None:
+    """The news card's one cut is evidence 108; with its marker gone the body offset is 108 too
+    (`v1-e06-t17`, the PM's ruling of 2026-11-14: the exit code MANUAL_EDIT gives)."""
+    path = written(tmp_path, edited(docx_world.export.document, replace_in_evidence(MARKER, "")))
+
+    as_json = invoke("--json", "verify", str(path))
+    for_a_person = invoke("verify", str(path))
+
+    assert as_json.exit_code == for_a_person.exit_code == ExitCode.DOMAIN_FAILURE
+    error = envelope(as_json)["error"]
+    assert (error["code"], error["exit_code"]) == ("UNVERIFIED", 1)
+    [card] = error["details"]["cards"]
+    assert (card["position"], card["status"], card["reason_codes"]) == (0, "UNVERIFIED", ["HIDDEN_CUT"])
+    assert (card["reasons"][0]["evidence_range"], card["reasons"][0]["body_range"]) == (
+        {"start": 108, "end": 108},
+        {"start": 108, "end": 108},
+    )
+    row = next(line for line in for_a_person.stdout.splitlines() if line.startswith("│ 0CVT"))
+    assert "UNVERIFIED" in row and "HIDDEN_CUT at 108-108" in row
 
 
 @pytest.mark.parametrize(

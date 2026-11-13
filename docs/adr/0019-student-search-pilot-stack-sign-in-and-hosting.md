@@ -247,6 +247,15 @@ This record covers release v1.7 and its two environments. It decides the pilot o
    index was 350,958,220 bytes on 2026-11-05, 32,843,153 bytes (9.4%) above the week before; each
    weekly run's `search_index` record carries `gzip_bytes`.
 
+*(PM note 2026-11-12, `v1-e39-t18`.)* The backfile seasons are not in this index. Each earlier
+season has an index of its own, published to its own pointer
+(`reports/tub/search/seasons/<season>.json`) with its own shrink guard, loaded only when a student
+picks that season, one held at a time, and screened by the same suppression list on the same
+five-minute check. The default search, its index and its cold start are as above. Measured on
+2026-11-12, one index of all seasons would have broken every limit here (3.97 GB of SQLite, a 19.1 s
+load); one season is estimated at 0.57 to 0.90 GB and 3 to 6 s, measured by the task's
+after-measurement before any season is published.
+
 ### (d) Sign-in: Cognito managed login, coach-created accounts, TOTP required
 
 **The pool,** `debate-<env>-tub`, one per environment.

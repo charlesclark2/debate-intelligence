@@ -1,0 +1,80 @@
+# TASK v1-e40-t50-a-stopped-run-notice-for-a-token-error-gives-the-cloud-cure - A cloud run stopped on a token error, or refused its secret, emails the cure a person can act on
+# Epic: E40 — Weekly Caselist Run in the Cloud | Release: v1.8 (Weekly caselist run in the cloud) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e40-t50-a-stopped-run-notice-for-a-token-error-gives-the-cloud-cure
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.8
+    debate/epic: v1-e40-cloud-caselist-run
+  annotations:
+    debate/title: "A cloud run stopped on a token error, or refused its secret, emails the cure a person can act on"
+spec:
+  # Filed by the PM, 2026-11-12, from v1-e40-t40's follow-ups 1 and 2 (the PM's review, 2026-11-12).
+  description: >-
+    v1-e40-t40 gave CASELIST_TOKEN_MISSING and CASELIST_TOKEN_UNREADABLE the Wednesday-login
+    cure in the output, the record and the failed-stage notice. Two gaps: (1) a bucket-mode run
+    that stops on either code still emails t28's 'the next cloud run … or one started by hand',
+    while its log names the Wednesday login; give that arm the table's cure for a code in it,
+    and propose its title (t33 gave the expired login one of its own). (2) A bucket-mode run
+    whose secret read is refused (STORE_ACCESS_DENIED at GetSecretValue, a decrypt or IAM
+    change) exits 3, 'may be cured by a retry', with no hint, where a person is needed: measure
+    the notice it sends today on a fake bucket, then propose its words (escalate to the PM with
+    the error class; never an IAM or key-policy change by hand, as the runbook says). Stop for
+    the PM's ruling on both before code. On the Mac nothing changes.
+  priority: 3
+  constraints:
+    packages: [debate_core.application, debate_cli, packages/debate_core/tests, packages/debate_cli/tests, docs/runbooks]
+    forbidden:
+      - A change to the Mac's output
+      - Network or AWS access in a test
+      - A cure for a code outside the table
+  context:
+    - kind: TaskRef
+      name: v1-e40-t40-token-errors-name-the-cloud-cure
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        The proposal is ruled on, and the stopped-run notice for the two token codes and the
+        refused-secret run give the ruled cure in bucket mode only, by tests shown failing
+        first.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e40-t50-a-stopped-run-notice-for-a-token-error-gives-the-cloud-cure-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.8
+    debate/epic: v1-e40-cloud-caselist-run
+spec:
+  description: >-
+    A cloud run stopped on a token error, or refused its secret, emails the cure a person can
+    act on.
+  goalRef:
+    name: v1-e40-t50-a-stopped-run-notice-for-a-token-error-gives-the-cloud-cure
+  graph:
+    nodes:
+      - id: a-stopped-run-notice-for-a-token-error-g
+        kind: Task
+        name: Stopped-run cures
+        description: >-
+          A cloud run stopped on a token error, or refused its secret, emails the cure a
+          person can act on.
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Stopped-run cures tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests, packages/debate_cli/tests, -k, token or access_denied]
+status:
+  phase: Pending

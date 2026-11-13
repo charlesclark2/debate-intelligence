@@ -1,0 +1,73 @@
+# TASK v1-e08-t28-an-auto-cut-bundle-that-verifies-clean-end-to-end - An end-to-end auto-cut bundle of VERIFIED cards only verifies with exit 0
+# Epic: E08 Federated Research Workflows | Release: v1.4 (Federated research from the CLI) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e08-t28-an-auto-cut-bundle-that-verifies-clean-end-to-end
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.4
+    debate/epic: v1-e08-research-workflows
+  annotations:
+    debate/title: "An end-to-end auto-cut bundle of VERIFIED cards only verifies with exit 0"
+spec:
+  # Filed by the PM, 2026-11-12, from v1-e08-t26's question 1 (the PM's review, 2026-11-12).
+  description: >-
+    Since v1-e08-t24's ranking, the e2e --auto-cut 3 bundle holds the bannered UNVERIFIED
+    press-release card, so verify bundle.docx exits 1, and no e2e scenario shows a whole
+    auto-cut bundle verifying with exit 0 (the architecture's §11 criterion 2). Add one: a
+    smaller --auto-cut on the same recorded search, which stops before the press release, or
+    another the session measures first, whose bundle holds only VERIFIED cards and verifies with
+    exit 0, with every card's offsets and snapshot checked as the existing test does. Marked
+    slow, as its neighbours are.
+  priority: 3
+  constraints:
+    packages: [tests/integration]
+    forbidden:
+      - A weakened assertion in the existing e2e tests
+      - A live provider call in a test
+  context:
+    - kind: TaskRef
+      name: v1-e08-t24-the-ranking-keeps-a-multi-query-searchs-relevant-results-up
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        An e2e auto-cut bundle of VERIFIED cards only verifies with exit 0, every card
+        checked against its snapshot.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e08-t28-an-auto-cut-bundle-that-verifies-clean-end-to-end-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.4
+    debate/epic: v1-e08-research-workflows
+spec:
+  description: >-
+    An end-to-end auto-cut bundle of VERIFIED cards only verifies with exit 0.
+  goalRef:
+    name: v1-e08-t28-an-auto-cut-bundle-that-verifies-clean-end-to-end
+  graph:
+    nodes:
+      - id: an-auto-cut-bundle-that-verifies-clean-e
+        kind: Task
+        name: Clean bundle end to end
+        description: >-
+          An end-to-end auto-cut bundle of VERIFIED cards only verifies with exit 0.
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Clean bundle end to end tests pass
+            command: uv
+            args: [run, pytest, tests/integration/test_e2e_research.py, -m, slow or not slow]
+status:
+  phase: Pending

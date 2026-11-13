@@ -1122,5 +1122,25 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e40-t49-a-smoke-check-for-the-backfile-parser-line
+    - id: t50
+      kind: Task
+      name: 'A cloud run stopped on a token error, or refused its secret, emails the cure a person can act on'
+      description: >-
+        A cloud run stopped on a token error, or refused its secret, emails the cure a
+        person can act on.
+      inputs:
+        specRef: plan_specs/v1/e40-cloud-caselist-run/t50-a-stopped-run-notice-for-a-token-error-gives-the-cloud-cure.yaml
+        goalRef: v1-e40-t50-a-stopped-run-notice-for-a-token-error-gives-the-cloud-cure
+      dependsOn:
+      - t40
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e40-t50-a-stopped-run-notice-for-a-token-error-gives-the-cloud-cure reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e40-t50-a-stopped-run-notice-for-a-token-error-gives-the-cloud-cure
 status:
   phase: Pending

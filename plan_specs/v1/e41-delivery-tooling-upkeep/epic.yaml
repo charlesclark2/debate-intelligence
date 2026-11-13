@@ -745,5 +745,32 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e41-t28-tzdata-installed-on-every-platform
+    - id: ext-v1-e08-t24-the-ranking-keeps-a-multi-query-searchs-relevant-results-up
+      kind: External
+      name: 'Prerequisite from E08: On a search of many queries, the ranking keeps the results the coach marks relevant above the providers'' own order'
+      description: >-
+        Cross-epic prerequisite owned by v1-e08-research-workflows (release v1.4).
+      inputs:
+        goalRef: v1-e08-t24-the-ranking-keeps-a-multi-query-searchs-relevant-results-up
+        specRef: plan_specs/v1/e08-research-workflows/t24-the-ranking-keeps-a-multi-query-searchs-relevant-results-up.yaml
+    - id: t29
+      kind: Task
+      name: 'A pull request''s ci runs the slow tests its affected set reaches'
+      description: >-
+        A pull request's ci runs the slow tests its affected set reaches.
+      inputs:
+        specRef: plan_specs/v1/e41-delivery-tooling-upkeep/t29-a-pull-requests-ci-runs-the-slow-tests-it-reaches.yaml
+        goalRef: v1-e41-t29-a-pull-requests-ci-runs-the-slow-tests-it-reaches
+      dependsOn:
+      - ext-v1-e08-t24-the-ranking-keeps-a-multi-query-searchs-relevant-results-up
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e41-t29-a-pull-requests-ci-runs-the-slow-tests-it-reaches reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e41-t29-a-pull-requests-ci-runs-the-slow-tests-it-reaches
 status:
   phase: Pending

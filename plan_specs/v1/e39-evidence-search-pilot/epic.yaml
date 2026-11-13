@@ -732,5 +732,43 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e39-t30-coach-reviews-taxonomy-updates-in-the-tub-app
+    - id: t31
+      kind: Task
+      name: 'A disclosed card''s provenance line names its season after the caselist slug'
+      description: >-
+        A disclosed card's provenance line names its season after the caselist slug.
+      inputs:
+        specRef: plan_specs/v1/e39-evidence-search-pilot/t31-the-provenance-line-names-its-season.yaml
+        goalRef: v1-e39-t31-the-provenance-line-names-its-season
+      dependsOn:
+      - t18
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e39-t31-the-provenance-line-names-its-season reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e39-t31-the-provenance-line-names-its-season
+    - id: t32
+      kind: Task
+      name: 'The first search''s wait after a cold start is measured on the function itself'
+      description: >-
+        The first search's wait after a cold start is measured on the function itself.
+      inputs:
+        specRef: plan_specs/v1/e39-evidence-search-pilot/t32-the-first-searchs-wait-measured-on-the-function.yaml
+        goalRef: v1-e39-t32-the-first-searchs-wait-measured-on-the-function
+      dependsOn:
+      - t18
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e39-t32-the-first-searchs-wait-measured-on-the-function reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e39-t32-the-first-searchs-wait-measured-on-the-function
 status:
   phase: Pending

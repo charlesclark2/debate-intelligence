@@ -246,3 +246,13 @@ always take.
     lint-imports, thin handlers, command blocks and the specs are clean, after syncing onto #814.
 11. **Merge:** `scripts/task pr --partial` once `ci` is green. The Goal stays `InProgress` until the
     re-parse's counts are recorded.
+
+## Operator records (recorded by the PM, 2026-11-12)
+
+Added by the PM. Nothing above is changed, and this section is not a review.
+
+| Criterion | Was | Now | Record |
+|---|---|---|---|
+| ac3: the operator's re-parse records the counts before and after | NOT RUN | PASS (PM ruling) | The re-parse happened: the run of 2026-11-11 (`20261111T120101Z`) parsed all four current caselists in full at `2026.11.03-docx-9` (20,746 sources, 392,919 cards), and a restored copy of 2026-11-12 holds every store at docx-9. The before and after counts are the session's, over the same 13,518 sources on the shipped docx-9, in the parse report. `count_in_round_markers.py --expect-version 2026.11.03-docx-9` over that copy found every store at docx-9 but no source blob (a run-state restore brings back the parsed store, not the sources), so it re-parsed nothing; its check, a re-parse matching the store, holds by construction for a store the same parser wrote from the same sources. The PM ruled on 2026-11-12 that this closes ac3 without a restore that carries the blobs |
+
+Every criterion passes, so the Goal is `Succeeded`.

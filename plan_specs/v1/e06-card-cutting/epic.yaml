@@ -422,5 +422,24 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e06-t15-a-deletion-beside-a-cut-marker-is-a-deletion
+    - id: t16
+      kind: Task
+      name: 'An untouched export whose cut joins two words with no space verifies'
+      description: >-
+        An untouched export whose cut joins two words with no space verifies.
+      inputs:
+        specRef: plan_specs/v1/e06-card-cutting/t16-a-cut-that-joins-two-words-verifies.yaml
+        goalRef: v1-e06-t16-a-cut-that-joins-two-words-verifies
+      dependsOn:
+      - t15
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e06-t16-a-cut-that-joins-two-words-verifies reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e06-t16-a-cut-that-joins-two-words-verifies
 status:
   phase: Pending

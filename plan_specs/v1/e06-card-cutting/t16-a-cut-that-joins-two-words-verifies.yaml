@@ -1,0 +1,78 @@
+# TASK v1-e06-t16-a-cut-that-joins-two-words-verifies - An untouched export whose cut joins two words with no space verifies
+# Epic: E06 Card Cutting, Citation & Export | Release: v1.3 (URL → verified card) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e06-t16-a-cut-that-joins-two-words-verifies
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.3
+    debate/epic: v1-e06-card-cutting
+  annotations:
+    debate/title: "An untouched export whose cut joins two words with no space verifies"
+spec:
+  # Filed by the PM, 2026-11-12, from v1-e06-t15's follow-ups 1 and 2 (the PM's review, 2026-11-12).
+  description: >-
+    v1-e06-t15 found a second false failure in the .docx body diff: evidence_text joins kept
+    pieces with nothing, so a card whose kept range ends at a word and whose next starts at a
+    word holds, for example, 'holdflood', while the body shows 'hold … flood', and an untouched
+    export reads as MANUAL_EDIT (reproduced with VerificationWorld, ranges ((0, 23), (39, 45))
+    of an invented sentence). First measure whether CardService's selections, and the model cut,
+    ever produce such a join (counts on the existing fixtures and cassettes, no live call); then
+    fix the tokenization (for example the card's omission offsets as token boundaries) so an
+    untouched export always verifies, while a real changed word stays MANUAL_EDIT. Also say what
+    a marker typed with other spacing (one space, a non-breaking space) does after v1-e06-t15,
+    and whether it needs the same unit rule.
+  priority: 2
+  constraints:
+    packages: [debate_core.evidence, packages/debate_core/tests]
+    forbidden:
+      - A changed or added word reported as verified
+      - A team card or real source in a fixture
+      - Network access in a test
+  context:
+    - kind: TaskRef
+      name: v1-e06-t15-a-deletion-beside-a-cut-marker-is-a-deletion
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        The measured count of such joins is recorded, an untouched export whose cut joins
+        two words verifies, and a changed word beside it is still MANUAL_EDIT, by tests on
+        synthetic exports shown failing first.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e06-t16-a-cut-that-joins-two-words-verifies-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.3
+    debate/epic: v1-e06-card-cutting
+spec:
+  description: >-
+    An untouched export whose cut joins two words with no space verifies.
+  goalRef:
+    name: v1-e06-t16-a-cut-that-joins-two-words-verifies
+  graph:
+    nodes:
+      - id: a-cut-that-joins-two-words-verifies
+        kind: Task
+        name: Joined words
+        description: >-
+          An untouched export whose cut joins two words with no space verifies.
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Joined words tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/evidence/test_docx_verify.py, -k, join]
+status:
+  phase: Pending

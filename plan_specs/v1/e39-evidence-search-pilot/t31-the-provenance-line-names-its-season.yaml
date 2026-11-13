@@ -1,0 +1,77 @@
+# TASK v1-e39-t31-the-provenance-line-names-its-season - A disclosed card's provenance line names its season after the caselist slug
+# Epic: E39 — Team Evidence Search (Student Pilot) | Release: v1.7 (Team evidence search pilot) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e39-t31-the-provenance-line-names-its-season
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.7
+    debate/epic: v1-e39-evidence-search-pilot
+  annotations:
+    debate/title: "A disclosed card's provenance line names its season after the caselist slug"
+spec:
+  # Filed by the PM, 2026-11-12, from v1-e39-t18's Q2 and the coach's approval of policy 1.24 (2026-11-12).
+  description: >-
+    Policy 1.24 (approved by the coach on 2026-11-12) changes Attribution rule 2: a disclosed
+    card's provenance line names its season in words after the caselist slug, from the year the
+    season starts (a slug's two digits), as `[Disclosed: hspolicy25 (2025-26) 2026-03-02 —
+    <school> <team>, Aff vs. <tournament> Round 4]`. v1-e39-t18 kept the line unchanged and
+    shows 'Earlier season:' on a backfile card's page. Change occurrence_provenance_line in
+    debate_core.domain.evidence_search so every disclosed card's line carries its season,
+    current and backfile alike, using v1-e39-t18's season words (or moving them into the
+    domain); camp cards are unchanged. Every place that prints the line (the pilot's card page
+    and results, the CLI's listings) follows, and the pinned lines in tests move.
+  priority: 2
+  constraints:
+    packages: [debate_core.domain, debate_core.application, packages/debate_core/tests, debate_api, packages/debate_api/tests, debate_cli, packages/debate_cli/tests]
+    forbidden:
+      - A field about a person, school or team added to the line
+      - A camp card's line changed
+      - A season raised or invented: the season comes from the slug's starting year only
+  context:
+    - kind: TaskRef
+      name: v1-e39-t18-backfiles-in-the-pilot-index
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        Every disclosed card's provenance line names its season after the slug, from the
+        slug's starting year, wherever it is shown, and a camp card's line is unchanged, by
+        tests shown failing first.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e39-t31-the-provenance-line-names-its-season-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.7
+    debate/epic: v1-e39-evidence-search-pilot
+spec:
+  description: >-
+    A disclosed card's provenance line names its season after the caselist slug.
+  goalRef:
+    name: v1-e39-t31-the-provenance-line-names-its-season
+  graph:
+    nodes:
+      - id: the-provenance-line-names-its-season
+        kind: Task
+        name: Season in the line
+        description: >-
+          A disclosed card's provenance line names its season after the caselist slug.
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Season in the line tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests, packages/debate_api/tests, -k, provenance]
+status:
+  phase: Pending

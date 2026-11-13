@@ -502,6 +502,16 @@
       "title": "ArticleIdentifiers",
       "type": "object"
     },
+    "DatePrecision": {
+      "description": "How much of a publication date is known (v1-e07-t03; on an Article and a cite, v1-e06-t13).\n\nCrossref deposits dates as `[year]`, `[year, month]` or `[year, month, day]`, and a user may state\na year or a month alone. A date known only to its year or month is stored at the first instant of\nthat period, and its precision says so, so nothing downstream reads an invented day. A precision is\nnever raised: a year stays a year.",
+      "enum": [
+        "day",
+        "month",
+        "year"
+      ],
+      "title": "DatePrecision",
+      "type": "string"
+    },
     "DeclaredLengthSource": {
       "description": "Where a page's declared article length was read.",
       "enum": [
@@ -704,8 +714,20 @@
               "type": "null"
             }
           ],
-          "description": "The date stated, YYYY-MM-DD; null when none was.",
+          "description": "The date stated, at its precision: YYYY-MM-DD, YYYY-MM or YYYY (`v1-e06-t13`); null when none was.",
           "title": "Published At"
+        },
+        "date_precision": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DatePrecision"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "`month` or `year` for a date stated without a day (`v1-e06-t13`); absent for a day, as before, and when no date was stated."
         }
       },
       "required": [

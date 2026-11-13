@@ -929,7 +929,7 @@ DATED_VALUES: Final = {
 
 def stating_date(date_text: str) -> tuple[str, ...]:
     """`STATED_OPTIONS` with `date_text` as the `--date`."""
-    options = list(STATED_OPTIONS)
+    options: list[str] = list(STATED_OPTIONS)
     options[options.index("--date") + 1] = date_text
     return tuple(options)
 

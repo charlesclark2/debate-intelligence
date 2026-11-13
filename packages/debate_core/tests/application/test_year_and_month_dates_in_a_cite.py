@@ -437,7 +437,7 @@ def candidate(published: datetime, precision: DatePrecision) -> CandidateResult:
 
 def crossref_answer(date_parts: list[int]) -> bytes:
     """Crossref's `/works/{doi}` answer for the same invented paper, written by hand."""
-    message = {
+    message: dict[str, object] = {
         "DOI": DOI,
         "type": "journal-article",
         "title": ["Seed Banks and the Long Drought"],

@@ -15,16 +15,20 @@ proposal §8, §19): each field is a value some source states, or it is missing.
 2. **Crossref, by DOI.** The first DOI the page's metadata or URL states, else the article's own, is
    looked up through the :class:`~debate_core.application.ports.doi_metadata.DoiMetadataSource` port,
    once per DOI (the adapter caches). Crossref gives the title, the container title as the
-   publication, the first whole date (a year or a month alone is never completed), the authors, and
-   each author's deposited affiliations as credentials. A lookup that fails is logged and the cite
-   is resolved from the page: a Crossref outage never fails a cite. The outcome is on the
+   publication, the first whole date (a year or a month alone is never completed, `v1-e06-t13`: with
+   no whole date anywhere, its first month, else its first year, is taken at that precision), the
+   authors, and each author's deposited affiliations as credentials. A lookup that fails is logged
+   and the cite is resolved from the page: a Crossref outage never fails a cite. The outcome is on the
    :class:`CitationResolution` (:class:`CrossrefOutcome`).
 
 ## Which value wins, and what verifies it
 
 Per field, the candidate from the highest source in :data:`SOURCE_PRECEDENCE` wins: Crossref, then
 JSON-LD, meta tags, OpenGraph, byline, the platform's retrieval record, heuristic; within one source,
-the first found. A field with no candidate is `missing`.
+the first found. A field with no candidate is `missing`. The publication date is chosen at the finest
+precision any source states (`v1-e06-t13`): a day from any source, by that precedence, before a
+Crossref year or month, which is taken only when no source states a day. So no cite that had a day
+loses it, and no year or month is ever completed to one.
 
 A value is **verified** when its source is an explicit statement (anything but `heuristic`) and the
 platform retrieved the source itself (`PUBLISHER_RETRIEVED`). A heuristic is never verified, and
@@ -73,18 +77,20 @@ kept (:func:`keep_student_edits`): a stated field that differs from the derived 
 unverified, and is named in :attr:`CitationResolution.stated_fields`; a field the user did not state
 is derived as before. Nothing about user-supplied text verifies, so a card cut from it stays
 UNVERIFIED for its cite (``CITATION_UNVERIFIED``), and the cite marks each field as it marks any
-unverified field.
+unverified field. The date may be a year (`YYYY`), a month (`YYYY-MM`) or a day (`YYYY-MM-DD`), and is
+recorded at that precision (`v1-e06-t13`).
 
 ## Formatting (ac4)
 
 :func:`format_cite` writes the short cite, "Lastname YY" (first author's last name, "et al." for
 more, an organization's name whole; with no author the publication, then the title; "ND" with no
 date), and the full cite line:
-authors with their credentials in parentheses, the title in quotes, the publication, the date as
-the source states its day, the URL, the accessed date, and where the text came from when the
-platform did not retrieve it. Team conventions are format profiles' business (`v1-e06-t03`). The
-returned :class:`FormattedCite` names every field that is shown unverified, and every field that is
-missing, so an export can mark them.
+authors with their credentials in parentheses, the title in quotes, the publication, the date at
+the precision its source states it (`September 14, 2026`, `September 2026` or `2026`, `v1-e06-t13`;
+the short cite's "YY" is the year at any precision), the URL, the accessed date, and where the text
+came from when the platform did not retrieve it. Team conventions are format profiles' business
+(`v1-e06-t03`). The returned :class:`FormattedCite` names every field that is shown unverified, and
+every field that is missing, so an export can mark them.
 """
 
 from __future__ import annotations
@@ -104,7 +110,7 @@ from debate_core.application.ports.persistence import ArticleRepository
 from debate_core.application.snapshot_service import LoadedSnapshot, SnapshotService
 from debate_core.domain import Article, Card, Citation, CitationField, ProvenanceMode
 from debate_core.domain.citation import CITATION_FIELD_NAMES
-from debate_core.domain.enums import CitationFieldSource
+from debate_core.domain.enums import CitationFieldSource, DatePrecision
 from debate_core.evidence.edits import EditKind
 from debate_core.retrieval.citation_harvest import (
     CitationCandidates,
@@ -117,6 +123,7 @@ from debate_core.retrieval.citation_harvest import (
 __all__ = [
     "CITATION_FIELD_NAMES",
     "SOURCE_PRECEDENCE",
+    "STATED_DATE_FORMS",
     "CitationResolution",
     "CitationService",
     "CrossrefOutcome",
@@ -223,6 +230,10 @@ def resolve_citation(
     """
     deposit = _deposit_candidates(work)
     verifies = provenance_mode is ProvenanceMode.PUBLISHER_RETRIEVED
+    published_at = _chosen((*deposit.published_at, *candidates.published_at), verifies)
+    precision = DatePrecision.DAY
+    if not published_at and (partial := _deposit_partial_date(work)) is not None:
+        published_at, precision = _chosen((partial[0],), verifies), partial[1]
     people = (*deposit.authors, *candidates.authors)
     organizations = (*deposit.organization_authors, *candidates.organization_authors)
     return Citation.model_validate(
@@ -234,7 +245,8 @@ def resolve_citation(
             ),
             "title": _chosen((*deposit.title, *candidates.title), verifies),
             "publication": _chosen((*deposit.publication, *candidates.publication), verifies),
-            "published_at": _chosen((*deposit.published_at, *candidates.published_at), verifies),
+            "published_at": published_at,
+            "published_at_precision": precision,
             "canonical_url": _chosen(candidates.canonical_url, verifies),
             "accessed_at": {
                 "value": accessed_at,
@@ -292,6 +304,27 @@ def _deposit_candidates(work: DoiWork | None) -> CitationCandidates:
     )
 
 
+def _deposit_partial_date(work: DoiWork | None) -> tuple[Harvested[datetime], DatePrecision] | None:
+    """A deposit's finest date without a day: its first month, else its first year, at the period's start.
+
+    Read only when no source states a whole date (`v1-e06-t13`). Nothing is added to it: a year stays
+    a year, and a month is never given a day.
+    """
+    if work is None:
+        return None
+    months = [(stated.year, month) for stated in work.dates if (month := stated.month) and stated.day is None]
+    if months:
+        year, month = months[0]
+        moment = datetime(year, month, 1, tzinfo=UTC)
+        return Harvested(moment, _CROSSREF, f"{year:04d}-{month:02d}"), DatePrecision.MONTH
+    years = [stated.year for stated in work.dates if stated.month is None]
+    if years:
+        return Harvested(
+            datetime(years[0], 1, 1, tzinfo=UTC), _CROSSREF, f"{years[0]:04d}"
+        ), DatePrecision.YEAR
+    return None
+
+
 def keep_student_edits(stored: Citation, derived: Citation) -> tuple[Citation, tuple[str, ...]]:
     """`derived`, keeping each of `stored`'s fields a student changed away from the source (ac5).
 
@@ -302,16 +335,24 @@ def keep_student_edits(stored: Citation, derived: Citation) -> tuple[Citation, t
     arrives verified), so the derivation replaces it. Any other stored value is the student's: it is
     kept as stored, with `verified` false. The names of the cleared and kept fields are returned with
     the cite, in cite order.
+
+    A date is the same only at the same precision: a stated year is not a derived first of January. A
+    kept date keeps its own precision, and a derived one the derivation's (`v1-e06-t13`).
     """
     kept: dict[str, CitationField[Any]] = {}
     for name in CITATION_FIELD_NAMES:
         mine: CitationField[Any] = getattr(stored, name)
         theirs: CitationField[Any] = getattr(derived, name)
-        if name in stored.cleared_by_student or (
-            mine.is_present and not mine.verified and mine.value != theirs.value
-        ):
+        same = mine.value == theirs.value and (
+            name != "published_at" or stored.published_at_precision is derived.published_at_precision
+        )
+        if name in stored.cleared_by_student or (mine.is_present and not mine.verified and not same):
             kept[name] = mine
-    marked = {"authors_are_organizations": stored.authors_are_organizations} if "authors" in kept else {}
+    marked: dict[str, object] = {}
+    if "authors" in kept:
+        marked["authors_are_organizations"] = stored.authors_are_organizations
+    if "published_at" in kept:
+        marked["published_at_precision"] = stored.published_at_precision
     return derived.evolve(**kept, **marked, cleared_by_student=stored.cleared_by_student), tuple(kept)
 
 
@@ -326,7 +367,9 @@ class InvalidStatedCite(ValueError):
         super().__init__(f"{field}: {detail}")
 
 
-_ISO_DAY: Final = re.compile(r"\d{4}-\d{2}-\d{2}")
+_STATED_DATE: Final = re.compile(r"(?P<year>\d{4})(?:-(?P<month>\d{2})(?:-(?P<day>\d{2}))?)?")
+"""`YYYY`, `YYYY-MM` or `YYYY-MM-DD`: the forms `fetch --paste --date` takes (`v1-e06-t13`)."""
+STATED_DATE_FORMS: Final = "YYYY, YYYY-MM or YYYY-MM-DD"
 
 
 def stated_citation(
@@ -340,8 +383,9 @@ def stated_citation(
 
     Each value is stripped and recorded with its source `heuristic` and `verified` false, as the title a
     user gives an article already is: a statement nothing checked, which the domain refuses ever to mark
-    verified. The authors stay in the order given. The date is a full ISO date, `YYYY-MM-DD`, the one
-    form the cite can print without inventing a day; anything else is refused, never guessed at.
+    verified. The authors stay in the order given. The date is a year, `YYYY`, a month, `YYYY-MM`, or a
+    day, `YYYY-MM-DD`, recorded at that precision and never completed (`v1-e06-t13`); anything else is
+    refused, never guessed at.
     Raises :class:`InvalidStatedCite` for an empty value or another form of date.
     """
     stated: dict[str, CitationField[Any]] = {}
@@ -354,9 +398,12 @@ def stated_citation(
         )
     if publication is not None:
         stated["publication"] = _stated_text("publication", publication)
+    precision = DatePrecision.DAY
     if published_on is not None:
-        stated["published_at"] = _stated_date(published_on)
-    return Citation.model_validate(stated) if stated else None
+        stated["published_at"], precision = _stated_date(published_on)
+    if not stated:
+        return None
+    return Citation.model_validate({**stated, "published_at_precision": precision})
 
 
 def _stated_text(name: str, text: str) -> CitationField[str]:
@@ -366,19 +413,26 @@ def _stated_text(name: str, text: str) -> CitationField[str]:
     return CitationField[str](value=value, source=_HEURISTIC, raw=value)
 
 
-def _stated_date(text: str) -> CitationField[datetime]:
+def _stated_date(text: str) -> tuple[CitationField[datetime], DatePrecision]:
+    """The date `text` states at the start of the year, month or day it names, and that precision."""
     value = text.strip()
+    match = _STATED_DATE.fullmatch(value)
     try:
-        if not _ISO_DAY.fullmatch(value):
+        if match is None:
             raise ValueError(value)
-        day = date.fromisoformat(value)
+        year, month, day = int(match["year"]), match["month"], match["day"]
+        if month is None:
+            moment, precision = datetime(year, 1, 1, tzinfo=UTC), DatePrecision.YEAR
+        elif day is None:
+            moment, precision = datetime(year, int(month), 1, tzinfo=UTC), DatePrecision.MONTH
+        else:
+            moment, precision = datetime(year, int(month), int(day), tzinfo=UTC), DatePrecision.DAY
     except ValueError:
         raise InvalidStatedCite(
-            "published_at", f"{text!r} is not a date in the form YYYY-MM-DD, such as 2026-09-14"
+            "published_at",
+            f"{text!r} is not a date in the form {STATED_DATE_FORMS}, such as 2026, 2026-09 or 2026-09-14",
         ) from None
-    return CitationField[datetime](
-        value=datetime(day.year, day.month, day.day, tzinfo=UTC), source=_HEURISTIC, raw=value
-    )
+    return CitationField[datetime](value=moment, source=_HEURISTIC, raw=value), precision
 
 
 # --------------------------------------------------------------------------------------------
@@ -492,6 +546,7 @@ def format_cite(citation: Citation, *, provenance_mode: ProvenanceMode) -> Forma
     """The short cite and the full cite line for `citation`; see the module docstring."""
     day = _stated_day(citation.published_at)
     short = f"{_short_name(citation)} {f'{day.year % 100:02d}' if day is not None else NO_DATE}"
+    precision = citation.published_at_precision
     parts: list[str] = []
     names, credentials = citation.authors.value, citation.author_credentials.value
     if names:
@@ -503,7 +558,7 @@ def format_cite(citation: Citation, *, provenance_mode: ProvenanceMode) -> Forma
     if citation.publication.value:
         parts.append(citation.publication.value)
     if day is not None:
-        parts.append(_long_date(day))
+        parts.append(_date_at(day, precision))
     if citation.canonical_url.value:
         parts.append(citation.canonical_url.value)
     if citation.accessed_at.value is not None:
@@ -558,3 +613,12 @@ def _stated_day(published: CitationField[datetime]) -> date | None:
 
 def _long_date(day: date) -> str:
     return f"{_MONTH_NAMES[day.month - 1]} {day.day}, {day.year}"
+
+
+def _date_at(day: date, precision: DatePrecision) -> str:
+    """The date as far as its source states it: "September 14, 2026", "September 2026" or "2026"."""
+    if precision is DatePrecision.YEAR:
+        return f"{day.year}"
+    if precision is DatePrecision.MONTH:
+        return f"{_MONTH_NAMES[day.month - 1]} {day.year}"
+    return _long_date(day)

@@ -166,6 +166,21 @@ class Citation(DomainModel):
         return self
 
     @model_validator(mode="after")
+    def _check_date_precision(self) -> Self:
+        precision, published = self.published_at_precision, self.published_at.value
+        if precision is DatePrecision.DAY:
+            return self
+        if published is None:
+            raise ValueError(f"a cite with no publication date cannot give it a {precision.value} precision")
+        start = period_start(published, precision)
+        if published != start:
+            raise ValueError(
+                f"a {precision.value}-precision published_at is the first instant of its {precision.value}, "
+                f"{start.isoformat()}, not {published.isoformat()}"
+            )
+        return self
+
+    @model_validator(mode="after")
     def _check_organization_authors(self) -> Self:
         if self.authors_are_organizations and not self.authors.is_present:
             raise ValueError("a cite with no authors cannot mark them as organizations")

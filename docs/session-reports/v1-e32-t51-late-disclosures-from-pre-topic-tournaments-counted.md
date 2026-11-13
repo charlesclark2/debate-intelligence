@@ -10,12 +10,12 @@
 
 ## Summary
 
-**Stopped at step 2 of the PM's order of work (2026-11-12), waiting for the PM to release the copy.**
+**Stopped at step 2 of the PM's order of work (2026-11-12): the block is handed over, and the operator runs it when the PM says (third on the copy).**
 The counting rule is in `debate_core.application.landscape_late_disclosures`, and
 `scripts/count_late_disclosures.py` prints it as one JSON object of counts. Both are tested on
 synthetic stores (18 tests), shown red against a skeleton that counts nothing (16 of 17 failed), with
 19 mutants caught. The operator block for the 2026-11-10 count over v1-e39-t18's copy is under
-Operator follow-ups. It is held until the PM says the copy is free. Nothing has been run over the copy,
+Operator follow-ups, with the guard the PM's ruling 1 asked for. Nothing has been run over the copy,
 and no session command has touched it.
 
 The PM should look first at the rule as built (below): the cut is the topic range's first day; "FBK
@@ -66,6 +66,21 @@ It reads the manifests, the suppression list and the parsed store; it opens no d
 nothing and calls no model. A disclosure that cannot be read as one refuses the whole count, and the
 refusal never quotes the school or team code that pydantic's error text would carry.
 
+## The PM's rulings (2026-11-12)
+
+> 1. Accepted: the block runs from the t51 worktree's .venv. Add a guard that stops, naming the path,
+>    if that .venv or its python is missing; never fall back to another interpreter.
+> 2. Accepted: a late spelling is named only when 2 or more schools use it and it holds no school or
+>    team-code word (as v1-e32-t06's Deviation 3); otherwise it is counted, not named.
+>
+> The copy: v1-e39-t18 has finished measuring. v1-e31-t32's and v1-e31-t23's counts run on it first,
+> then yours, third. Hand the operator your 2026-11-10 block now; the operator runs it when the PM says.
+
+How the build follows them: the block's guard stops on a missing worktree or `.venv/bin/python`,
+naming the path, and calls that python by its full path, so no other interpreter can run it. Tried in
+zsh: a `.venv/bin/python` symlink to a missing file stops; a missing worktree stops; the real
+worktree, run from `/tmp` over a synthetic copy, gives `exit 0`. The naming rule is as built (Decision 5).
+
 ## Plan nodes
 
 | Node | Status | Notes |
@@ -76,7 +91,7 @@ refusal never quotes the school or team code that pydantic's error text would ca
 
 | Criterion | Status | Evidence (command → result) |
 |---|---|---|
-| ac1: the counts on 2026-11-10 and 2026-11-17 recorded with their share and the topic-word check, entries proposed if the 5% trigger or the check says so | NOT RUN | The 2026-11-10 count's block is written and held until the PM releases v1-e39-t18's copy (Operator follow-ups). 2026-11-17's snapshot exists only after the run of 2026-11-18. |
+| ac1: the counts on 2026-11-10 and 2026-11-17 recorded with their share and the topic-word check, entries proposed if the 5% trigger or the check says so | NOT RUN | The 2026-11-10 count's block is handed to the operator, who runs it when the PM says (Operator follow-ups). 2026-11-17's snapshot exists only after the run of 2026-11-18. |
 | ac2: the weekly report line, as ruled, by tests on synthetic stores shown failing first | NOT RUN | Waits on the count and the PM's ruling on the line (step 3). |
 | Node: `uv run pytest packages/debate_core/tests -k late_disclosure` | PASS (so far) | `.venv/bin/python scripts/hard_stop.py 115 .venv/bin/python -m pytest packages/debate_core/tests -k late_disclosure -q` → **15 passed in 50.8 s**: this task's 14, plus one in v1-e32-t06's `test_landscape_tournament_entries.py` whose name holds the same words. Run again when the report line lands. |
 
@@ -132,7 +147,7 @@ refusal never quotes the school or team code that pydantic's error text would ca
 
 ## Deviations from the spec
 
-1. **The block runs from this worktree, with its `.venv`, not from the main clone at dev's tip.** The
+1. **The block runs from this worktree, with its `.venv`, not from the main clone at dev's tip** (accepted, the PM's ruling 1 of 2026-11-12). The
    PM's brief asked for the main clone. Its `.venv` imports the main clone's `debate_core`
    (`.../debate-intelligence/packages/debate_core/src`), which does not hold the new module until this
    branch merges, so the script could not run there. This worktree was started from dev's tip
@@ -156,7 +171,7 @@ refusal never quotes the school or team code that pydantic's error text would ca
    topic, and they are counted as `off_topic`, so a later space-colonization entry would show up there.
 4. **First seen among live disclosures only.** A spelling seen earlier only in a suppressed file is not
    late, because that earlier disclosure no longer counts anywhere.
-5. **Spellings are named under a stricter test than the brief's.** The brief named a spelling more
+5. **Spellings are named under a stricter test than the brief's** (accepted, the PM's ruling 2 of 2026-11-12). The brief named a spelling more
    than one school uses. This also withholds one that holds a school or team-code word, because a
    tournament named after its host school is a school's name: v1-e32-t06 left four such names out of its
    report (its Deviation 3). Schools are counted across every snapshot, as "uses" means for
@@ -166,25 +181,34 @@ refusal never quotes the school or team code that pydantic's error text would ca
 
 ## Operator follow-ups
 
-1. **The 2026-11-10 count. Held: do not run until the PM says v1-e39-t18's copy is free.** It is
-   read-only and opens no database. It stops if `~/t18-measure/copy` has no restore marker, or if the
-   copy's newest hsld26 manifest is not `2026-11-10.jsonl`. It takes a fingerprint of the copy's files
+1. **The 2026-11-10 count, handed over 2026-11-12; the operator runs it when the PM says.** It is
+   read-only and opens no database. It stops, naming the path, if the worktree or its
+   `.venv/bin/python` is missing (the PM's ruling 1: never another interpreter), if
+   `~/t18-measure/copy` has no restore marker, or if the copy's newest hsld26 manifest is not
+   `2026-11-10.jsonl`. It takes a fingerprint of the copy's files
    (names, sizes, times) before and after.
 
    **Operator command** (expected runtime under a minute, likely about 10 s)
-   Where: any terminal on the Mac
+   Where: any terminal on the Mac, when the PM says the copy is free (third, after v1-e31-t32's and
+   v1-e31-t23's counts)
    ```bash
-   cd /Users/charlesclark/Documents/debate/debate-intelligence-tool/debate-intelligence-worktrees/v1-e32-t51-late-disclosures-from-pre-topic-tournaments-counted
+   WT=/Users/charlesclark/Documents/debate/debate-intelligence-tool/debate-intelligence-worktrees/v1-e32-t51-late-disclosures-from-pre-topic-tournaments-counted
+   PY="${WT}/.venv/bin/python"
    COPY="$HOME/t18-measure/copy"
    NEWEST=$(ls "${COPY}/objects/manifests/hsld26" 2>/dev/null | grep -E '^[0-9]{4}-[0-9]{2}-[0-9]{2}[.]jsonl$' | LC_ALL=C sort | tail -1)
-   if [[ ! -f "${COPY}/debate-research-restored-copy.json" ]]; then
+   if [[ ! -d "${WT}" ]]; then
+     echo "STOP: no worktree at ${WT}"
+   elif [[ ! -x "${PY}" ]]; then
+     echo "STOP: no python at ${PY}; this block runs no other interpreter"
+   elif [[ ! -f "${COPY}/debate-research-restored-copy.json" ]]; then
      echo "STOP: ${COPY} is not a restored copy"
    elif [[ "${NEWEST}" != "2026-11-10.jsonl" ]]; then
      echo "STOP: the copy's newest hsld26 manifest is ${NEWEST:-none}, not 2026-11-10.jsonl"
    else
+     cd "${WT}"
      BEFORE=$(find "${COPY}" -type f -print0 | xargs -0 stat -f '%N %z %m' | LC_ALL=C sort | shasum -a 256)
-     git log -1 --format='commit %h'
-     .venv/bin/python scripts/count_late_disclosures.py --data-dir "${COPY}" --caselist hsld26 --snapshot 2026-11-10 --version 2026.11.03-docx-9 --topic-word de-extinct --other-topic-word "space col" --other-topic-word coloniz
+     git -C "${WT}" log -1 --format='commit %h'
+     "${PY}" "${WT}/scripts/count_late_disclosures.py" --data-dir "${COPY}" --caselist hsld26 --snapshot 2026-11-10 --version 2026.11.03-docx-9 --topic-word de-extinct --other-topic-word "space col" --other-topic-word coloniz
      echo "exit $?"
      AFTER=$(find "${COPY}" -type f -print0 | xargs -0 stat -f '%N %z %m' | LC_ALL=C sort | shasum -a 256)
      if [[ "${BEFORE}" == "${AFTER}" ]]; then echo "copy unchanged"; else echo "STOP: the copy changed"; fi

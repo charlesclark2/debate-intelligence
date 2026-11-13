@@ -6,7 +6,7 @@
 | Spec | [`plan_specs/v1/e39-evidence-search-pilot/t18-backfiles-in-the-pilot-index.yaml`](../../plan_specs/v1/e39-evidence-search-pilot/t18-backfiles-in-the-pilot-index.yaml) |
 | Epic / release | `v1-e39-evidence-search-pilot` / `v1.7` |
 | Branch | `task/v1-e39-t18-backfiles-in-the-pilot-index` |
-| Session status | IN PROGRESS <!-- COMPLETE / PARTIAL / BLOCKED --> |
+| Session status | PARTIAL <!-- COMPLETE / PARTIAL / BLOCKED --> |
 
 ## Summary
 
@@ -296,6 +296,16 @@ ADR-0019 (c) 3 overlaps with the download.
 The process itself stays near 45 MB; what fills the container is the page cache of the file in
 `/tmp`, which in Lambda lives in the function's memory too. The combined file (3.97 GB) cannot stay
 cached in 2 GB: the container sat at its cap, reclaiming, and the searches ran 5 to 15 times slower.
+
+**The copy and both scratch indexes, deleted** (policy 1.18) by the operator on 2026-11-12, after the
+PM's three read-only counts (v1-e31-t32's, v1-e31-t23's and v1-e32-t51's) had finished and after a
+check of the copy's restored-copy marker: `~/t18-measure` whole. The copy: 95,125 files,
+59,241,553,920 bytes on disk (parsed files: hspolicy25 14,343, hsld25 23,660, hspolicy24 12,312, hsld24
+23,976, hsld26 8,258, hspolicy26 5,691, hspf26 6,700, openev 110; the rest the bundle and state
+files). The scratch index `f318149882fdd9c5` (current seasons): 5 files, 1,430,638,592 bytes. The
+scratch index `8eae91e2afa36c1d` (combined): 5 files, 5,450,915,840 bytes. The folder is gone, no
+restored-copy marker is left within four levels of the home folder, and 105,939,890,176 bytes are
+free after. The probe and overlap scripts in the session's scratchpad hold no card data.
 
 ## ac1: the counts against the targets, and the options
 

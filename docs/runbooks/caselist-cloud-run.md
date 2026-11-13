@@ -732,6 +732,12 @@ What it prints, by its `"event"`:
 The run's result is still one line, the last it writes, and the only one the late-run alarm counts:
 the step lines carry no `run_record`, which the `RunsRecorded` metric filter requires.
 
+**After a parser bump, the backfiles** (PM note 2026-11-12, `v1-e40-t46`). The weekly run parses
+only the caselists it follows. `caselist runs --remote` names, below its table, each backfile whose
+parsed store has no directory at the newest run's parser version (or this build's), with the versions
+it does hold. The cure is a `caselist backfile-import` of that backfile in the cloud, by the "Backfile
+imports" procedure, as hspolicy25's rebuild of 2026-11-12 was.
+
 **Its record reads as a Mac run's does** (ac2). The run published its record to the bucket like any
 run; `caselist runs --remote` on the Mac, with the everyday profile, lists it beside the Mac's runs,
 and the record's keys are the Mac record's keys.

@@ -29,9 +29,18 @@ spec:
     `daily` takes the UTC date, so a digest run in the coach's evening covers only the hours since
     UTC midnight. Propose the default (the coach's local date from a configured time zone, or the 24
     hours before the run) with the queries, and stop for the ruling.
+    (PM amendment 2026-11-12, recording the rulings of the same day.) The date default:
+    with no --date a digest covers the 24 hours before the run, dated in daily.time_zone (America/
+    Chicago by default); --date keeps its meaning. The queries (option A): digest-specific two-word
+    templates in config/daily_templates.yaml, asked by daily in place of the taxonomy's for the pairs
+    they cover, with the first list the four that kept items on the operator's count of
+    2026-11-12T23:21Z; search, the feeds' every-word rule and the coach-reviewed templates unchanged.
+    The fallback (ruling C): a pair with no digest templates asks the taxonomy's templates exactly as
+    before, and the digest names it. The packages gain the measurement script, the build stamp that
+    bundles the templates, and their tests.
   priority: 3
   constraints:
-    packages: [debate_core.application, debate_core.integrations.discovery, debate_cli, config, packages/debate_core/tests, packages/debate_cli/tests, docs/guides]
+    packages: [debate_core.application, debate_core.integrations.discovery, debate_cli, config, packages/debate_core/tests, packages/debate_cli/tests, docs/guides, scripts, tests/scripts, tests/smoke]
     forbidden:
       - A change to a coach-reviewed template
       - A title from a real feed in a test, log or report

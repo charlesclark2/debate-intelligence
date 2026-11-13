@@ -161,6 +161,18 @@ ls "$HOME/Library/LaunchAgents/com.debate-intelligence.caselist-sync.plist"
 Success looks like `booted out`, `agent unloaded`, and the plist's path: it is kept. From here until
 step 8 nothing runs the week.
 
+**Then disable it** (PM amendment 2026-11-12). `bootout` alone does not survive a login: launchd loads
+every plist in `~/Library/LaunchAgents` when you log in, so a restart loads the agent again. On
+2026-11-12 the agent was found loaded after a reboot of 2026-11-11 (`runs = 0`, so it had not run).
+`disable` keeps it unloaded across logins, with the plist still in place for a fallback week;
+`launchctl enable` undoes it. Success looks like `disabled`, then `"com.debate-intelligence.caselist-sync"
+=> disabled` (or `=> true`).
+
+```bash
+launchctl disable "gui/$(id -u)/com.debate-intelligence.caselist-sync" && echo "disabled"
+launchctl print-disabled "gui/$(id -u)" | grep caselist-sync
+```
+
 ## Step 3 — The build with the lock, the agent's caselists, and the seed
 
 ADR-0020 (4) steps 3 and 4. Four parts: the build installed on the Mac; a check that every build the
@@ -703,7 +715,10 @@ apply after the PM's word (`Resources: 0 added, 1 changed, 0 destroyed.`, then `
 log read `split` or `found: 0`, the alarm has not counted the run: do not turn its email on, and tell
 the PM.
 
-The cutover is done. The Mac's agent stays unloaded, with its plist kept for the fallback week; the
+The cutover is done. The Mac's agent stays unloaded and disabled (step 2), with its plist kept for
+the fallback week. Dev's fallback week has ended, and the Mac runs a fallback week by hand, never by
+its agent, so the plist and its wrapper may be retired (moved out of `~/Library/LaunchAgents`) once the
+cloud run has completed two scheduled weeks in a row; the
 Mac no longer needs its own OpenCaselist token renewed every two weeks, except for a fallback week.
 
 ## The fallback week on the Mac

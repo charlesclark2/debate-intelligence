@@ -1,0 +1,81 @@
+# TASK v1-e07-t25-semantic-scholar-bulk-search-weighed-and-a-pace-margin - Semantic Scholar's bulk search is weighed against relevance search, and its pace keeps a margin under one a second
+# Epic: E07 Discovery Provider Adapters | Release: v1.4 (Federated research from the CLI) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e07-t25-semantic-scholar-bulk-search-weighed-and-a-pace-margin
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.4
+    debate/epic: v1-e07-discovery-adapters
+  annotations:
+    debate/title: "Semantic Scholar's bulk search is weighed against relevance search, and its pace keeps a margin under one a second"
+spec:
+  # Filed by the PM, 2026-11-12, from Semantic Scholar's tutorial, read by the PM on 2026-11-12.
+  description: >-
+    Semantic Scholar's tutorial (read by the PM, 2026-11-12) recommends
+    /graph/v1/paper/search/bulk over /paper/search in most cases, since relevance search is more
+    resource intensive, and gives a key 1 request a second, cumulative across all endpoints. The
+    adapter asks /paper/search at exactly one request a second. Propose, from one measured keyed
+    comparison the operator runs (counts and ranks only, never a title), whether search should
+    ask bulk search (its sort, its token pagination, what it does to ranking and to the expanded
+    search's later queries) or stay on relevance search; and a pace margin (for example 1.1 s
+    between sends) with its reason. Stop for the PM's ruling before code.
+  priority: 3
+  constraints:
+    packages: [debate_core.integrations.discovery, packages/debate_core/tests, scripts, docs/guides]
+    forbidden:
+      - A live provider call in a test
+      - A pace faster than one request a second
+      - The key on a command line or in output
+  context:
+    - kind: TaskRef
+      name: v1-e07-t20-semantic-scholar-enabled-after-its-live-smoke
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        The proposal, with the operator's measured comparison, is ruled on by the PM before
+        any code.
+    - id: ac2
+      description: >-
+        What the ruling asks for holds, by tests on virtual time and recorded-shape fixtures
+        shown failing first.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e07-t25-semantic-scholar-bulk-search-weighed-and-a-pace-margin-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.4
+    debate/epic: v1-e07-discovery-adapters
+spec:
+  description: >-
+    Semantic Scholar's bulk search is weighed against relevance search, and its pace keeps a
+    margin under one a second.
+  goalRef:
+    name: v1-e07-t25-semantic-scholar-bulk-search-weighed-and-a-pace-margin
+  graph:
+    nodes:
+      - id: semantic-scholar-bulk-search-weighed-and
+        kind: Task
+        name: Bulk and margin
+        description: >-
+          Semantic Scholar's bulk search is weighed against relevance search, and its pace
+          keeps a margin under one a second.
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Bulk and margin tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/integrations/discovery, -k, semantic]
+status:
+  phase: Pending

@@ -546,5 +546,65 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e07-t23-configuration-gaps-named-with-their-cure-everywhere
+    - id: t24
+      kind: Task
+      name: 'The no-provider hint fits a provider enabled but unbuilt, and the partial message names only the providers that count'
+      description: >-
+        The no-provider hint fits a provider enabled but unbuilt, and the partial message
+        names only the providers that count.
+      inputs:
+        specRef: plan_specs/v1/e07-discovery-adapters/t24-the-no-provider-hint-and-the-partial-message-name-only-what-counts.yaml
+        goalRef: v1-e07-t24-the-no-provider-hint-and-the-partial-message-name-only-what-counts
+      dependsOn:
+      - t23
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e07-t24-the-no-provider-hint-and-the-partial-message-name-only-what-counts reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e07-t24-the-no-provider-hint-and-the-partial-message-name-only-what-counts
+    - id: t25
+      kind: Task
+      name: 'Semantic Scholar''s bulk search is weighed against relevance search, and its pace keeps a margin under one a second'
+      description: >-
+        Semantic Scholar's bulk search is weighed against relevance search, and its pace
+        keeps a margin under one a second.
+      inputs:
+        specRef: plan_specs/v1/e07-discovery-adapters/t25-semantic-scholar-bulk-search-weighed-and-a-pace-margin.yaml
+        goalRef: v1-e07-t25-semantic-scholar-bulk-search-weighed-and-a-pace-margin
+      dependsOn:
+      - t20
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e07-t25-semantic-scholar-bulk-search-weighed-and-a-pace-margin reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e07-t25-semantic-scholar-bulk-search-weighed-and-a-pace-margin
+    - id: t26
+      kind: Task
+      name: 'Semantic Scholar goes back to HTTPS once its keyed HTTPS endpoint works, and prod enables it'
+      description: >-
+        Semantic Scholar goes back to HTTPS once its keyed HTTPS endpoint works, and prod
+        enables it.
+      inputs:
+        specRef: plan_specs/v1/e07-discovery-adapters/t26-semantic-scholar-back-on-https-and-enabled-in-prod.yaml
+        goalRef: v1-e07-t26-semantic-scholar-back-on-https-and-enabled-in-prod
+      dependsOn:
+      - t20
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e07-t26-semantic-scholar-back-on-https-and-enabled-in-prod reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e07-t26-semantic-scholar-back-on-https-and-enabled-in-prod
 status:
   phase: Pending

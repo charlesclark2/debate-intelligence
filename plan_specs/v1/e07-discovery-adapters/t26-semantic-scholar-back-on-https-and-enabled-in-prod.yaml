@@ -1,0 +1,77 @@
+# TASK v1-e07-t26-semantic-scholar-back-on-https-and-enabled-in-prod - Semantic Scholar goes back to HTTPS once its keyed HTTPS endpoint works, and prod enables it
+# Epic: E07 Discovery Provider Adapters | Release: v1.4 (Federated research from the CLI) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e07-t26-semantic-scholar-back-on-https-and-enabled-in-prod
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.4
+    debate/epic: v1-e07-discovery-adapters
+  annotations:
+    debate/title: "Semantic Scholar goes back to HTTPS once its keyed HTTPS endpoint works, and prod enables it"
+spec:
+  # Filed by the PM, 2026-11-12, from the operator's requests of 2026-11-12 and v1-e07-t20's amendment of the same day.
+  description: >-
+    On 2026-11-12 Semantic Scholar's HTTPS endpoint answered keyed requests with the
+    unauthenticated 429 while HTTP answered them with results, and v1-e07-t20 adds an opt-in,
+    providers.semantic_scholar_insecure_http, for the operator alone. Blocked until Semantic
+    Scholar confirms keyed HTTPS works and one keyed HTTPS request by curl (the key on standard
+    input) answers 200; the PM then sets it to Pending. Then: remove the opt-in setting (an
+    existing credentials file that still sets it is refused at load with the setting's name and
+    the cure, delete the line), the adapter asks HTTPS only, the prod profile enables
+    semantic_scholar, and the guides drop the HTTP sentences.
+  priority: 3
+  constraints:
+    packages: [debate_core.application, debate_core.integrations.discovery, config/profiles, debate_cli, packages/debate_core/tests, packages/debate_cli/tests, docs/guides]
+    forbidden:
+      - The key sent over plain HTTP
+      - A live provider call in a test
+  context:
+    - kind: TaskRef
+      name: v1-e07-t20-semantic-scholar-enabled-after-its-live-smoke
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        No setting or code path asks Semantic Scholar over HTTP, a credentials file still
+        setting the opt-in is refused naming it, and both profiles enable semantic_scholar,
+        by tests shown failing first.
+status:
+  phase: Blocked
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e07-t26-semantic-scholar-back-on-https-and-enabled-in-prod-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.4
+    debate/epic: v1-e07-discovery-adapters
+spec:
+  description: >-
+    Semantic Scholar goes back to HTTPS once its keyed HTTPS endpoint works, and prod enables
+    it.
+  goalRef:
+    name: v1-e07-t26-semantic-scholar-back-on-https-and-enabled-in-prod
+  graph:
+    nodes:
+      - id: semantic-scholar-back-on-https-and-enabl
+        kind: Task
+        name: Back on HTTPS
+        description: >-
+          Semantic Scholar goes back to HTTPS once its keyed HTTPS endpoint works, and
+          prod enables it.
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Back on HTTPS tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests, packages/debate_cli/tests, -k, semantic_scholar and (https or insecure or profile)]
+status:
+  phase: Pending

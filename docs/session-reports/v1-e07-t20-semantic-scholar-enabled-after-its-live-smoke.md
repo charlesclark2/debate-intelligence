@@ -493,3 +493,22 @@ while ac1, ac2 and the node's `-k profile` criterion wait for the live smokes.
   only after the PM has recorded ac1 as passed.
 
 `scripts/task pr --partial`
+
+## Operator records (recorded by the PM, 2026-11-12)
+
+Added by the PM. Nothing above is changed, and this section is not a review.
+
+| Request (2026-11-12, Chicago) | Client and scheme | Answer |
+|---|---|---|
+| (a), the keyed smoke, at night | `debate-research` on `v1.1.0-dev.413`, HTTPS, `/paper/search` | HTTP 429, no Retry-After; one request, the breaker closed with 1 error |
+| The diagnostic, about 19:40 | curl, HTTPS, `/paper/search`, the key on standard input | HTTP 429, "Too Many Requests. Please wait and try again or apply for a key for higher rate limits", no rate-limit headers |
+| About 20:00, and again later | curl, HTTPS, `/paper/search/bulk` | the same 429 and message |
+| Then | Insomnia, HTTP, `/paper/search/bulk` | **200**, `total` 484 |
+| Then | Insomnia, HTTPS, the same request | 429 |
+| Then | Insomnia, HTTP again | 200 |
+
+The key in `~/.debate-research/dev.env` matches the emailed key (compared in the shell, 44 characters,
+never printed). A listener on `127.0.0.1` showed that curl sends `x-api-key` with all 44 characters and
+no whitespace. Semantic Scholar's tutorial (read by the PM, 2026-11-12) sends the key as `x-api-key`,
+as the adapter does. So the same key, client and minute are recognised over HTTP and refused over
+HTTPS. The operator reported it to Semantic Scholar on 2026-11-12. ac1 stays NOT RUN, not FAIL.

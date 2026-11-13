@@ -717,5 +717,33 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e41-t27-a-task-names-its-prerequisites-or-why-it-has-none
+    - id: ext-v1-e08-t25-digest-queries-and-the-feeds-every-word-rule
+      kind: External
+      name: 'Prerequisite from E08: A daily digest''s queries find what the feeds carry, measured on a real digest first'
+      description: >-
+        Cross-epic prerequisite owned by v1-e08-research-workflows (release v1.4).
+      inputs:
+        goalRef: v1-e08-t25-digest-queries-and-the-feeds-every-word-rule
+        specRef: plan_specs/v1/e08-research-workflows/t25-digest-queries-and-the-feeds-every-word-rule.yaml
+    - id: t28
+      kind: Task
+      name: 'The IANA time zone database ships with the build on every platform, not only Windows'
+      description: >-
+        The IANA time zone database ships with the build on every platform, not only
+        Windows.
+      inputs:
+        specRef: plan_specs/v1/e41-delivery-tooling-upkeep/t28-tzdata-installed-on-every-platform.yaml
+        goalRef: v1-e41-t28-tzdata-installed-on-every-platform
+      dependsOn:
+      - ext-v1-e08-t25-digest-queries-and-the-feeds-every-word-rule
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e41-t28-tzdata-installed-on-every-platform reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e41-t28-tzdata-installed-on-every-platform
 status:
   phase: Pending

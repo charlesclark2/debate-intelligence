@@ -15,7 +15,8 @@
 #   pairs: the argument/need pairs every query is expanded for, by taxonomy id (not an alias), in the
 #     order the digest groups its results.
 #   providers: the discovery providers asked, by their providers.enabled names. One the environment
-#     does not enable is reported "not configured" in the digest's footer, which makes it partial.
+#     does not enable is named "not configured" in the digest's footer, with `enable it in
+#     providers.enabled`, and does not make it partial (v1-e07-t23).
 #   feed_topics: the config/feeds/ files the rss and google_news providers read for this preset's run,
 #     and no others: a politics digest never reads the health-insurance feeds.
 #   max_results: the most results each search ranks (20 unless given).

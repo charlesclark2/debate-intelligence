@@ -1,0 +1,88 @@
+# TASK v1-e40-t48-the-schedule-passes-scheduled - The weekly schedule starts its pull with --scheduled, so the recent-run guard is live
+# Epic: E40 — Weekly Caselist Run in the Cloud | Release: v1.8 (Weekly caselist run in the cloud) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e40-t48-the-schedule-passes-scheduled
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.8
+    debate/epic: v1-e40-cloud-caselist-run
+  annotations:
+    debate/title: "The weekly schedule starts its pull with --scheduled, so the recent-run guard is live"
+spec:
+  # Filed by the PM, 2026-11-12, from v1-e40-t44's follow-up 1 (the PM's review, 2026-11-12).
+  description: >-
+    v1-e40-t44 adds caselist pull --scheduled and a guard that refuses a scheduled pull within
+    24 hours of a recorded run; it is inert until the schedule passes the option. Proposed
+    change, verbatim from t44's report: resource aws_scheduler_schedule.run, file
+    infrastructure/modules/caselist_run/run_task.tf, block target, a new attribute input =
+    jsonencode({ containerOverrides = [{ name = local.run_container_name, command = ["--json",
+    "caselist", "pull", "--scheduled"] }] }); ECS keeps the entry point and replaces the command
+    only. Not verified: that a templated ECS target passes input to RunTask as overrides. First
+    read AWS's EventBridge Scheduler documentation for the templated ECS target and say what it
+    says, with the page and the date; if input does not reach RunTask, use the universal target
+    arn:aws:scheduler:::aws-sdk:ecs:runTask with the whole RunTask request. Order: an image
+    carrying --scheduled released and pushed, its digest pinned in owner.auto.tfvars, the plan
+    read by the PM, the apply never on a Wednesday, all in one plan; an older image answers
+    --scheduled with exit 2 and the week would not run. Then the runbook's sentence that the
+    guard does nothing until the schedule passes --scheduled comes out.
+  priority: 2
+  constraints:
+    packages: [infrastructure/modules/caselist_run, ops, docs/runbooks, tests/infrastructure]
+    forbidden:
+      - An apply by a session
+      - An apply on a Wednesday
+      - A plan that destroys or replaces the schedule's role, the task definition's roles or an account assignment
+      - A schedule pointed at an image without --scheduled
+  context:
+    - kind: TaskRef
+      name: v1-e40-t44-a-scheduled-run-refuses-a-second-run-within-hours
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        The schedule's target passes --scheduled, shown by the plan's diff and a plan-time
+        test, with the documentation's answer on input recorded, and the PM has read the
+        plan before the operator's apply.
+    - id: ac2
+      description: >-
+        The operator's first scheduled run after the apply records a pull started with
+        --scheduled (operator).
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e40-t48-the-schedule-passes-scheduled-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.8
+    debate/epic: v1-e40-cloud-caselist-run
+spec:
+  description: >-
+    The weekly schedule starts its pull with --scheduled, so the recent-run guard is live.
+  goalRef:
+    name: v1-e40-t48-the-schedule-passes-scheduled
+  graph:
+    nodes:
+      - id: the-schedule-passes-scheduled
+        kind: Task
+        name: Schedule passes --scheduled
+        description: >-
+          The weekly schedule starts its pull with --scheduled, so the recent-run guard is
+          live.
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Schedule passes --scheduled tests pass
+            command: uv
+            args: [run, pytest, tests/infrastructure, -k, schedule]
+status:
+  phase: Pending

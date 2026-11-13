@@ -1,0 +1,81 @@
+# TASK v1-e07-t24-the-no-provider-hint-and-the-partial-message-name-only-what-counts - The no-provider hint fits a provider enabled but unbuilt, and the partial message names only the providers that count
+# Epic: E07 Discovery Provider Adapters | Release: v1.4 (Federated research from the CLI) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e07-t24-the-no-provider-hint-and-the-partial-message-name-only-what-counts
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.4
+    debate/epic: v1-e07-discovery-adapters
+  annotations:
+    debate/title: "The no-provider hint fits a provider enabled but unbuilt, and the partial message names only the providers that count"
+spec:
+  # Filed by the PM, 2026-11-12, from v1-e07-t23's follow-ups 2 and 3 (the PM's review, 2026-11-12).
+  description: >-
+    v1-e07-t23 names every configuration gap with its cure and leaves uncounted providers out of
+    the status and partial_providers. Two messages still disagree with it. (1)
+    NO_PROVIDER_ENABLED's hint says 'Name enabled providers with --providers, or enable them in
+    providers.enabled' even when every selected provider is enabled and only unbuilt (a keyless
+    GovInfo or Semantic Scholar), where the cure is the key and each line above the hint already
+    says so: drop the second clause in that case, or drop the hint when every line carries its
+    cure, as the proposal argues. (2) SEARCH_PARTIAL's message ('N of M providers did not answer
+    in full: openalex (timeout), govinfo (not configured)') and daily's still list uncounted
+    providers beside the one that made the search partial: count and name only the providers
+    partial_providers counts, so the message matches report.json's key. Exit codes and JSON keys
+    are unchanged.
+  priority: 3
+  constraints:
+    packages: [debate_core.application, debate_cli, packages/debate_core/tests, packages/debate_cli/tests, docs/guides]
+    forbidden:
+      - A provider hidden from the footer, providers or reasons
+      - An exit code or a JSON key changed
+      - Business logic in debate_cli
+  context:
+    - kind: TaskRef
+      name: v1-e07-t23-configuration-gaps-named-with-their-cure-everywhere
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        The hint fits each case of enabled-but-unbuilt and not-enabled providers, and the
+        partial message of search and daily names only the counted providers, by tests shown
+        failing first.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e07-t24-the-no-provider-hint-and-the-partial-message-name-only-what-counts-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.4
+    debate/epic: v1-e07-discovery-adapters
+spec:
+  description: >-
+    The no-provider hint fits a provider enabled but unbuilt, and the partial message names only
+    the providers that count.
+  goalRef:
+    name: v1-e07-t24-the-no-provider-hint-and-the-partial-message-name-only-what-counts
+  graph:
+    nodes:
+      - id: the-no-provider-hint-and-the-partial-mes
+        kind: Task
+        name: Messages that count
+        description: >-
+          The no-provider hint fits a provider enabled but unbuilt, and the partial
+          message names only the providers that count.
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Messages that count tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests, packages/debate_cli/tests, -k, no_provider or search_partial]
+status:
+  phase: Pending

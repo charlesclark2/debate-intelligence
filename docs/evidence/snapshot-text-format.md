@@ -394,6 +394,10 @@ its card `UNVERIFIED` whatever the verifier said:
 | A .docx body holds no card for a manifest card | `BODY_CARD_MISSING` |
 | A .docx body holds a card its manifest does not list, such as one pasted in by hand; reported on that body card's own entry, by its body position | `BODY_CARD_NOT_IN_MANIFEST` |
 
+A deletion in a .docx body that removes a negating word (the edit policy's list and its `n't` rule) is
+not a reason either: the card stays `VERIFIED`, with the warning `NEGATION_REMOVED` and the deletion's
+ranges in `evidence_text` and in the snapshot (`v1-e06-t10`, PM note 2026-11-12).
+
 A bracketed interpolation in a .docx body is not a reason: the card stays `VERIFIED`, with the warning
 `INTERPOLATION_PRESENT` and the offset it is read before
 ([`debate_core.evidence.docx_verify`](../../packages/debate_core/src/debate_core/evidence/docx_verify.py)).

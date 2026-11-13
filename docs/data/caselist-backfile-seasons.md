@@ -132,3 +132,14 @@ revision 15, the first at `2026.11.03-docx-9`, completed in 113 minutes, 12:00:5
 restore took 6.7 s and brought back no parsed object, since no docx-9 directory existed; it parsed its
 four caselists in full in 92 minutes (20,746 sources, 392,919 cards), left the lock free and saved its
 bundle. The four backfiles, which the weekly run does not follow, changed none of its stages.
+
+**hspolicy25 rebuilt at docx-9, 2026-11-12** (recorded by the PM, 2026-11-12). `v1-e39-t18`'s first
+bucket check found hspolicy25's parsed store at `2026.10.27-docx-7` only, as its import of 2026-11-02
+ran before the docx-9 image. It was rebuilt in the cloud by this runbook's procedure: a dry run
+(`"already_imported": true`, 24.7 GB needed, 105.5 GB free, outside the window), then ECS task
+`8e203907c93940a99ce84ea6dba01d9a`, revision 15 (`sha256:f1b0e903…`), started 00:53 Chicago. Result:
+status ok, applied, `downloaded_bytes` 0 (no download budget spent), sources skipped 14,340 (all
+stored), parsed 14,163 (176 unsupported, 1 failed), 408,335 cards, parsed objects uploaded 14,343;
+restore 7.2 s, parse 4,080.9 s, publish 69.6 s, publish parsed 388.0 s, about 76 minutes. All four
+backfiles now hold a docx-9 directory. hspolicy25's docx-7 directory remains until `caselist retire
+--bucket` retires it, after `v1-e39-t18` has measured.

@@ -26,9 +26,12 @@ spec:
     (PM amendment 2026-11-05, from v1-e07-t13's deviation 2.) There is no search guide under
     docs/guides: "the search guide" is the `debate-research search` section of
     `packages/debate_cli/README.md`, inside the `debate_cli` package.
+    (PM amendment 2026-11-12, recording the ruling of the same day, Q2.) The keyword version
+    reads OpenAlex's `keywords` in the adapter, so debate_core.integrations.discovery joins the
+    packages, and agreement 5's smoke check joins as tests/smoke.
   priority: 3
   constraints:
-    packages: [debate_core.application, debate_core.domain, debate_cli, packages/debate_core/tests, packages/debate_cli/tests, docs/guides]
+    packages: [debate_core.application, debate_core.domain, debate_core.integrations.discovery, debate_cli, packages/debate_core/tests, packages/debate_cli/tests, docs/guides, tests/smoke]
     forbidden:
       - A model call to suggest a query
       - A live provider call in a test

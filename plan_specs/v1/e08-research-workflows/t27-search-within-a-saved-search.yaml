@@ -1,0 +1,77 @@
+# TASK v1-e08-t27-search-within-a-saved-search - `search --within` narrows a saved search's results locally, with no provider call
+# Epic: E08 Federated Research Workflows | Release: v1.4 (Federated research from the CLI) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e08-t27-search-within-a-saved-search
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.4
+    debate/epic: v1-e08-research-workflows
+  annotations:
+    debate/title: "`search --within` narrows a saved search's results locally, with no provider call"
+spec:
+  # Filed by the PM, 2026-11-12, from v1-e08-t15's follow-up 1 (the PM's review, 2026-11-12).
+  description: >-
+    v1-e08-t15 suggests narrower searches from the first page's OpenAlex keywords. Its
+    proposal's third step, ruled a follow-up: `debate-research search --within <the --save file>
+    'words'` reads the saved file and keeps the saved results whose title has every word typed,
+    or that carry a subject with those words, in their saved rank, with no provider call. A
+    missing or non-search file exits 2, naming the path. A file saved before this task carries
+    no per-result subjects: it matches titles only, with a note to run the search again. So
+    --save first gains each result's subjects (additive, left out when empty). No abstract is
+    saved or matched.
+  priority: 3
+  constraints:
+    packages: [debate_core.application, debate_cli, packages/debate_core/tests, packages/debate_cli/tests]
+    forbidden:
+      - A provider call from --within
+      - An abstract saved or printed
+      - A change to a saved file's existing keys
+  context:
+    - kind: TaskRef
+      name: v1-e08-t15-ld-research-starts-broad-and-narrows-from-the-first-page
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        --within filters a saved file's results by title and subject words in saved rank
+        with no provider call, refuses a missing or non-search file with exit 2, and reads
+        an older file by titles with a note, by tests shown failing first.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e08-t27-search-within-a-saved-search-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.4
+    debate/epic: v1-e08-research-workflows
+spec:
+  description: >-
+    `search --within` narrows a saved search's results locally, with no provider call.
+  goalRef:
+    name: v1-e08-t27-search-within-a-saved-search
+  graph:
+    nodes:
+      - id: search-within-a-saved-search
+        kind: Task
+        name: Within a saved search
+        description: >-
+          `search --within` narrows a saved search's results locally, with no provider
+          call.
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Within a saved search tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests, packages/debate_cli/tests, -k, within]
+status:
+  phase: Pending

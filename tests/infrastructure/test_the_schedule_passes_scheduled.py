@@ -493,3 +493,383 @@ def test_the_memory_check_still_refuses_a_known_revision_under_the_template(tmp_
     assert said.startswith("PLAN STOP: "), said
     assert f"{RUN_SCHEDULE} starts debate-dev-caselist-run:12, a revision known before the apply" in said
     assert code == 1
+
+
+# ------------------------------------------------------------------------------------------------
+# The runbook's section: the operator's blocks, in run order
+# ------------------------------------------------------------------------------------------------
+
+RUNBOOK: Final = REPO_ROOT / "docs" / "runbooks" / "caselist-cloud-run.md"
+HEADING: Final = "\n## The schedule passes --scheduled (`v1-e40-t48`), once\n"
+ONEOFF_NAME: Final = "debate-dev-caselist-run-field-name-proof"
+ROLE: Final = "debate-dev-caselist-run-scheduler"
+
+
+def section() -> str:
+    text = RUNBOOK.read_text(encoding="utf-8")
+    start = text.index(HEADING)
+    return text[start : text.index("\n## ", start + 1)]
+
+
+def bash_blocks(text: str) -> list[str]:
+    return re.findall(r"```bash\n(.*?)```", text, flags=re.DOTALL)
+
+
+def block_with(needle: str) -> str:
+    [found] = [block for block in bash_blocks(section()) if needle in block]
+    return found
+
+
+def heredoc(block: str, marker: str) -> str:
+    [found] = re.findall(rf"<<'{marker}'\n(.*?)\n{marker}\n", block, flags=re.DOTALL)
+    return found
+
+
+def run_heredoc(code: str, *arguments: str | Path) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        [sys.executable, "-I", "-", *map(str, arguments)],
+        input=code,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+
+ACCOUNT_IN_ARNS: Final = "999988887777"
+ECS_ARNS: Final = f"arn:aws:ecs:us-east-1:{ACCOUNT_IN_ARNS}"
+REVISION_16: Final = f"{ECS_ARNS}:task-definition/debate-dev-caselist-run:16"
+READ_BACK_APPLIED: Final = (
+    "target: arn:aws:scheduler:::aws-sdk:ecs:runTask\n"
+    'command: ["--json", "caselist", "pull", "--scheduled"]\n'
+)
+
+
+def applied_target(command: list[str] = SCHEDULED, arn: str = UNIVERSAL) -> dict[str, object]:
+    """`aws scheduler get-schedule --query Target` after the apply, as the CLI prints it (invented ids)."""
+    return {
+        "Arn": arn,
+        "RoleArn": f"arn:aws:iam::{ACCOUNT_IN_ARNS}:role/{ROLE}",
+        "Input": json.dumps(
+            {
+                "cluster": f"arn:aws:ecs:us-east-1:{ACCOUNT_IN_ARNS}:cluster/debate-dev-caselist-run",
+                "taskDefinition": REVISION_16,
+                "count": 1,
+                "launchType": "FARGATE",
+                "networkConfiguration": {
+                    "awsvpcConfiguration": {
+                        "subnets": ["subnet-1"],
+                        "securityGroups": ["sg-1"],
+                        "assignPublicIp": "ENABLED",
+                    }
+                },
+                "overrides": {"containerOverrides": [{"name": "run", "command": command}]},
+            }
+        ),
+        "RetryPolicy": {"MaximumEventAgeInSeconds": 3600, "MaximumRetryAttempts": 3},
+        "DeadLetterConfig": {"Arn": f"arn:aws:sqs:us-east-1:{ACCOUNT_IN_ARNS}:debate-dev-caselist-run-dlq"},
+    }
+
+
+def test_the_section_comes_after_the_memory_section_and_the_inert_guard_sentence_is_gone() -> None:
+    text = RUNBOOK.read_text(encoding="utf-8")
+
+    assert (
+        text.index("\n## The run task's memory\n")
+        < text.index(HEADING)
+        < text.index("\n## A failed parse stage\n")
+    )
+    assert "the guard does nothing" not in text
+    assert "Today the run schedule's target\npasses no override" not in text
+
+
+def test_the_tag_block_refuses_a_release_without_scheduled() -> None:
+    block = block_with("gh release list")
+
+    assert 'git show "$TAG:packages/debate_cli/src/debate_cli/commands/caselist_pull.py"' in block
+    assert "grep -q -- '\"--scheduled\"'" in block
+    assert 'echo "STOP: $TAG has no caselist pull --scheduled; use v1.1.0-dev.423 or later"; TAG=""' in block
+
+
+def test_the_digest_edit_changes_one_line_of_the_owner_file(tmp_path: Path) -> None:
+    owner = tmp_path / "owner.auto.tfvars"
+    others = 'owner = "coach"\ncaselist_run_schedule_enabled = true\n'
+    owner.write_text(f'{others}caselist_image_digest = "sha256:{"1" * 64}"\n', encoding="utf-8")
+    new = f'caselist_image_digest = "sha256:{"2" * 64}"'
+
+    ran = run_heredoc(heredoc(block_with("<<'DIGEST'"), "DIGEST"), owner, new)
+
+    assert ran.returncode == 0, ran.stderr
+    assert owner.read_text(encoding="utf-8") == f"{others}{new}\n"
+    assert ran.stdout == f'replaced: caselist_image_digest = "sha256:{"1" * 64}"  ->  {new}\n'
+
+
+def test_the_plan_block_checks_the_saved_plans_json_with_universal_target() -> None:
+    block = block_with(" plan ")
+
+    assert (
+        "rm -f infrastructure/envs/dev/caselist-schedule-scheduled.tfplan "
+        "/tmp/caselist-schedule-scheduled-plan.json" in block
+    )
+    assert "plan -input=false -no-color -out=caselist-schedule-scheduled.tfplan" in block
+    assert (
+        "show -json caselist-schedule-scheduled.tfplan > /tmp/caselist-schedule-scheduled-plan.json" in block
+    )
+    assert (
+        "python3 -I ops/caselist_run/check_image_plan.py /tmp/caselist-schedule-scheduled-plan.json "
+        "infrastructure/envs/dev/owner.auto.tfvars --universal-target"
+    ) in block
+    assert " apply " not in block
+    assert "`Plan: 2 to add, 4 to change, 2 to\ndestroy.`" in section()
+
+
+def test_the_apply_block_applies_the_checked_plan_never_on_a_wednesday_in_chicago() -> None:
+    block = block_with(" apply ")
+
+    assert "apply -input=false caselist-schedule-scheduled.tfplan" in block
+    assert 'if [ "$(TZ=America/Chicago date +%A)" = "Wednesday" ]; then echo "STOP' in block
+    assert "--desired-status RUNNING" in block
+    assert " plan " not in block
+    assert "never a Wednesday" in section()
+    assert "after the PM's word" in section()
+
+
+@pytest.mark.parametrize(
+    ("target", "expected"),
+    [
+        (
+            applied_target(),
+            READ_BACK_APPLIED,
+        ),
+        (
+            applied_target(["--json", "caselist", "pull"]),
+            'target: arn:aws:scheduler:::aws-sdk:ecs:runTask\ncommand: ["--json", "caselist", "pull"]\n',
+        ),
+        (
+            {
+                "Arn": f"arn:aws:ecs:us-east-1:{ACCOUNT_IN_ARNS}:cluster/debate-dev-caselist-run",
+                "RoleArn": "x",
+            },
+            "target: the ECS template, not the universal RunTask target\n"
+            "command: none: the target has no RunTask Input with a command override\n",
+        ),
+    ],
+    ids=["applied", "without --scheduled", "still the template"],
+)
+def test_the_read_back_prints_only_the_target_arn_and_the_command(
+    tmp_path: Path, target: dict[str, object], expected: str
+) -> None:
+    block = block_with("<<'TARGET'")
+    saved = tmp_path / "target.json"
+    saved.write_text(json.dumps(target), encoding="utf-8")
+
+    ran = run_heredoc(heredoc(block, "TARGET"), saved)
+
+    assert ran.returncode == 0, ran.stderr
+    assert ran.stdout == expected
+    assert ACCOUNT_IN_ARNS not in ran.stdout
+    assert (
+        "get-schedule --region us-east-1 --group-name debate-dev-caselist-run --name debate-dev-caselist-run "
+        in block
+    )
+
+
+def test_the_one_off_is_the_applied_target_with_only_the_command_a_dry_run(tmp_path: Path) -> None:
+    source, out = tmp_path / "target.json", tmp_path / "oneoff.json"
+    target = applied_target()
+    source.write_text(json.dumps(target), encoding="utf-8")
+
+    ran = run_heredoc(heredoc(block_with("<<'ONEOFF'"), "ONEOFF"), source, out)
+
+    assert ran.returncode == 0, ran.stderr
+    assert ran.stdout == (
+        "one-off target: arn:aws:scheduler:::aws-sdk:ecs:runTask\n"
+        'one-off command: ["--json", "caselist", "pull", "--dry-run"]\n'
+    )
+    oneoff = json.loads(out.read_text(encoding="utf-8"))
+    expected_request = json.loads(str(target["Input"]))
+    expected_request["overrides"]["containerOverrides"][0]["command"] = [
+        "--json",
+        "caselist",
+        "pull",
+        "--dry-run",
+    ]
+    assert json.loads(oneoff.pop("Input")) == expected_request
+    assert oneoff == {k: v for k, v in target.items() if k != "Input"}
+
+
+@pytest.mark.parametrize(
+    "target",
+    [
+        applied_target(["--json", "caselist", "pull"]),
+        applied_target(arn="arn:aws:ecs:us-east-1:1:cluster/x"),
+        {"Arn": UNIVERSAL},
+    ],
+    ids=["no --scheduled yet", "the template", "no Input"],
+)
+def test_the_one_off_refuses_a_target_that_is_not_the_applied_one(
+    tmp_path: Path, target: dict[str, object]
+) -> None:
+    source, out = tmp_path / "target.json", tmp_path / "oneoff.json"
+    source.write_text(json.dumps(target), encoding="utf-8")
+
+    ran = run_heredoc(heredoc(block_with("<<'ONEOFF'"), "ONEOFF"), source, out)
+
+    assert ran.returncode == 1
+    assert ran.stderr.startswith("STOP: "), ran.stderr
+    assert not out.exists()
+
+
+def test_the_one_off_is_created_in_the_runs_group_deleting_itself_never_on_a_wednesday() -> None:
+    block = block_with("create-schedule")
+
+    assert "--group-name debate-dev-caselist-run " in block
+    assert f"--name {ONEOFF_NAME} " in block
+    assert "--action-after-completion DELETE" in block
+    assert "--flexible-time-window Mode=OFF" in block
+    assert "date -u -v+10M '+at(%Y-%m-%dT%H:%M:%S)'" in block
+    assert "--schedule-expression-timezone UTC" in block
+    assert "--target file:///tmp/caselist-run-oneoff-target.json" in block
+    assert 'if [ "$(TZ=America/Chicago date +%A)" = "Wednesday" ]; then echo "STOP' in block
+    assert "--desired-status RUNNING" in block
+
+
+def test_the_one_off_is_deleted_only_by_name_and_after_a_read() -> None:
+    blocks = bash_blocks(section())
+    [read] = [block for block in blocks if "get-schedule" in block and ONEOFF_NAME in block]
+    [delete] = [block for block in blocks if "delete-schedule" in block]
+
+    assert blocks.index(read) < blocks.index(delete)
+    assert "delete-schedule" not in read
+    assert f"--name {ONEOFF_NAME} " in delete
+    assert "--name debate-dev-caselist-run " not in delete
+
+
+def cloudtrail_event(role: str, command: list[str] | None, task: str | None, at: str) -> str:
+    """One `Events[].CloudTrailEvent` string as `aws cloudtrail lookup-events` gives it (invented ids)."""
+    request: dict[str, object] = {
+        "cluster": f"arn:aws:ecs:us-east-1:{ACCOUNT_IN_ARNS}:cluster/debate-dev-caselist-run",
+        "taskDefinition": REVISION_16,
+        "networkConfiguration": {"awsvpcConfiguration": {"subnets": ["subnet-secret-1"]}},
+    }
+    if command is not None:
+        request["overrides"] = {"containerOverrides": [{"name": "run", "command": command}]}
+    tasks = (
+        []
+        if task is None
+        else [{"taskArn": f"arn:aws:ecs:us-east-1:{ACCOUNT_IN_ARNS}:task/debate-dev-caselist-run/{task}"}]
+    )
+    return json.dumps(
+        {
+            "eventTime": at,
+            "eventName": "RunTask",
+            "userIdentity": {
+                "type": "AssumedRole",
+                "arn": f"arn:aws:sts::{ACCOUNT_IN_ARNS}:assumed-role/{role}/0123456789abcdef",
+                "accountId": ACCOUNT_IN_ARNS,
+            },
+            "requestParameters": request,
+            "responseElements": {"tasks": tasks, "failures": []},
+            "sourceIPAddress": "scheduler.amazonaws.com",
+        }
+    )
+
+
+def runtask_blocks() -> list[str]:
+    return [block for block in bash_blocks(section()) if "<<'RUNTASK'" in block]
+
+
+def test_both_cloudtrail_reads_run_the_same_code_over_their_own_windows() -> None:
+    proof, wednesday = runtask_blocks()
+
+    assert heredoc(proof, "RUNTASK") == heredoc(wednesday, "RUNTASK")
+    assert '--start-time "$(date -u -v-3H +%Y-%m-%dT%H:%M:%SZ)"' in proof
+    assert "--start-time 2026-11-18T11:00:00Z --end-time 2026-11-18T14:00:00Z" in wednesday
+    for block in (proof, wednesday):
+        assert "--lookup-attributes AttributeKey=EventName,AttributeValue=RunTask" in block
+        assert f"/tmp/caselist-run-runtask-events.json {ROLE} /tmp/caselist-run-runtask-task.txt" in block
+
+
+def test_the_cloudtrail_read_prints_only_the_time_role_command_and_task_id(tmp_path: Path) -> None:
+    events, task_file = tmp_path / "events.json", tmp_path / "task.txt"
+    events.write_text(
+        json.dumps(
+            [
+                cloudtrail_event(ROLE, SCHEDULED, "aaaa1111", "2026-11-18T12:00:03Z"),
+                cloudtrail_event("debate-dev-caselist-scheduler", None, "bbbb2222", "2026-11-18T09:00:02Z"),
+                cloudtrail_event(
+                    "AWSReservedSSO_DebateDevCaselistRunDeployer_0123",
+                    SCHEDULED,
+                    "cccc3333",
+                    "2026-11-18T12:30:00Z",
+                ),
+                cloudtrail_event(ROLE, SCHEDULED, None, "2026-11-18T12:00:01Z"),
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    ran = run_heredoc(heredoc(runtask_blocks()[0], "RUNTASK"), events, ROLE, task_file)
+
+    assert ran.returncode == 0, ran.stderr
+    assert ran.stdout == (
+        f'2026-11-18T12:00:01Z  {ROLE}  ["--json", "caselist", "pull", "--scheduled"]  (no task)\n'
+        f'2026-11-18T12:00:03Z  {ROLE}  ["--json", "caselist", "pull", "--scheduled"]  aaaa1111\n'
+    )
+    for leaked in (ACCOUNT_IN_ARNS, "arn:", "subnet-secret-1", "task-definition", "scheduler.amazonaws.com"):
+        assert leaked not in ran.stdout
+    assert task_file.read_text(encoding="utf-8") == "aaaa1111\n"
+
+
+def test_the_cloudtrail_read_says_when_the_role_made_no_runtask(tmp_path: Path) -> None:
+    events, task_file = tmp_path / "events.json", tmp_path / "task.txt"
+    events.write_text(
+        json.dumps([cloudtrail_event("debate-dev-caselist-scheduler", None, "b", "t")]), encoding="utf-8"
+    )
+
+    ran = run_heredoc(heredoc(runtask_blocks()[0], "RUNTASK"), events, ROLE, task_file)
+
+    assert ran.returncode == 0, ran.stderr
+    assert ran.stdout == f"none: no RunTask by {ROLE} in the window\n"
+    assert not task_file.exists()
+
+
+def test_the_cloudtrail_read_names_a_start_without_a_command_override(tmp_path: Path) -> None:
+    events, task_file = tmp_path / "events.json", tmp_path / "task.txt"
+    events.write_text(
+        json.dumps([cloudtrail_event(ROLE, None, "dddd4444", "2026-11-11T12:00:01Z")]), encoding="utf-8"
+    )
+
+    ran = run_heredoc(heredoc(runtask_blocks()[0], "RUNTASK"), events, ROLE, task_file)
+
+    assert ran.stdout == f"2026-11-11T12:00:01Z  {ROLE}  (no command override)  dddd4444\n"
+
+
+def test_the_exit_check_reads_the_task_the_cloudtrail_read_kept() -> None:
+    block = block_with("describe-tasks")
+
+    assert 'TASK_ID="$(cat /tmp/caselist-run-runtask-task.txt 2>/dev/null)"' in block
+    assert "--query 'tasks[0].[lastStatus,stopCode,containers[0].exitCode]'" in block
+
+
+def inside_double_quotes(block: str) -> list[str]:
+    """The text inside each double-quoted string of a block's shell lines (heredoc bodies left out)."""
+    shell = re.sub(r"<<'([A-Z]+)'\n.*?\n\1\n", "\n", block, flags=re.DOTALL)
+    found, quote, current = [], None, ""
+    for character in shell:
+        if quote is None:
+            quote = character if character in "'\"" else None
+        elif character == quote:
+            if quote == '"':
+                found.append(current)
+            quote, current = None, ""
+        elif quote == '"':
+            current += character
+    return found
+
+
+def test_no_block_of_the_section_puts_an_exclamation_mark_in_a_shell_line() -> None:
+    """zsh expands `!` when a block is pasted; the section's shell lines carry none at all."""
+    assert inside_double_quotes('echo "a!b" \'c!d\' "e"') == ["a!b", "e"]
+    for block in bash_blocks(section()):
+        shell = re.sub(r"<<'([A-Z]+)'\n.*?\n\1\n", "\n", block, flags=re.DOTALL)
+        assert "!" not in shell, block

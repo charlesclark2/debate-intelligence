@@ -42,7 +42,7 @@ spec:
         The proposal is ruled on, and a PR whose affected set reaches a slow test file runs
         it in ci, as ruled, shown by a planted break that only a slow test catches.
 status:
-  phase: InProgress
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

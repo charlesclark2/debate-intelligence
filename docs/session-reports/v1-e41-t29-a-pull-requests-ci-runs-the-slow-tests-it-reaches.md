@@ -6,15 +6,22 @@
 | Spec | [`plan_specs/v1/e41-delivery-tooling-upkeep/t29-a-pull-requests-ci-runs-the-slow-tests-it-reaches.yaml`](../../plan_specs/v1/e41-delivery-tooling-upkeep/t29-a-pull-requests-ci-runs-the-slow-tests-it-reaches.yaml) |
 | Epic / release | `v1-e41-delivery-tooling-upkeep` / `v1.8` |
 | Branch | `task/v1-e41-t29-a-pull-requests-ci-runs-the-slow-tests-it-reaches` |
-| Session status | IN PROGRESS: stopped at the proposal for the PM's ruling, no code written <!-- COMPLETE / PARTIAL / BLOCKED --> |
+| Session status | COMPLETE <!-- COMPLETE / PARTIAL / BLOCKED --> |
 
 ## Summary
 
-Stopped at the proposal, as the brief asks. No code has changed yet. The proposal: a
-`slow-tests` job in `ci.yml`, beside the test parts, on pull requests into `dev` only. It runs
-validate-dev's slow-tier markers over the same affected set the parts run. Four tests are left
-to validate-dev, each with its reason. It is one of `ci`'s needs, so a slow failure blocks the
-merge. The measurements and the open questions are below.
+A pull request into `dev` now runs the slow tests its affected set reaches, as the PM ruled on
+2026-11-13. `ci.yml` has a new `slow-tests` job beside the test parts. `test-selection` hands it the
+chosen files that may hold a slow test (`run_slow`, `slow_chromium`, `slow_test_files`). The new
+`scripts/ci_slow_tests.py` runs their slow tests with validate-dev's markers, imported from
+`validate_dev.SLOW`, less four tests left to validate-dev, and a skip fails it. The job is one of
+`ci`'s needs, gated on `run_slow`, so a slow failure blocks the merge; the required checks and
+rulesets are unchanged. A planted break that only a slow test sees passes the parts' command over
+its whole affected set (788 passed) and fails the slow job's command (3 failed, at assertions). That
+is a committed test, together with the replay of v1-e08-t24's merge. Also built:
+`affected_tests.py --run --slow`, `--durations=25` on validate-dev's tiers, and agreements 1 and 10
+plus the costs page. **Look first at** the four ids in `LEFT_TO_VALIDATE_DEV`
+(`scripts/ci_slow_tests.py`) and the reworded "Not on PRs into `dev`" item in agreement 1.
 
 ## Proposal for the PM's ruling (written before any code)
 
@@ -199,38 +206,168 @@ changing":
   chosen files passes, and the slow job's command over the same files fails at
   `test_e2e_research.py`. Both outputs are recorded here.
 
-## Plan nodes
+### The PM's ruling (2026-11-13)
 
-<!-- One row per Plan graph node, in the order they were completed. -->
+1. (a): the affected set the parts run, run again with validate-dev's slow-tier markers imported from
+   `validate_dev.SLOW`; the whole selection is every slow test. Four node ids stay on validate-dev
+   only, each with its reason in the job summary, pinned in a test. A skip fails the job. Not (b) or
+   (c).
+2. (a) the bound: pytest step at most 120 s, the job at most 60 s past the longest part; past that,
+   the browser files get their own job first, then the slowest test is made cheaper, and nothing
+   leaves validate-dev. (b) reword agreement 1 to "browser suites against a deployed site", with a
+   sentence on why the in-process browser files differ. (c) `--durations=25` on validate-dev's tiers.
+3. A separate `slow-tests` job, beside the parts, on pull requests into dev only, gated on
+   `test-selection.run_slow`, one of `ci`'s needs; required checks unchanged, no ruleset change.
+4. (a), written into agreement 10: no session runs the whole slow tier; the slow tests of changed
+   files under 115 s, then `affected_tests.py --run --slow` before the report; the planted-break
+   cases are validate-dev's alone, with no hand-off.
+5. The ranking note as written, under agreement 10's "While working".
+
+Build it, shown by a planted break that only a slow test catches, in a test of the selection, with
+the replay of t24's merge kept as a test.
+
+## Plan nodes
 
 | Node | Status | Notes |
 |---|---|---|
-| | | |
+| `a-pull-requests-ci-runs-the-slow-tests-i` (Slow tests in PR ci) | Done | Commits `4241371`, `7a52e92` (outputs pin), `a7f5c33` (docs), `4d289e1`, `73acd1a`; criterion below |
 
 ## Acceptance criteria
 
-<!-- Goal criteria (ac1…) and every node criterion. Status: PASS / FAIL / NOT RUN. -->
-
 | Criterion | Status | Evidence (command → result) |
 |---|---|---|
-| | | |
+| ac1: the proposal is ruled on, and a PR whose affected set reaches a slow test file runs it in ci, as ruled, shown by a planted break that only a slow test catches | PASS | Ruled 2026-11-13 (above). Built as ruled: the `slow-tests` job in `ci.yml`, `scripts/ci_slow_tests.py`, the outputs from `scripts/ci_test_selection.py`. **The replay of t24's merge**, `test_the_replay_of_v1_e08_t24s_merge_hands_the_slow_job_the_e2e_test_it_broke`: t24's eight changed files over today's tree reach `tests/integration/test_e2e_research.py`, `run_slow` is true, and the job is handed that file without deselecting it. **The planted break**, `test_a_planted_break_only_a_slow_test_sees_passes_the_parts_and_fails_the_slow_job`: the end-to-end harness's Crossref answers 404 for the journal's DOI. The parts' markers over the e2e file exit 5 (none run), the slow job's command unplanted passes 2, and planted fails 2, each at an `AssertionError` with `AUTO_CUT_SHORT` or `SHORT: 2 of 3 cards VERIFIED`, never `INTERNAL_ERROR`. **That only a slow test catches it, in this session** ([The planted break, run whole](#the-planted-break-run-whole)): the parts' command over the harness change's whole affected set, planted, gave 788 passed, exit 0, and the slow job's command over the 3 files it is handed gave 3 failed. The pull request's own runner run is the operator's (`scripts/task pr`); see Follow-up work. |
+| Node: Slow tests in PR ci tests pass (`uv run pytest tests/scripts -k "slow and affected"`) | PASS | `.venv/bin/python scripts/hard_stop.py 115 uv run pytest tests/scripts -k "slow and affected"` → `39 passed in 29.67s` |
 
 ## Files changed
 
-<!-- Group by package or directory; one line on why each group changed. -->
+* **`.github/workflows/ci.yml`:** the `slow-tests` job; `test-selection`'s three new outputs and
+  its fallback (a failed selection runs every slow test on a pull request into dev, none
+  elsewhere); `slow-tests` in `ci`'s needs and `GATES_OF_JOB`; the header's browser wording and a
+  paragraph on the job.
+* **`scripts/ci_slow_tests.py` (new):** the four tests left to validate-dev with their reasons, the
+  text check (`may_hold_slow_tests`), when Chromium is needed, the pytest command (validate-dev's
+  markers, `--deselect` per id, `--durations=25`, JUnit), and the verdict (exit 5 passes, a skip
+  fails).
+* **`scripts/ci_test_selection.py`:** `slow_choice`, the `run_slow`, `slow_chromium` and
+  `slow_test_files` outputs, and a "Slow tests" section in the job summary.
+* **`scripts/affected_tests.py`:** `--run --slow` (`run_slow_tests`), which imports
+  `ci_slow_tests` where it is used.
+* **`scripts/validate_dev.py`:** `--durations=25` on every tier's command.
+* **`tests/scripts/test_ci_slow_tests_the_affected_set_reaches.py` (new):** 39 tests (listed in
+  its docstring).
+* **`tests/scripts/test_ci_workflow_test_selection.py`, `test_ci_workflow_selection_once_and_no_queue.py`:**
+  the pinned output sets gain the three slow-tests outputs.
+* **`docs/process/working-agreements.md`:** agreements 1 and 10 as ruled.
+* **`docs/process/ci-test-part-costs.md`:** "The slow-tests job", the figures, and its docs-index
+  line.
+* **The spec:** phase `Succeeded`.
 
 ## Deviations from the spec
 
-None.
+None. No test left validate-dev's slow tier (it only gained `--durations=25`), and no test makes a
+live call.
 
 ## Decisions and assumptions
 
-<!-- Choices the spec left open, with the reasoning. -->
+* **"The planted-break cases" is one node id, the file.** `--deselect` takes a node id prefix, and in
+  the slow run a file's id deselects only its slow tests, since the parts run its others. The file
+  has two slow tests: the 14 parametrized cases, and `test_a_break_no_selected_test_reaches_is_not_counted_as_caught`,
+  which plants a break too and clones the repository. One id covers both, so the ruling's count
+  of four holds. The text check also never hands the job a file left out whole, so the many PRs
+  that reach only that file start no slow job.
+* **The job is handed only the chosen files that may hold a slow test**, not the whole affected
+  set. The proposal said it would collect the chosen files under the slow marker (8–15 s of
+  collection). The text check, `mark.slow` in the file or a conftest above it, can only say yes
+  more often than pytest, and a test holds that it finds every file the slow tier comes from. So
+  the job collects about a dozen files. It finds `tests/evals/parser/test_parser_eval.py` too,
+  which `not eval` then deselects.
+* **The planted break is in the end-to-end harness, not the ranking weights** that the proposal
+  named. Putting t24's recency rule back would also fail the fast CLI tests t24 updated, so it is
+  not a break only a slow test sees. Only the three e2e files import
+  `tests/integration/e2e_harness.py`. A Crossref 404 there gives a well-formed wrong result, a
+  journal card `UNVERIFIED` with `CITATION_UNVERIFIED`. My first plant, dropping the Crossref
+  answer, crashed the CLI with `INTERNAL_ERROR`, and a crash is not a catch. t24's own merge stays
+  as the selection replay.
+* **The replay costs about 21 s** (one build of the real import graph) in whichever part gets its
+  file. It runs on every pull request that reaches the file, as `test_affected_tests.py` does.
+* **`run_slow` on a failed selection** is written by the workflow step, not the script. On a pull
+  request into dev it is `true` with Chromium and no file list, so every slow test runs: it fails
+  toward more, as the parts do. Elsewhere it is `false`.
+* **`affected_tests.py` imports `ci_slow_tests` inside `run_slow_tests`.** The partition proof
+  loads `affected_tests.py` by its path with `scripts/` off `sys.path`. My first top-level import
+  failed it, which its own run below caught.
+
+## Checks before the report
+
+All on the operator's Mac, each test run under `scripts/hard_stop.py 115`.
+
+* `uv run scripts/affected_tests.py --run --slow` → "The whole selection is affected:
+  .github/workflows/ci.yml is shared test ground." It ran nothing; that run is the pull request's
+  `ci`. So, as agreement 10 says, the test directories of what changed and the always-run list:
+  `pytest tests/scripts tests/docs tests/architecture tests/specs packages/debate_cli/tests/test_app.py packages/debate_cli/tests/test_help_rendering.py packages/debate_cli/tests/test_container_factories.py -m "not slow and not live and not partition_proof"`
+  → `3450 passed in 88.37s`.
+* The partition proof, as its job runs it (`-m "partition_proof and not slow and not live"
+  tests/scripts/test_ci_workflow_test_job.py`). First run: 1 failed, a `ModuleNotFoundError` for
+  `ci_slow_tests` when it loads `affected_tests.py` by path. After the fix: `2 passed in 15.72s`.
+* The new tests with `test_affected_tests.py`, after that fix → `197 passed in 33.33s`.
+* The job's command over the whole selection's 11 files, as this branch's own pull request will
+  hand them (`ci_test_selection.py --event pull_request --base-branch dev`, then
+  `scripts/ci_slow_tests.py --test-files …`) → 43 passed, 0 skipped, 58 s wall; the four left out
+  were deselected.
+* `ruff format --check .` → 2107 files already formatted; `ruff check .` → all checks passed (after
+  removing a duplicate import it caught); `pyright` (whole project, as CI) → 0 errors;
+  `lint-imports` → 20 kept, 0 broken; `uv run scripts/validate_specs.py` → OK: 684 files, 41 epics,
+  621 tasks, 22 releases; `docs_index.py --check-descriptions`, `check_links.py` and
+  `check_command_blocks.py --base origin/dev` → OK. ShellCheck over the six `run:` blocks this
+  changed → clean. actionlint is not run here, since it downloads itself; the pull request's
+  `workflow-lint` job runs it.
+
+### Each check fails for its reason (13 mutants)
+
+On the committed tree, each one applied, the new test file run (the replay left out), and restored
+with `git checkout HEAD --`. Every one failed at assertions, with no errors:
+
+| Mutant | Failed |
+|---|---|
+| a left-out id dropped | the four pinned, the summary, the deselect list |
+| a skip passes | the skip verdict, `--slow`'s status |
+| no conftest read | the three conftest cases |
+| the planted-break file handed to the job | 7, among them "only the planted breaks runs no slow job" |
+| slow tests on a push | the four events that are not a pull request into dev |
+| Chromium always | the e2e-only choice |
+| the markers spelled out, not validate-dev's | the markers test |
+| no exit-5 pass | "no slow test left to run passes" |
+| `--slow` hands every file | the three `--slow` tests |
+| validate-dev's durations dropped | the durations test |
+| the gate dropped from `ci` | the gate test |
+| Playwright unconditional | the job's shape |
+| the fallback runs no slow test | the fallback test |
+
+### The planted break, run whole
+
+The plant is a `-p` plugin under the scratchpad: the harness's Crossref answers 404 for the
+journal's DOI. A change to `tests/integration/e2e_harness.py` selects 24 test files:
+the 3 e2e files, the always-run list, and fast files that read source as data.
+
+* The parts' command over all 24, planted
+  (`pytest -p planted… -n auto -m "not slow and not live and not partition_proof" --dist worksteal @…`)
+  → `788 passed in 39.39s`, exit 0. A first try put the plant in `PYTEST_ADDOPTS`. That leaked into
+  `test_affected_tests.py::test_run_runs_the_selection_and_exits_with_pytests_status`'s own inner
+  pytest, in a synthetic repository where the plugin cannot import, and the test failed; it passes
+  without the plant. On the command line the plant reaches the outer run only.
+* The slow job's command, planted: it is handed the 3 e2e files →
+  `3 failed, 8 passed in 9.87s`. The failures are
+  `test_cut_writes_each_kind_of_sources_card_…[open-access journal]` (exit `CARD_UNVERIFIED`,
+  `CITATION_UNVERIFIED`) and both `test_e2e_research.py` tests (exit `AUTO_CUT_SHORT`,
+  "2 of 3 cards VERIFIED").
 
 ## Operator follow-ups
 
 <!-- Commands the operator must run (anything over ~2 minutes), with where to run them, the exact
 command, expected runtime and what success looks like. Also GitHub/AWS settings to change. -->
+
+None outstanding. The one command this task asked for, now done:
 
 **Read-only: validate-dev's slow-job timings, for the proposal's question 2** (expected runtime
 under a minute). Run it on your Mac, in the task worktree. It reads the last five validate-dev
@@ -260,7 +397,20 @@ and 453.25 s, in that order. The step timings are summarised in the proposal's q
 <!-- Bugs, gaps or ideas outside this task's scope, each with the task or epic it belongs to.
 The PM decides whether they become spec changes or new tasks. -->
 
-None.
+* **This branch's own pull request is the first runner measurement.** It changes `ci.yml`, so it is
+  the whole selection: the `slow-tests` job gets all 11 files and installs Chromium. Its pytest
+  step and job time, against the longest part, show whether the 120-s and 60-s bound holds where it
+  is tightest. 58 s wall on the Mac.
+* **validate-dev's per-file costs from its next runs.** Its tiers now print their 25 slowest tests,
+  so the planted-break cases' share of its 379–453 s can be read rather than inferred. That belongs
+  in `docs/process/ci-test-part-costs.md`, for E41.
+* **The environment-gated files start the job when they are all that is reached.** The text check
+  reads files, not tests. A pull request whose only slow files are `test_docx_renderer.py` or the
+  two SQLite feature files starts the job, which deselects their one slow test each and passes on
+  exit 5: runner minutes, no wall-clock time. A per-test check would need a collection in
+  `test-selection`, on every part's path. Not worth it unless the queue says otherwise.
+* **The browser files' own job**, the ruling's first step past the bound, is not built. It waits
+  for a runner measurement that needs it.
 
 ## PM review
 

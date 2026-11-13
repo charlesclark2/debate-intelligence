@@ -64,11 +64,11 @@ v2.3's extension work.
 | [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 4 | 125 | 105 | 550 |
 | [v1.2](plan_specs/releases/v1.2.yaml) | Argument landscape & file building | 3 | 99 | 82 | 366 |
 | [v1.3](plan_specs/releases/v1.3.yaml) | URL → verified card | 2 | 24 | 15 | 125 |
-| [v1.4](plan_specs/releases/v1.4.yaml) | Federated research from the CLI | 2 | 48 | 28 | 158 |
+| [v1.4](plan_specs/releases/v1.4.yaml) | Federated research from the CLI | 2 | 48 | 30 | 158 |
 | [v1.5](plan_specs/releases/v1.5.yaml) | V1 quality gate & team pilot | 1 | 7 | 1 | 66 |
 | [v1.6](plan_specs/releases/v1.6.yaml) | Public team website | 3 | 31 | 22 | 169 |
 | [v1.7](plan_specs/releases/v1.7.yaml) | Team evidence search pilot | 1 | 30 | 25 | 100 |
-| [v1.8](plan_specs/releases/v1.8.yaml) | Weekly caselist run in the cloud | 2 | 74 | 45 | 136 |
+| [v1.8](plan_specs/releases/v1.8.yaml) | Weekly caselist run in the cloud | 2 | 74 | 46 | 136 |
 | [v2.0](plan_specs/releases/v2.0.yaml) | Cloud platform foundation | 3 | 17 | 0 | 164 |
 | [v2.1](plan_specs/releases/v2.1.yaml) | Web app, debate tub & async jobs | 3 | 18 | 0 | 198 |
 | [v2.2](plan_specs/releases/v2.2.yaml) | Research workspace | 2 | 12 | 0 | 117 |
@@ -498,7 +498,7 @@ A student can run `debate-research cut <URL>` and receive a verified, tagged, ci
 | [Semantic Scholar is enabled in both profiles once its live smoke has passed](plan_specs/v1/e07-discovery-adapters/t20-semantic-scholar-enabled-after-its-live-smoke.yaml) `v1-e07-t20-semantic-scholar-enabled-after-its-live-smoke` | InProgress | 4 | 1.0 |
 | [Semantic Scholar's influential citation count is either weighed by the ranking or no longer asked for](plan_specs/v1/e07-discovery-adapters/t21-influential-citations-weighed-or-not-asked.yaml) `v1-e07-t21-influential-citations-weighed-or-not-asked` | Pending | 1 | 2.0 |
 | [A paced call checks the breaker and the rate-limit hold when its turn comes, and a 429 backs the provider off exponentially](plan_specs/v1/e07-discovery-adapters/t22-a-paced-call-checks-the-breaker-at-its-turn-and-backs-off-on-429.yaml) `v1-e07-t22-a-paced-call-checks-the-breaker-at-its-turn-and-backs-off-on-429` | Succeeded | 2 | 3.0 |
-| [A provider missing only configuration is named with its cure wherever it appears, and counts as partial only when a person asked for it](plan_specs/v1/e07-discovery-adapters/t23-configuration-gaps-named-with-their-cure-everywhere.yaml) `v1-e07-t23-configuration-gaps-named-with-their-cure-everywhere` | Pending | 1 | 2.0 |
+| [A provider missing only configuration is named with its cure wherever it appears, and counts as partial only when a person asked for it](plan_specs/v1/e07-discovery-adapters/t23-configuration-gaps-named-with-their-cure-everywhere.yaml) `v1-e07-t23-configuration-gaps-named-with-their-cure-everywhere` | Succeeded | 1 | 2.0 |
 
 #### [E08 — Federated Research Workflows](plan_specs/v1/e08-research-workflows/epic.yaml)
 
@@ -528,7 +528,7 @@ A student can run `debate-research cut <URL>` and receive a verified, tagged, ci
 | [The auto-cut report states the whole command's spend beside its own calls' cost](plan_specs/v1/e08-research-workflows/t22-auto-cut-report-states-the-commands-whole-cost.yaml) `v1-e08-t22-auto-cut-report-states-the-commands-whole-cost` | Pending | 1 | 1.0 |
 | [A politics DA's link queries pair the DA's agenda item with the plan's mechanism](plan_specs/v1/e08-research-workflows/t23-politics-da-links-pair-the-agenda-item-with-the-plans-mechanism.yaml) `v1-e08-t23-politics-da-links-pair-the-agenda-item-with-the-plans-mechanism` | Pending | 2 | 4.0 |
 | [On a search of many queries, the ranking keeps the results the coach marks relevant above the providers' own order](plan_specs/v1/e08-research-workflows/t24-the-ranking-keeps-a-multi-query-searchs-relevant-results-up.yaml) `v1-e08-t24-the-ranking-keeps-a-multi-query-searchs-relevant-results-up` | Succeeded | 2 | 4.0 |
-| [A daily digest's queries find what the feeds carry, measured on a real digest first](plan_specs/v1/e08-research-workflows/t25-digest-queries-and-the-feeds-every-word-rule.yaml) `v1-e08-t25-digest-queries-and-the-feeds-every-word-rule` | Pending | 1 | 2.0 |
+| [A daily digest's queries find what the feeds carry, measured on a real digest first](plan_specs/v1/e08-research-workflows/t25-digest-queries-and-the-feeds-every-word-rule.yaml) `v1-e08-t25-digest-queries-and-the-feeds-every-word-rule` | Succeeded | 1 | 2.0 |
 
 
 ### v1.5 — V1 quality gate & team pilot
@@ -692,7 +692,7 @@ The weekly caselist run (pull, import, publish, parse, search index) runs in the
 | [The weekly run logs each stage as it starts and ends, so a run can be read while it runs](plan_specs/v1/e40-cloud-caselist-run/t43-weekly-run-logs-each-stage.yaml) `v1-e40-t43-weekly-run-logs-each-stage` | Succeeded | 1 | 3.0 |
 | [A scheduled pull refuses to run when the bucket's run log shows a run started within the last hours](plan_specs/v1/e40-cloud-caselist-run/t44-a-scheduled-run-refuses-a-second-run-within-hours.yaml) `v1-e40-t44-a-scheduled-run-refuses-a-second-run-within-hours` | Pending | 1 | 2.0 |
 | [The run lock tells a test when a writer starts waiting, so the shared-renewal test is not a thread race](plan_specs/v1/e40-cloud-caselist-run/t45-run-lock-offers-a-test-hook-when-a-writer-waits.yaml) `v1-e40-t45-run-lock-offers-a-test-hook-when-a-writer-waits` | Pending | 1 | 1.0 |
-| [A backfile with no directory at the running parser version is named](plan_specs/v1/e40-cloud-caselist-run/t46-a-backfile-without-the-running-parsers-directory-is-named.yaml) `v1-e40-t46-a-backfile-without-the-running-parsers-directory-is-named` | Pending | 1 | 1.0 |
+| [A backfile with no directory at the running parser version is named](plan_specs/v1/e40-cloud-caselist-run/t46-a-backfile-without-the-running-parsers-directory-is-named.yaml) `v1-e40-t46-a-backfile-without-the-running-parsers-directory-is-named` | Succeeded | 1 | 1.0 |
 | [Prod receives each backfile once, by hand, before the run's home moves](plan_specs/v1/e40-cloud-caselist-run/t47-prods-one-time-backfile-publish.yaml) `v1-e40-t47-prods-one-time-backfile-publish` | Pending | 2 | 2.0 |
 
 #### [E41 — Delivery Tooling Upkeep](plan_specs/v1/e41-delivery-tooling-upkeep/epic.yaml)

@@ -606,13 +606,19 @@ def main() -> None:
     started = time.perf_counter()
     with holder.lease() as search:
         loaded = time.perf_counter() - started
-        print(f"first lease (load) {loaded:.2f} s; VmHWM {status_kib('VmHWM')} KiB, VmRSS {status_kib('VmRSS')} KiB")
+        print(
+            f"first lease (load) {loaded:.2f} s; VmHWM {status_kib('VmHWM')} KiB, VmRSS {status_kib('VmRSS')} KiB"
+        )
         for query in QUERIES:
             t0 = time.perf_counter()
             page = search.search(query)
-            count = (f"{page.count.matches}{'+' if page.count.capped else ''}" if page.count is not None else None)
-            print(f"search {len(query.split())}-word query: {round((time.perf_counter() - t0) * 1000)} ms, "
-                  f"{len(page.hits)} hits on the page, counted {count if count is not None else 'n/a'}")
+            count = (
+                f"{page.count.matches}{'+' if page.count.capped else ''}" if page.count is not None else None
+            )
+            print(
+                f"search {len(query.split())}-word query: {round((time.perf_counter() - t0) * 1000)} ms, "
+                f"{len(page.hits)} hits on the page, counted {count if count is not None else 'n/a'}"
+            )
     print(f"after searches: VmHWM {status_kib('VmHWM')} KiB, VmRSS {status_kib('VmRSS')} KiB")
     print(f"cgroup memory.peak {cgroup('memory.peak')} bytes, memory.max {cgroup('memory.max')}")
     print(f"oom events {cgroup('memory.events').replace(chr(10), ', ')}")

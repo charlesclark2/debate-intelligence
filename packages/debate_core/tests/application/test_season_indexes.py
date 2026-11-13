@@ -248,7 +248,7 @@ def test_a_cart_of_several_indexes_leases_the_current_one_first_then_each_season
         CardKey(SEASON_B, "b2" + "0" * 62),
     )
 
-    screened = download_service(log)._screen(keys)
+    screened = download_service(log)._screen(keys)  # pyright: ignore[reportPrivateUsage]
 
     assert screened.sources == (
         (SEASON_B, SEASON_B),

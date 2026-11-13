@@ -73,6 +73,11 @@ class S3SearchIndexSource:
         self._client = client if client is not None else build_s3_client(region=region)
         self._pointer_key = validate_object_key(pointer_key)
 
+    @property
+    def pointer_key(self) -> str:
+        """The pointer :meth:`read_pointer` reads."""
+        return self._pointer_key
+
     def read_pointer(self, *, if_none_match: str | None) -> PointerRead:
         arguments: dict[str, Any] = {"Bucket": self._bucket, "Key": self._pointer_key}
         if if_none_match is not None:

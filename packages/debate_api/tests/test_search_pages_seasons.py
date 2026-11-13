@@ -20,6 +20,7 @@ import pytest
 from debate_core.application.ports.suppression import ReasonCode, SuppressionAction, SuppressionEntry
 from debate_core.application.season_indexes import season_pointer_key
 from debate_core.domain.search_index import SEARCH_INDEX_POINTER_KEY
+from debate_core.integrations.s3 import S3SearchIndexSource
 
 SEASON_A: Final = "hsxx25"
 SEASON_B: Final = "hsyy24"
@@ -319,8 +320,11 @@ def test_the_functions_container_gives_each_season_its_pointer_its_own_directory
     holder = services.seasons._holder_for(SEASON_A)
 
     assert services.seasons.offered == (SEASON_A, SEASON_B)
-    assert holder._source._pointer_key == season_pointer_key(SEASON_A)
-    assert services.search_index._source._pointer_key == SEARCH_INDEX_POINTER_KEY
+    season_source, current_source = holder._source, services.search_index._source
+    assert isinstance(season_source, S3SearchIndexSource)
+    assert isinstance(current_source, S3SearchIndexSource)
+    assert season_source.pointer_key == season_pointer_key(SEASON_A)
+    assert current_source.pointer_key == SEARCH_INDEX_POINTER_KEY
     assert holder._suppression_source is services.search_index._suppression_source
     assert holder._directory == tmp_path / container.SEASON_DIRECTORY_NAME
     assert services.search_index._directory == tmp_path / container.INDEX_DIRECTORY_NAME

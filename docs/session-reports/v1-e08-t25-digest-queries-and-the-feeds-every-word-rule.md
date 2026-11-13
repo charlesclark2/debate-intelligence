@@ -22,30 +22,32 @@ The task is done in three steps.
   [`config/daily_templates.yaml`](../../config/daily_templates.yaml), and never the taxonomy's. The
   file holds the ruled four: `bill Congress`, `Senate Congress`, `Senate Republicans`,
   `Senate election`. These are unchanged: `search`, the feed provider's every-word rule, and all 456
-  coach-reviewed templates (now pinned by test). A pair with no digest templates asks the preset's
-  query alone, and the digest names that group. That covers the `nhi` preset today. 34 tests were
-  shown failing against a skeleton first, and 4 planted breaks were caught by the guard tests.
+  coach-reviewed templates (now pinned by test). By the PM's ruling C (2026-11-12), a pair with no
+  digest templates asks the taxonomy's templates exactly as on dev, and the digest names that group
+  under its heading. Today that is each of the `nhi` preset's pairs, pinned to the eight queries
+  dev's own code asks. So the change reaches only the politics preset. The tests were shown failing
+  first against a skeleton (34 red) and then against the query-alone build (8 red). Seven planted
+  breaks were caught.
 * **The date default (ac3), as ruled before the stop.** With no `--date`, a digest covers the 24 hours
   before the run and is dated in `daily.time_zone`, which is America/Chicago.
 
 Every criterion passes, so the Goal is **Succeeded**. One operator follow-up waits for the merge: one
-real `daily politics` on a dev build that carries this change. For the PM, look first at the `nhi`
-consequence of the fallback (Decisions 9 and the question below).
+real `daily politics` on a dev build that carries this change.
 
 ## Plan nodes
 
 | Node | Status | Notes |
 |---|---|---|
-| `digest-queries-and-the-feeds-every-word` (Digest queries) | DONE | In order: the measurement script; the date default (ac3); the operator's counts and the proposal; the PM's ruling of 2026-11-12; the digest templates (ac2). The node's test command passes after ac2 (below). |
+| `digest-queries-and-the-feeds-every-word` (Digest queries) | DONE | In order: the measurement script; the date default (ac3); the operator's counts and the proposal; the PM's ruling of 2026-11-12; the digest templates (ac2); the PM's ruling C on the fallback. The node's test command passes after both (below). |
 
 ## Acceptance criteria
 
 | Criterion | Status | Evidence (command → result) |
 |---|---|---|
 | ac1: the operator's real digest counts are recorded, and the PM rules on the proposal before any code (operator) | PASS | The operator ran the Operator follow-ups block on 2026-11-12T23:21Z (build 1.1.0.dev413, 4 of 4 feeds read, exit 0). The counts for all four strategies and both windows are under [Measured counts](#measured-counts-2026-11-12), and the whole output is in the appendix. The proposal is [Proposal from the counts](#proposal-from-the-counts). The PM ruled for option A on 2026-11-12, and the PM records the ruling. No query code came before the ruling: the first ac2 commit is `eada0db`, after it. Before the run I checked the script offline from `$HOME` against four made-up items and worked the counts out by hand. |
-| ac2: the ruled change holds, by tests on fixtures shown failing first | PASS | **Red** (`eada0db`, the skeleton): the stage still asked the taxonomy's templates, the loader and the checks refused nothing, and no group fell back. `pytest -n 0 --tb=line` over `test_digest_service.py`, `test_digest_templates.py`, `test_feeds.py`, `test_daily_command.py` and `tests/scripts/test_stamp_build.py` gave **34 failed, 233 passed**. Every failure was an assertion or a "did not raise". Examples: `assert ['bill vote c…ot pass', …] == ['bill Congre…ate election']` (daily asks the digest templates); `assert {'Congress sp…on risk', …} == {'health insurance'}` (nhi asks its query alone); `DID NOT RAISE DigestTemplateError` for each refused template, pair and query; the hand-written 17th and 18th digests, `'… 10 queries\n' == '… 4 queries\n'`. **Green** (`864aa74`): the same files gave **267 passed**. **Guards**, which hold before and after the change by design, were shown failing on a planted break each, every break restored from HEAD: (1) `search` given the digest stage → `test_search_still_asks_the_taxonomys_uniqueness_templates` failed, `['Senate Cong… Republicans'] == ['Senate vote…ill not pass']`; (2) one reviewed template edited (`will not pass` → `won't pass`) → `test_every_coach_reviewed_template_is_byte_for_byte_as_it_was` and `test_the_uniqueness_templates_daily_used_to_ask_are_unchanged_for_search` failed; (3) the every-word rule loosened to any word → 3 cases of `test_a_digest_templates_two_words_are_both_required_by_the_same_every_word_rule` failed; (4) a group with no templates falling back silently to the taxonomy → 5 tests failed, the two core fallback tests and three nhi CLI tests. The ruling's six points and their tests: digest templates asked, `test_daily_asks_the_digest_templates_and_none_of_the_taxonomys_uniqueness_templates`, `test_a_digest_asks_its_templates_ids_and_none_of_the_taxonomys`; `search` unchanged, `test_search_still_asks…`; every-word unchanged, `test_a_digest_templates_two_words_are_both_required…`; reviewed templates pinned, `test_every_coach_reviewed_template_is_byte_for_byte_as_it_was` (35 arguments, 456 templates, sha256); groups apart, `test_the_two_groups_list_what_their_own_templates_found_and_nothing_twice`; the stated fallback, `test_a_pair_with_no_digest_templates_asks_its_query_alone_and_says_so`, `test_with_no_digest_templates_at_all…`, `test_a_group_with_no_digest_templates_asks_its_query_alone_and_the_digest_says_so`. |
+| ac2: the ruled change holds, by tests on fixtures shown failing first | PASS | **First ruling, red** (`eada0db`, a skeleton whose stage still asked the taxonomy's templates and whose loader and checks refused nothing): `pytest -n 0 --tb=line` over `test_digest_service.py`, `test_digest_templates.py`, `test_feeds.py`, `test_daily_command.py` and `tests/scripts/test_stamp_build.py` gave **34 failed, 233 passed**, every failure an assertion or a "did not raise". For example, `assert ['bill vote c…ot pass', …] == ['bill Congre…ate election']`, `DID NOT RAISE DigestTemplateError`, and `'… 10 queries\n' == '… 4 queries\n'`. **Green** (`864aa74`): **267 passed**. **Ruling C (the fallback), red against the query-alone build** (`472642f`; the rename `8ef037a` and the `asks_taxonomy` alias changed no behaviour): over `test_digest_service.py`, `test_digest_templates.py` and `test_daily_command.py`, **8 failed, 105 passed**, every one an assertion. Examples: `assert ['health insu…th insurance'] == ['health insu…thy now', …]` (nhi asks dev's eight queries); `assert [('Spending D…s', True, [])] == …` (nhi's three groups kept apart); `assert ['bill', 'bill'] == ['bill vote c…ion forecast']`. **Green** (`08c1c5c`): **270 passed** over the five files. **The pins come from dev, not from this branch.** The eight nhi queries were recorded by running dev's own code at 5c71e42 in a scratch worktree, which was then removed: `health insurance federal spending debate Congress`, `Congress spending restraint health insurance`, `states lead health insurance policy`, `health insurance state innovation federalism`, `health insurance clean federal and state separation now`, `health insurance federalism healthy now`, `health insurance economic growth forecast`, `health insurance recession risk`. The three groups and GovInfo's "8 of 8 queries" are dev's own hand-written expectations, restored. The core list is dev's `test_every_query_is_the_pairs_expansion_asked_inside_the_window`. **Planted breaks, each restored from HEAD:** (1) `search` given the digest stage → `test_search_still_asks_the_taxonomys_uniqueness_templates` failed; (2) one reviewed template edited → the two pin tests failed; (3) the every-word rule loosened to any word → 3 cases failed; (4) a no-template group falling back silently → 5 failed (under the first ruling); (5) **the named line dropped** → `test_an_nhi_pair_with_no_digest_templates_asks_the_taxonomys_templates_as_on_dev_and_says_so` failed; (6) **a fallback to the query alone** → 8 failed, the same 8 as the red run; (7) a pair with digest templates also asking the taxonomy's → 20 failed. **Tests for each point:** digest templates only for politics, `test_daily_asks_the_digest_templates_and_none_of_the_taxonomys_uniqueness_templates` and `test_a_pair_with_digest_templates_never_also_asks_the_taxonomys`; `search` unchanged, `test_search_still_asks…`; every-word unchanged, `test_a_digest_templates_two_words_are_both_required…`; reviewed templates pinned, `test_every_coach_reviewed_template_is_byte_for_byte_as_it_was` (35 arguments, 456 templates, sha256); groups apart, `test_the_two_groups_list_what_their_own_templates_found_and_nothing_twice` and the nhi groups; the fallback asks the taxonomy's and is named, `test_an_nhi_pair_with_no_digest_templates_asks_the_taxonomys_templates_as_on_dev_and_says_so`, `test_a_pair_with_no_digest_templates_asks_the_taxonomys_templates_and_says_so`, `test_with_no_digest_templates_at_all_every_pair_asks_as_it_did_before` and `test_the_nhi_presets_pairs_have_none_and_ask_the_taxonomys_templates`, with `test_a_politics_digest_carries_no_such_line` for the converse. |
 | ac3: a digest run with no `--date` covers the ruled hours, not the UTC date's, by tests on an injected clock shown failing first | PASS | **Red** (commits `5a9c1b5` and `1a77ae4`): the tests ran against a skeleton with the new API that still took the UTC date and whole UTC days, and an unvalidated `daily.time_zone`. `pytest -n 0 --tb=line` over `test_digest_service.py`, `test_daily_command.py`, `test_settings.py` and `test_settings_environments.py` gave **23 failed, 162 passed**. Every failure was on an assertion, for example `assert datetime.date(2026, 11, 12) == datetime.date(2026, 11, 11)` (23:00 Chicago), `assert ['politics-2026-09-18.json'] == ['politics-2026-09-17.json']` (Los Angeles), `'- Window: … (1 day, UTC)' == '- Window: …fore the run)'` (07:00 Chicago), and `DID NOT RAISE ConfigurationError` (each unknown zone). The 3-day CLI test first crashed with FileNotFoundError; I changed it to assert the file list first, and it then failed on `['politics-2026-09-18.md'] == ['politics-2026-09-17.md']`. **Green** (`1049ff1`): **192 passed**. **Mutants**: (a) the CLI hard-codes Chicago instead of reading the setting: caught by the Los Angeles case; (b) a 24-hour window whatever `--window` says: caught in core and in the CLI. The four cases asked for: 23:00 Chicago (2026-11-11, 05:00Z to 05:00Z), 07:00 Chicago, both changeover days (1 November, when the clocks fall back, and 8 March, when they spring forward), and a non-default zone (Los Angeles and Tokyo). With ac2 the CLI cases' expected items changed with the fixtures (B, I, C), and they still pass. |
-| Node: "Digest queries tests pass" (`uv run pytest packages/debate_core/tests packages/debate_cli/tests -k "digest or feed"`) | PASS | `.venv/bin/python scripts/hard_stop.py 115 .venv/bin/python -m pytest -q packages/debate_core/tests packages/debate_cli/tests -k "digest or feed" -m "not slow and not live"` after ac2 → **545 passed in 41.77 s**, exit 0. |
+| Node: "Digest queries tests pass" (`uv run pytest packages/debate_core/tests packages/debate_cli/tests -k "digest or feed"`) | PASS | `.venv/bin/python scripts/hard_stop.py 115 .venv/bin/python -m pytest -q packages/debate_core/tests packages/debate_cli/tests -k "digest or feed" -m "not slow and not live"` after ruling C → **548 passed in 34.25 s**, exit 0. |
 
 ### Checks before the report
 
@@ -67,7 +69,7 @@ consequence of the fallback (Decisions 9 and the question below).
     `test_factory.py`);
   * `tests/scripts/test_stamp_build.py`.
 
-  Result: `pytest -q -n 6 -m "not slow and not live"` → **1496 passed in 44.94 s**.
+  Result, after ruling C: `pytest -q -n 6 -m "not slow and not live"` → **1499 passed in 37.50 s**.
 * `packages/debate_core/tests/application` as a whole did not finish inside 115 seconds earlier in
   the session (`hard_stop` exit 124), so it is in CI's whole selection.
 * `uv run ruff format --check .` → `2077 files already formatted`. `uv run ruff check .` → `All checks
@@ -163,15 +165,15 @@ this run. Few `polling` or `forecast` items is what the calendar predicts, which
 * **The digest templates (ac2).**
   * `config/daily_templates.yaml` (new): the ruled four, each with its measured counts as a comment.
   * `packages/debate_core/src/debate_core/application/digest_templates.py` (new): the file's model,
-    the loader, the checks against the taxonomy and the presets, `queries_for` with the fallback, and
-    `DigestExpansionStage`.
+    the loader, the checks against the taxonomy and the presets, `queries_for` and `asks_taxonomy`, and
+    `DigestExpansionStage`, which hands a pair with no group to the taxonomy's `QueryExpansionStage`.
   * `digest_service.py`: `DigestService` takes the templates, skips a search no template is for, gives
     each group `asked_taxonomy_templates`, and gains `planned_searches()`.
   * `container.py`: `daily_templates()`, and daily's federated search built with the digest stage.
     `search` keeps the taxonomy's stage.
   * `daily.py`: the progress line counts the planned searches; the docstring.
-  * `daily_presenter.py`: the note under a group that asked its query alone, and `asked_taxonomy_templates`
-    in the JSON group.
+  * `daily_presenter.py`: the note under a group that asked the taxonomy's templates, and
+    `asked_taxonomy_templates` in the JSON group.
   * `config/daily_presets.yaml`: its header comment.
 * **The date default (ac3).**
   * `digest_service.py`: `DigestRequest.before_the_run()` and `bounds()`, `DigestWindow.span`, and
@@ -185,8 +187,8 @@ this run. Few `polling` or `forecast` items is what the calendar predicts, which
 * **The measurement.** `scripts/count_digest_feed_matches.py` (new). It now counts the committed
   digest templates and any `--candidate`, counts only.
 * **Tests.**
-  * `test_digest_templates.py` (new, 23 cases).
-  * `test_digest_service.py`: the world asks test-written digest templates; 4 new ac2 tests and 12
+  * `test_digest_templates.py` (new, 24 cases).
+  * `test_digest_service.py`: the world asks test-written digest templates; 5 new ac2 tests and 12
     ac3 tests.
   * `test_feeds.py`: 1 test over 6 cases.
   * `test_daily_command.py`: 6 new ac2 tests (8 cases) and 6 ac3 tests, with the expectations
@@ -252,16 +254,20 @@ this run. Few `polling` or `forecast` items is what the calendar predicts, which
    Republicans` and `bill election` kept nothing. A pair whose group has no template for a query runs
    no search for it: midterms DA x `bill`. The politics digest asks 4 queries in 3 searches. It used
    to ask 10 in 4.
-9. **The fallback is "its query alone, named"**, which is one of the two the ruling offered. A pair
-   with no group asks the preset's query alone. It is recorded as
-   `digest/<argument>/<need>/query-alone`, and the digest says under the group's heading that its
-   searches asked the preset's queries alone. It never asks the taxonomy's templates. I chose this
-   over "none asked and named" because of `nhi`, all of whose pairs have no group: with none asked,
-   every `nhi` digest would ask no provider and exit 1 without writing anything. The cost is real
-   too. The three `nhi` searches all ask `health insurance`, of OpenAlex, Crossref, the feeds and the
-   government sources, so their results are listed once, under the spending DA group, and the other
-   two groups stay empty. Before this, `nhi` asked the reviewed spending, federalism and economy
-   templates. The PM question below asks about this.
+9. **The fallback is the PM's ruling C (2026-11-12): the taxonomy's templates, named.** A pair with no
+   digest templates asks the taxonomy's uniqueness templates exactly as before this task. The digest
+   stage hands that search to the taxonomy's own `QueryExpansionStage`, the one `search` uses. Under
+   the group's heading the digest says "No digest templates for this pair in
+   config/daily_templates.yaml: its searches asked the taxonomy's templates."; the JSON group carries
+   `asked_taxonomy_templates: true`. The ruling's change therefore reaches only pairs with digest
+   templates, today the politics preset's.
+
+   **Rejected:** (A) the preset's query alone, named, which I had built first. Under it, `nhi`'s
+   three groups collapsed into one bare `health insurance` search. (B) none asked, named. Under it,
+   the season's main topic would have had no digest. The PM's reason: the every-word rule is the feed
+   provider's alone, and `nhi`'s reviewed templates were doing work against OpenAlex, Crossref and the
+   government sources. The PM also said the earlier list of two fallbacks was too narrow, and that
+   this is the PM's to own.
 10. **A template is the query and one word, enforced.** The file refuses anything else when it
     loads: three words, the query alone, a filled query, the query twice. That keeps the measured
     rule from drifting back to long queries.
@@ -355,10 +361,8 @@ if env | grep -q '^DEBATE_'; then echo "STOP: DEBATE_ overrides are set in this 
 
 ## Follow-up work
 
-* **Digest templates for `nhi` (E08).** Its three pairs ask `health insurance` alone and collapse into
-  one group (Decisions 9). The script counts `nhi`'s feed candidates: `count_digest_feed_matches.py nhi
-  --candidate "spending-da/uniqueness={query} spending"`. It does not count what OpenAlex, Crossref or
-  the government sources would return, so a template's worth on those providers is not measured.
+* **`nhi`'s feeds under the every-word rule.** Whether they are starved can be counted with the
+  script (`count_digest_feed_matches.py nhi`) before any `nhi` digest template is proposed.
 * **Re-measure the midterms templates after the season turns.** The 2026-11-12 counts came nine days
   after the midterms. `{query} polls` and `{query} midterms` kept nothing then, and may not later.
 * **`daily` by a scheduler.** If the coach ever schedules `daily`, the scheduled run's time decides
@@ -366,35 +370,8 @@ if env | grep -q '^DEBATE_'; then echo "STOP: DEBATE_ overrides are set in this 
 
 ### Questions for the PM
 
-````text
-PM question from v1-e08-t25 (digest queries), session of 2026-11-12, after your rulings. Built as
-ruled, every criterion passes, and the Goal is Succeeded; this one question changes one rule if you
-answer B.
-
-1. The fallback for a pair with no digest templates, which you asked me to state. I chose "its query
-   alone, named": the search asks the preset's query alone, and the digest says so under the group's
-   heading. It never asks the taxonomy's templates. Today that is every pair of the nhi preset: its
-   spending, federalism and economy DA searches each ask "health insurance" alone, of OpenAlex,
-   Crossref, the feeds and the government sources. What they find is listed once, under the spending
-   DA group, and the other two groups are empty. Before, nhi asked the reviewed templates for each
-   pair.
-   Options:
-   (A) As built: nhi keeps producing a digest, named as asking its query alone, until nhi gets digest
-       templates of its own.
-   (B) None asked and named: a pair with no digest templates asks nothing, and the digest names it.
-       Every nhi digest then asks no provider, exits 1 and writes nothing until it has templates.
-   Recommendation: A, and a follow-up task for nhi's digest templates, counted with the script for
-   the feeds. The script does not count OpenAlex or Crossref, so those would be unmeasured.
-
-FYI, as built:
-- The ruled four are exactly four: a template's `queries` names the preset queries it is asked for,
-  so bill Republicans and bill election (0 / 0) are not asked, and midterms DA x bill runs no search.
-  The politics digest now asks 4 queries in 3 searches (it asked 10 in 4).
-- scripts/stamp_build.py and its test bundle config/daily_templates.yaml into published builds, which
-  is two more paths outside constraints.packages (Deviations 2).
-- The post-merge operator follow-up block is in the report: one real `daily politics` with no --date,
-  writing only to a Desktop scratch folder. It stops while any debate-research command is running.
-````
+None open. The PM's rulings of 2026-11-12 are built as given: A for the queries, C for the fallback,
+and A for the once-only replacement of a UTC-dated file.
 
 ## Appendix: the operator's output, 2026-11-12
 

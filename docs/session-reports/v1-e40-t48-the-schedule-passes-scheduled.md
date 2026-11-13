@@ -372,7 +372,7 @@ Download stays on. `the image parses at <new> and dev's function at <old>` is a 
 function is not deployed with the image, which would turn Download off until the run: the run's index
 is still the old version until then. It is deployed at the new version the day after the image's
 first run records its index
-([A new image with a new parser version](#a-new-image-with-a-new-parser-version)). A `STOP` line stops this section: do not replace the digest line. Deploy dev's function as the line
+([A new image with a new parser version](../runbooks/caselist-cloud-run.md#a-new-image-with-a-new-parser-version)). A `STOP` line stops this section: do not replace the digest line. Deploy dev's function as the line
 says, run this block again, and go on only after `OK`. A failed `aws` call prints its own error and
 no `OK`. For prod at the promotion the same check reads `debate-prod-tub`.
 

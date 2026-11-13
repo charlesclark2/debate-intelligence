@@ -271,7 +271,24 @@ def _refuse_a_scheduled_pull_it_cannot_guard(
     nothing to guard, `--publish-pending` lists and fetches nothing, and local mode keeps no bucket run
     log to read. The PM's ruling 2, 2026-11-12.
     """
-    return
+    if dry_run:
+        raise typer.BadParameter(
+            "--scheduled is the weekly schedule's whole run, and a dry run takes nothing to guard; pass one "
+            "or the other",
+            param_hint="--scheduled",
+        )
+    if publish_pending:
+        raise typer.BadParameter(
+            "--scheduled is the weekly schedule's whole run, and --publish-pending lists and fetches "
+            "nothing; pass one or the other",
+            param_hint="--scheduled",
+        )
+    if not bucket_mode:
+        raise typer.BadParameter(
+            "--scheduled refuses after a run the bucket's run log records, and only bucket mode keeps the "
+            'bucket\'s run log (caselist.run_state = "bucket"); this environment is in local mode',
+            param_hint="--scheduled",
+        )
 
 
 class ConflictingPullMode(typer.BadParameter):

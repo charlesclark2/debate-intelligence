@@ -277,6 +277,25 @@ def test_a_backfile_import_is_not_a_weekly_run_and_leaves_the_run_log_alone(
     assert world.object_keys("reports/sync-runs/") == runs_before
 
 
+def test_a_backfile_import_writes_no_record_a_scheduled_pull_counts(
+    backfiles: tuple[World, Site], tmp_path: Path
+) -> None:
+    """The PM's ruling 3 of 2026-11-12 for `v1-e40-t44`: only `caselist pull` runs count, and a backfile
+    import writes no record to the bucket's run log, the one a scheduled pull reads. So a scheduled pull
+    straight after an import runs, whatever the no-import window keeps them apart by. The Mac's pull the
+    fixture seeded started 27 hours before this Thursday, outside the guard's 24."""
+    world, _ = backfiles
+    run_log = "reports/sync/state/caselist-sync-runs.jsonl"
+    logged_before = world.body(run_log)
+
+    assert execute(world)["exit_code"] == ExitCode.OK
+
+    assert world.body(run_log) == logged_before, "the import added no record to the bucket's run log"
+    world.use(tmp_path / "wednesday-task")
+    scheduled = world.pull("--scheduled")
+    assert scheduled["exit_code"] == ExitCode.OK, scheduled
+
+
 def occurrence_table(world: World) -> str:
     [occurrences] = [
         key for key in world.object_keys(f"parsed/{BACKFILE}/") if key.endswith("/occurrences.jsonl")

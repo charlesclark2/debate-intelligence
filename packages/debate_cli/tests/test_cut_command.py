@@ -897,3 +897,83 @@ def test_a_paste_stored_again_with_other_cite_options_is_cut_with_exactly_those(
         f"Brannigan 26 [Teodor Brannigan; September 14, 2026; {NEWS_CANONICAL}; accessed October 26, 2026; "
         f"user-supplied text] {PASTED_CITE_MARKS}"
     ), "the newest copy's fields alone: no title or publication carried over, the URL path's date"
+
+
+# --------------------------------------------------------------------------------------------
+# A stated year or month: printed and exported at its precision in every profile (v1-e06-t13)
+# --------------------------------------------------------------------------------------------
+
+STATED_BEFORE_THE_DATE: Final = (
+    'Mara Okonkwo-Lindqvist and Teodor Brannigan; "Mammoth Money and the Elephants Left Waiting"; '
+    "The Synthetic Science Weekly"
+)
+STATED_AFTER_THE_DATE: Final = f"{NEWS_CANONICAL}; accessed October 26, 2026; user-supplied text"
+DATED_CITES: Final = {
+    "2025": f"Okonkwo-Lindqvist et al. 25 [{STATED_BEFORE_THE_DATE}; 2025; {STATED_AFTER_THE_DATE}]",
+    "2024-11": (
+        f"Okonkwo-Lindqvist et al. 24 [{STATED_BEFORE_THE_DATE}; November 2024; {STATED_AFTER_THE_DATE}]"
+    ),
+    "2026-09-15": STATED_FULL_CITE,
+}
+"""The cite for `STATED_OPTIONS` with each `--date`, written by hand. A year prints as the year alone and a
+month as its name and year, never a day; the short cite's two digits are the year at any precision. The
+day is t12's cite unchanged. Every committed profile prints the same text: a profile sizes the cite and
+never words it (`config/format_profiles/`)."""
+DATED_PRECISIONS: Final = {"2025": "year", "2024-11": "month", "2026-09-15": None}
+DATED_VALUES: Final = {
+    "2025": "2025-01-01T00:00:00Z",
+    "2024-11": "2024-11-01T00:00:00Z",
+    "2026-09-15": "2026-09-15T00:00:00Z",
+}
+
+
+def stating_date(date_text: str) -> tuple[str, ...]:
+    """`STATED_OPTIONS` with `date_text` as the `--date`."""
+    options: list[str] = list(STATED_OPTIONS)
+    options[options.index("--date") + 1] = date_text
+    return tuple(options)
+
+
+@pytest.mark.parametrize("profile", ["team-default", "flow", "plain"])
+@pytest.mark.parametrize("date_text", list(DATED_CITES), ids=["year", "month", "day"])
+def test_a_stated_year_month_or_day_date_prints_at_its_precision_in_every_profiles_docx(
+    seams: Seams, out: Path, tmp_path: Path, profile: str, date_text: str
+) -> None:
+    paste_stating(NEWS_URL, tmp_path, *stating_date(date_text))
+
+    result = cut_pasted(NEWS_URL, out, "--format", profile)
+
+    assert result.exit_code == ExitCode.CARD_UNVERIFIED, result.output
+    assert cite_paragraph(out) == f"{DATED_CITES[date_text]} {PASTED_CITE_MARKS}"
+    assert embedded_manifest(out)["cards"][0]["format_profile"] == profile
+
+
+@pytest.mark.parametrize("date_text", list(DATED_CITES), ids=["year", "month", "day"])
+def test_a_stated_date_is_stored_on_the_card_and_in_its_manifest_at_its_precision(
+    seams: Seams, data_dir: Path, out: Path, tmp_path: Path, date_text: str
+) -> None:
+    paste_stating(NEWS_URL, tmp_path, *stating_date(date_text))
+
+    assert cut_pasted(NEWS_URL, out).exit_code == ExitCode.CARD_UNVERIFIED
+
+    [card] = stored_cards(data_dir)
+    [embedded] = embedded_manifest(out)["cards"]
+    for recorded in (card, embedded):
+        citation = recorded["citation"]
+        assert citation["published_at"]["value"] == DATED_VALUES[date_text]
+        assert citation["published_at"]["raw"] == date_text
+        assert citation.get("published_at_precision") == DATED_PRECISIONS[date_text]
+        assert "published_at_precision" in citation or DATED_PRECISIONS[date_text] is None
+
+
+def test_verify_finds_a_card_with_a_stated_year_unverified_for_its_cite_alone(
+    seams: Seams, out: Path, tmp_path: Path
+) -> None:
+    paste_stating(NEWS_URL, tmp_path, *stating_date("2025"))
+    assert cut_pasted(NEWS_URL, out).exit_code == ExitCode.CARD_UNVERIFIED
+
+    result = runner.invoke(create_app(), ["--json", "verify", str(out)])
+
+    assert result.exit_code == ExitCode.DOMAIN_FAILURE, result.output
+    [card] = envelope(result)["error"]["details"]["cards"]
+    assert (card["status"], card["reason_codes"]) == ("UNVERIFIED", ["CITATION_UNVERIFIED"])

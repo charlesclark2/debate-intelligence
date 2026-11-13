@@ -470,19 +470,21 @@ With `--paste`, `--title`, `--author` (once per author, in order), `--date` and 
 the copy's cite (`v1-e06-t12`), because a pasted copy has no markup to read one from. They are stored
 with the copy, never as verified, and `cut URL --from-paste` cites the card with them. The card stays
 UNVERIFIED for its cite (`CITATION_UNVERIFIED`), as a card cut from text a user supplied always is,
-and the cite marks each field `[… unverified]`. The date is a full date, `YYYY-MM-DD`; a year alone or a
-year and month is refused. A person sees the stored fields as `Stated …` rows, and `--json` as the
+and the cite marks each field `[… unverified]`. The date is a year (`2026`), a month (`2026-09`) or
+a day (`2026-09-14`), and the cite prints it at that precision, `2026`, `September 2026` or
+`September 14, 2026`, never completing it to a day (`v1-e06-t13`); any other form is refused. A person sees the stored fields as `Stated …` rows, and `--json` as the
 snapshot's `stated_cite`. Storing the same text again with none of these options, or with the same
 ones, reuses the stored copy and its fields. With other options it stores a new copy holding exactly
 the fields that command states, nothing carried over, so restate `--title` when you add `--author`.
 A copy stored with stated cite fields needs this build or later: an older build cannot read its
-record.
+record. A year or a month date needs a build from `v1-e06-t13` on, for the copy and for every card cut
+from it: an older build refuses those records rather than reading the date as the first of January.
 
 | Exit | Means |
 |---|---|
 | `0` | ACCESSIBLE and stored (or answered by a recent stored snapshot), or pasted text stored as USER_SUPPLIED. |
 | `1` | Refused, nothing stored: not a source URL, pasted text not attested, or pasted text rejected (blank, too short, too large). |
-| `2` | A usage error, for example `--paste` without `--source-url`, a URL and `--paste` together, a cite option without `--paste` or with an empty value, or a `--date` that is not `YYYY-MM-DD`. |
+| `2` | A usage error, for example `--paste` without `--source-url`, a URL and `--paste` together, a cite option without `--paste` or with an empty value, or a `--date` that is not `YYYY`, `YYYY-MM` or `YYYY-MM-DD`. |
 | `3` | PAYWALLED, BLOCKED, ROBOTS_DISALLOWED, NOT_FOUND, UNSUPPORTED_TYPE or ERROR (`SOURCE_NOT_ACCESSIBLE`), or the fetcher could not run. No snapshot is stored. |
 
 ## `debate-research cut`

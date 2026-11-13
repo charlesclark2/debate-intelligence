@@ -33,8 +33,9 @@ from debate_core.domain.citation import (
     STATED_CITATION_FIELDS,
     Citation,
     CitationField,
+    period_start,
 )
-from debate_core.domain.enums import AccessStatus, ProvenanceMode, SourceType
+from debate_core.domain.enums import AccessStatus, DatePrecision, ProvenanceMode, SourceType
 
 __all__ = ["Article", "ArticleIdentifiers", "SourceSnapshot"]
 
@@ -132,6 +133,16 @@ class Article(DomainEntity):
     published_at: UtcDatetime | None = Field(
         default=None, description="Publication timestamp in UTC; None when the source states no date."
     )
+    date_precision: DatePrecision = Field(
+        default=DatePrecision.DAY,
+        exclude_if=lambda precision: precision is DatePrecision.DAY,
+        description=(
+            "How much of `published_at` is known (`v1-e06-t13`): `year` and `month` mean it is the first "
+            "instant of that year or month, as a discovery provider stated it, and no day is known. `day`, "
+            "the default, is what every Article stored before this field held, and is left out of the "
+            "stored record."
+        ),
+    )
     source_type: SourceType = Field(
         default=SourceType.OTHER,
         description="Descriptive category of the publication, never a quality score.",
@@ -142,6 +153,20 @@ class Article(DomainEntity):
     identifiers: ArticleIdentifiers = Field(
         default_factory=ArticleIdentifiers, description="External identifiers used for deduplication."
     )
+
+    @model_validator(mode="after")
+    def _check_date_precision(self) -> Self:
+        precision, published = self.date_precision, self.published_at
+        if precision is DatePrecision.DAY:
+            return self
+        if published is None:
+            raise ValueError(f"an Article with no date cannot give it a {precision.value} precision")
+        if published != (start := period_start(published, precision)):
+            raise ValueError(
+                f"a {precision.value}-precision published_at is the first instant of its {precision.value}, "
+                f"{start.isoformat()}, not {published.isoformat()}"
+            )
+        return self
 
 
 class SourceSnapshot(DomainEntity):

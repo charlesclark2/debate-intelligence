@@ -34,6 +34,7 @@ from debate_core.application.errors import ProviderUnavailable
 from debate_core.application.settings import ArticleSettings
 from debate_core.application.snapshot_service import SnapshotService
 from debate_core.domain import AccessStatus, CitationFieldSource, ProvenanceMode
+from debate_core.domain.enums import DatePrecision
 from debate_core.retrieval.fetch_types import (
     FetchResult,
     RobotsDisallowed,
@@ -619,8 +620,6 @@ def test_paste_with_an_empty_cite_option_is_a_usage_error_and_stores_nothing(
 @pytest.mark.parametrize(
     "stated",
     [
-        "2026",
-        "2026-08",
         "August 30, 2026",
         "2026-8-30",
         "2026/08/30",
@@ -629,14 +628,102 @@ def test_paste_with_an_empty_cite_option_is_a_usage_error_and_stores_nothing(
         "2026-08-30T10:00",
     ],
 )
-def test_paste_with_a_date_that_is_not_yyyy_mm_dd_is_a_usage_error_naming_the_form(
+def test_paste_with_a_date_in_another_form_is_a_usage_error_naming_the_forms_it_may_take(
+    world: World, tmp_path: Path, stated: str
+) -> None:
+    """`2026` and `2026-08` were refused until `v1-e06-t13`; they are a year and a month now."""
+    result = paste_stating(tmp_path, "--date", stated, json_output=False)
+
+    assert result.exit_code == ExitCode.USAGE_ERROR, result.output
+    assert "YYYY, YYYY-MM or YYYY-MM-DD" in " ".join(result.stderr.replace("│", " ").split())
+    assert world.snapshot_count() == 0
+
+
+# --------------------------------------------------------------------------------------------
+# --date as a year or a month: stored at that precision, never completed to a day (v1-e06-t13)
+# --------------------------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("stated", "moment", "precision", "reported"),
+    [
+        (
+            "2026",
+            datetime(2026, 1, 1, tzinfo=UTC),
+            DatePrecision.YEAR,
+            {"published_at": "2026", "date_precision": "year"},
+        ),
+        (
+            "2026-08",
+            datetime(2026, 8, 1, tzinfo=UTC),
+            DatePrecision.MONTH,
+            {"published_at": "2026-08", "date_precision": "month"},
+        ),
+        ("2026-08-30", datetime(2026, 8, 30, tzinfo=UTC), DatePrecision.DAY, {"published_at": "2026-08-30"}),
+    ],
+    ids=["year", "month", "day"],
+)
+def test_paste_with_a_year_month_or_day_date_stores_and_reports_it_at_that_precision(
+    world: World,
+    tmp_path: Path,
+    stated: str,
+    moment: datetime,
+    precision: DatePrecision,
+    reported: dict[str, str],
+) -> None:
+    result = paste_stating(tmp_path, "--date", stated)
+
+    assert result.exit_code == ExitCode.OK, result.output
+    document = envelope(result)
+    assert document["data"]["snapshot"]["stated_cite"] == {
+        "authors": [],
+        "title": None,
+        "publication": None,
+        **reported,
+    }
+    assert violations(FETCH_RESULT_SCHEMA_FILENAME, document) == []
+    [stored] = stored_snapshots(world)
+    citation = stored.stated_citation
+    assert citation is not None
+    assert (citation.published_at.value, citation.published_at.raw, citation.published_at_precision) == (
+        moment,
+        stated,
+        precision,
+    )
+    assert (citation.published_at.source, citation.published_at.verified) == (
+        CitationFieldSource.HEURISTIC,
+        False,
+    )
+
+
+@pytest.mark.parametrize(
+    ("stated", "shown"), [("2026", "2026"), ("2026-08", "2026-08")], ids=["year", "month"]
+)
+def test_paste_with_a_year_or_a_month_date_prints_it_as_stated(
+    world: World, tmp_path: Path, stated: str, shown: str
+) -> None:
+    result = paste_stating(tmp_path, "--date", stated, json_output=False)
+
+    assert result.exit_code == ExitCode.OK, result.output
+    assert f"Stated date {shown} " in " ".join(result.stdout.replace("│", " ").split()) + " "
+
+
+@pytest.mark.parametrize("stated", ["2026-13", "2026-00", "0000", "2026-8", "26", "2026-08-", "August 2026"])
+def test_paste_with_a_year_or_month_date_that_is_no_date_is_a_usage_error_naming_the_forms(
     world: World, tmp_path: Path, stated: str
 ) -> None:
     result = paste_stating(tmp_path, "--date", stated, json_output=False)
 
     assert result.exit_code == ExitCode.USAGE_ERROR, result.output
-    assert "YYYY-MM-DD" in result.stderr
+    assert "YYYY, YYYY-MM or YYYY-MM-DD" in " ".join(result.stderr.replace("│", " ").split())
     assert world.snapshot_count() == 0
+
+
+def test_the_fetch_help_names_the_three_forms_a_date_may_take() -> None:
+    result = invoke("fetch", "--help")
+
+    assert result.exit_code == ExitCode.OK
+    assert "YYYY, YYYY-MM or YYYY-MM-DD" in " ".join(result.stdout.replace("│", " ").split())
 
 
 def test_paste_cite_options_are_stored_stripped(world: World, tmp_path: Path) -> None:

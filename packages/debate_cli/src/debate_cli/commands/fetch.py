@@ -34,7 +34,8 @@ or with `--i-have-lawful-access` anywhere else (with `--json`, when the text com
 stdin is not a terminal). A run that can neither prompt nor was given the flag stores nothing and
 exits 1.
 
-With `--paste`, `--title`, `--author` (once per author, in order), `--date` (`YYYY-MM-DD`) and
+With `--paste`, `--title`, `--author` (once per author, in order), `--date` (`YYYY`, `YYYY-MM` or
+`YYYY-MM-DD`, kept at that precision and never completed to a day, `v1-e06-t13`) and
 `--publication` state the copy's cite fields (`v1-e06-t12`). They are stored with the copy,
 unverified, and a card cut from it is cited with them; it stays UNVERIFIED for its cite, as text a
 user supplied always is. Any of them without `--paste`, an empty value, or a date in another form is
@@ -130,7 +131,10 @@ def fetch(
     ] = None,
     published_on: Annotated[
         str | None,
-        typer.Option("--date", help="With --paste: the date the article was published, YYYY-MM-DD."),
+        typer.Option(
+            "--date",
+            help="With --paste: the date the article was published, YYYY, YYYY-MM or YYYY-MM-DD.",
+        ),
     ] = None,
     publication: Annotated[
         str | None,
@@ -150,7 +154,7 @@ def fetch(
     Exit codes:
     0  ACCESSIBLE and stored, or pasted text stored as USER_SUPPLIED
     1  refused, nothing stored: not a source URL, or pasted text not attested or rejected
-    2  usage error, for example --paste without --source-url, or a --date not YYYY-MM-DD
+    2  usage error, for example --paste without --source-url, or a --date not YYYY, YYYY-MM or YYYY-MM-DD
     3  PAYWALLED, BLOCKED, ROBOTS_DISALLOWED, NOT_FOUND, UNSUPPORTED_TYPE or ERROR; no snapshot stored
     """
     cli = cli_context(ctx)

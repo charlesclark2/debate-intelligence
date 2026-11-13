@@ -13,6 +13,7 @@ from debate_core.domain import (
     CitationField,
     CitationFieldSource,
 )
+from debate_core.domain.enums import DatePrecision
 
 
 def verified_citation() -> Citation:
@@ -150,3 +151,70 @@ def test_citation_round_trips_through_json() -> None:
         ),
     )
     assert Citation.model_validate_json(citation.model_dump_json()) == citation
+
+
+# --------------------------------------------------------------------------------------------
+# The publication date's precision (v1-e06-t13)
+# --------------------------------------------------------------------------------------------
+
+
+def dated_cite(moment: datetime | None, precision: DatePrecision) -> Citation:
+    published = (
+        CitationField[datetime](value=moment, source=CitationFieldSource.CROSSREF, verified=True)
+        if moment is not None
+        else CitationField[datetime]()
+    )
+    return Citation(published_at=published, published_at_precision=precision)
+
+
+def test_a_cite_dates_to_the_day_unless_it_says_otherwise() -> None:
+    assert Citation().published_at_precision is DatePrecision.DAY
+    assert verified_citation().published_at_precision is DatePrecision.DAY
+
+
+@pytest.mark.parametrize(
+    ("moment", "precision"),
+    [
+        (datetime(2021, 1, 1, tzinfo=UTC), DatePrecision.YEAR),
+        (datetime(2021, 3, 1, tzinfo=UTC), DatePrecision.MONTH),
+        (datetime(2021, 3, 4, 17, 30, tzinfo=UTC), DatePrecision.DAY),
+    ],
+    ids=["year", "month", "day"],
+)
+def test_a_year_or_month_date_is_the_first_instant_of_its_period(
+    moment: datetime, precision: DatePrecision
+) -> None:
+    assert dated_cite(moment, precision).published_at_precision is precision
+
+
+@pytest.mark.parametrize(
+    ("moment", "precision"),
+    [
+        (datetime(2021, 3, 4, tzinfo=UTC), DatePrecision.YEAR),
+        (datetime(2021, 3, 1, tzinfo=UTC), DatePrecision.YEAR),
+        (datetime(2021, 3, 4, tzinfo=UTC), DatePrecision.MONTH),
+        (datetime(2021, 3, 1, 9, tzinfo=UTC), DatePrecision.MONTH),
+    ],
+    ids=["a day as a year", "a month as a year", "a day as a month", "a time as a month"],
+)
+def test_a_date_that_names_more_than_its_precision_is_refused(
+    moment: datetime, precision: DatePrecision
+) -> None:
+    with pytest.raises(ValidationError, match="first instant of its"):
+        dated_cite(moment, precision)
+
+
+@pytest.mark.parametrize("precision", [DatePrecision.YEAR, DatePrecision.MONTH])
+def test_a_cite_with_no_date_has_no_year_or_month_precision(precision: DatePrecision) -> None:
+    with pytest.raises(ValidationError, match="no publication date"):
+        dated_cite(None, precision)
+
+
+def test_a_day_precision_is_left_out_of_the_record_and_a_year_or_month_written_beside_the_date() -> None:
+    day = dated_cite(datetime(2021, 3, 4, tzinfo=UTC), DatePrecision.DAY)
+    year = dated_cite(datetime(2021, 1, 1, tzinfo=UTC), DatePrecision.YEAR)
+
+    assert "published_at_precision" not in day.model_dump()
+    assert year.model_dump()["published_at_precision"] == "year"
+    assert Citation.model_validate_json(year.model_dump_json()) == year
+    assert Citation.model_validate_json(day.model_dump_json()) == day

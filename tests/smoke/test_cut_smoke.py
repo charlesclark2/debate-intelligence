@@ -20,11 +20,13 @@ from __future__ import annotations
 
 import asyncio
 import gc
+import io
 import json
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Final
 
+import docx
 import pytest
 from tests.fixtures.card.card_world import MODEL_OUTPUTS, NEWS_ARGUMENT, NEWS_NEED, page_bytes, paragraphs_of
 from tests.fixtures.citation.citation_world import load_case
@@ -467,3 +469,68 @@ def test_cut_from_paste_cites_the_fields_stated_at_fetch_paste_unverified_offlin
     assert isinstance(verified, dict)
     [verdict] = verified["details"]["cards"]
     assert (verdict["status"], verdict["reason_codes"]) == ("UNVERIFIED", ["CITATION_UNVERIFIED"])
+
+
+# --------------------------------------------------------------------------------------------
+# A stated year: stored, cited and exported as a year, never a day (v1-e06-t13)
+# --------------------------------------------------------------------------------------------
+
+
+def test_cut_from_paste_cites_a_stated_year_as_a_year_offline(installed_cli: InstalledCli) -> None:
+    """The build's own `fetch --paste --date 2025` stores a year; its `cut --from-paste` prints "2025" in
+    the .docx cite where the URL's path names a day, and the card's manifest keeps the year's precision."""
+    pasted = installed_cli.workdir / "library-copy.txt"
+    pasted.write_text("\n\n".join(paragraphs_of("news-article")), encoding="utf-8")
+    stored = installed_cli.run(
+        "--json",
+        "fetch",
+        "--paste",
+        str(pasted),
+        "--source-url",
+        NEWS_URL,
+        "--i-have-lawful-access",
+        "--date",
+        "2025",
+    )
+    assert stored.exit_code == ExitCode.OK, stored.output
+    data = stored.envelope()["data"]
+    assert isinstance(data, dict)
+    assert data["snapshot"]["stated_cite"] == {
+        "authors": [],
+        "title": None,
+        "publication": None,
+        "published_at": "2025",
+        "date_precision": "year",
+    }
+    assert len(_plant_cassettes(installed_cli.data_dir)) == 2
+    out = installed_cli.workdir / "evidence.docx"
+
+    cut = installed_cli.run(
+        "--json",
+        "cut",
+        NEWS_URL,
+        "--from-paste",
+        "--need",
+        NEWS_NEED,
+        "--argument",
+        NEWS_ARGUMENT,
+        "--output",
+        str(out),
+    )
+
+    assert cut.exit_code == ExitCode.CARD_UNVERIFIED, cut.output
+    [card] = json.loads(read_embedded_manifest_bytes(out))["cards"]
+    published = card["citation"]["published_at"]
+    assert (published["value"], published["raw"], published["source"], published["verified"]) == (
+        "2025-01-01T00:00:00Z",
+        "2025",
+        "heuristic",
+        False,
+    )
+    assert card["citation"]["published_at_precision"] == "year"
+    cite = docx.Document(io.BytesIO(out.read_bytes())).paragraphs[2].text
+    assert cite.startswith(
+        "[no author] 25 [2025; "
+        "https://www.dailymeridian.example/science/2026/09/14/mammoth-revival-years-away; accessed "
+    ), cite
+    assert "September 14" not in cite

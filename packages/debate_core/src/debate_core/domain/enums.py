@@ -23,6 +23,7 @@ from enum import StrEnum
 __all__ = [
     "AccessStatus",
     "CitationFieldSource",
+    "DatePrecision",
     "ProvenanceMode",
     "SearchStatus",
     "SourceType",
@@ -154,6 +155,20 @@ class SearchStatus(StrEnum):
 
     FAILED = "FAILED"
     """No provider returned results."""
+
+
+class DatePrecision(StrEnum):
+    """How much of a publication date is known (v1-e07-t03; on an Article and a cite, v1-e06-t13).
+
+    Crossref deposits dates as `[year]`, `[year, month]` or `[year, month, day]`, and a user may state
+    a year or a month alone. A date known only to its year or month is stored at the first instant of
+    that period, and its precision says so, so nothing downstream reads an invented day. A precision is
+    never raised: a year stays a year.
+    """
+
+    DAY = "day"
+    MONTH = "month"
+    YEAR = "year"
 
 
 class CitationFieldSource(StrEnum):

@@ -47,6 +47,7 @@ from debate_core.application.article_service import (
 from debate_core.application.errors import ProviderUnavailable, error_code_of_class
 from debate_core.application.snapshot_service import SnapshotService
 from debate_core.domain import AccessStatus, ArticleIdentifiers, Citation, ProvenanceMode
+from debate_core.domain.enums import DatePrecision
 from debate_core.domain.schema_export import JSON_SCHEMA_DIALECT
 from debate_core.retrieval.access import AccessEvidence
 
@@ -83,6 +84,10 @@ class Closeable(Protocol):
     async def aclose(self) -> None: ...
 
 
+_DATE_LENGTHS: Final = {DatePrecision.DAY: 10, DatePrecision.MONTH: 7, DatePrecision.YEAR: 4}
+"""How much of `YYYY-MM-DD` a date at each precision states."""
+
+
 class StatedCite(BaseModel):
     """The cite fields a user stated for a pasted copy, as stored (`v1-e06-t12`); none is verified."""
 
@@ -91,16 +96,32 @@ class StatedCite(BaseModel):
     authors: tuple[str, ...] = Field(description="The authors stated, in order; empty when none were.")
     title: str | None
     publication: str | None
-    published_at: str | None = Field(description="The date stated, YYYY-MM-DD; null when none was.")
+    published_at: str | None = Field(
+        description=(
+            "The date stated, at its precision: YYYY-MM-DD, YYYY-MM or YYYY (`v1-e06-t13`); "
+            "null when none was."
+        )
+    )
+    date_precision: DatePrecision | None = Field(
+        default=None,
+        exclude_if=lambda value: value is None,
+        description=(
+            "`month` or `year` for a date stated without a day (`v1-e06-t13`); absent for a day, as before, "
+            "and when no date was stated."
+        ),
+    )
 
     @classmethod
     def of(cls, stated: Citation) -> StatedCite:
-        published = stated.published_at.value
+        published, precision = stated.published_at.value, stated.published_at_precision
+        day = published.astimezone(UTC).date().isoformat() if published is not None else None
+        partial = published is not None and precision is not DatePrecision.DAY
         return cls(
             authors=stated.authors.value or (),
             title=stated.title.value,
             publication=stated.publication.value,
-            published_at=published.astimezone(UTC).date().isoformat() if published is not None else None,
+            published_at=day[: _DATE_LENGTHS[precision]] if day is not None else None,
+            date_precision=precision if partial else None,
         )
 
 

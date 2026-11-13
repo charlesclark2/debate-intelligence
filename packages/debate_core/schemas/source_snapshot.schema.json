@@ -40,6 +40,11 @@
           "$ref": "#/$defs/CitationField_Annotated_datetime__AfterValidator__",
           "description": "Publication date, in UTC."
         },
+        "published_at_precision": {
+          "$ref": "#/$defs/DatePrecision",
+          "default": "day",
+          "description": "How much of `published_at` its source states (`v1-e06-t13`). `year` and `month` mean the date is the first instant of that year or month and no day is known; `day`, the default, is what every cite stored before this field held, and is left out of the stored record."
+        },
         "canonical_url": {
           "$ref": "#/$defs/CitationField_str_",
           "description": "Canonical URL of the source."
@@ -218,6 +223,16 @@
       },
       "title": "CitationField[tuple[Annotated[str, StringConstraints], ...]]",
       "type": "object"
+    },
+    "DatePrecision": {
+      "description": "How much of a publication date is known (v1-e07-t03; on an Article and a cite, v1-e06-t13).\n\nCrossref deposits dates as `[year]`, `[year, month]` or `[year, month, day]`, and a user may state\na year or a month alone. A date known only to its year or month is stored at the first instant of\nthat period, and its precision says so, so nothing downstream reads an invented day. A precision is\nnever raised: a year stays a year.",
+      "enum": [
+        "day",
+        "month",
+        "year"
+      ],
+      "title": "DatePrecision",
+      "type": "string"
     },
     "ProvenanceMode": {
       "description": "Where a snapshot's or card's text came from.\n\nThis travels from the snapshot onto every card cut from it, so a reader can always tell\npublisher-retrieved evidence from text a person supplied.",

@@ -4,17 +4,19 @@ Every part of a citation is a :class:`CitationField`: the value, where it was ha
 whether that source counts as verification. Nothing here is ever filled in by a model. If a
 publication date cannot be found, the field stays missing and the export shows the gap, because a
 plausible-looking invented date is exactly the failure this platform exists to prevent
-(architecture proposal §8).
+(architecture proposal §8). For the same reason a date known only to its year or month is kept at
+that precision (:attr:`Citation.published_at_precision`, `v1-e06-t13`), never completed to a day.
 """
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from typing import Self
 
 from pydantic import Field, model_validator
 
 from debate_core.domain.base import DomainModel, NonEmptyText, UtcDatetime
-from debate_core.domain.enums import CitationFieldSource
+from debate_core.domain.enums import CitationFieldSource, DatePrecision
 
 __all__ = [
     "CITATION_FIELD_NAMES",
@@ -22,6 +24,7 @@ __all__ = [
     "STATED_CITATION_FIELDS",
     "Citation",
     "CitationField",
+    "period_start",
 ]
 
 #: The fields a cite must have verified before a card can be presented as finished evidence.
@@ -42,6 +45,16 @@ CITATION_FIELD_NAMES = (
 
 #: The cite fields a user may state for a copy they supplied (`v1-e06-t12`), in cite order.
 STATED_CITATION_FIELDS = ("authors", "title", "publication", "published_at")
+
+
+def period_start(moment: datetime, precision: DatePrecision) -> datetime:
+    """The first instant, in UTC, of the day, month or year `moment` falls in, by its UTC calendar."""
+    at = moment.astimezone(UTC)
+    if precision is DatePrecision.YEAR:
+        return datetime(at.year, 1, 1, tzinfo=UTC)
+    if precision is DatePrecision.MONTH:
+        return datetime(at.year, at.month, 1, tzinfo=UTC)
+    return datetime(at.year, at.month, at.day, tzinfo=UTC)
 
 
 class CitationField[CitationValueT](DomainModel):
@@ -112,6 +125,15 @@ class Citation(DomainModel):
     published_at: CitationField[UtcDatetime] = Field(
         default_factory=CitationField[UtcDatetime], description="Publication date, in UTC."
     )
+    published_at_precision: DatePrecision = Field(
+        default=DatePrecision.DAY,
+        exclude_if=lambda precision: precision is DatePrecision.DAY,
+        description=(
+            "How much of `published_at` its source states (`v1-e06-t13`). `year` and `month` mean the date "
+            "is the first instant of that year or month and no day is known; `day`, the default, is what "
+            "every cite stored before this field held, and is left out of the stored record."
+        ),
+    )
     canonical_url: CitationField[str] = Field(
         default_factory=CitationField[str], description="Canonical URL of the source."
     )
@@ -141,6 +163,21 @@ class Citation(DomainModel):
             raise ValueError(f"not cite fields: {', '.join(unknown)}")
         if list(self.cleared_by_student) != [n for n in CITATION_FIELD_NAMES if n in self.cleared_by_student]:
             raise ValueError("cleared fields are listed once each, in cite order")
+        return self
+
+    @model_validator(mode="after")
+    def _check_date_precision(self) -> Self:
+        precision, published = self.published_at_precision, self.published_at.value
+        if precision is DatePrecision.DAY:
+            return self
+        if published is None:
+            raise ValueError(f"a cite with no publication date cannot give it a {precision.value} precision")
+        start = period_start(published, precision)
+        if published != start:
+            raise ValueError(
+                f"a {precision.value}-precision published_at is the first instant of its {precision.value}, "
+                f"{start.isoformat()}, not {published.isoformat()}"
+            )
         return self
 
     @model_validator(mode="after")

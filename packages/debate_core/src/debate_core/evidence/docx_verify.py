@@ -410,7 +410,7 @@ def _anchors_shown_inside_words(card: Card, cuts: Sequence[int], body_text: str)
             continue
         before = re.escape(card.evidence_text[word.start : item.anchor])
         after = re.escape(card.evidence_text[item.anchor : word.end])
-        if re.search(rf"(?<![^\W_]){before}\[[^\[\]]*\]{after}(?![^\W_])", body_text):
+        if re.search(rf"{before}\[[^\[\]]*\]{after}", body_text):
             shown.append(item.anchor)
     return shown
 

@@ -1633,6 +1633,7 @@ def test_hidden_cut_a_marker_taken_out_at_a_punctuation_join(
     assert comparison == BodyComparison(
         manual_edits=(), interpolations=(), deletions=(), hidden_cuts=(HiddenCut(*hidden),)
     )
+    assert not comparison.follows_the_policy
 
 
 def test_hidden_cut_every_marker_taken_out_is_one_hidden_cut_each(marker_card: VerifiedExport) -> None:

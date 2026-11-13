@@ -167,6 +167,30 @@ rows read, 459,285 occurrences, 166,394 provenance rows, none suppressed, no clu
 2,088 left out as no card (1,684 cite only, 404 with no cite and under 25 words). SQLite
 1,043,304,448 bytes, gzip 387,288,605; 1,446,481,920 bytes on disk for the folder.
 
+**Build 2, current plus the four backfiles**, 2026-11-12 20:52:13 to 21:46:38 Chicago; load average
+4.13 / 6.40 / 7.41 before it. Exit 0, 3,265.52 s real (2,165.38 user, 549.86 sys), maximum resident
+set 4,440,457,216 bytes, peak memory footprint 4,588,392,384. Index `8eae91e2afa36c1d`: 237,146
+documents, 173,441 more than build 1 (hspolicy25 53,883, hsld25 37,009, hspolicy24 48,414, hsld24
+34,135; the current stores' counts unchanged), 210,533 distinct card clusters, 2,003,222 occurrence
+rows read, 1,976,129 occurrences, 629,312 provenance rows, none suppressed, no cluster left out;
+9,733 left out as no card (8,404 cite only, 1,329 with no cite and under 25 words). SQLite
+3,973,885,952 bytes, gzip 1,462,856,642; 5,450,915,840 bytes on disk for the folder.
+
+**What the current seasons already hold**, counted over build 2 and the copy's occurrence tables
+(5.6 s). The current seasons keep 60,503 cluster ids, over 465,001 rows and 87,885 distinct exact
+fingerprints. A backfile cluster is "new" when its id is no current document's, or when none of its
+cards' exact fingerprints appears in a current row; every cluster new by fingerprint is new by id
+too, so "lacked by both" is the fingerprint count. Exact matches only: a card re-cut between seasons
+counts as new.
+
+| Backfile | Documents | Rows | New by cluster id | New by exact fingerprint |
+|---|---|---|---|---|
+| hspolicy25 | 53,883 | 438,613 | 49,452 | 47,451 |
+| hsld25 | 37,009 | 369,330 | 33,254 | 31,457 |
+| hspolicy24 | 48,414 | 364,501 | 45,273 | 43,665 |
+| hsld24 | 34,135 | 365,777 | 31,999 | 30,734 |
+| All four, distinct ids | 173,441 | 1,538,221 | 150,030 | 144,372 |
+
 ## Operator follow-ups
 
 <!-- Commands the operator must run (anything over ~2 minutes), with where to run them, the exact

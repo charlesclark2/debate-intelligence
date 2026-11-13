@@ -55,6 +55,7 @@ from debate_core.evidence.docx_reader import UnreadableDocument, read_document_b
 from debate_core.evidence.docx_renderer import render_cards_docx
 from debate_core.evidence.docx_verify import (
     BodyCard,
+    BodyComparison,
     BodyInterpolation,
     BodyParagraph,
     CharacterRange,
@@ -550,8 +551,8 @@ def test_diff_text_the_card_itself_brackets_is_quoted_text_not_an_interpolation(
 #   "never " 61-67 (116-122), "don't " 105-111 (160-166).
 # The omission holds "nothing", a negating word no body deletion removes, so a check that read the
 # snapshot between a deletion's ends, instead of the words the deletion took out, would warn for it.
-# "have" keeps "never" off the word right after the cut: deleting that word reads as a MANUAL_EDIT
-# (t07's diff ties two edit scripts there; the session report's follow-ups), which is not this test's.
+# "have" keeps "never" off the word right after the cut. Until `v1-e06-t15` deleting the word after
+# the word right after a cut read as a MANUAL_EDIT; that node's tests pin deletions beside a marker.
 
 NEGATION_SOURCE: Final = (
     "Engineers met on Tuesday. The levee will not hold another spring flood. Officials said nothing new. "
@@ -567,34 +568,50 @@ SOURCE_WORDS: Final = ("levee", "never", "don't", "Inspectors", "residents", "pu
 
 
 @dataclass(frozen=True)
-class NegationExport:
+class VerifiedExport:
     world: VerificationWorld
     card: Card
     document: bytes
 
 
-def negation_export(card_of: Callable[[Card], Card] = lambda card: card) -> NegationExport:
-    """The invented card, VERIFIED, changed by ``card_of`` and exported to a .docx in the team profile."""
+def verified_export(
+    source_text: str,
+    ranges: tuple[tuple[int, int], ...],
+    evidence: str,
+    card_of: Callable[[Card], Card] = lambda card: card,
+) -> VerifiedExport:
+    """A card cut from ``ranges`` of an invented source, VERIFIED, changed by ``card_of`` and exported to
+    a .docx in the team profile. ``evidence`` is its hand-written ``evidence_text``."""
     world = VerificationWorld()
-    source = world.add_source(NEGATION_SOURCE)
-    card, result = run(world.verifier.verify_and_record(world.cut_card_from_ranges(source, NEGATION_RANGES)))
-    assert (result.status, card.evidence_text) == (VerificationStatus.VERIFIED, NEGATION_EVIDENCE)
+    source = world.add_source(source_text)
+    card, result = run(world.verifier.verify_and_record(world.cut_card_from_ranges(source, ranges)))
+    assert (result.status, card.evidence_text) == (VerificationStatus.VERIFIED, evidence)
     card = card_of(card)
     exporter = ExportService(
         articles=world.articles, clock=FixedClock(EXPORTED_AT), render_docx=render_cards_docx
     )
-    return NegationExport(world, card, run(exporter.export_docx([card], profile=TEAM_DEFAULT)))
+    return VerifiedExport(world, card, run(exporter.export_docx([card], profile=TEAM_DEFAULT)))
+
+
+def negation_export(card_of: Callable[[Card], Card] = lambda card: card) -> VerifiedExport:
+    """The invented negation card, VERIFIED, changed by ``card_of`` and exported."""
+    return verified_export(NEGATION_SOURCE, NEGATION_RANGES, NEGATION_EVIDENCE, card_of)
 
 
 @pytest.fixture(scope="module")
-def negation_card() -> NegationExport:
+def negation_card() -> VerifiedExport:
     return negation_export()
 
 
-def negation_verdict(
-    export: NegationExport, *changes: Callable[[Document], None], world: VerificationWorld | None = None
+def docx_verdict(
+    export: VerifiedExport,
+    *changes: Callable[[Document], None],
+    world: VerificationWorld | None = None,
+    source_words: tuple[str, ...] = SOURCE_WORDS,
 ) -> dict[str, Any]:
-    """The one card's verdict on ``export`` changed by each of ``changes``, as `verify --json` gives it."""
+    """The one card's verdict on ``export`` changed by each of ``changes``, as `verify --json` gives it.
+
+    ``source_words`` are words of the card's source that the report may not quote."""
     document = export.document
     for change in changes:
         document = edited(document, change)
@@ -607,7 +624,7 @@ def negation_verdict(
     report = run(use_case.verify(document)).model_dump(mode="json")
     [verdict] = report["cards"]
     text = json.dumps(report)
-    assert not [word for word in SOURCE_WORDS if word in text], "the report quotes the evidence"
+    assert not [word for word in source_words if word in text], "the report quotes the evidence"
     return verdict
 
 
@@ -635,32 +652,32 @@ def is_verified_without_reasons(verdict: dict[str, Any]) -> bool:
     ],
 )
 def test_negation_a_deletion_that_removes_not_is_a_warning_with_its_ranges_on_a_verified_card(
-    negation_card: NegationExport,
+    negation_card: VerifiedExport,
     replacement: str,
     evidence_range: tuple[int, int],
     snapshot_range: tuple[int, int],
 ) -> None:
     """Typing the marker over "not " keeps the space after it, so the deletion is "not" alone."""
-    verdict = negation_verdict(negation_card, replace_in_evidence("not ", replacement))
+    verdict = docx_verdict(negation_card, replace_in_evidence("not ", replacement))
 
     assert is_verified_without_reasons(verdict)
     assert negation_warnings(verdict) == [("NEGATION_REMOVED", evidence_range, snapshot_range)]
 
 
 def test_negation_a_deletion_that_removes_no_negating_word_gives_no_warning(
-    negation_card: NegationExport,
+    negation_card: VerifiedExport,
 ) -> None:
-    verdict = negation_verdict(negation_card, replace_in_evidence("another ", ""))
+    verdict = docx_verdict(negation_card, replace_in_evidence("another ", ""))
 
     assert is_verified_without_reasons(verdict)
     assert "warnings" not in verdict
 
 
 def test_negation_kept_while_the_words_either_side_of_it_are_cut_gives_no_warning(
-    negation_card: NegationExport,
+    negation_card: VerifiedExport,
 ) -> None:
     """ "will " and "hold " go, "not" stays: two deletions, each beside the negation, neither through it."""
-    verdict = negation_verdict(
+    verdict = docx_verdict(
         negation_card, replace_in_evidence("will ", ""), replace_in_evidence("hold ", "")
     )
 
@@ -669,9 +686,9 @@ def test_negation_kept_while_the_words_either_side_of_it_are_cut_gives_no_warnin
 
 
 def test_negation_two_deletions_that_each_remove_one_give_two_warnings_in_body_order(
-    negation_card: NegationExport,
+    negation_card: VerifiedExport,
 ) -> None:
-    verdict = negation_verdict(
+    verdict = docx_verdict(
         negation_card, replace_in_evidence("never ", ""), replace_in_evidence("not ", "")
     )
 
@@ -682,17 +699,17 @@ def test_negation_two_deletions_that_each_remove_one_give_two_warnings_in_body_o
     ]
 
 
-def test_negation_a_contracted_negation_removed_is_a_warning(negation_card: NegationExport) -> None:
+def test_negation_a_contracted_negation_removed_is_a_warning(negation_card: VerifiedExport) -> None:
     """The edit policy counts any word ending in "n't" as a negation (`negation.NEGATION_SUFFIX`)."""
-    verdict = negation_verdict(negation_card, replace_in_evidence("don't ", ""))
+    verdict = docx_verdict(negation_card, replace_in_evidence("don't ", ""))
 
     assert is_verified_without_reasons(verdict)
     assert negation_warnings(verdict) == [("NEGATION_REMOVED", (105, 111), (160, 166))]
 
 
-def test_negation_one_deletion_that_removes_two_is_one_warning(negation_card: NegationExport) -> None:
+def test_negation_one_deletion_that_removes_two_is_one_warning(negation_card: VerifiedExport) -> None:
     """ "never checked the north wall, and residents don't " is one deletion: one warning, its whole range."""
-    verdict = negation_verdict(
+    verdict = docx_verdict(
         negation_card, replace_in_evidence("never checked the north wall, and residents don't ", "")
     )
 
@@ -711,11 +728,11 @@ def across_the_cards_own_cut(document: Document) -> None:
 
 
 def test_negation_a_deletion_across_the_cards_own_cut_reads_only_the_words_it_removed(
-    negation_card: NegationExport,
+    negation_card: VerifiedExport,
 ) -> None:
     """Evidence [32, 56) is snapshot [58, 71) and [100, 111); "nothing", in the omission between, was
     not in the body to remove."""
-    verdict = negation_verdict(negation_card, across_the_cards_own_cut)
+    verdict = docx_verdict(negation_card, across_the_cards_own_cut)
 
     assert is_verified_without_reasons(verdict)
     assert "warnings" not in verdict
@@ -732,11 +749,11 @@ def from_not_to_never_across_the_cut(document: Document) -> None:
 
 
 def test_negation_one_deletion_across_the_cut_with_a_negation_either_side_is_one_warning(
-    negation_card: NegationExport,
+    negation_card: VerifiedExport,
 ) -> None:
     """Evidence [15, 67) is snapshot [41, 71) and [100, 122): "not" in one, "never" in the other, one
     deletion, so one warning, which spans the omission between."""
-    verdict = negation_verdict(negation_card, from_not_to_never_across_the_cut)
+    verdict = docx_verdict(negation_card, from_not_to_never_across_the_cut)
 
     assert is_verified_without_reasons(verdict)
     assert negation_warnings(verdict) == [("NEGATION_REMOVED", (15, 67), (41, 122))]
@@ -754,7 +771,7 @@ def test_negation_is_not_read_where_the_card_does_not_reproduce_its_snapshot() -
         )
     )
 
-    verdict = negation_verdict(tampered, replace_in_evidence("now ", ""))
+    verdict = docx_verdict(tampered, replace_in_evidence("now ", ""))
 
     assert (verdict["status"], verdict["reason_codes"]) == ("UNVERIFIED", ["TEXT_MISMATCH"])
     assert "warnings" not in verdict
@@ -765,15 +782,15 @@ def test_negation_is_not_read_where_the_card_was_cut_from_other_text() -> None:
     not rebuild its evidence at all, so nothing is read at them, even where the words still match."""
     other_text = negation_export(lambda card: card.model_copy(update={"normalized_text_hash": "a" * 64}))
 
-    verdict = negation_verdict(other_text, replace_in_evidence("not ", ""))
+    verdict = docx_verdict(other_text, replace_in_evidence("not ", ""))
 
     assert (verdict["status"], verdict["reason_codes"]) == ("UNVERIFIED", ["HASH_MISMATCH"])
     assert "warnings" not in verdict
 
 
-def test_negation_warnings_and_interpolations_come_in_body_order(negation_card: NegationExport) -> None:
+def test_negation_warnings_and_interpolations_come_in_body_order(negation_card: VerifiedExport) -> None:
     """ "not " goes at evidence 15 and "[drainage]" is read before "pumps", evidence 125."""
-    verdict = negation_verdict(
+    verdict = docx_verdict(
         negation_card,
         replace_in_evidence("new pumps", "new [drainage] pumps"),
         replace_in_evidence("not ", ""),
@@ -794,8 +811,207 @@ def test_negation_warnings_and_interpolations_come_in_body_order(negation_card: 
     ]
 
 
-def test_negation_is_not_read_without_the_cards_snapshot(negation_card: NegationExport) -> None:
-    verdict = negation_verdict(negation_card, replace_in_evidence("not ", ""), world=VerificationWorld())
+def test_negation_is_not_read_without_the_cards_snapshot(negation_card: VerifiedExport) -> None:
+    verdict = docx_verdict(negation_card, replace_in_evidence("not ", ""), world=VerificationWorld())
 
     assert (verdict["status"], verdict["reason_codes"]) == ("UNVERIFIED", ["SNAPSHOT_MISSING"])
     assert "warnings" not in verdict
+
+
+# --------------------------------------------------------------------------------------------
+# Node marker-side deletions (`v1-e06-t15`): a whole-word deletion beside a cut's marker is a deletion
+# --------------------------------------------------------------------------------------------
+#
+# The card here has three cuts, all at sentence ends, so its body shows three markers. It is cut from
+# an invented source, exported by ExportService and changed through python-docx; each test reads the
+# body as `verify` does and checks both the comparison's ranges and the verdict. Offsets, counted by
+# hand from MARKER_SOURCE:
+#
+#   snapshot   0-12    "Levees fail."                                      -> evidence   0-12
+#   snapshot  12-39    " Engineers met on Tuesday. "            cut 1, drawn at evidence 12
+#   snapshot  39-84    "The levee will not hold another spring flood."     -> evidence  12-57
+#   snapshot  84-113   " Officials said nothing new. "          cut 2, drawn at evidence 57
+#   snapshot 113-132   "Repairs never came."                               -> evidence  57-76
+#   snapshot 132-153   " The budget is gone. "                  cut 3, drawn at evidence 76
+#   snapshot 153-186   "Nobody has checked the north wall"                 -> evidence  76-109
+#   snapshot 186-197   " since May."                            after the card
+#
+# so a snapshot offset is the evidence offset plus 0, 27, 56 and 77 in the four pieces, and a body
+# offset is the evidence offset plus 0, 3, 6 and 9 (each marker, " … ", is three characters). Words:
+#   piece 1: "Levees" 0-6, "fail" 7-11, "." 11
+#   piece 2: "The" 12-15, "levee" 16-21, "spring" 44-50, "flood" 51-56, "." 56
+#   piece 3: "Repairs" 57-64, "never" 65-70, "came" 71-75, "." 75   (between two cuts)
+#   piece 4: "Nobody" 76-82, "has" 83-86, "north" 99-104, "wall" 105-109   (the body's last word)
+#
+# Where a space beside a marker can be the card's own space, it is read as the card's: deleting "The "
+# right after cut 1 leaves ". … levee", whose one space after the marker is the card's space after
+# "The", so the deletion is "The" [12, 15). That is how t07 already reads a marker typed over words
+# ("… " over "not " is the deletion "not"), and it keeps every deletion as small as the body allows.
+
+MARKER_SOURCE: Final = (
+    "Levees fail. Engineers met on Tuesday. The levee will not hold another spring flood. "
+    "Officials said nothing new. Repairs never came. The budget is gone. "
+    "Nobody has checked the north wall since May."
+)
+MARKER_RANGES: Final = ((0, 12), (39, 84), (113, 132), (153, 186))
+MARKER_EVIDENCE: Final = (
+    "Levees fail."
+    "The levee will not hold another spring flood."
+    "Repairs never came."
+    "Nobody has checked the north wall"
+)
+MARKER_RENDERED: Final = (
+    "Levees fail. … The levee will not hold another spring flood. … Repairs never came. … "
+    "Nobody has checked the north wall"
+)
+MARKER_SOURCE_WORDS: Final = ("Levees", "levee", "flood", "Repairs", "Nobody", "north", "Officials", "budget")
+
+
+@pytest.fixture(scope="module")
+def marker_card() -> VerifiedExport:
+    export = verified_export(MARKER_SOURCE, MARKER_RANGES, MARKER_EVIDENCE)
+    assert body_of(export.document).cards[0].paragraphs[-1].text == MARKER_RENDERED
+    return export
+
+
+def marker_comparison(export: VerifiedExport, *changes: Callable[[Document], None]) -> BodyComparison:
+    """The body diff of ``export`` changed by each of ``changes``, read as `verify` reads it."""
+    document = export.document
+    for change in changes:
+        document = edited(document, change)
+    [shown] = body_of(document).cards
+    return compare_body(export.card, body_evidence(export.card, shown), MARKER)
+
+
+def marker_verdict(export: VerifiedExport, *changes: Callable[[Document], None]) -> dict[str, Any]:
+    return docx_verdict(export, *changes, source_words=MARKER_SOURCE_WORDS)
+
+
+@pytest.mark.parametrize(
+    ("old", "new", "deletion"),
+    [
+        pytest.param("Levees ", "", (0, 7), id="the-first-word-of-the-body-one-word-before-cut-1"),
+        pytest.param(" fail", "", (6, 11), id="right-before-cut-1"),
+        pytest.param("The levee", "levee", (12, 15), id="right-after-cut-1"),
+        pytest.param("levee ", "", (16, 22), id="one-word-after-cut-1"),
+        pytest.param("spring ", "", (44, 51), id="one-word-before-cut-2"),
+        pytest.param(" flood", "", (50, 56), id="right-before-cut-2"),
+        pytest.param("Repairs ", "", (57, 64), id="right-after-cut-2-between-two-cuts"),
+        pytest.param("never ", "", (65, 71), id="one-word-after-cut-2-and-before-cut-3"),
+        pytest.param(" came", "", (70, 75), id="right-before-cut-3-between-two-cuts"),
+        pytest.param("Repairs never came.", "", (57, 76), id="all-between-two-cuts-leaving-the-markers-together"),
+        pytest.param("Nobody ", "", (76, 82), id="right-after-cut-3"),
+        pytest.param("has ", "", (83, 87), id="one-word-after-cut-3"),
+        pytest.param(" wall", "", (104, 109), id="the-last-word-of-the-body"),
+    ],
+)
+def test_marker_a_whole_word_deleted_beside_a_cut_is_a_deletion_with_its_range(
+    marker_card: VerifiedExport, old: str, new: str, deletion: tuple[int, int]
+) -> None:
+    comparison = marker_comparison(marker_card, replace_in_evidence(old, new))
+
+    assert (comparison.manual_edits, comparison.deletions) == ((), (CharacterRange(*deletion),))
+    assert is_verified_without_reasons(marker_verdict(marker_card, replace_in_evidence(old, new)))
+
+
+def test_marker_deletions_beside_two_different_cuts_are_two_deletions(marker_card: VerifiedExport) -> None:
+    """ "levee " one word after cut 1 and "has " one word after cut 3, in one body."""
+    changes = (replace_in_evidence("levee ", ""), replace_in_evidence("has ", ""))
+
+    comparison = marker_comparison(marker_card, *changes)
+
+    assert (comparison.manual_edits, comparison.deletions) == (
+        (),
+        (CharacterRange(16, 22), CharacterRange(83, 87)),
+    )
+    assert is_verified_without_reasons(marker_verdict(marker_card, *changes))
+
+
+def test_marker_the_second_word_after_the_news_cards_cut_deleted_is_a_deletion(card: Card) -> None:
+    """t07's own reproduction: "biologists " is evidence [121, 132), the second word after the cut at 108.
+    "Conservation " right after the cut is "Conservation" [108, 120), its space read as the marker's."""
+    assert compare_body(card, RENDERED_EVIDENCE.replace("biologists ", "", 1), MARKER).deletions == (
+        CharacterRange(121, 132),
+    )
+    assert compare_body(card, RENDERED_EVIDENCE.replace("Conservation ", "", 1), MARKER).deletions == (
+        CharacterRange(108, 120),
+    )
+
+
+@pytest.mark.parametrize(
+    ("old", "new", "evidence_range", "body_range"),
+    [
+        pytest.param("The levee", "A levee", (12, 15), (15, 16), id="letters-altered-right-after-cut-1"),
+        pytest.param("levee will", "levees will", (16, 21), (19, 25), id="letters-altered-one-word-after-cut-1"),
+        pytest.param(" flood.", " floods.", (51, 56), (54, 60), id="letters-altered-right-before-cut-2"),
+        pytest.param("came.", "come.", (71, 75), (77, 81), id="letters-altered-between-two-cuts"),
+        pytest.param("fail.", "fail again.", (11, 11), (11, 17), id="a-word-added-right-before-cut-1"),
+        pytest.param("Nobody has", "Truly Nobody has", (76, 76), (85, 91), id="a-word-added-right-after-cut-3"),
+        pytest.param("flood.", "flood. Sadly", (57, 57), (60, 66), id="a-word-added-right-before-cut-2"),
+        pytest.param("levee will", "levee levee will", (22, 22), (25, 31), id="a-word-repeated-one-word-after-cut-1"),
+    ],
+)
+def test_marker_a_changed_or_added_word_beside_a_cut_is_a_manual_edit(
+    marker_card: VerifiedExport,
+    old: str,
+    new: str,
+    evidence_range: tuple[int, int],
+    body_range: tuple[int, int],
+) -> None:
+    """Body ranges: "A" 15-16, "levees" 19-25, "floods" 54-60, "come" 77-81; " again" 11-17; "Truly "
+    85-91, after cut 3's marker (82-85) and before "Nobody" (76); " Sadly" 60-66, after "flood." and
+    before cut 2's marker, at evidence 57; the second "levee " 25-31, before "will" (22). The card's own
+    marker beside a changed word is never part of the manual edit's body range."""
+    comparison = marker_comparison(marker_card, replace_in_evidence(old, new))
+
+    assert comparison.manual_edits == (ManualEdit(CharacterRange(*evidence_range), CharacterRange(*body_range)),)
+    assert comparison.deletions == ()
+    verdict = marker_verdict(marker_card, replace_in_evidence(old, new))
+    assert (verdict["status"], verdict["reason_codes"]) == ("UNVERIFIED", ["MANUAL_EDIT"])
+
+
+def test_marker_a_word_moved_across_a_cut_is_a_manual_edit_never_a_deletion(marker_card: VerifiedExport) -> None:
+    """ "The" taken from after cut 1 and typed before its marker: "Levees fail. The … levee will"."""
+    changes = (replace_in_evidence("fail.", "fail. The"), replace_in_evidence("The levee", "levee"))
+
+    comparison = marker_comparison(marker_card, *changes)
+
+    assert comparison.manual_edits != ()
+    assert comparison.deletions == ()
+    verdict = marker_verdict(marker_card, *changes)
+    assert (verdict["status"], verdict["reason_codes"]) == ("UNVERIFIED", ["MANUAL_EDIT"])
+
+
+@pytest.mark.parametrize(
+    ("old", "evidence_range", "snapshot_range"),
+    [
+        pytest.param("never ", (65, 71), (121, 127), id="one-word-after-cut-2"),
+        pytest.param("Nobody ", (76, 82), (153, 159), id="right-after-cut-3"),
+    ],
+)
+def test_marker_a_negation_deleted_beside_a_cut_is_a_warning_on_a_verified_card(
+    marker_card: VerifiedExport,
+    old: str,
+    evidence_range: tuple[int, int],
+    snapshot_range: tuple[int, int],
+) -> None:
+    """ "never" is snapshot [121, 126) and "Nobody" [153, 159); the omission before each holds "nothing",
+    which no deletion here removes."""
+    verdict = marker_verdict(marker_card, replace_in_evidence(old, ""))
+
+    assert is_verified_without_reasons(verdict)
+    assert negation_warnings(verdict) == [("NEGATION_REMOVED", evidence_range, snapshot_range)]
+
+
+def test_marker_an_ellipsis_the_source_itself_prints_is_quoted_text(card: Card) -> None:
+    """A source may print " … " itself; the body's copy is the source's, and a word deleted after it is a
+    deletion. "then " is evidence [14, 19). Only the comparison is under test, so the card's text is
+    swapped without re-cutting it."""
+    text = "Prices rose … then fell sharply."
+    quoted = card.model_copy(update={"evidence_text": text, "omitted_ranges": ()})
+
+    untouched = compare_body(quoted, text, MARKER)
+    deleted = compare_body(quoted, text.replace("then ", "", 1), MARKER)
+
+    assert (untouched.manual_edits, untouched.deletions) == ((), ())
+    assert (deleted.manual_edits, deleted.deletions) == ((), (CharacterRange(14, 19),))

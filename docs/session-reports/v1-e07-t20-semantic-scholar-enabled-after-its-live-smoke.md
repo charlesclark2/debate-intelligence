@@ -897,9 +897,45 @@ Q2. Where may the opt-in be set?
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-11-12 (the resumed session)
 
 **Notes:**
+
+Accepted for a second partial merge (`scripts/task pr --partial`). ac4 passes. The Goal stays
+`InProgress` for ac1 (the smokes), ac2 (the dev profile) and `-k profile`.
+
+* **ac4, checked against the report and the rulings:**
+  * the opt-in is false by default;
+  * only the Semantic Scholar adapter changes scheme;
+  * a redirect from HTTP to HTTPS is a refusal named as such, never followed;
+  * doctor names the opt-in whenever Semantic Scholar is built, and a search names it only when it
+    asked Semantic Scholar (Q1, A);
+  * it may be set wherever a setting may, except a committed profile (Q2, A). The profile pin was shown
+    failing on each of the three profiles in turn, and the session noticed and redid the one plant that
+    failed for the wrong reason (`TOMLDecodeError`);
+  * the per-user file's docstring says why this is the one name there that is not a credential, as
+    ruled.
+* **The evidence handling is right.** The first red run failed mostly because the setting did not
+  exist yet. The session added a skeleton so that the 17 failures came at the behaviour's assertions,
+  turned the `KeyError`/`IndexError` cases into assertions, and recorded both runs. All 15 mutants were
+  caught, including following redirects and the per-user file refusing the opt-in.
+* **The key stays protected in both modes:** never in a URL, a log line or output, pinned through the
+  container.
+* **Deviations 1 to 5: accepted.**
+  * The smoke check sits outside the packages, under agreement 5.
+  * The search guide is the README's search section.
+  * Deviations 3 and 4 are the PM's Q1 and Q2.
+  * Leaving the daily footer unwired is right while no preset asks Semantic Scholar.
+* **The operator blocks are accepted as written,** to run only after the PM's word.
+  * (a1) appends the opt-in line safely: it adds a newline first if the file lacks one, does nothing if
+    the line is already there, and prints only counts and permissions.
+  * (a) stops unless the installed build carries the opt-in and doctor names it.
+  * (b) puts `-q` first, so no `~/.curlrc` header can be read.
+  * Order, after this merge and the install: (a1), (a), then (b). If (a) passes, the session resumes
+    for ac2.
+* **The affected set** is the whole selection (`settings.py`), so it goes to `ci` under agreement 10.
+
+`scripts/task pr --partial`

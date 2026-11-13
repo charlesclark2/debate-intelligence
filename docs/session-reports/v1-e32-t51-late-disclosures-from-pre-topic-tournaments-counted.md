@@ -10,7 +10,7 @@
 
 ## Summary
 
-**Stopped at step 2 of the PM's order of work (2026-11-12): the block is handed over, and the operator runs it when the PM says (third on the copy).**
+**Stopped at step 3 of the PM's order of work (2026-11-12), waiting for the PM's ruling.** The 2026-11-10 count is in: 356 of 1,639 hsld26 disclosures are late (21.7%), and 277 of their 336 sources hold only space colonization words. Both triggers are met. The proposal (Q1 to Q4) is below.
 The counting rule is in `debate_core.application.landscape_late_disclosures`, and
 `scripts/count_late_disclosures.py` prints it as one JSON object of counts. Both are tested on
 synthetic stores (18 tests), shown red against a skeleton that counts nothing (16 of 17 failed), with
@@ -81,6 +81,125 @@ naming the path, and calls that python by its full path, so no other interpreter
 zsh: a `.venv/bin/python` symlink to a missing file stops; a missing worktree stops; the real
 worktree, run from `/tmp` over a synthetic copy, gives `exit 0`. The naming rule is as built (Decision 5).
 
+## The 2026-11-10 count (2026-11-12)
+
+The operator ran the block from this worktree at `b8baeb5`, over v1-e39-t18's copy, after the PM
+released it. Every guard passed: the restore marker was there, the newest hsld26 manifest was
+`2026-11-10.jsonl`, and the parsed version was `2026.11.03-docx-9`. The result was `exit 0` and
+`copy unchanged`, in 6.6 s. The topic was `ld-2026-nov-dec-de-extinction` from its range, which starts
+2026-11-06; `first_seen_through` was 2026-11-03, and the entry spellings were `bluekey` and `fbk`.
+
+| | Count |
+|---|---|
+| Live hsld26 disclosures in the snapshot (sources) | 1,639 (1,512) |
+| Off the topic, naming no tournament | 0, 0 |
+| Under Florida Blue Key's spellings | 34 |
+| **Late** (sources, schools, spellings) | **356** (336, 51, 56) |
+| **Late share** | **21.7%** (356 of 1,639) |
+| Late by first-seen snapshot: 2026-11-03 / 2026-10-27 / 2026-10-20 / earlier | 37 / 28 / 103 / 188 |
+
+The topic-word check, by source (de-extinction words: `de-extinct`; space colonization words:
+`space col`, `coloniz`; in tags and headings):
+
+| Group | De-extinction only | Both | Space only | Neither | Not parsed |
+|---|---|---|---|---|---|
+| Late (336 sources) | 2 | 0 | 277 | 54 | 3 |
+| Florida Blue Key's spellings (33) | 24 | 1 | 2 | 6 | 0 |
+| Other (1,146) | 955 | 49 | 12 | 106 | 24 |
+
+Three sources are disclosed in two groups, so the groups hold 1,515 between them.
+
+**Late spellings.** 22 were named (two or more schools, no hsld26 school or team-code word): 182
+disclosures. 21 one-school spellings (50 disclosures) and 13 spellings holding a school or team-code
+word (124) were counted, not named, as ruled. Of the 22 named, the session judges 8 (44 disclosures)
+to be a school's own name: a host school that does not disclose on hsld26 under that name, so the
+withholding words cannot catch it. They are left out of this report, as v1-e32-t06 left four out (its
+Deviation 3). The output the operator pasted names them. That is the ruled naming rule's gap, and
+Q3 below asks about it. The other 14 named spellings are tournament names with no school in them.
+Two of these are named for the host university, and three for a person who is not a debater.
+
+### The judgement
+
+* **The 5% trigger is met:** 21.7% of the snapshot's disclosures are late, about four times the
+  threshold. 319 of the 356 were first seen two weeks or more before the topic began, so they are
+  not tournaments that straddled the cut.
+* **The check says space colonization files land in de-extinction counts.** Of the late sources, 277
+  of 336 hold only space colonization words and 2 hold only de-extinction words. Of the 279 that hold
+  either topic's words, 277 (99%) are space colonization. Today the landscape report counts all 356
+  as de-extinction rounds. Their headings mostly match no de-extinction position, so they swell its
+  rounds, teams and unclassified share.
+* **Late counts few de-extinction files.** 2 of 336 late sources hold de-extinction words. Among the
+  rest of the week, 955 of 1,146 sources hold only de-extinction words and 12 only space words. So
+  spellings first seen before the topic began separate the two topics far better than a space
+  colonization entry list can, because most late disclosures cannot be listed (below).
+
+## The proposal (2026-11-12, for the PM's ruling)
+
+Kept as sent, with one change: the tournament names and spellings it listed are left out, under the
+PM's Q3 ruling (below).
+
+> Q1. The remedy. Options:
+>   (a) Space colonization tournament entries in topics.yaml, as v1-e32-t06's Decision 1 keeps it: one
+>       per tournament on ld-2026-sep-oct-space-colonization, caselist hsld26, from 2026-11-10 to
+>       2026-12-31 (an older topic's entry may reach forward into a newer range; the loader allows it).
+>       Only spellings two or more schools use, holding no school's name or a hsld26 school or
+>       team-code word, and whose late files hold no de-extinction words. Eight tournaments, by
+>       spelling, with 44, 29, 27, 13, 7, 5, 4 and 1 late disclosures. [Their names and spellings are
+>       left out here under the PM's Q3 ruling of 2026-11-12.]
+>       They reach 130 of the 356 (36.5%). The late share
+>       falls to at most 13.8% (226 of 1,639), still above 5%. The other 226 cannot be configured
+>       under t51's forbidden list: 124 are under spellings holding a hsld26 school's word
+>       (tournaments named for a disclosing school), 44 under spellings that are a school's name, 50
+>       under one-school spellings, 7 under one tournament whose late files hold some de-extinction
+>       words (2 of its 6 sources), and 1 under a spelling too short
+>       to match safely by "holds".
+>   (b) A rule from spelling history, named in configuration. In a snapshot a newer topic's range
+>       covers, a disclosure whose spelling was first seen before that range began, and holds none of
+>       the newer topic's own entry spellings, is on the earlier topic. It is switched on by a key on
+>       the range in topics.yaml, so only hsld26's de-extinction range uses it. No snapshot before
+>       2026-11-10 moves, and no tournament or school is named. On 2026-11-10 it moves all 356. Of
+>       their 336 sources, 2 hold only de-extinction words: that is the error the check measures.
+>       Risk: a November tournament sharing an earlier spelling moves off de-extinction. The weekly
+>       line counts what the rule moved, with the topic-word check, so that risk is seen every week.
+>       This is a code change in debate_core.domain.landscape (t51's packages include it), so it is a
+>       scope change, and it goes against Decision 1 keeping the remedy in configuration.
+>   (c) Neither: keep counting, and the weekly line reports it.
+>   Recommended: (b). (a) reaches barely a third of the late disclosures, and lists tournament names
+>   week by week. (b) reaches every one the count found, names nothing, and is the measure the PM
+>   already ruled the count by. It is not a topic-word rule: the words only check it.
+>
+> Q2. The weekly report line (so later weeks need no session):
+>   Where: report.md's header notes, beside the "Part of a week" notice, and one additive key in
+>   `landscape report --json`, `late_disclosures`, written only when it applies. It applies when the
+>   snapshot is on its topic by a range and the caselist has an earlier topic's range, so on hsld26
+>   from 2026-11-10 and on no Policy report.
+>   What it counts: as the script does, from the same function. The check words come from topics.yaml,
+>   one `check_words` list per topic (de-extinction: [de-extinct]; space colonization: [space col,
+>   coloniz]). They are a check that decides nothing. Without words the line gives the count and share
+>   alone.
+>   Its words under (b): "Earlier topic: 356 of 1,639 disclosures this week (21.7%) name a tournament
+>     first disclosed before this topic began on 2026-11-06, and are counted on Space colonization, not
+>     here. Of their 336 files, 2 hold only this topic's words in tags and headings, and 277 only the
+>     earlier topic's."
+>   Its words under (a) or (c): "Late disclosures: 356 of 1,639 disclosures this week (21.7%) name a
+>     tournament first disclosed before this topic began on 2026-11-06, and are counted here. Of their
+>     336 files, 277 hold only the earlier topic's words in tags and headings, and 2 only this
+>     topic's."
+>   The line names no tournament; spellings stay in the script's output for the operator.
+>   Recommended: as above, with the line shown even when the count is 0, so it is visibly checked.
+>
+> Q3. The naming rule's gap: 8 of the 22 spellings the script named are a school's own name (host
+>   schools that do not disclose on hsld26 under that name, so the withholding words miss them). They
+>   are in the output the operator pasted into the session, and left out of the report. Options:
+>   (i) the script names no spelling at all, counts only; (ii) keep naming for the operator, and the
+>   session screens before anything is written. Recommended: (i) for the 2026-11-17 count, since (b)
+>   needs no names. Under (a), (ii).
+>
+> Q4. The 2026-11-17 count: the run of 2026-11-18 is a Wednesday, so its restore goes on 2026-11-19 or
+>   later. It is my own guarded restore, read-only count, deleted after use (policy 1.18), unless
+>   another task's copy of that week is available. Under (b) it runs with the ruled topics.yaml, so it
+>   shows what the rule moves and what is left.
+
 ## Plan nodes
 
 | Node | Status | Notes |
@@ -91,7 +210,7 @@ worktree, run from `/tmp` over a synthetic copy, gives `exit 0`. The naming rule
 
 | Criterion | Status | Evidence (command → result) |
 |---|---|---|
-| ac1: the counts on 2026-11-10 and 2026-11-17 recorded with their share and the topic-word check, entries proposed if the 5% trigger or the check says so | NOT RUN | The 2026-11-10 count's block is handed to the operator, who runs it when the PM says (Operator follow-ups). 2026-11-17's snapshot exists only after the run of 2026-11-18. |
+| ac1: the counts on 2026-11-10 and 2026-11-17 recorded with their share and the topic-word check, entries proposed if the 5% trigger or the check says so | NOT RUN (2026-11-10 done) | 2026-11-10 recorded: 356 of 1,639 late (21.7%); late sources 277 space only and 2 de-extinction only of 336; both triggers met; remedy proposed (The 2026-11-10 count, The proposal). 2026-11-17 waits on the run of 2026-11-18 and the PM's ruling. |
 | ac2: the weekly report line, as ruled, by tests on synthetic stores shown failing first | NOT RUN | Waits on the count and the PM's ruling on the line (step 3). |
 | Node: `uv run pytest packages/debate_core/tests -k late_disclosure` | PASS (so far) | `.venv/bin/python scripts/hard_stop.py 115 .venv/bin/python -m pytest packages/debate_core/tests -k late_disclosure -q` → **15 passed in 50.8 s**: this task's 14, plus one in v1-e32-t06's `test_landscape_tournament_entries.py` whose name holds the same words. Run again when the report line lands. |
 
@@ -181,7 +300,7 @@ worktree, run from `/tmp` over a synthetic copy, gives `exit 0`. The naming rule
 
 ## Operator follow-ups
 
-1. **The 2026-11-10 count, handed over 2026-11-12; the operator runs it when the PM says.** It is
+1. **The 2026-11-10 count: run 2026-11-12 (`exit 0`, `copy unchanged`, 6.6 s; results above).** It is
    read-only and opens no database. It stops, naming the path, if the worktree or its
    `.venv/bin/python` is missing (the PM's ruling 1: never another interpreter), if
    `~/t18-measure/copy` has no restore marker, or if the copy's newest hsld26 manifest is not

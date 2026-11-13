@@ -1039,3 +1039,296 @@ def test_marker_an_ellipsis_the_source_itself_prints_is_quoted_text(card: Card) 
 
     assert (untouched.manual_edits, untouched.deletions) == ((), ())
     assert (deleted.manual_edits, deleted.deletions) == ((), (CharacterRange(14, 19),))
+
+
+# --------------------------------------------------------------------------------------------
+# Node joined words (`v1-e06-t16`): an untouched export whose cut joins two words verifies
+# --------------------------------------------------------------------------------------------
+#
+# ``evidence_text`` joins a card's kept pieces with nothing between them, so a piece that ends in a
+# word followed by one that starts with a word reads as one word in the card ("holdnever"), while the
+# body shows the two words either side of the profile's marker. The card here is cut from an invented
+# source at three such joins, exported by ExportService and changed through python-docx. Offsets,
+# counted by hand from JOIN_SOURCE:
+#
+#   snapshot   0-9     "Engineers"                                         -> evidence   0-9
+#   snapshot   9-30    " met on Tuesday. The "                  cut 1, drawn at evidence  9
+#   snapshot  30-49    "levee will not hold"                               -> evidence   9-28
+#   snapshot  49-93    " another spring flood, they warned. Repairs "      cut 2, at evidence 28
+#   snapshot  93-116   "never came to the north"                           -> evidence  28-51
+#   snapshot 116-139   " wall before the storm "                cut 3, drawn at evidence 51
+#   snapshot 139-145   "season"                                            -> evidence  51-57
+#   snapshot 145-146   "."                                      after the card
+#
+# so a snapshot offset is the evidence offset plus 0, 21, 65 and 88 in the four pieces, and a body
+# offset is the evidence offset plus 0, 3, 6 and 9. Words, evidence (body):
+#   piece 1: "Engineers" 0-9 (0-9), the body's first word, right before join 1
+#   piece 2: "levee" 9-14 (12-17), "will" 15-19, "not" 20-23 (23-26), "hold" 24-28 (27-31)
+#   piece 3: "never" 28-33 (34-39), "came" 34-38 (40-44), "north" 46-51 (52-57)
+#   piece 4: "season" 51-57 (60-66), the body's last word, right after join 3
+#
+# The joins are at the body's start (join 1), its middle (join 2, with "not" one word before it and
+# "never" right after it) and its end (join 3). As in the t15 section, a space beside a marker that can
+# be the card's own space is read as the card's, so deleting " hold" before join 2 is the deletion
+# "hold", and the space before the marker stands for the card's space after "not".
+
+JOIN_SOURCE: Final = (
+    "Engineers met on Tuesday. The levee will not hold another spring flood, they warned. "
+    "Repairs never came to the north wall before the storm season."
+)
+JOIN_RANGES: Final = ((0, 9), (30, 49), (93, 116), (139, 145))
+JOIN_EVIDENCE: Final = "Engineerslevee will not holdnever came to the northseason"
+JOIN_RENDERED: Final = "Engineers … levee will not hold … never came to the north … season"
+JOIN_SOURCE_WORDS: Final = ("Engineers", "levee", "north", "season", "Tuesday", "warned", "Repairs", "storm")
+
+PM_JOIN_SOURCE: Final = "The levee will not hold another spring flood, engineers said."
+"""The PM's reproduction (v1-e06-t15's follow-up 1): "hold" [19, 23) is joined to "flood" [23, 28)."""
+
+
+@pytest.fixture(scope="module")
+def join_card() -> VerifiedExport:
+    export = verified_export(JOIN_SOURCE, JOIN_RANGES, JOIN_EVIDENCE)
+    assert body_of(export.document).cards[0].paragraphs[-1].text == JOIN_RENDERED
+    return export
+
+
+def join_verdict(export: VerifiedExport, *changes: Callable[[Document], None]) -> dict[str, Any]:
+    return docx_verdict(export, *changes, source_words=JOIN_SOURCE_WORDS)
+
+
+def retyped_marker(index: int, text: str) -> Callable[[Document], None]:
+    """The ``index``-th marker run of the evidence (from 0) rewritten as ``text``."""
+
+    def change(document: Document) -> None:
+        markers = [each for each in evidence_paragraph(document).runs if each.text == MARKER]
+        markers[index].text = text
+
+    return change
+
+
+@pytest.mark.parametrize(
+    ("source", "ranges", "evidence", "rendered"),
+    [
+        pytest.param(
+            JOIN_SOURCE,
+            ((0, 9), (30, 49)),
+            "Engineerslevee will not hold",
+            "Engineers … levee will not hold",
+            id="at-the-start-of-the-body",
+        ),
+        pytest.param(
+            JOIN_SOURCE,
+            ((30, 49), (93, 116)),
+            "levee will not holdnever came to the north",
+            "levee will not hold … never came to the north",
+            id="in-the-middle-of-the-body",
+        ),
+        pytest.param(
+            JOIN_SOURCE,
+            ((93, 116), (139, 145)),
+            "never came to the northseason",
+            "never came to the north … season",
+            id="at-the-end-of-the-body",
+        ),
+        pytest.param(JOIN_SOURCE, JOIN_RANGES, JOIN_EVIDENCE, JOIN_RENDERED, id="three-joins-in-one-card"),
+        pytest.param(
+            PM_JOIN_SOURCE,
+            ((0, 23), (39, 45)),
+            "The levee will not holdflood,",
+            "The levee will not hold … flood,",
+            id="the-pms-reproduction",
+        ),
+    ],
+)
+def test_join_an_untouched_export_whose_cut_joins_two_words_verifies(
+    source: str, ranges: tuple[tuple[int, int], ...], evidence: str, rendered: str
+) -> None:
+    export = verified_export(source, ranges, evidence)
+    assert body_of(export.document).cards[0].paragraphs[-1].text == rendered
+
+    comparison = marker_comparison(export)
+
+    assert comparison == BodyComparison(manual_edits=(), interpolations=(), deletions=())
+    assert is_verified_without_reasons(docx_verdict(export, source_words=("levee", "flood", "north")))
+
+
+@pytest.mark.parametrize(
+    ("change", "evidence_range", "body_range"),
+    [
+        pytest.param(
+            replace_in_evidence("Engineers", "Engineer"),
+            (0, 9),
+            (0, 8),
+            id="letters-altered-right-before-join-1",
+        ),
+        pytest.param(
+            replace_in_evidence("levee ", "levees "),
+            (9, 14),
+            (12, 18),
+            id="letters-altered-right-after-join-1",
+        ),
+        pytest.param(
+            replace_in_evidence("hold", "holds"), (24, 28), (27, 32), id="letters-altered-right-before-join-2"
+        ),
+        pytest.param(
+            replace_in_evidence("never", "ever"), (28, 33), (34, 38), id="letters-altered-right-after-join-2"
+        ),
+        pytest.param(
+            replace_in_evidence("season", "seasons"),
+            (51, 57),
+            (60, 67),
+            id="letters-altered-right-after-join-3",
+        ),
+        pytest.param(
+            replace_in_evidence("never", "now never"),
+            (28, 28),
+            (34, 38),
+            id="a-word-added-right-after-join-2",
+        ),
+        pytest.param(
+            replace_in_evidence("hold", "hold now"), (28, 28), (31, 35), id="a-word-added-right-before-join-2"
+        ),
+        pytest.param(retyped_marker(1, ""), (24, 33), (27, 36), id="the-marker-at-join-2-taken-out"),
+    ],
+)
+def test_join_a_changed_or_added_word_beside_a_join_is_a_manual_edit(
+    join_card: VerifiedExport,
+    change: Callable[[Document], None],
+    evidence_range: tuple[int, int],
+    body_range: tuple[int, int],
+) -> None:
+    """Body ranges: "Engineer" 0-8, before join 1's marker; "levees" 12-18 and "holds" 27-32; "ever" 34-38
+    after join 2's marker (31-34); "seasons" 60-67; "now " 34-38 after join 2's marker and " now" 31-35
+    before it, both at evidence 28. Taking join 2's marker out leaves "holdnever" (body 27-36), a word
+    the source never wrote, which is the card's "hold" [24, 28) and "never" [28, 33) changed: the
+    renderer drew them apart, as t07's deleted space between two words is a manual edit."""
+    comparison = marker_comparison(join_card, change)
+
+    assert comparison.manual_edits == (
+        ManualEdit(CharacterRange(*evidence_range), CharacterRange(*body_range)),
+    )
+    assert comparison.deletions == ()
+    verdict = join_verdict(join_card, change)
+    assert (verdict["status"], verdict["reason_codes"]) == ("UNVERIFIED", ["MANUAL_EDIT"])
+
+
+@pytest.mark.parametrize(
+    ("old", "deletion"),
+    [
+        pytest.param("Engineers", (0, 9), id="the-first-word-of-the-body-right-before-join-1"),
+        pytest.param("levee ", (9, 14), id="right-after-join-1"),
+        pytest.param("will ", (15, 20), id="one-word-after-join-1"),
+        pytest.param(" hold", (24, 28), id="right-before-join-2"),
+        pytest.param("came ", (34, 39), id="one-word-after-join-2"),
+        pytest.param(" north", (46, 51), id="right-before-join-3"),
+        pytest.param("season", (51, 57), id="the-last-word-of-the-body-right-after-join-3"),
+    ],
+)
+def test_join_a_whole_word_deleted_beside_a_join_is_a_deletion_with_its_range(
+    join_card: VerifiedExport, old: str, deletion: tuple[int, int]
+) -> None:
+    """ "levee " right after join 1 is "levee" [9, 14): the marker's space after it stands for the card's
+    space after "levee". " hold" and " north" before a marker leave the card's space before them in front
+    of the marker, so each is the word alone. A deletion one word further on keeps its own space. The
+    first and last words leave their marker at the body's edge, which stands for the deletion's cut."""
+    comparison = marker_comparison(join_card, replace_in_evidence(old, ""))
+
+    assert (comparison.manual_edits, comparison.deletions) == ((), (CharacterRange(*deletion),))
+    verdict = join_verdict(join_card, replace_in_evidence(old, ""))
+    assert is_verified_without_reasons(verdict)
+    assert negation_warnings(verdict) == []
+
+
+@pytest.mark.parametrize(
+    ("old", "evidence_range", "snapshot_range"),
+    [
+        pytest.param("never ", (28, 33), (93, 98), id="right-after-join-2"),
+        pytest.param("not ", (20, 24), (41, 45), id="one-word-before-join-2"),
+    ],
+)
+def test_join_a_negation_deleted_beside_a_join_is_a_warning_on_a_verified_card(
+    join_card: VerifiedExport,
+    old: str,
+    evidence_range: tuple[int, int],
+    snapshot_range: tuple[int, int],
+) -> None:
+    """ "never" is snapshot [93, 98), right after join 2, its space read as the marker's; "not " is
+    snapshot [41, 45), a word clear of the marker, so its own space goes with it."""
+    verdict = join_verdict(join_card, replace_in_evidence(old, ""))
+
+    assert is_verified_without_reasons(verdict)
+    assert negation_warnings(verdict) == [("NEGATION_REMOVED", evidence_range, snapshot_range)]
+
+
+# A marker typed with other spacing (v1-e06-t15's follow-up 2). The student retypes a marker's run; the
+# card's own space beside it is read as the card's only where the body still has an ordinary space
+# there, so with no ordinary space after the marker, "never " deleted right after join 2 is evidence
+# [28, 34), its space included, and with one there it is "never" [28, 33). A word one further on keeps
+# its own space whatever the marker's spacing: "will " [15, 20) after join 1, "came " [34, 39) after
+# join 2. Two spaces each side of the marker could be paired with the card's spaces either side of
+# "never" and read "came " deleted as a word moved, until the marker's whole spacing was one unit.
+
+OTHER_SPACINGS: Final = (
+    pytest.param(" …", id="one-space-before"),
+    pytest.param("… ", id="one-space-after"),
+    pytest.param("…", id="no-spaces"),
+    pytest.param(" … ", id="non-breaking-spaces"),
+    pytest.param("  …  ", id="two-spaces-each-side"),
+)
+
+
+@pytest.mark.parametrize("spacing", OTHER_SPACINGS)
+def test_join_markers_retyped_with_other_spacing_verify_untouched(
+    join_card: VerifiedExport, spacing: str
+) -> None:
+    """All three markers retyped: each change retypes the first marker still drawn as the profile's."""
+    changes = tuple(retyped_marker(0, spacing) for _ in range(3))
+
+    comparison = marker_comparison(join_card, *changes)
+
+    assert comparison == BodyComparison(manual_edits=(), interpolations=(), deletions=())
+    assert is_verified_without_reasons(join_verdict(join_card, *changes))
+
+
+@pytest.mark.parametrize("spacing", OTHER_SPACINGS)
+@pytest.mark.parametrize(
+    ("marker", "old", "deletion"),
+    [
+        pytest.param(0, "will ", (15, 20), id="one-word-after-join-1"),
+        pytest.param(1, "came ", (34, 39), id="one-word-after-join-2"),
+    ],
+)
+def test_join_a_word_deleted_one_word_after_a_retyped_marker_is_a_deletion(
+    join_card: VerifiedExport, spacing: str, marker: int, old: str, deletion: tuple[int, int]
+) -> None:
+    changes = (retyped_marker(marker, spacing), replace_in_evidence(old, ""))
+
+    comparison = marker_comparison(join_card, *changes)
+
+    assert (comparison.manual_edits, comparison.deletions) == ((), (CharacterRange(*deletion),))
+    assert is_verified_without_reasons(join_verdict(join_card, *changes))
+
+
+@pytest.mark.parametrize(
+    ("spacing", "deletion"),
+    [
+        pytest.param(" …", (28, 34), id="one-space-before"),
+        pytest.param("… ", (28, 33), id="one-space-after"),
+        pytest.param("…", (28, 34), id="no-spaces"),
+        pytest.param(" … ", (28, 34), id="non-breaking-spaces"),
+        pytest.param("  …  ", (28, 33), id="two-spaces-each-side"),
+    ],
+)
+def test_join_a_negation_deleted_right_after_a_retyped_marker_is_a_warning(
+    join_card: VerifiedExport, spacing: str, deletion: tuple[int, int]
+) -> None:
+    """ "never" is snapshot [93, 98) and its space 98; the snapshot range is the deletion's, plus 65."""
+    changes = (retyped_marker(1, spacing), replace_in_evidence("never ", ""))
+
+    comparison = marker_comparison(join_card, *changes)
+
+    assert (comparison.manual_edits, comparison.deletions) == ((), (CharacterRange(*deletion),))
+    verdict = join_verdict(join_card, *changes)
+    assert is_verified_without_reasons(verdict)
+    snapshot = (deletion[0] + 65, deletion[1] + 65)
+    assert negation_warnings(verdict) == [("NEGATION_REMOVED", deletion, snapshot)]

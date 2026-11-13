@@ -32,6 +32,8 @@ the first, so one run reports everything wrong with a card:
   reader from the document body (`v1-e06-t07`).
 * ``BODY_CARD_NOT_IN_MANIFEST``: in a .docx, a card in the body that the manifest does not list, such
   as one pasted in by hand. It is reported on that body card, not on a manifest card (`v1-e06-t07`).
+* ``HIDDEN_CUT``: in a .docx, the body takes out the omission marker at one of the card's cuts, so a
+  reader cannot see that text was cut there. Reported by the manifest reader (`v1-e06-t17`).
 
 A :class:`WarningCode` is not a reason: it is something a reader of the card should know that leaves
 the card VERIFIED, such as a bracketed interpolation in a .docx body (``INTERPOLATION_PRESENT``) or a
@@ -160,6 +162,15 @@ class ReasonCode(StrEnum):
     so it is UNVERIFIED, and a document holding it is not a verified document. Carried by the body
     card's own entry, never by a manifest card's verdict; the detail gives its position in the body.
     Reported by :class:`~debate_core.application.verify_manifest.VerifyManifest`."""
+
+    HIDDEN_CUT = "HIDDEN_CUT"
+    """A .docx body does not show one of the card's cuts: the omission marker where the card cut text is
+    gone, wherever the cut joins its two sides (:class:`~debate_core.evidence.docx_verify.HiddenCut`,
+    `v1-e06-t17`, the PM's ruling of 2026-11-14). Every word left may be the source's, but a reader
+    cannot see that text was cut, so the card is not verified. Not ``MANUAL_EDIT``, which says a quoted
+    word changed: here the fix is to put the marker back. Carries the cut's ``evidence_text`` offset and
+    the body offset where the marker should be, as empty ranges, never the words. Reported by
+    :class:`~debate_core.application.verify_manifest.VerifyManifest`."""
 
 
 class WarningCode(StrEnum):

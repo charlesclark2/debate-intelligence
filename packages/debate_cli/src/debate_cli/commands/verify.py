@@ -9,7 +9,8 @@ a program, and which exit code each outcome ends with (architecture proposal §1
 A .docx the platform exported is read too (`v1-e06-t07`): the use case finds the manifest embedded in
 it, verifies its cards the same way, and then checks that the document body still shows each card's
 evidence, allowing only the edits the edit policy allows. A card whose quoted words were changed is
-UNVERIFIED with `MANUAL_EDIT` and the character range; a bracketed interpolation is a warning
+UNVERIFIED with `MANUAL_EDIT` and the character range, and one whose body takes out the omission marker
+at one of its cuts is UNVERIFIED with `HIDDEN_CUT` and the cut's offset (`v1-e06-t17`); a bracketed interpolation is a warning
 (`INTERPOLATION_PRESENT`) on a card that stays VERIFIED, and so is a deletion that removed a negating
 word, by the edit policy's own test (`NEGATION_REMOVED` with the deletion's range, `v1-e06-t10`): a
 warning changes no status and no exit code. A card in the body that the manifest does
@@ -25,8 +26,9 @@ machine is UNVERIFIED with `SNAPSHOT_MISSING`, never skipped and never assumed.
 From :mod:`debate_cli.exit_codes`, and each one means exactly one thing here:
 
 * `0`: every card is VERIFIED.
-* `1`: the manifest was read and at least one card is UNVERIFIED, a .docx's `MANUAL_EDIT` among
-  them, or a .docx's body holds a card its manifest does not list (`BODY_CARD_NOT_IN_MANIFEST`).
+* `1`: the manifest was read and at least one card is UNVERIFIED, a .docx's `MANUAL_EDIT` and
+  `HIDDEN_CUT` among them, or a .docx's body holds a card its manifest does not list
+  (`BODY_CARD_NOT_IN_MANIFEST`).
   Every card is still reported.
 * `2`: the command line was wrong, or the file is not a card manifest this build reads: not JSON,
   not valid against `card_manifest.v1.json`, or written by a newer build (`NewerManifestVersion`,
@@ -92,15 +94,17 @@ def verify(
 
     Each card's evidence is cut again from its stored snapshot and compared exactly.
     In a .docx, the body must still show each card's evidence: deleting whole words and
-    changing markup are allowed, a bracketed interpolation is a warning, and any other
-    change is MANUAL_EDIT. A card in the body that the manifest does not list is
+    changing markup are allowed, a bracketed interpolation is a warning, a cut whose
+    omission marker was taken out is HIDDEN_CUT, and any other change is MANUAL_EDIT.
+    A card in the body that the manifest does not list is
     UNVERIFIED with BODY_CARD_NOT_IN_MANIFEST. Snapshots are read from this environment's
     data directory and never fetched, and the file is never written.
 
     Exit codes:
     0  every card is VERIFIED
     1  at least one card is UNVERIFIED (every card is still listed);
-       BODY_CARD_NOT_IN_MANIFEST for a card in a .docx body that its manifest does not list
+       BODY_CARD_NOT_IN_MANIFEST for a card in a .docx body that its manifest does not list;
+       HIDDEN_CUT for a cut whose omission marker a .docx body took out
     2  usage error, a manifest that fails its JSON Schema, or one from a newer build (its JSON path is shown);
        NO_MANIFEST for a .docx with no embedded manifest
     3  verification could not run, for example a store could not be read

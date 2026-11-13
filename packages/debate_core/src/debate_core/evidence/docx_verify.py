@@ -110,8 +110,8 @@ difference the policy refuses: the words that are left are still the source's.
 ## What it never holds
 
 Text. A :class:`ManualEdit` is two ranges, a :class:`BodyInterpolation` an offset and a length, a
-:class:`RemovedNegation` two ranges, a :class:`HiddenCut` two offsets, so a report built from them cannot carry a word of the evidence or
-of the student's insertion.
+:class:`RemovedNegation` two ranges and a :class:`HiddenCut` two offsets, so a report built from them
+cannot carry a word of the evidence or of the student's insertion.
 """
 
 from __future__ import annotations
@@ -663,7 +663,9 @@ class _Classifier:
             reached.update(cuts)
             body_at = self._range(self._body, hunk.added_start, hunk.added_end, self._body_length).start
             if _same_text(hunk, self._evidence, self._body):
-                hidden.extend(HiddenCut(cut, body_at + cut - removed.start) for cut in cuts)
+                # The body repeats the card's characters here, so a cut sits as far into the body's run
+                # as the card's tokens before it are long.
+                hidden.extend(HiddenCut(cut, body_at + self._length_before(hunk, cut)) for cut in cuts)
                 continue
             added = self._added(hunk)
             if added is None or not (cuts and not added.markers or self._allows(added, removed)):
@@ -692,6 +694,11 @@ class _Classifier:
             tuple(deletions),
             tuple(sorted(hidden, key=lambda cut: cut.evidence_offset)),
         )
+
+    def _length_before(self, hunk: _Hunk, cut: int) -> int:
+        """How many characters the hunk's card tokens hold before ``cut``, a token boundary inside it."""
+        removed = self._evidence[hunk.removed_start : hunk.removed_end]
+        return sum(len(token.text) for token in removed if token.end <= cut)
 
     def _body_offset(self, hunks: list[_Hunk], cut: int) -> int:
         """Where the body shows the card's text at ``cut``, a cut no hunk takes in."""

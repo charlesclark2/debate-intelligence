@@ -384,7 +384,7 @@ still verified. `VerifyManifest`
 ([`debate_core.application.verify_manifest`](../../packages/debate_core/src/debate_core/application/verify_manifest.py),
 `v1-e03-t06`) reports it.
 
-Four more come from `VerifyManifest` since `v1-e06-t07`, also never from the verifier, and each makes
+Five more come from `VerifyManifest` since `v1-e06-t07`, also never from the verifier, and each makes
 its card `UNVERIFIED` whatever the verifier said:
 
 | Found by `VerifyManifest` | Reason code |
@@ -393,6 +393,7 @@ its card `UNVERIFIED` whatever the verifier said:
 | A .docx body changes the card's quoted words beyond the edit policy: a word changed, added, joined or partly deleted | `MANUAL_EDIT`, with the `evidence_text` range and the body range |
 | A .docx body holds no card for a manifest card | `BODY_CARD_MISSING` |
 | A .docx body holds a card its manifest does not list, such as one pasted in by hand; reported on that body card's own entry, by its body position | `BODY_CARD_NOT_IN_MANIFEST` |
+| A .docx body takes out the omission marker at one of the card's cuts, so a reader cannot see that text was cut (`v1-e06-t17`) | `HIDDEN_CUT`, with the cut's `evidence_text` offset and the body offset, each as an empty range |
 
 A deletion in a .docx body that removes a negating word (the edit policy's list and its `n't` rule) is
 not a reason either: the card stays `VERIFIED`, with the warning `NEGATION_REMOVED` and the deletion's

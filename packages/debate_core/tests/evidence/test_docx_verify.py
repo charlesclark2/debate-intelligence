@@ -738,10 +738,13 @@ def test_negation_a_deletion_across_the_cards_own_cut_reads_only_the_words_it_re
     negation_card: VerifiedExport,
 ) -> None:
     """Evidence [32, 56) is snapshot [58, 71) and [100, 111); "nothing", in the omission between, was
-    not in the body to remove."""
+    not in the body to remove. The deletion takes the cut's marker with it, so since `v1-e06-t17` (the
+    PM's ruling of 2026-11-14) the card is UNVERIFIED with HIDDEN_CUT at the cut (evidence 45), where the
+    body runs "another " into "have" (body 32); it was VERIFIED before."""
     verdict = docx_verdict(negation_card, across_the_cards_own_cut)
 
-    assert is_verified_without_reasons(verdict)
+    assert verdict["status"] == "UNVERIFIED"
+    assert reason_ranges(verdict) == [("HIDDEN_CUT", (45, 45), (32, 32))]
     assert "warnings" not in verdict
 
 
@@ -759,10 +762,13 @@ def test_negation_one_deletion_across_the_cut_with_a_negation_either_side_is_one
     negation_card: VerifiedExport,
 ) -> None:
     """Evidence [15, 67) is snapshot [41, 71) and [100, 122): "not" in one, "never" in the other, one
-    deletion, so one warning, which spans the omission between."""
+    deletion, so one warning, which spans the omission between. The deletion takes the cut's marker with
+    it: since `v1-e06-t17` (the PM's ruling of 2026-11-14) HIDDEN_CUT at evidence 45, body 15 ("will "
+    then "checked"); it was VERIFIED before."""
     verdict = docx_verdict(negation_card, from_not_to_never_across_the_cut)
 
-    assert is_verified_without_reasons(verdict)
+    assert verdict["status"] == "UNVERIFIED"
+    assert reason_ranges(verdict) == [("HIDDEN_CUT", (45, 45), (15, 15))]
     assert negation_warnings(verdict) == [("NEGATION_REMOVED", (15, 67), (41, 122))]
 
 
@@ -1749,3 +1755,85 @@ def test_hidden_cut_none_where_one_marker_is_left_for_the_two_cuts_a_deletion_jo
         manual_edits=(), interpolations=(), deletions=(CharacterRange(57, 76),)
     )
     assert is_verified_without_reasons(marker_verdict(marker_card, *changes))
+
+
+def reason_ranges(verdict: dict[str, Any]) -> list[tuple[str, tuple[int, int], tuple[int, int]]]:
+    """Each reason's code, evidence_text range and body range, in the verdict's order."""
+    return [
+        (
+            reason["code"],
+            (reason["evidence_range"]["start"], reason["evidence_range"]["end"]),
+            (reason["body_range"]["start"], reason["body_range"]["end"]),
+        )
+        for reason in verdict["reasons"]
+    ]
+
+
+@pytest.mark.parametrize(
+    ("card_name", "changes", "evidence_offset", "body_offset"),
+    [
+        pytest.param("marker", (retyped_marker(0, ""),), 12, 12, id="punctuation-join-cut-1"),
+        pytest.param("marker", (retyped_marker(2, ""),), 76, 82, id="punctuation-join-cut-3"),
+        pytest.param("join", (retyped_marker(1, ""),), 28, 31, id="word-join-2-holdnever"),
+        pytest.param("join", (retyped_marker(0, ""),), 9, 9, id="word-join-1-at-the-body-start"),
+        pytest.param("marker", (retyped_marker(0, " "),), 12, 12, id="a-space-for-the-marker"),
+        pytest.param(
+            "marker",
+            (retyped_marker(0, ""), replace_in_evidence("The levee", "levee")),
+            12,
+            12,
+            id="a-word-deleted-with-the-marker",
+        ),
+    ],
+)
+def test_hidden_cut_is_an_unverified_card_with_its_offsets(
+    marker_card: VerifiedExport,
+    join_card: VerifiedExport,
+    card_name: str,
+    changes: tuple[Callable[[Document], None], ...],
+    evidence_offset: int,
+    body_offset: int,
+) -> None:
+    """The PM's ruling of 2026-11-14: HIDDEN_CUT, a reason of its own, with empty ranges at the cut."""
+    export = marker_card if card_name == "marker" else join_card
+    words = MARKER_SOURCE_WORDS if card_name == "marker" else JOIN_SOURCE_WORDS
+
+    verdict = docx_verdict(export, *changes, source_words=words)
+
+    assert (verdict["status"], verdict["reason_codes"]) == ("UNVERIFIED", ["HIDDEN_CUT"])
+    assert reason_ranges(verdict) == [
+        ("HIDDEN_CUT", (evidence_offset, evidence_offset), (body_offset, body_offset))
+    ]
+    assert verdict["reasons"][0]["detail"] == (
+        f"the document body hides the card's cut at evidence_text offset {evidence_offset} (body evidence "
+        f"offset {body_offset}): no omission marker stands there, so a reader cannot see that text was cut; "
+        "put the omission marker back where the text was cut"
+    )
+
+
+@pytest.mark.parametrize(
+    ("changes", "expected"),
+    [
+        pytest.param(
+            (retyped_marker(0, ""), replace_in_evidence("came.", "come.")),
+            [("HIDDEN_CUT", (12, 12), (12, 12)), ("MANUAL_EDIT", (71, 75), (74, 78))],
+            id="the-hidden-cut-first",
+        ),
+        pytest.param(
+            (retyped_marker(2, ""), replace_in_evidence("The levee", "A levee")),
+            [("MANUAL_EDIT", (12, 15), (15, 16)), ("HIDDEN_CUT", (76, 76), (80, 80))],
+            id="the-manual-edit-first",
+        ),
+    ],
+)
+def test_hidden_cut_and_a_manual_edit_are_reported_in_evidence_order(
+    marker_card: VerifiedExport,
+    changes: tuple[Callable[[Document], None], ...],
+    expected: list[tuple[str, tuple[int, int], tuple[int, int]]],
+) -> None:
+    """ "come" is body 74-78 with cut 1's marker gone (t15's 77-81 less three); "A" is body 15-16 after cut
+    1's marker; cut 3 at 76 with its marker gone is body 76 + 3 + 3 - 2, "The" (3) having become "A" (1)."""
+    verdict = marker_verdict(marker_card, *changes)
+
+    assert verdict["status"] == "UNVERIFIED"
+    assert reason_ranges(verdict) == expected

@@ -327,12 +327,12 @@ class _Token:
 
 
 def _tokens(text: str, boundaries: Sequence[int] = ()) -> list[_Token]:
-    """``text`` as tokens, none of which crosses one of ``boundaries`` (offsets into ``text``).
+    """``text`` as tokens, none of which crosses one of ``boundaries`` (increasing offsets into ``text``).
 
     The card's evidence is tokenized with its omission offsets as boundaries, so the pieces either side
     of a cut are never one token (`v1-e06-t16`).
     """
-    edges = [0, *sorted(offset for offset in set(boundaries) if 0 < offset < len(text)), len(text)]
+    edges = [0, *boundaries, len(text)]
     return [
         _Token(match.group(), match.start())
         for start, end in zip(edges, edges[1:], strict=False)

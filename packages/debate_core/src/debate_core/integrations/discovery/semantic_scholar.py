@@ -20,6 +20,17 @@ never in a URL, so httpx's request log line never carries it. The constructor st
 with :func:`~debate_core.integrations.discovery.redaction.protect_logs`, and no message this module
 writes names it.
 
+**Over HTTP, by the person's own opt-in** (v1-e07-t20, the PM's amendment of 2026-11-12). On
+2026-11-12 Semantic Scholar's HTTPS endpoint answered every keyed request with the unauthenticated
+`429`, while its HTTP endpoint answered the same request, key and minute with results. Until HTTPS
+works (v1-e07-t26), `providers.semantic_scholar_insecure_http`, false by default and set only in a
+person's own credentials file, makes this adapter alone ask :data:`PAPER_SEARCH_URL_OVER_HTTP`
+(:func:`paper_search_url`). The key then travels unencrypted, still in its header and never in the URL.
+Every other provider, and this one with the setting off, stays on HTTPS. No redirect is followed in
+either mode: over HTTP, one that points to HTTPS is a refusal saying so
+(:func:`redirect_to_https_failure`), because following it would ask the endpoint the opt-in avoids.
+`doctor --providers` and a search's footer name the opt-in whenever it is in force.
+
 **Without a key Semantic Scholar is not configured** (v1-e07-t20, the PM's amendment of 2026-11-11).
 On the operator's keyless smoke of that day the shared pool refused every request with `429`, the
 first included, so it is not usable for the team. :func:`semantic_scholar_factory` raises
@@ -109,6 +120,7 @@ __all__ = [
     "KEYLESS_PACE",
     "MAX_PER_REQUEST",
     "PAPER_SEARCH_URL",
+    "PAPER_SEARCH_URL_OVER_HTTP",
     "PROVIDER_NAME",
     "REQUESTED_FIELDS",
     "SOURCE_TYPE_BY_PUBLICATION_TYPE",
@@ -117,6 +129,8 @@ __all__ = [
     "candidate_from_paper",
     "missing_key_reason",
     "paper_search_parameters",
+    "paper_search_url",
+    "redirect_to_https_failure",
     "searchable_query",
     "semantic_scholar_factory",
     "source_type_for",
@@ -127,6 +141,9 @@ PROVIDER_NAME: Final = "semantic_scholar"
 
 PAPER_SEARCH_URL: Final = "https://api.semanticscholar.org/graph/v1/paper/search"
 """The relevance search endpoint (not `/paper/search/bulk`)."""
+
+PAPER_SEARCH_URL_OVER_HTTP: Final = "http://api.semanticscholar.org/graph/v1/paper/search"
+"""The same endpoint over plain HTTP, asked only under `providers.semantic_scholar_insecure_http`."""
 
 PAPER_PAGE_URL: Final = "https://www.semanticscholar.org/paper/"
 """A paper's page on Semantic Scholar's site, before its paper id."""
@@ -342,6 +359,20 @@ def paper_search_parameters(query: ProviderQuery) -> dict[str, str]:
     return parameters
 
 
+def paper_search_url(*, insecure_http: bool) -> str:
+    """The endpoint to ask: :data:`PAPER_SEARCH_URL_OVER_HTTP` under the person's opt-in, HTTPS otherwise."""
+    return PAPER_SEARCH_URL_OVER_HTTP if insecure_http else PAPER_SEARCH_URL
+
+
+def redirect_to_https_failure(status: int, headers: httpx.Headers) -> ProviderUnavailable | None:
+    """A `3xx` to an `https` URL, as a refusal naming the scheme and host only; `None` for any other."""
+    location = urlsplit(headers.get("location") or "")
+    if location.scheme.lower() != "https":
+        return None
+    where = f" at {location.hostname}" if location.hostname else ""
+    return ProviderUnavailable(PROVIDER_NAME, f"HTTP {status}: redirected to HTTPS{where}, not followed")
+
+
 def _rate_phrase(pace: Pace) -> str:
     """`1 query a second`, `3 queries a second`, `1 query every 2 seconds`."""
     noun = "query" if pace.requests == 1 else "queries"
@@ -369,8 +400,12 @@ class SemanticScholarProvider:
         timeout_seconds: float,
         clock: Clock,
         sleep: Sleep = asyncio.sleep,
+        insecure_http: bool = False,
     ) -> None:
         self._client = client
+        self._insecure_http = insecure_http
+        """Ask over plain HTTP: `providers.semantic_scholar_insecure_http`, the person's own opt-in."""
+        self._url = paper_search_url(insecure_http=insecure_http)
         key = api_key.get_secret_value().strip() if api_key is not None else ""
         self._api_key = key or None
         """The key, or `None`: a blank `DEBATE_PROVIDERS__SEMANTIC_SCHOLAR_API_KEY=` is no key."""
@@ -413,7 +448,7 @@ class SemanticScholarProvider:
             sent_at = self._clock.now()
             try:
                 response = await self._client.get(
-                    PAPER_SEARCH_URL, params=paper_search_parameters(query), headers=headers
+                    self._url, params=paper_search_parameters(query), headers=headers
                 )
             except httpx.TimeoutException as error:
                 raise ProviderUnavailable(self.name, "timed out") from error
@@ -426,7 +461,12 @@ class SemanticScholarProvider:
         if failure is not None:
             raise failure
         if response.is_redirect:
-            raise redirect_failure(self.name, response.status_code, response.headers)
+            to_https = (
+                redirect_to_https_failure(response.status_code, response.headers)
+                if self._insecure_http
+                else None
+            )
+            raise to_https or redirect_failure(self.name, response.status_code, response.headers)
         results = self._read(response)[: query.filters.max_results]
         elapsed_ms = (time.perf_counter() - started) * 1000
         return ProviderResponse(provider=self.name, results=results, elapsed_ms=elapsed_ms)
@@ -479,9 +519,10 @@ def semantic_scholar_factory(
     set (unset, empty or spaces), so the registry records Semantic Scholar as not configured and builds
     nothing (v1-e07-t20). The client identifies the platform with the article fetcher's User-Agent,
     keeps no cookies, follows no redirect and reads nothing from the environment (no `~/.netrc`, no
-    proxy). Its own timeouts are the HTTP settings'; the wrapper's `providers.timeout_seconds` bounds
-    the whole call, and the pacer reads it to know when a query is too late to send. `sleep` and
-    `transport` are for tests, which pass virtual time and a mock.
+    proxy). It asks over plain HTTP only when `providers.semantic_scholar_insecure_http` is set
+    (:func:`paper_search_url`). Its own timeouts are the HTTP settings'; the wrapper's
+    `providers.timeout_seconds` bounds the whole call, and the pacer reads it to know when a query is
+    too late to send. `sleep` and `transport` are for tests, which pass virtual time and a mock.
     """
 
     def build(settings: ProviderSettings) -> SemanticScholarProvider:
@@ -502,6 +543,7 @@ def semantic_scholar_factory(
             timeout_seconds=settings.timeout_seconds,
             clock=clock,
             sleep=sleep,
+            insecure_http=settings.semantic_scholar_insecure_http,
         )
 
     return build

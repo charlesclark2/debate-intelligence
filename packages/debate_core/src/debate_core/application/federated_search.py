@@ -486,8 +486,11 @@ class FederatedSearchService:
         normalize: SearchStage | None = None,
         rank: SearchStage | None = None,
         topics: SearchTopics = NO_TOPICS,
+        asked_over_http: Collection[str] = (),
     ) -> None:
         self._providers = providers
+        self._asked_over_http = tuple(asked_over_http)
+        """The providers these settings ask over plain HTTP (`providers_asked_over_http`, v1-e07-t20)."""
         self._searches = searches
         self._clock = clock
         self._ids = ids
@@ -541,4 +544,12 @@ class FederatedSearchService:
             ranked_candidates=state.ranked_candidates,
             articles=state.articles,
             uncounted=uncounted,
+            asked_over_http=self._over_http_in(state.provider_statuses),
         )
+
+    def _over_http_in(self, statuses: Sequence[ProviderStatus]) -> tuple[str, ...]:
+        """The providers asked over HTTP that this search built and asked: any call not `not_configured`."""
+        asked = {
+            status.provider for status in statuses if status.outcome is not ProviderOutcome.NOT_CONFIGURED
+        }
+        return tuple(name for name in self._asked_over_http if name in asked)

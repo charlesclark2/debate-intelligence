@@ -239,6 +239,39 @@ def test_the_build_reads_the_per_user_credentials_file_and_doctor_names_its_sour
         assert email not in run.output
 
 
+def test_the_build_reads_semantic_scholar_s_http_opt_in_from_the_per_user_file_and_doctor_names_it(
+    installed_cli: InstalledCli,
+) -> None:
+    """`v1-e07-t20`. With a Semantic Scholar key and the HTTP opt-in in the scratch home's
+    `~/.debate-research/dev.env`, and Semantic Scholar enabled, `doctor --providers` says the key is sent
+    unencrypted and never prints it; without the opt-in it says nothing of HTTP. No network is reached."""
+    key = f"smoke-{secrets.token_hex(6)}"
+    folder = installed_cli.home / ".debate-research"
+    folder.mkdir()
+    credentials = folder / "dev.env"
+    credentials.write_text(
+        f"DEBATE_PROVIDERS__SEMANTIC_SCHOLAR_API_KEY={key}\nDEBATE_PROVIDERS__SEMANTIC_SCHOLAR_INSECURE_HTTP=true\n",
+        encoding="utf-8",
+    )
+    credentials.chmod(0o600)
+    enabled = {"DEBATE_PROVIDERS__ENABLED": '["semantic_scholar"]'}
+
+    opted_in = installed_cli.run("--json", "doctor", "--providers", env=enabled)
+    as_table = installed_cli.run("doctor", "--providers", env=enabled)
+    credentials.write_text(f"DEBATE_PROVIDERS__SEMANTIC_SCHOLAR_API_KEY={key}\n", encoding="utf-8")
+    not_opted_in = installed_cli.run("--json", "doctor", "--providers", env=enabled)
+
+    warning = "Semantic Scholar asked over HTTP: the key is sent unencrypted"
+    assert data_of(opted_in)["providers"]["asked_over_http"] == [
+        {"provider": "semantic_scholar", "warning": warning}
+    ]
+    assert as_table.exit_code == 0, as_table.output
+    assert "unencrypted" in " ".join(as_table.output.split())
+    assert data_of(not_opted_in)["providers"]["asked_over_http"] == []
+    for run in (opted_in, as_table, not_opted_in):
+        assert key not in run.output
+
+
 # ------------------------------------------------------------------------------------------------
 # config show: secrets never leave, and the environment decides the rest
 # ------------------------------------------------------------------------------------------------

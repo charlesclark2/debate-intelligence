@@ -8,6 +8,12 @@ configured, and that is a fact about the machine rather than a fault in the inst
 
 The rows also say whether the per-user credentials file was read, so that a person who wrote one
 can see it was found.
+
+**Over HTTP** (v1-e07-t20, the PM's amendment of 2026-11-12). When a person's credentials file turns on
+`providers.semantic_scholar_insecure_http` and Semantic Scholar is built (enabled, with its key), its key
+is sent unencrypted. :func:`providers_asked_over_http` says so, and :func:`over_http_warning` is the
+sentence `doctor --providers`, a search's footer and their JSON give: "Semantic Scholar asked over HTTP:
+the key is sent unencrypted".
 """
 
 from __future__ import annotations
@@ -20,6 +26,7 @@ from pydantic import SecretStr
 from debate_core.application.settings import (
     ENV_NESTED_DELIMITER,
     ENV_PREFIX,
+    ProviderSettings,
     SearchProviderName,
     Settings,
     display_user_path,
@@ -28,10 +35,13 @@ from debate_core.application.settings import (
 
 __all__ = [
     "CredentialsFileState",
+    "OverHttpNotice",
     "ProviderCredentialReport",
     "ProviderCredentialRow",
     "missing_credential_cure",
+    "over_http_warning",
     "provider_credential_report",
+    "providers_asked_over_http",
 ]
 
 
@@ -69,16 +79,34 @@ class CredentialsFileState:
 
 
 @dataclass(frozen=True, slots=True)
+class OverHttpNotice:
+    """A provider asked over plain HTTP, its key sent unencrypted, and the sentence that says so."""
+
+    provider: str
+    warning: str
+
+    @classmethod
+    def of(cls, provider: str) -> OverHttpNotice:
+        return cls(provider=provider, warning=over_http_warning(provider))
+
+    def as_json(self) -> dict[str, str]:
+        return {"provider": self.provider, "warning": self.warning}
+
+
+@dataclass(frozen=True, slots=True)
 class ProviderCredentialReport:
-    """The credentials file's state and one row per enabled provider, in the providers' declared order."""
+    """The credentials file's state, one row per enabled provider in the providers' declared order, and
+    the providers asked over plain HTTP."""
 
     credentials_file: CredentialsFileState
     enabled: tuple[ProviderCredentialRow, ...]
+    asked_over_http: tuple[OverHttpNotice, ...] = ()
 
     def as_json(self) -> dict[str, object]:
         return {
             "credentials_file": self.credentials_file.as_json(),
             "enabled": [row.as_json() for row in self.enabled],
+            "asked_over_http": [notice.as_json() for notice in self.asked_over_http],
         }
 
 
@@ -161,7 +189,36 @@ def provider_credential_report(settings: Settings) -> ProviderCredentialReport:
         )
     enabled = set(settings.providers.enabled)
     rows = tuple(_row(settings, name) for name in SearchProviderName if name in enabled)
-    return ProviderCredentialReport(credentials_file=credentials_file, enabled=rows)
+    over_http = tuple(OverHttpNotice.of(name) for name in providers_asked_over_http(settings.providers))
+    return ProviderCredentialReport(
+        credentials_file=credentials_file, enabled=rows, asked_over_http=over_http
+    )
+
+
+def providers_asked_over_http(providers: ProviderSettings) -> tuple[str, ...]:
+    """The providers these settings ask over plain HTTP: `semantic_scholar` when its opt-in is on and it is
+    built, that is enabled and with a key that is not blank (v1-e07-t20); otherwise none."""
+    key = providers.semantic_scholar_api_key
+    built = SearchProviderName.SEMANTIC_SCHOLAR in providers.enabled and _is_set(key)
+    return (
+        (SearchProviderName.SEMANTIC_SCHOLAR.value,)
+        if providers.semantic_scholar_insecure_http and built
+        else ()
+    )
+
+
+def over_http_warning(provider: str) -> str:
+    """`Semantic Scholar asked over HTTP: the key is sent unencrypted`: the PM's words of 2026-11-12."""
+    try:
+        label = _WORDS[SearchProviderName(provider)].label
+    except ValueError:
+        label = provider
+    return f"{label} asked over HTTP: the key is sent unencrypted"
+
+
+def _is_set(value: object) -> bool:
+    """A credential is set when it is a secret whose value is not blank, as every adapter treats it."""
+    return isinstance(value, SecretStr) and bool(value.get_secret_value().strip())
 
 
 def _row(settings: Settings, name: SearchProviderName) -> ProviderCredentialRow:
@@ -169,9 +226,7 @@ def _row(settings: Settings, name: SearchProviderName) -> ProviderCredentialRow:
     if name in PROVIDERS_WITHOUT_AN_ADAPTER or words.field is None:
         summary = _NO_ADAPTER if name in PROVIDERS_WITHOUT_AN_ADAPTER else _KEYLESS
         return ProviderCredentialRow(name.value, words.label, None, None, None, summary)
-    value = getattr(settings.providers, words.field)
-    # Blank is missing, as every adapter strips and treats it.
-    is_set = isinstance(value, SecretStr) and bool(value.get_secret_value().strip())
+    is_set = _is_set(getattr(settings.providers, words.field))
     source = settings.field_sources.get(f"providers.{words.field}", "default")
     variable = f"{ENV_PREFIX}PROVIDERS{ENV_NESTED_DELIMITER}{words.field.upper()}"
     summary = words.when_set.format(source=source) if is_set else words.when_missing

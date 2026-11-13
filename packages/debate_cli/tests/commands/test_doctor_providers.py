@@ -194,6 +194,74 @@ def test_a_semantic_scholar_key_is_named_by_its_source_and_a_blank_one_counts_as
     assert_no_value(result)
 
 
+OVER_HTTP: Final = "Warning Semantic Scholar asked over HTTP: the key is sent unencrypted"
+"""The row `doctor --providers` adds when Semantic Scholar's HTTP opt-in is on and Semantic Scholar is
+built: enabled, with its key (the PM's amendment of 2026-11-12 on v1-e07-t20)."""
+OPT_IN: Final = "DEBATE_PROVIDERS__SEMANTIC_SCHOLAR_INSECURE_HTTP=true"
+
+
+def test_with_the_http_opt_in_and_a_key_doctor_says_the_key_is_sent_unencrypted(
+    installation: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("DEBATE_PROVIDERS__ENABLED", '["openalex", "semantic_scholar"]')
+    per_user_file(installation, f"DEBATE_PROVIDERS__SEMANTIC_SCHOLAR_API_KEY={KEY}", OPT_IN)
+
+    exit_code, rows, result = provider_rows()
+    _, envelope, as_json = doctor_json("--providers")
+
+    assert exit_code == ExitCode.OK
+    assert rows == [
+        "Credentials file ~/.debate-research/dev.env: read",
+        "OpenAlex no OpenAlex key: keyless (a lower daily allowance)",
+        f"Semantic Scholar API key set ({SOURCE}): asked at one request a second",
+        OVER_HTTP,
+    ]
+    assert envelope["data"]["providers"].get("asked_over_http") == [
+        {
+            "provider": "semantic_scholar",
+            "warning": "Semantic Scholar asked over HTTP: the key is sent unencrypted",
+        }
+    ]
+    assert_no_value(result)
+    assert_no_value(as_json)
+
+
+@pytest.mark.parametrize(
+    ("enabled", "lines"),
+    [
+        ('["semantic_scholar"]', (OPT_IN,)),
+        ('["openalex"]', (f"DEBATE_PROVIDERS__SEMANTIC_SCHOLAR_API_KEY={KEY}", OPT_IN)),
+        ('["semantic_scholar"]', (f"DEBATE_PROVIDERS__SEMANTIC_SCHOLAR_API_KEY={KEY}",)),
+        (
+            '["semantic_scholar"]',
+            (
+                f"DEBATE_PROVIDERS__SEMANTIC_SCHOLAR_API_KEY={KEY}",
+                "DEBATE_PROVIDERS__SEMANTIC_SCHOLAR_INSECURE_HTTP=false",
+            ),
+        ),
+    ],
+    ids=[
+        "opted in without a key",
+        "opted in and not enabled",
+        "a key and no opt-in",
+        "a key and the opt-in false",
+    ],
+)
+def test_doctor_names_no_unencrypted_key_unless_semantic_scholar_is_built_and_opted_in(
+    installation: Path, monkeypatch: pytest.MonkeyPatch, enabled: str, lines: tuple[str, ...]
+) -> None:
+    monkeypatch.setenv("DEBATE_PROVIDERS__ENABLED", enabled)
+    per_user_file(installation, *lines)
+
+    exit_code, rows, result = provider_rows()
+    _, envelope, _ = doctor_json("--providers")
+
+    assert exit_code == ExitCode.OK
+    assert not [row for row in rows if "HTTP" in row or "unencrypted" in row]
+    assert envelope["data"]["providers"].get("asked_over_http") == []
+    assert_no_value(result)
+
+
 def test_with_no_provider_enabled_one_row_says_so(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("DEBATE_PROVIDERS__ENABLED", "[]")
 
@@ -271,6 +339,7 @@ def test_the_json_carries_the_rows_under_providers(installation: Path) -> None:
                 "summary": "no GovInfo key: GovInfo not asked",
             },
         ],
+        "asked_over_http": [],
     }
     assert_no_value(result)
 

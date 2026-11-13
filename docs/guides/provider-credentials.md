@@ -10,6 +10,7 @@ of them work better, or at all, with a credential of your own:
 | `DEBATE_PROVIDERS__OPENALEX_API_KEY` | OpenAlex answers keyless, with a lower daily allowance. |
 | `DEBATE_PROVIDERS__API_DATA_GOV_KEY` | GovInfo is not asked. The key is free from api.data.gov. |
 | `DEBATE_PROVIDERS__SEMANTIC_SCHOLAR_API_KEY` | Semantic Scholar is not asked. A search that has it enabled names it `not configured` with the cure, request a key through the form on Semantic Scholar's API page (semanticscholar.org/product/api), and does not count it as partial. A search that names it with `--providers` gives the same cure and is partial; one that has no other provider to ask exits `1`, and its message names Semantic Scholar with the cure too (`v1-e07-t23`). The shared keyless pool refused every request in the operator's smoke of 2026-11-11 (`v1-e07-t20`). No profile enables Semantic Scholar yet. |
+| `DEBATE_PROVIDERS__SEMANTIC_SCHOLAR_INSECURE_HTTP` | Not a credential, and off unless you set it: Semantic Scholar is asked over HTTPS, like every other provider. See [Semantic Scholar over HTTP](#semantic-scholar-over-http-your-choice-for-your-own-key). |
 
 **When a provider is held.** A provider that answers `429` is asking us to slow down, and a search
 then holds it back (`v1-e07-t22`): its queries still waiting are skipped, never sent, the footer
@@ -25,7 +26,7 @@ now, `~/Documents/debate/crossref-smoke`). No command writes it: you do, with th
 
 ## The rules the file follows
 
-* **Those four names only.** Any other line is refused, by the file's name and the line's number,
+* **Those names only:** the four credentials and Semantic Scholar's HTTP opt-in. Any other line is refused, by the file's name and the line's number,
   and the command stops until it is fixed. That includes `DEBATE_ENV` and the OpenCaselist token:
   the token is kept by `debate-research caselist auth login`, never in this file. A line with no
   `=`, or whose name is not a setting name, is named by its line number alone, because it could be a
@@ -44,6 +45,38 @@ now, `~/Documents/debate/crossref-smoke`). No command writes it: you do, with th
   `dotenv:<path>` for a `.env`, and `env:DEBATE_...` for an exported variable. A variable exported
   empty also wins, which is how to force Crossref's public pool for one command.
 * **The `test` environment never reads it.**
+
+## Semantic Scholar over HTTP: your choice for your own key
+
+On 2026-11-12 Semantic Scholar's HTTPS address answered every request carrying a valid key as if it
+carried none (`429`, "apply for a key"), while its plain-HTTP address answered the same request, key
+and minute with results. The operator has reported it to Semantic Scholar. Until they fix it, a person
+who wants their own key to work can add this line to their own per-user file:
+
+```text
+DEBATE_PROVIDERS__SEMANTIC_SCHOLAR_INSECURE_HTTP=true
+```
+
+What it does (`v1-e07-t20`):
+
+* **Semantic Scholar alone is asked at `http://api.semanticscholar.org`**, so your key crosses the
+  network unencrypted, readable by anyone on the path between you and Semantic Scholar. It is still sent
+  only in its header, never in an address, a log line or any output. Every other provider is still asked
+  over HTTPS.
+* **No redirect is followed.** If Semantic Scholar starts sending HTTP requests to HTTPS, the search
+  names it `error: HTTP 301: redirected to HTTPS at api.semanticscholar.org, not followed`, and nothing
+  more is sent.
+* **It is said wherever it applies.** `doctor --providers` adds a row, `Warning | Semantic Scholar asked
+  over HTTP: the key is sent unencrypted`, and a search that asked Semantic Scholar prints the same
+  sentence in its footer, under Semantic Scholar's line. With `--json`, both carry it as
+  `asked_over_http`, the provider and the sentence; it is an empty list otherwise. Without a key,
+  Semantic Scholar is not asked at all, so the line does not appear.
+* **It is the operator's choice, for the operator's key.** It is the one name in the per-user file that
+  is not a credential: it decides only how your own key is sent, and writing it is your consent to that,
+  so it lives beside the key. No committed profile sets it, and a test fails if one does.
+* **It comes out when HTTPS works.** Once Semantic Scholar answers keyed requests over HTTPS, the setting
+  is removed in one change (`v1-e07-t26`), and a file that still sets it is refused by name, so you know to
+  delete the line.
 
 ## On a machine that has no keys yet
 
@@ -103,7 +136,7 @@ came from. In a source checkout, put `uv run` in front of each command.
 
 ```bash
 cd ~
-debate-research config show | grep -E 'providers\.(contact_email|openalex_api_key|semantic_scholar_api_key|api_data_gov_key)'
+debate-research config show | grep -E 'providers\.(contact_email|openalex_api_key|semantic_scholar_api_key|semantic_scholar_insecure_http|api_data_gov_key)'
 debate-research doctor --providers
 ```
 
@@ -111,7 +144,8 @@ Each credential you wrote should show `***` and the source `user-env:~/.debate-r
 and the `Credentials file` row should say `~/.debate-research/dev.env: read`. A provider without
 its credential says what a search does without it, for example `Crossref | no contact email:
 Crossref's public pool` or `GovInfo | no GovInfo key: GovInfo not asked`; `doctor --providers`
-never fails for that. If a command stops instead, its message names the file, the line and the fix.
+never fails for that. If you set Semantic Scholar's HTTP opt-in and its key, a `Warning` row says the key
+is sent unencrypted. If a command stops instead, its message names the file, the line and the fix.
 
 To check prod's file, put `DEBATE_ENV=prod` in front of each command: `DEBATE_ENV=prod
 debate-research doctor --providers`.

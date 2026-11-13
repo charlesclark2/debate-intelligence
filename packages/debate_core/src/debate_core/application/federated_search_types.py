@@ -323,6 +323,10 @@ class SearchOutcome:
     """The providers left out of the status, missing only configuration, that no person named: enabled
     but unbuilt, a key or the email missing (v1-e07-t15), or a preset's provider settings do not enable
     (v1-e07-t23). Each is still in `provider_statuses`, `not_configured`, with its cure."""
+    asked_over_http: tuple[str, ...] = ()
+    """The providers this search asked over plain HTTP, their keys sent unencrypted: Semantic Scholar under
+    the person's `providers.semantic_scholar_insecure_http`, when it was built and among the providers
+    this search asked (v1-e07-t20)."""
 
     @property
     def status(self) -> SearchStatus:

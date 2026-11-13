@@ -1417,7 +1417,7 @@ CLOUD_TOKEN_CURES: Final[Mapping[str, str]] = MappingProxyType(
 (`v1-e40-t40`): the only place a token code's cloud cure comes from.
 
 Each cure gives the Wednesday login and never a login by hand, which the Mac's words for these codes
-give. The command's output (`debate_cli.caselist_token_cures`), its failed-stage hint and a failed
+give. The command's output (`debate_cli.caselist_auth_cures`), its failed-stage hint and a failed
 stage's notice ask this table, through :func:`cloud_cure_for`. A code outside it keeps its own words in
 bucket mode too."""
 

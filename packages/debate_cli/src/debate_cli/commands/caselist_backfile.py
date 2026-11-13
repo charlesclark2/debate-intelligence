@@ -33,7 +33,7 @@ environment's.
 
 An expired login, no caselist_token, or one it cannot read ends it as it ends `caselist pull`: in bucket
 mode with what happened and the Wednesday login as its hint, never `caselist auth login` (`v1-e40-t35`,
-`v1-e40-t40`, :mod:`debate_cli.caselist_token_cures`), and on the Mac as before.
+`v1-e40-t40`, :mod:`debate_cli.caselist_auth_cures`), and on the Mac as before.
 """
 
 from __future__ import annotations
@@ -44,8 +44,8 @@ from typing import Annotated, NoReturn
 import typer
 
 from debate_cli.bucket_lock import terminated_on_sigterm
+from debate_cli.caselist_auth_cures import cloud_cure_for_a_token_error
 from debate_cli.caselist_events import event_for_caselist
-from debate_cli.caselist_token_cures import cloud_cure_for_a_token_error
 from debate_cli.context import CliContext, cli_context, command_name
 from debate_cli.exit_codes import ExitCode
 from debate_cli.options.bucket_environment import CONFIRM_PROD_FLAG

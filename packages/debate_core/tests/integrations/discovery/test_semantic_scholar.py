@@ -1470,3 +1470,146 @@ def test_every_recorded_request_carries_its_key_only_in_the_header() -> None:
     assert not [request for request in seen if API_KEY in str(request.url)]
     assert [json.loads(path.read_text(encoding="utf-8")) for path in FIXTURES.glob("*.json")]
     assert not [path.name for path in FIXTURES.iterdir() if API_KEY in path.read_text(encoding="utf-8")]
+
+
+# --------------------------------------------------------------------------------------------
+# Over HTTP, by the person's own opt-in (v1-e07-t20, the PM's amendment of 2026-11-12)
+# --------------------------------------------------------------------------------------------
+
+OVER_HTTP_URL: Final = (
+    "http://api.semanticscholar.org/graph/v1/paper/search?query=carbon+capture+subsidies"
+    "&publicationDateOrYear=2020-01-01%3A2024-12-31&limit=6"
+    "&fields=title%2Cauthors%2Cyear%2CpublicationDate%2Cvenue%2CexternalIds%2CcitationCount"
+    "%2CinfluentialCitationCount%2CisOpenAccess%2CopenAccessPdf%2CpublicationTypes%2Cabstract"
+)
+"""The carbon capture search over plain HTTP: the same request, `http://` in place of `https://`."""
+
+
+async def test_with_the_opt_in_unset_semantic_scholar_is_asked_over_https_only() -> None:
+    transport, sent = counting_transport()
+    provider = the_factory(transport)(provider_settings())
+    await provider.search(CARBON_CAPTURE)
+    await provider.search(CARBON_CAPTURE)
+
+    assert ProviderSettings().semantic_scholar_insecure_http is False
+    assert [str(request.url) for request in sent] == [CARBON_CAPTURE_URL, CARBON_CAPTURE_URL]
+
+
+async def test_with_the_opt_in_semantic_scholar_is_asked_over_http_with_its_key_in_the_header() -> None:
+    transport, sent = counting_transport()
+    provider = the_factory(transport)(provider_settings(semantic_scholar_insecure_http=True))
+    await provider.search(CARBON_CAPTURE)
+    await provider.search(CARBON_CAPTURE)
+
+    assert [str(request.url) for request in sent] == [OVER_HTTP_URL, OVER_HTTP_URL]
+    assert [request.headers.get_list("x-api-key") for request in sent] == [[API_KEY], [API_KEY]]
+    assert all(API_KEY not in str(request.url) for request in sent)
+
+
+async def test_with_the_opt_in_off_explicitly_semantic_scholar_stays_on_https() -> None:
+    transport, sent = counting_transport()
+    await the_factory(transport)(provider_settings(semantic_scholar_insecure_http=False)).search(
+        CARBON_CAPTURE
+    )
+
+    assert [str(request.url) for request in sent] == [CARBON_CAPTURE_URL]
+
+
+@pytest.mark.parametrize("status", [301, 302, 307, 308])
+async def test_over_http_a_redirect_to_https_is_a_failure_named_as_such_and_never_followed(
+    status: int,
+) -> None:
+    """Semantic Scholar may one day send HTTP to HTTPS. Following it would ask the HTTPS endpoint the
+    opt-in is there to avoid; it is a refusal that says where it pointed, by scheme and host only."""
+    sent: list[httpx.Request] = []
+
+    def answer(request: httpx.Request) -> httpx.Response:
+        sent.append(request)
+        location = f"https://api.semanticscholar.org/graph/v1/paper/search?query=x&key={API_KEY}"
+        return httpx.Response(status, headers={"location": location})
+
+    provider = the_factory(httpx.MockTransport(answer))(
+        provider_settings(semantic_scholar_insecure_http=True)
+    )
+    with pytest.raises(ProviderUnavailable) as caught:
+        await provider.search(CARBON_CAPTURE)
+
+    assert str(caught.value) == (
+        f"semantic_scholar: HTTP {status}: redirected to HTTPS at api.semanticscholar.org, not followed"
+    )
+    assert [str(request.url) for request in sent] == [OVER_HTTP_URL]
+    assert API_KEY not in str(caught.value)
+
+
+async def test_over_http_a_redirect_elsewhere_is_named_by_its_host_as_before() -> None:
+    def answer(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(302, headers={"location": "http://elsewhere.example.org/search"})
+
+    provider = the_factory(httpx.MockTransport(answer))(
+        provider_settings(semantic_scholar_insecure_http=True)
+    )
+    with pytest.raises(ProviderUnavailable) as caught:
+        await provider.search(CARBON_CAPTURE)
+
+    assert str(caught.value) == "semantic_scholar: HTTP 302: redirected to elsewhere.example.org"
+
+
+@pytest.mark.usefixtures("bare_protected_loggers")
+@pytest.mark.parametrize("opted_in", [False, True], ids=["https", "http"])
+async def test_in_either_mode_the_key_reaches_no_url_log_line_error_or_health_snapshot(
+    opted_in: bool, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Through the registry and the wrapper, as a search asks it: an answer, then a 403 whose body quotes
+    the key, then a transport failure whose message does."""
+    caplog.set_level(logging.DEBUG)
+    clock = FixedClock(NOW)
+    sent: list[httpx.Request] = []
+
+    def answer(request: httpx.Request) -> httpx.Response:
+        sent.append(request)
+        if request.url.params["query"] == "quoting":
+            raise httpx.ConnectError(
+                f"refused for x-api-key: {request.headers['x-api-key']}", request=request
+            )
+        if request.url.params["query"] == "refused":
+            return httpx.Response(403, text=f"key {request.headers['x-api-key']} refused")
+        return httpx.Response(200, json=papers(a_paper()))
+
+    factory = semantic_scholar_factory(
+        HttpSettings(),
+        version=VERSION,
+        clock=clock,
+        sleep=instant_sleep(clock),
+        transport=httpx.MockTransport(answer),
+    )
+    registry = ProviderRegistry.from_settings(
+        provider_settings(semantic_scholar_insecure_http=opted_in),
+        {SearchProviderName.SEMANTIC_SCHOLAR: factory},
+        clock=clock,
+    )
+    provider = registry.get("semantic_scholar")
+    surfaces = [repr(registry), repr(provider)]
+    answered = await provider.search(ProviderQuery(query="carbon capture"))
+    surfaces.append(answered.model_dump_json())
+    for text in ("refused", "quoting"):
+        with pytest.raises(ProviderUnavailable) as caught:
+            await provider.search(ProviderQuery(query=text))
+        surfaces += [
+            str(caught.value),
+            repr(caught.value),
+            str(caught.value.__cause__),
+            repr(caught.value.__cause__),
+        ]
+    surfaces += [snapshot.model_dump_json() for snapshot in registry.health()]
+    surfaces += [str(request.url) for request in sent]
+    surfaces += [record.getMessage() for record in caplog.records]
+    scheme = "http" if opted_in else "https"
+
+    assert len(answered.results) == 1
+    assert {request.url.scheme for request in sent} == {scheme}
+    assert any(
+        f"HTTP Request: GET {scheme}://api.semanticscholar.org/graph/v1/paper/search" in text
+        for text in surfaces
+    )
+    assert any("refused for x-api-key: ***" in text for text in surfaces)
+    assert not [text for text in surfaces if API_KEY in text]

@@ -50,7 +50,7 @@ spec:
         UNVERIFIED card pinned (or the ranking is fixed as the PM rules), and the slow tier
         passes in full.
 status:
-  phase: Pending
+  phase: InProgress
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

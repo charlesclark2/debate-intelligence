@@ -173,7 +173,7 @@ set 4,440,457,216 bytes, peak memory footprint 4,588,392,384. Index `8eae91e2afa
 documents, 173,441 more than build 1 (hspolicy25 53,883, hsld25 37,009, hspolicy24 48,414, hsld24
 34,135; the current stores' counts unchanged), 210,533 distinct card clusters, 2,003,222 occurrence
 rows read, 1,976,129 occurrences, 629,312 provenance rows, none suppressed, no cluster left out;
-9,733 left out as no card (8,404 cite only, 1,329 with no cite and under 25 words). SQLite
+9,351 left out as no card (7,404 cite only, 1,947 with no cite and under 25 words). SQLite
 3,973,885,952 bytes, gzip 1,462,856,642; 5,450,915,840 bytes on disk for the folder.
 
 **What the current seasons already hold**, counted over build 2 and the copy's occurrence tables

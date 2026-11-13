@@ -1360,7 +1360,7 @@ def test_join_a_negation_deleted_right_after_a_retyped_marker_is_a_warning(
 #
 # Interpolation anchors inside a word. Each card here is the join card with an interpolation "s"
 # added through E03's edit API, so the body shows "[s]" (three characters) inside the word:
-#   anchor 11 inside "levee" [9, 14), right after join 1: "lev[s]ee" is body 12-20
+#   anchor 11 inside "levee" [9, 14), right after join 1: "le[s]vee" is body 12-20
 #   anchor 30 inside "never" [28, 33), right after join 2: "ne[s]ver" is body 34-42
 #   anchor 54 inside "season" [51, 57), the body's last word: "sea[s]son" is body 60-69
 #
@@ -1390,7 +1390,7 @@ def anchored_export(anchor: int) -> VerifiedExport:
 
 ANCHORS_INSIDE_WORDS: Final = (
     pytest.param(
-        11, "Engineers … lev[s]ee will not hold … never came to the north … season", id="inside-levee"
+        11, "Engineers … le[s]vee will not hold … never came to the north … season", id="inside-levee"
     ),
     pytest.param(
         30, "Engineers … levee will not hold … ne[s]ver came to the north … season", id="inside-never"
@@ -1439,14 +1439,14 @@ def test_anchor_inside_a_word_whose_interpolation_the_body_leaves_out_verifies(
 @pytest.mark.parametrize(
     ("change", "body_range"),
     [
-        pytest.param(replace_in_evidence("lev", ""), (12, 17), id="the-letters-before-the-anchor"),
-        pytest.param(replace_in_evidence("ee will", " will"), (12, 18), id="the-letters-after-the-anchor"),
+        pytest.param(replace_in_evidence("le", ""), (12, 18), id="the-letters-before-the-anchor"),
+        pytest.param(replace_in_evidence("vee will", " will"), (12, 17), id="the-letters-after-the-anchor"),
     ],
 )
 def test_anchor_inside_a_word_letters_deleted_on_one_side_of_it_are_a_manual_edit(
     change: Callable[[Document], None], body_range: tuple[int, int]
 ) -> None:
-    """ "[s]ee" is body 12-17 and "lev[s]" 12-18, both after join 1's marker (9-12): "levee" [9, 14)
+    """ "[s]vee" is body 12-18 and "le[s]" 12-17, both after join 1's marker (9-12): "levee" [9, 14)
     changed, never a deletion of letters beside an interpolation."""
     export = anchored_export(11)
 
@@ -1461,7 +1461,7 @@ def test_anchor_inside_a_word_letters_deleted_on_one_side_of_it_are_a_manual_edi
 def test_anchor_inside_a_word_deleted_with_its_interpolation_is_a_deletion() -> None:
     """ "levee " right after join 1, as t16's "right-after-join-1" deletes it: "levee" [9, 14)."""
     export = anchored_export(11)
-    changes = (replace_in_evidence("lev", ""), blanked_run("[s]"), replace_in_evidence("ee will", "will"))
+    changes = (replace_in_evidence("le", ""), blanked_run("[s]"), replace_in_evidence("vee will", "will"))
 
     comparison = marker_comparison(export, *changes)
 
@@ -1474,8 +1474,8 @@ def test_anchor_inside_a_word_deleted_with_its_interpolation_is_a_deletion() -> 
 def test_anchor_a_bracket_inside_a_word_the_card_does_not_record_is_a_manual_edit(
     join_card: VerifiedExport,
 ) -> None:
-    """ "lev[s]ee" typed into the join card, which records no interpolation: t16's measured ranges."""
-    change = replace_in_evidence("levee", "lev[s]ee")
+    """ "le[s]vee" typed into the join card, which records no interpolation: t16's measured ranges."""
+    change = replace_in_evidence("levee", "le[s]vee")
 
     comparison = marker_comparison(join_card, change)
 

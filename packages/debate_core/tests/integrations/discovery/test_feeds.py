@@ -236,6 +236,27 @@ def test_a_feed_entry_is_kept_when_every_term_is_a_whole_word_in_title_or_snippe
 
 
 @pytest.mark.parametrize(
+    ("title", "snippet", "kept"),
+    [
+        ("Senate election forecast", None, True),
+        ("Election night in the Senate", None, True),
+        ("Senate", "Who wins the election", True),
+        ("Senate vote count on the stopgap", None, False),
+        ("Election forecast", None, False),
+        ("Senate elections ahead", None, False),
+    ],
+)
+def test_a_digest_templates_two_words_are_both_required_by_the_same_every_word_rule(
+    title: str, snippet: str | None, kept: bool
+) -> None:
+    """v1-e08-t25, the PM's ruling of 2026-11-12: `daily` asks shorter queries, and the feeds' rule is
+    unchanged. `Senate election` keeps an entry only with both words, whole, anywhere in its title or
+    snippet, never one with only `Senate`."""
+    assert query_terms("Senate election") == ("senate", "election")
+    assert matches_terms(an_entry(title, snippet), query_terms("Senate election")) is kept
+
+
+@pytest.mark.parametrize(
     ("published_at", "inside"),
     [
         (datetime(2026, 10, 1, tzinfo=UTC), True),

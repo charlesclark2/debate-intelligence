@@ -1,0 +1,39 @@
+# Digest templates for `debate-research daily` (v1-e08-t25, the PM's ruling of 2026-11-12).
+#
+# Read by debate_core.application.digest_templates whenever `daily` runs; a mistake stops the run
+# naming the group. `daily` asks these in place of config/argument_taxonomy.yaml's templates, which
+# `search` still asks and which this file never changes.
+#
+# Why: the publisher feeds keep an item only when every word of a query is in its title or summary.
+# On 2026-11-12 the politics preset's ten filled uniqueness templates (`Senate vote count Senate`,
+# `bill likely to pass Congress`, ...) kept none of the 42 items the politics feeds had published in
+# the 24 hours before, nor any of the 59 in the 72 hours before. Two-word queries kept some.
+#
+# Each group is one argument/need pair of a preset, by taxonomy id. A template is the preset's query
+# and one more word, `{query} <word>` or `<word> {query}`, nothing longer. `queries` lists the preset
+# queries the template is asked for; left out, it is asked for every query of every preset with the
+# pair. A preset query no template of its group is for is not searched for that pair.
+#
+# A pair with no group here (today, every pair of the nhi preset) asks the taxonomy's templates
+# exactly as before, and the digest names the group as asked that way (the PM's ruling C,
+# 2026-11-12): the every-word rule is the feed provider's alone, and those reviewed templates do their
+# work against OpenAlex, Crossref and the government sources.
+#
+# Adding a template: count it first against the real feeds with scripts/count_digest_feed_matches.py
+# (docs/guides/daily-digests.md, "Counting a template before adding it"), then add it here with the
+# date it was measured and its counts, items kept in the 24 hours / the 72 hours before the run.
+schema_version: 1
+groups:
+  - argument: politics-da
+    need: uniqueness
+    templates:
+      # Measured 2026-11-12T23:21Z: bill Congress 1 / 1, Senate Congress 1 / 1.
+      - {text: "{query} Congress", queries: [bill, Senate]}
+      # Measured 2026-11-12T23:21Z: Senate Republicans 1 / 1 (bill Republicans kept 0 / 0, not asked).
+      - {text: "{query} Republicans", queries: [Senate]}
+
+  - argument: midterms-da
+    need: uniqueness
+    templates:
+      # Measured 2026-11-12T23:21Z: Senate election 2 / 4 (bill election kept 0 / 0, not asked).
+      - {text: "{query} election", queries: [Senate]}

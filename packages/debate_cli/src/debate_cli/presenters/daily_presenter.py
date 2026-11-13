@@ -75,6 +75,13 @@ def _plain(text: str) -> str:
     return _MARKDOWN_SPECIAL.sub(r"\\\1", " ".join(text.split()))
 
 
+TAXONOMY_NOTE: Final = (
+    "No digest templates for this pair in config/daily_templates.yaml: its searches asked the "
+    "taxonomy's templates."
+)
+"""Under a group whose pair has no digest templates (v1-e08-t25, the PM's ruling C): never silent."""
+
+
 def digest_file_name(digest: Digest, file_format: DigestFormat) -> str:
     """`politics-2026-09-17.md`: the preset, the date and the format."""
     return f"{digest.preset.name}-{digest.day.isoformat()}.{file_format.value}"
@@ -86,8 +93,16 @@ def digest_footer(digest: Digest) -> list[str]:
 
 
 def _window_words(digest: Digest) -> str:
-    first, last = digest.since.date().isoformat(), digest.until.date().isoformat()
+    """`2026-09-17 (1 day, UTC)` for a `--date` digest; with no `--date`, the run's hours in its zone:
+    `2026-09-17 07:00 to 2026-09-18 07:00 America/Chicago (the 24 hours before the run)`."""
     days = digest.window.days
+    if digest.zone is not None:
+        first, last = (
+            moment.astimezone(digest.zone).strftime("%Y-%m-%d %H:%M")
+            for moment in (digest.since, digest.until)
+        )
+        return f"{first} to {last} {digest.zone.key} (the {24 * days} hours before the run)"
+    first, last = digest.since.date().isoformat(), digest.until.date().isoformat()
     span = first if first == last else f"{first} to {last}"
     return f"{span} ({days} {'day' if days == 1 else 'days'}, UTC)"
 
@@ -137,6 +152,8 @@ def digest_markdown(digest: Digest) -> str:
         lines += [f"> {line}", ""]
     for group in digest.groups:
         lines += [f"## {_plain(group.heading)}", ""]
+        if group.asked_taxonomy_templates:
+            lines += [f"> {TAXONOMY_NOTE}", ""]
         if not group.items:
             lines += ["No new results.", ""]
         for position, item in enumerate(group.items, start=1):
@@ -194,6 +211,7 @@ def digest_payload(digest: Digest) -> dict[str, JsonValue]:
                 "argument": group.pair.argument,
                 "need": group.pair.need,
                 "heading": group.heading,
+                "asked_taxonomy_templates": group.asked_taxonomy_templates,
                 "results": [_item_json(position, item) for position, item in enumerate(group.items, start=1)],
             }
             for group in digest.groups
@@ -223,6 +241,9 @@ def digest_table(digest: Digest) -> TableSpec:
         title = f"PARTIAL: {title}"
     below = [f"Digest: {digest.file}"] if digest.file is not None else []
     below += _review_lines(digest)
+    below += [
+        f"{group.heading}: {TAXONOMY_NOTE}" for group in digest.groups if group.asked_taxonomy_templates
+    ]
     below += digest_footer(digest)
     return TableSpec(
         title=title,

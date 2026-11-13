@@ -224,6 +224,14 @@ from debate_core.application.daily_preset_config import (
 )
 from debate_core.application.digest_seen_set import FileDigestSeenStore
 from debate_core.application.digest_service import DigestService
+from debate_core.application.digest_templates import (
+    DAILY_TEMPLATES_PATH,
+    DigestExpansionStage,
+    DigestTemplateError,
+    DigestTemplates,
+    check_digest_templates,
+    load_digest_templates,
+)
 from debate_core.application.environment_data_dirs import profile_data_dir
 from debate_core.application.evidence_profiles import (
     MODEL_PROFILE_SETTING,
@@ -245,7 +253,7 @@ from debate_core.application.federated_ranking import (
 )
 from debate_core.application.federated_search import FederatedSearchService, SearchTopics
 from debate_core.application.federated_search_articles import ArticleMatchingStage
-from debate_core.application.federated_search_types import StagesInOrder
+from debate_core.application.federated_search_types import SearchStage, StagesInOrder
 from debate_core.application.file_build_service import FileBuildService
 from debate_core.application.file_publish_service import FilePublishService
 from debate_core.application.file_quality_service import FileQualityService
@@ -1732,9 +1740,13 @@ class ServiceContainer:
         )
 
     def _federated_search_over(
-        self, providers: ProviderRegistry, guard: StructuredOutputGuard | None
+        self,
+        providers: ProviderRegistry,
+        guard: StructuredOutputGuard | None,
+        expand: SearchStage | None = None,
     ) -> FederatedSearchService:
-        """`search`'s federated search over `providers`: the same stages, stores and topics."""
+        """`search`'s federated search over `providers`: the same stages, stores and topics. `expand`
+        replaces the taxonomy's expand stage, for `daily`'s digest templates (v1-e08-t25)."""
         from debate_core.integrations.local import SqliteArticleRepository, SqliteSearchRepository
 
         settings = self.settings
@@ -1751,7 +1763,7 @@ class ServiceContainer:
             ids=ids,
             deadline_seconds=settings.providers.search_deadline_seconds,
             topics=self._search_topics(),
-            expand=QueryExpansionStage(taxonomy, clock=clock, guard=guard),
+            expand=expand or QueryExpansionStage(taxonomy, clock=clock, guard=guard),
             normalize=DedupeStage(),
             rank=StagesInOrder(
                 FederatedRankStage(ranking, clock=clock),
@@ -1782,6 +1794,24 @@ class ServiceContainer:
         except DailyPresetError as error:
             raise ConfigurationError(str(error), field=str(DAILY_PRESETS_PATH)) from None
 
+    def daily_templates(self) -> DigestTemplates:
+        """The committed `config/daily_templates.yaml` (`v1-e08-t25`): what `daily` asks in place of the
+        taxonomy's templates, checked against the taxonomy and every preset when it is loaded. A file
+        that does not load is a :class:`~debate_core.application.settings.ConfigurationError` naming it."""
+        return self.singleton("daily_templates", self._load_daily_templates)
+
+    def _load_daily_templates(self) -> DigestTemplates:
+        path = _committed_root(str(DAILY_TEMPLATES_PATH)) / DAILY_TEMPLATES_PATH
+        try:
+            return check_digest_templates(
+                load_digest_templates(path),
+                self.daily_presets(),
+                self.argument_taxonomy(),
+                source=str(DAILY_TEMPLATES_PATH),
+            )
+        except DigestTemplateError as error:
+            raise ConfigurationError(str(error), field=str(DAILY_TEMPLATES_PATH)) from None
+
     def daily_digesting(self, *, feed_topics: tuple[str, ...]) -> DailyDigesting:
         """What `daily` runs (`v1-e08-t07`): :class:`DigestService` over `search`'s federated search,
         whose feed and Google News providers read only `feed_topics`' committed feed lists, so a
@@ -1801,10 +1831,15 @@ class ServiceContainer:
             )
             for config in lists
         }
+        taxonomy = self.argument_taxonomy()
+        templates = self.daily_templates()
         service = DigestService(
-            searching=self._federated_search_over(providers, None),
+            searching=self._federated_search_over(
+                providers, None, DigestExpansionStage(taxonomy, templates, clock=_PortClock(self.clock()))
+            ),
             seen=FileDigestSeenStore(self.settings.storage.data_dir / DAILY_SEEN_DIRECTORY),
-            taxonomy=self.argument_taxonomy(),
+            taxonomy=taxonomy,
+            templates=templates,
             feed_reviews=reviews,
         )
         return DailyDigesting(service=service, providers=providers)

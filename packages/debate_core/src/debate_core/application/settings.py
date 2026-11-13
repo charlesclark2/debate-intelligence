@@ -114,6 +114,7 @@ from fnmatch import fnmatchcase
 from pathlib import Path
 from typing import Any, Final, cast
 from urllib.parse import urlsplit
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from pydantic import (
     BaseModel,
@@ -161,6 +162,7 @@ __all__ = [
     "CardFingerprintSettings",
     "CaselistTokenBackend",
     "ConfigurationError",
+    "DailySettings",
     "Environment",
     "HttpSettings",
     "CaselistSettings",
@@ -1386,6 +1388,35 @@ class ArticleSettings(SettingsGroup):
         return timedelta(hours=self.refetch_after_hours)
 
 
+class DailySettings(SettingsGroup):
+    """`debate-research daily`'s digests (`v1-e08-t25`)."""
+
+    time_zone: str = Field(
+        default="America/Chicago",
+        description=(
+            "The IANA time zone a digest run with no --date is dated in: it covers the 24 hours before "
+            "the run and is named for the run's date here."
+        ),
+    )
+
+    @field_validator("time_zone")
+    @classmethod
+    def _a_zone_the_database_knows(cls, value: str) -> str:
+        """Refused at load, never at a digest's first run; the message does not repeat the value."""
+        try:
+            ZoneInfo(value)
+        except (ZoneInfoNotFoundError, ValueError, OSError):
+            raise ValueError(
+                "is not a time zone the IANA time zone database knows; give a name such as America/Chicago"
+            ) from None
+        return value
+
+    @property
+    def zone(self) -> ZoneInfo:
+        """`time_zone` as a time zone."""
+        return ZoneInfo(self.time_zone)
+
+
 class Settings(BaseSettings):
     """Everything the platform was configured with for this run.
 
@@ -1433,6 +1464,7 @@ class Settings(BaseSettings):
     fingerprints: CardFingerprintSettings = Field(default_factory=CardFingerprintSettings)
     parse: ParseSettings = Field(default_factory=ParseSettings)
     articles: ArticleSettings = Field(default_factory=ArticleSettings)
+    daily: DailySettings = Field(default_factory=DailySettings)
 
     @classmethod
     def settings_customise_sources(

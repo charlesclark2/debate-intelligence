@@ -150,6 +150,8 @@ class Seams:
     articles: ReplayTransport | None = None
     card_router: NeedRecordingRouter | None = None
     crossref: CrossrefAnswers = field(default_factory=CrossrefAnswers)
+    now: datetime = NOW
+    """The container's fixed clock, unless `stepping_clock`."""
     stepping_clock: bool = False
     """A container clock that moves 0.4 s each time it is read, from NOW, in place of the fixed one:
     Crossref's pacer waits on it, and waits for ever on a clock that never moves."""
@@ -181,7 +183,7 @@ def seams(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Seams]:
 
     def with_seams(self: ServiceContainer, **arguments: Any) -> None:
         build(self, **arguments)
-        self.override("clock", SteppingClock() if seams.stepping_clock else lambda: NOW)
+        self.override("clock", SteppingClock() if seams.stepping_clock else lambda: seams.now)
         self.override("topic_feed_lists", FEED_LISTS)
         transport = httpx.MockTransport(seams.feeds.handle)
         self.override("discovery_transport", transport)
@@ -253,9 +255,9 @@ SEPTEMBER_17_MARKDOWN: Final = (
     )
     + "\n### 2. "
     + item(
-        "Senate vote count on the stopgap spending measure",
+        "Senate Republicans block the stopgap spending measure",
         "2026-09-17",
-        "https://news.example.org/2026/09/17/senate-vote-count",
+        "https://news.example.org/2026/09/17/senate-republicans",
     )
     + "\n## Midterms DA — Uniqueness\n"
     "\n"
@@ -269,11 +271,13 @@ SEPTEMBER_17_MARKDOWN: Final = (
     "\n"
     "Providers: COMPLETE\n"
     "\n"
-    "- rss: ok, 3 results from 10 queries\n"
+    "- rss: ok, 3 results from 4 queries\n"
 )
-"""`daily politics --date 2026-09-17`, by hand from `courier_2026-09-17.xml`: politics x bill keeps B,
-politics x Senate keeps A (E is a week old), midterms x Senate keeps C. Ten queries: three politics DA
-templates and two midterms DA templates for each of the two queries."""
+"""`daily politics --date 2026-09-17`, by hand from `courier_2026-09-17.xml` and the committed
+`config/daily_templates.yaml` (v1-e08-t25): politics x bill asks `bill Congress` and keeps B; politics
+x Senate asks `Senate Congress` and `Senate Republicans` and keeps I; midterms x Senate asks `Senate
+election` and keeps C; midterms x bill is not searched, no template being for `bill`. Four queries.
+A, which the taxonomy's `Senate vote count Senate` would keep, is not listed."""
 
 SEPTEMBER_18_MARKDOWN: Final = (
     "# Politics daily digest: 2026-09-18\n"
@@ -289,7 +293,7 @@ SEPTEMBER_18_MARKDOWN: Final = (
     "\n"
     "### 1. "
     + item(
-        "Spending bill will not pass the House, leaders say",
+        "Spending bill heads back to Congress, leaders say",
         "2026-09-18",
         "https://news.example.org/2026/09/18/spending-bill",
     )
@@ -297,17 +301,17 @@ SEPTEMBER_18_MARKDOWN: Final = (
     "\n"
     "### 1. "
     + item(
-        "Senate midterms polling tightens in three states",
+        "Senate election polling tightens in three states",
         "2026-09-17",
-        "https://news.example.org/2026/09/17/senate-midterms-polling",
+        "https://news.example.org/2026/09/17/senate-election-polling",
     )
     + "\n## Providers\n"
     "\n"
     "Providers: COMPLETE\n"
     "\n"
-    "- rss: ok, 5 results from 10 queries\n"
+    "- rss: ok, 5 results from 4 queries\n"
 )
-"""`daily politics --date 2026-09-18 --window 2d` after the 17th's: B, A and C are in the window again
+"""`daily politics --date 2026-09-18 --window 2d` after the 17th's: B, I and C are in the window again
 and were listed on the 17th, so they are left out; G is new, and so is H, dated the 17th but first in
 the feed on the 18th."""
 
@@ -330,7 +334,7 @@ def test_daily_politics_writes_the_dated_digest_grouped_by_argument_and_need(
     assert sorted(path.name for path in (tmp_path / DIGESTS).iterdir()) == ["politics-2026-09-17.md"]
     assert "Digest: digests/politics-2026-09-17.md" in result.stdout
     assert "Providers: COMPLETE" in result.stdout
-    assert "rss: ok, 3 results from 10 queries" in result.stdout
+    assert "rss: ok, 3 results from 4 queries" in result.stdout
     assert SENTINEL not in markdown + result.output
 
 
@@ -354,6 +358,267 @@ def test_with_no_date_the_digest_is_for_today_by_the_clock(seams: Seams, tmp_pat
 
     assert result.exit_code == ExitCode.OK, result.output
     assert (tmp_path / DIGESTS / "politics-2026-09-17.md").is_file()
+
+
+# ------------------------------------------------------------------------------------------------
+# The digest templates, never the taxonomy's (v1-e08-t25's ac2, the PM's ruling of 2026-11-12)
+# ------------------------------------------------------------------------------------------------
+
+DIGEST_QUERIES: Final = ["bill Congress", "Senate Congress", "Senate Republicans", "Senate election"]
+"""What the committed `config/daily_templates.yaml` asks of the politics preset: the ruling's four."""
+
+UNIQUENESS_QUERIES: Final = [
+    "bill vote count Senate",
+    "bill likely to pass Congress",
+    "bill will not pass",
+    "Senate vote count Senate",
+    "Senate likely to pass Congress",
+    "Senate will not pass",
+    "bill midterms polling",
+    "bill election forecast",
+    "Senate midterms polling",
+    "Senate election forecast",
+]
+"""The ten queries the taxonomy's politics DA and midterms DA uniqueness templates fill for the preset."""
+
+
+def test_daily_asks_the_digest_templates_and_none_of_the_taxonomys_uniqueness_templates(seams: Seams) -> None:
+    result = daily("politics", "--date", "2026-09-17", "--format", "json", json_output=True)
+
+    assert result.exit_code == ExitCode.OK, result.output
+    data = envelope(result)["data"]
+    asked = [call["query"] for call in data["provider_calls"]]
+    assert asked == DIGEST_QUERIES
+    assert not set(asked) & set(UNIQUENESS_QUERIES)
+    titles = {result["title"] for group in data["groups"] for result in group["results"]}
+    assert "Senate vote count on the stopgap spending measure" not in titles
+
+
+def test_search_still_asks_the_taxonomys_uniqueness_templates(seams: Seams) -> None:
+    result = runner.invoke(
+        create_app(), ["--json", "search", "Senate", "--argument", "politics-da", "--need", "uniqueness"]
+    )
+
+    document = envelope(result)
+    data = document["data"] if document["data"] is not None else document["error"]["details"]
+    assert [query["query"] for query in data["expansion"]["queries"]] == UNIQUENESS_QUERIES[3:6]
+    assert [query["template_id"] for query in data["expansion"]["queries"]] == [
+        "politics-da/uniqueness/1",
+        "politics-da/uniqueness/2",
+        "politics-da/uniqueness/3",
+    ]
+
+
+def test_the_two_groups_list_what_their_own_templates_found_and_nothing_twice(seams: Seams) -> None:
+    result = daily("politics", "--date", "2026-09-17", "--format", "json", json_output=True)
+
+    data = envelope(result)["data"]
+    found = {group["heading"]: [r["url"] for r in group["results"]] for group in data["groups"]}
+    assert found == {
+        "Politics DA — Uniqueness": [
+            "https://news.example.org/2026/09/17/farm-bill?utm_source=feed",
+            "https://news.example.org/2026/09/17/senate-republicans",
+        ],
+        "Midterms DA — Uniqueness": ["https://news.example.org/2026/09/17/senate-forecast"],
+    }
+
+
+def test_an_nhi_pair_with_no_digest_templates_asks_the_taxonomys_templates_as_on_dev_and_says_so(
+    seams: Seams, tmp_path: Path
+) -> None:
+    """The PM's ruling C (2026-11-12): a pair with no digest templates asks the taxonomy's uniqueness
+    templates exactly as before this task, keeps its groups apart, and the digest names it."""
+    result = daily("nhi", "--date", "2026-09-17", "--format", "json", json_output=True)
+
+    assert result.exit_code == ExitCode.OK, result.output
+    data = envelope(result)["data"]
+    assert [
+        call["query"] for call in data["provider_calls"] if call["provider"] == "rss"
+    ] == NHI_QUERIES_ON_DEV
+    assert nhi_groups(data) == NHI_GROUPS
+    assert daily("nhi", "--date", "2026-09-17").exit_code == ExitCode.OK
+    markdown = (tmp_path / DIGESTS / "nhi-2026-09-17.md").read_text(encoding="utf-8")
+    for heading in ("Spending DA — Uniqueness", "Federalism DA — Uniqueness", "Economy DA — Uniqueness"):
+        assert f"## {heading}\n\n{TAXONOMY_NOTE}\n" in markdown
+
+
+def test_a_politics_digest_carries_no_such_line(seams: Seams, tmp_path: Path) -> None:
+    assert daily("politics", "--date", "2026-09-17").exit_code == ExitCode.OK
+
+    markdown = (tmp_path / DIGESTS / "politics-2026-09-17.md").read_text(encoding="utf-8")
+    assert "No digest templates" not in markdown
+
+
+@pytest.mark.parametrize(
+    ("change", "named"),
+    [
+        (
+            lambda document: document["groups"][0]["templates"].append({"text": "{query} vote count"}),
+            "a digest template is the query and one word",
+        ),
+        (
+            lambda document: document["groups"][1].update(argument="elections"),
+            "group elections/uniqueness: the taxonomy has no argument with the id 'elections'; did you "
+            "mean 'midterms-da'",
+        ),
+        (
+            lambda document: document["groups"][1]["templates"][0].update(queries=["Senate", "House"]),
+            "is for the query 'House', which no preset with this pair asks",
+        ),
+    ],
+    ids=["a three-word template", "an alias for the argument", "a query no preset asks"],
+)
+def test_a_digest_templates_file_that_does_not_load_stops_every_run_naming_it(
+    seams: Seams, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, change: Any, named: str
+) -> None:
+    repository = Path(__file__).resolve().parents[3]
+    document = yaml.safe_load((repository / "config" / "daily_templates.yaml").read_text(encoding="utf-8"))
+    change(document)
+    templates = tmp_path / "daily_templates.yaml"
+    templates.write_text(yaml.safe_dump(document, sort_keys=False), encoding="utf-8")
+    monkeypatch.setattr(container_module, "DAILY_TEMPLATES_PATH", templates)
+
+    result = daily("politics", "--date", "2026-09-17", json_output=True)
+
+    assert result.exit_code == ExitCode.DOMAIN_FAILURE, result.output
+    error = envelope(result)["error"]
+    assert named in " ".join(error["message"].split())
+    assert str(templates) in error["message"]
+    assert seams.feeds.requests == []
+
+
+# ------------------------------------------------------------------------------------------------
+# With no --date: the 24 hours before the run, dated in daily.time_zone (v1-e08-t25's ac3)
+#
+# The fixtures' items are on 17 and 18 September, when Chicago is UTC-5 and Los Angeles UTC-7. A run
+# at 23:00 Chicago on the 17th is 04:00Z on the 18th: the case of 2026-11-11, when the UTC date sent
+# the evening's digest to the next day with only the hours since UTC midnight in it.
+# ------------------------------------------------------------------------------------------------
+
+
+def window_line(markdown: str) -> str:
+    return next(line for line in markdown.splitlines() if line.startswith("- Window: "))
+
+
+def test_with_no_date_a_run_at_23_00_in_chicago_is_that_evenings_digest_of_its_24_hours(
+    seams: Seams, tmp_path: Path
+) -> None:
+    seams.now = datetime(2026, 9, 18, 4, 0, tzinfo=UTC)
+
+    result = daily("politics", "--format", "json", json_output=True)
+
+    assert result.exit_code == ExitCode.OK, result.output
+    data = envelope(result)["data"]
+    assert (data["date"], data["file"], data["new_results"]) == (
+        "2026-09-17",
+        "digests/politics-2026-09-17.json",
+        3,
+    )
+    assert data["window"] == {
+        "days": 1,
+        "since": "2026-09-17T04:00:00+00:00",
+        "until": "2026-09-18T04:00:00+00:00",
+    }
+    assert sorted(path.name for path in (tmp_path / DIGESTS).iterdir()) == ["politics-2026-09-17.json"]
+    seen = seen_set(tmp_path)
+    assert seen is not None
+    assert set(seen["urls"].values()) == {"2026-09-17"}
+
+
+def test_with_no_date_a_run_at_07_00_in_chicago_reaches_into_the_evening_before(
+    seams: Seams, tmp_path: Path
+) -> None:
+    """07:00 Chicago on the 18th is 12:00Z: the window opens at 12:00Z on the 17th, after B (09:30Z)
+    and I (11:00Z) and before C and H; G is the 18th's. Each search's own order is the ranking's."""
+    seams.now = datetime(2026, 9, 18, 12, 0, tzinfo=UTC)
+    seams.feeds.courier = "courier_2026-09-18.xml"
+
+    result = daily("politics")
+
+    assert result.exit_code == ExitCode.OK, result.output
+    markdown = (tmp_path / DIGESTS / "politics-2026-09-18.md").read_text(encoding="utf-8")
+    assert window_line(markdown) == (
+        "- Window: 2026-09-17 07:00 to 2026-09-18 07:00 America/Chicago (the 24 hours before the run)"
+    )
+    sections = markdown.split("\n## ")
+    assert [section.splitlines()[0] for section in sections[1:]] == [
+        "Politics DA — Uniqueness",
+        "Midterms DA — Uniqueness",
+        "Providers",
+    ]
+    assert set(re.findall(r"^### \d\. (.+)$", sections[1], re.MULTILINE)) == {
+        "Spending bill heads back to Congress, leaders say",
+    }
+    assert set(re.findall(r"^### \d\. (.+)$", sections[2], re.MULTILINE)) == {
+        "Senate election polling tightens in three states",
+        "Senate election forecast: Democrats favored to hold the chamber",
+    }
+
+
+def test_with_no_date_and_a_wider_window_it_is_that_many_days_of_24_hours(
+    seams: Seams, tmp_path: Path
+) -> None:
+    seams.now = datetime(2026, 9, 18, 4, 0, tzinfo=UTC)
+
+    result = daily("politics", "--window", "3d")
+
+    assert result.exit_code == ExitCode.OK, result.output
+    assert sorted(path.name for path in (tmp_path / DIGESTS).iterdir()) == ["politics-2026-09-17.md"]
+    markdown = (tmp_path / DIGESTS / "politics-2026-09-17.md").read_text(encoding="utf-8")
+    assert window_line(markdown) == (
+        "- Window: 2026-09-14 23:00 to 2026-09-17 23:00 America/Chicago (the 72 hours before the run)"
+    )
+
+
+@pytest.mark.parametrize(
+    ("zone", "named"),
+    [(None, "politics-2026-09-18.md"), ("America/Los_Angeles", "politics-2026-09-17.md")],
+    ids=["chicago by default, 00:30 on the 18th", "los angeles, 22:30 on the 17th"],
+)
+def test_with_no_date_the_digest_is_dated_in_the_configured_zone(
+    seams: Seams, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, zone: str | None, named: str
+) -> None:
+    """05:30Z on the 18th. Either way the window is 05:30Z on the 17th to 05:30Z on the 18th, which
+    holds B, I and C."""
+    if zone is not None:
+        monkeypatch.setenv("DEBATE_DAILY__TIME_ZONE", zone)
+    seams.now = datetime(2026, 9, 18, 5, 30, tzinfo=UTC)
+
+    result = daily("politics", "--format", "json", json_output=True)
+
+    assert result.exit_code == ExitCode.OK, result.output
+    data = envelope(result)["data"]
+    assert sorted(path.name for path in (tmp_path / DIGESTS).iterdir()) == [named.replace(".md", ".json")]
+    assert (data["window"]["since"], data["window"]["until"], data["new_results"]) == (
+        "2026-09-17T05:30:00+00:00",
+        "2026-09-18T05:30:00+00:00",
+        3,
+    )
+
+
+def test_a_time_zone_the_database_does_not_know_stops_the_run_naming_the_setting(
+    seams: Seams, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("DEBATE_DAILY__TIME_ZONE", "America/Springfield")
+
+    result = daily("politics", "--date", "2026-09-17", json_output=True)
+
+    assert result.exit_code == ExitCode.DOMAIN_FAILURE, result.output
+    error = envelope(result)["error"]
+    assert error["details"]["field"] == "daily.time_zone"
+    assert "daily.time_zone" in error["message"]
+    assert seams.feeds.requests == []
+    assert not (tmp_path / DIGESTS).exists()
+
+
+def test_a_date_keeps_its_whole_utc_day_whatever_the_clock_says(seams: Seams, tmp_path: Path) -> None:
+    seams.now = datetime(2026, 9, 19, 4, 0, tzinfo=UTC)
+
+    result = daily("politics", "--date", "2026-09-17")
+
+    assert result.exit_code == ExitCode.OK, result.output
+    shape, _ = without_why((tmp_path / DIGESTS / "politics-2026-09-17.md").read_text(encoding="utf-8"))
+    assert shape == SEPTEMBER_17_MARKDOWN
 
 
 # ------------------------------------------------------------------------------------------------
@@ -385,7 +650,7 @@ def test_the_seen_set_is_in_the_data_directory_by_canonical_url_and_never_beside
         "urls": {
             "https://news.example.org/2026/09/17/farm-bill": "2026-09-17",
             "https://news.example.org/2026/09/17/senate-forecast": "2026-09-17",
-            "https://news.example.org/2026/09/17/senate-vote-count": "2026-09-17",
+            "https://news.example.org/2026/09/17/senate-republicans": "2026-09-17",
         },
         "dois": {},
     }
@@ -544,10 +809,10 @@ def test_format_json_writes_the_digest_as_json_and_prints_it(seams: Seams, tmp_p
                     "https://news.example.org/2026/09/17/farm-bill?utm_source=feed",
                 ),
                 (
-                    "Senate vote count on the stopgap spending measure",
+                    "Senate Republicans block the stopgap spending measure",
                     "The Example Courier",
                     "2026-09-17",
-                    "https://news.example.org/2026/09/17/senate-vote-count",
+                    "https://news.example.org/2026/09/17/senate-republicans",
                 ),
             ],
         ),
@@ -565,15 +830,15 @@ def test_format_json_writes_the_digest_as_json_and_prints_it(seams: Seams, tmp_p
     ]
     assert data["feed_topics"] == [{"topic": "politics", "awaiting_coach_review": ["The Example Courier"]}]
     assert data["providers"] == [
-        {"provider": "rss", "outcome": "ok", "queries": 10, "failed": 0, "results": 3, "reasons": []}
+        {"provider": "rss", "outcome": "ok", "queries": 4, "failed": 0, "results": 3, "reasons": []}
     ]
-    assert len(data["provider_calls"]) == 10
+    assert len(data["provider_calls"]) == 4
     assert [(s["query"], s["argument"], s["need"]) for s in data["searches"]] == [
         ("bill", "politics-da", "uniqueness"),
         ("Senate", "politics-da", "uniqueness"),
-        ("bill", "midterms-da", "uniqueness"),
         ("Senate", "midterms-da", "uniqueness"),
     ]
+    assert [group["asked_taxonomy_templates"] for group in data["groups"]] == [False, False]
     assert SENTINEL not in result.stdout
 
 
@@ -589,7 +854,7 @@ def test_a_feed_that_fails_makes_the_digest_partial_and_the_footer_says_so(
     markdown = (tmp_path / DIGESTS / "politics-2026-09-17.md").read_text(encoding="utf-8")
     footer = markdown[markdown.index("## Providers") :].splitlines()
     assert footer[2] == "Providers: PARTIAL, results may be missing"
-    assert footer[4].startswith("- rss: partial, 3 results from 10 queries: ")
+    assert footer[4].startswith("- rss: partial, 3 results from 4 queries: ")
     assert "The Example Ledger" in footer[4]
     assert "- Status: PARTIAL" in markdown
     assert "Providers: PARTIAL, results may be missing" in result.stdout
@@ -631,6 +896,49 @@ NOT_ENABLED_UNCOUNTED: Final = (
 v1-e07-t15's follow-up 1)."""
 
 
+NHI_GROUPS: Final = [
+    (
+        "Spending DA — Uniqueness",
+        True,
+        ["Health insurance subsidies at the center of the federal spending debate in Congress"],
+    ),
+    ("Federalism DA — Uniqueness", True, ["States lead on health insurance policy as Washington stalls"]),
+    ("Economy DA — Uniqueness", True, []),
+]
+"""The nhi preset's pairs have no digest templates, so each asks the taxonomy's uniqueness templates as
+before v1-e08-t25 (the PM's ruling C of 2026-11-12), and the digest names each. The groups are dev's
+own, as `test_daily_command.py` pinned them on dev at 5c71e42."""
+
+NHI_QUERIES_ON_DEV: Final = [
+    "health insurance federal spending debate Congress",
+    "Congress spending restraint health insurance",
+    "states lead health insurance policy",
+    "health insurance state innovation federalism",
+    "health insurance clean federal and state separation now",
+    "health insurance federalism healthy now",
+    "health insurance economic growth forecast",
+    "health insurance recession risk",
+]
+"""What `daily nhi --date 2026-09-17` asked the feeds on dev at 5c71e42, before this task: recorded by
+running dev's own code in a scratch worktree on 2026-11-12, not from this branch's output."""
+
+TAXONOMY_NOTE: Final = (
+    "> No digest templates for this pair in config/daily_templates.yaml: its searches asked the "
+    "taxonomy's templates."
+)
+
+
+def nhi_groups(data: dict[str, Any]) -> list[tuple[str, bool | None, list[str]]]:
+    return [
+        (
+            group["heading"],
+            group.get("asked_taxonomy_templates"),
+            [result["title"] for result in group["results"]],
+        )
+        for group in data["groups"]
+    ]
+
+
 def test_an_nhi_digest_reads_only_the_health_insurance_feeds_and_names_its_uncounted_providers(
     seams: Seams, tmp_path: Path
 ) -> None:
@@ -650,14 +958,7 @@ def test_an_nhi_digest_reads_only_the_health_insurance_feeds_and_names_its_uncou
         ("federal_register", "not configured", [NOT_ENABLED_UNCOUNTED]),
         ("govinfo", "not configured", [NOT_ENABLED_UNCOUNTED]),
     ]
-    assert [(group["heading"], [r["title"] for r in group["results"]]) for group in details["groups"]] == [
-        (
-            "Spending DA — Uniqueness",
-            ["Health insurance subsidies at the center of the federal spending debate in Congress"],
-        ),
-        ("Federalism DA — Uniqueness", ["States lead on health insurance policy as Washington stalls"]),
-        ("Economy DA — Uniqueness", []),
-    ]
+    assert nhi_groups(details) == NHI_GROUPS
     assert (tmp_path / "data" / "daily" / "seen" / "nhi.json").is_file()
 
 
@@ -693,14 +994,7 @@ def test_an_nhi_digest_without_the_api_data_gov_key_names_govinfo_not_configured
         ("federal_register", "ok", []),
         ("govinfo", "not configured", [GOVINFO_NOT_COUNTED.split(": ", 2)[2]]),
     ]
-    assert [(group["heading"], [r["title"] for r in group["results"]]) for group in data["groups"]] == [
-        (
-            "Spending DA — Uniqueness",
-            ["Health insurance subsidies at the center of the federal spending debate in Congress"],
-        ),
-        ("Federalism DA — Uniqueness", ["States lead on health insurance policy as Washington stalls"]),
-        ("Economy DA — Uniqueness", []),
-    ]
+    assert nhi_groups(data) == NHI_GROUPS
     again = daily("nhi", "--date", "2026-09-17")
     assert again.exit_code == ExitCode.OK, again.output
     markdown = (tmp_path / DIGESTS / "nhi-2026-09-17.md").read_text(encoding="utf-8")

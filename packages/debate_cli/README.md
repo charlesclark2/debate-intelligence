@@ -627,8 +627,13 @@ template queries alone.
 of new research for a preset in `config/daily_presets.yaml`: `politics` (politics DA and midterms DA
 uniqueness, from the politics feeds) and `nhi` (the NHI topic's spending, federalism and economy DA
 uniqueness). `DigestService` in `debate_core` runs each of the preset's queries, expanded for each of
-its argument/need pairs, through `search`'s federated search for the window (`--window 1d` to `31d`,
-ending with `--date`, in UTC; `--date` defaults to today). The feed and Google News providers are built
+its argument/need pairs by the two-word digest templates of `config/daily_templates.yaml` (never the
+taxonomy's, which `search` asks; a pair with none, such as each of `nhi`'s, asks the taxonomy's
+templates as before and the digest says so; `v1-e08-t25`), through `search`'s federated search for the window: with `--date`, whole UTC
+days ending with it (`--window 1d` to `31d`); with no `--date`, the `--window` days of 24 hours before
+the run, dated by the run's date in `daily.time_zone`, America/Chicago in the committed profiles
+(`v1-e08-t25`; the coach's account is [`docs/guides/daily-digests.md`](../../docs/guides/daily-digests.md)).
+An unknown zone name stops every command at startup, naming `daily.time_zone`. The feed and Google News providers are built
 for the preset's own feed topics, so a politics digest never reads the health-insurance feeds. A
 preset is added by adding it to the file: every preset there is checked when `daily` runs, and an
 unknown preset exits `2` listing the presets.

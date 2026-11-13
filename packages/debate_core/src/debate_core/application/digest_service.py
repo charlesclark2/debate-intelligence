@@ -8,9 +8,27 @@ renders the digest and writes its file; this module decides what is in it and wh
 
 For each of the preset's pairs, in the preset's order, and each of its queries, in order, one
 federated search (:class:`~debate_core.application.federated_search.FederatedSearchService`, the one
-`search` runs) asks the preset's providers the query expanded for that argument and need, on the
-preset's topic, inside the window: from the start of the first day to the end of `--date`, in UTC.
-The window is the search's own `since` and `until`, so it overrules every template's recency window.
+`search` runs, with `daily`'s own expand stage) asks the preset's providers the query expanded for
+that argument and need by the **digest templates**, `config/daily_templates.yaml`
+(:mod:`~debate_core.application.digest_templates`, the PM's ruling of 2026-11-12, v1-e08-t25), on
+the preset's topic, inside the window. Never by the taxonomy's templates, which `search` asks: a
+filled uniqueness template such as `Senate vote count Senate` kept no feed item on 2026-11-12.
+
+* A pair whose group has no template for a query runs no search for it.
+* A pair with no group asks the taxonomy's templates exactly as before, and its :class:`DigestGroup`
+  says so (`asked_taxonomy_templates`), so the digest names it (the PM's ruling C of 2026-11-12).
+
+The window is the search's own `since` and `until`.
+
+## The window and the date
+
+With `--date D` the window is whole UTC days: from the start of the first day to the end of D, `--window`
+days in all, and the digest is D's. With no `--date` (:meth:`DigestRequest.before_the_run`, the PM's
+ruling of 2026-11-12, v1-e08-t25) it is the `--window` days of 24 hours before the run, by the
+injected clock, and the digest is dated by the run's date in `daily.time_zone`: a run at 23:00 in
+Chicago is that evening's digest of the day before it, not the next UTC date's. A day is 24 hours
+even when the zone's clocks change that day. The date names the file and is the date the seen-set
+records, so two runs on one local date are that date's digest twice, as two runs of one `--date` are.
 The service is built for the preset's feed topics alone (the container's job), so a politics digest
 never reads the health-insurance feeds. The searches run one after another; each is stored as
 `search` stores it.
@@ -56,9 +74,11 @@ from dataclasses import dataclass, replace
 from datetime import UTC, date, datetime, time, timedelta
 from pathlib import Path
 from typing import Final, Protocol
+from zoneinfo import ZoneInfo
 
 from debate_core.application.batch_cut_service import BatchCandidate, BatchNeed, batch_need
 from debate_core.application.digest_seen_set import DigestSeenSet, DigestSeenStore, SourceKeys, source_keys
+from debate_core.application.digest_templates import DigestTemplates
 from debate_core.application.federated_ranking import RankedCandidate
 from debate_core.application.federated_search import search_status
 from debate_core.application.federated_search_types import ExpansionRequest, SearchOutcome, SearchRequest
@@ -69,6 +89,7 @@ from debate_core.domain.discovery import ProviderStatus
 
 __all__ = [
     "MAX_WINDOW_DAYS",
+    "ONE_DAY",
     "Digest",
     "DigestGroup",
     "DigestItem",
@@ -106,6 +127,11 @@ class DigestWindow:
             raise ValueError(f"{text!r} is not a window: give days, 1d to {MAX_WINDOW_DAYS}d")
         return cls(int(found.group(1)))
 
+    @property
+    def span(self) -> timedelta:
+        """The window as a length of time: 24 hours a day, whatever a clock in any zone does."""
+        return timedelta(days=self.days)
+
     def bounds(self, day: date) -> tuple[datetime, datetime]:
         """The first instant of the window's first day and the last of `day`, in UTC."""
         first = day - timedelta(days=self.days - 1)
@@ -115,13 +141,42 @@ class DigestWindow:
         return f"{self.days}d"
 
 
+ONE_DAY: Final = DigestWindow()
+"""`--window 1d`, the default: the date alone, or the 24 hours before the run."""
+
+
 @dataclass(frozen=True, slots=True)
 class DigestRequest:
-    """One digest: a preset, the date it is for, and how many days back it looks."""
+    """One digest: a preset, the date it is for, and how many days back it looks.
+
+    Built as it is, it is a `--date` digest: whole UTC days ending with `day`. Built by
+    :meth:`before_the_run`, it is a digest run with no `--date`.
+    """
 
     preset: DailyPreset
     day: date
-    window: DigestWindow = DigestWindow()
+    window: DigestWindow = ONE_DAY
+    run_at: datetime | None = None
+    """When a digest with no `--date` was run; None for a `--date` digest."""
+    zone: ZoneInfo | None = None
+    """The time zone `day` is the run's date in; None for a `--date` digest."""
+
+    @classmethod
+    def before_the_run(
+        cls, preset: DailyPreset, *, now: datetime, zone: ZoneInfo, window: DigestWindow = ONE_DAY
+    ) -> DigestRequest:
+        """The digest run at `now` with no `--date`: `window` days of 24 hours before `now`, dated by
+        `now`'s date in `zone`. `ValueError` for a `now` with no time zone of its own, which could be
+        any instant."""
+        if now.utcoffset() is None:
+            raise ValueError("a digest's run time needs a time zone of its own, or it could be any instant")
+        return cls(preset, now.astimezone(zone).date(), window, run_at=now.astimezone(UTC), zone=zone)
+
+    def bounds(self) -> tuple[datetime, datetime]:
+        """The first and last instant the digest's searches cover, in UTC."""
+        if self.run_at is None:
+            return self.window.bounds(self.day)
+        return self.run_at - self.window.span, self.run_at
 
 
 @dataclass(frozen=True, slots=True)
@@ -158,6 +213,8 @@ class DigestGroup:
     heading: str
     """`Politics DA — Uniqueness`: the argument's and the need's labels."""
     items: tuple[DigestItem, ...]
+    asked_taxonomy_templates: bool = False
+    """The pair has no digest templates, so its searches asked the taxonomy's, as before v1-e08-t25."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -174,6 +231,8 @@ class Digest:
     listed_before: int
     """Distinct sources the searches found that a digest of another date already listed."""
     feed_topics: tuple[FeedTopicReview, ...]
+    zone: ZoneInfo | None = None
+    """The time zone a digest with no `--date` is dated in; None for a `--date` digest."""
     file: Path | None = None
     """Where the digest was written; None until it is, and for a FAILED digest, which is not."""
 
@@ -227,26 +286,29 @@ class DigestService:
         searching: DigestSearching,
         seen: DigestSeenStore,
         taxonomy: ArgumentTaxonomy,
+        templates: DigestTemplates,
         feed_reviews: Mapping[str, Sequence[str]] | None = None,
     ) -> None:
-        """`feed_reviews`: for each feed topic, the publishers of its feeds still awaiting review."""
+        """`templates`: the digest templates the search's expand stage asks, the same ones.
+        `feed_reviews`: for each feed topic, the publishers of its feeds still awaiting review."""
         self._searching = searching
         self._seen = seen
         self._taxonomy = taxonomy
+        self._templates = templates
         self._feed_reviews = dict(feed_reviews or {})
 
     async def build(self, request: DigestRequest) -> Digest:
         """The digest, without writing it or recording anything: see the module docstring."""
         preset = request.preset
         seen = self._seen.load(preset.name)
-        since, until = request.window.bounds(request.day)
+        since, until = request.bounds()
         listed: list[SourceKeys] = []
         left_out: list[SourceKeys] = []
         outcomes: list[SearchOutcome] = []
         groups: list[DigestGroup] = []
         for pair in preset.pairs:
             items: list[DigestItem] = []
-            for query in preset.queries:
+            for query in self._queries(preset, pair):
                 outcome = await self._searching.search(self._request(preset, pair, query, since, until))
                 outcomes.append(outcome)
                 for item in self._items(outcome, query):
@@ -257,7 +319,12 @@ class DigestService:
                         continue
                     listed.append(item.keys)
                     items.append(item)
-            groups.append(DigestGroup(pair=pair, heading=self._heading(pair), items=tuple(items)))
+            alone = self._templates.asks_taxonomy(pair.argument, pair.need)
+            groups.append(
+                DigestGroup(
+                    pair=pair, heading=self._heading(pair), items=tuple(items), asked_taxonomy_templates=alone
+                )
+            )
         return Digest(
             preset=preset,
             day=request.day,
@@ -271,6 +338,7 @@ class DigestService:
                 FeedTopicReview(topic, tuple(self._feed_reviews.get(topic, ())))
                 for topic in preset.feed_topics
             ),
+            zone=request.zone,
         )
 
     async def run(self, request: DigestRequest, write: DigestWriter) -> Digest:
@@ -286,6 +354,19 @@ class DigestService:
         seen: DigestSeenSet = self._seen.load(request.preset.name)
         self._seen.save(seen.with_listed((item.keys for item in digest.items), request.day))
         return replace(digest, file=path)
+
+    def planned_searches(self, preset: DailyPreset) -> int:
+        """How many searches the preset's digest runs: one per pair and query a digest template is for."""
+        return sum(len(self._queries(preset, pair)) for pair in preset.pairs)
+
+    def _queries(self, preset: DailyPreset, pair: DailyPair) -> tuple[str, ...]:
+        """The preset's queries a search is run for on `pair`: all of them for a pair that asks the
+        taxonomy's templates, otherwise each that some digest template is for."""
+        if self._templates.asks_taxonomy(pair.argument, pair.need):
+            return preset.queries
+        return tuple(
+            query for query in preset.queries if self._templates.queries_for(pair.argument, pair.need, query)
+        )
 
     def _request(
         self, preset: DailyPreset, pair: DailyPair, query: str, since: datetime, until: datetime

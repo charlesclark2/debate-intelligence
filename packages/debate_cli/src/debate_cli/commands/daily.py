@@ -2,10 +2,18 @@
 
 The deciding is `debate_core`'s: :class:`~debate_core.application.digest_service.DigestService` runs
 the preset's searches (`config/daily_presets.yaml`) through `search`'s federated search for the
-window, leaves out what an earlier digest of the preset listed, groups the rest by argument and need,
+window, each asking the digest templates of `config/daily_templates.yaml` and never the taxonomy's
+(v1-e08-t25), leaves out what an earlier digest of the preset listed, groups the rest by argument and need,
 and records them as listed only once the file is written. What is here is the command-line surface:
 the options, writing the file, and the exit code. The Markdown, the JSON and the summary are
 :mod:`debate_cli.presenters.daily_presenter`'s.
+
+## The date and the window
+
+`--date D` searches whole UTC days ending with D, `--window` days in all. With no `--date` the digest
+covers the `--window` days of 24 hours before the run, by the container's clock, and is dated by the
+run's date in `daily.time_zone` (America/Chicago in the committed profiles; v1-e08-t25, the PM's ruling
+of 2026-11-12). The date names the file and is the date the seen-set records.
 
 ## Files
 
@@ -36,7 +44,7 @@ from __future__ import annotations
 import asyncio
 import json
 from collections.abc import Coroutine
-from datetime import UTC, date, datetime
+from datetime import datetime
 from functools import partial
 from pathlib import Path
 from typing import Annotated, Any, NoReturn
@@ -91,11 +99,17 @@ def daily(
     day: Annotated[
         datetime | None,
         typer.Option(
-            "--date", formats=[DATE_FORMAT], help="The date the digest is for. Default: today, UTC."
+            "--date",
+            formats=[DATE_FORMAT],
+            help="The date the digest is for, in whole UTC days. Default: the 24 hours before the run, "
+            "dated by the run's date in daily.time_zone.",
         ),
     ] = None,
     window: Annotated[
-        str, typer.Option("--window", help="How many days, ending with --date, to search: 1d to 31d.")
+        str,
+        typer.Option(
+            "--window", help="How many days to search, ending with --date or with the run: 1d to 31d."
+        ),
     ] = "1d",
     file_format: Annotated[
         DigestFormat,
@@ -138,9 +152,9 @@ def daily(
     if file_format is DigestFormat.JSON and not cli.output.is_json:
         cli.output = CliOutput(OutputMode.JSON, verbose=cli.output.verbose)
     chosen = _preset(cli, preset)
-    request = DigestRequest(chosen, _day(cli, day), _window(window))
+    request = _request(cli, chosen, day, _window(window))
     digesting = cli.services.daily_digesting(feed_topics=chosen.feed_topics)
-    _progress(cli, ctx, request)
+    _progress(cli, ctx, request, digesting)
     digest = _run(_digest(digesting, request, partial(_write, digest_dir, file_format)))
     payload = {**digest_payload(digest), "file": str(digest.file) if digest.file is not None else None}
     exit_code = exit_code_for_digest(digest)
@@ -172,11 +186,14 @@ def _preset(cli: CliContext, name: str) -> DailyPreset:
     return found
 
 
-def _day(cli: CliContext, given: datetime | None) -> date:
-    """`--date`, or today in UTC by the container's clock."""
+def _request(
+    cli: CliContext, preset: DailyPreset, given: datetime | None, window: DigestWindow
+) -> DigestRequest:
+    """`--date`'s digest, or with none the one before the run, by the container's clock."""
     if given is not None:
-        return given.date()
-    return cli.services.clock()().astimezone(UTC).date()
+        return DigestRequest(preset, given.date(), window)
+    zone = cli.services.settings.daily.zone
+    return DigestRequest.before_the_run(preset, now=cli.services.clock()(), zone=zone, window=window)
 
 
 def _window(text: str) -> DigestWindow:
@@ -186,9 +203,9 @@ def _window(text: str) -> DigestWindow:
         raise typer.BadParameter(str(invalid), param_hint="--window") from None
 
 
-def _progress(cli: CliContext, ctx: typer.Context, request: DigestRequest) -> None:
+def _progress(cli: CliContext, ctx: typer.Context, request: DigestRequest, digesting: DailyDigesting) -> None:
     preset = request.preset
-    searches = len(preset.pairs) * len(preset.queries)
+    searches = digesting.service.planned_searches(preset)
     cli.output.event_line(
         command_name(ctx),
         "digesting",

@@ -38,3 +38,19 @@ def test_an_unknown_preset_exits_2_listing_the_presets_the_build_carries(install
 
     assert run.exit_code == ExitCode.USAGE_ERROR, run.output
     assert "the presets are politics, nhi" in " ".join(run.stderr.split())
+
+
+def test_a_digest_with_no_date_is_dated_in_the_zone_the_builds_profile_names(
+    installed_cli: InstalledCli,
+) -> None:
+    """v1-e08-t25: with no `--date` a digest covers the 24 hours before the run and is dated in
+    `daily.time_zone`, which the profile a published build carries sets to America/Chicago."""
+    shown = installed_cli.run("--json", "config", "show").envelope()["data"]
+    assert isinstance(shown, dict)
+    assert shown["settings"]["daily.time_zone"] == "America/Chicago"
+    assert shown["sources"]["daily.time_zone"].startswith("profile:")
+
+    run = installed_cli.run("daily", "--help", env={"COLUMNS": "200"})
+
+    assert run.exit_code == 0, run.output
+    assert "the 24 hours before the run" in " ".join(run.stdout.split())

@@ -20,8 +20,10 @@
 #     and no others: a politics digest never reads the health-insurance feeds.
 #   max_results: the most results each search ranks (20 unless given).
 #
-# A feed result is kept only when every word of a query (after its template is filled in) is in the
-# item's title or summary, so short queries find more.
+# Each search asks the digest templates of config/daily_templates.yaml for its pair, never the
+# taxonomy's (v1-e08-t25): a feed result is kept only when every word of a query is in the item's title
+# or summary, and the taxonomy's longer templates kept none on 2026-11-12. A pair with no digest
+# templates asks the taxonomy's templates as before, and the digest says so.
 schema_version: 1
 presets:
   # Uniqueness only: elections, Senate votes and polling (PM ruling, 2026-11-09). Link queries that

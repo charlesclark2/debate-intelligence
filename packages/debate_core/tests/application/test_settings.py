@@ -235,6 +235,48 @@ def test_an_out_of_range_value_names_the_field_and_where_it_came_from(
     assert "http.max_retries" in str(raised.value)
 
 
+@pytest.mark.parametrize(
+    "zone",
+    ["America/Springfield", "Central", "", "../../etc/passwd", "/usr/share/zoneinfo/America/Chicago"],
+    ids=["no such city", "not an iana name", "empty", "a relative path", "an absolute path"],
+)
+def test_a_time_zone_the_database_does_not_know_is_refused_naming_the_setting(
+    profiles: Path, monkeypatch: pytest.MonkeyPatch, zone: str
+) -> None:
+    """v1-e08-t25: refused when the settings load, not when a digest is first dated. The value is not
+    quoted, as no refused value is."""
+    monkeypatch.setenv("DEBATE_DAILY__TIME_ZONE", zone)
+
+    with pytest.raises(ConfigurationError) as raised:
+        load_settings(environment="dev", profile_dir=profiles)
+
+    assert raised.value.field == "daily.time_zone"
+    assert raised.value.source == "env:DEBATE_DAILY__TIME_ZONE"
+    assert "daily.time_zone" in str(raised.value)
+    assert not zone or zone not in str(raised.value)
+
+
+@pytest.mark.parametrize("zone", ["America/Chicago", "America/Los_Angeles", "Asia/Tokyo", "UTC"])
+def test_a_time_zone_the_database_knows_is_kept_as_given(
+    profiles: Path, monkeypatch: pytest.MonkeyPatch, zone: str
+) -> None:
+    monkeypatch.setenv("DEBATE_DAILY__TIME_ZONE", zone)
+
+    settings = load_settings(environment="dev", profile_dir=profiles)
+
+    assert settings.daily.time_zone == zone
+    assert settings.daily.zone.key == zone
+
+
+def test_with_no_layer_naming_one_the_digest_zone_is_the_coachs(profiles: Path) -> None:
+    settings = load_settings(environment="dev", profile_dir=profiles)
+
+    assert (settings.daily.time_zone, settings.field_sources["daily.time_zone"]) == (
+        "America/Chicago",
+        "default",
+    )
+
+
 def test_a_misspelled_key_in_a_profile_is_rejected_by_name(tmp_path: Path) -> None:
     directory = tmp_path / "profiles"
     directory.mkdir()

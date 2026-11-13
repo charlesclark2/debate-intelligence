@@ -35,6 +35,14 @@ same deal, and since v1-e41-t18 each collects only the files it gives that part 
 name (run_in_parts.py), so the deal is also each part's list of files: one output for every part,
 which a missing or empty deal leaves collecting everything as before.
 
+It also chooses for ci.yml's `slow-tests` job (v1-e41-t29): on a pull request into dev, the
+chosen files, or for the whole selection every test file, that may hold a slow test
+(`ci_slow_tests.may_hold_slow_tests`, a text check that says yes whenever pytest could find one).
+The job runs their slow tests with validate-dev's markers, less the four tests left to validate-dev.
+Until then the parts' `not slow` dropped them, and v1-e08-t24's ranking change broke a slow e2e test
+its affected set had chosen, which only validate-dev on dev then ran. Every other run leaves the slow
+tier to validate-dev.
+
 It fails toward more tests, never fewer. The choice is written in `$GITHUB_OUTPUT`'s format:
 `run_parts`, whether the parts run at all, `parts`, the matrix's list of part numbers as JSON,
 `files_to_parts`, the deal as JSON on one line (empty: test by test), and
@@ -67,6 +75,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 import affected_tests
+import ci_slow_tests
 import ci_test_durations
 
 # The one target branch whose pull requests run only the tests their changes reach.
@@ -212,6 +221,52 @@ def dealing(
     return deal
 
 
+@dataclass(frozen=True)
+class SlowChoice:
+    """Whether ci.yml's `slow-tests` job runs, which test files it is handed, and why (v1-e41-t29)."""
+
+    runs: bool
+    test_files: tuple[str, ...]
+    reason: str
+
+    @property
+    def chromium(self) -> bool:
+        return self.runs and ci_slow_tests.needs_chromium(self.test_files or None)
+
+
+def slow_choice(root: Path, choice: Choice, event: str, base_branch: str) -> SlowChoice:
+    """The slow tests a pull request into dev runs: those of the chosen files, or of every test file
+    for the whole selection, that may hold one (`ci_slow_tests.may_hold_slow_tests`). Every other run
+    leaves the slow tier to validate-dev, which runs it whole on every dev pre-release. A test file
+    list that cannot be read hands the job every testpath, so it fails toward more."""
+    if event != "pull_request" or base_branch != AFFECTED_SET_BRANCH:
+        return SlowChoice(False, (), "only a pull request into dev runs them here")
+    if not choice.runs_parts:
+        return SlowChoice(False, (), "no test part runs")
+    try:
+        candidates = test_files_to_deal(root, choice)
+        holding = tuple(test for test in candidates if ci_slow_tests.may_hold_slow_tests(root, test))
+    except (Exception, SystemExit) as error:
+        return SlowChoice(True, (), f"the test files could not be read ({error}), so it runs every slow test")
+    if not holding:
+        return SlowChoice(False, (), "none of the chosen test files holds a slow test it runs")
+    chosen = "the whole selection's" if choice.tests is None else "the chosen"
+    return SlowChoice(True, holding, f"{len(holding)} of {chosen} test files hold slow tests")
+
+
+def slow_summary(slow: SlowChoice) -> str:
+    if not slow.runs:
+        return f"\n### Slow tests: none here\n\nThe `slow-tests` job does not run: {slow.reason}.\n"
+    listing = "\n".join(f"- `{test}`" for test in slow.test_files) or "- every testpath"
+    left = "\n".join(f"- `{node}`: {why}" for node, why in ci_slow_tests.LEFT_TO_VALIDATE_DEV.items())
+    chromium = " It installs Playwright's Chromium first." if slow.chromium else ""
+    return (
+        "\n### Slow tests: the `slow-tests` job runs them\n\n"
+        f"With validate-dev's markers, because {slow.reason}.{chromium}\n\n{listing}\n\n"
+        f"Left to validate-dev's slow tier:\n\n{left}\n"
+    )
+
+
 def in_parts(choice: Choice) -> str:
     parts = len(parts_of(choice))
     return f"in {parts} part{'s' if parts > 1 else ''}"
@@ -224,9 +279,11 @@ def commit_exists(root: Path, revision: str) -> bool:
     return completed.returncode == 0
 
 
-def summary(choice: Choice, deal: ci_test_durations.Deal | None = None) -> str:
+def summary(
+    choice: Choice, deal: ci_test_durations.Deal | None = None, slow: SlowChoice | None = None
+) -> str:
     dealt = "" if deal is None else f"\n{ci_test_durations.summary(deal)}"
-    return chosen_summary(choice) + dealt
+    return chosen_summary(choice) + dealt + ("" if slow is None else slow_summary(slow))
 
 
 def chosen_summary(choice: Choice) -> str:
@@ -251,19 +308,28 @@ def chosen_summary(choice: Choice) -> str:
     )
 
 
-def github_outputs(choice: Choice, deal: ci_test_durations.Deal | None = None) -> str:
+def github_outputs(
+    choice: Choice, deal: ci_test_durations.Deal | None = None, slow: SlowChoice | None = None
+) -> str:
     """The choice in `$GITHUB_OUTPUT`'s format: `run_parts`, whether the test parts run at all,
     `parts`, the matrix's part numbers as JSON, `files_to_parts`, the deal of whole files to parts
     (empty: test by test), and `test_files`, one test file per line, which is empty for the whole
-    default selection."""
+    default selection. For the `slow-tests` job (v1-e41-t29): `run_slow`, whether it runs,
+    `slow_chromium`, whether it installs Playwright's Chromium, and `slow_test_files`, the files it
+    is handed, one per line (empty: every testpath)."""
+    slow = slow or SlowChoice(False, (), "not chosen")
     delimiter = f"test_files_{uuid.uuid4().hex}"
     listing = "".join(f"{test}\n" for test in choice.tests or ())
+    slow_listing = "".join(f"{test}\n" for test in slow.test_files)
     run_parts = "true" if choice.runs_parts else "false"
     parts = json.dumps(parts_of(choice))
     return (
         f"run_parts={run_parts}\nparts={parts}\n"
         f"files_to_parts={'' if deal is None else ci_test_durations.as_output(deal)}\n"
         f"test_files<<{delimiter}\n{listing}{delimiter}\n"
+        f"run_slow={'true' if slow.runs else 'false'}\n"
+        f"slow_chromium={'true' if slow.chromium else 'false'}\n"
+        f"slow_test_files<<{delimiter}\n{slow_listing}{delimiter}\n"
     )
 
 
@@ -287,12 +353,13 @@ def main(argv: list[str] | None = None) -> int:
     root = affected_tests.repository_root()
     choice = choose(root, arguments.event, arguments.base_branch, arguments.base_sha, arguments.ref_name)
     deal = dealing(root, choice, arguments.durations, datetime.now(UTC))
-    text = summary(choice, deal)
+    slow = slow_choice(root, choice, arguments.event, arguments.base_branch)
+    text = summary(choice, deal, slow)
     print(text)
     if arguments.summary is not None:
         with arguments.summary.open("a", encoding="utf-8") as file:
             file.write(text)
-    arguments.outputs.write_text(github_outputs(choice, deal), encoding="utf-8")
+    arguments.outputs.write_text(github_outputs(choice, deal, slow), encoding="utf-8")
     return 0
 
 

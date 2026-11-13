@@ -157,7 +157,16 @@ def run(
     )
     assert completed.returncode == 0, completed.stdout + completed.stderr
     outputs = read_github_output(output.read_text(encoding="utf-8"))
-    assert set(outputs) == {"run_parts", "test_files", "parts", "files_to_parts"}, outputs
+    # The slow-tests job's three (v1-e41-t29): tests/scripts/test_ci_slow_tests_the_affected_set_reaches.py.
+    assert set(outputs) == {
+        "run_parts",
+        "test_files",
+        "parts",
+        "files_to_parts",
+        "run_slow",
+        "slow_chromium",
+        "slow_test_files",
+    }, outputs
     return Ran(
         outputs["run_parts"],
         outputs["test_files"].splitlines(),

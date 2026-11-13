@@ -654,9 +654,53 @@ The PM decides whether they become spec changes or new tasks. -->
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-11-12
 
 **Notes:**
+
+Accepted for a partial merge (`scripts/task pr --partial`, after `scripts/task sync`, since dev has
+moved 21 commits). The Goal stays `InProgress` until ac2 (c), the after-measurement, is recorded and
+ruled on.
+
+* **ac1 is complete and honest.**
+  * Two clamshell-sleep failures are recorded with their `pmset` evidence and their lapsed leases. The
+    partial copies were deleted, and the one not counted first is said to be uncounted.
+  * Build 1 reproduces dev's published index byte for byte, which validates the method.
+  * Every target the combined index breaks is named with its number, and the shrink-guard consequence
+    for the weekly stage is found, not assumed.
+* **Shape (4) is built as ruled.**
+  * Default search never reads a season pointer, pinned by a test.
+  * One season is held at a time, each with its own pointer and its own shrink guard.
+  * Every holder reads the one suppression list: a removed card is gone at 5:00, and a season first
+    loaded after a removal never shows it.
+  * A season card's page and copy read its season's index.
+  * A season not offered is refused.
+* **The evidence is enough:** the red run had 27 of 45 failing for named reasons, and 20 of 20
+  mutants plus 2 of 2 Terraform mutants were caught.
+* **The prune change is accepted and is the important catch.** Without it, the removal runbook's P4
+  would have deleted every season's index, or kept their superseded copies for ever (gate items 1
+  and 5).
+* **Seasons by the slug's starting year is accepted.** The PM's Q2 example (hspolicy25 as 2024-25) was
+  a year early, and the recorded rule makes it 2025-26.
+* **Inert until ruled:** `TUB_BACKFILE_SEASONS` is unset, so no season is offered, and
+  `backfile_seasons` is set on the function only when it names one. So merging and deploying this
+  code changes nothing a student sees. No backfile index is published, and none will be before the
+  PM rules on the after-measurement.
+* **The deviations are accepted.** The season key living in `debate_core.application` and the API
+  conftest are fine as they are. The ADR-0019 sentence is the PM's, in the next batch.
+* **The after-measurement (AM1 to AM5) is accepted as written.** It runs after the coming dev install
+  and its checks, never on a Wednesday, on mains power with the lid open, one block at a time, with AM5
+  deleting everything (policy 1.18). The PM rules on its figures before any publish, Terraform apply
+  or deploy.
+* **Q2 (the provenance line's season)** waits on the coach's approval of version 1.24's words. Once
+  approved, the domain change is a task of its own (outside these packages).
+* **Follow-ups, into the next PM batch:**
+  * today's index loads at the top of (c) 7's band: a task to measure the first search's wait on the
+    function itself;
+  * the annual purge's step 5 to name the season steps, as a PM doc edit;
+  * the ADR-0019 note.
+
+`scripts/task pr --partial`

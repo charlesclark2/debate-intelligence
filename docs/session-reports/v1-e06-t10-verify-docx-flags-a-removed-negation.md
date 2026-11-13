@@ -240,9 +240,42 @@ None. The affected set is over the two-minute line and is left to the pull reque
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-11-12
 
 **Notes:**
+
+Accepted. ac1 and the node pass, and the Goal is `Succeeded`.
+
+* **The rulings, checked against the branch** (on dev's tip, `2f3e2b6`). `docx_verify.py` imports
+  `removes_negation` from `negation.py` and `snapshot_ranges_of` from `card_mapping.py`, and adds no
+  word list. A body deletion is therefore judged exactly as the same cut in the editor (E03's
+  DeleteRange). The warning carries ranges and no evidence text. The card stays VERIFIED, and the
+  exit code is unchanged.
+* **The gate is the strongest part.** The snapshot text is handed on only when the verifier rebuilt
+  the evidence from it exactly. A card already UNVERIFIED for TEXT_MISMATCH, HASH_MISMATCH or
+  SNAPSHOT_MISSING is not read. Each clause has a mutant and a test.
+* **The evidence is enough.** The red run in the tree had 6 failures, each at its warnings assertion
+  after VERIFIED had passed. The four later tests were run against the start commit's source. All 11
+  mutants were caught, two of them only after a test was added for each, which the report says
+  plainly.
+* **The decisions are accepted:** the loaded snapshot rather than the deleted tokens, ranges rather
+  than a count, `n't` covered by the policy's suffix rule, and body order.
+* **Deviations 1 to 3: accepted.**
+  * The t07 test had to change: its deleted sentence holds "never", so it must warn, as the editor
+    flags it.
+  * The schema change is additive and pinned.
+  * The node's selection is accepted as amended. For the future: a change to a spec beyond its phase
+    is the PM's to make, so propose it and the PM's batch writes it. This one stands, and the next
+    batch records it.
+* **The affected set** goes to `ci` under agreement 10.
+* **Follow-ups, into the next PM batch:**
+  1. t07's body-diff tie: a legitimate cut reported as MANUAL_EDIT, which makes the card
+     UNVERIFIED. It is a false failure a student would meet, so it is filed as a new E06 task at p2,
+     with this report's reproduction.
+  2. `docs/evidence/snapshot-text-format.md`, as a PM edit.
+  3. The smoke check, folded into the p2 task above.
+
+`scripts/task pr`

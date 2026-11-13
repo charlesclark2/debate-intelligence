@@ -42,6 +42,19 @@ and added body tokens between two runs that match. A hunk is allowed when:
   as E03 refuses a second interpolation at one anchor. An omission marker is allowed where text was
   removed, in that hunk or by the card's own omissions; a marker that claims a cut nobody made is not.
 
+The format profile's whole omission marker (``" … "``, its spaces included) is one unit in the diff, in
+the body and in the card alike, and its tokens are put back after it (`v1-e06-t15`). Compared token
+by token, the marker's spaces could be paired with the card's spaces either side of the word after a
+cut, and Myers then had two equally short edit scripts: one deletes the word, the other reads the
+word before it as moved across the marker, a manual edit. As a unit the marker matches nothing but a
+marker, so a whole-word deletion beside a cut is a deletion wherever it sits. Then each hunk drops the
+tokens it removes and adds back unchanged at its ends, so a space beside the marker that can be the
+card's own space is read as the card's: deleting "The " right after a cut leaves one space after the
+marker, which is the card's space after "The", and the deletion is "The". A marker typed over words
+is read the same way. A hunk that is a manual edit does not report a whole marker at either end where
+the card has a cut: that marker is the card's own, and the edit's body range is what the student
+changed.
+
 Formatting is never read: underlining, highlighting and sizes are the student's to change, so a markup
 change is not a difference at all. Every other hunk is a :class:`ManualEdit`, with the card range it
 replaced and the body range it holds. A body that keeps none of the card's words is one too: E03
@@ -505,7 +518,9 @@ class _Classifier:
         return BodyComparison(tuple(edits), tuple(interpolations), tuple(deletions))
 
     def _removed(self, hunk: _Hunk) -> CharacterRange:
-        return self._range(self._evidence, hunk.removed_start, hunk.removed_end, len(self._card.evidence_text))
+        return self._range(
+            self._evidence, hunk.removed_start, hunk.removed_end, len(self._card.evidence_text)
+        )
 
     def _without_the_cards_marker(self, hunk: _Hunk) -> _Hunk:
         """A manual edit's hunk without the whole marker it adds at either end where the card has a cut.

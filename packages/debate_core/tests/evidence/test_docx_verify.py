@@ -677,9 +677,7 @@ def test_negation_kept_while_the_words_either_side_of_it_are_cut_gives_no_warnin
     negation_card: VerifiedExport,
 ) -> None:
     """ "will " and "hold " go, "not" stays: two deletions, each beside the negation, neither through it."""
-    verdict = docx_verdict(
-        negation_card, replace_in_evidence("will ", ""), replace_in_evidence("hold ", "")
-    )
+    verdict = docx_verdict(negation_card, replace_in_evidence("will ", ""), replace_in_evidence("hold ", ""))
 
     assert is_verified_without_reasons(verdict)
     assert "warnings" not in verdict
@@ -688,9 +686,7 @@ def test_negation_kept_while_the_words_either_side_of_it_are_cut_gives_no_warnin
 def test_negation_two_deletions_that_each_remove_one_give_two_warnings_in_body_order(
     negation_card: VerifiedExport,
 ) -> None:
-    verdict = docx_verdict(
-        negation_card, replace_in_evidence("never ", ""), replace_in_evidence("not ", "")
-    )
+    verdict = docx_verdict(negation_card, replace_in_evidence("never ", ""), replace_in_evidence("not ", ""))
 
     assert is_verified_without_reasons(verdict)
     assert negation_warnings(verdict) == [
@@ -899,7 +895,9 @@ def marker_verdict(export: VerifiedExport, *changes: Callable[[Document], None])
         pytest.param("Repairs ", "", (57, 64), id="right-after-cut-2-between-two-cuts"),
         pytest.param("never ", "", (65, 71), id="one-word-after-cut-2-and-before-cut-3"),
         pytest.param(" came", "", (70, 75), id="right-before-cut-3-between-two-cuts"),
-        pytest.param("Repairs never came.", "", (57, 76), id="all-between-two-cuts-leaving-the-markers-together"),
+        pytest.param(
+            "Repairs never came.", "", (57, 76), id="all-between-two-cuts-leaving-the-markers-together"
+        ),
         pytest.param("Nobody ", "", (76, 82), id="right-after-cut-3"),
         pytest.param("has ", "", (83, 87), id="one-word-after-cut-3"),
         pytest.param(" wall", "", (104, 109), id="the-last-word-of-the-body"),
@@ -942,18 +940,32 @@ def test_marker_the_second_word_after_the_news_cards_cut_deleted_is_a_deletion(c
     ("old", "new", "evidence_range", "body_range"),
     [
         pytest.param("The levee", "A levee", (12, 15), (15, 16), id="letters-altered-right-after-cut-1"),
-        pytest.param("levee will", "levees will", (16, 21), (19, 25), id="letters-altered-one-word-after-cut-1"),
+        pytest.param(
+            "levee will", "levees will", (16, 21), (19, 25), id="letters-altered-one-word-after-cut-1"
+        ),
         pytest.param(" flood.", " floods.", (51, 56), (54, 60), id="letters-altered-right-before-cut-2"),
         pytest.param("came.", "come.", (71, 75), (77, 81), id="letters-altered-between-two-cuts"),
         pytest.param("fail.", "fail again.", (11, 11), (11, 17), id="a-word-added-right-before-cut-1"),
-        pytest.param("Nobody has", "Truly Nobody has", (76, 76), (85, 91), id="a-word-added-right-after-cut-3"),
-        pytest.param("flood.", "flood. Sadly", (57, 57), (60, 66), id="a-word-added-right-before-cut-2"),
-        pytest.param("levee will", "levee levee will", (22, 22), (25, 31), id="a-word-repeated-one-word-after-cut-1"),
         pytest.param(
-            "another spring", "another … late spring", (43, 43), (46, 53), id="a-marker-then-a-word-where-nothing-was-cut"
+            "Nobody has", "Truly Nobody has", (76, 76), (85, 91), id="a-word-added-right-after-cut-3"
+        ),
+        pytest.param("flood.", "flood. Sadly", (57, 57), (60, 66), id="a-word-added-right-before-cut-2"),
+        pytest.param(
+            "levee will", "levee levee will", (22, 22), (25, 31), id="a-word-repeated-one-word-after-cut-1"
         ),
         pytest.param(
-            "another spring", "another late … spring", (44, 44), (47, 54), id="a-word-then-a-marker-where-nothing-was-cut"
+            "another spring",
+            "another … late spring",
+            (43, 43),
+            (46, 53),
+            id="a-marker-then-a-word-where-nothing-was-cut",
+        ),
+        pytest.param(
+            "another spring",
+            "another late … spring",
+            (44, 44),
+            (47, 54),
+            id="a-word-then-a-marker-where-nothing-was-cut",
         ),
     ],
 )
@@ -972,13 +984,17 @@ def test_marker_a_changed_or_added_word_beside_a_cut_is_a_manual_edit(
     "spring" (44)."""
     comparison = marker_comparison(marker_card, replace_in_evidence(old, new))
 
-    assert comparison.manual_edits == (ManualEdit(CharacterRange(*evidence_range), CharacterRange(*body_range)),)
+    assert comparison.manual_edits == (
+        ManualEdit(CharacterRange(*evidence_range), CharacterRange(*body_range)),
+    )
     assert comparison.deletions == ()
     verdict = marker_verdict(marker_card, replace_in_evidence(old, new))
     assert (verdict["status"], verdict["reason_codes"]) == ("UNVERIFIED", ["MANUAL_EDIT"])
 
 
-def test_marker_a_word_moved_across_a_cut_is_a_manual_edit_never_a_deletion(marker_card: VerifiedExport) -> None:
+def test_marker_a_word_moved_across_a_cut_is_a_manual_edit_never_a_deletion(
+    marker_card: VerifiedExport,
+) -> None:
     """ "The" taken from after cut 1 and typed before its marker: "Levees fail. The … levee will"."""
     changes = (replace_in_evidence("fail.", "fail. The"), replace_in_evidence("The levee", "levee"))
 

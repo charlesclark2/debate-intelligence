@@ -64,6 +64,20 @@ own, and says download is off when it is not (:meth:`~debate_core.application.ca
 CardDownloadService.is_on`, asked in the card's own lease). Both buttons are `app.js`'s: the cart is
 kept in the browser, and the download is :mod:`debate_api.download`'s POST.
 
+## An earlier season (`v1-e39-t18`)
+
+When the pilot offers backfile seasons (`TUB_BACKFILE_SEASONS`), the form has a *Season* choice:
+*This season*, the default, and each offered season by its slug and years, `hspolicy25 (2025-26)`.
+A search of an earlier season sends `season=<slug>` and is answered from that season's own index
+alone, through :class:`~debate_core.application.season_indexes.SeasonIndexes`; a search without it
+never reaches a season's index, so its cold start is what it was. The results page says which season
+it searched, the caselist filter offers that season's store, and the season travels in the query
+string as the other filters do. A season not yet loaded on this environment carries a "Loading"
+sentence, which `app.js` shows under the form while that first search waits. A card of an offered
+season is looked up in its season's index, on its page and its copy alike, and its page names the
+season above its provenance line. A season the pilot does not offer is refused as a filter outside
+its choices is.
+
 ## Nothing here is logged
 
 A search is a `GET`, so its words are in the URL, and since `v1-e39-t11` in a card page's URL too.
@@ -76,6 +90,7 @@ reads every log record a search and a card view make.
 from __future__ import annotations
 
 import re
+from contextlib import AbstractContextManager
 from dataclasses import dataclass
 from datetime import date
 from typing import Final, cast
@@ -89,6 +104,7 @@ from starlette.datastructures import QueryParams
 from debate_api.copy_card import copied_card
 from debate_api.state import PilotState, pilot_state
 from debate_core.application.search_index_holder import ScreenedSearch, SearchIndexUnavailable
+from debate_core.application.season_indexes import is_season, season_label
 from debate_core.application.tub.access_audit import AccessNotRecorded
 from debate_core.application.tub.sessions import Session
 from debate_core.domain.caselist import Event, Side
@@ -158,6 +174,8 @@ class SearchForm:
     since: str = ""
     cursor: str | None = None
     passage: bool = False
+    season: str = ""
+    """An earlier season's slug, whose own index is searched; empty for this season's."""
 
     @classmethod
     def from_query(cls, params: QueryParams) -> SearchForm:
@@ -169,6 +187,7 @@ class SearchForm:
             since=params.get("since", ""),
             cursor=params.get("cursor") or None,
             passage=params.get("mode", "") == _PASSAGE_MODE,
+            season=params.get("season", ""),
         )
         if params.get("mode", "") not in ("", _PASSAGE_MODE):
             raise SearchFormInvalid("mode")
@@ -178,6 +197,8 @@ class SearchForm:
             raise SearchFormInvalid("side")
         if form.caselist and _STORE.match(form.caselist) is None:
             raise SearchFormInvalid("caselist")
+        if form.season and not is_season(form.season):
+            raise SearchFormInvalid("season")
         if form.cursor is not None and len(form.cursor) > _CURSOR_LIMIT:
             raise SearchFormInvalid("cursor")
         if form.since:
@@ -215,6 +236,7 @@ class SearchForm:
             "side": self.side,
             "since": self.since,
             "mode": _PASSAGE_MODE if self.passage else "",
+            "season": self.season,
         }
         if cursor is not None:
             fields["cursor"] = cursor
@@ -275,9 +297,12 @@ def _result(hit: SearchHit, form: SearchForm) -> ResultView:
     )
 
 
-def _caselist_choices(state: PilotState, chosen: str) -> list[tuple[str, str]]:
-    """The loaded index's stores, without waiting for one; the chosen one is always offered."""
-    stores = list(state.services.search_index.loaded_caselists())
+def _caselist_choices(state: PilotState, chosen: str, season: str) -> list[tuple[str, str]]:
+    """The loaded index's stores, without waiting for one; the chosen one is always offered.
+
+    A season's search offers its one store, the season itself.
+    """
+    stores = [season] if season else list(state.services.search_index.loaded_caselists())
     if chosen and chosen not in stores:
         stores.append(chosen)
     return [(store, CAMP_LABEL if store == CAMP_STORE else store) for store in sorted(stores)]
@@ -300,7 +325,12 @@ def _render_search(
         form=form,
         event_choices=[(event.value, label) for event, label in EVENT_CHOICES],
         side_choices=[(side.value, label) for side, label in SIDE_CHOICES],
-        caselist_choices=_caselist_choices(state, form.caselist),
+        caselist_choices=_caselist_choices(state, form.caselist, form.season),
+        season_choices=[
+            (season, season_label(season), not state.services.seasons.is_loaded(season))
+            for season in state.services.seasons.offered
+        ],
+        searching_season=season_label(form.season) if form.season and page is not None else None,
         searched=page is not None,
         count_words=_count_words(page.count) if page is not None else None,
         results=[_result(hit, form) for hit in page.hits] if page is not None else [],
@@ -317,6 +347,16 @@ def _render_search(
         since_caselist_only=SearchNotice.FIRST_SEEN_CASELIST_CARDS_ONLY in notices,
         problem=problem,
     )
+
+
+def _lease(state: PilotState, season: str) -> AbstractContextManager[ScreenedSearch]:
+    """The lease a search of `season` takes: that season's index, or this season's when it is empty."""
+    return state.services.seasons.lease(season) if season else state.services.search_index.lease()
+
+
+def _card_lease(state: PilotState, caselist: str) -> AbstractContextManager[ScreenedSearch]:
+    """The lease a card of `caselist` is looked up in: its season's index when the pilot offers it."""
+    return _lease(state, caselist if state.services.seasons.holds(caselist) else "")
 
 
 def _session(request: Request) -> Session:
@@ -346,18 +386,30 @@ def search_page(request: Request) -> HTMLResponse:
             status_code=400,
             problem="That search could not be read. Choose the filters again.",
         )
+    state = pilot_state(request)
+    if form.season and not state.services.seasons.holds(form.season):
+        return _render_search(
+            request, SearchForm(), status_code=400, problem="That season is not one this search offers."
+        )
     if not form.has_words:
         return _render_search(request, form)
-    state = pilot_state(request)
     try:
-        with state.services.search_index.lease() as search:
+        with _lease(state, form.season) as search:
             page = search.search(form.query, filters, form.cursor, passage=form.passage)
     except SearchIndexUnavailable:
         return _refused(request, 503, _UNAVAILABLE_HEADING, _UNAVAILABLE)
     except InvalidSearchCursor:
         return _render_search(
             request,
-            SearchForm(form.query, form.event, form.caselist, form.side, form.since, passage=form.passage),
+            SearchForm(
+                form.query,
+                form.event,
+                form.caselist,
+                form.side,
+                form.since,
+                passage=form.passage,
+                season=form.season,
+            ),
             status_code=400,
             problem="That page of results is out of date. Search again from the first page.",
         )
@@ -370,7 +422,7 @@ def _card(request: Request, caselist: str, cluster_id: str) -> Card | None:
     """The card at this address, or `None`; :class:`SearchIndexUnavailable` passes through."""
     if _STORE.match(caselist) is None or _CLUSTER_ID.match(cluster_id) is None:
         return None
-    with pilot_state(request).services.search_index.lease() as search:
+    with _card_lease(pilot_state(request), caselist) as search:
         return search.card(caselist, cluster_id)
 
 
@@ -407,7 +459,7 @@ def card_page(caselist: str, cluster_id: str, request: Request) -> HTMLResponse:
         if _STORE.match(caselist) is None or _CLUSTER_ID.match(cluster_id) is None:
             card = None
         else:
-            with pilot_state(request).services.search_index.lease() as search:
+            with _card_lease(pilot_state(request), caselist) as search:
                 card = search.card(caselist, cluster_id)
                 if card is not None:
                     back = _back_link(request.query_params, search)
@@ -431,6 +483,9 @@ def card_page(caselist: str, cluster_id: str, request: Request) -> HTMLResponse:
         card=card,
         back_href=back or _FRESH_SEARCH,
         back_words=_BACK_TO_RESULTS if back else _NEW_SEARCH,
+        season=season_label(card.caselist)
+        if pilot_state(request).services.seasons.holds(card.caselist)
+        else None,
         provenance_line=representative.provenance_line if representative is not None else None,
         source_link=_source_link(request, representative),
         counts=_counts(card.file_count, card.team_count),

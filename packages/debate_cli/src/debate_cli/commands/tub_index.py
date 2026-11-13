@@ -73,6 +73,7 @@ from debate_core.application.search_index_publish import (
     RecordedCheck,
 )
 from debate_core.application.search_index_refresh import SEARCH_INDEX_DIRECTORY, newest_local_index
+from debate_core.application.season_indexes import is_season
 from debate_core.application.settings import Environment, Settings
 from debate_core.domain.search_index import DEFAULT_PROVENANCE_LIMIT
 
@@ -91,6 +92,7 @@ search index stage builds too (`v1-e39-t09`), so `publish --index` finds what ei
 
 CONFIRM_PROD_FLAG = "--confirm-prod"
 NEWEST_FLAG = "--newest"
+SEASON_FLAG = "--season"
 
 _PUBLISHABLE = (Environment.DEV, Environment.PROD)
 
@@ -158,6 +160,17 @@ def publish(
             ),
         ),
     ] = None,
+    season: Annotated[
+        str | None,
+        typer.Option(
+            SEASON_FLAG,
+            metavar="SEASON",
+            help=(
+                "Publish a backfile season's own index, built from that one store, to its own pointer "
+                "(reports/tub/search/seasons/<season>.json). Needs --index; never --newest."
+            ),
+        ),
+    ] = None,
 ) -> None:
     """Publish a built index to this environment's bucket, its pointer last."""
     if allow_shrink is not None and not _one_line(allow_shrink):
@@ -172,11 +185,22 @@ def publish(
         )
     if not newest and index is None:
         raise typer.BadParameter(f"name the index with --index, or pass {NEWEST_FLAG}", param_hint="--index")
+    if season is not None and newest:
+        raise typer.BadParameter(
+            f"{SEASON_FLAG} publishes the index --index names, never the newest weekly one",
+            param_hint=SEASON_FLAG,
+        )
+    if season is not None and not is_season(season):
+        raise typer.BadParameter("a season is a caselist slug such as hspolicy25", param_hint=SEASON_FLAG)
     cli = cli_context(ctx)
     _refuse(cli, ctx, _not_this_environment(cli.services.settings, env, confirmed=confirm_prod))
     if index is None:
         index = _newest_built(cli, ctx)
-    service = cli.services.search_index_publish()
+    service = (
+        cli.services.season_index_publish(season)
+        if season is not None
+        else cli.services.search_index_publish()
+    )
     cli.output.detail(f"publishing {index.name} to {cli.services.settings.storage.s3.bucket}")
     published = run_holding_the_bucket_lock(
         cli,

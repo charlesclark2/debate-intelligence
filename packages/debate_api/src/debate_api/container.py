@@ -12,7 +12,11 @@ evidence bucket through an `S3SnapshotStore` per `raw/` prefix (`raw/caselist/<s
 file's `raw/openev/<year>`), on the same client; it writes nothing anywhere. The landscape pages
 (`v1-e39-t17`) read `reports/landscape/` through an `S3EvidenceObjectStore` on the same client, held
 by a :class:`~debate_core.application.tub.landscape_pages.LandscapeShelf` that renders each newest
-bundle once with :func:`~debate_api.landscape_markdown.render_bundle`. Routes
+bundle once with :func:`~debate_api.landscape_markdown.render_bundle`. The backfile seasons the
+configuration offers (`v1-e39-t18`) each get a holder of their own, built when a student first picks
+that season, reading the season's pointer under the same grant, into a directory of its own under
+`/tmp`, and re-reading the same suppression list; :class:`~debate_core.application.season_indexes.
+SeasonIndexes` keeps one at a time. Routes
 ask `app.state.pilot` for the use cases and never import an adapter (the import contracts and
 `scripts/check_thin_handlers.py` hold them to that).
 
@@ -53,6 +57,7 @@ from debate_core.application.caselist.camp_metadata import load_camp_aliases
 from debate_core.application.evidence_search import EvidenceSearchService
 from debate_core.application.ports.persistence import SnapshotStore
 from debate_core.application.search_index_holder import SearchIndexHolder
+from debate_core.application.season_indexes import SeasonIndexes, season_pointer_key
 from debate_core.application.tub.access_audit import AccessAuditService
 from debate_core.application.tub.account_page import AccountPageService
 from debate_core.application.tub.landscape_pages import LandscapeShelf
@@ -80,10 +85,18 @@ from debate_core.integrations.s3 import (
     build_s3_client,
 )
 
-__all__ = ["INDEX_DIRECTORY_NAME", "build_pilot_services", "create_app_from_environment"]
+__all__ = [
+    "INDEX_DIRECTORY_NAME",
+    "SEASON_DIRECTORY_NAME",
+    "build_pilot_services",
+    "create_app_from_environment",
+]
 
 INDEX_DIRECTORY_NAME = "tub-index"
 """The holder's own directory under the function's `/tmp`, which nothing else writes to."""
+
+SEASON_DIRECTORY_NAME = "tub-index-seasons"
+"""The season holders' directory under `/tmp`: one season's file at a time, never the current index's."""
 
 
 def _now() -> datetime:
@@ -135,18 +148,33 @@ def build_pilot_services(environ: Mapping[str, str]) -> PilotServices:
     )
     s3 = build_s3_client(region=configuration.region)
     evidence = S3SearchIndexSource(bucket=configuration.evidence_bucket, client=s3)
+    build_service = partial(
+        EvidenceSearchService,
+        count_cap=configuration.result_count_cap,
+        passage_share_percent=configuration.passage_share_percent,
+    )
     search_index = SearchIndexHolder(
         evidence,
         directory=Path(tempfile.gettempdir()) / INDEX_DIRECTORY_NAME,
         open_reader=_open_index,
         clock=_now,
-        build_service=partial(
-            EvidenceSearchService,
-            count_cap=configuration.result_count_cap,
-            passage_share_percent=configuration.passage_share_percent,
-        ),
+        build_service=build_service,
         suppression_list=evidence,
     )
+
+    def season_holder(season: str) -> SearchIndexHolder:
+        return SearchIndexHolder(
+            S3SearchIndexSource(
+                bucket=configuration.evidence_bucket, client=s3, pointer_key=season_pointer_key(season)
+            ),
+            directory=Path(tempfile.gettempdir()) / SEASON_DIRECTORY_NAME,
+            open_reader=_open_index,
+            clock=_now,
+            build_service=build_service,
+            suppression_list=evidence,
+        )
+
+    seasons = SeasonIndexes(configuration.backfile_seasons, season_holder)
     access_audit = AccessAuditService(audit=audit, clock=_now)
     parser = DebateDocxParser()
     base = load_base_template()
@@ -176,6 +204,7 @@ def build_pilot_services(environ: Mapping[str, str]) -> PilotServices:
         access_audit=access_audit,
         card_download=CardDownloadService(
             search_index=search_index,
+            seasons=seasons,
             writer=lambda sources: DocxEvidenceFileWriter(snapshots=sources, parser=parser, base=base),
             source_stores=source_store,
             access_audit=access_audit,
@@ -193,6 +222,7 @@ def build_pilot_services(environ: Mapping[str, str]) -> PilotServices:
         ),
         openev_camp_words=load_camp_aliases().openev_words,
         clock=_now,
+        seasons=seasons,
     )
 
 

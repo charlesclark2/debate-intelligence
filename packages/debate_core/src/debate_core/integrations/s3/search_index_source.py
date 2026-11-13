@@ -17,6 +17,10 @@ than answered `NoSuchKey`; either way the holder gets a
   `manifests/`. A list that does not exist has no lines: S3 answers `NoSuchKey` only to a caller
   that may list, so to the function a missing list is `AccessDenied`, refused like any other failure.
 
+A backfile season's holder reads its own pointer, `reports/tub/search/seasons/<season>.json`
+(`v1-e39-t18`): `pointer_key` names it, and everything else is read as for `current.json`, under the
+same grant.
+
 Every call runs inside :func:`~debate_core.integrations.s3.errors.mapped_s3_errors`, so nothing
 botocore raises leaves this module.
 """
@@ -56,15 +60,24 @@ class S3SearchIndexSource:
     on the same bucket and client.
     """
 
-    def __init__(self, *, bucket: str, region: str | None = None, client: S3Client | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        bucket: str,
+        region: str | None = None,
+        client: S3Client | None = None,
+        pointer_key: str = SEARCH_INDEX_POINTER_KEY,
+    ) -> None:
+        """`pointer_key` is the pointer :meth:`read_pointer` reads: `current.json`, or a season's."""
         self._bucket = bucket
         self._client = client if client is not None else build_s3_client(region=region)
+        self._pointer_key = validate_object_key(pointer_key)
 
     def read_pointer(self, *, if_none_match: str | None) -> PointerRead:
-        arguments: dict[str, Any] = {"Bucket": self._bucket, "Key": SEARCH_INDEX_POINTER_KEY}
+        arguments: dict[str, Any] = {"Bucket": self._bucket, "Key": self._pointer_key}
         if if_none_match is not None:
             arguments["IfNoneMatch"] = if_none_match
-        with mapped_s3_errors(self._call(SEARCH_INDEX_POINTER_KEY)):
+        with mapped_s3_errors(self._call(self._pointer_key)):
             try:
                 response = self._client.get_object(**arguments)
             except ClientError as error:

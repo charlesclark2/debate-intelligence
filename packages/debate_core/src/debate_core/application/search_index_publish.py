@@ -503,6 +503,7 @@ class SearchIndexPublishService:
         fingerprint_version: str = FINGERPRINT_VERSION,
         format_version: int = SEARCH_INDEX_FORMAT_VERSION,
         minimum_share_percent: int = DEFAULT_MINIMUM_SHARE_PERCENT,
+        season: str | None = None,
     ) -> None:
         """`parser_version` and `fingerprint_version` are the running build's: an index must match both.
 
@@ -513,6 +514,7 @@ class SearchIndexPublishService:
             raise ValueError(f"minimum_share_percent is 0 to 100; got {minimum_share_percent}")
         self._bucket = bucket
         self._minimum_share_percent = minimum_share_percent
+        self._season = season
         self._running = {
             "parser version": parser_version,
             "fingerprint version": fingerprint_version,

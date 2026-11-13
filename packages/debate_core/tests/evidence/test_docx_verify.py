@@ -949,6 +949,12 @@ def test_marker_the_second_word_after_the_news_cards_cut_deleted_is_a_deletion(c
         pytest.param("Nobody has", "Truly Nobody has", (76, 76), (85, 91), id="a-word-added-right-after-cut-3"),
         pytest.param("flood.", "flood. Sadly", (57, 57), (60, 66), id="a-word-added-right-before-cut-2"),
         pytest.param("levee will", "levee levee will", (22, 22), (25, 31), id="a-word-repeated-one-word-after-cut-1"),
+        pytest.param(
+            "another spring", "another … late spring", (43, 43), (46, 53), id="a-marker-then-a-word-where-nothing-was-cut"
+        ),
+        pytest.param(
+            "another spring", "another late … spring", (44, 44), (47, 54), id="a-word-then-a-marker-where-nothing-was-cut"
+        ),
     ],
 )
 def test_marker_a_changed_or_added_word_beside_a_cut_is_a_manual_edit(
@@ -961,7 +967,9 @@ def test_marker_a_changed_or_added_word_beside_a_cut_is_a_manual_edit(
     """Body ranges: "A" 15-16, "levees" 19-25, "floods" 54-60, "come" 77-81; " again" 11-17; "Truly "
     85-91, after cut 3's marker (82-85) and before "Nobody" (76); " Sadly" 60-66, after "flood." and
     before cut 2's marker, at evidence 57; the second "levee " 25-31, before "will" (22). The card's own
-    marker beside a changed word is never part of the manual edit's body range."""
+    marker beside a changed word is never part of the manual edit's body range; a marker typed where
+    nothing was cut is: " … late" 46-53 before the space after "another" (43), "late … " 47-54 before
+    "spring" (44)."""
     comparison = marker_comparison(marker_card, replace_in_evidence(old, new))
 
     assert comparison.manual_edits == (ManualEdit(CharacterRange(*evidence_range), CharacterRange(*body_range)),)

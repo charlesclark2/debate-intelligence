@@ -42,6 +42,19 @@ and added body tokens between two runs that match. A hunk is allowed when:
   as E03 refuses a second interpolation at one anchor. An omission marker is allowed where text was
   removed, in that hunk or by the card's own omissions; a marker that claims a cut nobody made is not.
 
+The format profile's whole omission marker (``" … "``, its spaces included) is one unit in the diff, in
+the body and in the card alike, and its tokens are put back after it (`v1-e06-t15`). Compared token
+by token, the marker's spaces could be paired with the card's spaces either side of the word after a
+cut, and Myers then had two equally short edit scripts: one deletes the word, the other reads the
+word before it as moved across the marker, a manual edit. As a unit the marker matches nothing but a
+marker, so a whole-word deletion beside a cut is a deletion wherever it sits. Then each hunk drops the
+tokens it removes and adds back unchanged at its ends, so a space beside the marker that can be the
+card's own space is read as the card's: deleting "The " right after a cut leaves one space after the
+marker, which is the card's space after "The", and the deletion is "The". A marker typed over words
+is read the same way. A hunk that is a manual edit does not report a whole marker at either end where
+the card has a cut: that marker is the card's own, and the edit's body range is what the student
+changed.
+
 Formatting is never read: underlining, highlighting and sizes are the student's to change, so a markup
 change is not a difference at all. Every other hunk is a :class:`ManualEdit`, with the card range it
 replaced and the body range it holds. A body that keeps none of the card's words is one too: E03
@@ -244,13 +257,17 @@ def compare_body(card: Card, body_text: str, omission_marker: str) -> BodyCompar
     """Classify every difference between ``card.evidence_text`` and ``body_text`` by the edit policy."""
     evidence = _tokens(card.evidence_text)
     body = _tokens(body_text)
+    marker = [token.text for token in _tokens(omission_marker)]
+    evidence_units, evidence_bounds = _units(evidence, marker)
+    body_units, body_bounds = _units(body, marker)
     whole = ManualEdit(CharacterRange(0, len(card.evidence_text)), CharacterRange(0, len(body_text)))
-    hunks = _diff(
-        [token.text for token in evidence], [token.text for token in body], MAXIMUM_BODY_EDIT_TOKENS
+    unit_hunks = _diff(
+        [unit.text for unit in evidence_units], [unit.text for unit in body_units], MAXIMUM_BODY_EDIT_TOKENS
     )
-    if hunks is None:
+    if unit_hunks is None:
         return BodyComparison(manual_edits=(whole,), interpolations=(), deletions=())
-    hunks = _trimmed(_merged(_slid(hunks, evidence, body), evidence, body), evidence, body)
+    unit_hunks = _merged(_slid(unit_hunks, evidence_units, body_units), evidence_units, body_units)
+    hunks = _trimmed(_expanded(unit_hunks, evidence_bounds, body_bounds), evidence, body)
     removed_words = sum(
         1 for hunk in hunks for token in evidence[hunk.removed_start : hunk.removed_end] if not token.is_space
     )
@@ -258,7 +275,7 @@ def compare_body(card: Card, body_text: str, omission_marker: str) -> BodyCompar
     if kept_words == 0 and (card.evidence_text.strip() or body_text.strip()):
         # E03 refuses the deletion that leaves nothing quoted ("delete the card instead").
         return BodyComparison(manual_edits=(whole,), interpolations=(), deletions=())
-    return _Classifier(card, evidence, body, _tokens(omission_marker.strip())).classify(hunks)
+    return _Classifier(card, evidence, body, marker, _tokens(omission_marker.strip())).classify(hunks)
 
 
 def removed_negations(
@@ -313,6 +330,42 @@ class _Hunk:
     removed_end: int
     added_start: int
     added_end: int
+
+
+def _units(tokens: list[_Token], marker: Sequence[str]) -> tuple[list[_Token], list[int]]:
+    """``tokens`` with each run that spells the whole omission ``marker`` made one unit, and where each
+    unit starts in ``tokens`` (one more entry, ``len(tokens)``, closes the last).
+
+    The diff compares units, so a marker's own spaces cannot be paired with the card's spaces: where
+    they could, two edit scripts are equally short, and the one that pairs them reads a word deleted
+    beside a cut as that word moved across it (`v1-e06-t15`).
+    """
+    units: list[_Token] = []
+    bounds: list[int] = []
+    index = 0
+    while index < len(tokens):
+        bounds.append(index)
+        if marker and [token.text for token in tokens[index : index + len(marker)]] == list(marker):
+            units.append(_Token("".join(marker), tokens[index].start))
+            index += len(marker)
+        else:
+            units.append(tokens[index])
+            index += 1
+    bounds.append(len(tokens))
+    return units, bounds
+
+
+def _expanded(hunks: list[_Hunk], removed_bounds: Sequence[int], added_bounds: Sequence[int]) -> list[_Hunk]:
+    """Hunks over units, as hunks over the tokens the units are made of."""
+    return [
+        _Hunk(
+            removed_bounds[hunk.removed_start],
+            removed_bounds[hunk.removed_end],
+            added_bounds[hunk.added_start],
+            added_bounds[hunk.added_end],
+        )
+        for hunk in hunks
+    ]
 
 
 def _diff(removed: Sequence[str], added: Sequence[str], limit: int) -> list[_Hunk] | None:
@@ -427,10 +480,18 @@ def _trimmed(hunks: list[_Hunk], removed: Sequence[_Token], added: Sequence[_Tok
 
 
 class _Classifier:
-    def __init__(self, card: Card, evidence: list[_Token], body: list[_Token], marker: list[_Token]) -> None:
+    def __init__(
+        self,
+        card: Card,
+        evidence: list[_Token],
+        body: list[_Token],
+        whole_marker: list[str],
+        marker: list[_Token],
+    ) -> None:
         self._card = card
         self._evidence = evidence
         self._body = body
+        self._whole_marker = whole_marker
         self._marker = [token.text for token in marker]
         self._omissions = frozenset(omission_offsets(card))
 
@@ -439,19 +500,52 @@ class _Classifier:
         interpolations: list[BodyInterpolation] = []
         deletions: list[CharacterRange] = []
         for hunk in hunks:
-            removed = self._range(
-                self._evidence, hunk.removed_start, hunk.removed_end, len(self._card.evidence_text)
-            )
-            added = self._range(self._body, hunk.added_start, hunk.added_end, self._body_length)
+            removed = self._removed(hunk)
             inserted = self._insertion(hunk, removed)
             if inserted is None:
-                edits.append(ManualEdit(removed, added))
+                rest = self._without_the_cards_marker(hunk)
+                edits.append(
+                    ManualEdit(
+                        self._removed(rest),
+                        self._range(self._body, rest.added_start, rest.added_end, self._body_length),
+                    )
+                )
                 continue
             if removed.start < removed.end:
                 deletions.append(removed)
             if inserted != "":
                 interpolations.append(self._interpolation(inserted, removed))
         return BodyComparison(tuple(edits), tuple(interpolations), tuple(deletions))
+
+    def _removed(self, hunk: _Hunk) -> CharacterRange:
+        return self._range(
+            self._evidence, hunk.removed_start, hunk.removed_end, len(self._card.evidence_text)
+        )
+
+    def _without_the_cards_marker(self, hunk: _Hunk) -> _Hunk:
+        """A manual edit's hunk without the whole marker it adds at either end where the card has a cut.
+
+        That marker is the card's own, drawn where the renderer drew it; the edit is what is left. Only
+        a hunk the policy already refuses is narrowed, and the rest still holds what made it refused,
+        so this changes the ranges a manual edit reports, never whether one is reported.
+        """
+        a0, a1, b0, b1 = hunk.removed_start, hunk.removed_end, hunk.added_start, hunk.added_end
+        width = len(self._whole_marker)
+        if not width:
+            return hunk
+        if self._spells_the_marker(b0) and self._removed(_Hunk(a0, a0, b0, b0)).start in self._omissions:
+            b0 += width
+        if (
+            b1 - b0 >= width
+            and self._spells_the_marker(b1 - width)
+            and self._removed(_Hunk(a1, a1, b1, b1)).start in self._omissions
+        ):
+            b1 -= width
+        return _Hunk(a0, a1, b0, b1)
+
+    def _spells_the_marker(self, start: int) -> bool:
+        width = len(self._whole_marker)
+        return [token.text for token in self._body[start : start + width]] == self._whole_marker
 
     @property
     def _body_length(self) -> int:

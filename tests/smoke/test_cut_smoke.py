@@ -28,6 +28,7 @@ from typing import Any, Final
 import pytest
 from tests.fixtures.card.card_world import MODEL_OUTPUTS, NEWS_ARGUMENT, NEWS_NEED, page_bytes, paragraphs_of
 from tests.fixtures.citation.citation_world import load_case
+from tests.fixtures.verify.docx_world import edited, replace_in_evidence
 from tests.smoke.installed_build import InstalledCli
 
 from debate_cli.container import CARD_CASSETTES_DIRECTORY
@@ -250,6 +251,35 @@ def test_verify_reads_the_docx_cut_wrote_and_finds_its_card_verified_offline(
         "unclaimed_body_card_verdicts": [],
     }
     assert out.read_bytes() == written, "verify only reads the document"
+
+
+def test_verify_warns_negation_removed_on_a_docx_whose_body_deletes_never_and_exits_0_offline(
+    installed_cli: InstalledCli, stored_news: Path
+) -> None:
+    """`verify` on the build under test, after a student deleted "never " from the body (v1-e06-t10,
+    v1-e06-t15). The edit is made as Word would, through python-docx. "never " is evidence [186, 192):
+    the critics' sentence starts at 108 and "never" is its 78th character. In the snapshot, t04's
+    paragraphs joined with a blank line, the third paragraph starts at 210 + 2 + 208 + 2 = 422, so the
+    deletion is snapshot [500, 506). The card stays VERIFIED and the warning is all the report says."""
+    out = installed_cli.workdir / "evidence.docx"
+    cut = installed_cli.run(
+        "cut", NEWS_URL, "--need", NEWS_NEED, "--argument", NEWS_ARGUMENT, "--output", str(out)
+    )
+    assert cut.exit_code == ExitCode.OK, cut.output
+    out.write_bytes(edited(out.read_bytes(), replace_in_evidence("was never realistic", "was realistic")))
+
+    run = installed_cli.run("--json", "verify", str(out))
+
+    assert run.exit_code == ExitCode.OK, run.output
+    data = run.envelope()["data"]
+    assert isinstance(data, dict)
+    [card] = data["cards"]
+    assert (card["status"], card["reason_codes"]) == ("VERIFIED", [])
+    assert [
+        (warning["code"], warning["evidence_range"], warning["snapshot_range"])
+        for warning in card.get("warnings", [])
+    ] == [("NEGATION_REMOVED", {"start": 186, "end": 192}, {"start": 500, "end": 506})]
+    assert "never" not in run.stdout, "the report holds offsets, never the evidence's words"
 
 
 # --------------------------------------------------------------------------------------------

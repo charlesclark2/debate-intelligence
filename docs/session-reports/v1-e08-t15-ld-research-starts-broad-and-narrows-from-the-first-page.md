@@ -463,9 +463,42 @@ None. The measurement the PM asked for (Q3) has run, and its output is recorded 
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-11-12
 
 **Notes:**
+
+Accepted. ac1, ac2 and the node pass, and the Goal is `Succeeded`.
+
+* **The rulings are built as given.**
+  * OpenAlex keywords only, into a provider-neutral `subjects`.
+  * The counting rules, the order and the cap of five.
+  * Apostrophe-safe commands, run through `sh` (and zsh where installed), with no command printed
+    for a query that cannot be quoted safely.
+  * Unusable keyword items are skipped. There is no `--within`.
+* **The live measurement settles Q4.** The embedded shape is exactly `display_name`, `id` and
+  `score`, as the fixture assumed, and the block printed subject names and counts only. On the
+  de-extinction page, keywords carry three of the coach's four directions (ethics, ecology, the
+  animal subject), and topics miss the fourth (mourning) as well. That is honest evidence for the
+  keyword version.
+* **The evidence is enough.** The red run against do-nothing skeletons had 30 of 45 new cases
+  failing at assertions; the 46 existing OpenAlex failures were URL pins, expected from the new
+  `select=`. All 18 mutants were caught. The five cases no mutant shows failing are explained.
+  `subjects` is left out of a dump when empty, so stored and pinned shapes are unchanged.
+* **Deviation 1 is the PM's.** The packages amendment (Q2) was held out of the 2026-11-12 batch so as
+  not to collide with this branch's spec. The next batch adds `debate_core.integrations.discovery`
+  and `tests/smoke`. Deviation 2 is as the 2026-11-05 amendment says.
+* **The branch is behind dev** (e40-t44 and the PM batch merged since). Neither touches this task's
+  files. If `scripts/task pr` asks, `scripts/task sync`.
+* **The affected set** (581 files) goes to `ci` under agreement 10.
+* **Follow-ups, into the next PM batch:**
+  1. `search --within <saved file>`, as a local filter: a new E08 task at p3, as recorded here,
+     including that a saved file must carry per-result `subjects`;
+  2. whether the cap of five hides the coach's directions: a coach check on one real LD search after
+     install, before any change;
+  3. topics: not filed. The miss (mourning) is one topics would not repair, so the condition for the
+     second step is not met.
+
+`scripts/task pr`

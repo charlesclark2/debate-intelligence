@@ -721,6 +721,27 @@ def test_negation_a_deletion_across_the_cards_own_cut_reads_only_the_words_it_re
     assert "warnings" not in verdict
 
 
+def from_not_to_never_across_the_cut(document: Document) -> None:
+    """ "not hold another spring flood.", the marker and "Inspectors have never " taken out: one deletion."""
+    before, marker, after = evidence_paragraph(document).runs
+    assert before.text.endswith("not hold another spring flood.") and marker.text == MARKER
+    assert after.text.startswith("Inspectors have never ")
+    before.text = before.text.removesuffix("not hold another spring flood.")
+    marker.text = ""
+    after.text = after.text.removeprefix("Inspectors have never ")
+
+
+def test_negation_one_deletion_across_the_cut_with_a_negation_either_side_is_one_warning(
+    negation_card: NegationExport,
+) -> None:
+    """Evidence [15, 67) is snapshot [41, 71) and [100, 122): "not" in one, "never" in the other, one
+    deletion, so one warning, which spans the omission between."""
+    verdict = negation_verdict(negation_card, from_not_to_never_across_the_cut)
+
+    assert is_verified_without_reasons(verdict)
+    assert negation_warnings(verdict) == [("NEGATION_REMOVED", (15, 67), (41, 122))]
+
+
 def test_negation_is_not_read_where_the_card_does_not_reproduce_its_snapshot() -> None:
     """The card says "now" where the source says "not"; deleting it removes no negation the body showed.
 

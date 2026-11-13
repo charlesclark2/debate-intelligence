@@ -63,12 +63,12 @@ v2.3's extension work.
 | [v1.0](plan_specs/releases/v1.0.yaml) | Foundation & verified evidence core | 3 | 55 | 55 | 252 |
 | [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 4 | 125 | 105 | 550 |
 | [v1.2](plan_specs/releases/v1.2.yaml) | Argument landscape & file building | 3 | 99 | 83 | 366 |
-| [v1.3](plan_specs/releases/v1.3.yaml) | URL → verified card | 2 | 25 | 16 | 127 |
-| [v1.4](plan_specs/releases/v1.4.yaml) | Federated research from the CLI | 2 | 51 | 30 | 162 |
+| [v1.3](plan_specs/releases/v1.3.yaml) | URL → verified card | 2 | 25 | 17 | 127 |
+| [v1.4](plan_specs/releases/v1.4.yaml) | Federated research from the CLI | 2 | 53 | 31 | 164 |
 | [v1.5](plan_specs/releases/v1.5.yaml) | V1 quality gate & team pilot | 1 | 7 | 1 | 66 |
 | [v1.6](plan_specs/releases/v1.6.yaml) | Public team website | 3 | 31 | 22 | 169 |
 | [v1.7](plan_specs/releases/v1.7.yaml) | Team evidence search pilot | 1 | 30 | 25 | 100 |
-| [v1.8](plan_specs/releases/v1.8.yaml) | Weekly caselist run in the cloud | 2 | 77 | 47 | 140 |
+| [v1.8](plan_specs/releases/v1.8.yaml) | Weekly caselist run in the cloud | 2 | 77 | 48 | 140 |
 | [v2.0](plan_specs/releases/v2.0.yaml) | Cloud platform foundation | 3 | 17 | 0 | 164 |
 | [v2.1](plan_specs/releases/v2.1.yaml) | Web app, debate tub & async jobs | 3 | 18 | 0 | 198 |
 | [v2.2](plan_specs/releases/v2.2.yaml) | Research workspace | 2 | 12 | 0 | 117 |
@@ -466,7 +466,7 @@ A student can run `debate-research cut <URL>` and receive a verified, tagged, ci
 | [A pasted copy's cite fields can be stated when it is stored, so a card cut from it has a usable cite](plan_specs/v1/e06-card-cutting/t12-pasted-copy-cite-stated-by-the-user.yaml) `v1-e06-t12-pasted-copy-cite-stated-by-the-user` | Succeeded | 1 | 2.0 |
 | [A cite can carry a year-only or year-and-month date without inventing a day](plan_specs/v1/e06-card-cutting/t13-year-and-month-dates-in-a-cite.yaml) `v1-e06-t13-year-and-month-dates-in-a-cite` | Pending | 1 | 2.0 |
 | [A stated cite the domain refuses is reported as a refusal, not an internal error](plan_specs/v1/e06-card-cutting/t14-refused-stated-cite-is-a-refusal.yaml) `v1-e06-t14-refused-stated-cite-is-a-refusal` | Pending | 1 | 1.0 |
-| [A whole-word deletion right after a cut's marker is read as a deletion, not a manual edit](plan_specs/v1/e06-card-cutting/t15-a-deletion-beside-a-cut-marker-is-a-deletion.yaml) `v1-e06-t15-a-deletion-beside-a-cut-marker-is-a-deletion` | Pending | 2 | 2.0 |
+| [A whole-word deletion right after a cut's marker is read as a deletion, not a manual edit](plan_specs/v1/e06-card-cutting/t15-a-deletion-beside-a-cut-marker-is-a-deletion.yaml) `v1-e06-t15-a-deletion-beside-a-cut-marker-is-a-deletion` | Succeeded | 2 | 2.0 |
 
 
 ### v1.4 — Federated research from the CLI
@@ -522,7 +522,7 @@ A student can run `debate-research cut <URL>` and receive a verified, tagged, ci
 | [`search --json` says whether a result's date is a day, a month or a year](plan_specs/v1/e08-research-workflows/t12-search-json-names-a-dates-precision.yaml) `v1-e08-t12-search-json-names-a-dates-precision` | Pending | 2 | 1.0 |
 | [An expansion on a topic only a feed file names falls back cleanly, and a pair's templates are capped](plan_specs/v1/e08-research-workflows/t13-topic-expansion-fallback-and-templates-per-pair.yaml) `v1-e08-t13-topic-expansion-fallback-and-templates-per-pair` | Pending | 2 | 1.0 |
 | [A disadvantage's link queries name the plan's mechanism and the United States](plan_specs/v1/e08-research-workflows/t14-da-links-name-the-plans-mechanism-in-the-united-states.yaml) `v1-e08-t14-da-links-name-the-plans-mechanism-in-the-united-states` | Succeeded | 2 | 3.0 |
-| [LD research starts broad and narrows from what the first page turns up](plan_specs/v1/e08-research-workflows/t15-ld-research-starts-broad-and-narrows-from-the-first-page.yaml) `v1-e08-t15-ld-research-starts-broad-and-narrows-from-the-first-page` | Pending | 1 | 3.0 |
+| [LD research starts broad and narrows from what the first page turns up](plan_specs/v1/e08-research-workflows/t15-ld-research-starts-broad-and-narrows-from-the-first-page.yaml) `v1-e08-t15-ld-research-starts-broad-and-narrows-from-the-first-page` | Succeeded | 1 | 3.0 |
 | [A DA's mechanism queries cross the link templates the coach chose, and a preset may name more mechanisms](plan_specs/v1/e08-research-workflows/t16-mechanism-queries-cross-the-chosen-link-templates.yaml) `v1-e08-t16-mechanism-queries-cross-the-chosen-link-templates` | InProgress | 2 | 3.0 |
 | [`--max-cost` is one limit for the whole command, whatever routers it builds](plan_specs/v1/e08-research-workflows/t17-one-max-cost-across-every-router-a-command-builds.yaml) `v1-e08-t17-one-max-cost-across-every-router-a-command-builds` | Succeeded | 1 | 2.0 |
 | [An auto-cut run's report does not replace the last run's in the same directory](plan_specs/v1/e08-research-workflows/t18-auto-cut-report-names-per-run.yaml) `v1-e08-t18-auto-cut-report-names-per-run` | Pending | 2 | 1.0 |
@@ -533,6 +533,8 @@ A student can run `debate-research cut <URL>` and receive a verified, tagged, ci
 | [A politics DA's link queries pair the DA's agenda item with the plan's mechanism](plan_specs/v1/e08-research-workflows/t23-politics-da-links-pair-the-agenda-item-with-the-plans-mechanism.yaml) `v1-e08-t23-politics-da-links-pair-the-agenda-item-with-the-plans-mechanism` | Pending | 2 | 4.0 |
 | [On a search of many queries, the ranking keeps the results the coach marks relevant above the providers' own order](plan_specs/v1/e08-research-workflows/t24-the-ranking-keeps-a-multi-query-searchs-relevant-results-up.yaml) `v1-e08-t24-the-ranking-keeps-a-multi-query-searchs-relevant-results-up` | Succeeded | 2 | 4.0 |
 | [A daily digest's queries find what the feeds carry, measured on a real digest first](plan_specs/v1/e08-research-workflows/t25-digest-queries-and-the-feeds-every-word-rule.yaml) `v1-e08-t25-digest-queries-and-the-feeds-every-word-rule` | Succeeded | 1 | 2.0 |
+| [The end-to-end auto-cut tests follow v1-e08-t24's ranking, so validate-dev is green again](plan_specs/v1/e08-research-workflows/t26-the-end-to-end-auto-cut-test-follows-the-multi-query-ranking.yaml) `v1-e08-t26-the-end-to-end-auto-cut-test-follows-the-multi-query-ranking` | InProgress | 1 | 1.0 |
+| [`search --within` narrows a saved search's results locally, with no provider call](plan_specs/v1/e08-research-workflows/t27-search-within-a-saved-search.yaml) `v1-e08-t27-search-within-a-saved-search` | Pending | 1 | 2.0 |
 
 
 ### v1.5 — V1 quality gate & team pilot
@@ -690,7 +692,7 @@ The weekly caselist run (pull, import, publish, parse, search index) runs in the
 | [Redaction no longer takes two apostrophes for a quoted path and removes the words between them](plan_specs/v1/e40-cloud-caselist-run/t37-redact-keeps-text-between-apostrophes.yaml) `v1-e40-t37-redact-keeps-text-between-apostrophes` | Pending | 1 | 1.0 |
 | [A lock refusal is not reported as a run that stopped before its stages](plan_specs/v1/e40-cloud-caselist-run/t38-landscape-staleness-ignores-lock-refusals.yaml) `v1-e40-t38-landscape-staleness-ignores-lock-refusals` | Succeeded | 1 | 0.8 |
 | [The near-duplicate index and the linker's word lists are held compactly, so a season's rebuild fits with room](plan_specs/v1/e40-cloud-caselist-run/t39-cut-index-and-linker-words-held-compactly.yaml) `v1-e40-t39-cut-index-and-linker-words-held-compactly` | Succeeded | 1 | 4.0 |
-| [In bucket mode a missing or unreadable token, and a download refused for an expired login, give the cloud's cure, not a login by hand](plan_specs/v1/e40-cloud-caselist-run/t40-token-errors-name-the-cloud-cure.yaml) `v1-e40-t40-token-errors-name-the-cloud-cure` | Pending | 1 | 1.0 |
+| [In bucket mode a missing or unreadable token, and a download refused for an expired login, give the cloud's cure, not a login by hand](plan_specs/v1/e40-cloud-caselist-run/t40-token-errors-name-the-cloud-cure.yaml) `v1-e40-t40-token-errors-name-the-cloud-cure` | Succeeded | 1 | 1.0 |
 | [A cloud run's decision about each listed file is kept past the log's 90 days](plan_specs/v1/e40-cloud-caselist-run/t41-cloud-run-keeps-its-per-file-decisions.yaml) `v1-e40-t41-cloud-run-keeps-its-per-file-decisions` | Pending | 1 | 2.0 |
 | [The run's schedule tries again when AWS refuses to launch the task, and never starts a second run](plan_specs/v1/e40-cloud-caselist-run/t42-schedule-retries-a-refused-launch.yaml) `v1-e40-t42-schedule-retries-a-refused-launch` | Succeeded | 1 | 2.0 |
 | [The weekly run logs each stage as it starts and ends, so a run can be read while it runs](plan_specs/v1/e40-cloud-caselist-run/t43-weekly-run-logs-each-stage.yaml) `v1-e40-t43-weekly-run-logs-each-stage` | Succeeded | 1 | 3.0 |

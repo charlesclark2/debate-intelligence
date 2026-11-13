@@ -417,9 +417,42 @@ The PM decides whether they become spec changes or new tasks. -->
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-11-13
 
 **Notes:**
+
+Accepted. ac1 and the node pass, and the Goal is `Succeeded`.
+
+* **Built as ruled.**
+  * A `slow-tests` job in `ci.yml` is one of `ci`'s needs, gated on `test-selection.run_slow`, on PRs
+    into dev only.
+  * Its markers are imported from `validate_dev.SLOW`, so the two cannot drift.
+  * The four ids left to validate-dev are pinned in a test, and a skip fails the job.
+  * Required checks and rulesets are unchanged.
+  * validate-dev only gains `--durations=25`, and no test leaves its tier.
+* **The proof is the right shape.**
+  * The replay of t24's merge hands the job the e2e file that broke.
+  * The planted break passes the parts' command over its whole affected set (788 passed) and fails
+    the slow job's command (3 failed, at assertions, never `INTERNAL_ERROR`).
+  * Moving the plant from the ranking weights to the harness is correct: a ranking plant would fail
+    fast tests too, so it would not be a break only a slow test sees.
+  * All 13 mutants were caught.
+* **The decisions are accepted:**
+  * one node id for the planted-break file;
+  * handing the job only the files the text check finds;
+  * a failed selection running every slow test, failing toward more;
+  * the local import that keeps the partition proof loading `affected_tests.py` by path. The
+    session's own run caught that one.
+* **Agreements 1 and 10 and the costs page,** as ruled.
+* **This PR is the first runner measurement.** Its `slow-tests` job gets all 11 files. Record its
+  pytest step and job time against the 120 s and 60 s bound when it runs. The PM records it in the
+  next batch.
+* **Follow-ups:**
+  * per-file costs from validate-dev's next runs, into the costs page as a PM edit;
+  * the gated-files-only case: no task (runner minutes, no wall time);
+  * the browser job: waits for a measurement that needs it.
+
+`scripts/task pr`

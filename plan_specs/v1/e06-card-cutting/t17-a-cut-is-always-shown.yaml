@@ -1,0 +1,85 @@
+# TASK v1-e06-t17-a-cut-is-always-shown - A cut is always shown: a marker removed at a punctuation join is refused, and a hand-typed `...` counts as the marker
+# Epic: E06 Card Cutting, Citation & Export | Release: v1.3 (URL → verified card) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e06-t17-a-cut-is-always-shown
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.3
+    debate/epic: v1-e06-card-cutting
+  annotations:
+    debate/title: "A cut is always shown: a marker removed at a punctuation join is refused, and a hand-typed `...` counts as the marker"
+spec:
+  # Filed by the PM, 2026-11-13, from v1-e06-t16's follow-ups 1 to 3 (the PM's review, 2026-11-13) and the coach's decision of 2026-11-13.
+  description: >-
+    v1-e06-t16 left three gaps in the .docx body diff. (1) A body that takes the card's marker
+    out where the cut joins punctuation to a word ('fail.The') equals the card's characters, so
+    the comparison is empty and the card stays VERIFIED: a reader cannot see that text was cut.
+    At a word join the same edit is already MANUAL_EDIT. A cut must always show, so a removed
+    marker is a reason wherever the join falls, named as a hidden cut (propose its code and
+    words, and whether it is MANUAL_EDIT with a detail or a reason of its own; stop for the PM's
+    ruling on that one point). (2) An interpolation anchored inside a word reads as MANUAL_EDIT
+    on an untouched export (the join card with an anchor at offset 11 inside 'levee':
+    ManualEdit(evidence [9, 14), body [12, 20))); give the anchors as token boundaries beside
+    the omission offsets, and say whether E03's edit API refuses a mid-word anchor. (3) The
+    coach's decision of 2026-11-13: a marker typed by hand as three full stops with a space on
+    each side (' ... ') counts the same as the profile's ' … ', so a body using it verifies as
+    the rendered marker does; without the spaces it is not a marker. Applies to verify's reading
+    only; the renderer keeps writing '…'.
+  priority: 2
+  constraints:
+    packages: [debate_core.evidence, packages/debate_core/tests]
+    forbidden:
+      - A hidden cut reported as VERIFIED
+      - A changed or added word reported as verified
+      - A team card or real source in a fixture
+      - Network access in a test
+  context:
+    - kind: TaskRef
+      name: v1-e06-t16-a-cut-that-joins-two-words-verifies
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        A marker removed at any join is a named reason, a mid-word interpolation anchor
+        verifies untouched, and ' ... ' reads as the marker while '...' without spaces does
+        not, by tests on synthetic exports shown failing first.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e06-t17-a-cut-is-always-shown-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.3
+    debate/epic: v1-e06-card-cutting
+spec:
+  description: >-
+    A cut is always shown: a marker removed at a punctuation join is refused, and a hand-typed
+    `...` counts as the marker.
+  goalRef:
+    name: v1-e06-t17-a-cut-is-always-shown
+  graph:
+    nodes:
+      - id: a-cut-is-always-shown
+        kind: Task
+        name: Cuts always shown
+        description: >-
+          A cut is always shown: a marker removed at a punctuation join is refused, and a
+          hand-typed `...` counts as the marker.
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Cuts always shown tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/evidence/test_docx_verify.py, -k, hidden or anchor or typed_marker]
+status:
+  phase: Pending

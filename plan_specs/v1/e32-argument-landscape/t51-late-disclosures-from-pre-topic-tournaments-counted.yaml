@@ -33,9 +33,17 @@ spec:
     (PM note 2026-11-12.) The weekly run of 2026-11-11 (`20261111T120101Z`) recorded hsld26's
     snapshot of 2026-11-10 (manifests/hsld26/2026-11-10.jsonl), so the task is Pending. The second
     count, on 2026-11-17's snapshot, follows the run of 2026-11-18.
+    (PM amendment 2026-11-13, recording the rulings of 2026-11-12.) The remedy is a rule from
+    spelling history, not tournament entries: in a snapshot a newer topic's range covers, a disclosure
+    whose tournament spelling was first seen before that range began, that no entry matches and that
+    holds none of the newer topic's entry spellings, is counted on the earlier topic, behind
+    late_disclosures_on_earlier_topic on the range in topics.yaml. This amends v1-e32-t06's Decision 1
+    (topic placement by configuration alone) for this rule only. The count script names no spelling.
+    The weekly line and landscape report --json's late_disclosures key show the count even at 0. The
+    packages gain debate_cli and its tests (the --json key) and tests/scripts (the script's tests).
   priority: 2
   constraints:
-    packages: [debate_core.application, debate_core.arguments, debate_core.domain, config/landscape, scripts, packages/debate_core/tests, tests/config, docs/data, docs/guides]
+    packages: [debate_core.application, debate_core.arguments, debate_core.domain, config/landscape, scripts, packages/debate_core/tests, tests/config, docs/data, docs/guides, debate_cli, packages/debate_cli/tests, tests/scripts]
     forbidden:
       - A school, team code or debater name anywhere
       - A tournament spelling only one school uses in configuration

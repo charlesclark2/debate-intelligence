@@ -441,5 +441,25 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e06-t16-a-cut-that-joins-two-words-verifies
+    - id: t17
+      kind: Task
+      name: 'A cut is always shown: a marker removed at a punctuation join is refused, and a hand-typed `...` counts as the marker'
+      description: >-
+        A cut is always shown: a marker removed at a punctuation join is refused, and a
+        hand-typed `...` counts as the marker.
+      inputs:
+        specRef: plan_specs/v1/e06-card-cutting/t17-a-cut-is-always-shown.yaml
+        goalRef: v1-e06-t17-a-cut-is-always-shown
+      dependsOn:
+      - t16
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e06-t17-a-cut-is-always-shown reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e06-t17-a-cut-is-always-shown
 status:
   phase: Pending

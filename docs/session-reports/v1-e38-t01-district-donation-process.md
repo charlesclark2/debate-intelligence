@@ -224,9 +224,31 @@ Run on the final tree, with this report written.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-11-13
 
 **Notes:**
+
+Accepted for a partial merge (`scripts/task pr --partial`). The questions-and-skeleton node is done.
+The Goal stays `InProgress` for the district's written reply and the coach's approval.
+
+* **The skeleton follows the spec and the house style.** It has the status table, "not legal or tax
+  advice" near the top, Scope with booster fundraising out unless question 12 brings it in, and an
+  empty confirmation register keyed by role, never by name. No payment URL, payee or wording is
+  recorded before the district confirms it.
+* **The two added questions (13 and 14) are right.** Each feeds a criterion: ac5's recognition rules,
+  and ac6's version bump on a changed URL.
+* **One email to both offices is accepted,** for the reasons given: one dated thread and no
+  unnoticed contradiction. It carries no student's or team member's name and no money figures, and
+  asks for written answers.
+* **One question added by the PM, sent in the email as question 15:** "Does the team need any
+  approval before the page goes live, for example a fundraising approval form, or a review of the
+  page by the district's communications office?" Districts commonly require one, and a page
+  published without it would have to come down. The resumed session adds it to the policy's
+  question list and to the register, with the district's answer.
+* **Follow-up 1, the website publishing policy's "not yet written":** corrected at this task's
+  approval node, with that policy's version bump, as the session proposes.
+
+`scripts/task pr --partial`

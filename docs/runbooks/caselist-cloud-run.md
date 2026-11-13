@@ -1513,6 +1513,41 @@ escalation. A run on an image built before `v1-e40-t33` still names that command
 was refused, with the fix above as the command's hint; on an image built before it both still say to
 run it (the error's message is the Mac's). The rule holds for all of them.
 
+## A run with no readable caselist_token
+
+When a cloud run or a backfile import finds no value in the token secret (`CASELIST_TOKEN_MISSING`), or a
+value that is not a token record this program wrote (`CASELIST_TOKEN_UNREADABLE`), it stops before any
+request to OpenCaselist. Since `v1-e40-t40` the run's own log says only what happened, `no caselist_token
+is stored` or `the caselist_token stored in the secretsmanager backend is not readable`, and so does its
+record (`caselist runs --json`'s `error_message`). The command's hint is:
+
+> In bucket mode the next Wednesday 03:00 login writes a new caselist_token to the token secret, and the run after it takes up what this run did not finish, from the run state saved in the bucket; a backfile import refused for it starts again after Thursday 00:00 (caselist-cloud-run.md, "A run with no readable caselist_token"); never a login by hand, which would be a second login.
+
+The alert email is still a stopped run's, `caselist pull failed: needs a person`, `stopped: an error
+recorded as CASELIST_TOKEN_MISSING` (or `…_UNREADABLE`), with the fix line of
+[A failed or stopped run](#a-failed-or-stopped-run).
+
+**What it means.** The login task writes the token secret every Wednesday at 03:00, three hours before
+the run, and replaces whatever the secret held. A secret with no value has had no token written since
+it was made; one that cannot be read holds something the login did not write. Either way the next
+login puts it right, and that Wednesday's run restores the bucket's run state and does what this one
+did not. A backfile import refused for it starts again after Thursday 00:00, once the no-import window
+has closed, as in [Backfile imports](#backfile-imports).
+
+**What to do: usually nothing.** Two cases go to the PM with the run's id:
+
+* the Wednesday login failed: its own email, `Weekly caselist login failed`, came that morning. Follow
+  that email's fix ([caselist-cloud-credentials.md](caselist-cloud-credentials.md#when-the-weekly-login-fails));
+* the stopped run is a Wednesday run whose login that morning sent no failure email: that login should
+  have written the token, so something changed the secret after it.
+
+**Never `caselist auth login` or `caselist auth logout` on the operator's Mac** for it. A login is a
+second login that week for the same account
+([Step 3](#step-3--does-a-new-login-end-the-macs-token-before-apply-b)), and without `--token-backend
+secretsmanager` it writes only the Mac's own token, which the cloud run never reads. The logout refuses
+the Secrets Manager backend. A run on an image built before `v1-e40-t40` still says to run them (the
+error's message is the Mac's); the rule holds for that log too.
+
 ## A backlog growing
 
 When the archives a cloud run's daily download cap deferred have grown for two runs in a row, the
@@ -1783,9 +1818,11 @@ last lines (`aws logs tail` without the `grep`s) to the PM.
   hand for an import**, which would be a second login: start the import again after Thursday 00:00.
   Since `v1-e40-t35` an image's `CASELIST_AUTH_EXPIRED` message says only what OpenCaselist refused,
   and its hint is the Wednesday login of
-  [A run refused for an expired login](#a-run-refused-for-an-expired-login). An image built before it
-  still says to run `caselist auth login`, and the messages of the other two codes still do: that
-  wording is the Mac's, and the rule holds for all of them.
+  [A run refused for an expired login](#a-run-refused-for-an-expired-login). Since `v1-e40-t40` the
+  other two codes say only what happened, and their hint is the Wednesday login of
+  [A run with no readable caselist_token](#a-run-with-no-readable-caselist_token). An image built before
+  either still says to run `caselist auth login` (or the logout and then the login): that wording is the
+  Mac's, and the rule holds for all of them.
 * `INSIDE_NO_IMPORT_WINDOW`, `BACKFILE_BUDGET_SPENT`, `NOT_ENOUGH_FREE_SPACE`,
   `RUN_STATE_NOT_SEEDED`, `NOT_A_BACKFILE`, `NO_COMPLETE_ARCHIVE`: as
   [caselist-backfiles.md, "What each refusal means"](caselist-backfiles.md#what-each-refusal-means) says.

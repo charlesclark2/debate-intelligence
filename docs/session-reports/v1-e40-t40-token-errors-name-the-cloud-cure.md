@@ -231,9 +231,39 @@ today and no deploy.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-11-12
 
 **Notes:**
+
+Accepted. ac1 and the node pass, and the Goal is `Succeeded`.
+
+* **The Deviation is right, and the PM's premise was wrong.** In this build a refused decrypt at
+  `GetSecretValue` is `STORE_ACCESS_DENIED` (`ManagedSecret.read`, pinned by `test_managed_secret.py`),
+  and `CASELIST_TOKEN_UNREADABLE` means only a value that is not a token record this program wrote. The
+  session probed it through the real command and threw the probe away. The runbook now says what the
+  code does, and keeps the ruling's substance: escalate to the PM with the error class, and never an IAM
+  or key-policy change by hand. That is the correct way to handle a ruling built on a wrong fact.
+* **The scope is checked.**
+  * One table, `CLOUD_TOKEN_CURES`, keyed by the code the CLI reports, so a cure appears only beside
+    its own code.
+  * The Mac's words are pinned before any change: 9 of the red run's passes are exactly those pins.
+  * The notice change is in the failed-stage arm only, as ruled.
+  * `INSECURE_TOKEN_FILE` stays outside the table.
+* **The evidence is strong.** The red run had 13 of 14 failures at assertions (the 14th was the
+  table's ImportError, before it existed). All 14 mutants were caught at assertions, including the
+  drift between the application's clause and the store's own message.
+* **The sync onto t44 is correct.** The one conflict was resolved with t44's guard first, and t44's
+  tests pass beside this task's.
+* **The affected set** (417 files) goes to `ci` under agreement 10.
+* **Follow-ups, into the next PM batch:**
+  1. The stopped-run notice for the two token codes still says "one started by hand", while the log's
+     hint names the Wednesday login. That is a new E40 task at p3, with the title question for its
+     proposal.
+  2. A refused secret read in bucket mode exits 3 as retryable, with no hint, where a person is
+     needed. That goes into the same task as its second criterion, measured first.
+  3. `INSECURE_TOKEN_FILE`: no task, since the cloud never meets it.
+
+`scripts/task pr`

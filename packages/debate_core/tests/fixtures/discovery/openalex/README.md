@@ -46,3 +46,19 @@ never in a URL.
   an abstract and an open copy). The third and fourth agree on title, author and year but carry
   different DOIs. The fifth and sixth agree on title, author, day and site and carry no DOI (the
   sixth's `doi` is a URL that is not one, which the adapter drops).
+* `works_keywords.body.json` (v1-e08-t15) is a `/works` body of eight works with OpenAlex keywords, in the
+  shape the operator's live request confirmed on 2026-11-12: each keyword is `{id, display_name, score}`,
+  best first, and its id is under `https://openalex.org/keywords/`. The works, the journal and the people
+  are invented. The adapter tests read it through `candidate_from_work`, and the narrowing tests in
+  `packages/debate_core/tests/application/test_search_narrowing.py`,
+  `packages/debate_cli/tests/test_search_command.py` and `tests/smoke/test_search_smoke.py` count it.
+  By hand, for the query `de-extinction`:
+  * works 1 to 6 carry keywords. The seventh's `keywords` is null, and the eighth's items have no name,
+    a blank one, a number, or are not objects, so neither carries any;
+  * `de-extinction` and `biotechnology` are on all six, so they are left out as on every result;
+    `extinction` (on works 1 to 3) has all its words in the query; `woolly mammoth` is on work 1 alone;
+  * the second work lists `animal welfare` twice, and it counts once;
+  * the five suggested are `conservation ethics` (works 1 to 5), `animal welfare` (1 to 4), `nature's
+    value` (2 to 4, the keyword with an apostrophe), `biodiversity conservation` and `genetic rescue`
+    (both on works 5 and 6). `human-animal relations`, also on works 5 and 6, is the sixth by name, so it
+    is not shown.

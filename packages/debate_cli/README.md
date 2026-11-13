@@ -617,6 +617,41 @@ extra queries, replayed from `<data dir>/search/model-cassettes/` unless `DEBATE
 or `record`; it is off unless given, and a model that cannot be asked leaves a warning on stderr and the
 template queries alone.
 
+**Narrowing a search: start broad, then hone in on what the first page finds** (`v1-e08-t15`). Search
+the topic in a word or two first. OpenAlex gives each work it returns a handful of keywords, short
+phrases saying what the work is about, and the subjects several results on your page share are the
+directions your broad search already found. Below the footer, search prints up to five of them, each
+with the narrower search to run next:
+
+```text
+Narrow it: subjects OpenAlex gave 2 or more of these 20 results
+  conservation ethics, on 5:  debate-research search 'de-extinction conservation ethics'
+  animal welfare, on 4:  debate-research search 'de-extinction animal welfare'
+```
+
+Copy a line's command and paste it to run that search: it is your search with the subject's words added,
+keeping your `--since`, `--until`, `--max-results`, `--topic` and `--providers`. Add `--save`,
+`--format json` or `--auto-cut` yourself. You can narrow the same way with words of your own:
+`debate-research search 'de-extinction mourning'`. The query is in single quotes, so it pastes as one
+piece in zsh or bash. An apostrophe in it is written `'\''` (`'de-extinction nature'\''s value'`), and a
+query with a character that would not paste as shown, such as a tab, gets no command, only its subject.
+
+Which subjects you see:
+
+* Each is on 2 or more of the results the table shows. One on a single result is left out.
+* One on every result that has keywords is left out, because narrowing by it changes nothing.
+* One whose words are all in your query already is left out, such as `extinction` on a
+  `de-extinction` search.
+* They are ordered by how many results carry each, then by the best rank among them, then by name.
+
+No model is asked and no extra request is sent: the keywords come with the answer the search already
+has. A narrower search costs what any search costs: one OpenAlex request per 100 results out of its
+daily budget, one Crossref call, and a read of each feed. A search expanded with `--argument` and
+`--need` prints none, because it asks the taxonomy's queries, not yours. Neither does a search with no
+results, nor a page whose results share no keyword (only OpenAlex's results carry keywords). `--format
+json` and `--save` carry the same suggestions as `narrowing`, each with its `subject`, `scheme`, `id`,
+`results`, `best_rank`, `query` and `command`; the list is empty when there are none.
+
 | Exit | Means |
 |---|---|
 | `0` | Every provider asked answered in full, with results. One enabled without its key is named, not counted. |

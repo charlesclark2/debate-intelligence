@@ -97,6 +97,7 @@ def test_search_runs_offline_and_names_the_provider_it_could_not_ask(installed_c
     details = error["details"]
     assert isinstance(details, dict)
     assert details["results"] == []
+    assert details["narrowing"] == []
     assert [(entry["provider"], entry["outcome"]) for entry in details["providers"]] == [
         ("semantic_scholar", "not configured")
     ]
@@ -168,3 +169,54 @@ def test_an_unknown_topic_exits_2_listing_the_topics(installed_cli: InstalledCli
 
     assert run.exit_code == ExitCode.USAGE_ERROR, run.output
     assert "policy-2026-27-nhi" in run.stderr
+
+
+KEYWORDS_BODY = (
+    REPO_ROOT
+    / "packages"
+    / "debate_core"
+    / "tests"
+    / "fixtures"
+    / "discovery"
+    / "openalex"
+    / "works_keywords.body.json"
+)
+
+
+def test_the_build_suggests_narrower_searches_from_a_pages_keywords(installed_cli: InstalledCli) -> None:
+    """v1-e08-t15: the build's own adapter, rules and presenter, over the hand-written keywords body.
+
+    No provider can answer offline, so the build's interpreter maps the body's works as the adapter
+    does, ranks them in the body's order and prints each suggested command. By hand from the body: the
+    five keywords two or more works share, by count, then name; the apostrophe closed and reopened."""
+    probe = (
+        "import json, sys\n"
+        "from debate_cli.presenters.search_narrowing import SearchCommandLine\n"
+        "from debate_core.application.federated_dedupe import merge_group\n"
+        "from debate_core.application.federated_ranking import RankedCandidate\n"
+        "from debate_core.application.federated_ranking_features import FEATURE_NAMES\n"
+        "from debate_core.application.search_narrowing import narrowing_suggestions\n"
+        "from debate_core.integrations.discovery.openalex import candidate_from_work\n"
+        "works = json.load(open(sys.argv[1], encoding='utf-8'))['results']\n"
+        "page = [\n"
+        "    RankedCandidate(\n"
+        "        candidate=merge_group([candidate_from_work(work)]), rank=rank, total_score=0.0,\n"
+        "        lexical_score=None, features=dict.fromkeys(FEATURE_NAMES),\n"
+        "        contributions=dict.fromkeys(FEATURE_NAMES, 0.0), explanation='-',\n"
+        "    )\n"
+        "    for rank, work in enumerate(works, start=1)\n"
+        "]\n"
+        "suggestions = narrowing_suggestions('de-extinction', page)\n"
+        "print(json.dumps([SearchCommandLine().for_query(item.query) for item in suggestions]))\n"
+    )
+
+    run = installed_cli.run_program([str(installed_cli.build.interpreter), "-c", probe, str(KEYWORDS_BODY)])
+
+    assert run.exit_code == 0, run.output
+    assert json.loads(run.stdout) == [
+        "debate-research search 'de-extinction conservation ethics'",
+        "debate-research search 'de-extinction animal welfare'",
+        "debate-research search 'de-extinction nature'\\''s value'",
+        "debate-research search 'de-extinction biodiversity conservation'",
+        "debate-research search 'de-extinction genetic rescue'",
+    ]

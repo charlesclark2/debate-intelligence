@@ -458,9 +458,44 @@ exit 0
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-11-12
 
 **Notes:**
+
+Accepted. ac1, ac2, ac3 and the node pass, and the Goal is `Succeeded`.
+
+* **ac1.** The operator's run of 2026-11-12T23:21Z is recorded whole, and it printed counts,
+  publisher names and committed template texts only. The first query commit, `eada0db`, comes after
+  the ruling. The proposal argues from the numbers, including the function-word inflation in "own
+  plus one", and the PM ruled A.
+* **ac2, checked against the branch.** The diff touches no taxonomy file and no prompt.
+  `config/daily_templates.yaml` holds exactly the ruled four, each with its measured counts. The
+  reviewed templates are pinned by a sha256 over all 456. Ruling C's tests were shown failing against
+  the query-alone build, with nhi's eight queries pinned from dev's own code at `5c71e42`, not from
+  the new code. Mutants 5 and 6 (the named line dropped, and a fallback to the query alone) were
+  caught, as the ruling asked. Scoping each template by `queries`, so that the zero-count pairs run
+  no search, is a good reading of the ruling.
+* **ac3.** The tests were shown red on an injected clock at 23:00 and 07:00 Chicago, on both
+  changeover days and in two other zones. An explicit `--date` keeps its UTC days, as ruled.
+* **Decisions 1 to 12: accepted.** On decision 1, the default zone: `DailySettings` validates its
+  default, so every settings load now resolves `America/Chicago` through the system's time zone
+  database. The PM checked where that runs. The pilot API does not load `Settings` (it has its own
+  `PilotConfiguration`). The cloud run image already resolves the same zone at import, through
+  `backfile_import.NO_IMPORT_WINDOW_ZONE`, and the hspolicy25 rebuild ran on it. The Mac and CI have
+  the database. So nothing breaks today. As insurance, an unconditional `tzdata` dependency is filed
+  as a p3 follow-up in the next PM batch; today the lock carries it only for Windows.
+* **The deviations are accepted.** The next PM batch amends the spec: the rulings (A, C, and the date
+  default), plus `scripts/`, `tests/smoke/`, `scripts/stamp_build.py` and `tests/scripts/` in its
+  packages.
+* **The affected set** is the whole selection, so it goes to `ci` under agreement 10. The 1,499 tests
+  run within the limit are enough for review.
+* **The operator's post-merge block is accepted.** Its guards are: no `DEBATE_` overrides, and no
+  `debate-research` process (v1-e39-t18's included). It writes only to a Desktop scratch folder and
+  prints counts and group headings only. The PM records it.
+* **Follow-ups, into the next PM batch:** the nhi feed count and the midterms re-measure as notes on
+  the epic; the scheduler note needs nothing now.
+
+`scripts/task pr`

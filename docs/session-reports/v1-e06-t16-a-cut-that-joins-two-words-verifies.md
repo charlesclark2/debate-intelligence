@@ -253,9 +253,41 @@ None.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-11-13
 
 **Notes:**
+
+Accepted. ac1 and the node pass, and the Goal is `Succeeded`.
+
+* **The measurement is the right first step, and it is honest.**
+  * CardService made 0 word-to-word joins over 105 distinct cards.
+  * E03's edit API made 145, in its own tests, so stored joins are likely and the fix matters.
+  * Only counts and digests were recorded, and no card text.
+* **Decision 1, the fix in the tokenization and never in `evidence_text`, is right.** The report
+  measures or argues each alternative: changing stored text breaks EVIDENCE_TEXT_EXACT and every hash,
+  splitting the body fails 52 tests, and diffing characters loses t07's rule. No stored data and no
+  existing expectation changed (all 87 earlier tests pass untouched).
+* **Decision 2 is accepted.** A body that takes the marker out at a word join reads "holdflood", a word
+  the source never wrote, so it is a MANUAL_EDIT, as t07 reads a deleted space.
+* **Decision 4 is accepted.** It is t15's own rule, extended to all the whitespace around the "…". It
+  was measured first: one space, no space and non-breaking spaces already worked, and two spaces
+  brought the tie back.
+* **The evidence is enough.**
+  * 22 of 22 join tests failed red at assertions. The 2 two-space tests failed against the join fix
+    alone.
+  * All 8 boundary mutants were caught. Two checks no input could distinguish were removed rather than
+    kept untested (agreement 8). The body-side-only mutant is t15's known equivalent.
+* **The affected set** goes to `ci` under agreement 10.
+* **Follow-ups, into the next PM batch:**
+  2. Taking the marker out where a cut joins punctuation to a word ("fail.The") still verifies, so a
+     reader cannot see that text was cut. That is an evidence-integrity gap: a new E06 task at p2,
+     whose outcome is a refusal named as a hidden cut.
+  1. An interpolation anchored inside a word: folded into the same task, since it is the same one-line
+     boundary change.
+  3. Three full stops typed for the marker: the coach's decision, asked of him first; filed by the
+     answer.
+
+`scripts/task pr`

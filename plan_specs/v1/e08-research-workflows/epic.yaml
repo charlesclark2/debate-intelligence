@@ -643,5 +643,44 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e08-t25-digest-queries-and-the-feeds-every-word-rule
+    - id: t26
+      kind: Task
+      name: 'The end-to-end auto-cut tests follow v1-e08-t24''s ranking, so validate-dev is green again'
+      description: >-
+        The end-to-end auto-cut tests follow v1-e08-t24's ranking, so validate-dev is green
+        again.
+      inputs:
+        specRef: plan_specs/v1/e08-research-workflows/t26-the-end-to-end-auto-cut-test-follows-the-multi-query-ranking.yaml
+        goalRef: v1-e08-t26-the-end-to-end-auto-cut-test-follows-the-multi-query-ranking
+      dependsOn:
+      - t24
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e08-t26-the-end-to-end-auto-cut-test-follows-the-multi-query-ranking reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e08-t26-the-end-to-end-auto-cut-test-follows-the-multi-query-ranking
+    - id: t27
+      kind: Task
+      name: '`search --within` narrows a saved search''s results locally, with no provider call'
+      description: >-
+        `search --within` narrows a saved search's results locally, with no provider call.
+      inputs:
+        specRef: plan_specs/v1/e08-research-workflows/t27-search-within-a-saved-search.yaml
+        goalRef: v1-e08-t27-search-within-a-saved-search
+      dependsOn:
+      - t15
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e08-t27-search-within-a-saved-search reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e08-t27-search-within-a-saved-search
 status:
   phase: Pending

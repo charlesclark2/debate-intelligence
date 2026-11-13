@@ -1,0 +1,85 @@
+# TASK v1-e08-t26-the-end-to-end-auto-cut-test-follows-the-multi-query-ranking - The end-to-end auto-cut tests follow v1-e08-t24's ranking, so validate-dev is green again
+# Epic: E08 Federated Research Workflows | Release: v1.4 (Federated research from the CLI) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e08-t26-the-end-to-end-auto-cut-test-follows-the-multi-query-ranking
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.4
+    debate/epic: v1-e08-research-workflows
+  annotations:
+    debate/title: "The end-to-end auto-cut tests follow v1-e08-t24's ranking, so validate-dev is green again"
+spec:
+  # Filed by the PM, 2026-11-12, from validate-dev's slow-tier failure on dev (the PM's bisect, 2026-11-12).
+  description: >-
+    validate-dev's slow tier has failed on dev since v1-e08-t24 merged (982cc154, #887):
+    tests/integration/test_e2e_research.py's test_search_auto_cut_3_writes_three_verified_cards_
+    cut_from_their_snapshots_and_verify_passes_the_bundle and
+    test_the_bundle_does_not_verify_where_its_snapshots_are_not_stored. The PM bisected it
+    between 7b81d85e (passes) and daa5563 (fails) to 982cc154. Under t24's ranking the synthetic
+    world's fosw.example.gov grants page (cut UNVERIFIED, CITATION_UNVERIFIED) now ranks ahead
+    of the dailymeridian.example mammoth article, so auto-cut --auto-cut 3 cuts it before
+    reaching its third VERIFIED card: the report still reads wanted 3, verified 3, COMPLETE, and
+    the bundle gains the UNVERIFIED card in its bannered section, as batch_cut_service intends,
+    so the manifest lists four cards where the tests expect three. The pull request's ci never
+    ran it, because the slow tier runs only in validate-dev. First say which of t24's signals
+    moved the grants page up, and whether that order is what t24's rule intends on this query.
+    If it is, update the two tests' expectations so they pin the bannered UNVERIFIED card and
+    its reason as well, keeping every other assertion. If it is not, it is a ranking bug: stop
+    for the PM's ruling before changing either. protect-main requires validate-dev green, so no
+    promotion merges until this does.
+  priority: 1
+  constraints:
+    packages: [tests/integration, debate_core.application, packages/debate_core/tests]
+    forbidden:
+      - A weakened assertion (fewer cards checked, a status or reason no longer pinned)
+      - A change to batch_cut_service's rule that an UNVERIFIED card is kept in the bannered section
+      - A live provider call in a test
+  context:
+    - kind: TaskRef
+      name: v1-e08-t24-the-ranking-keeps-a-multi-query-searchs-relevant-results-up
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        The cause is named, the two tests pass against t24's ranking with the bannered
+        UNVERIFIED card pinned (or the ranking is fixed as the PM rules), and the slow tier
+        passes in full.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e08-t26-the-end-to-end-auto-cut-test-follows-the-multi-query-ranking-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.4
+    debate/epic: v1-e08-research-workflows
+spec:
+  description: >-
+    The end-to-end auto-cut tests follow v1-e08-t24's ranking, so validate-dev is green again.
+  goalRef:
+    name: v1-e08-t26-the-end-to-end-auto-cut-test-follows-the-multi-query-ranking
+  graph:
+    nodes:
+      - id: the-end-to-end-auto-cut-test-follows-the
+        kind: Task
+        name: End-to-end follows the ranking
+        description: >-
+          The end-to-end auto-cut tests follow v1-e08-t24's ranking, so validate-dev is
+          green again.
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: test_passes
+            name: End-to-end follows the ranking tests pass
+            command: uv
+            args: [run, pytest, tests/integration/test_e2e_research.py, -m, slow or not slow]
+status:
+  phase: Pending

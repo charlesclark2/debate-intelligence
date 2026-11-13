@@ -10,11 +10,11 @@ A .docx the platform exported is read too (`v1-e06-t07`): the use case finds the
 it, verifies its cards the same way, and then checks that the document body still shows each card's
 evidence, allowing only the edits the edit policy allows. A card whose quoted words were changed is
 UNVERIFIED with `MANUAL_EDIT` and the character range, and one whose body takes out the omission marker
-at one of its cuts is UNVERIFIED with `HIDDEN_CUT` and the cut's offset (`v1-e06-t17`); a bracketed interpolation is a warning
-(`INTERPOLATION_PRESENT`) on a card that stays VERIFIED, and so is a deletion that removed a negating
-word, by the edit policy's own test (`NEGATION_REMOVED` with the deletion's range, `v1-e06-t10`): a
-warning changes no status and no exit code. A card in the body that the manifest does
-not list, such as one pasted in by hand, is a row of its own, UNVERIFIED with
+at one of its cuts is UNVERIFIED with `HIDDEN_CUT` and the cut's offset (`v1-e06-t17`); a bracketed
+interpolation is a warning (`INTERPOLATION_PRESENT`) on a card that stays VERIFIED, and so is a
+deletion that removed a negating word, by the edit policy's own test (`NEGATION_REMOVED` with the
+deletion's range, `v1-e06-t10`): a warning changes no status and no exit code. A card in the body that
+the manifest does not list, such as one pasted in by hand, is a row of its own, UNVERIFIED with
 `BODY_CARD_NOT_IN_MANIFEST`. The file is only ever read.
 
 Snapshots are read from this environment's data directory (`storage.data_dir`, chosen by

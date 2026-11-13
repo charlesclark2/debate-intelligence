@@ -32,7 +32,7 @@ from pydantic import Field, model_validator
 
 from debate_core.domain.article import ArticleIdentifiers
 from debate_core.domain.base import DomainModel, HttpUrlStr, NonEmptyText, UtcDatetime
-from debate_core.domain.enums import SourceType
+from debate_core.domain.enums import DatePrecision, SourceType
 from debate_core.domain.search import SearchFilters
 
 __all__ = [
@@ -62,19 +62,6 @@ class ProviderQuery(DomainModel):
     filters: SearchFilters = Field(
         default_factory=SearchFilters, description="Date window, source types, language and result cap."
     )
-
-
-class DatePrecision(StrEnum):
-    """How much of a publication date a provider knows (v1-e07-t03).
-
-    Crossref deposits dates as `[year]`, `[year, month]` or `[year, month, day]`. A date known only
-    to its year or month is stored at the first instant of that period, and its precision says so,
-    so nothing downstream reads an invented day.
-    """
-
-    DAY = "day"
-    MONTH = "month"
-    YEAR = "year"
 
 
 class SubjectScheme(StrEnum):

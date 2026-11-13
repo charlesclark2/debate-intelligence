@@ -20,6 +20,7 @@ from debate_core.domain import (
     SourceType,
     new_id,
 )
+from debate_core.domain.enums import DatePrecision
 
 RAW_SHA256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
 NORMALIZED_SHA256 = "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"
@@ -325,3 +326,48 @@ def test_a_snapshot_with_no_stated_citation_is_stored_byte_for_byte_as_before(mo
         SourceSnapshot.model_validate_json(SNAPSHOT_DOCUMENT_BEFORE_T12.replace("{mode}", mode.value))
         == snapshot
     )
+
+
+# --------------------------------------------------------------------------------------------
+# An Article's date precision (v1-e06-t13)
+# --------------------------------------------------------------------------------------------
+
+
+def test_an_article_dates_to_the_day_unless_it_says_otherwise() -> None:
+    article = make_article(published_at=datetime(2021, 3, 4, tzinfo=UTC))
+
+    assert article.date_precision is DatePrecision.DAY
+    assert "date_precision" not in article.model_dump()
+
+
+@pytest.mark.parametrize(
+    ("moment", "precision"),
+    [
+        (datetime(2021, 1, 1, tzinfo=UTC), DatePrecision.YEAR),
+        (datetime(2021, 3, 1, tzinfo=UTC), DatePrecision.MONTH),
+    ],
+    ids=["year", "month"],
+)
+def test_an_articles_year_or_month_is_kept_beside_its_date_through_json(
+    moment: datetime, precision: DatePrecision
+) -> None:
+    article = make_article(published_at=moment, date_precision=precision)
+
+    assert article.model_dump()["date_precision"] == precision.value
+    assert Article.model_validate_json(article.model_dump_json()) == article
+
+
+@pytest.mark.parametrize(
+    ("moment", "precision", "message"),
+    [
+        (datetime(2021, 3, 4, tzinfo=UTC), DatePrecision.YEAR, "first instant of its year"),
+        (datetime(2021, 3, 4, tzinfo=UTC), DatePrecision.MONTH, "first instant of its month"),
+        (None, DatePrecision.YEAR, "no date"),
+    ],
+    ids=["a day as a year", "a day as a month", "no date"],
+)
+def test_an_article_never_gives_a_date_a_precision_it_does_not_have(
+    moment: datetime | None, precision: DatePrecision, message: str
+) -> None:
+    with pytest.raises(ValidationError, match=message):
+        make_article(published_at=moment, date_precision=precision)

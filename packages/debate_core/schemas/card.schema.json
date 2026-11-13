@@ -98,6 +98,11 @@
           "$ref": "#/$defs/CitationField_Annotated_datetime__AfterValidator__",
           "description": "Publication date, in UTC."
         },
+        "published_at_precision": {
+          "$ref": "#/$defs/DatePrecision",
+          "default": "day",
+          "description": "How much of `published_at` its source states (`v1-e06-t13`). `year` and `month` mean the date is the first instant of that year or month and no day is known; `day`, the default, is what every cite stored before this field held, and is left out of the stored record."
+        },
         "canonical_url": {
           "$ref": "#/$defs/CitationField_str_",
           "description": "Canonical URL of the source."
@@ -276,6 +281,16 @@
       },
       "title": "CitationField[tuple[Annotated[str, StringConstraints], ...]]",
       "type": "object"
+    },
+    "DatePrecision": {
+      "description": "How much of a publication date is known (v1-e07-t03; on an Article and a cite, v1-e06-t13).\n\nCrossref deposits dates as `[year]`, `[year, month]` or `[year, month, day]`, and a user may state\na year or a month alone. A date known only to its year or month is stored at the first instant of\nthat period, and its precision says so, so nothing downstream reads an invented day. A precision is\nnever raised: a year stays a year.",
+      "enum": [
+        "day",
+        "month",
+        "year"
+      ],
+      "title": "DatePrecision",
+      "type": "string"
     },
     "Effort": {
       "description": "How much thinking and output a Claude model spends on a call: its quality lever.\n\nSent as Converse's `outputConfig.effort`. The current Claude models take no temperature but their\ndefault and always think, so effort is the one knob that trades quality against tokens on them\n(v1-e05-t01-model-router-port, Follow-up work). Unset sends none, and the model's own default\napplies; that default differs by model, so a route that cares names a level.",

@@ -230,19 +230,37 @@ def test_the_service_stores_the_matched_results_and_returns_the_ranking_and_arti
 
 
 @pytest.mark.parametrize(
-    ("published_at", "precision", "stored"),
+    ("published_at", "precision", "stored", "stored_precision"),
     [
-        (datetime(2021, 1, 1, tzinfo=UTC), DatePrecision.YEAR, None),
-        (datetime(2023, 3, 1, tzinfo=UTC), DatePrecision.MONTH, None),
-        (datetime(2022, 5, 17, tzinfo=UTC), DatePrecision.DAY, datetime(2022, 5, 17, tzinfo=UTC)),
-        (datetime(2022, 5, 17, tzinfo=UTC), None, datetime(2022, 5, 17, tzinfo=UTC)),
+        (
+            datetime(2021, 1, 1, tzinfo=UTC),
+            DatePrecision.YEAR,
+            datetime(2021, 1, 1, tzinfo=UTC),
+            DatePrecision.YEAR,
+        ),
+        (
+            datetime(2023, 3, 1, tzinfo=UTC),
+            DatePrecision.MONTH,
+            datetime(2023, 3, 1, tzinfo=UTC),
+            DatePrecision.MONTH,
+        ),
+        (
+            datetime(2022, 5, 17, tzinfo=UTC),
+            DatePrecision.DAY,
+            datetime(2022, 5, 17, tzinfo=UTC),
+            DatePrecision.DAY,
+        ),
+        (datetime(2022, 5, 17, tzinfo=UTC), None, datetime(2022, 5, 17, tzinfo=UTC), DatePrecision.DAY),
     ],
     ids=["year", "month", "day", "no precision"],
 )
-def test_a_discovery_only_article_never_turns_a_year_or_a_month_into_a_day(
-    published_at: datetime, precision: DatePrecision | None, stored: datetime | None
+def test_a_discovery_only_article_keeps_a_year_or_a_month_date_at_its_precision_never_a_day(
+    published_at: datetime,
+    precision: DatePrecision | None,
+    stored: datetime,
+    stored_precision: DatePrecision,
 ) -> None:
-    """Until a Citation can carry a partial date (v1-e06-t12's follow-up), an Article stores none."""
+    """A year or a month is stored with its precision (v1-e06-t13); until then v1-e07-t03 stored none."""
     crossref = PAPER.model_copy(
         update={
             "provider": "crossref",
@@ -255,4 +273,4 @@ def test_a_discovery_only_article_never_turns_a_year_or_a_month_into_a_day(
     done = run(stage(InMemoryArticleRepository()).run(ranked_state(crossref)))
 
     [article] = done.articles
-    assert article.published_at == stored
+    assert (article.published_at, article.date_precision) == (stored, stored_precision)

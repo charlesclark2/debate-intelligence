@@ -1072,8 +1072,6 @@ def test_an_empty_stated_field_is_refused(given: dict[str, Any], field_name: str
 @pytest.mark.parametrize(
     "date_text",
     [
-        "2026",
-        "2026-10",
         "October 3, 2026",
         "2026-10-3",
         "2026/10/03",
@@ -1083,12 +1081,13 @@ def test_an_empty_stated_field_is_refused(given: dict[str, Any], field_name: str
         " ",
     ],
 )
-def test_a_stated_date_is_a_full_iso_date_or_refused_naming_that_form(date_text: str) -> None:
+def test_a_stated_date_in_another_form_is_refused_naming_the_forms_it_may_take(date_text: str) -> None:
+    """`2026` and `2026-10` were refused until `v1-e06-t13`; they are a year and a month now."""
     with pytest.raises(InvalidStatedCite) as refused:
         stated_citation(published_on=date_text)
 
     assert refused.value.field == "published_at"
-    assert "YYYY-MM-DD" in str(refused.value)
+    assert "YYYY, YYYY-MM or YYYY-MM-DD" in str(refused.value)
 
 
 async def test_a_user_supplied_copy_is_cited_with_its_stated_fields_none_of_them_verified(

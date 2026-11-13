@@ -94,6 +94,16 @@
       "title": "ArticleIdentifiers",
       "type": "object"
     },
+    "DatePrecision": {
+      "description": "How much of a publication date is known (v1-e07-t03; on an Article and a cite, v1-e06-t13).\n\nCrossref deposits dates as `[year]`, `[year, month]` or `[year, month, day]`, and a user may state\na year or a month alone. A date known only to its year or month is stored at the first instant of\nthat period, and its precision says so, so nothing downstream reads an invented day. A precision is\nnever raised: a year stays a year.",
+      "enum": [
+        "day",
+        "month",
+        "year"
+      ],
+      "title": "DatePrecision",
+      "type": "string"
+    },
     "SourceType": {
       "description": "The kind of publication a source is, used as a ranking feature and a search filter.\n\nThis is a descriptive category, never a quality or credibility score: source quality is\nexpressed as named, explainable features (architecture proposal §9).",
       "enum": [
@@ -217,6 +227,11 @@
       "default": null,
       "description": "Publication timestamp in UTC; None when the source states no date.",
       "title": "Published At"
+    },
+    "date_precision": {
+      "$ref": "#/$defs/DatePrecision",
+      "default": "day",
+      "description": "How much of `published_at` is known (`v1-e06-t13`): `year` and `month` mean it is the first instant of that year or month, as a discovery provider stated it, and no day is known. `day`, the default, is what every Article stored before this field held, and is left out of the stored record."
     },
     "source_type": {
       "$ref": "#/$defs/SourceType",

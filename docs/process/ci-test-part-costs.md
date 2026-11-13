@@ -1,4 +1,4 @@
-<!-- docs-index: What one ci.yml test part costs besides its tests (measured 2026-11-01), how many parts a selection gets, how whole files are dealt to parts by recorded durations (2026-11-02), what module fixtures and collection cost a part (2026-11-05), each part collecting only its own files, and the options for making parts cheaper -->
+<!-- docs-index: What one ci.yml test part costs besides its tests (measured 2026-11-01), how many parts a selection gets, how whole files are dealt to parts by recorded durations (2026-11-02), what module fixtures and collection cost a part (2026-11-05), each part collecting only its own files, and the options for making parts cheaper, and what the slow-tests job costs (2026-11-13) -->
 # What a CI test part costs besides its tests
 
 `ci.yml`'s `test` job runs the selection in parts (working agreement 1): eight until `v1-e41-t16`,
@@ -389,3 +389,58 @@ test. Collecting less takes a few seconds off every part, that one included. The
 pytest step on this task's pull request, a whole-selection run in eight parts dealt by dev's record
 like the dispatch of `440f797`, is read after it runs, and on three task pull requests after the
 merge (the task's ac2).
+
+## The slow-tests job
+
+Since `v1-e41-t29` a pull request into `dev` runs the slow tests its affected set reaches, in the
+`slow-tests` job beside the parts ([working agreement 1](working-agreements.md#1-ci-stays-light)).
+These figures sized it, and set its bound: the pytest step at most 120 seconds, and the job at most
+60 seconds past the longest part.
+
+**How often a pull request reaches each slow file.** Dev's last 11 commits that were not refreshes
+(2026-11-12), each replayed over that day's import graph:
+
+| Slow files | Reached by |
+|---|---|
+| `tests/scripts/test_affected_tests_planted_breaks.py` (left to validate-dev) | 11 of 11: every task pull request, through its own spec |
+| the three `tests/integration` e2e files | 7–8 |
+| the three environment-gated files (their slow tests left to validate-dev) | 7 |
+| the two `packages/debate_api/tests/browser` files | 5 |
+| `test_evidence_search_scale.py` | 2 |
+| `test_structural_fixtures.py` | 1 |
+
+**What they cost on the operator's Mac** (2026-11-12, load 5–13):
+
+| Slow files | Tests | Time |
+|---|---|---|
+| the three e2e files, `-n 0` | 11 | 6.5 s |
+| `test_evidence_search_scale.py`, `-n 0` | 1 | 52.0 s; one test, so it sets any run's critical path |
+| `test_structural_fixtures.py`, `-n 0` | 1 | 2.2 s |
+| the browser files, xdist auto | 30 | 21.4 s |
+| all of the above at `-n 4 --dist worksteal`, a runner part's workers | 43 | 51.4 s |
+| `scripts/ci_slow_tests.py` over the whole selection's 11 slow files, as the job runs it (2026-11-13, load 5) | 43 | 58 s wall, 43 passed, none skipped |
+
+**validate-dev's slow job on a runner** (its last five runs, read by the operator with `gh` on
+2026-11-13; 4 xdist workers, 60 tests each):
+
+| Step | Seconds |
+|---|---|
+| Set up job, checkout, setup-uv, Python, `uv sync` (cached) | 8–14 |
+| Playwright's Chromium with its system libraries | 21–32 |
+| LibreOffice | 16–40 |
+| QEMU and the Lambda image | 18–23 |
+| pytest, the whole slow tier | 379–453 |
+
+Its log gave no per-file times: the tier ran without `--durations`, and pytest's lines reach the log
+through a pipe, timestamped when it is flushed. From this commit each tier prints its 25 slowest
+tests. A runner's part runs at about a Mac's speed (about 0.09 s a test against 0.099 s at `-n 4`,
+above), so the 43 tests the job runs take about 50–80 s there, and most of the runner's 379–453 s
+are the planted-break cases.
+
+**The estimate this gives** for the worst realistic pull request (a `debate_core` search change
+reaching the browser files and the scale test): setup 8–14 s, Chromium 21–32 s, pytest 50–80 s, so
+a job of about 1.5–2.5 minutes. Such a pull request's eight parts take 2–3 minutes each, so `ci`
+takes 0–30 s longer. The usual reach, the e2e files alone, is a job of under a minute, under the
+parts. Running the three environment-gated tests too would add 34–63 s of installs. Running the
+planted-break cases would add most of 6–7 minutes, past the 5-minute budget. Both stay on
+validate-dev (the PM's ruling, 2026-11-13).

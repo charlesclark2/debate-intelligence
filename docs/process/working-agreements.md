@@ -73,17 +73,43 @@ The goal is a short wait between opening a PR and being able to merge it into `d
   its parts. A push part that takes over 8 minutes means one part more: a larger `MOST_PARTS`. Locally, ask for it:
   `uv run pytest --cov --cov-report=term-missing`.
 * **What runs on every PR:** formatting and lint, type checks, fast unit and contract tests,
-  import-boundary checks, spec validation. All offline: recorded fixtures and the fake/replay
-  model router, no live network, no real model calls.
+  import-boundary checks, spec validation, and on a pull request into `dev` the slow tests its
+  affected set reaches (below). All offline: recorded fixtures and the fake/replay model router,
+  no live network, no real model calls.
+* **A pull request into `dev` runs the slow tests its affected set reaches** (`v1-e41-t29`, the PM's
+  rulings of 2026-11-13). The parts run `not slow`. Beside them, `ci.yml`'s `slow-tests` job runs
+  the slow tests of the same chosen files, or for the whole selection every slow test, with
+  validate-dev's slow-tier markers (`validate_dev.SLOW`, imported by `scripts/ci_slow_tests.py`).
+  `v1-e08-t24`'s ranking change broke a slow end-to-end test its affected set had chosen. No pull
+  request ran it, and dev was red for a day until validate-dev's slow tier saw it.
+  * **Four tests stay on validate-dev only**, deselected by node id, each with its reason in the job
+    summary (`LEFT_TO_VALIDATE_DEV` in `scripts/ci_slow_tests.py`, pinned by its test): the
+    planted-break cases, which every task pull request reaches through its own spec and which are
+    most of validate-dev's 6–7-minute slow tier, the LibreOffice renderer check and the two
+    Lambda-image SQLite checks. A new one is a reviewed change to that list.
+  * **A skip fails it**, as it fails validate-dev's tier. No slow test left to run passes.
+  * **It is one of `ci`'s needs**, gated on `test-selection`'s `run_slow`, so a slow failure blocks
+    the merge into `dev`. The required checks do not change. A push, a promotion and a dispatch
+    leave the slow tier to validate-dev, which runs it whole on every dev pre-release.
+  * **Its bound:** the pytest step at most 120 seconds on a runner, and the job at most 60 seconds
+    past the longest test part. When that is passed on ordinary pull requests, the browser files
+    move to a job of their own first, then the slowest test is made cheaper. Nothing ever leaves
+    validate-dev's slow tier. Its log ends with the 25 slowest tests, as validate-dev's tiers do;
+    [`ci-test-part-costs.md`](ci-test-part-costs.md#the-slow-tests-job) has the figures it was
+    sized by.
 * **Path filters:** jobs only run when their area changed. Web jobs when `web/` or
   `clients/` changed, Terraform `fmt`/`validate` when `infrastructure/` changed, Python jobs when
   `packages/`, `tests/` or `pyproject.toml` changed.
-* **Not on PRs into `dev`:** LLM evaluation suites, browser end-to-end suites, live canaries,
-  `terraform plan/apply` against real accounts, load tests, security scans that take minutes. They
-  run in `validate-dev` after the merge (before a promotion to `main`), on a nightly schedule, or on
-  manual dispatch.
+* **Not on PRs into `dev`:** LLM evaluation suites, browser suites against a deployed site, live
+  canaries, `terraform plan/apply` against real accounts, load tests, security scans that take
+  minutes. They run in `validate-dev` after the merge (before a promotion to `main`), on a nightly
+  schedule, or on manual dispatch. The search pages' browser files are not among them: they drive Chromium against
+  pages served in-process and reach nothing outside the runner, so a pull request's `slow-tests`
+  job runs them when its affected set reaches them.
 * **Test markers:** tests that are slow or need the network are marked (`@pytest.mark.slow`,
-  `@pytest.mark.live`) and excluded from the default `pytest` run.
+  `@pytest.mark.live`) and excluded from the default `pytest` run. A `slow` test still runs on a
+  pull request into `dev` that reaches it, in the `slow-tests` job, so marking a test `slow` moves it
+  off the parts, never off the pull request.
 
 ## 2. Anything over about 2 minutes goes to the operator
 
@@ -261,6 +287,11 @@ tests its changes reach, and the whole selection runs once per merge instead (`v
   only the doc checks (`v1-e41-t15`); since `v1-e41-t16` that dispatch also runs no type check,
   import check, Terraform, site or workflow job, as its pull request runs none. An affected set
   runs in one part per 30 test files, at most eight, and the whole selection in eight.
+* **It runs the slow tests its affected set reaches as well** (`v1-e41-t29`). The parts run
+  `not slow`; beside them the `slow-tests` job runs the slow tests of the same chosen files, with
+  validate-dev's slow-tier markers, less the four tests left to validate-dev
+  ([agreement 1](#1-ci-stays-light) says which, why, and the job's bound). For the whole selection it
+  runs every slow test but those four.
 * **Dev's push run and every promotion run everything.** A push to `dev` or `main`, a pull request
   into `main` and a dispatched run each run the whole default selection, and the `coverage` job
   measures it on every push. The dev pre-release waits for dev's push run, so a test the affected set
@@ -273,15 +304,32 @@ tests its changes reach, and the whole selection runs once per merge instead (`v
 * **A session never runs the whole default selection**, in one command or in parts. Not at red, not
   before the report, not after a sync. The whole-suite run is CI's: the pull request's `ci` check
   when the selection is the whole one, and dev's push run after every merge.
+* **Nor the whole slow tier** (the PM's ruling of 2026-11-13, `v1-e41-t29`). It runs the slow tests
+  of the files it changes, under the same 115-second bound, and before the report those its
+  affected set reaches (`--run --slow`, below). The planted-break cases in
+  `tests/scripts/test_affected_tests_planted_breaks.py` are validate-dev's alone, with no hand-off:
+  one of them needs about 123 seconds on the operator's Mac, over the bound, and all of them are
+  most of validate-dev's slow tier on a runner. A session that changes `scripts/affected_tests.py`
+  runs that file's fast tests like any other.
 * **While working, run the tests for what you are changing:** the new or changed test files, the
   test directory of the module under change, and the plan node's own acceptance command. A red run
-  is the new tests alone, shown failing.
+  is the new tests alone, shown failing. Their slow tests run too, with `-m slow`, when the files
+  changed hold any.
+  * **A change that moves a fixture search's ranking** (a weight, the recency rule, a tie-break,
+    a provider's order) greps `tests/integration` for the same query or fixture, and runs what it
+    finds with `-m slow`. Those end-to-end tests pin the order and the cut of the same recorded
+    searches the CLI tests do. In `v1-e08-t24` only they saw the reorder, no pull request ran
+    them, and dev was red for a day. The pull request's `slow-tests` job now runs them when its
+    affected set reaches them (`v1-e41-t29`); the grep finds them before the push.
 * **Before the report, run the affected set once**, plus the cheap whole-repo checks:
   * the affected set, run with `uv run scripts/affected_tests.py --run` (`v1-e01-t28`). It prints
     every test file the branch's changes can reach, committed or not: through imports, directly or
     through any chain of modules, the conftest files above a test, a script or fixture a test names
     by path, and an always-run list (`tests/architecture`, `tests/specs`, the CLI's wiring tests).
-    Then it runs pytest over them with CI's markers. `--explain` says why each file was chosen. When
+    Then it runs pytest over them with CI's markers. Run it as `--run --slow` (`v1-e41-t29`): it then
+    runs the slow tests those files hold, as the pull request's `slow-tests` job does, with
+    validate-dev's markers, less the four tests left to validate-dev, a skip counted as a failure.
+    On today's suite that is at most about a minute. `--explain` says why each file was chosen. When
     the branch changes shared test ground (`pyproject.toml`, `uv.lock`, the root `conftest.py`,
     `tests/pytest_plugins/`, `ci.yml`) it prints that the whole selection is affected and runs
     nothing: that run is CI's, or the operator's under the exception below;

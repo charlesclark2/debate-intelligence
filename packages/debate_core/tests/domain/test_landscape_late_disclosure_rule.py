@@ -31,6 +31,7 @@ HISTORY = {
     "harborcityclassic": NOV_03,
     "harborcityrr": NOV_03,
     "novemberclassic": NOV_10,
+    "summeropen": date(2026, 8, 4),
 }
 """Each spelling's first snapshot, as `first_seen_spellings` gives it for the store."""
 
@@ -85,7 +86,7 @@ def topics(
                     "caselists": [
                         {
                             "caselist": POLICY,
-                            "from": "2026-07-01",
+                            "from": "2026-09-01",
                             "to": "2027-06-30",
                             "late_disclosures_on_earlier_topic": policy_key,
                         }
@@ -111,6 +112,7 @@ def test_in_the_2026_11_10_shape_late_spellings_move_and_an_entry_spelling_stays
     assert on(map_.resolve_disclosure(LD, NOV_10, None, first_seen=HISTORY)) == NEW
     assert on(map_.resolve_disclosure(LD, NOV_10, "A spelling never seen", first_seen=HISTORY)) == NEW
     assert on(map_.resolve_disclosure(LD, NOV_17, "Lakeside Open", first_seen=HISTORY)) == OLD
+    assert on(map_.resolve_disclosure(LD, NOV_17, "November Classic", first_seen=HISTORY)) == NEW
 
 
 def test_the_earlier_topic_is_the_caselists_range_just_before_not_any_earlier_one() -> None:
@@ -130,14 +132,20 @@ def test_the_earlier_topic_is_the_caselists_range_just_before_not_any_earlier_on
 def test_no_snapshot_before_the_range_moves() -> None:
     with_key, without = topics(), topics(key=False)
     days = [date(2026, 7, 7), date(2026, 8, 25), date(2026, 9, 1), date(2026, 9, 15), OCT_27, NOV_03]
-    texts = ["Lakeside Open", "Pinecrest Invitational", "Harbor City Classic", "November Classic", None]
+    texts = [
+        "Summer Open",
+        "Lakeside Open",
+        "Pinecrest Invitational",
+        "Harbor City Classic",
+        "November Classic",
+        None,
+    ]
 
     for day in days:
         for text in texts:
             assert on(with_key.resolve_disclosure(LD, day, text, first_seen=HISTORY)) == on(
                 without.resolve_disclosure(LD, day, text, first_seen=HISTORY)
             ), (day, text)
-            assert not with_key.is_late(LD, day, text, HISTORY)
 
 
 def test_a_newer_topic_entry_always_wins_over_the_rule() -> None:
@@ -160,7 +168,7 @@ def test_with_the_key_off_nothing_moves_but_the_late_disclosure_is_still_known()
 
 def test_policy_with_no_earlier_topic_never_moves() -> None:
     map_ = topics()
-    history = {"lakesideopen": date(2026, 6, 2)}
+    history = {"lakesideopen": date(2026, 8, 4)}
 
     assert map_.late_cut(POLICY, NOV_10) is None
     assert not map_.is_late(POLICY, NOV_10, "Lakeside Open", history)

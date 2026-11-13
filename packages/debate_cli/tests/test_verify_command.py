@@ -780,6 +780,28 @@ def test_docx_a_bracketed_interpolation_is_shown_as_a_warning_and_exits_zero(
     assert "Okapi" not in as_json.stdout + for_a_person.stdout + for_a_person.stderr
 
 
+def test_docx_a_deletion_that_removes_a_negation_is_shown_as_a_warning_and_exits_zero(
+    tmp_path: Path, docx_world: ExportedDocx
+) -> None:
+    """ "never " out of the critics' sentence: evidence [186, 192), snapshot [500, 506) (t04's third
+    paragraph starts at snapshot 422, which is evidence 108)."""
+    path = written(tmp_path, edited(docx_world.export.document, replace_in_evidence("never ", "")))
+
+    as_json = invoke("--json", "verify", str(path))
+    for_a_person = invoke("verify", str(path))
+
+    assert as_json.exit_code == for_a_person.exit_code == ExitCode.OK, for_a_person.output
+    [card] = envelope(as_json)["data"]["cards"]
+    assert (card["status"], card["reason_codes"]) == ("VERIFIED", [])
+    assert [
+        (warning["code"], warning["evidence_range"], warning["snapshot_range"])
+        for warning in card["warnings"]
+    ] == [("NEGATION_REMOVED", {"start": 186, "end": 192}, {"start": 500, "end": 506})]
+    assert "NEGATION_REMOVED (warning) at 186-192" in for_a_person.stdout
+    shown = as_json.stdout + for_a_person.stdout + for_a_person.stderr
+    assert "never" not in shown and "realistic" not in shown
+
+
 def with_a_pasted_card(document: Any) -> None:
     document.add_paragraph("A card pasted in by hand", style="Heading 4")
     document.add_paragraph("Someone 24")

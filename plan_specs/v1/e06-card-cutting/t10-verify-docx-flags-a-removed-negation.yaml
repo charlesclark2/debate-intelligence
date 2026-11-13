@@ -42,7 +42,7 @@ spec:
         warning with its evidence range, the card stays VERIFIED, and a deletion that
         removes none gives no warning, by tests shown failing first.
 status:
-  phase: Pending
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan
@@ -67,10 +67,20 @@ spec:
         description: >-
           `verify` warns when a deletion in a .docx body removes a negation.
         estimatedEffort: 1h
+        # Session amendment, 2026-11-12: the selection names the use case's and the command's test files
+        # too, so `-k negation` picks up the CLI's table and --json test and t07's sentence deletion,
+        # which now warns (the session report's Deviations).
         acceptanceCriteria:
           - type: test_passes
             name: Negation warning tests pass
             command: uv
-            args: [run, pytest, packages/debate_core/tests/evidence/test_docx_verify.py, -k, negation]
+            args:
+              - run
+              - pytest
+              - packages/debate_core/tests/evidence/test_docx_verify.py
+              - packages/debate_core/tests/application/test_verify_docx.py
+              - packages/debate_cli/tests/test_verify_command.py
+              - -k
+              - negation
 status:
   phase: Pending

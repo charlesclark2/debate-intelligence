@@ -563,6 +563,30 @@
           "default": null,
           "description": "For INTERPOLATION_PRESENT: the evidence_text offset it is read before.",
           "title": "Evidence Offset"
+        },
+        "evidence_range": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ReportedRange"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "For NEGATION_REMOVED: the evidence_text range the deletion removed. Absent otherwise."
+        },
+        "snapshot_range": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ReportedRange"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "For NEGATION_REMOVED: the same deletion in the snapshot's normalized text, from its first removed character to its last (a deletion across a cut the card already made spans that omission too). Absent otherwise."
         }
       },
       "required": [
@@ -650,7 +674,8 @@
     "WarningCode": {
       "description": "Something about a VERIFIED card a reader should know. Never a reason: the status stays VERIFIED.",
       "enum": [
-        "INTERPOLATION_PRESENT"
+        "INTERPOLATION_PRESENT",
+        "NEGATION_REMOVED"
       ],
       "title": "WarningCode",
       "type": "string"

@@ -56,7 +56,13 @@ and verified exactly as a JSON manifest is, and then its body
 (:func:`~debate_core.evidence.docx_reader.read_document_body`) is compared with each card under the
 edit policy (:mod:`debate_core.evidence.docx_verify`). A card whose body changes its quoted words is
 ``MANUAL_EDIT``, and one the body does not hold at all ``BODY_CARD_MISSING``; a bracketed
-interpolation is a warning (``INTERPOLATION_PRESENT``) on a card that stays VERIFIED. The body is read
+interpolation is a warning (``INTERPOLATION_PRESENT``) on a card that stays VERIFIED, and so is a
+deletion that removed a negating word (``NEGATION_REMOVED``, `v1-e06-t10`), one per deletion, with its
+range in ``evidence_text`` and in the snapshot. That check reads the words a deletion removed from the
+snapshot by the edit policy's own test, so it runs only where the verifier rebuilt the card's evidence
+from its snapshot exactly
+(:meth:`~debate_core.application.evidence_verifier.EvidenceVerifier.verify_with_snapshot_text`, the
+same load as the verdict's). The body is read
 in the format profile the cards name; a manifest whose cards name more than one profile, or one this
 build does not have, describes no document this build can read, and is an :class:`InvalidManifest`.
 So is a document whose manifest is damaged or whose body cannot be read. A body card no manifest card
@@ -122,9 +128,11 @@ from debate_core.evidence.docx_verify import (
     BodyCard,
     BodyComparison,
     CharacterRange,
+    RemovedNegation,
     body_evidence,
     compare_body,
     match_body_cards,
+    removed_negations,
 )
 from debate_core.evidence.format_profile import ResolvedFormatProfile
 from debate_core.evidence.manifest import (
@@ -136,6 +144,7 @@ from debate_core.evidence.manifest import (
     SnapshotReference,
     render_card_manifest_schema,
 )
+from debate_core.evidence.snapshot_text import SnapshotText
 from debate_core.evidence.verification_types import (
     ReasonCode,
     VerificationCheck,
@@ -327,6 +336,20 @@ class ReportedWarning(BaseModel):
     detail: str = Field(description="For people. Gives offsets and lengths; never evidence or inserted text.")
     evidence_offset: int | None = Field(
         default=None, description="For INTERPOLATION_PRESENT: the evidence_text offset it is read before."
+    )
+    evidence_range: ReportedRange | None = Field(
+        default=None,
+        exclude_if=lambda value: value is None,
+        description="For NEGATION_REMOVED: the evidence_text range the deletion removed. Absent otherwise.",
+    )
+    snapshot_range: ReportedRange | None = Field(
+        default=None,
+        exclude_if=lambda value: value is None,
+        description=(
+            "For NEGATION_REMOVED: the same deletion in the snapshot's normalized text, from its first "
+            "removed character to its last (a deletion across a cut the card already made spans that "
+            "omission too). Absent otherwise."
+        ),
     )
 
 
@@ -645,13 +668,18 @@ class VerifyManifest:
         except ValidationError as invalid:
             return CardVerdict.of_invalid_card(position, entry, invalid)
         try:
-            result = await self._verifier.verify(card)
+            # Only the body check reads the snapshot's text, so only a .docx asks for it.
+            result, snapshot_text = (
+                (await self._verifier.verify(card), None)
+                if body is None
+                else await self._verifier.verify_with_snapshot_text(card)
+            )
             reasons = await self._reference_reasons(card, references)
         except DomainError as stopped:
             raise VerificationCouldNotRun(card_id=card.card_id, position=position, cause=stopped) from stopped
         warnings: list[ReportedWarning] = []
         if body is not None:
-            body_reasons, warnings = body.check(position, card)
+            body_reasons, warnings = body.check(position, card, snapshot_text)
             reasons = (*reasons, *body_reasons)
         return CardVerdict.of_result(position, card, result, more_reasons=reasons, warnings=warnings)
 
@@ -702,7 +730,14 @@ class _BodyCheck:
     body_card: BodyCard | None
     omission_marker: str
 
-    def check(self, position: int, card: Card) -> tuple[tuple[ReportedReason, ...], list[ReportedWarning]]:
+    def check(
+        self, position: int, card: Card, snapshot_text: SnapshotText | None
+    ) -> tuple[tuple[ReportedReason, ...], list[ReportedWarning]]:
+        """The body's reasons and warnings for ``card``.
+
+        ``snapshot_text`` is the text the card's evidence was rebuilt from exactly, or None, when the
+        words a deletion removed cannot be read and no ``NEGATION_REMOVED`` is looked for.
+        """
         if self.body_card is None:
             return (
                 ReportedReason(
@@ -711,7 +746,9 @@ class _BodyCheck:
                 ),
             ), []
         comparison = compare_body(card, body_evidence(card, self.body_card), self.omission_marker)
-        return _manual_edits(comparison), _interpolation_warnings(comparison)
+        negations = () if snapshot_text is None else removed_negations(card, comparison, snapshot_text)
+        warnings = [*_interpolation_warnings(comparison), *map(_negation_warning, negations)]
+        return _manual_edits(comparison), sorted(warnings, key=_evidence_position)
 
 
 def _manual_edits(comparison: BodyComparison) -> tuple[ReportedReason, ...]:
@@ -745,6 +782,27 @@ def _interpolation_warnings(comparison: BodyComparison) -> list[ReportedWarning]
         )
         for item in comparison.interpolations
     ]
+
+
+def _negation_warning(negation: RemovedNegation) -> ReportedWarning:
+    evidence, snapshot = negation.evidence_range, negation.snapshot_range
+    return ReportedWarning(
+        code=WarningCode.NEGATION_REMOVED,
+        detail=(
+            f"the document body deletes evidence_text [{evidence.start}, {evidence.end}) (snapshot "
+            f"[{snapshot.start}, {snapshot.end})), which removes a word that negates; the words left are "
+            "the source's, but a cut that removes a negation can reverse what they say"
+        ),
+        evidence_range=ReportedRange.of(evidence),
+        snapshot_range=ReportedRange.of(snapshot),
+    )
+
+
+def _evidence_position(warning: ReportedWarning) -> int:
+    """Where a warning is in the card's evidence, so a card's warnings come in body order."""
+    if warning.evidence_range is not None:
+        return warning.evidence_range.start
+    return warning.evidence_offset or 0
 
 
 # --------------------------------------------------------------------------------------------

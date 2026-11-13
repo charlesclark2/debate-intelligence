@@ -8,34 +8,47 @@ expected text and offset is counted by hand from the fixture's evidence, whose p
 the first sentence is evidence [0, 108), the cut sits at 108, the critics' sentence is [108, 202) and
 the rest [202, 398). In an untouched body everything after the cut is three characters further on,
 the marker's length.
+
+Tests with ``negation`` in their name are `v1-e06-t10`'s node: a deletion in the body that removes a
+negating word is a ``NEGATION_REMOVED`` warning on a card that stays VERIFIED. They verify a card cut
+from an invented source of their own (its offsets are counted where it is defined), through
+``VerifyManifest``, so each sees the verdict `verify` reports.
 """
 
 from __future__ import annotations
 
 import io
+import json
 import zipfile
 from collections.abc import Callable
-from typing import Final
+from dataclasses import dataclass
+from typing import Any, Final
 
 import pytest
 from docx.document import Document
 from docx.oxml import parse_xml
 from docx.oxml.ns import nsdecls, qn
+from tests.fixtures.verification.verification_world import VerificationWorld, run
 from tests.fixtures.verify.docx_world import (
     CRITICS_SENTENCE,
+    EXPORTED_AT,
     FIRST_SENTENCE,
     LAST_PART,
     MARKER,
     NEWS_CITE,
     NEWS_TAG,
+    PROFILES,
     RENDERED_EVIDENCE,
     TEAM_DEFAULT,
     NewsExport,
     edited,
     evidence_paragraph,
     news_export,
+    replace_in_evidence,
 )
 
+from debate_core.application.export_service import ExportService
+from debate_core.application.verify_manifest import VerifyManifest
 from debate_core.domain import Card, Interpolation, VerificationStatus
 from debate_core.evidence.card_rendering import CardToRender, DocumentHeadings
 from debate_core.evidence.docx_reader import UnreadableDocument, read_document_body
@@ -51,7 +64,9 @@ from debate_core.evidence.docx_verify import (
     compare_body,
     match_body_cards,
 )
+from debate_core.evidence.format_profile import load_format_profiles
 from debate_core.evidence.manifest import CardManifest
+from debate_core.testing.fakes.clock_and_ids import FixedClock
 
 STYLES: Final = TEAM_DEFAULT.style_profile
 OBJECT: Final = "\ufffc"
@@ -514,3 +529,273 @@ def test_diff_text_the_card_itself_brackets_is_quoted_text_not_an_interpolation(
     comparison = compare_body(bracketed, text, MARKER)
 
     assert (comparison.manual_edits, comparison.interpolations) == ((), ())
+
+
+# --------------------------------------------------------------------------------------------
+# Node verify-docx-flags-a-removed-negation (`v1-e06-t10`): a deletion that removes a negation warns
+# --------------------------------------------------------------------------------------------
+#
+# The card here is cut from an invented source, exported by ExportService and changed through
+# python-docx, then verified by VerifyManifest, so every test sees the verdict `verify` prints. Its
+# offsets are counted by hand from NEGATION_SOURCE:
+#
+#   snapshot   0-26    "Engineers met on Tuesday. "               left out of the envelope
+#   snapshot  26-71    "The levee will not hold another spring flood."   -> evidence   0-45
+#   snapshot  71-100   " Officials said nothing new. "            the card's own omission (29)
+#   snapshot 100-186   "Inspectors have never checked the north wall, and residents don't trust the
+#                      new pumps."                                                -> evidence 45-131
+#
+# so an evidence offset is 26 less than its snapshot offset before the cut and 55 less after it:
+#   "will " 10-15 (36-41), "not " 15-19 (41-45), "hold " 19-24 (45-50), "another " 24-32 (50-58),
+#   "never " 61-67 (116-122), "don't " 105-111 (160-166).
+# The omission holds "nothing", a negating word no body deletion removes, so a check that read the
+# snapshot between a deletion's ends, instead of the words the deletion took out, would warn for it.
+# "have" keeps "never" off the word right after the cut: deleting that word reads as a MANUAL_EDIT
+# (t07's diff ties two edit scripts there; the session report's follow-ups), which is not this test's.
+
+NEGATION_SOURCE: Final = (
+    "Engineers met on Tuesday. The levee will not hold another spring flood. Officials said nothing new. "
+    "Inspectors have never checked the north wall, and residents don't trust the new pumps."
+)
+NEGATION_RANGES: Final = ((26, 71), (100, 186))
+NEGATION_EVIDENCE: Final = (
+    "The levee will not hold another spring flood."
+    "Inspectors have never checked the north wall, and residents don't trust the new pumps."
+)
+SOURCE_WORDS: Final = ("levee", "never", "don't", "Inspectors", "residents", "pumps", "Officials")
+"""Words of the source that no warning or reason may carry: the output holds offsets, never evidence."""
+
+
+@dataclass(frozen=True)
+class NegationExport:
+    world: VerificationWorld
+    card: Card
+    document: bytes
+
+
+def negation_export(card_of: Callable[[Card], Card] = lambda card: card) -> NegationExport:
+    """The invented card, VERIFIED, changed by ``card_of`` and exported to a .docx in the team profile."""
+    world = VerificationWorld()
+    source = world.add_source(NEGATION_SOURCE)
+    card, result = run(world.verifier.verify_and_record(world.cut_card_from_ranges(source, NEGATION_RANGES)))
+    assert (result.status, card.evidence_text) == (VerificationStatus.VERIFIED, NEGATION_EVIDENCE)
+    card = card_of(card)
+    exporter = ExportService(
+        articles=world.articles, clock=FixedClock(EXPORTED_AT), render_docx=render_cards_docx
+    )
+    return NegationExport(world, card, run(exporter.export_docx([card], profile=TEAM_DEFAULT)))
+
+
+@pytest.fixture(scope="module")
+def negation_card() -> NegationExport:
+    return negation_export()
+
+
+def negation_verdict(
+    export: NegationExport, *changes: Callable[[Document], None], world: VerificationWorld | None = None
+) -> dict[str, Any]:
+    """The one card's verdict on ``export`` changed by each of ``changes``, as `verify --json` gives it."""
+    document = export.document
+    for change in changes:
+        document = edited(document, change)
+    world = world or export.world
+    use_case = VerifyManifest(
+        verifier=world.verifier,
+        articles=world.articles,
+        format_profiles=lambda: load_format_profiles(PROFILES),
+    )
+    report = run(use_case.verify(document)).model_dump(mode="json")
+    [verdict] = report["cards"]
+    text = json.dumps(report)
+    assert not [word for word in SOURCE_WORDS if word in text], "the report quotes the evidence"
+    return verdict
+
+
+def negation_warnings(verdict: dict[str, Any]) -> list[tuple[str, tuple[int, int], tuple[int, int]]]:
+    """Each warning's code, evidence_text range and snapshot range, in body order."""
+    return [
+        (
+            warning["code"],
+            (warning["evidence_range"]["start"], warning["evidence_range"]["end"]),
+            (warning["snapshot_range"]["start"], warning["snapshot_range"]["end"]),
+        )
+        for warning in verdict.get("warnings", [])
+    ]
+
+
+def is_verified_without_reasons(verdict: dict[str, Any]) -> bool:
+    return (verdict["status"], verdict["reasons"]) == ("VERIFIED", [])
+
+
+@pytest.mark.parametrize(
+    ("replacement", "evidence_range", "snapshot_range"),
+    [
+        pytest.param("", (15, 19), (41, 45), id="deleted"),
+        pytest.param("… ", (15, 18), (41, 44), id="replaced-by-the-marker"),
+    ],
+)
+def test_negation_a_deletion_that_removes_not_is_a_warning_with_its_ranges_on_a_verified_card(
+    negation_card: NegationExport,
+    replacement: str,
+    evidence_range: tuple[int, int],
+    snapshot_range: tuple[int, int],
+) -> None:
+    """Typing the marker over "not " keeps the space after it, so the deletion is "not" alone."""
+    verdict = negation_verdict(negation_card, replace_in_evidence("not ", replacement))
+
+    assert is_verified_without_reasons(verdict)
+    assert negation_warnings(verdict) == [("NEGATION_REMOVED", evidence_range, snapshot_range)]
+
+
+def test_negation_a_deletion_that_removes_no_negating_word_gives_no_warning(
+    negation_card: NegationExport,
+) -> None:
+    verdict = negation_verdict(negation_card, replace_in_evidence("another ", ""))
+
+    assert is_verified_without_reasons(verdict)
+    assert "warnings" not in verdict
+
+
+def test_negation_kept_while_the_words_either_side_of_it_are_cut_gives_no_warning(
+    negation_card: NegationExport,
+) -> None:
+    """ "will " and "hold " go, "not" stays: two deletions, each beside the negation, neither through it."""
+    verdict = negation_verdict(
+        negation_card, replace_in_evidence("will ", ""), replace_in_evidence("hold ", "")
+    )
+
+    assert is_verified_without_reasons(verdict)
+    assert "warnings" not in verdict
+
+
+def test_negation_two_deletions_that_each_remove_one_give_two_warnings_in_body_order(
+    negation_card: NegationExport,
+) -> None:
+    verdict = negation_verdict(
+        negation_card, replace_in_evidence("never ", ""), replace_in_evidence("not ", "")
+    )
+
+    assert is_verified_without_reasons(verdict)
+    assert negation_warnings(verdict) == [
+        ("NEGATION_REMOVED", (15, 19), (41, 45)),
+        ("NEGATION_REMOVED", (61, 67), (116, 122)),
+    ]
+
+
+def test_negation_a_contracted_negation_removed_is_a_warning(negation_card: NegationExport) -> None:
+    """The edit policy counts any word ending in "n't" as a negation (`negation.NEGATION_SUFFIX`)."""
+    verdict = negation_verdict(negation_card, replace_in_evidence("don't ", ""))
+
+    assert is_verified_without_reasons(verdict)
+    assert negation_warnings(verdict) == [("NEGATION_REMOVED", (105, 111), (160, 166))]
+
+
+def test_negation_one_deletion_that_removes_two_is_one_warning(negation_card: NegationExport) -> None:
+    """ "never checked the north wall, and residents don't " is one deletion: one warning, its whole range."""
+    verdict = negation_verdict(
+        negation_card, replace_in_evidence("never checked the north wall, and residents don't ", "")
+    )
+
+    assert is_verified_without_reasons(verdict)
+    assert negation_warnings(verdict) == [("NEGATION_REMOVED", (61, 111), (116, 166))]
+
+
+def across_the_cards_own_cut(document: Document) -> None:
+    """ "spring flood.", the marker and "Inspectors " taken out: one deletion, either side of the cut."""
+    before, marker, after = evidence_paragraph(document).runs
+    assert before.text.endswith("spring flood.") and marker.text == MARKER
+    assert after.text.startswith("Inspectors ")
+    before.text = before.text.removesuffix("spring flood.")
+    marker.text = ""
+    after.text = after.text.removeprefix("Inspectors ")
+
+
+def test_negation_a_deletion_across_the_cards_own_cut_reads_only_the_words_it_removed(
+    negation_card: NegationExport,
+) -> None:
+    """Evidence [32, 56) is snapshot [58, 71) and [100, 111); "nothing", in the omission between, was
+    not in the body to remove."""
+    verdict = negation_verdict(negation_card, across_the_cards_own_cut)
+
+    assert is_verified_without_reasons(verdict)
+    assert "warnings" not in verdict
+
+
+def from_not_to_never_across_the_cut(document: Document) -> None:
+    """ "not hold another spring flood.", the marker and "Inspectors have never " taken out: one deletion."""
+    before, marker, after = evidence_paragraph(document).runs
+    assert before.text.endswith("not hold another spring flood.") and marker.text == MARKER
+    assert after.text.startswith("Inspectors have never ")
+    before.text = before.text.removesuffix("not hold another spring flood.")
+    marker.text = ""
+    after.text = after.text.removeprefix("Inspectors have never ")
+
+
+def test_negation_one_deletion_across_the_cut_with_a_negation_either_side_is_one_warning(
+    negation_card: NegationExport,
+) -> None:
+    """Evidence [15, 67) is snapshot [41, 71) and [100, 122): "not" in one, "never" in the other, one
+    deletion, so one warning, which spans the omission between."""
+    verdict = negation_verdict(negation_card, from_not_to_never_across_the_cut)
+
+    assert is_verified_without_reasons(verdict)
+    assert negation_warnings(verdict) == [("NEGATION_REMOVED", (15, 67), (41, 122))]
+
+
+def test_negation_is_not_read_where_the_card_does_not_reproduce_its_snapshot() -> None:
+    """The card says "now" where the source says "not"; deleting it removes no negation the body showed.
+
+    The swap keeps the card's length, so only the verifier's exact comparison sees it. The words a
+    deletion removed are read from the snapshot only when the verifier rebuilt the card's evidence from
+    it exactly."""
+    tampered = negation_export(
+        lambda card: card.model_copy(
+            update={"evidence_text": card.evidence_text.replace("will not", "will now")}
+        )
+    )
+
+    verdict = negation_verdict(tampered, replace_in_evidence("now ", ""))
+
+    assert (verdict["status"], verdict["reason_codes"]) == ("UNVERIFIED", ["TEXT_MISMATCH"])
+    assert "warnings" not in verdict
+
+
+def test_negation_is_not_read_where_the_card_was_cut_from_other_text() -> None:
+    """A card whose text hash is not its snapshot's has offsets into some other text: the verifier does
+    not rebuild its evidence at all, so nothing is read at them, even where the words still match."""
+    other_text = negation_export(lambda card: card.model_copy(update={"normalized_text_hash": "a" * 64}))
+
+    verdict = negation_verdict(other_text, replace_in_evidence("not ", ""))
+
+    assert (verdict["status"], verdict["reason_codes"]) == ("UNVERIFIED", ["HASH_MISMATCH"])
+    assert "warnings" not in verdict
+
+
+def test_negation_warnings_and_interpolations_come_in_body_order(negation_card: NegationExport) -> None:
+    """ "not " goes at evidence 15 and "[drainage]" is read before "pumps", evidence 125."""
+    verdict = negation_verdict(
+        negation_card,
+        replace_in_evidence("new pumps", "new [drainage] pumps"),
+        replace_in_evidence("not ", ""),
+    )
+
+    assert is_verified_without_reasons(verdict)
+    assert [
+        (warning["code"], warning.get("evidence_range"), warning["evidence_offset"])
+        for warning in verdict["warnings"]
+    ] == [
+        ("NEGATION_REMOVED", {"start": 15, "end": 19}, None),
+        ("INTERPOLATION_PRESENT", None, 125),
+    ]
+    # The ranges are a negation's alone: an interpolation's warning keeps the keys it had before them.
+    assert [sorted(warning) for warning in verdict["warnings"]] == [
+        ["code", "detail", "evidence_offset", "evidence_range", "snapshot_range"],
+        ["code", "detail", "evidence_offset"],
+    ]
+
+
+def test_negation_is_not_read_without_the_cards_snapshot(negation_card: NegationExport) -> None:
+    verdict = negation_verdict(negation_card, replace_in_evidence("not ", ""), world=VerificationWorld())
+
+    assert (verdict["status"], verdict["reason_codes"]) == ("UNVERIFIED", ["SNAPSHOT_MISSING"])
+    assert "warnings" not in verdict

@@ -51,6 +51,7 @@ from debate_core.application.ports.persistence import ArticleRepository
 from debate_core.application.ports.providers import Clock
 from debate_core.application.snapshot_service import LoadedSnapshot, SnapshotService
 from debate_core.domain import Card, VerificationStatus
+from debate_core.evidence.snapshot_text import SnapshotText
 from debate_core.evidence.verification_types import (
     VERIFIER_VERSION,
     ReasonCode,
@@ -80,11 +81,29 @@ class EvidenceVerifier:
 
         Raises only for failures that are not verdicts about the card: see the module docstring.
         """
+        result, _ = await self.verify_with_snapshot_text(card)
+        return result
+
+    async def verify_with_snapshot_text(self, card: Card) -> tuple[VerificationResult, SnapshotText | None]:
+        """:meth:`verify`'s verdict, and the snapshot text the card's evidence was rebuilt from exactly.
+
+        The text is None unless the snapshot loaded and the card's ``evidence_text`` is that text at the
+        card's offsets, so a caller that reads the snapshot at an offset of the card reads what the card
+        quotes (`v1-e06-t10`: the .docx body check reads the words a deletion removed). One load serves
+        both, as one does for :meth:`verify`.
+        """
         findings = VerificationFindings()
         check_card(card, findings)
         loaded = await self._load(card, findings)
         if loaded is not None:
             check_against_snapshot(card, loaded.snapshot, loaded.normalized, findings)
+        reproduced = VerificationCheck.EVIDENCE_TEXT_EXACT in findings.checks_run and all(
+            reason.code is not ReasonCode.TEXT_MISMATCH for reason in findings.reasons
+        )
+        text = loaded.normalized if loaded is not None and reproduced else None
+        return self._result(card, findings), text
+
+    def _result(self, card: Card, findings: VerificationFindings) -> VerificationResult:
         return VerificationResult(
             card_id=card.card_id,
             status=VerificationStatus.UNVERIFIED if findings.reasons else VerificationStatus.VERIFIED,

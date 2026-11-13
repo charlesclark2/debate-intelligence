@@ -307,7 +307,7 @@ resource "aws_lambda_function" "pilot" {
   # Configuration, not secrets. The app takes its own origin and the login host from here and
   # never from a forwarded Host header (ADR-0019 (b) 3); the client secret and the cookie keys are
   # read from Parameter Store by name at cold start.
-  # TUB_BACKFILE_SEASONS (v1-e39-t18) is set only when backfile_seasons names a season, so a module
+  # TUB_EARLIER_SEASONS (v1-e39-t18) is set only when earlier_seasons names a season, so a module
   # that offers none plans the same function as before it existed.
   environment {
     variables = merge({
@@ -322,8 +322,8 @@ resource "aws_lambda_function" "pilot" {
       TUB_AUDIT_LOG_GROUP          = aws_cloudwatch_log_group.audit.name
       AWS_LWA_PORT                 = tostring(local.lambda_web_adapter_port)
       AWS_LWA_READINESS_CHECK_PATH = local.lambda_web_adapter_readiness
-      }, length(var.backfile_seasons) > 0 ? {
-      TUB_BACKFILE_SEASONS = join(",", var.backfile_seasons)
+      }, length(var.earlier_seasons) > 0 ? {
+      TUB_EARLIER_SEASONS = join(",", var.earlier_seasons)
     } : {})
   }
 

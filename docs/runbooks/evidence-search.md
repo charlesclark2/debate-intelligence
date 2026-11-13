@@ -2281,11 +2281,11 @@ env DEBATE_ENV=dev DEBATE_STORAGE__DATA_DIR="$COPY" debate-research tub index pu
 what that season's pointer names, never with `current.json`. It needs `--index`; `--newest` is the
 weekly index's.
 
-**Offering it.** Set the module's `backfile_seasons` (for example `["hspolicy25", "hsld25"]`) in the
-environment's root and apply: the function's `TUB_BACKFILE_SEASONS` lists them, and the search page's
+**Offering it.** Set the module's `earlier_seasons` (for example `["hspolicy25", "hsld25"]`) in the
+environment's root and apply: the function's `TUB_EARLIER_SEASONS` lists them, and the search page's
 *Season* choice offers each by its slug and years, `hspolicy25 (2025-26)`. Name a season only once its
 pointer is published: a season picked before it is there answers "Search is not available right now".
-With the list empty the function has no `TUB_BACKFILE_SEASONS`, and the page has no *Season* choice.
+With the list empty the function has no `TUB_EARLIER_SEASONS`, and the page has no *Season* choice.
 
 **A removal of a backfile card.** The one suppression list hides it from that season's search, its
 page and its copy within five minutes, as for a current card (gate item 1). To take it out of the
@@ -2293,7 +2293,7 @@ season's index file as well, rebuild that season from a fresh restore and publis
 (`--allow-shrink` with the removal's request id if the guard refuses), then run the removal runbook's
 P4 prune, which deletes the season's superseded versions.
 
-**Retiring a season.** Take it out of `backfile_seasons` and apply, so no student can pick it; then
+**Retiring a season.** Take it out of `earlier_seasons` and apply, so no student can pick it; then
 delete its pointer with the takedown credential and run P4: a season pointer whose current version
 is a delete marker keeps nothing, so its index's versions are deleted with the rest.
 

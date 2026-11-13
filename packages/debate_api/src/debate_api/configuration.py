@@ -15,7 +15,7 @@ v1-e39-t04's Terraform sets these on the function (`infrastructure/modules/evide
 | `TUB_PASSAGE_SHARE_PERCENT` | optional: percent of a passage's words a card holds, 66 unset (`v1-e39-t13`) |
 | `TUB_DOWNLOAD_CARD_CAP` | optional: the most cards a download holds, 1 to 30, 8 unset (`v1-e39-t08`) |
 | `TUB_DOWNLOAD_SOURCE_XML_BYTES` | optional: the most `document.xml` bytes one download parses, 20,000,000 |
-| `TUB_BACKFILE_SEASONS` | optional: the earlier seasons a student may pick, comma-separated (`v1-e39-t18`) |
+| `TUB_EARLIER_SEASONS` | optional: the earlier seasons a student may pick, comma-separated (`v1-e39-t18`) |
 
 The passage share is the PM's "about two thirds" (`v1-e39-t13`), and is not set by Terraform either.
 The two download caps were set from measurements (:mod:`debate_core.application.card_download`
@@ -26,7 +26,7 @@ function, and the defaults hold until someone measures otherwise.
 may pick on the search page, such as `hspolicy25,hsld25`. Each is read from its season pointer
 (:func:`~debate_core.application.season_indexes.season_pointer_key`) the first time it is chosen. Unset
 or empty, none is offered and the search page is today's. Terraform sets it from the module's
-`backfile_seasons`. A slug that is not a season's (letters, then two digits), or one named twice,
+`earlier_seasons`. A slug that is not a season's (letters, then two digits), or one named twice,
 stops the app at its cold start.
 
 The app never reads its origin from a `Host` or `X-Forwarded-*` header: CloudFront's origin request
@@ -73,7 +73,7 @@ _COUNT_CAP_VARIABLE: Final = "TUB_RESULT_COUNT_CAP"
 _PASSAGE_SHARE_VARIABLE: Final = "TUB_PASSAGE_SHARE_PERCENT"
 _DOWNLOAD_CARD_CAP_VARIABLE: Final = "TUB_DOWNLOAD_CARD_CAP"
 _DOWNLOAD_SOURCE_XML_BYTES_VARIABLE: Final = "TUB_DOWNLOAD_SOURCE_XML_BYTES"
-_BACKFILE_SEASONS_VARIABLE: Final = "TUB_BACKFILE_SEASONS"
+_EARLIER_SEASONS_VARIABLE: Final = "TUB_EARLIER_SEASONS"
 _MOST_SOURCE_XML_BYTES: Final = 100_000_000
 """Far above anything the function could read and parse in a request: a bound on a typo, not a setting."""
 
@@ -149,7 +149,7 @@ class PilotConfiguration:
     passage_share_percent: int = DEFAULT_PASSAGE_SHARE_PERCENT
     download_card_cap: int = DEFAULT_DOWNLOAD_CARD_CAP
     download_source_xml_bytes: int = DEFAULT_DOWNLOAD_SOURCE_XML_BYTES
-    backfile_seasons: tuple[str, ...] = ()
+    earlier_seasons: tuple[str, ...] = ()
     """The backfile seasons a student may pick, in the order the search page offers them."""
 
     @classmethod
@@ -184,7 +184,7 @@ class PilotConfiguration:
                 DEFAULT_DOWNLOAD_SOURCE_XML_BYTES,
                 _MOST_SOURCE_XML_BYTES,
             ),
-            backfile_seasons=_seasons(environ.get(_BACKFILE_SEASONS_VARIABLE, "")),
+            earlier_seasons=_seasons(environ.get(_EARLIER_SEASONS_VARIABLE, "")),
         )
         return configuration
 
@@ -220,15 +220,15 @@ def _whole_number(environ: Mapping[str, str], variable: str, default: int, most:
 
 
 def _seasons(value: str) -> tuple[str, ...]:
-    """`TUB_BACKFILE_SEASONS` as season slugs, each once; none when it is unset or empty."""
+    """`TUB_EARLIER_SEASONS` as season slugs, each once; none when it is unset or empty."""
     seasons = tuple(one.strip() for one in value.split(",") if one.strip())
     if any(not is_season(one) for one in seasons):
         raise ConfigurationMissing(
-            _BACKFILE_SEASONS_VARIABLE,
+            _EARLIER_SEASONS_VARIABLE,
             "names something that is not a season's caselist slug, such as hspolicy25",
         )
     if len(set(seasons)) != len(seasons):
-        raise ConfigurationMissing(_BACKFILE_SEASONS_VARIABLE, "names a season twice")
+        raise ConfigurationMissing(_EARLIER_SEASONS_VARIABLE, "names a season twice")
     return seasons
 
 

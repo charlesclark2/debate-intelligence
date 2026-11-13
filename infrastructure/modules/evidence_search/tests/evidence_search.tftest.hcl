@@ -1148,21 +1148,21 @@ run "no_backfile_season_means_no_season_setting" {
   command = plan
 
   assert {
-    condition     = !contains(keys(aws_lambda_function.pilot.environment[0].variables), "TUB_BACKFILE_SEASONS")
-    error_message = "With backfile_seasons empty, the function's environment has no TUB_BACKFILE_SEASONS."
+    condition     = !contains(keys(aws_lambda_function.pilot.environment[0].variables), "TUB_EARLIER_SEASONS")
+    error_message = "With earlier_seasons empty, the function's environment has no TUB_EARLIER_SEASONS."
   }
 }
 
-run "backfile_seasons_reach_the_function_in_order" {
+run "earlier_seasons_reach_the_function_in_order" {
   command = plan
 
   variables {
-    backfile_seasons = ["hspolicy25", "hsld25"]
+    earlier_seasons = ["hspolicy25", "hsld25"]
   }
 
   assert {
-    condition     = aws_lambda_function.pilot.environment[0].variables["TUB_BACKFILE_SEASONS"] == "hspolicy25,hsld25"
-    error_message = "TUB_BACKFILE_SEASONS lists the seasons backfile_seasons names, in its order, comma-separated."
+    condition     = aws_lambda_function.pilot.environment[0].variables["TUB_EARLIER_SEASONS"] == "hspolicy25,hsld25"
+    error_message = "TUB_EARLIER_SEASONS lists the seasons earlier_seasons names, in its order, comma-separated."
   }
 }
 
@@ -1170,18 +1170,18 @@ run "a_backfile_season_named_twice_is_refused" {
   command = plan
 
   variables {
-    backfile_seasons = ["hspolicy25", "hspolicy25"]
+    earlier_seasons = ["hspolicy25", "hspolicy25"]
   }
 
-  expect_failures = [var.backfile_seasons]
+  expect_failures = [var.earlier_seasons]
 }
 
 run "a_backfile_season_with_a_path_in_it_is_refused" {
   command = plan
 
   variables {
-    backfile_seasons = ["../current"]
+    earlier_seasons = ["../current"]
   }
 
-  expect_failures = [var.backfile_seasons]
+  expect_failures = [var.earlier_seasons]
 }

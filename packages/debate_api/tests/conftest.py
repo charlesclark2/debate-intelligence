@@ -1186,7 +1186,7 @@ class PilotWorld:
         )
 
     def _seasons(self) -> SeasonIndexes:
-        """No backfile season is offered, as on a function whose `TUB_BACKFILE_SEASONS` is unset."""
+        """No backfile season is offered, as on a function whose `TUB_EARLIER_SEASONS` is unset."""
         return SeasonIndexes.none()
 
     def _card_download(

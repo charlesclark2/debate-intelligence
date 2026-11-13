@@ -66,7 +66,7 @@ kept in the browser, and the download is :mod:`debate_api.download`'s POST.
 
 ## An earlier season (`v1-e39-t18`)
 
-When the pilot offers backfile seasons (`TUB_BACKFILE_SEASONS`), the form has a *Season* choice:
+When the pilot offers backfile seasons (`TUB_EARLIER_SEASONS`), the form has a *Season* choice:
 *This season*, the default, and each offered season by its slug and years, `hspolicy25 (2025-26)`.
 A search of an earlier season sends `season=<slug>` and is answered from that season's own index
 alone, through :class:`~debate_core.application.season_indexes.SeasonIndexes`; a search without it

@@ -60,7 +60,7 @@ anywhere. The restored copy and both scratch indexes are deleted (policy 1.18).
 * `packages/debate_core/src/debate_core/integrations/s3/search_index_source.py`: `pointer_key=`.
 * `packages/debate_api/src/debate_api/` (`configuration.py`, `container.py`, `state.py`,
   `search_pages.py`, `templates/search.html`, `templates/card.html`, `static/app.js`):
-  `TUB_BACKFILE_SEASONS`, a season holder per season under `/tmp/tub-index-seasons`, the *Season*
+  `TUB_EARLIER_SEASONS`, a season holder per season under `/tmp/tub-index-seasons`, the *Season*
   choice, the season searched, "Earlier season:" on a card's page, and the loading line.
 * `packages/debate_cli/src/debate_cli/` (`commands/tub_index.py`, `container.py`): `tub index publish
   --season`, and `season_index_publish(season)`.
@@ -69,7 +69,7 @@ anywhere. The restored copy and both scratch indexes are deleted (policy 1.18).
   `packages/debate_api/tests/test_search_pages_seasons.py` (new) and `conftest.py` (a seasons hook on
   every world, `SeasonWorld`, two invented seasons); `packages/debate_cli/tests/test_container_factories.py`
   (a season value).
-* `infrastructure/modules/evidence_search/` (`main.tf`, `variables.tf`, tests): `backfile_seasons`,
+* `infrastructure/modules/evidence_search/` (`main.tf`, `variables.tf`, tests): `earlier_seasons`,
   set on the function only when it names a season; four new offline test runs.
 * `docs/runbooks/evidence-search.md` (Backfile seasons), `docs/runbooks/caselist-removal.md` (P4 keeps
   each season's current index).
@@ -91,6 +91,12 @@ anywhere. The restored copy and both scratch indexes are deleted (policy 1.18).
 * **ADR-0019 is not amended**: `docs/adr` is not in the spec's packages. Its (c) 3 and 5 describe one
   index; a sentence naming the season indexes (one held at a time, its own pointer, the same list) is
   the PM's to add.
+
+* **Renamed after the review, for CI** (`tests/docs/test_backfile_import_plan_check.py`, which holds
+  that no Terraform file but `alerts.tf` names a backfile, so that nothing can schedule a backfile
+  import): the module's variable is `earlier_seasons` and the function's setting `TUB_EARLIER_SEASONS`,
+  not `backfile_seasons` and `TUB_BACKFILE_SEASONS`. The PM's review notes below use the old names;
+  nothing else changed.
 
 ## Decisions and assumptions
 
@@ -365,7 +371,7 @@ The options, as relayed to the PM (the relay in the session's operator message i
 
 ## The build (shape 4)
 
-**What a student sees.** With seasons offered (`TUB_BACKFILE_SEASONS`), the search form has a *Season*
+**What a student sees.** With seasons offered (`TUB_EARLIER_SEASONS`), the search form has a *Season*
 choice: *This season*, the default, then each season as `hspolicy25 (2025-26)`. A search of a season
 says "Searching hspolicy25 (2025-26)." above its results, and searches that season's index alone; a
 season not yet loaded on the environment carries "Loading hspolicy25 (2025-26). The first search of
@@ -404,9 +410,9 @@ ever loaded; a season's words a year early; a season index of another store publ
 guard reading `current.json`; a season's pointer written to `current.json`; the prune keeping no
 season's index; the prune keeping every version of a season pointer; an unreadable season pointer
 skipped; a dangling season pointer kept; execute not re-reading the season pointers; the last check
-forgetting the seasons; a season named twice in `TUB_BACKFILE_SEASONS`; the season dropped from the
+forgetting the seasons; a season named twice in `TUB_EARLIER_SEASONS`; the season dropped from the
 way back; a cart's season cards sent to the current index; a season's holder built with no
-suppression list. **Terraform, 2 of 2:** `TUB_BACKFILE_SEASONS` always set fails
+suppression list. **Terraform, 2 of 2:** `TUB_EARLIER_SEASONS` always set fails
 `no_backfile_season_means_no_season_setting`; an always-true validation fails
 `a_backfile_season_named_twice_is_refused` with "Missing expected failure".
 
@@ -483,7 +489,7 @@ cd "${HOME}"; M="${HOME}/t18-after"; C="${M}/copy"; if pgrep -fl 'debate-researc
 ```
 
 **After the PM rules on the result:** publish each season with `tub index publish --env dev --season
-<season> --index <dir>` from a restored copy, set `backfile_seasons` in dev's root and apply, and
+<season> --index <dir>` from a restored copy, set `earlier_seasons` in dev's root and apply, and
 deploy (the evidence search runbook's [Backfile seasons](../runbooks/evidence-search.md#backfile-seasons-v1-e39-t18)).
 
 The probe, `load_probe.py` (tested in `debate-dev-tub:0d81c542…` on 2026-11-12; prints counts, sizes
@@ -648,7 +654,7 @@ The PM decides whether they become spec changes or new tasks. -->
 * **The annual purge and a backfile season.** `docs/runbooks/annual-purge.md` step 5 checks the
   current index holds no purged caselist; a purged caselist that is an offered season also has its
   own index and pointer. The retiring steps are in the evidence search runbook's Backfile seasons
-  (take it out of `backfile_seasons`, delete its pointer, P4); step 5 should name them. Belongs to
+  (take it out of `earlier_seasons`, delete its pointer, P4); step 5 should name them. Belongs to
   the annual purge's owner.
 * **ADR-0019 (c) 3 and 5** describe one index; a sentence on the season indexes (each its own
   pointer, one held at a time, the same list) is the PM's to add.

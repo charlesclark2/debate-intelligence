@@ -234,7 +234,7 @@ def test_a_pilot_offering_no_season_shows_no_season_choice(search_world: Any) ->
 
 
 # ------------------------------------------------------------------------------------------------
-# Which seasons are offered: TUB_BACKFILE_SEASONS
+# Which seasons are offered: TUB_EARLIER_SEASONS
 # ------------------------------------------------------------------------------------------------
 
 REQUIRED_ENVIRONMENT: Final = {
@@ -267,17 +267,17 @@ def test_the_offered_seasons_are_read_from_the_environment(
 
     environ = dict(REQUIRED_ENVIRONMENT)
     if value is not None:
-        environ["TUB_BACKFILE_SEASONS"] = value
+        environ["TUB_EARLIER_SEASONS"] = value
 
-    assert PilotConfiguration.from_environment(environ).backfile_seasons == expected
+    assert PilotConfiguration.from_environment(environ).earlier_seasons == expected
 
 
 @pytest.mark.parametrize("value", ["hsxx", "hsxx25,../current", "hsxx25,hsxx25", "HSXX25"])
 def test_a_season_setting_the_app_cannot_read_stops_its_cold_start(value: str) -> None:
     from debate_api.configuration import ConfigurationMissing, PilotConfiguration
 
-    with pytest.raises(ConfigurationMissing, match="TUB_BACKFILE_SEASONS"):
-        PilotConfiguration.from_environment({**REQUIRED_ENVIRONMENT, "TUB_BACKFILE_SEASONS": value})
+    with pytest.raises(ConfigurationMissing, match="TUB_EARLIER_SEASONS"):
+        PilotConfiguration.from_environment({**REQUIRED_ENVIRONMENT, "TUB_EARLIER_SEASONS": value})
 
 
 def test_the_functions_container_gives_each_season_its_pointer_its_own_directory_and_the_one_list(
@@ -315,7 +315,7 @@ def test_the_functions_container_gives_each_season_its_pointer_its_own_directory
     )
 
     services = container.build_pilot_services(
-        {**REQUIRED_ENVIRONMENT, "TUB_BACKFILE_SEASONS": "hsxx25,hsyy24"}
+        {**REQUIRED_ENVIRONMENT, "TUB_EARLIER_SEASONS": "hsxx25,hsyy24"}
     )
     holder = services.seasons._holder_for(SEASON_A)
 

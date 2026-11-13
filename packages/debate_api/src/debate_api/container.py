@@ -174,7 +174,7 @@ def build_pilot_services(environ: Mapping[str, str]) -> PilotServices:
             suppression_list=evidence,
         )
 
-    seasons = SeasonIndexes(configuration.backfile_seasons, season_holder)
+    seasons = SeasonIndexes(configuration.earlier_seasons, season_holder)
     access_audit = AccessAuditService(audit=audit, clock=_now)
     parser = DebateDocxParser()
     base = load_base_template()

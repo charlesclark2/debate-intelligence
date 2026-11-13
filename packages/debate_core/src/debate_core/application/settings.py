@@ -220,6 +220,7 @@ USER_CREDENTIAL_VARIABLES: Final[tuple[str, ...]] = (
     "DEBATE_PROVIDERS__CONTACT_EMAIL",
     "DEBATE_PROVIDERS__OPENALEX_API_KEY",
     "DEBATE_PROVIDERS__SEMANTIC_SCHOLAR_API_KEY",
+    "DEBATE_PROVIDERS__SEMANTIC_SCHOLAR_INSECURE_HTTP",
     "DEBATE_PROVIDERS__API_DATA_GOV_KEY",
 )
 """The only names the per-user credentials file may set (the PM's ruling on `v1-e41-t22`, Q2).
@@ -227,7 +228,12 @@ USER_CREDENTIAL_VARIABLES: Final[tuple[str, ...]] = (
 The discovery providers' keys and the contact email: what a machine needs to search, and nothing
 that changes what a command does or where it writes. Written out, so that adding one is a decision a
 reviewer sees; `test_settings_user_credentials.py` fails when a new secret provider setting is
-neither here nor in :data:`USER_CREDENTIAL_EXCLUSIONS`."""
+neither here nor in :data:`USER_CREDENTIAL_EXCLUSIONS`.
+
+`DEBATE_PROVIDERS__SEMANTIC_SCHOLAR_INSECURE_HTTP` is the one name here that is not a credential (the
+PM's ruling of 2026-11-12 on v1-e07-t20). It governs only how the person's own Semantic Scholar key is
+sent, over HTTP and so unencrypted, and setting it is that person's consent to that, so it lives beside
+the key. No committed profile sets it (`test_settings.py` pins every one)."""
 
 USER_CREDENTIAL_EXCLUSIONS: Final[Mapping[str, str]] = {
     "DEBATE_PROVIDERS__CASELIST_TOKEN": (
@@ -652,6 +658,15 @@ class ProviderSettings(SettingsGroup):
     )
     semantic_scholar_api_key: SecretStr | None = Field(
         default=None, description="Semantic Scholar API key, if the account has one."
+    )
+    semantic_scholar_insecure_http: bool = Field(
+        default=False,
+        description=(
+            "Ask Semantic Scholar over plain HTTP, so its key is sent unencrypted (v1-e07-t20). Off unless "
+            "a person sets it for their own key, in their own credentials file, while Semantic Scholar's "
+            "HTTPS endpoint refuses keyed requests; never in a committed profile. It comes out when HTTPS "
+            "works (v1-e07-t26)."
+        ),
     )
     api_data_gov_key: SecretStr | None = Field(
         default=None,

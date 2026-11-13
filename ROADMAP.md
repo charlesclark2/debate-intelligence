@@ -63,7 +63,7 @@ v2.3's extension work.
 | [v1.0](plan_specs/releases/v1.0.yaml) | Foundation & verified evidence core | 3 | 55 | 55 | 252 |
 | [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 4 | 125 | 107 | 550 |
 | [v1.2](plan_specs/releases/v1.2.yaml) | Argument landscape & file building | 3 | 99 | 83 | 366 |
-| [v1.3](plan_specs/releases/v1.3.yaml) | URL → verified card | 2 | 26 | 17 | 129 |
+| [v1.3](plan_specs/releases/v1.3.yaml) | URL → verified card | 2 | 26 | 18 | 129 |
 | [v1.4](plan_specs/releases/v1.4.yaml) | Federated research from the CLI | 2 | 54 | 31 | 166 |
 | [v1.5](plan_specs/releases/v1.5.yaml) | V1 quality gate & team pilot | 1 | 7 | 1 | 66 |
 | [v1.6](plan_specs/releases/v1.6.yaml) | Public team website | 3 | 31 | 22 | 169 |
@@ -467,7 +467,7 @@ A student can run `debate-research cut <URL>` and receive a verified, tagged, ci
 | [A cite can carry a year-only or year-and-month date without inventing a day](plan_specs/v1/e06-card-cutting/t13-year-and-month-dates-in-a-cite.yaml) `v1-e06-t13-year-and-month-dates-in-a-cite` | Pending | 1 | 2.0 |
 | [A stated cite the domain refuses is reported as a refusal, not an internal error](plan_specs/v1/e06-card-cutting/t14-refused-stated-cite-is-a-refusal.yaml) `v1-e06-t14-refused-stated-cite-is-a-refusal` | Pending | 1 | 1.0 |
 | [A whole-word deletion right after a cut's marker is read as a deletion, not a manual edit](plan_specs/v1/e06-card-cutting/t15-a-deletion-beside-a-cut-marker-is-a-deletion.yaml) `v1-e06-t15-a-deletion-beside-a-cut-marker-is-a-deletion` | Succeeded | 2 | 2.0 |
-| [An untouched export whose cut joins two words with no space verifies](plan_specs/v1/e06-card-cutting/t16-a-cut-that-joins-two-words-verifies.yaml) `v1-e06-t16-a-cut-that-joins-two-words-verifies` | Pending | 1 | 2.0 |
+| [An untouched export whose cut joins two words with no space verifies](plan_specs/v1/e06-card-cutting/t16-a-cut-that-joins-two-words-verifies.yaml) `v1-e06-t16-a-cut-that-joins-two-words-verifies` | Succeeded | 1 | 2.0 |
 
 
 ### v1.4 — Federated research from the CLI

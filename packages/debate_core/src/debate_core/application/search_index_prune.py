@@ -24,6 +24,17 @@ leaves a pointer naming an index the listing does not hold, which is refused.
   manifest and its gzip object inside its directory, with a current `current.json` beside them.
   Nothing is kept by a guess, so nothing is deleted.
 
+## Backfile seasons' pointers (`v1-e39-t18`)
+
+A season's index lives under `reports/tub/search/<index id>/` like any other, and its pointer at
+`reports/tub/search/seasons/<season>.json`. Every season pointer the listing holds a current version
+of is read by the everyday credential too, and kept as `current.json` is: that current version, and
+every version under the directory it names. Its older versions, and the directories only they named,
+are deleted, so a removal reaches a backfile card's superseded copies as it reaches a current one's
+(E39 gate items 1 and 5). A season pointer this build cannot read is `SEASON_POINTER_UNREADABLE`, and
+one naming an index the listing does not hold `POINTER_NOT_IN_LISTING`, each refusing the whole plan.
+A season pointer whose current version is a delete marker keeps nothing: that season is retired.
+
 ## A dry run, then a confirmation
 
 As `caselist retire` does (`v1-e31-t16`): a plan's :attr:`PrunePlan.confirmation` is a digest of the
@@ -67,6 +78,7 @@ from debate_core.application.caselist.version_retention import CONFIRMATION_LENG
 from debate_core.application.errors import DomainError, NotFound
 from debate_core.application.ports.evidence_store import EvidenceObjectStore
 from debate_core.application.ports.evidence_versions import ObjectVersion
+from debate_core.application.season_indexes import season_of_pointer_key, season_pointer_key
 from debate_core.domain.search_index import SEARCH_INDEX_POINTER_KEY, SEARCH_INDEX_PREFIX, SearchIndexPointer
 
 __all__ = [
@@ -141,6 +153,11 @@ class PrunePlan:
         return _directory_of(self.pointer.index_id) if self.pointer is not None else None
 
     @property
+    def season_keep_prefixes(self) -> tuple[str, ...]:
+        """Each season pointer's index directory, kept as the current index's is."""
+        return tuple(_directory_of(pointer.index_id) for _, pointer in self.season_pointers)
+
+    @property
     def groups(self) -> tuple[PruneGroup, ...]:
         """Counts by index directory, then `current.json`, in key order."""
         names = sorted({_group_of(one.key) for one in (*self.kept, *self.doomed)}, key=_group_order)
@@ -161,11 +178,13 @@ class PrunePlan:
     @property
     def confirmation(self) -> str:
         """The code `--confirm` takes: a digest of the place, the index kept and every version deleted."""
-        shown = {
+        shown: dict[str, object] = {
             "location": self.location,
             "index_id": self.index_id,
             "delete": sorted([one.key, one.version_id or ""] for one in self.doomed),
         }
+        if self.season_pointers:
+            shown["seasons"] = sorted([season, pointer.index_id] for season, pointer in self.season_pointers)
         return hashlib.sha256(json.dumps(shown, sort_keys=True).encode()).hexdigest()[:CONFIRMATION_LENGTH]
 
     def refusal(self, confirmation: str | None) -> PruneRefusal | None:
@@ -287,10 +306,24 @@ class SearchIndexPrune:
                 f"current.json names index {pointer.index_id}, which the listing does not hold: a publish "
                 "may be under way. Nothing is deleted; run the dry run again later",
             )
-        keep = _directory_of(pointer.index_id)
-        kept = tuple(one for one in listed if one.key.startswith(keep) or _is_current_pointer(one))
-        doomed = tuple(one for one in listed if not one.key.startswith(keep) and not _is_current_pointer(one))
-        return PrunePlan(location=location, pointer=pointer, kept=kept, doomed=doomed, refusals=())
+        seasons = await self._season_pointers(listed)
+        if isinstance(seasons, PruneRefusal):
+            return _refused(location, pointer, seasons.code, seasons.message)
+        keep = (_directory_of(pointer.index_id), *(_directory_of(one.index_id) for _, one in seasons))
+        season_keys = frozenset(season_pointer_key(season) for season, _ in seasons)
+
+        def is_kept(one: ObjectVersion) -> bool:
+            return (
+                one.key.startswith(keep)
+                or _is_current_pointer(one)
+                or (one.key in season_keys and _is_current(one, one.key))
+            )
+
+        kept = tuple(one for one in listed if is_kept(one))
+        doomed = tuple(one for one in listed if not is_kept(one))
+        return PrunePlan(
+            location=location, pointer=pointer, kept=kept, doomed=doomed, refusals=(), season_pointers=seasons
+        )
 
     async def execute(self, plan: PrunePlan, *, confirmation: str | None) -> PruneResult:
         """Delete the plan's versions, after the last checks. Call it holding the bucket's run lock."""
@@ -306,6 +339,15 @@ class SearchIndexPrune:
             raise SearchIndexPointerMoved(
                 planned=plan.index_id, now=now.index_id if now is not None else None
             )
+        for season, planned in plan.season_pointers:
+            try:
+                season_now = await self._read_pointer(season_pointer_key(season))
+            except _UnreadablePointer:
+                season_now = None
+            if season_now != planned:
+                raise SearchIndexPointerMoved(
+                    planned=planned.index_id, now=season_now.index_id if season_now is not None else None
+                )
         _refuse_the_current(plan)
         if not plan.doomed:
             return PruneResult(plan=plan, deleted=0)
@@ -327,12 +369,45 @@ class SearchIndexPrune:
             )
         return access
 
-    async def _read_pointer(self) -> SearchIndexPointer | None:
-        """`current.json`, or `None` when there is none. Raises :class:`_UnreadablePointer`."""
-        with tempfile.TemporaryDirectory(prefix="tub-index-prune-") as scratch:
-            landed = Path(scratch) / "current.json"
+    async def _season_pointers(
+        self, listed: Sequence[ObjectVersion]
+    ) -> tuple[tuple[str, SearchIndexPointer], ...] | PruneRefusal:
+        """Every season pointer the listing holds a current version of, read; or why the plan refuses."""
+        keys = sorted(
+            {one.key for one in listed if season_of_pointer_key(one.key) and _is_current(one, one.key)}
+        )
+        read: list[tuple[str, SearchIndexPointer]] = []
+        for key in keys:
+            season = season_of_pointer_key(key)
+            assert season is not None
             try:
-                await self._pointer.get_file(SEARCH_INDEX_POINTER_KEY, landed)
+                pointer = await self._read_pointer(key)
+            except _UnreadablePointer:
+                return PruneRefusal(
+                    code="SEASON_POINTER_UNREADABLE",
+                    message=f"the pointer of season {season} is not a pointer this build reads",
+                )
+            if pointer is None or not _holds(listed, pointer, pointer_key=key):
+                named = f"names index {pointer.index_id}" if pointer is not None else "is gone"
+                return PruneRefusal(
+                    code="POINTER_NOT_IN_LISTING",
+                    message=(
+                        f"the pointer of season {season} {named}, which the listing does not hold: a publish "
+                        "may be under way. Nothing is deleted; run the dry run again later"
+                    ),
+                )
+            read.append((season, pointer))
+        return tuple(read)
+
+    async def _read_pointer(self, key: str = SEARCH_INDEX_POINTER_KEY) -> SearchIndexPointer | None:
+        """The pointer at `key`, `current.json` unless a season's; `None` when there is none.
+
+        Raises :class:`_UnreadablePointer`.
+        """
+        with tempfile.TemporaryDirectory(prefix="tub-index-prune-") as scratch:
+            landed = Path(scratch) / "pointer.json"
+            try:
+                await self._pointer.get_file(key, landed)
             except NotFound:
                 return None
             try:
@@ -367,22 +442,32 @@ def _is_current(version: ObjectVersion, key: str) -> bool:
     return version.key == key and version.is_latest and not version.is_delete_marker
 
 
-def _holds(listed: Sequence[ObjectVersion], pointer: SearchIndexPointer) -> bool:
-    """Whether the listing holds the pointer's index, current, inside its directory, and a current pointer."""
+def _holds(
+    listed: Sequence[ObjectVersion],
+    pointer: SearchIndexPointer,
+    *,
+    pointer_key: str = SEARCH_INDEX_POINTER_KEY,
+) -> bool:
+    """Whether the listing holds the pointer's index, current, inside its directory, and a current pointer
+    at `pointer_key`."""
     keep = _directory_of(pointer.index_id)
     named = (pointer.manifest_key, pointer.object_key)
     return (
         all(key.startswith(keep) for key in named)
         and all(any(_is_current(one, key) for one in listed) for key in named)
-        and any(_is_current_pointer(one) for one in listed)
+        and any(_is_current(one, pointer_key) for one in listed)
     )
 
 
 def _refuse_the_current(plan: PrunePlan) -> None:
     """The last check before the delete: nothing kept, and nothing outside `reports/tub/search/`."""
     keep = plan.keep_prefix
+    seasons = plan.season_keep_prefixes
+    season_keys = frozenset(season_pointer_key(season) for season, _ in plan.season_pointers)
     for one in plan.doomed:
         if keep is None or one.key.startswith(keep) or _is_current_pointer(one) or one in plan.kept:
+            raise WouldDeleteTheCurrentSearchIndex(plan.index_id)
+        if one.key.startswith(seasons) or (one.key in season_keys and _is_current(one, one.key)):
             raise WouldDeleteTheCurrentSearchIndex(plan.index_id)
         if not one.key.startswith(SEARCH_INDEX_PREFIX) or one.key == SEARCH_INDEX_PREFIX:
             raise WouldDeleteTheCurrentSearchIndex(plan.index_id)

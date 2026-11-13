@@ -277,3 +277,51 @@ def test_a_season_setting_the_app_cannot_read_stops_its_cold_start(value: str) -
 
     with pytest.raises(ConfigurationMissing, match="TUB_BACKFILE_SEASONS"):
         PilotConfiguration.from_environment({**REQUIRED_ENVIRONMENT, "TUB_BACKFILE_SEASONS": value})
+
+
+def test_the_functions_container_gives_each_season_its_pointer_its_own_directory_and_the_one_list(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Any
+) -> None:
+    """The composition root as the function runs it: its clients and its two parameters stubbed, so no
+    AWS code runs, and `/tmp` this test's. A season's holder is built here by hand, as a student's
+    first pick of the season builds it, and fetches nothing until it is leased.
+    """
+    import base64
+    import json
+    import tempfile
+
+    import debate_api.container as container
+
+    keys = json.dumps(
+        {
+            name: base64.b64encode(bytes([number]) * 32).decode()
+            for number, name in enumerate(("current", "previous"))
+        }
+    )
+    monkeypatch.setattr(tempfile, "tempdir", str(tmp_path))
+    for builder in (
+        "build_ssm_client",
+        "build_s3_client",
+        "build_logs_client",
+        "build_cognito_self_service_client",
+    ):
+        monkeypatch.setattr(container, builder, lambda **_named: object())
+    monkeypatch.setattr(container, "build_ssm_client", lambda region: object())
+    monkeypatch.setattr(
+        container,
+        "read_secure_parameter",
+        lambda _client, name: keys if "cookie" in name else "synthetic-secret",
+    )
+
+    services = container.build_pilot_services(
+        {**REQUIRED_ENVIRONMENT, "TUB_BACKFILE_SEASONS": "hsxx25,hsyy24"}
+    )
+    holder = services.seasons._holder_for(SEASON_A)
+
+    assert services.seasons.offered == (SEASON_A, SEASON_B)
+    assert holder._source._pointer_key == season_pointer_key(SEASON_A)
+    assert services.search_index._source._pointer_key == SEARCH_INDEX_POINTER_KEY
+    assert holder._suppression_source is services.search_index._suppression_source
+    assert holder._directory == tmp_path / container.SEASON_DIRECTORY_NAME
+    assert services.search_index._directory == tmp_path / container.INDEX_DIRECTORY_NAME
+    assert services.card_download._seasons is services.seasons

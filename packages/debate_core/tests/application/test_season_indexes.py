@@ -214,6 +214,7 @@ class CurrentHolder:
 
 def download_service(log: list[str]) -> CardDownloadService:
     def holder_for(season: str) -> Any:
+        log.append(f"build {season}")
         holder = FakeHolder(season, log)
 
         @contextmanager

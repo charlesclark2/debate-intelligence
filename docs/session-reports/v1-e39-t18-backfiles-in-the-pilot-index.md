@@ -131,6 +131,22 @@ restored-copy marker: `~/t18-measure` whole, 20,905 files and 12,827,660,288 byt
 (hspolicy25 183 parsed files, hsld26 8,258, hspolicy26 5,691, hspf26 6,700; the rest the bundle and
 state files). The folder is gone; 119,656,095,744 bytes free after.
 
+**The second restore**, 2026-11-12 19:27:35 to 20:26:45 Chicago (3,546 s), on mains power with the
+lid open, into a new `~/t18-measure/copy`: exit 0, parsed version `2026.11.03-docx-9`, 95,050 parsed
+objects, 58,915,599,975 bytes (the bucket check's figure exactly), 65 manifests, 7 suppression
+entries, dev's published index `f318149882fdd9c5`'s manifest. Every store's file count matches the
+bucket check; no docx-7 directory; 59,252,776,960 bytes on disk, 53,152,571,392 free after.
+
+It took the lock over from another Mac run of `caselist restore-run-state`, run id
+`20261112T225959Z` (16:59:59 Chicago), whose lease lapsed at 2026-11-13T00:55:05Z. Its last renewal
+was about 18:25 Chicago; the `pmset` log shows clamshell sleep at 18:26:01. A search of the home
+folder, `/private/tmp` and `/Volumes` for restored-copy markers (45 s, complete) found only the new
+copy. Which block that run was, and what became of what it wrote, is asked of the operator.
+
+dev's published index, as its restored manifest gives it: four stores (hsld26, hspolicy26, hspf26,
+openev) at docx-9, snapshot 2026-11-10, 63,705 documents (16,710, 26,678, 14,563 and 5,754), 465,001
+occurrence rows read, SQLite 1,043,304,448 bytes, gzip 387,288,605.
+
 ## Operator follow-ups
 
 <!-- Commands the operator must run (anything over ~2 minutes), with where to run them, the exact

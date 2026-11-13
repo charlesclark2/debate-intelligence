@@ -257,6 +257,8 @@ class RecordedProviders:
     any_feed_url: bool = False
     """Serve the Courier feed for every non-OpenAlex URL: the committed `config/feeds/` lists."""
     timeout_seconds: float = 10.0
+    semantic_scholar_to_https: bool = False
+    """Answer a plain-HTTP Semantic Scholar request with a 301 to HTTPS (v1-e07-t20)."""
     requests: list[httpx.Request] = field(default_factory=list[httpx.Request])
     unrecorded: list[str] = field(default_factory=list[str])
     transport: CountingTransport = field(init=False)
@@ -276,6 +278,8 @@ class RecordedProviders:
         if request.url.host == CROSSREF_HOST and request.url.path == "/works":
             return httpx.Response(200, json=CROSSREF_WORKS)
         if request.url.host == SEMANTIC_SCHOLAR_HOST and request.url.path == "/graph/v1/paper/search":
+            if self.semantic_scholar_to_https and request.url.scheme == "http":
+                return httpx.Response(301, headers={"location": str(request.url.copy_with(scheme="https"))})
             return httpx.Response(200, json=SEMANTIC_SCHOLAR_PAPERS)
         if request.url.host == FEDERAL_REGISTER_HOST and request.url.path == "/api/v1/documents.json":
             return httpx.Response(200, json=FEDERAL_REGISTER_DOCUMENTS)
@@ -1217,6 +1221,25 @@ def test_with_the_http_opt_in_a_search_that_does_not_ask_semantic_scholar_says_n
     assert f"  {OVER_HTTP_WARNING}" not in footer(result)
     assert envelope(as_json)["data"].get("asked_over_http") == []
     assert SEMANTIC_SCHOLAR_HOST not in schemes_asked(seams)
+
+
+def test_over_http_a_redirect_to_https_is_named_in_the_footer_and_never_followed(
+    seams: Seams, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    seams.registry_override = False
+    seams.providers.semantic_scholar_to_https = True
+    opt_in_over_http(monkeypatch)
+
+    result = search("carbon-capture subsidies")
+
+    assert result.exit_code == ExitCode.SEARCH_PARTIAL, result.output
+    assert footer(result)[0] == "Providers: PARTIAL, results may be missing"
+    assert (
+        "  semantic_scholar: error: HTTP 301: redirected to HTTPS at api.semanticscholar.org, not followed"
+        in footer(result)
+    )
+    sent = [request for request in seams.providers.requests if request.url.host == SEMANTIC_SCHOLAR_HOST]
+    assert [request.url.scheme for request in sent] == ["http"]
 
 
 def test_over_http_semantic_scholar_s_key_reaches_no_output_and_no_log_line(

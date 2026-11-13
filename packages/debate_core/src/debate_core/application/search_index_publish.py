@@ -492,6 +492,19 @@ def read_search_index_manifest(directory: Path) -> SearchIndexManifest:
         ) from None
 
 
+class SeasonIndexHoldsOtherStores(DomainError):
+    """A season's publish of an index that holds any store but that season's (`v1-e39-t18`)."""
+
+    def __init__(self, index_id: str, season: str, stores: tuple[str, ...]) -> None:
+        self.index_id = index_id
+        self.season = season
+        self.stores = stores
+        super().__init__(
+            f"search index {index_id} holds {', '.join(stores) or 'no store'}, not {season} alone: a "
+            f"season's index is built from that one store (tub index build --caselist {season})"
+        )
+
+
 class SearchIndexPublishService:
     """Publishes a built index to one bucket, the pointer last."""
 

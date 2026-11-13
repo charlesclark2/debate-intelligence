@@ -128,6 +128,8 @@ class PrunePlan:
     doomed: tuple[ObjectVersion, ...]
     """What `--execute` deletes. Empty when the plan refuses."""
     refusals: tuple[PruneRefusal, ...]
+    season_pointers: tuple[tuple[str, SearchIndexPointer], ...] = ()
+    """Each backfile season's pointer as the plan read it, by season (`v1-e39-t18`)."""
 
     @property
     def index_id(self) -> str | None:

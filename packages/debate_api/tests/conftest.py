@@ -89,6 +89,7 @@ from debate_core.application.ports.suppression import disclosure_digest
 from debate_core.application.ports.tub import AccountSelfService, AccountStanding, CodeRefused, TokenRefused
 from debate_core.application.search_index_build import cite_without_cutter_mark
 from debate_core.application.search_index_holder import ClosableSearchIndexReader, SearchIndexHolder
+from debate_core.application.season_indexes import SeasonIndexes, season_pointer_key
 from debate_core.application.tub.access_audit import AccessAuditService
 from debate_core.application.tub.account_page import AccountPageService
 from debate_core.application.tub.audit import AuditRecord
@@ -1145,6 +1146,7 @@ class PilotWorld:
             transport=self.login,
         )
         search_index = self._search_index()
+        self.seasons = self._seasons()
         access_audit = AccessAuditService(audit=self.audit, clock=self.clock)
         self.services = PilotServices(
             configuration=configuration(),
@@ -1168,6 +1170,7 @@ class PilotWorld:
             landscape=self._landscape(),
             openev_camp_words={} if openev_camp_words is None else openev_camp_words,
             clock=self.clock,
+            seasons=self.seasons,
         )
         self.app = create_app(self.services)
         self.browser = self.new_browser()
@@ -1181,6 +1184,10 @@ class PilotWorld:
             open_reader=_no_index_to_open,
             clock=self.clock,
         )
+
+    def _seasons(self) -> SeasonIndexes:
+        """No backfile season is offered, as on a function whose `TUB_BACKFILE_SEASONS` is unset."""
+        return SeasonIndexes.none()
 
     def _card_download(
         self, search_index: SearchIndexHolder, access_audit: AccessAuditService
@@ -1196,6 +1203,7 @@ class PilotWorld:
         """
         return CardDownloadService(
             search_index=search_index,
+            seasons=self.seasons,
             writer=_no_download_writer,
             source_stores=RecordingSourceStore,
             access_audit=access_audit,
@@ -1351,6 +1359,85 @@ class SearchWorld(PilotWorld):
         return f"/cards/{caselist}/{cluster_of(doc_id)}"
 
 
+class SeasonPointer:
+    """The world's bucket as one backfile season's holder reads it (`v1-e39-t18`): that season's pointer,
+    and the objects, the suppression list and the record of reads of the world's own source."""
+
+    def __init__(self, source: InMemorySearchIndexSource, season: str) -> None:
+        self.source = source
+        self.key = season_pointer_key(season)
+        self.etag: str | None = None
+        self.not_modified = 0
+
+    def publish(self, index: PublishedIndex, etag: str) -> None:
+        self.source.objects.update(index.objects)
+        self.source.objects[self.key] = index.pointer
+        self.etag = etag
+
+    def read_pointer(self, *, if_none_match: str | None) -> PointerRead:
+        self.source.reads.append(self.key)
+        if self.key not in self.source.objects:
+            raise NotFound("search index object", self.key)
+        if if_none_match is not None and if_none_match == self.etag:
+            self.not_modified += 1
+            return PointerRead(body=None, etag=if_none_match)
+        return PointerRead(body=self.source.objects[self.key], etag=self.etag)
+
+    def read_suppression_list(self, *, if_none_match: str | None) -> PointerRead:
+        return self.source.read_suppression_list(if_none_match=if_none_match)
+
+    def read_object(self, key: str, *, max_bytes: int) -> bytes:
+        return self.source.read_object(key, max_bytes=max_bytes)
+
+    def stream_object(self, key: str) -> Iterator[bytes]:
+        return self.source.stream_object(key)
+
+
+class SeasonWorld(SearchWorld):
+    """The search world, with two invented backfile seasons offered, each its own index (`v1-e39-t18`).
+
+    Each season's holder is the real one, built when a student first picks the season, reading the
+    season's pointer from the world's source and the world's one suppression list, in a directory of
+    its own beside the current index's.
+    """
+
+    def __init__(self, *, season_indexes: Mapping[str, PublishedIndex], **rest: Any) -> None:
+        self.season_indexes = dict(season_indexes)
+        self._season_directory = tempfile.TemporaryDirectory(prefix="tub-index-seasons-")
+        self.season_directory = Path(self._season_directory.name)
+        self.season_holders: list[SearchIndexHolder] = []
+        self.pointers: dict[str, SeasonPointer] = {}
+        super().__init__(**rest)
+        for number, (season, index) in enumerate(self.season_indexes.items()):
+            self.season_pointer(season).publish(index, f'"season-{number}"')
+
+    def season_pointer(self, season: str) -> SeasonPointer:
+        if season not in self.pointers:
+            self.pointers[season] = SeasonPointer(self.index_source, season)
+        return self.pointers[season]
+
+    def _seasons(self) -> SeasonIndexes:
+        return SeasonIndexes(tuple(self.season_indexes), self._season_holder)
+
+    def _season_holder(self, season: str) -> SearchIndexHolder:
+        holder = SearchIndexHolder(
+            self.season_pointer(season),
+            directory=self.season_directory,
+            open_reader=lambda path, index_id: SqliteSearchIndexReader(path, index_id=index_id),
+            clock=self.clock,
+            suppression_list=self.index_source,
+        )
+        self.season_holders.append(holder)
+        return holder
+
+    def season_files(self) -> list[str]:
+        """The index files on this world's season directory: what one held season puts on `/tmp`."""
+        return sorted(one.name for one in self.season_directory.iterdir() if one.suffix == ".sqlite")
+
+    def season_card_path(self, season: str, doc_id: int) -> str:
+        return f"/cards/{season}/{cluster_of(doc_id)}"
+
+
 class DownloadWorld(SearchWorld):
     """The search world over the download's corpus, its sources stored and the real E33 writer wired."""
 
@@ -1405,6 +1492,7 @@ class DownloadWorld(SearchWorld):
         parser = self._parser
         return CardDownloadService(
             search_index=search_index,
+            seasons=self.seasons,
             writer=self._download_writer
             or (
                 lambda sources: _RecordingWriter(
@@ -1544,6 +1632,52 @@ def search_corpus_index(search_corpus: tuple[SearchDocument, ...]) -> PublishedI
     return published_corpus(search_corpus)
 
 
+SEASON_A: Final = "hsxx25"
+SEASON_B: Final = "hsyy24"
+SEASON_A_CARD: Final = 9001
+"""Season A's featured card: its occurrence 0 (Maple Grove QX) is the representative."""
+SEASON_B_CARD: Final = 9101
+
+
+def season_corpus(season: str) -> tuple[SearchDocument, ...]:
+    """An invented season's cards: each holds `pumice`, and only season A's featured one `obsidian`."""
+    if season == SEASON_A:
+        return (
+            _document(
+                SEASON_A_CARD,
+                text="Pumice and obsidian prices rose in the invented earlier season.",
+                tag="Earlier pumice obsidian claim",
+                caselist=SEASON_A,
+                occurrences=(
+                    _occurrence(0, SEASON_A_CARD, caselist=SEASON_A),
+                    _occurrence(1, SEASON_A_CARD, caselist=SEASON_A, school=OTHER_SCHOOL, team=OTHER_TEAM),
+                ),
+                team_count=2,
+            ),
+            _document(
+                SEASON_A_CARD + 1,
+                text="Pumice quarries close in the invented earlier season.",
+                tag="Earlier pumice quarry claim",
+                caselist=SEASON_A,
+                occurrences=(_occurrence(0, SEASON_A_CARD + 1, caselist=SEASON_A),),
+            ),
+        )
+    return (
+        _document(
+            SEASON_B_CARD,
+            text="Pumice exports fall in the invented older season.",
+            tag="Older pumice export claim",
+            caselist=season,
+            occurrences=(_occurrence(0, SEASON_B_CARD, caselist=season),),
+        ),
+    )
+
+
+@pytest.fixture(scope="session")
+def season_corpus_indexes() -> dict[str, PublishedIndex]:
+    return {season: published_corpus(season_corpus(season)) for season in (SEASON_A, SEASON_B)}
+
+
 @pytest.fixture(scope="session")
 def download_parser() -> DebateDocxParser:
     """The running parser, as the function's composition root builds it: one for the process."""
@@ -1593,6 +1727,29 @@ def search_world(make_search_world: Callable[..., SearchWorld]) -> Iterator[Sear
     made = make_search_world()
     yield made
     made.services.search_index.close()
+
+
+@pytest.fixture
+def make_season_world(
+    search_corpus: tuple[SearchDocument, ...],
+    search_corpus_index: PublishedIndex,
+    season_corpus_indexes: dict[str, PublishedIndex],
+) -> Callable[..., SeasonWorld]:
+    return partial(
+        SeasonWorld,
+        index=search_corpus_index,
+        corpus=search_corpus,
+        cards=SEARCH_CARDS,
+        season_indexes=season_corpus_indexes,
+    )
+
+
+@pytest.fixture
+def season_world(make_season_world: Callable[..., SeasonWorld]) -> Iterator[SeasonWorld]:
+    made = make_season_world()
+    yield made
+    made.services.search_index.close()
+    made.services.seasons.close()
 
 
 @pytest.fixture

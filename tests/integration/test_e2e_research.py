@@ -11,7 +11,13 @@ Expected values are written by hand from the fixtures (working agreement 6):
 
 * which pages verify: `packages/debate_cli/tests/fixtures/search/README.md` (the news article, the
   think-tank report and the open-access PDF; the Closed Stacks page is robots-disallowed and the
-  Harbor Review page paywalled);
+  Harbor Review page paywalled; the government press release names no author, so its card is
+  UNVERIFIED with `CITATION_UNVERIFIED`);
+* which pages are cut: since v1-e08-t24 the politics DA's link queries, which all ask five years,
+  rank with no recency, so the press release (term match 0.2365) comes fifth, before the news
+  article (0.0346), and `--auto-cut 3` cuts it before its third VERIFIED card. Its card is kept in
+  the bundle's own section under "UNVERIFIED — not finished cards", never counted toward the three
+  (v1-e08-t26);
 * each card's evidence: EveryPageRouter selects paragraph 2 whole, so it is the second paragraph of
   t04's hand-written `tests/fixtures/extraction/<sample>.expected.json`, and it starts two characters
   (one blank line) after the first paragraph ends, as the stored snapshot document's `text` joins
@@ -60,6 +66,13 @@ VERIFYING: Final = {
 }
 """Canonical URL → (cassette, t04 sample) of the three pages whose cards verify."""
 
+PRESS_RELEASE: Final = "https://www.fosw.example.gov/news/2026/06/agency-announces-grants"
+UNVERIFYING: Final = {PRESS_RELEASE: ("government-press-release", "gov-press-release")}
+"""Canonical URL → (cassette, t04 sample) of the one page cut whose card does not verify: no author."""
+
+UNVERIFIED_SECTION: Final = "UNVERIFIED — not finished cards"
+PRESS_RELEASE_BANNER: Final = "UNVERIFIED — not a finished card: CITATION_UNVERIFIED"
+
 SKIPPED: Final = {
     "https://www.closed-stacks.example/archive/2026/water-rights-ruling": "ROBOTS_DISALLOWED",
     "https://www.harborreview.example/politics/2026/10/inside-the-tariff-talks": "PAYWALLED",
@@ -100,9 +113,12 @@ def auto_cut_3(cli: Cli, out: Path) -> Result:
     )
 
 
-def test_search_auto_cut_3_writes_three_verified_cards_cut_from_their_snapshots_and_verify_passes_the_bundle(
+def test_search_auto_cut_3_writes_three_verified_cards_and_a_bannered_unverified_one_and_verify_agrees(
     cli: Cli, boundaries: Boundaries, cli_environment: Path, tmp_path: Path
 ) -> None:
+    """Each of the four cards is cut from its stored snapshot; verify passes the three VERIFIED ones
+    and names the bannered one's CITATION_UNVERIFIED (until v1-e08-t26 the name ended
+    `..._cut_from_their_snapshots_and_verify_passes_the_bundle`, when the bundle held three cards)."""
     out = tmp_path / "research" / "bundle.docx"
 
     searched = auto_cut_3(cli, out)
@@ -110,23 +126,34 @@ def test_search_auto_cut_3_writes_three_verified_cards_cut_from_their_snapshots_
     assert searched.exit_code == ExitCode.OK, searched.output
     report = json.loads((out.parent / "report.json").read_text(encoding="utf-8"))
     assert (report["wanted"], report["verified"], report["stop_reason"]) == (3, 3, "COMPLETE")
+    assert report["unverified"] == 1
     skipped = {
         entry["url"]: entry["access_status"] for entry in report["entries"] if entry["status"] == "SKIPPED"
     }
     assert skipped == SKIPPED
+    unverified = {
+        entry["url"]: (entry["section"], entry["reasons"])
+        for entry in report["entries"]
+        if entry["status"] == "UNVERIFIED"
+    }
+    assert unverified == {PRESS_RELEASE: ("unverified", ["CITATION_UNVERIFIED"])}
 
     manifest_bytes = (out.parent / "bundle.manifest.json").read_bytes()
     assert read_embedded_manifest_bytes(out) == manifest_bytes
     cards = json.loads(manifest_bytes)["cards"]
-    assert [card["verification_status"] for card in cards] == ["VERIFIED"] * 3
+    assert [card["verification_status"] for card in cards] == ["VERIFIED"] * 3 + ["UNVERIFIED"]
     body = [paragraph.text for paragraph in docx.Document(io.BytesIO(out.read_bytes())).paragraphs]
     assert body[0] == BLOCK
+    section = body.index(UNVERIFIED_SECTION)
+    assert body[section + 2] == PRESS_RELEASE_BANNER
 
     cut_from = set()
     for card in cards:
         snapshot = stored_row(cli_environment, "source_snapshots", "snapshot_id", card["snapshot_id"])
         article = stored_row(cli_environment, "articles", "article_id", snapshot["article_id"])
-        cassette, sample = VERIFYING[article["canonical_url"]]
+        cassette, sample = {**VERIFYING, **UNVERIFYING}[article["canonical_url"]]
+        is_verified = card["verification_status"] == "VERIFIED"
+        assert (article["canonical_url"] in VERIFYING) == is_verified
         cut_from.add(article["canonical_url"])
         page = load_cassette(cassette).page
         assert page is not None
@@ -143,20 +170,30 @@ def test_search_auto_cut_3_writes_three_verified_cards_cut_from_their_snapshots_
         assert stored["text"][card["evidence_start_offset"] : card["evidence_end_offset"]] == paragraphs[1]
         assert card["evidence_text"] == paragraphs[1]
         assert paragraphs[1] in body
-    assert cut_from == set(VERIFYING)
+        # VERIFIED evidence is above the bannered section, the UNVERIFIED card's inside it.
+        assert (body.index(paragraphs[1]) < section) == is_verified
+    assert cut_from == set(VERIFYING) | set(UNVERIFYING)
 
     verified, envelope = cli.envelope("verify", str(out))
 
-    assert verified.exit_code == ExitCode.OK, verified.output
-    assert [(card["card_id"], card["status"]) for card in envelope["data"]["cards"]] == [
-        (card["card_id"], "VERIFIED") for card in cards
+    # The bundle holds the bannered card, so verify agrees card by card and fails the bundle for it.
+    assert verified.exit_code == ExitCode.DOMAIN_FAILURE == 1, verified.output
+    assert envelope["error"]["code"] == "UNVERIFIED"
+    assert [
+        (verdict["card_id"], verdict["status"], verdict["reason_codes"])
+        for verdict in envelope["error"]["details"]["cards"]
+    ] == [(card["card_id"], "VERIFIED", []) for card in cards[:3]] + [
+        (cards[3]["card_id"], "UNVERIFIED", ["CITATION_UNVERIFIED"])
     ]
 
 
 def test_the_bundle_does_not_verify_where_its_snapshots_are_not_stored(
     cli: Cli, boundaries: Boundaries, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """The same bundle, read on a machine whose data directory never stored its sources (§11.3)."""
+    """The same bundle, read on a machine whose data directory never stored its sources (§11.3).
+
+    The bannered press release card keeps its own reason as well: verify checks the citation before
+    it looks for the snapshot."""
     out = tmp_path / "research" / "bundle.docx"
     assert auto_cut_3(cli, out).exit_code == ExitCode.OK
     monkeypatch.setenv("DEBATE_STORAGE__DATA_DIR", str(tmp_path / "another-machine"))
@@ -169,5 +206,6 @@ def test_the_bundle_does_not_verify_where_its_snapshots_are_not_stored(
     verdicts = envelope["error"]["details"]["cards"]
     assert [(verdict["status"], verdict["reason_codes"]) for verdict in verdicts] == [
         ("UNVERIFIED", ["SNAPSHOT_MISSING"])
-    ] * 3
+    ] * 3 + [("UNVERIFIED", ["CITATION_UNVERIFIED", "SNAPSHOT_MISSING"])]
     assert "SNAPSHOT_MISSING" in shown.stdout
+    assert "CITATION_UNVERIFIED" in shown.stdout

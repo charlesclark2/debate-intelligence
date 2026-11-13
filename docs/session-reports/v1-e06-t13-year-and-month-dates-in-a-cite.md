@@ -271,9 +271,40 @@ None (the PM asked for no command). The affected set is left to the pull request
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-11-14
 
 **Notes:**
+
+Accepted. ac1 and the node pass, and the Goal is `Succeeded`.
+
+* **The rulings are built as given.** `2026` and `September 2026`, with the short cite unchanged (Q1,
+  a). A cite's date comes only from the sources it already reads, with Crossref's year or month used
+  only when no source states a day (Q2, a). No precision is ever raised, which the domain refuses at
+  construction.
+* **The old-row handling is the strongest part, and it meets the forbidden line by being said.**
+  * Day is the default and is never written, so every day row is byte-identical to the start
+    commit's (Article 441, Card 1189, SourceSnapshot 1286 bytes).
+  * An older build refuses a year or month row (`extra_forbidden`) rather than misreading it as the
+    first of January. So the domain's own `extra="forbid"` is the guard, and no new one is needed.
+  * The cost, an older build unable to read such a row on the same data directory, is stated, and
+    the CLI README says a year or month needs this build or later. Nothing in the cloud reads these
+    rows: the weekly run reads the parsed store, and the pilot reads its index.
+* **The evidence is thorough.**
+  * The red run on a skeleton had 73 failed and 46 passed, the passes being every day case and the
+    fields' own round trips.
+  * 21 of 21 mutants were caught, each raise of a precision among them.
+  * The diff deletes 17 lines, all in the three tests that pinned the old rule.
+* **Deviations 1 to 3: accepted.** They are the PM's rulings, and the hard-stop form of the node
+  command.
+* **The branch is behind dev by v1-e06-t16** (`docx_verify.py` and its tests, untouched here). If
+  `scripts/task pr` asks, `scripts/task sync`.
+* **The affected set** (763 files) goes to `ci` under agreement 10.
+* **Follow-ups:**
+  1. A page's own year or month (`citation_harvest.parse_stated_date`) goes on the PM's V1.x list, as
+     a p3 under the December rule.
+  2. `search --json`'s precision is v1-e08-t12's.
+
+`scripts/task pr`

@@ -2523,6 +2523,7 @@ class ServiceContainer:
             lock=self.bucket_run_lock if bucket else None,
             state=self.run_state if bucket else None,
             parsed_version=DebateDocxParser().parser_version,
+            now=lambda: _utc_now(),
         )
 
     @property

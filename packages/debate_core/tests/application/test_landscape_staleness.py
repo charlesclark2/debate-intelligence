@@ -14,6 +14,7 @@ from pathlib import Path
 
 import pytest
 
+from debate_core.application.caselist.recent_run import RecentRunRecorded
 from debate_core.application.caselist.run_lock import (
     LockBody,
     LockHolder,
@@ -34,6 +35,7 @@ from debate_core.application.caselist_sync import (
     SyncStage,
 )
 from debate_core.application.landscape_staleness import (
+    LOCK_REFUSALS,
     STALE_BANNER_HEADING,
     FailedSyncRun,
     LandscapeStalenessCheck,
@@ -484,11 +486,26 @@ def lock_refusals(tmp_path: Path) -> dict[str, BaseException]:
         RunLockHeld(holder=INVENTED_HOLDER, lease_expires_at=datetime(2026, 9, 18, 6, 25, tzinfo=UTC)),
         RunHomeMoved(body=INVENTED_MOVE, environment="dev"),
         RunLockWrongHome(home="prod", environment="dev"),
+        # A scheduled pull refused before the lock after a recent run (`v1-e40-t44`, the PM's amendment of
+        # 2026-11-07): it did nothing either.
+        RecentRunRecorded(run_id="20260918T053000Z", started_at=datetime(2026, 9, 18, 5, 30, tzinfo=UTC)),
     ]
     return {type(refusal).__name__: refusal for refusal in refusals}
 
 
-LOCK_REFUSAL_CLASSES = ("SyncRunInProgress", "RunLockHeld", "RunHomeMoved", "RunLockWrongHome")
+LOCK_REFUSAL_CLASSES = (
+    "SyncRunInProgress",
+    "RunLockHeld",
+    "RunHomeMoved",
+    "RunLockWrongHome",
+    "RecentRunRecorded",
+)
+
+
+def test_the_lock_refusals_are_the_ones_parametrised_here() -> None:
+    """Each refusal `LOCK_REFUSALS` passes over has its case below, and no other class is passed over."""
+    assert frozenset(LOCK_REFUSAL_CLASSES) == LOCK_REFUSALS
+
 
 REFUSED_AT = datetime(2026, 9, 18, 6, tzinfo=UTC)
 """After every run the tests below record: the refusal is the latest record."""

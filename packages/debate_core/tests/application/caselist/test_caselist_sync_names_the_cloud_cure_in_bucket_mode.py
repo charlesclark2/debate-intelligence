@@ -135,6 +135,9 @@ class BucketModeBracket:
     def watching(self, task: asyncio.Task[object]) -> None:
         return None
 
+    async def refuse_after_a_recent_run(self) -> None:  # pragma: no cover - no pull here is scheduled
+        return None
+
     async def start(self, caselists: Sequence[str], *, dry_run: bool, restore_parsed: bool = True) -> None:
         return None
 

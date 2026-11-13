@@ -1391,7 +1391,9 @@ again, whatever the task then does. A refused launch started no container, downl
 took no lock. If ECS ever placed a task *and* answered with an error, the retry's task would meet the
 bucket's run lock, taken before anything is restored or fetched, and stop refused while the first run
 holds it. A run takes the best part of an hour (56 minutes on 2026-10-28), and the retries come well
-before that. [run_task.tf](../../infrastructure/modules/caselist_run/run_task.tf) says it in full.
+before that. [run_task.tf](../../infrastructure/modules/caselist_run/run_task.tf) says it in full. Once
+the schedule passes `--scheduled`, a retry's task after the first run's end is refused too:
+[A scheduled run refused after a recent run](#a-scheduled-run-refused-after-a-recent-run).
 
 **What to do.**
 
@@ -1416,6 +1418,56 @@ aws ecs list-tasks --profile debate-admin --region us-east-1 --cluster debate-de
 A refused launch of the **login** looks the same in `-login-dlq`, and the run three hours later uses
 the previous token if it still works. A refused login is not this: it is a task that started and
 stopped non-zero, which emails `Weekly caselist login failed`, and it is never retried.
+
+## A scheduled run refused after a recent run
+
+Since `v1-e40-t44`, a pull the weekly schedule starts, `caselist pull --scheduled`, reads the bucket's
+run log before it takes the lock, and does nothing when the log records a run that started within the
+last **24 hours**. It closes the one gap [A launch AWS refused](#a-launch-aws-refused) leaves: a task
+placed and an error answered, whose retry starts a second task after the first run has finished and
+released the lock. The 24 hours are Scheduler's own ceiling on a retry's event age, so they hold whatever
+retry policy the schedule is given. **A pull without `--scheduled` is a hand run, and this guard never
+refuses one**, whatever the day or the hour.
+
+**Until the schedule passes `--scheduled`, the guard does nothing.** Today the run schedule's target
+passes no override, so every start, the schedule's included, runs as a hand run does. The change that
+makes the schedule pass it (a container override in `aws_scheduler_schedule.run`) is its own task,
+applied after an image that knows `--scheduled` is pushed and pinned, its plan read by the PM, never on
+a Wednesday.
+
+**What counts.** A `caselist pull` run that started within the 24 hours, whatever its outcome:
+completed, nothing new, cap-deferred, publish pending, incomplete or failed. Not a pull the run lock
+refused, not one this guard refused, and not `--publish-pending`, which lists and fetches nothing. A
+backfile import writes no run record, so it never counts, and neither does a run killed hard, which
+writes none either. The bucket's log gains a run's record at that run's end, just before it releases
+the lock: while a run is going, the lock is what refuses a second one.
+
+**What reaches the coach.** The refused task exits `1` without taking the lock, restoring anything or
+calling OpenCaselist, and writes nothing to the bucket. Its record stays in the task, so
+`caselist runs --remote` does not show it; its log in `debate-dev-caselist-run` ends with the JSON line
+whose code is `RECENT_RUN_RECORDED`. Two emails, as for a run the lock refused: the task-stopped email
+with exit code `1`, and the notice
+
+> **caselist pull skipped: a run started within the last 24 hours**
+>
+> Run `<run id>` (dev): the bucket's run log records run `<earlier run id>`, started `<time>`, within the
+> last 24 hours, so this scheduled pull did nothing; that run records and announces its own outcome. If
+> the week still needs a run, a hand run (the cloud-run runbook's Step 8) is never refused by this guard.
+
+**What to do.**
+
+1. **Usually nothing.** The run it names is the week's run. `debate-research caselist runs --remote`
+   shows how that run went.
+2. **If that run failed or stopped, and the week still needs a run:** a hand run (the cloud-run
+   runbook's Step 8) is never refused by this guard. It is the PM's word, then
+   [Step 8's "One run by hand"](#step-8--the-seed-bucket-mode-and-one-run-by-hand-at-the-cutover-after-v1-e40-t04),
+   as for any run by hand, and never on a Wednesday before 07:00.
+3. **A hand run between Tuesday 06:00 and Wednesday 06:00** makes that Wednesday's scheduled pull refuse.
+   That is expected (the PM's ruling of 2026-11-12): the week is the hand run's, and anything newer comes
+   with the next week's run, late and never lost.
+
+A run log the bucket could not give the guard refuses nothing: the pull goes on to the lock, and its log
+says `caselist pull: the bucket's run log could not be read (<class>); the run lock decides`.
 
 ## A run refused for an expired login
 

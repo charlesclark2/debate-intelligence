@@ -656,6 +656,7 @@ from debate_core.application.caselist.publish_service import (
     NothingToPublish,
     SourceResult,
 )
+from debate_core.application.caselist.recent_run import RecentRunRecorded
 from debate_core.application.caselist.status_service import (
     CASELIST_DRIFT,
     CaselistStatusService,
@@ -5509,6 +5510,8 @@ class PullBracket(Protocol):
 
     def watching(self, task: asyncio.Task[object]) -> None: ...
 
+    async def refuse_after_a_recent_run(self) -> None: ...
+
     async def start(
         self, caselists: Sequence[str], *, dry_run: bool, restore_parsed: bool = True
     ) -> None: ...
@@ -5574,6 +5577,7 @@ async def run_pull(
     on_line: Callable[[StepLine], None] | None = None,
     monotonic: Callable[[], float] = time.monotonic,
     memory: Callable[[], MemoryHighWater] = read_memory_high_water,
+    scheduled: bool = False,
 ) -> PulledRun:
     """Run one `caselist pull`: a dry run, a whole run, or `--publish-pending`.
 
@@ -5596,6 +5600,10 @@ async def run_pull(
             restore and the saves to the bucket, and in every mode each stage of the service.
         monotonic: Seconds, for the restore's and the saves' lines; the stages' are the run's clock.
         memory: The memory high-water marks for the restore's and the saves' lines.
+        scheduled: `--scheduled`, which only the weekly schedule passes (`v1-e40-t44`): before the lock,
+            the bracket refuses the run when the bucket's run log records a run started within 24
+            hours (:meth:`PullBracket.refuse_after_a_recent_run`). Never with `dry_run` or
+            `publish_pending`, which the command refuses first. A hand run is never asked.
 
     Raises :class:`NoCaselistsConfigured` when asked to pull no caselist, and whatever the service
     or the monitor raise; the monitor has recorded and announced it first.
@@ -5640,6 +5648,10 @@ async def run_pull(
             try:
                 if not publish_pending and not caselists:
                     raise NoCaselistsConfigured
+                if scheduled and bracket is not None:
+                    # Before the lock, the restore and the sync service: a scheduled pull after a
+                    # recent run takes nothing and calls no provider (`v1-e40-t44`).
+                    await bracket.refuse_after_a_recent_run()
                 if bracket is not None:
                     # The lock and the restore first: the run log read next is the restored one.
                     await start(bracket, dry_run=False, restore_parsed=not publish_pending)
@@ -6345,6 +6357,9 @@ def fix_for(error: BaseException, *, bucket_mode: bool = False) -> str | None:
     if isinstance(error, NewerFingerprintTable):
         return error.cloud_fix if bucket_mode else error.fix
     if isinstance(error, KeychainFailure):
+        return error.hint
+    if isinstance(error, RecentRunRecorded):
+        # The run it found and the cure, a hand run (`v1-e40-t44`, the PM's ruling 4).
         return error.hint
     if isinstance(error, CaselistTokenMissing) and not bucket_mode:
         return _TOKEN_MISSING_ON_THIS_MACHINE_FIX

@@ -34,7 +34,8 @@ the first, so one run reports everything wrong with a card:
   as one pasted in by hand. It is reported on that body card, not on a manifest card (`v1-e06-t07`).
 
 A :class:`WarningCode` is not a reason: it is something a reader of the card should know that leaves
-the card VERIFIED, such as a bracketed interpolation in a .docx body (``INTERPOLATION_PRESENT``).
+the card VERIFIED, such as a bracketed interpolation in a .docx body (``INTERPOLATION_PRESENT``) or a
+deletion there that removed a negating word (``NEGATION_REMOVED``).
 
 ## What VERIFIED means, and what it does not
 
@@ -168,6 +169,12 @@ class WarningCode(StrEnum):
     """A .docx body shows a bracketed interpolation in the card's evidence: words that are the
     debater's, not the source's (`v1-e06-t07`). The edit policy allows them; the report says where each
     is read and how long it is, never its words."""
+
+    NEGATION_REMOVED = "NEGATION_REMOVED"
+    """A deletion in a .docx body took out a word that negates, by the edit policy's own test
+    (:func:`~debate_core.evidence.negation.removes_negation`, `v1-e06-t10`). The words left are still the
+    source's, so the card verifies, but a cut that removes "not" can reverse what it says. The report
+    gives the deletion's range in ``evidence_text`` and in the snapshot, never the words."""
 
 
 class VerificationCheck(StrEnum):

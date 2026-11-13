@@ -159,14 +159,23 @@ def test_docx_taking_the_underlining_and_highlighting_off_keeps_the_card_verifie
     assert (verdict.status, verdict.reasons, verdict.warnings) == (VerificationStatus.VERIFIED, (), ())
 
 
-def test_docx_deleting_an_entire_unmarked_sentence_keeps_the_card_verified() -> None:
+def test_docx_deleting_an_entire_unmarked_sentence_keeps_the_card_verified_and_warns_of_its_negation() -> (
+    None
+):
+    """The critics' sentence, evidence [108, 202), is snapshot [422, 516) (t04's third paragraph starts
+    at 422) and says "the timeline was never realistic": its deletion removes a negation (`v1-e06-t10`)."""
     exported = news_export(change_card=news_card_with_the_critics_sentence_unmarked)
 
     verdict = verdict_of(
         verify(exported, edited(exported.document, replace_in_evidence(CRITICS_SENTENCE, "")))
     )
 
-    assert (verdict.status, verdict.reasons, verdict.warnings) == (VerificationStatus.VERIFIED, (), ())
+    assert (verdict.status, verdict.reasons) == (VerificationStatus.VERIFIED, ())
+    assert [
+        (warning.code, warning.evidence_range, warning.snapshot_range) for warning in verdict.warnings
+    ] == [
+        (WarningCode.NEGATION_REMOVED, ReportedRange(start=108, end=202), ReportedRange(start=422, end=516))
+    ]
 
 
 def test_docx_a_bracketed_interpolation_is_a_warning_on_a_verified_card(export: NewsExport) -> None:

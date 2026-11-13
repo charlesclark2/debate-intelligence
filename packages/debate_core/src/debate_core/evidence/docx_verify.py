@@ -47,10 +47,22 @@ change is not a difference at all. Every other hunk is a :class:`ManualEdit`, wi
 replaced and the body range it holds. A body that keeps none of the card's words is one too: E03
 refuses the deletion that would leave nothing quoted.
 
+## A deletion that removes a negation (`v1-e06-t10`)
+
+E03's DeleteRange flags a cut that takes out a word that negates, and :func:`removed_negations` asks
+the body's deletions the same question with the same code: each deletion's ``evidence_text`` range is
+mapped to the snapshot ranges it was cut from
+(:func:`~debate_core.evidence.card_mapping.snapshot_ranges_of`) and handed to
+:func:`~debate_core.evidence.negation.removes_negation`, so the words read are the ones the body took
+out, never a card omission between them, and the word list is the policy's. A hit is a
+:class:`RemovedNegation`, one per deletion however many negating words it took. It is a warning, never a
+difference the policy refuses: the words that are left are still the source's.
+
 ## What it never holds
 
-Text. A :class:`ManualEdit` is two ranges, a :class:`BodyInterpolation` an offset and a length, so a
-report built from them cannot carry a word of the evidence or of the student's insertion.
+Text. A :class:`ManualEdit` is two ranges, a :class:`BodyInterpolation` an offset and a length, a
+:class:`RemovedNegation` two ranges, so a report built from them cannot carry a word of the evidence or
+of the student's insertion.
 """
 
 from __future__ import annotations
@@ -63,7 +75,10 @@ from typing import Final
 from pydantic import TypeAdapter, ValidationError
 
 from debate_core.domain import Card, InterpolatedText, VerificationStatus
+from debate_core.evidence.card_mapping import snapshot_ranges_of
+from debate_core.evidence.negation import removes_negation
 from debate_core.evidence.run_segmentation import omission_offsets
+from debate_core.evidence.snapshot_text import SnapshotText
 
 __all__ = [
     "MAXIMUM_BODY_EDIT_TOKENS",
@@ -74,9 +89,11 @@ __all__ = [
     "CharacterRange",
     "DocumentBody",
     "ManualEdit",
+    "RemovedNegation",
     "body_evidence",
     "compare_body",
     "match_body_cards",
+    "removed_negations",
 ]
 
 MAXIMUM_BODY_EDIT_TOKENS: Final = 2000
@@ -173,6 +190,18 @@ class BodyComparison:
         return not self.manual_edits
 
 
+@dataclass(frozen=True, slots=True)
+class RemovedNegation:
+    """A deletion in the body that took out a word that negates, by the edit policy's test."""
+
+    evidence_range: CharacterRange
+    """The deletion, into the card's ``evidence_text``, as :attr:`BodyComparison.deletions` gives it."""
+    snapshot_range: CharacterRange
+    """The same deletion in the snapshot: from its first removed character to its last. A deletion
+    across one of the card's own cuts spans that omission too, as E03's flag names the omission that
+    holds it; only the quoted words either side were read."""
+
+
 # --------------------------------------------------------------------------------------------
 # Matching and segmenting
 # --------------------------------------------------------------------------------------------
@@ -230,6 +259,23 @@ def compare_body(card: Card, body_text: str, omission_marker: str) -> BodyCompar
         # E03 refuses the deletion that leaves nothing quoted ("delete the card instead").
         return BodyComparison(manual_edits=(whole,), interpolations=(), deletions=())
     return _Classifier(card, evidence, body, _tokens(omission_marker.strip())).classify(hunks)
+
+
+def removed_negations(
+    card: Card, comparison: BodyComparison, snapshot_text: SnapshotText
+) -> tuple[RemovedNegation, ...]:
+    """Each of ``comparison``'s deletions that removes a word that negates, in body order.
+
+    ``snapshot_text`` must be the text ``card``'s evidence was rebuilt from exactly
+    (:meth:`~debate_core.application.evidence_verifier.EvidenceVerifier.verify_with_snapshot_text`
+    gives it only then), so the snapshot words at a deletion's offsets are the words the body removed.
+    """
+    found: list[RemovedNegation] = []
+    for deletion in comparison.deletions:
+        removed = snapshot_ranges_of(card, deletion.start, deletion.end)
+        if removes_negation(snapshot_text, removed):
+            found.append(RemovedNegation(deletion, CharacterRange(removed[0][0], removed[-1][1])))
+    return tuple(found)
 
 
 # --------------------------------------------------------------------------------------------

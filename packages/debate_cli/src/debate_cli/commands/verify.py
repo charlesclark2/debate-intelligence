@@ -10,7 +10,9 @@ A .docx the platform exported is read too (`v1-e06-t07`): the use case finds the
 it, verifies its cards the same way, and then checks that the document body still shows each card's
 evidence, allowing only the edits the edit policy allows. A card whose quoted words were changed is
 UNVERIFIED with `MANUAL_EDIT` and the character range; a bracketed interpolation is a warning
-(`INTERPOLATION_PRESENT`) on a card that stays VERIFIED. A card in the body that the manifest does
+(`INTERPOLATION_PRESENT`) on a card that stays VERIFIED, and so is a deletion that removed a negating
+word, by the edit policy's own test (`NEGATION_REMOVED` with the deletion's range, `v1-e06-t10`): a
+warning changes no status and no exit code. A card in the body that the manifest does
 not list, such as one pasted in by hand, is a row of its own, UNVERIFIED with
 `BODY_CARD_NOT_IN_MANIFEST`. The file is only ever read.
 
@@ -68,6 +70,7 @@ from debate_core.application.verify_manifest import (
     NewerManifestVersion,
     NoManifest,
     ReportedReason,
+    ReportedWarning,
     UnclaimedBodyCardVerdict,
     VerificationCouldNotRun,
 )
@@ -252,12 +255,7 @@ def _table(report: ManifestVerificationReport) -> TableSpec:
                 verdict.status.value,
                 "\n".join(
                     [_reason_cell(reason) for reason in verdict.reasons]
-                    + [
-                        f"{warning.code.value} (warning) at offset {warning.evidence_offset}"
-                        if warning.evidence_offset is not None
-                        else f"{warning.code.value} (warning)"
-                        for warning in verdict.warnings
-                    ]
+                    + [_warning_cell(warning) for warning in verdict.warnings]
                 ),
             )
             for verdict in report.cards
@@ -273,6 +271,17 @@ def _table(report: ManifestVerificationReport) -> TableSpec:
 def _body_card(unclaimed: UnclaimedBodyCardVerdict) -> str:
     """How a person names a body card: counted from 1, as Word's reader would count them."""
     return f"body card {unclaimed.body_position + 1}"
+
+
+def _warning_cell(warning: ReportedWarning) -> str:
+    """A warning's code and where it is in ``evidence_text``: an offset, or a range as a reason's is."""
+    if warning.evidence_range is not None:
+        return (
+            f"{warning.code.value} (warning) at {warning.evidence_range.start}-{warning.evidence_range.end}"
+        )
+    if warning.evidence_offset is not None:
+        return f"{warning.code.value} (warning) at offset {warning.evidence_offset}"
+    return f"{warning.code.value} (warning)"
 
 
 def _reason_cell(reason: ReportedReason) -> str:

@@ -1,0 +1,545 @@
+{
+  "meta": {
+    "count": 8,
+    "db_response_time_ms": 23,
+    "page": 1,
+    "per_page": 20,
+    "groups_count": null
+  },
+  "results": [
+    {
+      "id": "https://openalex.org/W5550100001",
+      "doi": null,
+      "display_name": "Reviving lost species: an invented ledger of costs",
+      "publication_date": "2024-03-02",
+      "type": "article",
+      "cited_by_count": 3,
+      "open_access": {
+        "is_oa": false,
+        "oa_status": "closed",
+        "oa_url": null,
+        "any_repository_has_fulltext": false
+      },
+      "best_oa_location": null,
+      "primary_location": {
+        "is_oa": false,
+        "landing_page_url": "https://journal.example.org/invented/w5550100001",
+        "pdf_url": null,
+        "source": {
+          "id": "https://openalex.org/S4200000009",
+          "display_name": "Journal of Invented Futures",
+          "type": "journal"
+        }
+      },
+      "authorships": [
+        {
+          "author_position": "first",
+          "author": {
+            "id": "https://openalex.org/A5550100001",
+            "display_name": "Placeholder Author 1",
+            "orcid": null
+          },
+          "institutions": [],
+          "countries": [],
+          "is_corresponding": true,
+          "raw_author_name": "Placeholder Author 1",
+          "raw_affiliation_strings": []
+        }
+      ],
+      "abstract_inverted_index": null,
+      "keywords": [
+        {
+          "id": "https://openalex.org/keywords/de-extinction",
+          "display_name": "de-extinction",
+          "score": 1.0
+        },
+        {
+          "id": "https://openalex.org/keywords/conservation-ethics",
+          "display_name": "conservation ethics",
+          "score": 0.71
+        },
+        {
+          "id": "https://openalex.org/keywords/animal-welfare",
+          "display_name": "animal welfare",
+          "score": 0.66
+        },
+        {
+          "id": "https://openalex.org/keywords/extinction",
+          "display_name": "extinction",
+          "score": 0.61
+        },
+        {
+          "id": "https://openalex.org/keywords/biotechnology",
+          "display_name": "biotechnology",
+          "score": 0.52
+        },
+        {
+          "id": "https://openalex.org/keywords/woolly-mammoth",
+          "display_name": "woolly mammoth",
+          "score": 0.48
+        }
+      ]
+    },
+    {
+      "id": "https://openalex.org/W5550100002",
+      "doi": null,
+      "display_name": "Duties to the vanished: a placeholder essay",
+      "publication_date": "2023-11-20",
+      "type": "article",
+      "cited_by_count": 6,
+      "open_access": {
+        "is_oa": false,
+        "oa_status": "closed",
+        "oa_url": null,
+        "any_repository_has_fulltext": false
+      },
+      "best_oa_location": null,
+      "primary_location": {
+        "is_oa": false,
+        "landing_page_url": "https://journal.example.org/invented/w5550100002",
+        "pdf_url": null,
+        "source": {
+          "id": "https://openalex.org/S4200000009",
+          "display_name": "Journal of Invented Futures",
+          "type": "journal"
+        }
+      },
+      "authorships": [
+        {
+          "author_position": "first",
+          "author": {
+            "id": "https://openalex.org/A5550100002",
+            "display_name": "Placeholder Author 2",
+            "orcid": null
+          },
+          "institutions": [],
+          "countries": [],
+          "is_corresponding": true,
+          "raw_author_name": "Placeholder Author 2",
+          "raw_affiliation_strings": []
+        }
+      ],
+      "abstract_inverted_index": null,
+      "keywords": [
+        {
+          "id": "https://openalex.org/keywords/de-extinction",
+          "display_name": "de-extinction",
+          "score": 1.0
+        },
+        {
+          "id": "https://openalex.org/keywords/conservation-ethics",
+          "display_name": "conservation ethics",
+          "score": 0.8
+        },
+        {
+          "id": "https://openalex.org/keywords/animal-welfare",
+          "display_name": "animal welfare",
+          "score": 0.63
+        },
+        {
+          "id": "https://openalex.org/keywords/animal-welfare",
+          "display_name": "animal welfare",
+          "score": 0.63
+        },
+        {
+          "id": "https://openalex.org/keywords/natures-value",
+          "display_name": "nature's value",
+          "score": 0.55
+        },
+        {
+          "id": "https://openalex.org/keywords/extinction",
+          "display_name": "extinction",
+          "score": 0.5
+        },
+        {
+          "id": "https://openalex.org/keywords/biotechnology",
+          "display_name": "biotechnology",
+          "score": 0.41
+        }
+      ]
+    },
+    {
+      "id": "https://openalex.org/W5550100003",
+      "doi": null,
+      "display_name": "Invented ecologies after the return",
+      "publication_date": "2022-06-14",
+      "type": "article",
+      "cited_by_count": 9,
+      "open_access": {
+        "is_oa": false,
+        "oa_status": "closed",
+        "oa_url": null,
+        "any_repository_has_fulltext": false
+      },
+      "best_oa_location": null,
+      "primary_location": {
+        "is_oa": false,
+        "landing_page_url": "https://journal.example.org/invented/w5550100003",
+        "pdf_url": null,
+        "source": {
+          "id": "https://openalex.org/S4200000009",
+          "display_name": "Journal of Invented Futures",
+          "type": "journal"
+        }
+      },
+      "authorships": [
+        {
+          "author_position": "first",
+          "author": {
+            "id": "https://openalex.org/A5550100003",
+            "display_name": "Placeholder Author 3",
+            "orcid": null
+          },
+          "institutions": [],
+          "countries": [],
+          "is_corresponding": true,
+          "raw_author_name": "Placeholder Author 3",
+          "raw_affiliation_strings": []
+        }
+      ],
+      "abstract_inverted_index": null,
+      "keywords": [
+        {
+          "id": "https://openalex.org/keywords/de-extinction",
+          "display_name": "de-extinction",
+          "score": 0.97
+        },
+        {
+          "id": "https://openalex.org/keywords/animal-welfare",
+          "display_name": "animal welfare",
+          "score": 0.7
+        },
+        {
+          "id": "https://openalex.org/keywords/conservation-ethics",
+          "display_name": "conservation ethics",
+          "score": 0.66
+        },
+        {
+          "id": "https://openalex.org/keywords/natures-value",
+          "display_name": "nature's value",
+          "score": 0.6
+        },
+        {
+          "id": "https://openalex.org/keywords/extinction",
+          "display_name": "extinction",
+          "score": 0.58
+        },
+        {
+          "id": "https://openalex.org/keywords/biotechnology",
+          "display_name": "biotechnology",
+          "score": 0.44
+        }
+      ]
+    },
+    {
+      "id": "https://openalex.org/W5550100004",
+      "doi": null,
+      "display_name": "Who speaks for the resurrected animal",
+      "publication_date": "2025-01-09",
+      "type": "article",
+      "cited_by_count": 12,
+      "open_access": {
+        "is_oa": false,
+        "oa_status": "closed",
+        "oa_url": null,
+        "any_repository_has_fulltext": false
+      },
+      "best_oa_location": null,
+      "primary_location": {
+        "is_oa": false,
+        "landing_page_url": "https://journal.example.org/invented/w5550100004",
+        "pdf_url": null,
+        "source": {
+          "id": "https://openalex.org/S4200000009",
+          "display_name": "Journal of Invented Futures",
+          "type": "journal"
+        }
+      },
+      "authorships": [
+        {
+          "author_position": "first",
+          "author": {
+            "id": "https://openalex.org/A5550100004",
+            "display_name": "Placeholder Author 4",
+            "orcid": null
+          },
+          "institutions": [],
+          "countries": [],
+          "is_corresponding": true,
+          "raw_author_name": "Placeholder Author 4",
+          "raw_affiliation_strings": []
+        }
+      ],
+      "abstract_inverted_index": null,
+      "keywords": [
+        {
+          "id": "https://openalex.org/keywords/de-extinction",
+          "display_name": "de-extinction",
+          "score": 0.99
+        },
+        {
+          "id": "https://openalex.org/keywords/conservation-ethics",
+          "display_name": "conservation ethics",
+          "score": 0.69
+        },
+        {
+          "id": "https://openalex.org/keywords/animal-welfare",
+          "display_name": "animal welfare",
+          "score": 0.62
+        },
+        {
+          "id": "https://openalex.org/keywords/natures-value",
+          "display_name": "nature's value",
+          "score": 0.57
+        },
+        {
+          "id": "https://openalex.org/keywords/biotechnology",
+          "display_name": "biotechnology",
+          "score": 0.4
+        }
+      ]
+    },
+    {
+      "id": "https://openalex.org/W5550100005",
+      "doi": null,
+      "display_name": "Rewilding with surrogates: a made-up field report",
+      "publication_date": "2021-09-30",
+      "type": "article",
+      "cited_by_count": 15,
+      "open_access": {
+        "is_oa": false,
+        "oa_status": "closed",
+        "oa_url": null,
+        "any_repository_has_fulltext": false
+      },
+      "best_oa_location": null,
+      "primary_location": {
+        "is_oa": false,
+        "landing_page_url": "https://journal.example.org/invented/w5550100005",
+        "pdf_url": null,
+        "source": {
+          "id": "https://openalex.org/S4200000009",
+          "display_name": "Journal of Invented Futures",
+          "type": "journal"
+        }
+      },
+      "authorships": [
+        {
+          "author_position": "first",
+          "author": {
+            "id": "https://openalex.org/A5550100005",
+            "display_name": "Placeholder Author 5",
+            "orcid": null
+          },
+          "institutions": [],
+          "countries": [],
+          "is_corresponding": true,
+          "raw_author_name": "Placeholder Author 5",
+          "raw_affiliation_strings": []
+        }
+      ],
+      "abstract_inverted_index": null,
+      "keywords": [
+        {
+          "id": "https://openalex.org/keywords/de-extinction",
+          "display_name": "de-extinction",
+          "score": 0.95
+        },
+        {
+          "id": "https://openalex.org/keywords/conservation-ethics",
+          "display_name": "conservation ethics",
+          "score": 0.6
+        },
+        {
+          "id": "https://openalex.org/keywords/biodiversity-conservation",
+          "display_name": "biodiversity conservation",
+          "score": 0.59
+        },
+        {
+          "id": "https://openalex.org/keywords/genetic-rescue",
+          "display_name": "genetic rescue",
+          "score": 0.56
+        },
+        {
+          "id": "https://openalex.org/keywords/human-animal-relations",
+          "display_name": "human-animal relations",
+          "score": 0.5
+        },
+        {
+          "id": "https://openalex.org/keywords/biotechnology",
+          "display_name": "biotechnology",
+          "score": 0.38
+        }
+      ]
+    },
+    {
+      "id": "https://openalex.org/W5550100006",
+      "doi": null,
+      "display_name": "Placeholder genomes and the second coming of a bird",
+      "publication_date": "2020-04-18",
+      "type": "article",
+      "cited_by_count": 18,
+      "open_access": {
+        "is_oa": false,
+        "oa_status": "closed",
+        "oa_url": null,
+        "any_repository_has_fulltext": false
+      },
+      "best_oa_location": null,
+      "primary_location": {
+        "is_oa": false,
+        "landing_page_url": "https://journal.example.org/invented/w5550100006",
+        "pdf_url": null,
+        "source": {
+          "id": "https://openalex.org/S4200000009",
+          "display_name": "Journal of Invented Futures",
+          "type": "journal"
+        }
+      },
+      "authorships": [
+        {
+          "author_position": "first",
+          "author": {
+            "id": "https://openalex.org/A5550100006",
+            "display_name": "Placeholder Author 6",
+            "orcid": null
+          },
+          "institutions": [],
+          "countries": [],
+          "is_corresponding": true,
+          "raw_author_name": "Placeholder Author 6",
+          "raw_affiliation_strings": []
+        }
+      ],
+      "abstract_inverted_index": null,
+      "keywords": [
+        {
+          "id": "https://openalex.org/keywords/de-extinction",
+          "display_name": "de-extinction",
+          "score": 0.93
+        },
+        {
+          "id": "https://openalex.org/keywords/biodiversity-conservation",
+          "display_name": "biodiversity conservation",
+          "score": 0.64
+        },
+        {
+          "id": "https://openalex.org/keywords/human-animal-relations",
+          "display_name": "human-animal relations",
+          "score": 0.61
+        },
+        {
+          "id": "https://openalex.org/keywords/genetic-rescue",
+          "display_name": "genetic rescue",
+          "score": 0.6
+        },
+        {
+          "id": "https://openalex.org/keywords/biotechnology",
+          "display_name": "biotechnology",
+          "score": 0.33
+        }
+      ]
+    },
+    {
+      "id": "https://openalex.org/W5550100007",
+      "doi": null,
+      "display_name": "An invented note with no keywords",
+      "publication_date": "2024-08-01",
+      "type": "article",
+      "cited_by_count": 21,
+      "open_access": {
+        "is_oa": false,
+        "oa_status": "closed",
+        "oa_url": null,
+        "any_repository_has_fulltext": false
+      },
+      "best_oa_location": null,
+      "primary_location": {
+        "is_oa": false,
+        "landing_page_url": "https://journal.example.org/invented/w5550100007",
+        "pdf_url": null,
+        "source": {
+          "id": "https://openalex.org/S4200000009",
+          "display_name": "Journal of Invented Futures",
+          "type": "journal"
+        }
+      },
+      "authorships": [
+        {
+          "author_position": "first",
+          "author": {
+            "id": "https://openalex.org/A5550100007",
+            "display_name": "Placeholder Author 7",
+            "orcid": null
+          },
+          "institutions": [],
+          "countries": [],
+          "is_corresponding": true,
+          "raw_author_name": "Placeholder Author 7",
+          "raw_affiliation_strings": []
+        }
+      ],
+      "abstract_inverted_index": null,
+      "keywords": null
+    },
+    {
+      "id": "https://openalex.org/W5550100008",
+      "doi": null,
+      "display_name": "An invented note whose keywords are unusable",
+      "publication_date": "2023-02-27",
+      "type": "article",
+      "cited_by_count": 24,
+      "open_access": {
+        "is_oa": false,
+        "oa_status": "closed",
+        "oa_url": null,
+        "any_repository_has_fulltext": false
+      },
+      "best_oa_location": null,
+      "primary_location": {
+        "is_oa": false,
+        "landing_page_url": "https://journal.example.org/invented/w5550100008",
+        "pdf_url": null,
+        "source": {
+          "id": "https://openalex.org/S4200000009",
+          "display_name": "Journal of Invented Futures",
+          "type": "journal"
+        }
+      },
+      "authorships": [
+        {
+          "author_position": "first",
+          "author": {
+            "id": "https://openalex.org/A5550100008",
+            "display_name": "Placeholder Author 8",
+            "orcid": null
+          },
+          "institutions": [],
+          "countries": [],
+          "is_corresponding": true,
+          "raw_author_name": "Placeholder Author 8",
+          "raw_affiliation_strings": []
+        }
+      ],
+      "abstract_inverted_index": null,
+      "keywords": [
+        {
+          "id": "https://openalex.org/keywords/no-name",
+          "score": 0.9
+        },
+        {
+          "id": "https://openalex.org/keywords/blank",
+          "display_name": "   ",
+          "score": 0.8
+        },
+        {
+          "id": "https://openalex.org/keywords/number",
+          "display_name": 5,
+          "score": 0.7
+        },
+        "a keyword as a bare string",
+        null
+      ]
+    }
+  ]
+}

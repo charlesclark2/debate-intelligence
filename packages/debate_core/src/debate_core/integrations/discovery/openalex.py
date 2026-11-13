@@ -10,15 +10,23 @@ benches it after repeated failures and holds it through a rate limit. It never r
 id, the title, the authors' display names (never their affiliations or ORCIDs), the venue, the
 publication date, the work's type as a :class:`~debate_core.domain.enums.SourceType`, the abstract,
 the best open-access URL, whether OpenAlex says the work is open (`open_access.is_oa`) and its
-citation count (`cited_by_count`). A work with no title or no OpenAlex id is not a candidate and is
-skipped; any other field OpenAlex leaves out, or sends in a shape this module does not read, is left
-empty rather than failing the search.
+citation count (`cited_by_count`), and its keywords as `subjects` (v1-e08-t15). A work with no title
+or no OpenAlex id is not a candidate and is skipped; any other field OpenAlex leaves out, or sends in a
+shape this module does not read, is left empty rather than failing the search.
 
 **The abstract** arrives as an inverted index, word to positions, because OpenAlex does not ship
 plain-text abstracts. :func:`rebuild_abstract` puts each word back at its positions. It is a
 snippet for discovery only: card evidence comes from a stored snapshot, never from here.
 
 **The venue** is `primary_location.source.display_name`. OpenAlex removed `host_venue`.
+
+**The keywords** (v1-e08-t15) are OpenAlex's short phrases saying what the work is about, best first,
+each `{id, display_name, score}` (the shape the operator's live request confirmed on 2026-11-12: 100
+de-extinction works, 702 keywords, each with exactly those three fields). Each becomes a
+:class:`~debate_core.domain.discovery.Subject` in OpenAlex's order, named as OpenAlex names it. An item
+without a usable `display_name` is skipped, a name the work lists twice (in any case) is kept once, and
+a `keywords` that is not a list gives none; none of these fails the work. The score is not kept: which
+keywords a work gets is OpenAlex's own threshold (:func:`subjects_of`).
 
 **The request** is `GET /works` (:func:`works_parameters`): `search=` the query, the date window
 as `from_publication_date`/`to_publication_date` filters, `per_page` and a `select=` of the fields
@@ -79,7 +87,13 @@ from debate_core.application.errors import ProviderError, ProviderRateLimited, P
 from debate_core.application.ports.providers import Clock
 from debate_core.application.settings import HttpSettings, ProviderSettings
 from debate_core.domain.article import ArticleIdentifiers
-from debate_core.domain.discovery import CandidateResult, ProviderQuery, ProviderResponse
+from debate_core.domain.discovery import (
+    CandidateResult,
+    ProviderQuery,
+    ProviderResponse,
+    Subject,
+    SubjectScheme,
+)
 from debate_core.domain.enums import SourceType
 from debate_core.integrations.discovery.feeds import query_terms, text_matches_terms
 from debate_core.integrations.discovery.http_failures import provider_error_for_status
@@ -104,6 +118,7 @@ __all__ = [
     "openalex_factory",
     "rebuild_abstract",
     "source_type_for",
+    "subjects_of",
     "works_parameters",
     "works_requests",
     "works_url",
@@ -152,6 +167,7 @@ SELECTED_FIELDS: Final = (
     "primary_location",
     "authorships",
     "abstract_inverted_index",
+    "keywords",
 )
 """The root-level work fields :func:`candidate_from_work` reads; `select=` takes nothing nested."""
 
@@ -244,7 +260,32 @@ def candidate_from_work(work: Mapping[str, Any]) -> CandidateResult | None:
         open_access_url=_open_access_url(work),
         open_access=_is_open_access(work),
         citation_count=_citation_count(work.get("cited_by_count")),
+        subjects=subjects_of(work.get("keywords")),
     )
+
+
+def subjects_of(keywords: object) -> tuple[Subject, ...]:
+    """A work's `keywords` as subjects, in OpenAlex's order (see the module docstring).
+
+    An item that is not an object, or whose `display_name` is not text with a character in it, is
+    skipped; so is a name already kept, compared ignoring case. A non-text `id` is left out.
+    """
+    if not isinstance(keywords, list):
+        return ()
+    subjects: list[Subject] = []
+    seen: set[str] = set()
+    for item in cast("list[object]", keywords):
+        if not isinstance(item, Mapping):
+            continue
+        entry = cast("Mapping[str, object]", item)
+        name = _text(entry.get("display_name"))
+        if name is None or name.casefold() in seen:
+            continue
+        seen.add(name.casefold())
+        subjects.append(
+            Subject(scheme=SubjectScheme.OPENALEX_KEYWORD, name=name, provider_id=_text(entry.get("id")))
+        )
+    return tuple(subjects)
 
 
 def _open_access_url(work: Mapping[str, Any]) -> str | None:

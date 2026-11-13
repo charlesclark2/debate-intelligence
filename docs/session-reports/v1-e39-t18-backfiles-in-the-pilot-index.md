@@ -72,6 +72,15 @@ None.
   deployed with one, before the PM rules; nothing runs on a Wednesday; no AWS write of any kind; no
   pull request.
 
+**The PM's relay of 2026-11-12, a pause before deleting:** the measurements go ahead, then this task
+stops before deleting the restored copy and the scratch indexes. The copy is reused, after this
+task's measurements have finished so that they never skew its timings, for two read-only counts the
+PM hands the operator for other tasks: v1-e31-t32's after count (`scripts/count_tags_by_rule.py`)
+and v1-e31-t23's ac3 count (`scripts/count_in_round_markers.py --expect-version
+2026.11.03-docx-9`), both from the main clone, writing outside the copy. While they run, nothing is
+deleted and no index build or other heavy command runs against the copy. When the operator says
+both are done, the copy and every scratch index are deleted (policy 1.18) and the deletion recorded.
+
 ## The measurement so far
 
 **The bucket check** (read-only: the run lock and a listing of each store's

@@ -51,7 +51,7 @@ them, each with its reason, and the job summary prints them:
 
 | Test | Why it stays on validate-dev only |
 |---|---|
-| `tests/scripts/test_affected_tests_planted_breaks.py::test_a_planted_break_is_caught_by_a_test_the_script_selects` (14 cases) and `::test_a_break_no_selected_test_reaches_is_not_counted_as_caught` | Reached by every task PR (11 of 11), through its spec. About 4.5 minutes of the operator's Mac in v1-e08-t26's runs (70 + 43 + 40 s for 13 cases, case 12 about 123 s alone). It proves the selection against the whole repository, which is the job of validate-dev's run on each pre-release. Its fast tests still run in the parts. |
+| `tests/scripts/test_affected_tests_planted_breaks.py::test_a_planted_break_is_caught_by_a_test_the_script_selects` (14 cases) and `::test_a_break_no_selected_test_reaches_is_not_counted_as_caught` | Reached by every task PR (11 of 11), through its spec. About 4.5 minutes of the operator's Mac in v1-e08-t26's runs (70 + 43 + 40 s for 13 cases, case 12 about 123 s alone). On a runner they are most of validate-dev's 379–453-s tier (question 2). It proves the selection against the whole repository, which is the job of validate-dev's run on each pre-release. Its fast tests still run in the parts. |
 | `packages/debate_core/tests/evidence/test_docx_renderer.py::test_libreoffice_opens_a_rendered_document_headless_and_reads_every_paragraph` | Needs LibreOffice, an apt install in validate-dev's slow job. |
 | `packages/debate_core/tests/integrations/local/test_search_index_sqlite_features.py::test_search_index_opens_in_the_lambda_image_sqlite` and `…/test_search_index_reader_sqlite_features.py::test_search_index_reader_statements_run_in_the_lambda_image_sqlite` | Need the arm64 Lambda base image, a docker pull run under QEMU. |
 
@@ -80,24 +80,45 @@ marker (checked with grep). A test pins that, so the text check cannot miss a sl
 | the three environment-gated files, without their environment | 3 | 3 skipped in 0.6 s |
 | **Worst realistic PR: all of the above but the gated ones, at `-n 4 --dist worksteal` like a runner part** | **43** | **51.4 s**, the scale test (43.3 s) being the critical path |
 
-**On a CI runner:** validate-dev's log cannot give per-file times. Its slow tier runs `-rfEs` with
-no `--durations`, so only the step timings and the total are there (run 43351384277: 60 tests in
-346 s). The read-only `gh` command under **Operator follow-ups** fetches the slow job's step
-timings and xdist worker counts from its last runs. The figure that matters is the Playwright
-install step, which this estimate guesses.
+**On a CI runner, from validate-dev's own logs.** The operator ran the read-only `gh` command
+under **Operator follow-ups** over validate-dev's last five runs on 2026-11-13: four green, and one
+with 2 failed and 58 passed. Each run had 4 xdist workers and 60 tests.
+
+| Slow job step | Five runs |
+|---|---|
+| Set up job, checkout, setup-uv, Python, `uv sync` (cached) | 8–14 s together |
+| Install Playwright's Chromium (`--with-deps`) | 21, 21, 21, 24, 32 s |
+| Install LibreOffice | 16–40 s |
+| Set up QEMU and pull the Lambda image | 18–23 s |
+| pytest, the whole tier | 379, 385, 409, 439, 453 s |
+
+The log still cannot give per-file times. The tier runs with no `--durations`, and pytest's output
+reaches the log through a pipe, so its lines carry the time they were flushed, not the time they
+happened. What the totals do show: the 43 tests that would run on a PR take about 51 s on the Mac at
+`-n 4`, and the costs page puts a runner's part at about a Mac's speed (about 0.09 s a test against
+0.099 s at `-n 4`). So most of the runner's 379–453 s is the 15 planted-break cases, probably
+330–400 s of it.
 
 **Estimated worst case on a runner** (a debate_core search change reaching the browser files and
 the scale test, about 400–760 chosen files):
 
-* job setup (checkout, uv, Python, `uv sync`): about 15–30 s, as a part's;
-* Playwright's Chromium with its system libraries: not measured; guessed at 30–60 s;
+* job setup (checkout, uv, Python, `uv sync`): 8–14 s, measured;
+* Playwright's Chromium with its system libraries: 21–32 s, measured;
 * collecting the chosen files under the slow marker: about 8–15 s;
 * pytest: about 50–80 s.
 
-That makes the job about 2–3 minutes. The parts of such a PR are eight, at 2–3 minutes each, so
-`ci`'s wall clock grows by **0–60 s** in that case. For the usual reach, the e2e files alone, the
-job is about a minute, under the parts, and adds nothing. Each such PR does cost one extra runner
-job.
+That makes the job about **1.5–2.5 minutes**. The parts of such a PR are eight, at 2–3 minutes
+each, so `ci`'s wall clock grows by **0–30 s** in that case. For the usual reach, the e2e files
+alone, the job is under a minute, under the parts, and adds nothing. Each such PR does cost one
+extra runner job.
+
+**What the left-out tests would cost on a PR,** for the options in question 1:
+
+* **The three environment-gated tests:** LibreOffice plus QEMU and the image is 34–63 s more setup,
+  measured, before their own few seconds. With the browser files as well, the job would come to
+  about 2.2–3.3 minutes, which is past the parts on a mid-sized PR.
+* **The planted-break cases:** about 330–400 s on a runner. Any PR that runs them would pass the
+  5-minute budget.
 
 **The bound I recommend:** the job's pytest step at most **120 s** on a runner, and the job at
 most **60 s** beyond the longest test part. The job keeps the 10-minute `timeout-minutes` every
@@ -228,6 +249,11 @@ done
 Success looks like up to five blocks, each a job line, about a dozen step lines (one of them
 "Install Playwright's Chromium for the browser tests") and a line such as
 "58 passed, 2 failed in 346.12s". Paste it all back into the session.
+
+**Result (run by the operator, 2026-11-13):** five runs, 131709322369, 131708396523,
+131703924425, 131700738069 and 131660741652. The first four passed; the last had 2 failed and
+58 passed. Every run had 4/4 workers and 60 items, and pytest took 409.04, 439.48, 385.27, 378.79
+and 453.25 s, in that order. The step timings are summarised in the proposal's question 2.
 
 ## Follow-up work
 

@@ -1390,22 +1390,25 @@ run "the_run_schedule_starts_after_the_login_and_is_disabled_by_default" {
     error_message = "The run's schedule ships disabled until v1-e40-t04's bucket mode and lock (the PM's ruling); the login's is enabled as t02 left it."
   }
 
+  # Since v1-e40-t48 the run's schedule is Scheduler's universal RunTask target, so what it starts is
+  # in its Input, RunTask's own request; the_run_schedule_starts_its_pull_with_scheduled pins it whole.
   assert {
     condition = (
-      aws_scheduler_schedule.run[0].target[0].arn == "arn:aws:ecs:us-east-1:111122223333:cluster/debate-mock-caselist-run"
-      && aws_scheduler_schedule.run[0].target[0].ecs_parameters[0].task_definition_arn == "arn:aws:ecs:us-east-1:111122223333:task-definition/debate-mock-caselist-run:3"
-      && aws_scheduler_schedule.run[0].target[0].ecs_parameters[0].launch_type == "FARGATE"
-      && aws_scheduler_schedule.run[0].target[0].ecs_parameters[0].platform_version == "LATEST"
-      && aws_scheduler_schedule.run[0].target[0].ecs_parameters[0].enable_execute_command == false
-      && aws_scheduler_schedule.run[0].target[0].ecs_parameters[0].network_configuration[0].assign_public_ip == true
-      && aws_scheduler_schedule.run[0].target[0].ecs_parameters[0].network_configuration[0].security_groups == toset(["sg-0000000000000000a"])
-      && length(aws_scheduler_schedule.run[0].target[0].ecs_parameters[0].network_configuration[0].subnets) > 0
+      aws_scheduler_schedule.run[0].target[0].arn == "arn:aws:scheduler:::aws-sdk:ecs:runTask"
+      && try(jsondecode(aws_scheduler_schedule.run[0].target[0].input).cluster, "") == "arn:aws:ecs:us-east-1:111122223333:cluster/debate-mock-caselist-run"
+      && try(jsondecode(aws_scheduler_schedule.run[0].target[0].input).taskDefinition, "") == "arn:aws:ecs:us-east-1:111122223333:task-definition/debate-mock-caselist-run:3"
+      && try(jsondecode(aws_scheduler_schedule.run[0].target[0].input).launchType, "") == "FARGATE"
+      && try(jsondecode(aws_scheduler_schedule.run[0].target[0].input).platformVersion, "") == "LATEST"
+      && try(jsondecode(aws_scheduler_schedule.run[0].target[0].input).enableExecuteCommand, true) == false
+      && try(jsondecode(aws_scheduler_schedule.run[0].target[0].input).networkConfiguration.awsvpcConfiguration.assignPublicIp, "") == "ENABLED"
+      && try(jsondecode(aws_scheduler_schedule.run[0].target[0].input).networkConfiguration.awsvpcConfiguration.securityGroups, []) == ["sg-0000000000000000a"]
+      && length(try(jsondecode(aws_scheduler_schedule.run[0].target[0].input).networkConfiguration.awsvpcConfiguration.subnets, [])) > 0
     )
     error_message = "The schedule starts Terraform's revision of the run on the run's cluster: on-demand Fargate, platform 1.4.0 or later, no ECS Exec, a public address, the run's security group."
   }
 
   assert {
-    condition     = aws_scheduler_schedule.run[0].target[0].ecs_parameters[0].network_configuration[0].subnets == aws_scheduler_schedule.login[0].target[0].ecs_parameters[0].network_configuration[0].subnets
+    condition     = toset(try(jsondecode(aws_scheduler_schedule.run[0].target[0].input).networkConfiguration.awsvpcConfiguration.subnets, [])) == aws_scheduler_schedule.login[0].target[0].ecs_parameters[0].network_configuration[0].subnets
     error_message = "The login runs in the run's subnets: one network for both tasks."
   }
 
@@ -1482,6 +1485,104 @@ run "run_schedule_enabled_turns_the_run_on" {
   assert {
     condition     = aws_scheduler_schedule.run[0].state == "ENABLED"
     error_message = "run_schedule_enabled = true enables the run's schedule (the cutover, v1-e40-t06)."
+  }
+}
+
+# v1-e40-t48, the PM's ruling of 2026-11-14. The schedule starts its pull with `--scheduled`, so
+# v1-e40-t44's recent-run guard refuses a second start within 24 hours. AWS's Scheduler pages do not
+# say a templated ECS target's Input reaches RunTask as overrides (read 2026-11-13), so the schedule
+# is the universal target, arn:aws:scheduler:::aws-sdk:ecs:runTask, and its Input is the whole
+# RunTask request, in the camelCase of ECS's RunTask API reference
+# (https://docs.aws.amazon.com/AmazonECS/latest/APIReference/API_RunTask.html, read 2026-11-13).
+#
+# At plan time: the ARNs and the security group the request names are given during the plan, as a
+# real plan knows them when the task definition is not replaced; the subnets are the run's two, in
+# zone order. The request below is written out by hand from that page, not
+# copied from the module.
+run "the_run_schedule_starts_its_pull_with_scheduled" {
+  command = plan
+
+  variables {
+    image_digest         = "sha256:2222222222222222222222222222222222222222222222222222222222222222"
+    run_schedule_enabled = true
+  }
+
+  override_resource {
+    target          = aws_ecs_task_definition.run
+    override_during = plan
+    values = {
+      arn = "arn:aws:ecs:us-east-1:111122223333:task-definition/debate-mock-caselist-run:3"
+    }
+  }
+
+  override_resource {
+    target          = aws_ecs_cluster.run
+    override_during = plan
+    values = {
+      arn = "arn:aws:ecs:us-east-1:111122223333:cluster/debate-mock-caselist-run"
+    }
+  }
+
+  override_resource {
+    target          = aws_security_group.run
+    override_during = plan
+    values = {
+      id = "sg-0000000000000000a"
+    }
+  }
+
+  assert {
+    condition     = aws_scheduler_schedule.run[0].target[0].arn == "arn:aws:scheduler:::aws-sdk:ecs:runTask" && length(aws_scheduler_schedule.run[0].target[0].ecs_parameters) == 0
+    error_message = "The run's schedule is Scheduler's universal RunTask target, with no templated ECS parameters (the PM's ruling of 2026-11-14)."
+  }
+
+  assert {
+    condition     = try(jsondecode(aws_scheduler_schedule.run[0].target[0].input).overrides.containerOverrides, null) == [{ name = "run", command = ["--json", "caselist", "pull", "--scheduled"] }]
+    error_message = "The schedule starts `debate-research --json caselist pull --scheduled`: the run container's command, and nothing else, overridden, so the recent-run guard (v1-e40-t44) is live."
+  }
+
+  assert {
+    condition = try(jsondecode(aws_scheduler_schedule.run[0].target[0].input), null) == {
+      cluster              = "arn:aws:ecs:us-east-1:111122223333:cluster/debate-mock-caselist-run"
+      taskDefinition       = "arn:aws:ecs:us-east-1:111122223333:task-definition/debate-mock-caselist-run:3"
+      count                = 1
+      launchType           = "FARGATE"
+      platformVersion      = "LATEST"
+      enableExecuteCommand = false
+      enableECSManagedTags = false
+      networkConfiguration = {
+        awsvpcConfiguration = {
+          subnets        = [aws_subnet.public["us-east-1a"].id, aws_subnet.public["us-east-1b"].id]
+          securityGroups = ["sg-0000000000000000a"]
+          assignPublicIp = "ENABLED"
+        }
+      }
+      overrides = {
+        containerOverrides = [{ name = "run", command = ["--json", "caselist", "pull", "--scheduled"] }]
+      }
+    }
+    error_message = "The Input is the RunTask request the templated target sent, in RunTask's camelCase: Terraform's revision by its full ARN (which the scheduler role's policy names), the run's cluster by ARN (its ecs:cluster condition), one on-demand Fargate task, platform LATEST, no ECS Exec, no managed tags, the run's subnets and security group with a public address, and the command override. Nothing more: no tags, so no ecs:TagResource."
+  }
+
+  assert {
+    condition = (
+      aws_scheduler_schedule.run[0].target[0].role_arn == "arn:aws:iam::111122223333:role/debate-mock-caselist-run-scheduler"
+      && aws_scheduler_schedule.run[0].target[0].retry_policy[0].maximum_retry_attempts == 3
+      && aws_scheduler_schedule.run[0].target[0].retry_policy[0].maximum_event_age_in_seconds == 3600
+      && aws_scheduler_schedule.run[0].target[0].dead_letter_config[0].arn == "arn:aws:sqs:us-east-1:111122223333:debate-mock-caselist-run-dlq"
+      && aws_scheduler_schedule.run[0].state == "ENABLED"
+    )
+    error_message = "The universal target keeps the run's scheduler role, v1-e40-t42's retry of a refused launch and its dead-letter queue."
+  }
+
+  assert {
+    condition     = jsondecode(aws_ecs_task_definition.run[0].container_definitions)[0].command == ["--json", "caselist", "pull"]
+    error_message = "The task definition's own command stays `--json caselist pull`: a run started by hand is never asked about a recent run."
+  }
+
+  assert {
+    condition     = length(aws_scheduler_schedule.login[0].target[0].ecs_parameters) == 1 && aws_scheduler_schedule.login[0].target[0].input == null
+    error_message = "The login's schedule is unchanged: its templated ECS target, with no Input."
   }
 }
 
@@ -2212,17 +2313,20 @@ run "no_schedule_starts_a_backfile_import" {
     image_digest = "sha256:2222222222222222222222222222222222222222222222222222222222222222"
   }
 
+  # Since v1-e40-t48 the run's schedule passes an Input, the universal target's RunTask request, whose
+  # one override is the weekly pull's `--scheduled`: never a backfile import.
   assert {
     condition = (
-      try(aws_scheduler_schedule.run[0].target[0].input, null) == null
+      try(jsondecode(aws_scheduler_schedule.run[0].target[0].input).overrides, null) == { containerOverrides = [{ name = "run", command = ["--json", "caselist", "pull", "--scheduled"] }] }
+      && !strcontains(aws_scheduler_schedule.run[0].target[0].input, "backfile")
       && try(aws_scheduler_schedule.login[0].target[0].input, null) == null
     )
-    error_message = "Neither schedule passes an input: an input is a RunTask override, and an override is how a schedule would start a backfile import. Imports are started by hand only."
+    error_message = "No schedule starts a backfile import: the run's one override is the weekly pull's `--scheduled`, and the login passes no input. Imports are started by hand only."
   }
 
   assert {
     condition = (
-      aws_scheduler_schedule.run[0].target[0].ecs_parameters[0].task_definition_arn == aws_ecs_task_definition.run[0].arn
+      try(jsondecode(aws_scheduler_schedule.run[0].target[0].input).taskDefinition, "") == aws_ecs_task_definition.run[0].arn
       && jsondecode(aws_ecs_task_definition.run[0].container_definitions)[0].command == ["--json", "caselist", "pull"]
       && !strcontains(aws_ecs_task_definition.run[0].container_definitions, "backfile")
     )

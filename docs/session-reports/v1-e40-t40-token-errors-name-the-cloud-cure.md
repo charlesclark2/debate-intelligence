@@ -6,7 +6,7 @@
 | Spec | [`plan_specs/v1/e40-cloud-caselist-run/t40-token-errors-name-the-cloud-cure.yaml`](../../plan_specs/v1/e40-cloud-caselist-run/t40-token-errors-name-the-cloud-cure.yaml) |
 | Epic / release | `v1-e40-cloud-caselist-run` / `v1.8` |
 | Branch | `task/v1-e40-t40-token-errors-name-the-cloud-cure` |
-| Session status | PARTIAL: built and tested; waiting for one PM ruling (the wording of the cure for the two token codes) |
+| Session status | COMPLETE |
 
 ## Summary
 
@@ -19,23 +19,25 @@ Wednesday-login cure as its notice's fix line, where it used to give t28's "the 
 started by hand". t35's context manager is widened into one table of code → cloud cure,
 `sync_runs.CLOUD_TOKEN_CURES`, and every cure is read from it: the output, the pull's failed-stage hint
 and the notice. On the Mac every word is unchanged, pinned by its old text before anything changed.
-**The PM's ruling is needed on one thing:** the runbook had no section for a cloud run stopped on these
-two codes, so their cure's wording and its new runbook section are my proposal (Questions for the PM).
-Everything else is built on that proposal, so the ruling changes two strings and the runbook section
-at most. The Goal stays `InProgress` until the ruling.
+The runbook had no section for a cloud run stopped on these two codes, so I proposed the cure's wording
+and a new section. The PM accepted both (ruling A, 2026-11-12) and asked for one addition to the section.
+One premise of that addition does not hold in this build: a run role that cannot decrypt the secret stops
+on `STORE_ACCESS_DENIED`, not on `CASELIST_TOKEN_UNREADABLE`. The section states what the code does and
+keeps the ruling's escalation and its "never by hand" rule. **The PM should read that Deviation first.**
+The Goal is `Succeeded`.
 
 ## Plan nodes
 
 | Node | Status | Notes |
 |---|---|---|
-| `token-errors-name-the-cloud-cure` (Token cures) | Done, pending the wording ruling | Red tests `6ef985d`, implementation `45f1a34`, runbook `d848ec8` (after the sync onto dev with t44; before it they were `90f19c4`, `df62006`, `7ad057e`). |
+| `token-errors-name-the-cloud-cure` (Token cures) | Done | Red tests `6ef985d`, implementation `45f1a34`, runbook `d848ec8` (after the sync onto dev with t44; before it they were `90f19c4`, `df62006`, `7ad057e`). The ruling's addition to the runbook, with its pin, and the phase are in the last commit. |
 
 ## Acceptance criteria
 
 | Criterion | Status | Evidence (command → result) |
 |---|---|---|
-| ac1: in bucket mode each code in the table prints its cloud cure and never a hand login, a download refused for an expired login gets the Wednesday-login cure in its notice, the Mac's output is unchanged and pinned by its old text, by tests shown failing first | PASS (on the proposed wording) | **Red** at `90f19c4` against the start code: `hard_stop.py 115 … pytest packages/debate_cli/tests/bucket_mode/test_bucket_mode_token_errors_name_the_cloud_cure.py -n 4 -p no:randomly` → `14 failed, 9 passed`. The 9 that passed are the seven Mac pins (pull JSON, panel and record for each token code, the backfile import for each, the notice of a refused download), the out-of-table code and the other-code download. Of the 14 failures, 13 were assertion failures: the message still carried the login, the hint was `None`, the email's fix line was t28's, or the runbook section was missing. One, the table test, failed on `ImportError` of the not-yet-existing `CLOUD_TOKEN_CURES`. **Green** after the implementation and the runbook: `38 passed` (this file's 23 and t35's 15). After the sync: `158 passed` (this file, t35's and every test file t44 changed). |
-| Node: "Token cures tests pass" (`uv run pytest packages/debate_cli/tests -k token or auth_expired`) | PASS | `hard_stop.py 115 .venv/bin/python -m pytest packages/debate_cli/tests -k "token or auth_expired" -q -p no:randomly` → `55 passed in 24.87s`, after the sync `55 passed in 28.62s`: this task's 23, t35's 15, and 17 existing tests the keywords match. |
+| ac1: in bucket mode each code in the table prints its cloud cure and never a hand login, a download refused for an expired login gets the Wednesday-login cure in its notice, the Mac's output is unchanged and pinned by its old text, by tests shown failing first | PASS | **Red** at `90f19c4` against the start code: `hard_stop.py 115 … pytest packages/debate_cli/tests/bucket_mode/test_bucket_mode_token_errors_name_the_cloud_cure.py -n 4 -p no:randomly` → `14 failed, 9 passed`. The 9 that passed are the seven Mac pins (pull JSON, panel and record for each token code, the backfile import for each, the notice of a refused download), the out-of-table code and the other-code download. Of the 14 failures, 13 were assertion failures: the message still carried the login, the hint was `None`, the email's fix line was t28's, or the runbook section was missing. One, the table test, failed on `ImportError` of the not-yet-existing `CLOUD_TOKEN_CURES`. **Green** after the implementation and the runbook: `38 passed` (this file's 23 and t35's 15). After the sync: `158 passed` (this file, t35's and every test file t44 changed). |
+| Node: "Token cures tests pass" (`uv run pytest packages/debate_cli/tests -k token or auth_expired`) | PASS | `hard_stop.py 115 .venv/bin/python -m pytest packages/debate_cli/tests -k "token or auth_expired" -q -p no:randomly` → `55 passed in 24.87s`; after the sync `55 passed in 28.62s`; after the ruling's runbook addition `55 passed in 42.83s`. That is this task's 23, t35's 15, and 17 existing tests the keywords match. |
 
 ## Files changed
 
@@ -70,7 +72,32 @@ at most. The Goal stays `InProgress` until the ruling.
 
 ## Deviations from the spec
 
-None. Everything is inside the spec's packages. `CaselistTokenUnreadable` lives in
+**The PM's runbook addition, as written in the ruling, does not match this build** (the ruling of
+2026-11-12, option A). The ruling says `CASELIST_TOKEN_UNREADABLE` "can also mean the run role can no
+longer decrypt the secret (a change to its IAM policy or the key policy)". In this build it cannot.
+`ManagedSecret.read` translates `AccessDeniedException` and `DecryptionFailure` from `GetSecretValue`
+into `StoreAccessDenied` (`integrations/secrets_manager`, `_ACCESS_DENIED_CODES`, pinned by
+`test_managed_secret.py`). `CaselistTokenUnreadable` is raised only when a value was read and is not a
+token record this program wrote (`StoredCaselistToken.from_json`). I probed it through the real command:
+a bucket-mode `caselist pull` whose secret read answers `DecryptionFailure` printed
+`{"code": "STORE_ACCESS_DENIED", "message": "not allowed to GetSecretValue secret
+debate-dev-caselist-token", "exit_code": 3, …, "hint": null}` and recorded `error_class`
+`StoreAccessDenied`. The probe was an uncommitted scratch test, `ClientError` from a stand-in client
+(moto cannot refuse a KMS decrypt), run once and deleted. Following the standing rule (write the real
+rule, flag it, let the PM amend), the section:
+
+* keeps the ruling's escalation in substance. A second Wednesday stopped on
+  `CASELIST_TOKEN_UNREADABLE`, after a login that sent no failure email, goes to the PM with the run's
+  id and error class before anything is changed. Never an IAM or key-policy change by hand;
+* says the decrypt case is a different code: `STORE_ACCESS_DENIED`, error class `StoreAccessDenied`,
+  with the message above. The next login does not cure it, it goes to the PM the same way, and the
+  error class tells the two apart. The same "never by hand" rule applies.
+
+The cure text and the test's two pinned strings are unchanged, as ruled. If the PM wants the paragraph
+worded otherwise, it is two paragraphs in `caselist-cloud-run.md` and two pinned phrases in
+`test_the_cloud_runbook_has_the_section_the_no_token_cure_names`.
+
+Otherwise none. Everything is inside the spec's packages. `CaselistTokenUnreadable` lives in
 `debate_core.integrations.opencaselist.token_store`, which is not one of them and is unchanged. So the
 application words its bucket-mode clause from the error's `backend`, and a test ties the two sentences
 together (below).
@@ -167,46 +194,14 @@ the one conflict above, which I resolved and continued. The branch has never bee
 
 ## Questions for the PM
 
-One ruling. The runbook has a section for an expired login, and an import refusal bullet covering all
-three codes, but no section for a cloud **run** stopped on `CASELIST_TOKEN_MISSING` or
-`CASELIST_TOKEN_UNREADABLE`. So, as the ruling says, I propose the wording and the section that would hold
-it, and built everything on that proposal:
-
-```text
-PM question from v1-e40-t40-token-errors-name-the-cloud-cure (2026-11-12)
-
-The cloud runbook has no section for a cloud run stopped on CASELIST_TOKEN_MISSING or
-CASELIST_TOKEN_UNREADABLE (only the import refusal bullet, which covers all three token codes for an
-import). Proposed: one cure for both codes, and one new section in caselist-cloud-run.md, placed
-after "A run refused for an expired login":
-
-  Section: "A run with no readable caselist_token" (written on the branch, d848ec8)
-
-  Cure (CLOUD_NO_TOKEN_CURE), shown as the command's hint "In bucket mode <cure>.":
-  the next Wednesday 03:00 login writes a new caselist_token to the token secret, and the run after
-  it takes up what this run did not finish, from the run state saved in the bucket; a backfile import
-  refused for it starts again after Thursday 00:00 (caselist-cloud-run.md, "A run with no readable
-  caselist_token"); never a login by hand, which would be a second login
-
-  It is t33's cure with "renews the caselist_token" replaced by "writes a new caselist_token to the
-  token secret" (an empty or unreadable secret is not renewed but replaced), and its own section.
-
-Options:
-  A. Accept the wording and the section as written.            (recommended)
-  B. One section for all three codes: widen "A run refused for an expired login" and point both
-     token codes at it with t33's cure word for word. Renaming that heading changes t33's runbook
-     reference and its pinned email text, so it would be a wider change.
-  C. Different words: give the cure text and the section heading.
-
-Why A: the login task replaces whatever the secret holds, so both codes share a cure; the cure keeps
-t33's shape (what puts it right, the section, what never to do); and its section sends the two real
-escalations (the Wednesday login failed; a Wednesday run stopped although its login sent no failure
-email) to the PM, as t33's does.
-
-On A, the session sets the Goal to Succeeded and finishes the report. On B or C it changes
-CLOUD_NO_TOKEN_CURE / CLOUD_NO_TOKEN_RUNBOOK, the test's two pinned strings and the runbook, reruns
-the file, and finishes.
-```
+One question was asked: the wording of the cure for the two token codes, and the runbook section that
+would hold it. The runbook had a section for an expired login and an import refusal bullet, but none for
+a cloud run stopped on either token code. The PM ruled **A** (2026-11-12): `CLOUD_NO_TOKEN_CURE` as
+written, and the new section "A run with no readable caselist_token" after "A run refused for an expired
+login" (`d848ec8`). The PM added one thing to the section only: a second Wednesday stopped on
+`CASELIST_TOKEN_UNREADABLE` goes to the PM with the run's error class, never an IAM or key-policy change
+by hand. The addition is written in, with the correction under Deviations, and pinned by two assertions
+in the runbook test. The pin was checked to fail on the previous runbook. No question is open.
 
 ## Operator follow-ups
 
@@ -222,6 +217,11 @@ today and no deploy.
   disagree. A follow-up could give that arm the table's cure for a code in it, as t33's arm does for an
   expired login. That would take a decision on the title, since t33 gave the expired login a title of
   its own. This task did not touch it, per the ruling that the notice change is in the failed-stage arm.
+* **A bucket-mode run the token secret refused (`STORE_ACCESS_DENIED` at `GetSecretValue`) exits `3`,
+  "may be cured by a retry"**, with no hint (the cloud's secret client has no login hint). A KMS or IAM
+  change that stopped the run role reading the secret is not cured by waiting, so its notice probably
+  says "will be retried" where a person is needed. This is from the probe above, not measured on a
+  notice. E40, `debate_cli.exit_codes` and the secret adapter's hint.
 * **`INSECURE_TOKEN_FILE`** names `caselist auth login` in bucket mode too. It is outside the table by
   the spec. The cloud's backend never raises it, so I judge it not worth a cure unless a bucket-mode run
   on the Mac with the file backend is a case the PM wants covered.

@@ -529,3 +529,8 @@ def test_the_cloud_runbook_has_the_section_the_no_token_cure_names() -> None:
     flat = flattened(text)
     assert f"> {THE_NO_TOKEN_CURE_IN_THE_CLOUD}" in flat
     assert "and the messages of the other two codes still do" not in flat
+    assert (
+        "**A second Wednesday stopped on `CASELIST_TOKEN_UNREADABLE`**, after a login that sent no failure"
+        in flat
+    )
+    assert "the run stops on `STORE_ACCESS_DENIED`, error class `StoreAccessDenied`" in flat

@@ -1541,6 +1541,17 @@ has closed, as in [Backfile imports](#backfile-imports).
 * the stopped run is a Wednesday run whose login that morning sent no failure email: that login should
   have written the token, so something changed the secret after it.
 
+**A second Wednesday stopped on `CASELIST_TOKEN_UNREADABLE`**, after a login that sent no failure email,
+is not cured by the next login either. It goes to the PM with the run's id and its error class
+(`caselist runs --remote --json`'s `error_class`) before anything is changed. Never change the run
+role's IAM policy or the token key's policy by hand for it.
+
+A run role that can no longer decrypt the secret (a change to its IAM policy or to the key policy) is
+not this code. In this build its read is refused, and the run stops on `STORE_ACCESS_DENIED`, error
+class `StoreAccessDenied`, `not allowed to GetSecretValue secret debate-dev-caselist-token`. The next
+login does not cure that either. It goes to the PM the same way, with its error class, which tells the
+two apart. Again, never change an IAM policy or the key policy by hand.
+
 **Never `caselist auth login` or `caselist auth logout` on the operator's Mac** for it. A login is a
 second login that week for the same account
 ([Step 3](#step-3--does-a-new-login-end-the-macs-token-before-apply-b)), and without `--token-backend

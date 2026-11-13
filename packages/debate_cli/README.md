@@ -277,8 +277,10 @@ With `--providers` it also reports the per-user credentials file, `~/.debate-res
 (read, not there, or not read in the test environment), and one row for each enabled discovery
 provider: whether its key or the contact email is set and which source set it, never its value, or
 what a search does without it, for example `Crossref | no contact email: Crossref's public pool` and
-`GovInfo | no GovInfo key: GovInfo not asked` (`v1-e41-t22`). A blank value counts as missing. It
-never fails on a row; a per-user file that is refused stops it as it stops every command that loads
+`GovInfo | no GovInfo key: GovInfo not asked` (`v1-e41-t22`). A blank value counts as missing. With
+Semantic Scholar's HTTP opt-in on and Semantic Scholar enabled with its key, one more row reads
+`Warning | Semantic Scholar asked over HTTP: the key is sent unencrypted`, and the JSON's
+`providers.asked_over_http` carries it (`v1-e07-t20`). It never fails on a row; a per-user file that is refused stops it as it stops every command that loads
 settings. Plain `doctor` loads no settings and reads no per-user file.
 
 Without the options it fails on two checks only, the ones it can state precisely:
@@ -538,7 +540,8 @@ goes in a profile. Each machine keeps its own in the per-user file `~/.debate-re
 (`~/.debate-research/dev.env` for dev), which every command reads whatever folder it runs in
 (`v1-e41-t22`): [docs/guides/provider-credentials.md](../../docs/guides/provider-credentials.md) says
 how to write it. It holds only `DEBATE_PROVIDERS__CONTACT_EMAIL`, `DEBATE_PROVIDERS__OPENALEX_API_KEY`,
-`DEBATE_PROVIDERS__SEMANTIC_SCHOLAR_API_KEY` and `DEBATE_PROVIDERS__API_DATA_GOV_KEY`, and it is
+`DEBATE_PROVIDERS__SEMANTIC_SCHOLAR_API_KEY`, `DEBATE_PROVIDERS__API_DATA_GOV_KEY` and Semantic
+Scholar's HTTP opt-in, `DEBATE_PROVIDERS__SEMANTIC_SCHOLAR_INSECURE_HTTP` (below), and it is
 refused unless only its owner can read it (`chmod 600`). An exported variable, or a `.env` in the
 checkout or folder a command runs in, still wins over it. `debate-research config show` names where
 each credential came from, with its value masked, and `debate-research doctor --providers` says, for
@@ -560,6 +563,21 @@ each enabled provider, whether its key or the email is set and what a search doe
   queries; the results from every other provider are complete.
 * GovInfo without `DEBATE_PROVIDERS__API_DATA_GOV_KEY` is `not configured` on a topic that lists it,
   as below. The footer names it with its cure, and it does not make the search partial.
+
+**Semantic Scholar over HTTP, the operator's choice for their own key** (`v1-e07-t20`). Semantic
+Scholar is not configured without a key, and no profile enables it yet. On 2026-11-12 its HTTPS address
+answered every keyed request with the keyless `429`, while plain HTTP answered the same request with
+results. Until Semantic Scholar fixes HTTPS, a person may write
+`DEBATE_PROVIDERS__SEMANTIC_SCHOLAR_INSECURE_HTTP=true` in their own per-user file, beside their key;
+no committed profile sets it. Semantic Scholar alone is then asked at `http://api.semanticscholar.org`,
+and its key is sent unencrypted, still only in its header. Every other provider stays on HTTPS. No
+redirect is followed: one to HTTPS reads `semantic_scholar: error: HTTP 301: redirected to HTTPS at
+api.semanticscholar.org, not followed`. A search that asked Semantic Scholar says so under its footer
+line, `Semantic Scholar asked over HTTP: the key is sent unencrypted`, and its JSON's `asked_over_http`
+gives the provider and the sentence (an empty list otherwise). The setting comes out in one change when
+HTTPS works (`v1-e07-t26`).
+[docs/guides/provider-credentials.md](../../docs/guides/provider-credentials.md#semantic-scholar-over-http-your-choice-for-your-own-key)
+says more.
 
 **A provider that answers `429` is held** (`v1-e07-t22`). It is asking us to slow down, so a search
 holds it back: its queries still waiting for their turn are skipped, never sent, the footer names it

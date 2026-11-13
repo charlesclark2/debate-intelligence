@@ -403,6 +403,11 @@ name and each card's evidence paragraph is compared with its `evidence_text` und
   underlining, highlighting or sizes leave the card VERIFIED;
 * a bracketed interpolation, `[like this]`, leaves it VERIFIED with the warning
   `INTERPOLATION_PRESENT` and the offset it is read before;
+* a deletion that takes out a word that negates ("not", "never", "nobody", a word ending in "n't", by
+  the same list the card editor flags) leaves it VERIFIED with the warning `NEGATION_REMOVED`, one per
+  deletion, shown as its `evidence_text` range; `--json` gives that range and the same deletion's
+  range in the snapshot (`evidence_range`, `snapshot_range`). A warning never changes the exit code.
+  It is read only where the card's evidence was rebuilt from its snapshot exactly;
 * any other change to the quoted words (a word changed or added, letters taken out of a word, two
   words joined, a paragraph added under the evidence) makes it UNVERIFIED with `MANUAL_EDIT`, the
   `evidence_text` range it replaced and the body range that replaced it, and the run exits `1`;

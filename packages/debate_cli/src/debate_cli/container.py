@@ -1311,6 +1311,21 @@ class ServiceContainer:
             release_manifest_lines=lambda key: read_manifest_lines(self.evidence_object_path(key)),
         )
 
+    def season_index_publish(self, season: str) -> SearchIndexPublishService:
+        """Build the publish of one backfile season's index, to its own pointer (`v1-e39-t18`).
+
+        :meth:`search_index_publish`'s service, its pointer `reports/tub/search/seasons/<season>.json`
+        and its shrink guard that pointer's index. Built anew for each season, never a singleton.
+        """
+        from debate_core.integrations.docx_parser import DebateDocxParser
+
+        return SearchIndexPublishService(
+            bucket=self._evidence_bucket(),
+            parser_version=DebateDocxParser().parser_version,
+            minimum_share_percent=self.settings.caselist.search_index_minimum_share_percent,
+            season=season,
+        )
+
     def search_index_publish(self) -> SearchIndexPublishService:
         """Build the publish of a built index to this environment's bucket (`v1-e39-t02`).
 

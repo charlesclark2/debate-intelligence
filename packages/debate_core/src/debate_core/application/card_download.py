@@ -35,6 +35,15 @@ download, under the CSRF and body-hash rules of every POST. Here each reference 
 through the index holder's lease, under the suppression list that lease read, before any source is
 read. A card on a page rendered before a removal is refused at the download and named.
 
+## A backfile season's cards (`v1-e39-t18`)
+
+A card of a backfile season the pilot offers is looked up in that season's index, through
+:class:`~debate_core.application.season_indexes.SeasonIndexes`, and every other card in the current
+index, as before. A cart of several indexes leases each in turn, the current index first and then
+each season in the order the cart first names it, so at most one season's index is held while it is
+read; each lease applies its own reading of the one suppression list. Download is switched off when
+any index the cart reaches was built by another parser.
+
 ## In order, and what stops each step
 
 1. **Download is on.** The lease's index names the parser version every occurrence's element indices
@@ -109,6 +118,7 @@ from debate_core.application.ports.evidence_file_writer import (
 from debate_core.application.ports.parsed_store import OccurrenceRecord
 from debate_core.application.ports.persistence import BlobKey, SnapshotStore
 from debate_core.application.search_index_holder import ScreenedSearch, SearchIndexHolder
+from debate_core.application.season_indexes import SeasonIndexes
 from debate_core.application.tub.access_audit import AccessAuditService
 from debate_core.application.tub.audit import CARD_REFERENCE_PATTERN, MAX_DOWNLOAD_CARDS
 from debate_core.application.tub.sessions import Session
@@ -410,6 +420,7 @@ class CardDownloadService:
         self,
         *,
         search_index: SearchIndexHolder,
+        seasons: SeasonIndexes | None = None,
         writer: WriterFactory,
         source_stores: Callable[[str], SnapshotStore],
         access_audit: AccessAuditService,
@@ -427,6 +438,7 @@ class CardDownloadService:
         if source_xml_bytes < 1 or fetch_bytes < 1 or file_bytes < 1:
             raise ValueError("a download's byte limits are positive")
         self._search_index = search_index
+        self._seasons = seasons if seasons is not None else SeasonIndexes.none()
         self._writer = writer
         self._source_stores = source_stores
         self._audit = access_audit
@@ -505,14 +517,21 @@ class CardDownloadService:
     # The lease ------------------------------------------------------------------------------
 
     def _screen(self, keys: Sequence[CardKey]) -> _Screened:
-        """Each card's source under the list this lease read, unless download is off."""
-        with self._search_index.lease() as search:
-            if not self.is_on(search):
-                return _Screened(switched_off=True)
-            return _Screened(
-                switched_off=False,
-                sources=tuple(search.card_source(key.caselist, key.cluster_id) for key in keys),
-            )
+        """Each card's source under the list its index's lease read, unless download is off."""
+        sources: list[CardSource | None] = [None] * len(keys)
+        by_index: dict[str | None, list[int]] = {}
+        for position, key in enumerate(keys):
+            season = key.caselist if self._seasons.holds(key.caselist) else None
+            by_index.setdefault(season, []).append(position)
+        for season in sorted(by_index, key=lambda one: one is not None):
+            lease = self._search_index.lease() if season is None else self._seasons.lease(season)
+            with lease as search:
+                if not self.is_on(search):
+                    return _Screened(switched_off=True)
+                for position in by_index[season]:
+                    key = keys[position]
+                    sources[position] = search.card_source(key.caselist, key.cluster_id)
+        return _Screened(switched_off=False, sources=tuple(sources))
 
     # The sources ----------------------------------------------------------------------------
 

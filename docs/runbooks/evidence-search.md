@@ -2256,6 +2256,47 @@ kind you opened, and `"caselist":"hspolicy26"` with the snapshot's date (none on
 page). Record the deploy digest and these results in [What to record](#what-to-record). A `503` on
 every landscape page after the deploy means the apply has not reached the role: check step 9.
 
+## Backfile seasons (`v1-e39-t18`)
+
+The PM's ruling of 2026-11-12 (shape 4): each backfile season is searched from an index of its own,
+which the function loads when a student picks that season on the search page and holds one at a time.
+The current seasons' index, the weekly stage and its shrink guard are untouched: `current.json` never
+names a season index, and a search that names no season never reaches one. The measurements behind
+the ruling are in [the task's session report](../session-reports/v1-e39-t18-backfiles-in-the-pilot-index.md).
+
+**Where a season lives.** Its objects under `reports/tub/search/<index id>/`, as every index's, and its
+pointer at `reports/tub/search/seasons/<season>.json`, written last. The function reads both under the
+grant it already has. `tub index prune` keeps what each season pointer names and deletes the season's
+superseded versions with the rest.
+
+**Building and publishing one season**, from a restored copy that holds that season's parsed store
+(`caselist restore-run-state --caselist <season>`, policy 1.18: deleted after):
+
+```
+env DEBATE_ENV=dev DEBATE_STORAGE__DATA_DIR="$COPY" debate-research --json tub index build --caselist hspolicy25 --out "$COPY/season-index"
+env DEBATE_ENV=dev DEBATE_STORAGE__DATA_DIR="$COPY" debate-research tub index publish --env dev --season hspolicy25 --index "$COPY/season-index/<index id>"
+```
+
+`--season` refuses an index holding any store but that season's, and its shrink guard compares with
+what that season's pointer names, never with `current.json`. It needs `--index`; `--newest` is the
+weekly index's.
+
+**Offering it.** Set the module's `earlier_seasons` (for example `["hspolicy25", "hsld25"]`) in the
+environment's root and apply: the function's `TUB_EARLIER_SEASONS` lists them, and the search page's
+*Season* choice offers each by its slug and years, `hspolicy25 (2025-26)`. Name a season only once its
+pointer is published: a season picked before it is there answers "Search is not available right now".
+With the list empty the function has no `TUB_EARLIER_SEASONS`, and the page has no *Season* choice.
+
+**A removal of a backfile card.** The one suppression list hides it from that season's search, its
+page and its copy within five minutes, as for a current card (gate item 1). To take it out of the
+season's index file as well, rebuild that season from a fresh restore and publish it with `--season`
+(`--allow-shrink` with the removal's request id if the guard refuses), then run the removal runbook's
+P4 prune, which deletes the season's superseded versions.
+
+**Retiring a season.** Take it out of `earlier_seasons` and apply, so no student can pick it; then
+delete its pointer with the takedown credential and run P4: a season pointer whose current version
+is a delete marker keeps nothing, so its index's versions are deleted with the rest.
+
 ## What a refusal looks like in the app log
 
 The function logs to `debate-<env>-tub-app` (30 days), one line a record, `<LEVEL> <logger>: <message>`: every `WARNING`, and the index holder's `INFO` lines alone (`v1-e39-t10`). It never logs a query, a card id, a card's

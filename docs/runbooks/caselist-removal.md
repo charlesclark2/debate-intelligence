@@ -719,6 +719,13 @@ Wednesday in Chicago, the cloud run's day, and while the bucket's run lock is he
 while it deletes and reads `current.json` again before the first delete, so a publish since the dry
 run deletes nothing.
 
+Since `v1-e39-t18` the dry run also keeps **each backfile season's pointer**,
+`reports/tub/search/seasons/<season>.json`, and the directory its current version names, and deletes
+the older versions of each and what only they named. A season pointer it cannot read, or one naming
+an index the listing lacks, refuses the plan. A removal that reaches a backfile card: see the
+evidence search runbook's [Backfile seasons](evidence-search.md#backfile-seasons-v1-e39-t18) for
+rebuilding that season before this step.
+
 The installed build must have the command (a build from `v1-e39-t15` on); the block checks.
 
 **Operator command** (expected runtime seconds; reads only)

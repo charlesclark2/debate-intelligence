@@ -27,6 +27,14 @@ Before anything is uploaded:
   digest is not the one the manifest records, or that does not decompress to the SQLite file the
   manifest records.
 
+## A backfile season's own index (`v1-e39-t18`)
+
+`tub index publish --season <season>` publishes one season's index, built from that season's store
+alone (:class:`SeasonIndexHoldsOtherStores` refuses any other), to the season's own pointer,
+`reports/tub/search/seasons/<season>.json`, written last in the same order. The shrink guard compares
+it with what that pointer names, so each season has its own guard, and `current.json` is neither read
+nor written: the weekly stage and its guard never meet a season.
+
 ## The shrink guard (`v1-e39-t14`)
 
 Then the bucket's `current.json` and the manifest it names are read (:meth:`~SearchIndexPublishService.
@@ -78,6 +86,7 @@ from pydantic import Field, ValidationError
 
 from debate_core.application.errors import DomainError, NotFound
 from debate_core.application.ports.evidence_store import EvidenceObjectStore, ObjectInfo
+from debate_core.application.season_indexes import season_pointer_key
 from debate_core.domain.base import DomainModel, NonEmptyText, Sha256Hex
 from debate_core.domain.search_index import (
     SEARCH_INDEX_FORMAT_VERSION,
@@ -110,6 +119,7 @@ __all__ = [
     "SearchIndexStoreEmpty",
     "SearchIndexVersionMismatch",
     "SearchIndexWouldShrink",
+    "SeasonIndexHoldsOtherStores",
     "StoreShrink",
     "UnreadableSearchIndexManifest",
     "check_index_size",
@@ -492,6 +502,19 @@ def read_search_index_manifest(directory: Path) -> SearchIndexManifest:
         ) from None
 
 
+class SeasonIndexHoldsOtherStores(DomainError):
+    """A season's publish of an index that holds any store but that season's (`v1-e39-t18`)."""
+
+    def __init__(self, index_id: str, season: str, stores: tuple[str, ...]) -> None:
+        self.index_id = index_id
+        self.season = season
+        self.stores = stores
+        super().__init__(
+            f"search index {index_id} holds {', '.join(stores) or 'no store'}, not {season} alone: a "
+            f"season's index is built from that one store (tub index build --caselist {season})"
+        )
+
+
 class SearchIndexPublishService:
     """Publishes a built index to one bucket, the pointer last."""
 
@@ -503,16 +526,24 @@ class SearchIndexPublishService:
         fingerprint_version: str = FINGERPRINT_VERSION,
         format_version: int = SEARCH_INDEX_FORMAT_VERSION,
         minimum_share_percent: int = DEFAULT_MINIMUM_SHARE_PERCENT,
+        season: str | None = None,
     ) -> None:
         """`parser_version` and `fingerprint_version` are the running build's: an index must match both.
 
         `minimum_share_percent` is the shrink guard's share (:func:`check_index_size`), the setting
         `caselist.search_index_minimum_share_percent`.
+
+        `season` makes this the publish of one backfile season's own index (`v1-e39-t18`): its pointer
+        is that season's, `reports/tub/search/seasons/<season>.json`, which the shrink guard compares
+        against and the publish writes last, and the index must hold that season's store alone.
+        `current.json` is then never read or written.
         """
         if not 0 <= minimum_share_percent <= 100:
             raise ValueError(f"minimum_share_percent is 0 to 100; got {minimum_share_percent}")
         self._bucket = bucket
         self._minimum_share_percent = minimum_share_percent
+        self._season = season
+        self._pointer_key = season_pointer_key(season) if season is not None else SEARCH_INDEX_POINTER_KEY
         self._running = {
             "parser version": parser_version,
             "fingerprint version": fingerprint_version,
@@ -531,6 +562,9 @@ class SearchIndexPublishService:
             if built[field] != running:
                 raise SearchIndexVersionMismatch(manifest.index_id, field, built[field], running)
         _check_gzip_object(directory / SEARCH_INDEX_GZIP_NAME, manifest)
+        stores = tuple(store.caselist for store in manifest.stores)
+        if self._season is not None and stores != (self._season,):
+            raise SeasonIndexHoldsOtherStores(manifest.index_id, self._season, stores)
         return manifest
 
     async def current(self, *, for_index: str = "this") -> CurrentSearchIndex | None:
@@ -543,7 +577,7 @@ class SearchIndexPublishService:
         with tempfile.TemporaryDirectory(prefix="tub-index-current-") as scratch:
             landed = Path(scratch) / "current.json"
             try:
-                await self._bucket.get_file(SEARCH_INDEX_POINTER_KEY, landed)
+                await self._bucket.get_file(self._pointer_key, landed)
             except NotFound:
                 return None
             try:
@@ -730,7 +764,7 @@ class SearchIndexPublishService:
             _landed(
                 manifest.index_id,
                 "current.json",
-                await self._bucket.put_file(SEARCH_INDEX_POINTER_KEY, pointer_path),
+                await self._bucket.put_file(self._pointer_key, pointer_path),
                 hashlib.sha256(pointer.to_json_bytes()).hexdigest(),
             )
         replaced = (
@@ -755,7 +789,7 @@ class SearchIndexPublishService:
             index_id=manifest.index_id,
             object_key=object_key,
             manifest_key=manifest_key,
-            pointer_key=SEARCH_INDEX_POINTER_KEY,
+            pointer_key=self._pointer_key,
             pointer=pointer,
             replaced=replaced,
             allowed_shrink=allowed,

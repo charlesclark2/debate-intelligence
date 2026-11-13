@@ -16,6 +16,15 @@
 <p id="mode-help" class="help">Paste a sentence or two: finds cards that share most of its words, in any order. Quotes, - and * are read as plain words.</p>
 </div>
 </div>
+{% if season_choices %}<div class="search-season">
+<label for="season">Season</label>
+<select id="season" name="season" aria-describedby="season-help">
+<option value=""{% if not form.season %} selected{% endif %}>This season</option>
+{% for value, label, loading in season_choices %}<option value="{{ value }}"{% if form.season == value %} selected{% endif %}{% if loading %} data-tub-loading="Loading {{ label }}. The first search of an earlier season takes a few seconds."{% endif %}>{{ label }}</option>
+{% endfor %}</select>
+<p id="season-help" class="help">An earlier season is searched on its own, one season at a time.</p>
+<p class="notice" role="status" data-tub-season-loading hidden></p>
+</div>{% endif %}
 <fieldset class="filters">
 <legend>Filters</legend>
 <div class="filter">
@@ -51,6 +60,7 @@
 {% if searched %}
 <section class="results" aria-labelledby="results-heading">
 <h2 id="results-heading">Results</h2>
+{% if searching_season %}<p class="searching-season">Searching {{ searching_season }}.</p>{% endif %}
 {% if count_words %}<p class="result-count">{{ count_words }}</p>{% endif %}
 {% if query_shortened %}<p class="notice" role="status">Your search was long, so only its first part was used.</p>{% endif %}
 {% if no_search_terms %}<p class="notice" role="status">There is no word to search for. A search of only left-out words (-word) finds nothing.</p>{% endif %}

@@ -3,6 +3,10 @@
 :func:`~debate_core.application.caselist_sync.run_pull` hands each run to a :class:`BucketRun`, which
 does, in order:
 
+0. **A scheduled pull, first** (`v1-e40-t44`, :mod:`~debate_core.application.caselist.recent_run`):
+   read the bucket's run log, and refuse (:class:`~debate_core.application.caselist.recent_run.
+   RecentRunRecorded`) when it records a run that counts (:func:`latest_counting_run`) started within
+   24 hours, before the lock and before anything else. A log that cannot be read refuses nothing.
 1. **At the start**, inside the run monitor so that a refusal is recorded: in bucket mode, take the
    bucket's run lock (:class:`~debate_core.application.caselist.run_lock.BucketRunLock`), which
    refuses a bucket that holds no lock object, and start renewing it; then restore the working copy
@@ -37,9 +41,11 @@ import asyncio
 import logging
 import time
 from collections.abc import Callable, Sequence
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Final
 
+from debate_core.application.caselist.recent_run import RECENT_RUN_WINDOW, RecentRunRecorded
 from debate_core.application.caselist.run_lock import (
     BucketRunLock,
     BucketWriteGuard,
@@ -49,9 +55,10 @@ from debate_core.application.caselist.run_lock import (
 )
 from debate_core.application.caselist.run_state import BundleSave, RestoreReport, RunState, RunStateWithheld
 from debate_core.application.errors import DomainError
-from debate_core.application.sync_runs import BucketRunDetails, RestoreDetails
+from debate_core.application.landscape_staleness import LOCK_REFUSALS
+from debate_core.application.sync_runs import BucketRunDetails, RestoreDetails, SyncRunRecord
 
-__all__ = ["PULL_COMMAND_NAME", "TERMINATION_BUNDLE_BUDGET", "BucketRun"]
+__all__ = ["PULL_COMMAND_NAME", "TERMINATION_BUNDLE_BUDGET", "BucketRun", "latest_counting_run"]
 
 logger = logging.getLogger(__name__)
 
@@ -73,6 +80,7 @@ class BucketRun:
         state: Builds the run's state in the bucket, or `None` when the environment names no bucket.
         parsed_version: The parsed store's version directory this build reads and writes.
         clock: Seconds, for the termination budget.
+        now: The time, in UTC, that a recorded run's start is measured from (`v1-e40-t44`).
     """
 
     def __init__(
@@ -83,12 +91,14 @@ class BucketRun:
         state: Callable[[], RunState] | None,
         parsed_version: str,
         clock: Callable[[], float] = time.monotonic,
+        now: Callable[[], datetime] = lambda: datetime.now(UTC),
     ) -> None:
         self._guard = guard
         self._lock_factory = lock
         self._state_factory = state
         self._parsed_version = parsed_version
         self._clock = clock
+        self._now = now
         self._lock: BucketRunLock | None = None
         self._taken: TakenLock | None = None
         self._held: RunLockHeld | None = None
@@ -101,6 +111,20 @@ class BucketRun:
     @property
     def bucket_mode(self) -> bool:
         return self._guard.bucket_mode and self._lock_factory is not None and self._state_factory is not None
+
+    # ------------------------------------------------------------------------------------------
+    # 0. A scheduled pull, before the start
+    # ------------------------------------------------------------------------------------------
+
+    async def refuse_after_a_recent_run(self) -> None:
+        """Refuse a scheduled pull when the bucket's run log records a recent run (`v1-e40-t44`).
+
+        Raises :class:`RecentRunRecorded` for the latest run that counts (:func:`latest_counting_run`).
+        Asked before :meth:`start`, so before the lock is taken or anything restored. A log that cannot
+        be read refuses nothing: the run goes on to the lock, with a warning (the PM's ruling 5).
+        Local mode has no bucket run log, and the command refuses `--scheduled` there.
+        """
+        return
 
     # ------------------------------------------------------------------------------------------
     # 1. The start
@@ -226,6 +250,13 @@ class BucketRun:
 
     def _within_the_budget(self) -> bool:
         return self._terminated_at is None or self._clock() - self._terminated_at < TERMINATION_BUNDLE_BUDGET
+
+
+def latest_counting_run(
+    records: Sequence[SyncRunRecord], *, now: datetime, window: object = RECENT_RUN_WINDOW
+) -> SyncRunRecord | None:
+    """The latest recorded run that refuses a scheduled pull at `now`, or `None` (`v1-e40-t44`)."""
+    return None
 
 
 def _restore_details(report: RestoreReport) -> RestoreDetails:

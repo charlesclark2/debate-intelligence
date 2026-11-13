@@ -96,7 +96,12 @@ from debate_core.application.ports.run_state import RUN_STATE_BUNDLE_KEY, RUN_ST
 from debate_core.application.ports.suppression import HeldDigestList, SuppressionList
 from debate_core.application.search_index_publish import CHECKED_AGAINST_NAME, read_checked_against
 from debate_core.application.search_index_refresh import RESTORED_INDEX_MARKER, SEARCH_INDEX_DIRECTORY
-from debate_core.application.sync_runs import SYNC_RUN_DETAILS_FILENAME, SYNC_RUN_LOG_FILENAME
+from debate_core.application.sync_runs import (
+    SYNC_RUN_DETAILS_FILENAME,
+    SYNC_RUN_LOG_FILENAME,
+    SyncRunLog,
+    SyncRunRecord,
+)
 from debate_core.domain.search_index import (
     SEARCH_INDEX_MANIFEST_NAME,
     SEARCH_INDEX_POINTER_KEY,
@@ -427,6 +432,23 @@ class RunState:
             if landed.stat().st_size == 0:
                 return ParsesOwed()
             return ParseOwed(landed).read()
+
+    async def recorded_runs(self) -> list[SyncRunRecord]:
+        """The bucket's run log, read without restoring, oldest first (`v1-e40-t44`).
+
+        What a scheduled pull asks before it takes the lock. None when the bucket holds no run log, or
+        the empty object that records one removed. A line that is not a valid record is skipped, as
+        the log's own reader skips it. Raises the store's error, or `OSError` for the scratch file.
+        """
+        key = state_key(SYNC_RUN_LOG_FILENAME)
+        # Listed first, as parses_owed lists, for the same grant.
+        if key not in {info.key for info in await self._bucket.list_objects(STATE_PREFIX)}:
+            return []
+        self._data_dir.mkdir(parents=True, exist_ok=True)
+        with tempfile.TemporaryDirectory(dir=self._data_dir, prefix=".run-state-file-") as scratch:
+            landed = Path(scratch) / SYNC_RUN_LOG_FILENAME
+            await self._bucket.get_file(key, landed)
+            return SyncRunLog(landed).read()
 
     # ------------------------------------------------------------------------------------------
     # Raw sources, as the parse needs them

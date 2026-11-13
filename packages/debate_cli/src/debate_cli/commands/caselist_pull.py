@@ -202,6 +202,17 @@ def pull(
             ),
         ),
     ] = None,
+    scheduled: Annotated[
+        bool,
+        typer.Option(
+            "--scheduled",
+            help=(
+                "Only the weekly schedule passes this: refuse, before the lock, when the bucket's run "
+                "log records a run started within 24 hours. A pull without it is a hand run, never "
+                "refused by this."
+            ),
+        ),
+    ] = False,
 ) -> None:
     """Download, import and publish this week's caselist archives and OpenEv files."""
     cli = cli_context(ctx)
@@ -216,6 +227,10 @@ def pull(
     slugs = [] if publish_pending else list(caselist) if caselist else list(settings.caselist.sync_caselists)
 
     bracket = cli.services.bucket_run()
+    if scheduled:
+        _refuse_a_scheduled_pull_it_cannot_guard(
+            dry_run=dry_run, publish_pending=publish_pending, bucket_mode=bracket.bucket_mode
+        )
     with cloud_cure_for_an_expired_login(cli, ctx, bucket_mode=bracket.bucket_mode):
         pulled = _run(
             cancelled_on_sigterm(
@@ -230,6 +245,7 @@ def pull(
                     full_archive=full_archive,
                     bracket=bracket,
                     on_line=lambda line: write_step_line(cli.output, command_name(ctx), line),
+                    scheduled=scheduled,
                 ),
             )
         )
@@ -244,6 +260,18 @@ def pull(
     failure = _pull_failure(summary, payload, bucket_mode=bracket.bucket_mode)
     cli.output.failure(failure, command=command_name(ctx))
     raise typer.Exit(code=failure.exit_code)
+
+
+def _refuse_a_scheduled_pull_it_cannot_guard(
+    *, dry_run: bool, publish_pending: bool, bucket_mode: bool
+) -> None:
+    """`--scheduled` is the weekly run's whole pull, in bucket mode, and nothing else (`v1-e40-t44`).
+
+    A usage error (exit 2) before anything runs, as `--dry-run --publish-pending` is: a dry run takes
+    nothing to guard, `--publish-pending` lists and fetches nothing, and local mode keeps no bucket run
+    log to read. The PM's ruling 2, 2026-11-12.
+    """
+    return
 
 
 class ConflictingPullMode(typer.BadParameter):

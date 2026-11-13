@@ -739,6 +739,35 @@ def test_negation_is_not_read_where_the_card_does_not_reproduce_its_snapshot() -
     assert "warnings" not in verdict
 
 
+def test_negation_is_not_read_where_the_card_was_cut_from_other_text() -> None:
+    """A card whose text hash is not its snapshot's has offsets into some other text: the verifier does
+    not rebuild its evidence at all, so nothing is read at them, even where the words still match."""
+    other_text = negation_export(lambda card: card.model_copy(update={"normalized_text_hash": "a" * 64}))
+
+    verdict = negation_verdict(other_text, replace_in_evidence("not ", ""))
+
+    assert (verdict["status"], verdict["reason_codes"]) == ("UNVERIFIED", ["HASH_MISMATCH"])
+    assert "warnings" not in verdict
+
+
+def test_negation_warnings_and_interpolations_come_in_body_order(negation_card: NegationExport) -> None:
+    """ "not " goes at evidence 15 and "[drainage]" is read before "pumps", evidence 125."""
+    verdict = negation_verdict(
+        negation_card,
+        replace_in_evidence("new pumps", "new [drainage] pumps"),
+        replace_in_evidence("not ", ""),
+    )
+
+    assert is_verified_without_reasons(verdict)
+    assert [
+        (warning["code"], warning.get("evidence_range"), warning["evidence_offset"])
+        for warning in verdict["warnings"]
+    ] == [
+        ("NEGATION_REMOVED", {"start": 15, "end": 19}, None),
+        ("INTERPOLATION_PRESENT", None, 125),
+    ]
+
+
 def test_negation_is_not_read_without_the_cards_snapshot(negation_card: NegationExport) -> None:
     verdict = negation_verdict(negation_card, replace_in_evidence("not ", ""), world=VerificationWorld())
 

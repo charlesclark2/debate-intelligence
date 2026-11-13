@@ -1921,8 +1921,10 @@ path; the code is chosen from the OSStatus alone. Before `v1-e34-t33` each of th
 `CASELIST_TOKEN_MISSING` is a keychain with no item for the environment (-25300 reads as no token),
 or a file backend with no file. Its line in the table is for a run on this Mac, and so is
 `CASELIST_TOKEN_UNREADABLE`'s. A cloud run that stops on either names the code and the next cloud
-run, as before: its token is the secret the Wednesday
-login renews ([caselist-cloud-run.md](caselist-cloud-run.md)). `caselist auth logout` of a token
+run in its notice, as before: its token is the secret the Wednesday
+login renews ([caselist-cloud-run.md](caselist-cloud-run.md)). Since `v1-e40-t40` its own output names
+that login and no login by hand
+([caselist-cloud-run.md, "A run with no readable caselist_token"](caselist-cloud-run.md#a-run-with-no-readable-caselist_token)). `caselist auth logout` of a token
 that is already gone succeeds and says there was nothing to delete. Any other OSStatus is still `INTERNAL_ERROR`; run
 the command again by hand with `--verbose` to see the keychain's message, and report it.
 

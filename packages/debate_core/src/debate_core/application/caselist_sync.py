@@ -737,6 +737,7 @@ __all__ = [
     "SAVE_BUNDLE_STEP",
     "SAVE_STATE_FILES_STEP",
     "SKIP_TODAY_SECONDS",
+    "TOKEN_UNREADABLE_CODE",
     "ArchiveReader",
     "ArchiveSelection",
     "CaselistParseStage",
@@ -6293,7 +6294,7 @@ _TOKEN_MISSING_ON_THIS_MACHINE_FIX: Final = (
 )
 """A run outside bucket mode that found no caselist_token (`v1-e34-t35`), in `v1-e34-t33`'s words."""
 
-_TOKEN_UNREADABLE_CODE: Final = "CASELIST_TOKEN_UNREADABLE"
+TOKEN_UNREADABLE_CODE: Final = "CASELIST_TOKEN_UNREADABLE"
 """The code of the token store's `CaselistTokenUnreadable`, which is an adapter's error this layer
 may not import: told apart by its code, as `caselist runs` tells an expired login by its class name."""
 
@@ -6315,10 +6316,30 @@ def message_for(error: BaseException, *, bucket_mode: bool = False) -> str:
     (`caselist-cloud-run.md`, "A run refused for an expired login"); the cure is the notice's
     (:data:`~debate_core.application.sync_runs.CLOUD_AUTH_EXPIRED_CURE`) and the command's hint. On the Mac
     the message is the error's own, word for word.
+
+    So for no caselist_token, and one that cannot be read, in bucket mode (`v1-e40-t40`): what is missing
+    (:attr:`CaselistTokenMissing.finding`), or what cannot be read, without the Mac's login, or its logout
+    and then login. Their cure is the command's hint
+    (:data:`~debate_core.application.sync_runs.CLOUD_NO_TOKEN_CURE`).
     """
     if bucket_mode and isinstance(error, CaselistAuthExpired):
         return error.refusal
+    if bucket_mode and isinstance(error, CaselistTokenMissing):
+        return error.finding
+    if bucket_mode and reported_error_code(error) == TOKEN_UNREADABLE_CODE:
+        return _unreadable_token(error)
     return reported_error_message(error)
+
+
+def _unreadable_token(error: BaseException) -> str:
+    """What the token store's `CaselistTokenUnreadable` says before the Mac's logout and login.
+
+    The error is an adapter's, which this layer may not import, so its first clause is said here from
+    its `backend`, in the store's own words (a test keeps the two in step).
+    """
+    backend = getattr(error, "backend", None)
+    where = f"in the {backend} backend " if isinstance(backend, str) and backend else ""
+    return f"the caselist_token stored {where}is not readable"
 
 
 def fix_for(error: BaseException, *, bucket_mode: bool = False) -> str | None:
@@ -6363,7 +6384,7 @@ def fix_for(error: BaseException, *, bucket_mode: bool = False) -> str | None:
         return error.hint
     if isinstance(error, CaselistTokenMissing) and not bucket_mode:
         return _TOKEN_MISSING_ON_THIS_MACHINE_FIX
-    if reported_error_code(error) == _TOKEN_UNREADABLE_CODE and not bucket_mode:
+    if reported_error_code(error) == TOKEN_UNREADABLE_CODE and not bucket_mode:
         return _TOKEN_UNREADABLE_ON_THIS_MACHINE_FIX
     return None
 

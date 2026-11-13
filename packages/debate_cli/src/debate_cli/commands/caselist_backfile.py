@@ -31,9 +31,9 @@ nothing locked, and every refusal the real run would meet named, exit `1`. The r
 on the Mac and in the caselist image: the data directory, the inbox and the token backend are the
 environment's.
 
-An expired login ends it as it ends `caselist pull`: in bucket mode with what was refused and the
-Wednesday login as its hint, never `caselist auth login` (`v1-e40-t35`,
-:mod:`debate_cli.caselist_auth_expired`), and on the Mac as before.
+An expired login, no caselist_token, or one it cannot read ends it as it ends `caselist pull`: in bucket
+mode with what happened and the Wednesday login as its hint, never `caselist auth login` (`v1-e40-t35`,
+`v1-e40-t40`, :mod:`debate_cli.caselist_token_cures`), and on the Mac as before.
 """
 
 from __future__ import annotations
@@ -44,8 +44,8 @@ from typing import Annotated, NoReturn
 import typer
 
 from debate_cli.bucket_lock import terminated_on_sigterm
-from debate_cli.caselist_auth_expired import cloud_cure_for_an_expired_login
 from debate_cli.caselist_events import event_for_caselist
+from debate_cli.caselist_token_cures import cloud_cure_for_a_token_error
 from debate_cli.context import CliContext, cli_context, command_name
 from debate_cli.exit_codes import ExitCode
 from debate_cli.options.bucket_environment import CONFIRM_PROD_FLAG
@@ -251,7 +251,7 @@ def backfile_import(
         )
     service = cli.services.backfile_import(event_for_caselist=event_for_caselist)
     if not execute:
-        with cloud_cure_for_an_expired_login(cli, ctx, bucket_mode=service.bucket_mode):
+        with cloud_cure_for_a_token_error(cli, ctx, bucket_mode=service.bucket_mode):
             plan = asyncio.run(service.plan(caselist))
         if plan.refused:
             _refuse(cli, ctx, plan.refusals, plan)
@@ -260,7 +260,7 @@ def backfile_import(
     try:
         with (
             terminated_on_sigterm(),
-            cloud_cure_for_an_expired_login(cli, ctx, bucket_mode=service.bucket_mode),
+            cloud_cure_for_a_token_error(cli, ctx, bucket_mode=service.bucket_mode),
         ):
             report = asyncio.run(
                 service.run(caselist, on_line=lambda line: write_step_line(cli.output, IMPORT_COMMAND, line))

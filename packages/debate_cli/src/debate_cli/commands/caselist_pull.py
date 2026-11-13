@@ -134,13 +134,13 @@ from __future__ import annotations
 import asyncio
 from collections.abc import Coroutine
 from pathlib import Path
-from typing import Annotated, Any, Final, cast
+from typing import Annotated, Any, cast
 
 import typer
 
 from debate_cli.bucket_lock import cancelled_on_sigterm
-from debate_cli.caselist_auth_expired import CLOUD_AUTH_EXPIRED_HINT, cloud_cure_for_an_expired_login
 from debate_cli.caselist_events import event_for_caselist
+from debate_cli.caselist_token_cures import cloud_cure_for_a_token_error, in_bucket_mode
 from debate_cli.context import cli_context, command_name
 from debate_cli.exit_codes import ExitCode, exit_code_for_failure_codes
 from debate_cli.output import CommandFailure, JsonValue, TableSpec
@@ -154,14 +154,13 @@ from debate_core.application.caselist_sync import (
     SyncStage,
     run_pull,
 )
-from debate_core.application.errors import error_code_of_class
-from debate_core.application.ports.caselist_source import CaselistAuthExpired
 from debate_core.application.settings import Settings
 from debate_core.application.sync_runs import (
     CLOUD_PUBLISH_CURE,
     CLOUD_UNFINISHED_RUN_CURE,
     SyncRunDetails,
     SyncRunRecord,
+    cloud_cure_for,
 )
 
 __all__ = ["pull", "pull_summary"]
@@ -231,7 +230,7 @@ def pull(
         _refuse_a_scheduled_pull_it_cannot_guard(
             dry_run=dry_run, publish_pending=publish_pending, bucket_mode=bracket.bucket_mode
         )
-    with cloud_cure_for_an_expired_login(cli, ctx, bucket_mode=bracket.bucket_mode):
+    with cloud_cure_for_a_token_error(cli, ctx, bucket_mode=bracket.bucket_mode):
         pulled = _run(
             cancelled_on_sigterm(
                 bracket.terminate if bracket.bucket_mode else None,
@@ -509,9 +508,6 @@ def _pull_failure(
     )
 
 
-_AUTH_EXPIRED: Final = error_code_of_class(CaselistAuthExpired)
-
-
 def _hint_for(failed: list[StageRecord], *, retryable: bool, bucket_mode: bool = False) -> str:
     """What to do about the failed stages: the fix a stage names, or else how to run it again.
 
@@ -526,11 +522,13 @@ def _hint_for(failed: list[StageRecord], *, retryable: bool, bucket_mode: bool =
     inbox included, ended with it.
 
     A download OpenCaselist refused for an expired login names the Wednesday login instead in bucket
-    mode (`v1-e40-t35`, :data:`~debate_cli.caselist_auth_expired.CLOUD_AUTH_EXPIRED_HINT`): a run
-    started by hand before it is refused again, and a login by hand would be a second login.
+    mode (`v1-e40-t35`): a run started by hand before it is refused again, and a login by hand would be
+    a second login. Since `v1-e40-t40` the cure comes from the table of cloud cures, for any code in it
+    (:data:`~debate_core.application.sync_runs.CLOUD_TOKEN_CURES`).
     """
-    if bucket_mode and any(_AUTH_EXPIRED in record.error_codes for record in failed):
-        return CLOUD_AUTH_EXPIRED_HINT
+    cure = cloud_cure_for(code for record in failed for code in record.error_codes) if bucket_mode else None
+    if cure is not None:
+        return in_bucket_mode(cure)
     fixes = list(dict.fromkeys(record.hint for record in failed if record.hint))
     if fixes and bucket_mode:
         return " ".join(fixes) + f" Then in bucket mode {CLOUD_UNFINISHED_RUN_CURE}."

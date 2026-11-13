@@ -45,7 +45,7 @@ spec:
         notice, while the Mac's output is unchanged and pinned by its old text, by tests
         shown failing first.
 status:
-  phase: Pending
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

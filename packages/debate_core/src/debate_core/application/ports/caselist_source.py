@@ -252,7 +252,16 @@ class CaselistTokenMissing(DomainError):
     """No caselist_token is stored, so no authenticated request can be made."""
 
     def __init__(self) -> None:
-        super().__init__("no caselist_token is stored; run `debate-research caselist auth login` first")
+        super().__init__(f"{self.finding}; run `debate-research caselist auth login` first")
+
+    @property
+    def finding(self) -> str:
+        """What is missing, without the Mac's login: the message's first clause (`v1-e40-t40`).
+
+        A property, as :attr:`CaselistAuthExpired.refusal` is, so that it is not one of the details the CLI
+        reports from the error's attributes.
+        """
+        return "no caselist_token is stored"
 
 
 class CaselistAuthExpired(DomainError):

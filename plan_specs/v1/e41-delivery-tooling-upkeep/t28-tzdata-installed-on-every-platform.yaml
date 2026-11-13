@@ -1,0 +1,77 @@
+# TASK v1-e41-t28-tzdata-installed-on-every-platform - The IANA time zone database ships with the build on every platform, not only Windows
+# Epic: E41 — Delivery Tooling Upkeep | Release: v1.8 (Weekly caselist run in the cloud) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e41-t28-tzdata-installed-on-every-platform
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.8
+    debate/epic: v1-e41-delivery-tooling-upkeep
+  annotations:
+    debate/title: "The IANA time zone database ships with the build on every platform, not only Windows"
+spec:
+  # Filed by the PM, 2026-11-12, from v1-e08-t25's review (the PM, 2026-11-12).
+  description: >-
+    Since v1-e08-t25 every settings load resolves daily.time_zone (America/Chicago by default)
+    through zoneinfo, and budget.py, backfile_import.py and search_index_prune.py resolve
+    America/Chicago at import. On Linux and macOS zoneinfo reads the system's database; the lock
+    carries the tzdata package only for Windows (a marker from tzlocal). Today's images and
+    machines have the system database: the cloud run image resolves the zone at import
+    (backfile_import), the pilot API loads no Settings, the Mac and CI have it. As insurance
+    against a slimmer image, make tzdata an unconditional dependency of debate_core, with a test
+    that the zone resolves with zoneinfo's system search path emptied
+    (zoneinfo.reset_tzpath([])), and the licence named in the report. If uv lock needs the
+    network, the operator runs it and the pull request takes the result.
+  priority: 3
+  constraints:
+    packages: [packages/debate_core/pyproject.toml, uv.lock, packages/debate_core/tests]
+    forbidden:
+      - A time zone resolved only from the system database in the new test
+      - A live call in a test
+  context:
+    - kind: TaskRef
+      name: v1-e08-t25-digest-queries-and-the-feeds-every-word-rule
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        debate_core depends on tzdata on every platform, and America/Chicago resolves with
+        zoneinfo's system path emptied, by a test shown failing first.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e41-t28-tzdata-installed-on-every-platform-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.8
+    debate/epic: v1-e41-delivery-tooling-upkeep
+spec:
+  description: >-
+    The IANA time zone database ships with the build on every platform, not only Windows.
+  goalRef:
+    name: v1-e41-t28-tzdata-installed-on-every-platform
+  graph:
+    nodes:
+      - id: tzdata-installed-on-every-platform
+        kind: Task
+        name: Time zones everywhere
+        description: >-
+          The IANA time zone database ships with the build on every platform, not only
+          Windows.
+        estimatedEffort: 30m
+        acceptanceCriteria:
+          - type: test_passes
+            name: Time zones everywhere tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests, -k, tzdata or time_zone]
+status:
+  phase: Pending

@@ -1,0 +1,89 @@
+# TASK v1-e06-t15-a-deletion-beside-a-cut-marker-is-a-deletion - A whole-word deletion right after a cut's marker is read as a deletion, not a manual edit
+# Epic: E06 Card Cutting, Citation & Export | Release: v1.3 (URL → verified card) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e06-t15-a-deletion-beside-a-cut-marker-is-a-deletion
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.3
+    debate/epic: v1-e06-card-cutting
+  annotations:
+    debate/title: "A whole-word deletion right after a cut's marker is read as a deletion, not a manual edit"
+spec:
+  # Filed by the PM, 2026-11-12, from v1-e06-t10's follow-ups 1 and 3 (the PM's review, 2026-11-12).
+  description: >-
+    v1-e06-t10 found a false failure in v1-e06-t07's .docx body diff: a whole-word deletion of
+    the word right after a cut's omission marker is reported as MANUAL_EDIT, so a legitimate cut
+    makes the card UNVERIFIED. Reproduction on t07's own news fixture: deleting 'biologists ',
+    the second word after the cut at 108, gives ManualEdit(evidence [108, 131), body [108, 123))
+    and no deletion, while deleting the third word, 'who ', is a plain deletion [132, 136).
+    Myers ties two shortest edit scripts there; one pairs the spaces around the marker with the
+    spaces around the word after it, and _merged then joins the hunks across those spaces,
+    swallowing the word before the deletion. Fix the tie (prefer the marker's hunk, or merge
+    only across removed whitespace, or another rule the proposal argues), so a whole-word
+    deletion next to a marker is a deletion wherever it sits, and a real changed word is still
+    MANUAL_EDIT. Also the smoke check v1-e06-t10 left: an installed build reports
+    NEGATION_REMOVED with exit 0 on an edited exported .docx (tests/smoke/test_cut_smoke.py).
+  priority: 2
+  constraints:
+    packages: [debate_core.evidence, packages/debate_core/tests, tests/smoke]
+    forbidden:
+      - A changed or added word reported as a deletion
+      - A team card or real source in a fixture
+      - Network access in a test
+  context:
+    - kind: TaskRef
+      name: v1-e06-t10-verify-docx-flags-a-removed-negation
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e06-t07-verify-docx
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        A whole-word deletion immediately before or after an omission marker, and one word
+        further on, is a deletion with its ranges, while a changed word beside a marker is
+        still MANUAL_EDIT, by tests on synthetic exports shown failing first, with a mutant
+        on the tie-break.
+    - id: ac2
+      description: >-
+        A smoke check on the installed build reports NEGATION_REMOVED as a warning with exit
+        0 on an exported .docx whose body deletes a negating word.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e06-t15-a-deletion-beside-a-cut-marker-is-a-deletion-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.3
+    debate/epic: v1-e06-card-cutting
+spec:
+  description: >-
+    A whole-word deletion right after a cut's marker is read as a deletion, not a manual edit.
+  goalRef:
+    name: v1-e06-t15-a-deletion-beside-a-cut-marker-is-a-deletion
+  graph:
+    nodes:
+      - id: a-deletion-beside-a-cut-marker-is-a-dele
+        kind: Task
+        name: Marker-side deletions
+        description: >-
+          A whole-word deletion right after a cut's marker is read as a deletion, not a
+          manual edit.
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Marker-side deletions tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/evidence/test_docx_verify.py, -k, marker]
+status:
+  phase: Pending

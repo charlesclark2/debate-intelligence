@@ -401,5 +401,26 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e06-t14-refused-stated-cite-is-a-refusal
+    - id: t15
+      kind: Task
+      name: 'A whole-word deletion right after a cut''s marker is read as a deletion, not a manual edit'
+      description: >-
+        A whole-word deletion right after a cut's marker is read as a deletion, not a manual
+        edit.
+      inputs:
+        specRef: plan_specs/v1/e06-card-cutting/t15-a-deletion-beside-a-cut-marker-is-a-deletion.yaml
+        goalRef: v1-e06-t15-a-deletion-beside-a-cut-marker-is-a-deletion
+      dependsOn:
+      - t10
+      - t07
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e06-t15-a-deletion-beside-a-cut-marker-is-a-deletion reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e06-t15-a-deletion-beside-a-cut-marker-is-a-deletion
 status:
   phase: Pending

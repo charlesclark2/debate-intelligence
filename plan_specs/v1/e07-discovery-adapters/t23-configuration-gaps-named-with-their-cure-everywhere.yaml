@@ -24,9 +24,14 @@ spec:
     well, and still makes the search PARTIAL, and the pin in tests/smoke/test_search_smoke.py
     moves with it; (3) batch report's `partial_providers` leaves out the providers a search did
     not count, which stay listed in `providers`.
+    (PM amendment 2026-11-12, recording the brief of the same day.) A fourth item was folded
+    in from v1-e07-t20's follow-up 2: when no provider was asked, the search and daily messages name
+    each selected provider with its own state, not enabled (with "enable it in providers.enabled") or
+    not configured (with its reason and cure), keeping exit 1 and NO_PROVIDER_ENABLED. docs/guides was
+    added to the packages for the sentences that quote these messages.
   priority: 3
   constraints:
-    packages: [debate_core.application, debate_cli, packages/debate_core/tests, packages/debate_cli/tests, tests/smoke]
+    packages: [debate_core.application, debate_cli, packages/debate_core/tests, packages/debate_cli/tests, tests/smoke, docs/guides]
     forbidden:
       - A provider hidden from the footer, `providers` or `reasons`
       - A live provider call in a test

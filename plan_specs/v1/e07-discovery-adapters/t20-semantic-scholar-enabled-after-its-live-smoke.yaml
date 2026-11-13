@@ -31,6 +31,18 @@ spec:
     reads as the keyed smoke, plus one keyless single query that returns results, run on a quiet day
     (the operator's API agreement says unauthenticated requests have succeeded). This waits for
     v1-e07-t22, the backoff the same agreement commits to.
+    (PM amendment 2026-11-12, from the operator's requests of the same day.) Semantic
+    Scholar's HTTPS endpoint answers a keyed request with the unauthenticated 429, and its HTTP endpoint
+    answers the same request with results (the operator records). The product owner chose to use HTTP
+    until Semantic Scholar fixes HTTPS, as a narrow opt-in: a setting
+    `providers.semantic_scholar_insecure_http`, false by default, set only in a person's own credentials
+    file and never in a committed profile; when true, the Semantic Scholar adapter alone asks
+    `http://api.semanticscholar.org`, follows no redirect, and `doctor --providers` and the search footer
+    say "Semantic Scholar asked over HTTP: the key is sent unencrypted". Every other provider stays on
+    HTTPS. ac1's keyed smoke runs on a build carrying the opt-in, with it set; the keyless query (b) is
+    one curl request, with no key header, and needs no particular build. ac2 is narrowed: the dev
+    profile enables semantic_scholar once ac1 has passed; the prod profile waits for HTTPS (a follow-up
+    task once Semantic Scholar answers). The opt-in comes out in one change when HTTPS works.
   priority: 3
   constraints:
     packages: [config/profiles, debate_core.integrations.discovery, debate_core.application, packages/debate_core/tests, debate_cli, packages/debate_cli/tests, docs/guides]
@@ -65,6 +77,12 @@ spec:
         (PM amendment 2026-11-11) Without a key Semantic Scholar is not configured, named
         with its cure and not counted as partial, and with one it is built and asked, by
         tests shown failing first.
+    - id: ac4
+      description: >-
+        (PM amendment 2026-11-12) With providers.semantic_scholar_insecure_http unset the
+        adapter asks HTTPS only; with it true it asks HTTP, follows no redirect and is named
+        as unencrypted in doctor and the footer; no committed profile sets it; by tests
+        shown failing first.
 status:
   phase: InProgress
 ---

@@ -1082,5 +1082,45 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e40-t47-prods-one-time-backfile-publish
+    - id: t48
+      kind: Task
+      name: 'The weekly schedule starts its pull with --scheduled, so the recent-run guard is live'
+      description: >-
+        The weekly schedule starts its pull with --scheduled, so the recent-run guard is
+        live.
+      inputs:
+        specRef: plan_specs/v1/e40-cloud-caselist-run/t48-the-schedule-passes-scheduled.yaml
+        goalRef: v1-e40-t48-the-schedule-passes-scheduled
+      dependsOn:
+      - t44
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e40-t48-the-schedule-passes-scheduled reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e40-t48-the-schedule-passes-scheduled
+    - id: t49
+      kind: Task
+      name: 'A smoke check reads caselist runs --remote''s backfile parser line on an installed build'
+      description: >-
+        A smoke check reads caselist runs --remote's backfile parser line on an installed
+        build.
+      inputs:
+        specRef: plan_specs/v1/e40-cloud-caselist-run/t49-a-smoke-check-for-the-backfile-parser-line.yaml
+        goalRef: v1-e40-t49-a-smoke-check-for-the-backfile-parser-line
+      dependsOn:
+      - t46
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e40-t49-a-smoke-check-for-the-backfile-parser-line reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e40-t49-a-smoke-check-for-the-backfile-parser-line
 status:
   phase: Pending

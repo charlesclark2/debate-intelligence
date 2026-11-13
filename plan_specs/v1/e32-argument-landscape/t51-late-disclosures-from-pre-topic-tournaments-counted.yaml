@@ -30,6 +30,9 @@ spec:
     Pending then.
     (PM note 2026-11-05.) Blocked until the weekly run of 2026-11-11 has recorded hsld26's
     2026-11-10 snapshot, a condition outside this repository; the PM sets it to Pending then.
+    (PM note 2026-11-12.) The weekly run of 2026-11-11 (`20261111T120101Z`) recorded hsld26's
+    snapshot of 2026-11-10 (manifests/hsld26/2026-11-10.jsonl), so the task is Pending. The second
+    count, on 2026-11-17's snapshot, follows the run of 2026-11-18.
   priority: 2
   constraints:
     packages: [debate_core.application, debate_core.arguments, debate_core.domain, config/landscape, scripts, packages/debate_core/tests, tests/config, docs/data, docs/guides]
@@ -52,7 +55,7 @@ spec:
       description: >-
         The weekly report line, as ruled, by tests on synthetic stores shown failing first.
 status:
-  phase: Blocked
+  phase: Pending
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

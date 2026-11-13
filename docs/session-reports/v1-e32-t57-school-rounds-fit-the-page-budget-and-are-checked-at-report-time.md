@@ -488,3 +488,13 @@ Built to the ruling, and measured where it matters: the largest school page goes
      one.
 9. **Merge:** `scripts/task pr --partial` once `ci` (the whole selection) is green. The Goal stays
    `InProgress` until ac4 is recorded.
+
+## Operator records (recorded by the PM, 2026-11-12)
+
+Added by the PM. Nothing above is changed, and this section is not a review.
+
+| Criterion | Was | Now | Record |
+|---|---|---|---|
+| ac4: the operator republishes the hspolicy26 report and the PM records the largest page | NOT RUN | PASS | The dev pilot was deployed on 2026-11-12 from `0d81c542` (function image `sha256:ef3f45026fbdda77190aad7b020b45ea53b56114c56b338a91b0ffd60d3b2fd6`, landscape bundle format 3), carrying this task and the `2026.11.03-docx-9` parser together, as Decision 7 planned; Download is on again, since the index parses at docx-9. The republish after it, from hspolicy26's snapshot of 2026-11-10 (184,074 cards, `scan_exempted_lines` 73, 8 files uploaded): 944 pages, 0 at or over the page budget, the largest 117,097 bytes |
+
+Every criterion passes, so the Goal is `Succeeded`.

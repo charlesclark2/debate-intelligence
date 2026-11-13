@@ -1,0 +1,72 @@
+# TASK v1-e40-t49-a-smoke-check-for-the-backfile-parser-line - A smoke check reads caselist runs --remote's backfile parser line on an installed build
+# Epic: E40 — Weekly Caselist Run in the Cloud | Release: v1.8 (Weekly caselist run in the cloud) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e40-t49-a-smoke-check-for-the-backfile-parser-line
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.8
+    debate/epic: v1-e40-cloud-caselist-run
+  annotations:
+    debate/title: "A smoke check reads caselist runs --remote's backfile parser line on an installed build"
+spec:
+  # Filed by the PM, 2026-11-12, from v1-e40-t46's follow-up 2 (the PM's review, 2026-11-12).
+  description: >-
+    v1-e40-t46 made caselist runs --remote name each backfile with no parsed-store directory at
+    the reference parser version, and give --json a backfile_parser_versions object. Working
+    agreement 5 asks for a smoke check of a user-facing change; t46's packages had no
+    tests/smoke. Add one that runs the installed build's caselist runs --remote --json against a
+    synthetic bucket (moto, no AWS) and reads the object's shape and the line below the table.
+  priority: 3
+  constraints:
+    packages: [tests/smoke]
+    forbidden:
+      - Network or AWS access in a test
+      - A real caselist slug other than the test profile's
+  context:
+    - kind: TaskRef
+      name: v1-e40-t46-a-backfile-without-the-running-parsers-directory-is-named
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        The installed build's caselist runs --remote gives backfile_parser_versions and its
+        line, read by a smoke check on a synthetic bucket.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e40-t49-a-smoke-check-for-the-backfile-parser-line-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.8
+    debate/epic: v1-e40-cloud-caselist-run
+spec:
+  description: >-
+    A smoke check reads caselist runs --remote's backfile parser line on an installed build.
+  goalRef:
+    name: v1-e40-t49-a-smoke-check-for-the-backfile-parser-line
+  graph:
+    nodes:
+      - id: a-smoke-check-for-the-backfile-parser-li
+        kind: Task
+        name: Backfile line smoke
+        description: >-
+          A smoke check reads caselist runs --remote's backfile parser line on an
+          installed build.
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Backfile line smoke tests pass
+            command: uv
+            args: [run, pytest, tests/smoke, -k, backfile]
+status:
+  phase: Pending

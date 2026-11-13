@@ -1,7 +1,7 @@
 """The per-user credentials file, `~/.debate-research/<env>.env` (`v1-e41-t22`, the PM's ruling, 2026-11-05).
 
 Its place in the order of sources: below the variables and the one `.env`, above the profile. It
-holds the four credentials in :data:`USER_CREDENTIAL_VARIABLES` and nothing else, and it is not read
+holds the credentials in :data:`USER_CREDENTIAL_VARIABLES` and nothing else, and it is not read
 at all when its group or others have any permission on it, or on a system that cannot say.
 
 Every home folder here is under `tmp_path`, with `HOME` pointed at it and the settings' one seam,
@@ -18,6 +18,7 @@ import stat
 import traceback
 from collections.abc import Iterator
 from pathlib import Path
+from typing import Final
 
 import pytest
 from pydantic import SecretStr
@@ -40,10 +41,13 @@ KEY = "pu-K3y-9Zq2"
 OTHER = "pu-0th3r-5Lm"
 SENTINELS = (EMAIL, KEY, OTHER)
 
-FOUR_NAMES = (
+CREDENTIAL_NAMES = (
     "DEBATE_PROVIDERS__CONTACT_EMAIL, DEBATE_PROVIDERS__OPENALEX_API_KEY, "
-    "DEBATE_PROVIDERS__SEMANTIC_SCHOLAR_API_KEY and DEBATE_PROVIDERS__API_DATA_GOV_KEY"
+    "DEBATE_PROVIDERS__SEMANTIC_SCHOLAR_API_KEY, DEBATE_PROVIDERS__SEMANTIC_SCHOLAR_INSECURE_HTTP and "
+    "DEBATE_PROVIDERS__API_DATA_GOV_KEY"
 )
+INSECURE_HTTP: Final = "DEBATE_PROVIDERS__SEMANTIC_SCHOLAR_INSECURE_HTTP"
+"""Not a secret, and still a name the file holds: how the person's own key is sent (v1-e07-t20)."""
 DEV_FILE = "~/.debate-research/dev.env"
 DEV_SOURCE = f"user-env:{DEV_FILE}"
 
@@ -165,6 +169,22 @@ def test_every_one_of_the_four_names_is_read(home: Path, profiles: Path) -> None
     assert secret(providers.api_data_gov_key) == KEY
 
 
+def test_semantic_scholar_s_http_opt_in_is_off_unless_the_file_turns_it_on(
+    home: Path, profiles: Path
+) -> None:
+    """The PM's ruling of 2026-11-12 on v1-e07-t20: the opt-in governs only how the person's own key is
+    sent, and it is their consent, so it lives in their file beside the key."""
+    unset = load_settings(environment="dev", profile_dir=profiles)
+    credentials(home, f"DEBATE_PROVIDERS__SEMANTIC_SCHOLAR_API_KEY={KEY}", f"{INSECURE_HTTP}=true")
+
+    opted_in = load_settings(environment="dev", profile_dir=profiles)
+
+    assert unset.providers.semantic_scholar_insecure_http is False
+    assert unset.field_sources["providers.semantic_scholar_insecure_http"] == "default"
+    assert opted_in.providers.semantic_scholar_insecure_http is True
+    assert opted_in.field_sources["providers.semantic_scholar_insecure_http"] == DEV_SOURCE
+
+
 def test_prod_reads_prod_env_and_never_dev_env(home: Path, profiles: Path) -> None:
     credentials(home, f"DEBATE_PROVIDERS__CONTACT_EMAIL={EMAIL}")
     credentials(home, f"DEBATE_PROVIDERS__OPENALEX_API_KEY={KEY}", environment="prod")
@@ -268,25 +288,27 @@ def test_no_file_is_no_layer(home: Path, profiles: Path) -> None:
 # ---------------------------------------------------------------------------------------------
 
 
-def test_the_credentials_are_the_four_provider_names() -> None:
+def test_the_credentials_are_the_four_provider_names_and_semantic_scholar_s_http_opt_in() -> None:
     assert USER_CREDENTIAL_VARIABLES == (
         "DEBATE_PROVIDERS__CONTACT_EMAIL",
         "DEBATE_PROVIDERS__OPENALEX_API_KEY",
         "DEBATE_PROVIDERS__SEMANTIC_SCHOLAR_API_KEY",
+        "DEBATE_PROVIDERS__SEMANTIC_SCHOLAR_INSECURE_HTTP",
         "DEBATE_PROVIDERS__API_DATA_GOV_KEY",
     )
     assert set(USER_CREDENTIAL_EXCLUSIONS) == {"DEBATE_PROVIDERS__CASELIST_TOKEN"}
 
 
 def test_every_secret_provider_setting_is_a_credential_or_excluded_by_name() -> None:
-    """A secret added to the providers group later fails here until someone decides which it is."""
+    """A secret added to the providers group later fails here until someone decides which it is. The one
+    name the file holds that is not a secret is Semantic Scholar's HTTP opt-in (v1-e07-t20)."""
     secret_fields = {
         f"DEBATE_PROVIDERS__{name.upper()}"
         for name, field in ProviderSettings.model_fields.items()
         if "SecretStr" in str(field.annotation)
     }
 
-    assert secret_fields == set(USER_CREDENTIAL_VARIABLES) | set(USER_CREDENTIAL_EXCLUSIONS)
+    assert secret_fields | {INSECURE_HTTP} == set(USER_CREDENTIAL_VARIABLES) | set(USER_CREDENTIAL_EXCLUSIONS)
     assert not set(USER_CREDENTIAL_VARIABLES) & set(USER_CREDENTIAL_EXCLUSIONS)
 
 
@@ -302,7 +324,7 @@ def test_a_name_that_is_not_a_credential_is_refused_by_file_and_line(home: Path,
 
     assert str(error) == (
         f"{DEV_FILE} line 3: DEBATE_STORAGE__DATA_DIR is not a credential; this file holds only "
-        f"{FOUR_NAMES}. Put it in a .env or export it."
+        f"{CREDENTIAL_NAMES}. Put it in a .env or export it."
     )
     assert error.source == DEV_SOURCE
 
@@ -315,7 +337,7 @@ def test_debate_env_in_the_file_is_refused_and_never_picks_the_environment(
     error = refusal(environment="dev", profile_dir=profiles)
 
     assert str(error) == (
-        f"{DEV_FILE} line 1: DEBATE_ENV is not a credential; this file holds only {FOUR_NAMES}. "
+        f"{DEV_FILE} line 1: DEBATE_ENV is not a credential; this file holds only {CREDENTIAL_NAMES}. "
         "Put it in a .env or export it."
     )
 
@@ -373,7 +395,7 @@ def test_every_problem_in_the_file_is_named_at_once(home: Path, profiles: Path) 
 
     assert str(error) == (
         f"{DEV_FILE} line 1 is not NAME=value. {DEV_FILE} line 2: DEBATE_HTTP__MAX_RETRIES is not a "
-        f"credential; this file holds only {FOUR_NAMES}. Put it in a .env or export it."
+        f"credential; this file holds only {CREDENTIAL_NAMES}. Put it in a .env or export it."
     )
 
 

@@ -13,8 +13,10 @@ from __future__ import annotations
 
 import os
 import tempfile
+import tomllib
 from collections.abc import Iterator
 from pathlib import Path
+from typing import cast
 
 import pytest
 
@@ -609,6 +611,27 @@ def test_no_committed_profile_contains_anything_that_looks_like_a_secret() -> No
         )
         for field in secret_fields:
             assert f"{field} =" not in body, f"{path.name} assigns the secret {field}"
+
+
+def _keys_anywhere(table: dict[str, object]) -> Iterator[str]:
+    """Every key in a parsed TOML document, at any depth, by its own name."""
+    for key, value in table.items():
+        yield key
+        if isinstance(value, dict):
+            yield from _keys_anywhere(cast(dict[str, object], value))
+
+
+@pytest.mark.skipif(REPOSITORY_ROOT is None, reason="not running from a source checkout")
+def test_no_committed_profile_sets_semantic_scholar_s_http_opt_in() -> None:
+    """The opt-in sends a person's key unencrypted, so it is that person's choice, in their own
+    credentials file, and never a committed profile's (the PM's amendment of 2026-11-12 on v1-e07-t20)."""
+    assert REPOSITORY_ROOT is not None
+    paths = sorted((REPOSITORY_ROOT / "config" / "profiles").glob("*.toml"))
+
+    assert {path.name for path in paths} >= {"dev.toml", "prod.toml", "test.toml"}
+    for path in paths:
+        document = tomllib.loads(path.read_text(encoding="utf-8"))
+        assert "semantic_scholar_insecure_http" not in set(_keys_anywhere(document)), path.name
 
 
 @pytest.mark.skipif(REPOSITORY_ROOT is None, reason="not running from a source checkout")

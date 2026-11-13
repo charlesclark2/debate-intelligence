@@ -1121,6 +1121,126 @@ def test_semantic_scholar_s_key_reaches_no_output_and_no_log_line(
     assert all(SEMANTIC_SCHOLAR_KEY not in record.getMessage() for record in caplog.records)
 
 
+OVER_HTTP_WARNING: Final = "Semantic Scholar asked over HTTP: the key is sent unencrypted"
+"""What the footer says, and the JSON's `asked_over_http` carries, when Semantic Scholar's HTTP opt-in is on
+and Semantic Scholar was built and asked (the PM's amendment of 2026-11-12 on v1-e07-t20)."""
+
+
+def opt_in_over_http(monkeypatch: pytest.MonkeyPatch, *, key: bool = True) -> None:
+    """OpenAlex, Crossref and Semantic Scholar enabled, Semantic Scholar's HTTP opt-in on, and its key."""
+    monkeypatch.setenv("DEBATE_PROVIDERS__ENABLED", '["openalex", "crossref", "semantic_scholar"]')
+    monkeypatch.setenv("DEBATE_PROVIDERS__SEMANTIC_SCHOLAR_INSECURE_HTTP", "true")
+    if key:
+        monkeypatch.setenv("DEBATE_PROVIDERS__SEMANTIC_SCHOLAR_API_KEY", SEMANTIC_SCHOLAR_KEY)
+
+
+def schemes_asked(seams: Seams) -> dict[str, set[str]]:
+    asked: dict[str, set[str]] = {}
+    for request in seams.providers.requests:
+        asked.setdefault(request.url.host, set()).add(request.url.scheme)
+    return asked
+
+
+def test_with_the_http_opt_in_semantic_scholar_alone_is_asked_over_http_and_the_footer_says_so(
+    seams: Seams, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    seams.registry_override = False
+    opt_in_over_http(monkeypatch)
+
+    result = search("carbon-capture subsidies")
+    as_json = search("carbon-capture subsidies", "--format", "json")
+
+    assert result.exit_code == ExitCode.OK, result.output
+    lines = footer(result)
+    assert lines[0] == "Providers: COMPLETE"
+    assert "  semantic_scholar: ok, 1 result" in lines
+    after = lines.index("  semantic_scholar: ok, 1 result") + 1
+    assert lines[after : after + 1] == [f"  {OVER_HTTP_WARNING}"]
+    assert lines.count(f"  {OVER_HTTP_WARNING}") == 1
+    assert envelope(as_json)["data"].get("asked_over_http") == [
+        {"provider": "semantic_scholar", "warning": OVER_HTTP_WARNING}
+    ]
+    assert schemes_asked(seams) == {
+        OPENALEX_HOST: {"https"},
+        CROSSREF_HOST: {"https"},
+        SEMANTIC_SCHOLAR_HOST: {"http"},
+    }
+    sent = [request for request in seams.providers.requests if request.url.host == SEMANTIC_SCHOLAR_HOST]
+    assert {request.headers["x-api-key"] for request in sent} == {SEMANTIC_SCHOLAR_KEY}
+
+
+def test_with_the_http_opt_in_unset_every_provider_is_asked_over_https_and_nothing_is_said(
+    seams: Seams, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    seams.registry_override = False
+    opt_in_over_http(monkeypatch)
+    monkeypatch.delenv("DEBATE_PROVIDERS__SEMANTIC_SCHOLAR_INSECURE_HTTP")
+
+    result = search("carbon-capture subsidies")
+    as_json = search("carbon-capture subsidies", "--format", "json")
+
+    assert result.exit_code == ExitCode.OK, result.output
+    assert "  semantic_scholar: ok, 1 result" in footer(result)
+    assert not [line for line in result.stdout.splitlines() if "HTTP" in line or "unencrypted" in line]
+    assert envelope(as_json)["data"].get("asked_over_http") == []
+    assert schemes_asked(seams) == {
+        OPENALEX_HOST: {"https"},
+        CROSSREF_HOST: {"https"},
+        SEMANTIC_SCHOLAR_HOST: {"https"},
+    }
+
+
+def test_with_the_http_opt_in_and_no_key_semantic_scholar_is_not_built_and_nothing_is_said(
+    seams: Seams, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    seams.registry_override = False
+    opt_in_over_http(monkeypatch, key=False)
+
+    result = search("carbon-capture subsidies", "--format", "json")
+
+    assert result.exit_code == ExitCode.OK, result.output
+    assert envelope(result)["data"].get("asked_over_http") == []
+    assert SEMANTIC_SCHOLAR_HOST not in schemes_asked(seams)
+
+
+def test_with_the_http_opt_in_a_search_that_does_not_ask_semantic_scholar_says_nothing_of_http(
+    seams: Seams, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Built, but not among this search's providers: its key went nowhere, so there is nothing to say."""
+    seams.registry_override = False
+    opt_in_over_http(monkeypatch)
+
+    result = search("carbon-capture subsidies", "--providers", "openalex,crossref")
+    as_json = search("carbon-capture subsidies", "--providers", "openalex,crossref", "--format", "json")
+
+    assert result.exit_code == ExitCode.OK, result.output
+    assert f"  {OVER_HTTP_WARNING}" not in footer(result)
+    assert envelope(as_json)["data"].get("asked_over_http") == []
+    assert SEMANTIC_SCHOLAR_HOST not in schemes_asked(seams)
+
+
+def test_over_http_semantic_scholar_s_key_reaches_no_output_and_no_log_line(
+    seams: Seams, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    """The redaction check above, with the opt-in on: the key travels in the header over HTTP, and still
+    no output and no log record at DEBUG carries it."""
+    seams.registry_override = False
+    opt_in_over_http(monkeypatch)
+
+    with caplog.at_level(logging.DEBUG):
+        searched = search("carbon-capture subsidies", "--format", "json")
+        shown = search("carbon-capture subsidies")
+        doctored = runner.invoke(create_app(), ["doctor", "--providers"])
+
+    assert searched.exit_code == ExitCode.OK, searched.output
+    assert any(request.url.scheme == "http" for request in seams.providers.requests)
+    written = "".join(run.stdout + run.stderr for run in (searched, shown, doctored))
+    assert OVER_HTTP_WARNING in written
+    assert SEMANTIC_SCHOLAR_KEY not in written
+    assert any("http://api.semanticscholar.org" in record.getMessage() for record in caplog.records)
+    assert all(SEMANTIC_SCHOLAR_KEY not in record.getMessage() for record in caplog.records)
+
+
 def test_the_federal_register_is_asked_only_by_a_search_on_a_topic_that_lists_it(
     seams: Seams, monkeypatch: pytest.MonkeyPatch
 ) -> None:

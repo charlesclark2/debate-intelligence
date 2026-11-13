@@ -54,7 +54,7 @@ spec:
         A smoke check on the installed build reports NEGATION_REMOVED as a warning with exit
         0 on an exported .docx whose body deletes a negating word.
 status:
-  phase: InProgress
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

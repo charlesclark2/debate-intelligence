@@ -12,6 +12,10 @@ expired login" and "A run with no readable caselist_token"). So in bucket mode `
 status, with what happened as its message and the code's cure as its hint, in
 `caselist_pull._hint_for`'s "In bucket mode …" idiom. Any other error, and every error outside bucket
 mode, goes on to the root handler, which prints it as it always has.
+
+The module's name has no `caselist_token` in it on purpose: the wheel check in `scripts/stamp_build.py`
+refuses any member whose name carries those words, so that the token file can never ship. v1-e40-t40
+named it `caselist_token_cures.py`, and the build's wheel test refused it (v1-e07-t20's pull request).
 """
 
 from __future__ import annotations

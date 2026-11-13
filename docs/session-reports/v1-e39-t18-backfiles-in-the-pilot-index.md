@@ -88,6 +88,31 @@ and v1-e31-t23's ac3 count (`scripts/count_in_round_markers.py --expect-version
 deleted and no index build or other heavy command runs against the copy. When the operator says
 both are done, the copy and every scratch index are deleted (policy 1.18) and the deletion recorded.
 
+**The PM's rulings of 2026-11-12 on ac1** (relayed by the operator):
+
+* **Q1, shape (4):** one index per backfile season, loaded when a student picks that season, one
+  held at a time. Default search, its index and its cold start are unchanged and never touch a
+  backfile index; the weekly stage and its shrink guard are untouched; each season's pointer has
+  its own guard; every index reads the one suppression list (gate item 1). The student sees which
+  season they are searching, and a short "loading <season>" line during that season's first search.
+  Not (1) or (3): each breaks every ADR-0019 limit, and (3) also breaks removal. Not (2): about 8 GB
+  of storage, more memory, and a 14 to 20 s first wait.
+* **Q2:** the season in words after the slug on every caselist card's provenance line, pending the
+  coach's word as the data-use policy's owner. Policy Attribution rule 2 spells the line out, so the
+  amendment's words are written below for the PM to carry, and the line is not changed on the
+  pilot before that approval.
+* **Q3:** yes: ac2's after-measurement builds and probes the per-season index files from a fresh
+  restore, under ac1's rules (scratch only, nothing published or deployed before the PM rules on
+  the result, deleted after use, never on a Wednesday, mains power with the lid open in every
+  restore block).
+* **The copy:** three read-only counts run before the delete, not two: v1-e31-t32's, v1-e31-t23's
+  and v1-e32-t51's (hsld26's 2026-11-10 snapshot), one after another, from the main clone.
+
+**A season's words come from its slug's start year.** `docs/data/caselist-backfile-seasons.md`:
+"A slug's two digits are the year its season starts", so hspolicy25 and hsld25 are 2025-26 and
+hspolicy24 and hsld24 are 2024-25 (and hsld26 is the current 2026-27). The PM's Q2 example,
+"hspolicy25 (2024–25)", is a year early; this build follows the recorded rule.
+
 ## The measurement so far
 
 **The bucket check** (read-only: the run lock and a listing of each store's

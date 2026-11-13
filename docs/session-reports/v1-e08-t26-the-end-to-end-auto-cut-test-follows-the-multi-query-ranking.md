@@ -353,9 +353,45 @@ None.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-11-12
 
 **Notes:**
+
+Accepted for a partial merge (`scripts/task pr --partial`). The Goal stays `InProgress` until
+validate-dev's slow job is green on dev after the merge, and the PM then records it `Succeeded`.
+
+* **The cause is named exactly and is intended.** It is t24's recency rule: every politics DA link
+  query asks 1,826 days with no `--since`, so age counts as unknown. The press release's term-match
+  lead then beats the news article's source-type and citation lead. The arithmetic is checked by hand
+  against the weights and the 90-day half-life, and no other feature moved. t24's own Deviations 3
+  recorded the same swap on the same fixture, and the PM accepted it on 2026-11-11. So this is a test
+  that never ran before the merge, not a ranking bug, and no stop was owed.
+* **The tests are stronger, not weaker.**
+  * Every snapshot, offset and evidence check now covers all four cards, the bannered one included.
+  * The UNVERIFIED card is pinned with its section and its reason.
+  * The second test's list is exact.
+  * The three mutants (the old ranking, an empty `unverified`, and the card left out of the bundle)
+    each fail both tests at assertions.
+* **Deviation 1 is accepted.** `verify` exiting 0 on the whole bundle cannot hold while the bundle
+  carries a bannered card, which is batch_cut_service's rule. Pinning exit 1 with every card's verdict
+  is the honest replacement.
+  * **Question 1: (a) now, and (b) as a p3 follow-up in the next PM batch.** The follow-up adds an
+    e2e scenario whose bundle holds only VERIFIED cards and verifies with exit 0, so §11's criterion 2
+    keeps a bundle-level exit 0. A smaller `--auto-cut` on the same search, which stops before the
+    press release, is the likely shape; it is unmeasured, so it is measured first.
+* **Deviation 2, Question 2: (a).** 56 of 60 slow tests passed here and none failed. The three skips
+  are environment gates (LibreOffice, the Lambda image), and the one over the bound was shown caught in
+  bounded steps. validate-dev is the only place all 60 run, so its green on dev closes ac1.
+* **Deviation 3: accepted.** ACCEPTANCE.md follows the renamed test.
+* **Follow-ups, into the next PM batch:**
+  * whether a PR's `ci` should run the slow files its affected set reaches: an E41 task at p2, since
+    this break went unseen for a day;
+  * a longer bound, or a hand-off, for the planted-break file in a session's slow-tier run: a note on
+    that task;
+  * the session note to grep `tests/integration` when a ranking change moves a fixture search: added
+    to the same E41 task's description.
+
+`scripts/task pr --partial`

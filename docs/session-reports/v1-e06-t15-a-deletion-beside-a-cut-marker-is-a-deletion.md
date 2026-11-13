@@ -199,9 +199,43 @@ None.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-11-12
 
 **Notes:**
+
+Accepted. ac1, ac2 and the node pass, and the Goal is `Succeeded`.
+
+* **Decision 1, the fix, is better than either option the PM named,** and the report shows why with
+  measurements, not argument.
+  * Treating the profile's whole marker as one diff unit removes the tie rather than moving it.
+  * Flipping Myers' tie failed 12 tests and moved the misreading.
+  * Merging only across removed whitespace failed 20, because the tied script inserts a word.
+  * t07's reproduction is now the deletion [121, 132).
+* **No existing expectation changed:** all 51 earlier tests in the file pass untouched, so there was
+  no reason to stop.
+* **Decision 2 is accepted:** a space beside a marker is read as the card's own space. It is the rule
+  t07's (31, 61) and t10's (15, 18) already pin, and it keeps each deletion as small as the body allows.
+* **Decision 3 is accepted.** It narrows only the body range of a MANUAL_EDIT the policy already
+  refuses, and only by the card's own marker at a cut offset. It never changes whether one is
+  reported, and a marker typed where nothing was cut stays in the range, pinned at both ends.
+* **Decision 4's equivalent mutant is accepted** as kept: one rule tokenizes both texts.
+* **The evidence is enough.**
+  * The red runs: 7, then 9, then 10 failed at their assertions.
+  * The mutant table caught every non-equivalent mutant. The two that survived first got their tests,
+    and the report says so.
+  * ac2's smoke check failed against a mutant that returns no warning.
+  * The smoke check ran against a build stamped from this branch and handed to the smoke harness, as
+    validate-dev does. The PM takes that to be a scratch build, not a replacement of the operator's
+    installed `debate-research`.
+* **The affected set** goes to `ci` under agreement 10.
+* **Follow-ups, into the next PM batch:**
+  1. An untouched export reads as MANUAL_EDIT when a cut joins two words with no space ("holdflood").
+     It is a false failure of the same kind, so it becomes a new E06 task at p2. It first measures
+     whether CardService's selections ever produce such a join, then fixes the tokenization if they do.
+  2. A marker typed with other spacing: a note on the same task. A student who keeps the rendered
+     marker is covered.
+
+`scripts/task pr`

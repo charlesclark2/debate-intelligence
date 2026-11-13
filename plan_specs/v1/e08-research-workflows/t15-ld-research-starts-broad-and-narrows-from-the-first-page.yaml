@@ -46,7 +46,7 @@ spec:
         What the ruling asks for is built with tests on recorded fixtures shown failing
         first, and the search guide says how a student narrows a search.
 status:
-  phase: Pending
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

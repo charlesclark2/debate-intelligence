@@ -6,7 +6,8 @@ and need (v1-e08-t04), asks every enabled provider every query under one deadlin
 they return into distinct sources (t02), ranks them by explainable features (t03), matches each to an
 Article without fetching it, and stores the search. What is here is the command-line surface: the
 options, the request, and the exit code each outcome ends with (architecture proposal §11). The table,
-the JSON and the provider status footer are :mod:`debate_cli.presenters.search_presenter`'s.
+the JSON and the provider status footer are :mod:`debate_cli.presenters.search_presenter`'s, and the
+narrower searches after the footer :mod:`debate_cli.presenters.search_narrowing`'s (v1-e08-t15).
 
 `--topic` names the debate topic the search is for (`policy-2026-27-nhi`). The Federal Register and
 GovInfo are asked only by a search on a topic whose feed file lists them (`config/feeds/`, v1-e07-t07),
@@ -60,6 +61,7 @@ from debate_cli.context import CliContext, cli_context, command_name
 from debate_cli.exit_codes import ExitCode, exit_code_for_search
 from debate_cli.options.budget import MaxCost
 from debate_cli.output import CliOutput, CommandFailure, JsonValue, OutputMode
+from debate_cli.presenters.search_narrowing import DEFAULT_MAX_RESULTS, SearchCommandLine
 from debate_cli.presenters.search_presenter import (
     SearchProgress,
     footer_lines,
@@ -102,7 +104,7 @@ def search(
     ] = None,
     max_results: Annotated[
         int, typer.Option("--max-results", min=1, max=200, help="The most results to show, 1 to 200.")
-    ] = 20,
+    ] = DEFAULT_MAX_RESULTS,
     argument: Annotated[
         str | None,
         typer.Option(
@@ -207,7 +209,8 @@ def search(
     """Search every enabled discovery provider at once, and rank what they find with the reasons why.
 
     Prints each source's rank, title, publisher or venue, date, source type, access and a short
-    explanation, then one line per provider saying whether it answered. Nothing is fetched and no card
+    explanation, then one line per provider saying whether it answered, then up to 5 narrower searches to
+    copy, from the OpenAlex keywords 2 or more results share. Nothing is fetched and no card
     is cut: use fetch or cut on a result's URL. With --argument and --need the query is expanded into
     the taxonomy's queries for that argument and need. Every search is stored with its results.
 
@@ -248,17 +251,28 @@ def search(
     if save is not None and not save.parent.is_dir():
         raise typer.BadParameter(f"{save.parent} is not a directory", param_hint="--save")
     outcome = _searched(cli, ctx, request, expand_llm=expand_llm)
-    payload = search_payload(outcome)
+    command_line = SearchCommandLine(
+        since=since.date() if since is not None else None,
+        until=until.date() if until is not None else None,
+        max_results=max_results,
+        providers=request.providers,
+        topic=topic,
+    )
+    payload = search_payload(outcome, command_line=command_line)
     exit_code = exit_code_for_search(outcome)
     if save is not None and exit_code in (ExitCode.OK, ExitCode.SEARCH_PARTIAL):
         _write_json(save, payload)
     if cutting is not None and exit_code in (ExitCode.OK, ExitCode.SEARCH_PARTIAL):
         return auto_cut(cli, ctx, outcome, payload, cutting)
     if exit_code is ExitCode.OK:
-        cli.output.success(command_name(ctx), payload, display=results_table(outcome))
+        cli.output.success(
+            command_name(ctx), payload, display=results_table(outcome, command_line=command_line)
+        )
         return
     if exit_code is ExitCode.SEARCH_PARTIAL and not cli.output.is_json:
-        cli.output.success(command_name(ctx), payload, display=results_table(outcome))
+        cli.output.success(
+            command_name(ctx), payload, display=results_table(outcome, command_line=command_line)
+        )
     elif not cli.output.is_json:
         # No rows to show, but the footer still says what each provider did.
         cli.output.note("\n".join(footer_lines(outcome)))

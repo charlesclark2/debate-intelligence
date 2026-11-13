@@ -37,6 +37,13 @@ The table's Date column shows what is known: `2022-05-17`, or `2023-03` and `202
 provider knows only to its month or year (Crossref's, v1-e07-t03). `--json` still gives
 `published_at` as the period's first instant.
 
+## Narrowing (v1-e08-t15)
+
+After the footer, up to five narrower searches the page's shared OpenAlex keywords suggest, each a
+command to copy, and the same as `narrowing` in the JSON
+(:mod:`debate_cli.presenters.search_narrowing`). An expanded search, or a page whose results share no
+keyword, prints none, and its `narrowing` is an empty list.
+
 ## No evidence text
 
 A search returns sources, not cards. Neither surface prints a snippet, an abstract or a feed's
@@ -52,8 +59,10 @@ from typing import Final
 
 from debate_cli.exit_codes import ExitCode
 from debate_cli.output import CliOutput, CommandFailure, JsonValue, TableSpec
+from debate_cli.presenters.search_narrowing import SearchCommandLine, narrowing_json, narrowing_lines
 from debate_core.application.federated_ranking import RankedCandidate
 from debate_core.application.federated_search_types import SearchOutcome
+from debate_core.application.search_narrowing import narrowing_for
 from debate_core.domain import AccessStatus, Article, SearchStatus
 from debate_core.domain.discovery import CandidateResult, DatePrecision, ProviderOutcome, ProviderStatus
 
@@ -301,8 +310,13 @@ def _result_json(
     }
 
 
-def search_payload(outcome: SearchOutcome) -> dict[str, JsonValue]:
-    """The search as JSON: `data` on exit 0, `error.details` otherwise. Never a snippet or an abstract."""
+def search_payload(
+    outcome: SearchOutcome, *, command_line: SearchCommandLine | None = None
+) -> dict[str, JsonValue]:
+    """The search as JSON: `data` on exit 0, `error.details` otherwise. Never a snippet or an abstract.
+
+    `narrowing`'s commands keep `command_line`'s options; without one, the query's alone.
+    """
     search = outcome.search
     articles = _articles_by_rank(outcome)
     return {
@@ -315,6 +329,7 @@ def search_payload(outcome: SearchOutcome) -> dict[str, JsonValue]:
             _result_json(ranked, articles.get(ranked.rank), outcome.candidates)
             for ranked in outcome.ranked_candidates
         ],
+        "narrowing": narrowing_json(narrowing_for(outcome), command_line or SearchCommandLine()),
         "providers": [
             summary.as_json()
             for summary in provider_summaries(outcome.provider_statuses, uncounted=outcome.uncounted)
@@ -324,8 +339,8 @@ def search_payload(outcome: SearchOutcome) -> dict[str, JsonValue]:
     }
 
 
-def results_table(outcome: SearchOutcome) -> TableSpec:
-    """The ranked rows, then the expansion's line and the provider status footer."""
+def results_table(outcome: SearchOutcome, *, command_line: SearchCommandLine | None = None) -> TableSpec:
+    """The ranked rows, then the expansion's line, the provider status footer and the narrowing lines."""
     articles = _articles_by_rank(outcome)
     count = len(outcome.ranked_candidates)
     title = f'{count} {"result" if count == 1 else "results"} for "{outcome.search.query}"'
@@ -352,6 +367,7 @@ def results_table(outcome: SearchOutcome) -> TableSpec:
             f"{len(expansion.queries)} queries" + (f", {suggested} from a model" if suggested else "")
         )
     below.extend(footer_lines(outcome))
+    below.extend(narrowing_lines(outcome, narrowing_for(outcome), command_line or SearchCommandLine()))
     return TableSpec(
         title=title,
         columns=("Rank", "Title", "Publisher / venue", "Date", "Type", "Access", "Why"),

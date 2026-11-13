@@ -28,7 +28,14 @@ from debate_core.application.errors import (
 )
 from debate_core.application.ports.providers import MultiQuerySearchProvider, SearchProvider
 from debate_core.application.settings import HttpSettings, ProviderSettings, SearchProviderName
-from debate_core.domain.discovery import BreakerState, CandidateResult, ProviderQuery, ProviderResponse
+from debate_core.domain.discovery import (
+    BreakerState,
+    CandidateResult,
+    ProviderQuery,
+    ProviderResponse,
+    Subject,
+    SubjectScheme,
+)
 from debate_core.domain.enums import SourceType
 from debate_core.domain.search import SearchFilters
 from debate_core.integrations.discovery.openalex import (
@@ -66,7 +73,7 @@ CONTACT_EMAIL: Final = "openalex-coach@example.org"
 VERSION: Final = "0.0.0-test"
 SELECT: Final = (
     "id,doi,display_name,publication_date,type,cited_by_count,open_access,best_oa_location,primary_location,"
-    "authorships,abstract_inverted_index"
+    "authorships,abstract_inverted_index,keywords"
 )
 
 
@@ -261,6 +268,73 @@ def test_the_recorded_works_map_to_the_hand_written_candidates() -> None:
     expected = json.loads((FIXTURES / "works_search.expected.json").read_text(encoding="utf-8"))
     mapped = [candidate_from_work(work) for work in works]
     assert mapped == [CandidateResult.model_validate(item) for item in expected]
+
+
+def keyword(slug: str, name: str) -> Subject:
+    return Subject(
+        scheme=SubjectScheme.OPENALEX_KEYWORD, name=name, provider_id=f"https://openalex.org/keywords/{slug}"
+    )
+
+
+def test_a_works_keywords_are_its_subjects_in_openalexs_order() -> None:
+    """`works_keywords.body.json` (v1-e08-t15): the first work's six keywords, best first, as written."""
+    first = candidate_from_work(body("works_keywords.body.json")["results"][0])
+    assert first is not None
+    assert first.subjects == (
+        keyword("de-extinction", "de-extinction"),
+        keyword("conservation-ethics", "conservation ethics"),
+        keyword("animal-welfare", "animal welfare"),
+        keyword("extinction", "extinction"),
+        keyword("biotechnology", "biotechnology"),
+        keyword("woolly-mammoth", "woolly mammoth"),
+    )
+
+
+def test_a_keyword_a_work_lists_twice_is_one_subject() -> None:
+    second = candidate_from_work(body("works_keywords.body.json")["results"][1])
+    assert second is not None
+    assert [subject.name for subject in second.subjects] == [
+        "de-extinction",
+        "conservation ethics",
+        "animal welfare",
+        "nature's value",
+        "extinction",
+        "biotechnology",
+    ]
+
+
+def test_a_work_with_no_keywords_or_only_unusable_ones_has_no_subjects() -> None:
+    """The seventh work's `keywords` is null; the eighth's items have no name, a blank one, a number, or
+    are not objects at all. Each is skipped, and the work is still a candidate."""
+    works = body("works_keywords.body.json")["results"]
+    seventh, eighth = candidate_from_work(works[6]), candidate_from_work(works[7])
+    assert seventh is not None and eighth is not None
+    assert (seventh.subjects, eighth.subjects) == ((), ())
+
+
+@pytest.mark.parametrize(
+    "keywords",
+    ["de-extinction", {"display_name": "de-extinction"}, 7, [["de-extinction"]], [{"display_name": None}]],
+)
+def test_keywords_in_a_shape_this_module_does_not_read_are_left_empty(keywords: object) -> None:
+    candidate = candidate_from_work(a_work(keywords=keywords))
+    assert candidate is not None
+    assert candidate.subjects == ()
+
+
+def test_a_keyword_without_an_id_is_still_a_subject() -> None:
+    candidate = candidate_from_work(a_work(keywords=[{"display_name": "  seed banks  ", "id": 12}]))
+    assert candidate is not None
+    assert candidate.subjects == (
+        Subject(scheme=SubjectScheme.OPENALEX_KEYWORD, name="seed banks", provider_id=None),
+    )
+
+
+def test_a_work_without_keywords_dumps_as_it_did_before_subjects() -> None:
+    """`subjects` is left out of a candidate's JSON when empty, so stored and pinned shapes keep theirs."""
+    candidate = candidate_from_work(body("works_search.body.json")["results"][0])
+    assert candidate is not None
+    assert "subjects" not in candidate.model_dump(mode="json")
 
 
 def test_the_mapping_keeps_no_affiliation_orcid_or_raw_author_name() -> None:
@@ -530,7 +604,7 @@ async def test_a_request_with_since_and_until_carries_the_date_filters_and_the_k
         "&filter=from_publication_date%3A2020-01-01%2Cto_publication_date%3A2024-12-31&per_page=3"
         "&select=id%2Cdoi%2Cdisplay_name%2Cpublication_date%2Ctype%2Ccited_by_count%2Copen_access"
         "%2Cbest_oa_location"
-        "%2Cprimary_location%2Cauthorships%2Cabstract_inverted_index"
+        "%2Cprimary_location%2Cauthorships%2Cabstract_inverted_index%2Ckeywords"
     )
 
 

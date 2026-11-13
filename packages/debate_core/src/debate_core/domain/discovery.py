@@ -5,7 +5,8 @@ government search endpoint) the same question and merges what comes back. These 
 that cross that boundary, in the platform's vocabulary rather than any provider's:
 
 * :class:`ProviderQuery` — what one provider is asked.
-* :class:`CandidateResult` — one normalized result.
+* :class:`CandidateResult` — one normalized result, with the :class:`Subject` values a provider
+  says it is about (v1-e08-t15).
 * :class:`ProviderResponse` — everything one provider returned for one query, including how it
   fell short.
 * :class:`ProviderHealth` and :class:`BreakerState` — a provider's recent record, for the CLI's
@@ -43,6 +44,8 @@ __all__ = [
     "ProviderQuery",
     "ProviderResponse",
     "ProviderStatus",
+    "Subject",
+    "SubjectScheme",
 ]
 
 
@@ -74,6 +77,28 @@ class DatePrecision(StrEnum):
     YEAR = "year"
 
 
+class SubjectScheme(StrEnum):
+    """Whose vocabulary a :class:`Subject` comes from (v1-e08-t15)."""
+
+    OPENALEX_KEYWORD = "openalex_keyword"
+    """OpenAlex's keywords: short phrases saying what the work is about, best first, assigned by a model
+    from the title, abstract and venue; a keyword joins the vocabulary once it describes 100 works."""
+
+
+class Subject(DomainModel):
+    """What a provider says a work is about, in the provider's own vocabulary (v1-e08-t15).
+
+    A search suggests narrower follow-up queries from the subjects its first page shares
+    (:mod:`debate_core.application.search_narrowing`). A subject is metadata, never evidence text.
+    """
+
+    scheme: SubjectScheme = Field(description="Whose vocabulary the subject is in.")
+    name: NonEmptyText = Field(description="The subject as the provider names it.")
+    provider_id: NonEmptyText | None = Field(
+        default=None, description="The provider's id for the subject, when it gives one."
+    )
+
+
 class CandidateResult(DomainModel):
     """One result from one provider, normalized into the platform's vocabulary.
 
@@ -84,6 +109,8 @@ class CandidateResult(DomainModel):
     Provider-specific payloads do not belong in these fields. A provider's own ids go in
     `identifiers` (or `provider_record_id`), and an adapter that keeps its raw record stores it
     itself and points at it with `raw_ref`; nothing else on this model is a provider's field.
+    `subjects` holds a provider's vocabulary as values that name their scheme, as `identifiers`
+    holds its ids (v1-e08-t15).
 
     The identifiers validate themselves: a DOI is reduced to its bare lowercase form whichever
     spelling the provider used (`https://doi.org/10.1038/NATURE12373` becomes
@@ -137,6 +164,11 @@ class CandidateResult(DomainModel):
         default=None,
         ge=0,
         description="How many works cite this one, by the provider's count; None when unknown.",
+    )
+    subjects: tuple[Subject, ...] = Field(
+        default=(),
+        exclude_if=lambda subjects: not subjects,
+        description="What the provider says the work is about, in its order; left out when it says nothing.",
     )
     raw_ref: NonEmptyText | None = Field(
         default=None,

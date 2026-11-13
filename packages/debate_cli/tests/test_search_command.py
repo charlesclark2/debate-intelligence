@@ -25,7 +25,10 @@ import itertools
 import json
 import logging
 import os
+import shlex
+import shutil
 import sqlite3
+import subprocess
 from collections.abc import Callable, Iterator, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
@@ -2190,3 +2193,168 @@ def test_max_cost_help_says_it_is_one_limit_for_the_whole_command() -> None:
     assert result.exit_code == ExitCode.OK
     help_text = " ".join(result.stdout.replace("│", " ").split())
     assert "one limit for the whole command, whatever models it asks" in help_text
+
+
+# ------------------------------------------------------------------------------------------------
+# Narrowing from the first page's keywords (v1-e08-t15)
+# ------------------------------------------------------------------------------------------------
+
+KEYWORDS_BODY: Final = str(
+    Path(__file__).resolve().parents[2]
+    / "debate_core"
+    / "tests"
+    / "fixtures"
+    / "discovery"
+    / "openalex"
+    / "works_keywords.body.json"
+)
+"""The one hand-written `/works` body with keywords, beside the adapter's other recordings."""
+
+KEYWORD_WORKS: Final = {
+    "conservation ethics": {"W5550100001", "W5550100002", "W5550100003", "W5550100004", "W5550100005"},
+    "animal welfare": {"W5550100001", "W5550100002", "W5550100003", "W5550100004"},
+    "nature's value": {"W5550100002", "W5550100003", "W5550100004"},
+    "biodiversity conservation": {"W5550100005", "W5550100006"},
+    "genetic rescue": {"W5550100005", "W5550100006"},
+}
+"""By hand, from the body: the five keywords a de-extinction search suggests, in order, and the works
+carrying each. Counts never depend on the ranking, and the two on two works are on the same two, so
+their order is by name whatever the ranking does."""
+
+NARROWING_HEADING: Final = "Narrow it: subjects OpenAlex gave 2 or more of these 8 results"
+
+
+def narrowing_lines(result: Result) -> list[str]:
+    lines = result.stdout.splitlines()
+    start = next(index for index, line in enumerate(lines) if line.startswith("Narrow it:"))
+    return lines[start:]
+
+
+def test_a_search_suggests_narrower_searches_from_the_keywords_its_page_shares(seams: Seams) -> None:
+    seams.providers.works_body = KEYWORDS_BODY
+
+    result = search("de-extinction")
+
+    assert result.exit_code == ExitCode.OK, result.output
+    assert footer(result)[:3] == ["Providers: COMPLETE", "  openalex: ok, 8 results", "  rss: ok, 0 results"]
+    assert narrowing_lines(result) == [
+        NARROWING_HEADING,
+        "  conservation ethics, on 5:  debate-research search 'de-extinction conservation ethics'",
+        "  animal welfare, on 4:  debate-research search 'de-extinction animal welfare'",
+        "  nature's value, on 3:  debate-research search 'de-extinction nature'\\''s value'",
+        "  biodiversity conservation, on 2:  "
+        "debate-research search 'de-extinction biodiversity conservation'",
+        "  genetic rescue, on 2:  debate-research search 'de-extinction genetic rescue'",
+    ]
+
+
+def test_the_json_names_each_suggestion_with_its_count_best_rank_query_and_command(seams: Seams) -> None:
+    seams.providers.works_body = KEYWORDS_BODY
+
+    result = search("de-extinction", json_output=True)
+
+    assert result.exit_code == ExitCode.OK, result.output
+    data = envelope(result)["data"]
+    rank_of = {item["provider_record_ids"]["openalex"]: item["rank"] for item in data["results"]}
+    assert data["narrowing"] == [
+        {
+            "subject": name,
+            "scheme": "openalex_keyword",
+            "id": "https://openalex.org/keywords/" + name.replace(" ", "-").replace("'", ""),
+            "results": len(works),
+            "best_rank": min(rank_of[work] for work in works),
+            "query": f"de-extinction {name}",
+            "command": "debate-research search " + "'" + f"de-extinction {name}".replace("'", "'\\''") + "'",
+        }
+        for name, works in KEYWORD_WORKS.items()
+    ]
+
+
+def test_the_saved_file_carries_the_suggestions_too(seams: Seams, tmp_path: Path) -> None:
+    seams.providers.works_body = KEYWORDS_BODY
+    saved = tmp_path / "search.json"
+
+    result = search("de-extinction", "--save", str(saved), json_output=True)
+
+    assert result.exit_code == ExitCode.OK, result.output
+    on_file = json.loads(saved.read_text(encoding="utf-8"))
+    assert [entry["subject"] for entry in on_file["narrowing"]] == list(KEYWORD_WORKS)
+
+
+def test_a_suggestion_keeps_the_students_window_cap_and_providers(seams: Seams) -> None:
+    seams.providers.works_body = KEYWORDS_BODY
+
+    result = search(
+        "de-extinction",
+        "--since",
+        "2020-01-01",
+        "--until",
+        "2025-12-31",
+        "--max-results",
+        "50",
+        "--providers",
+        "openalex,rss",
+    )
+
+    assert result.exit_code == ExitCode.OK, result.output
+    assert narrowing_lines(result)[1] == (
+        "  conservation ethics, on 5:  debate-research search 'de-extinction conservation ethics'"
+        " --since 2020-01-01 --until 2025-12-31 --max-results 50 --providers openalex,rss"
+    )
+
+
+def run_in(shell: str, command: str) -> list[str]:
+    """The words `shell` reads from `command`: `debate-research` swapped for a printf of each word."""
+    printing = command.replace("debate-research", "printf '%s\\n'", 1)
+    done = subprocess.run([shell, "-c", printing], capture_output=True, text=True, check=True, timeout=10)
+    return done.stdout.splitlines()
+
+
+def test_a_command_with_an_apostrophe_in_the_query_and_the_keyword_pastes_as_one_word(seams: Seams) -> None:
+    """The PM's ruling: each printed command pastes safely with an apostrophe in the query or the keyword.
+    `sh` reads it, and zsh too where it is installed (the operator's shell; CI's runners have none)."""
+    seams.providers.works_body = KEYWORDS_BODY
+
+    result = search("de-extinction's critics", json_output=True)
+
+    assert result.exit_code == ExitCode.OK, result.output
+    by_subject = {entry["subject"]: entry for entry in envelope(result)["data"]["narrowing"]}
+    command = by_subject["nature's value"]["command"]
+    assert command == "debate-research search 'de-extinction'\\''s critics nature'\\''s value'"
+    expected = ["search", "de-extinction's critics nature's value"]
+    assert shlex.split(command)[1:] == expected
+    for shell in filter(None, (shutil.which("sh"), shutil.which("zsh"))):
+        assert run_in(shell, command) == expected, shell
+    assert by_subject["conservation ethics"]["command"] == (
+        "debate-research search 'de-extinction'\\''s critics conservation ethics'"
+    )
+
+
+def test_an_expanded_search_suggests_nothing(seams: Seams) -> None:
+    seams.providers.works_body = KEYWORDS_BODY
+
+    table = search("health insurance", "--argument", "politics-da", "--need", "link")
+    as_json = search("health insurance", "--argument", "politics-da", "--need", "link", json_output=True)
+
+    assert table.exit_code == ExitCode.OK, table.output
+    assert "Narrow it:" not in table.stdout
+    assert envelope(as_json)["data"]["narrowing"] == []
+
+
+def test_a_page_without_keywords_prints_no_narrowing_and_says_so_in_the_json_with_an_empty_list(
+    seams: Seams,
+) -> None:
+    table = search("midterm elections", "--since", "2026-09-14")
+    as_json = search("midterm elections", "--since", "2026-09-14", json_output=True)
+
+    assert table.exit_code == ExitCode.OK, table.output
+    assert "Narrow it:" not in table.stdout
+    assert envelope(as_json)["data"]["narrowing"] == []
+
+
+def test_help_says_a_search_suggests_narrower_searches() -> None:
+    result = runner.invoke(create_app(), ["search", "--help"], env={"COLUMNS": "200"})
+
+    assert result.exit_code == ExitCode.OK
+    help_text = " ".join(result.stdout.replace("│", " ").split())
+    assert "up to 5 narrower searches to copy" in help_text

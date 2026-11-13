@@ -54,9 +54,11 @@ from debate_core.application.sync_runs import (
     SYNC_RUN_LOG_FILENAME,
     RunMode,
     StageEntry,
+    SyncRunDetails,
     SyncRunMonitor,
     SyncRunOutcome,
     SyncRunRecord,
+    banner_words,
 )
 from debate_core.integrations.local import BLOB_DIRECTORY, FsEvidenceObjectStore
 from debate_core.integrations.local.run_state_files import LocalRunStateFiles
@@ -64,7 +66,7 @@ from debate_core.integrations.s3 import S3EvidenceObjectStore
 from debate_core.integrations.s3.run_lock_object import S3LockObject
 from debate_core.testing.fakes.suppression import empty_suppression_list
 
-from .retry_rule import the_commands_retry_rule
+from .retry_rule import a_retry_may_cure, the_commands_retry_rule
 
 if TYPE_CHECKING:  # pragma: no cover - import for the type checker only
     from mypy_boto3_s3.client import S3Client
@@ -321,6 +323,19 @@ async def test_a_scheduled_pull_guard_refusal_is_recorded_and_announced_as_a_loc
         subtitle=sent.subtitle,
     )
     assert sent.subtitle == WHERE
+
+
+async def test_a_scheduled_pull_guard_refusal_reads_back_with_the_lock_refusals_banner_words(
+    task: Task,
+) -> None:
+    """`caselist runs` shows it beside the words a lock refusal's banner has, as `RunLockHeld`'s."""
+    task.the_bucket_records(a_record(EARLIER_START))
+
+    await task.pull(scheduled=True)
+
+    record = SyncRunRecord.model_validate(task.record())
+    details = SyncRunDetails.model_validate(task.details())
+    assert banner_words(record, details, may_succeed_on_retry=a_retry_may_cure) == sync_runs.LOCK_BANNER_WORDS
 
 
 async def test_a_scheduled_pull_guard_refusal_names_the_cure_on_the_error_too(task: Task) -> None:

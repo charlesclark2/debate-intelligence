@@ -42,7 +42,7 @@ spec:
         from `fetch --paste` and from a discovery candidate, and a day date prints as today,
         by tests shown failing first.
 status:
-  phase: InProgress
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

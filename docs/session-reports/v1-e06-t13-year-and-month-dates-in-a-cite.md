@@ -6,7 +6,7 @@
 | Spec | [`plan_specs/v1/e06-card-cutting/t13-year-and-month-dates-in-a-cite.yaml`](../../plan_specs/v1/e06-card-cutting/t13-year-and-month-dates-in-a-cite.yaml) |
 | Epic / release | `v1-e06-card-cutting` / `v1.3` |
 | Branch | `task/v1-e06-t13-year-and-month-dates-in-a-cite` |
-| Session status | PARTIAL <!-- COMPLETE / PARTIAL / BLOCKED --> |
+| Session status | COMPLETE <!-- COMPLETE / PARTIAL / BLOCKED --> |
 
 ## Summary
 
@@ -20,12 +20,12 @@ the Crossref deposit its DOI names, but only when no source states a day. The ci
 `September 2026` or `September 14, 2026`, and the short cite's two digits are the year at any precision.
 All three committed profiles print that text in the .docx.
 
-**The phase stays InProgress, for one ruling only (question 1 below).** No committed profile's style
-has a rule for a month or a year, so I proposed one and implemented it, as you asked. Every criterion
-passes with it. If you accept it as it stands, setting the phase to `Succeeded` is the only step left.
-Question 2 asks whether the cite should also read the Article's own date. I recommend it should not.
+**The PM ruled on both questions on 2026-11-13, both (a), as implemented**, and the Goal is
+`Succeeded`. The month and year wording is `September 2026` and `2026`, with the short cite
+unchanged. A cite's date comes from the Crossref record looked up by the Article's DOI, and
+`Article.published_at` is not read into a cite. No code or expected value changed after the rulings.
 
-## Questions for the PM
+## Questions for the PM, and the rulings
 
 1. **The month and year rule in the cite (the stop you asked for).** A profile sizes the cite and
    never words it (`config/format_profiles/*.yaml`). The wording is `format_cite`'s alone, so all three
@@ -37,6 +37,10 @@ Question 2 asks whether the cite should also read the Article's own date. I reco
    you would give. I recommend (a). It reads like the day form beside it, and the short cite needs no
    change. Changing it is one function, `_date_at` in `citation_service.py`, plus the hand-written
    expectations.
+
+   **PM ruling, 2026-11-13: (a).** The day style with the missing parts left out, the short cite
+   unchanged, because it reads like the day form beside it. The hand-written expected cite lines stay
+   as they are.
 2. **Should the cite also read an Article's discovery date?** Nothing read `Article.published_at` into
    a cite before this task (v1-e07-t03's report says so), and nothing does now. A discovery candidate's
    year or month reaches the cite through the Crossref deposit the cite looks up by the Article's DOI,
@@ -46,11 +50,14 @@ Question 2 asks whether the cite should also read the Article's own date. I reco
    Crossref record. But it also changes cites that print `ND` today, day dates included, so it is more
    than this task's scope. I recommend (a), with (b) as a follow-up if you want it.
 
+   **PM ruling, 2026-11-13: (a).** Not (b), because an unverified guess would change cites that print
+   `ND` today, day dates included. No follow-up task: (b) goes on the PM's V1.x list.
+
 ## Plan nodes
 
 | Node | Status | Notes |
 |---|---|---|
-| `year-and-month-dates-in-a-cite` (Partial dates) | Done; its criterion passes | Red run against a skeleton (`c7cab96`), then the implementation and CLI README (`184998e`). Phase InProgress for question 1. |
+| `year-and-month-dates-in-a-cite` (Partial dates) | Done; its criterion passes | Red run against a skeleton (`c7cab96`), then the implementation and CLI README (`184998e`). Goal `Succeeded` after the PM's rulings of 2026-11-13. |
 
 ## Acceptance criteria
 
@@ -101,7 +108,7 @@ The tests write it out by hand for each profile and precision. The date and the 
 | month | `--date 2024-11`, Crossref `[2021, 3]` | `November 2024`, `March 2021` | the same | the same | `… 24`, `… 21` |
 | day | `--date 2026-09-15` | `September 15, 2026`, as before | the same | the same | `… 26` |
 
-The proposed rule for month and year is question 1.
+The month and year rule is the PM's ruling 1 (2026-11-13), as proposed.
 
 ### What an older build reads
 
@@ -211,11 +218,13 @@ mutant also made other tests crash, I ran the targeted test alone and it failed 
 
 ## Deviations from the spec
 
-1. **The month and year rule is proposed, not ruled (question 1).** The PM's rulings say to stop for
-   this ruling only. The phase stays InProgress until it is made.
+1. **The month and year rule was proposed, then ruled (question 1).** The PM's brief said to stop for
+   this ruling only. I stopped with the rule implemented, and the PM ruled (a), as proposed, on
+   2026-11-13. The phase was set to `Succeeded` after that.
 2. **A discovery candidate's date reaches the cite through Crossref, not the Article (question 2).**
    The spec says a candidate's year or month reaches "the Article and the cite". It reaches the
    Article directly, and the cite through the deposit the cite already looks up by that Article's DOI.
+   The PM ruled (a), keep it so, on 2026-11-13.
 3. **The node's command was run under the hard stop.** I ran
    `.venv/bin/python scripts/hard_stop.py 115 .venv/bin/python -m pytest …`, as working agreement 10
    asks, rather than `uv run pytest …`. The selection is the same.
@@ -255,8 +264,7 @@ None (the PM asked for no command). The affected set is left to the pull request
    `citation_publication_date` of `2021` or JSON-LD `datePublished` of `2021-05`. The function is in
    `debate_core.retrieval`, outside this task's packages. With it, a scholarly landing page that states
    only a year would cite that year without Crossref.
-2. **The Article's discovery date as a last-resort cite candidate**, if question 2 is answered (b).
-3. `search --json`'s `date_precision` is v1-e08-t12's and untouched here.
+2. `search --json`'s `date_precision` is v1-e08-t12's and untouched here.
 
 ## PM review
 

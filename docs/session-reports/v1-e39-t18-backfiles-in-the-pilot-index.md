@@ -157,7 +157,12 @@ It took the lock over from another Mac run of `caselist restore-run-state`, run 
 `20261112T225959Z` (16:59:59 Chicago), whose lease lapsed at 2026-11-13T00:55:05Z. Its last renewal
 was about 18:25 Chicago; the `pmset` log shows clamshell sleep at 18:26:01. A search of the home
 folder, `/private/tmp` and `/Volumes` for restored-copy markers (45 s, complete) found only the new
-copy. Which block that run was, and what became of what it wrote, is asked of the operator.
+copy. The operator confirmed it was block 4's first run: it lost the network (the lid closed at
+18:26, as the log shows), the restore failed, and the operator deleted `~/t18-measure` before running
+block 4 again. That partial copy's contents were not counted before the deletion, so they are not
+recorded; it held dev's run copy and part of the parsed stores, as the first partial copy did, and it
+is gone (the marker search above). Its failed release left the lease that the second restore took
+over.
 
 dev's published index, as its restored manifest gives it: four stores (hsld26, hspolicy26, hspf26,
 openev) at docx-9, snapshot 2026-11-10, 63,705 documents (16,710, 26,678, 14,563 and 5,754), 465,001

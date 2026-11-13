@@ -15,8 +15,10 @@
 # CI stays light (docs/process/working-agreements.md §1): the `ci` check on a PR into dev has a budget
 # of 5 minutes and a target of under 3 on a typical pull request. Nothing here reaches a model, a
 # search provider or an AWS account, and nothing reads a repository secret. The only network use is
-# installing tools and dependencies. LLM evaluations, browser end-to-end suites, live canaries,
-# terraform plan/apply and load tests never run here.
+# installing tools and dependencies. LLM evaluations, browser suites against a deployed site, live
+# canaries, terraform plan/apply and load tests never run here. The search pages' browser files do,
+# in the `slow-tests` job when a pull request reaches them: they serve every page in-process and
+# reach nothing outside the runner (v1-e41-t29).
 #
 # What keeps it there is the `test` job (v1-e01-t27). It was one runner taking 4 to 6 minutes over
 # the whole suite, and it grew with every task. Now:
@@ -55,6 +57,11 @@
 #     The push run on dev is the whole selection, and the dev pre-release waits for it, so a test the
 #     selection missed fails before any release; a red push run on dev is fixed by the next pull
 #     request before anything else merges (working agreement 10).
+#   * The parts run no slow test. Beside them, the `slow-tests` job (v1-e41-t29) runs the slow tests
+#     of the same affected set on a pull request into dev, with validate-dev's slow-tier markers, less
+#     four tests left to validate-dev (scripts/ci_slow_tests.py says which and why). v1-e08-t24's
+#     ranking change broke a slow e2e test its affected set had chosen, and only validate-dev on dev
+#     ran it, a day later.
 #   * It measures no coverage on a pull request or a dispatch. On a push to dev or main each part
 #     measures coverage of its own share and keeps the data as an artifact, and the `coverage` job
 #     combines every part's data into one report over the whole selection (v1-e01-t42). Until then
@@ -320,6 +327,11 @@ jobs:
       test_files: ${{ steps.choose.outputs.test_files }}
       parts: ${{ steps.choose.outputs.parts }}
       files_to_parts: ${{ steps.choose.outputs.files_to_parts }}
+      # For the `slow-tests` job (v1-e41-t29): whether it runs, whether it needs Chromium, and the
+      # test files it is handed, those of the selection that may hold a slow test.
+      run_slow: ${{ steps.choose.outputs.run_slow }}
+      slow_chromium: ${{ steps.choose.outputs.slow_chromium }}
+      slow_test_files: ${{ steps.choose.outputs.slow_test_files }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -352,7 +364,8 @@ jobs:
         # script succeeded. If it cannot run, every part runs the whole default selection: a broken
         # choice runs more tests, never fewer and never none. The job summary says how many and why.
         # It writes no `files_to_parts`: an output never written reads as empty, which deals every
-        # part test by test (v1-e41-t17).
+        # part test by test (v1-e41-t17). On a pull request into dev the `slow-tests` job runs every
+        # slow test: `slow_test_files` never written is every testpath (v1-e41-t29).
         env:
           EVENT_NAME: ${{ github.event_name }}
           BASE_BRANCH: ${{ github.base_ref }}
@@ -367,6 +380,12 @@ jobs:
           else
             echo "run_parts=true" >> "$GITHUB_OUTPUT"
             echo "parts=[1, 2, 3, 4, 5, 6, 7, 8]" >> "$GITHUB_OUTPUT"
+            if [ "$EVENT_NAME" = pull_request ] && [ "$BASE_BRANCH" = dev ]; then
+              echo "run_slow=true" >> "$GITHUB_OUTPUT"
+              echo "slow_chromium=true" >> "$GITHUB_OUTPUT"
+            else
+              echo "run_slow=false" >> "$GITHUB_OUTPUT"
+            fi
             echo "::warning title=Test selection::scripts/ci_test_selection.py failed, so every part runs the whole default selection."
             printf '### Tests: the whole default selection\n\nscripts/ci_test_selection.py failed, so every part runs its share of every test file, dealt test by test.\n' >> "$GITHUB_STEP_SUMMARY"
           fi
@@ -473,6 +492,43 @@ jobs:
       - *uv-sync
       - name: pytest (the partition proof)
         run: uv run --frozen pytest -n auto -m "partition_proof and not slow and not live" --durations=10 tests/scripts/test_ci_workflow_test_job.py
+
+  # The slow tests a pull request into dev reaches (v1-e41-t29, the PM's ruling of 2026-11-13). The
+  # parts run `not slow`, so until then a slow test the affected set chose ran only in validate-dev's
+  # slow tier after the merge: v1-e08-t24's ranking change broke tests/integration/test_e2e_research.py,
+  # which its affected set had chosen, and dev was red for a day. `test-selection` hands this job the
+  # chosen test files that may hold a slow test (`run_slow` says whether there are any), and
+  # scripts/ci_slow_tests.py runs them with validate-dev's slow-tier markers, imported from
+  # scripts/validate_dev.py, less the four tests left to validate-dev (it names them and why, and the
+  # job summary prints them). A skip fails it, as it fails validate-dev's tier; no slow test left to
+  # run passes. It runs beside the parts, so it adds to `ci`'s time only past the longest part.
+  #
+  # Its bound (working agreement 1): the pytest step at most 120 seconds, and the job at most 60
+  # seconds past the longest test part. When that is passed on ordinary pull requests, the browser
+  # files move to a job of their own first, then the slowest test is made cheaper. Nothing ever
+  # leaves validate-dev's slow tier. A push, a promotion and a dispatch leave the slow tier to
+  # validate-dev, which runs it whole on every dev pre-release.
+  slow-tests:
+    needs: [changes, test-selection]
+    if: needs.changes.outputs.python == 'true' && needs.test-selection.outputs.run_slow == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - *checkout
+      - *setup-uv
+      - *install-python
+      - *uv-sync
+      # The search pages' browser tests drive Chromium through Playwright, every page served in-process
+      # (v1-e39-t06): the build the locked Playwright names, and the system libraries it needs.
+      - name: Install Playwright's Chromium for the browser tests (only when one is chosen)
+        if: needs.test-selection.outputs.slow_chromium == 'true'
+        run: uv run --frozen playwright install --with-deps chromium
+      - name: Write down the test files test-selection handed this job (none written is every testpath)
+        env:
+          SLOW_TEST_FILES: ${{ needs.test-selection.outputs.slow_test_files }}
+        run: printf '%s' "$SLOW_TEST_FILES" > "$RUNNER_TEMP/slow-test-files.txt"
+      - name: pytest (the slow tests of those files, with validate-dev's markers, four left to validate-dev)
+        run: uv run --frozen python scripts/ci_slow_tests.py --test-files "$RUNNER_TEMP/slow-test-files.txt" --junit "$RUNNER_TEMP/slow-tests.xml" --summary "$GITHUB_STEP_SUMMARY"
 
   # Branch coverage of the whole default selection, with the report every run printed until
   # v1-e01-t27, on pushes to dev and main only: nothing is gated on coverage (pyproject.toml sets no
@@ -740,6 +796,7 @@ jobs:
       - typecheck
       - test
       - partition-proof
+      - slow-tests
       - import-boundaries
       - spec-validate
       - terraform-checks
@@ -757,7 +814,9 @@ jobs:
           # to succeed.
           GATES_OF_JOB: >-
             {"typecheck": ["changes.python"], "test": ["changes.python", "test-selection.run_parts"],
-             "partition-proof": ["changes.partition_proof"], "import-boundaries": ["changes.python"],
+             "partition-proof": ["changes.partition_proof"],
+             "slow-tests": ["changes.python", "test-selection.run_slow"],
+             "import-boundaries": ["changes.python"],
              "terraform-checks": ["changes.infrastructure"], "site": ["changes.site"],
              "workflow-lint": ["changes.workflows"]}
         run: |

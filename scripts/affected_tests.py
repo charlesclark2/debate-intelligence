@@ -147,10 +147,16 @@ narrows imports is measured: t28's commits, each selected over the task's own gr
 are REV2's, so a changed file REV2 does not have is reached only by name, and the script lists such
 files. It cannot be combined with `--run`, which runs the working tree's tests.
 
+`--run --slow` then runs the slow tests the selection reaches, as a pull request's `slow-tests` job
+does (v1-e41-t29, scripts/ci_slow_tests.py): validate-dev's slow-tier markers over the selected
+files that may hold one, less the tests left to validate-dev, a skip counted as a failure. A session
+runs it once before its report (working agreement 10).
+
 Usage:
   uv run scripts/affected_tests.py                     # this branch against origin/dev, as printed paths
   uv run scripts/affected_tests.py --explain           # with the reason each file was selected
   uv run scripts/affected_tests.py --run               # and run pytest over them with CI's markers
+  uv run scripts/affected_tests.py --run --slow        # and then the slow tests they reach
   uv run scripts/affected_tests.py --diff REV          # what commit REV changed
   uv run scripts/affected_tests.py --base A --head B   # B against its merge base with A
   uv run scripts/affected_tests.py --diff REV --graph REV2   # REV's changes over REV2's imports
@@ -172,12 +178,15 @@ import re
 import subprocess
 import sys
 import tempfile
+import tempfile
 import time
 import tomllib
 from collections import deque
 from collections.abc import Callable, Iterable, Iterator
 from dataclasses import dataclass, field, replace
 from pathlib import Path, PurePosixPath
+
+import ci_slow_tests
 
 DEFAULT_BASE = "origin/dev"
 CI_MARKERS = "not slow and not live"
@@ -2987,6 +2996,14 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--explain", action="store_true", help="print why each test file was selected")
     parser.add_argument("--run", action="store_true", help="run pytest over the selection with CI's markers")
+    parser.add_argument(
+        "--slow",
+        action="store_true",
+        help=(
+            "with --run, then run the slow tests the selection reaches, as a pull request's slow-tests "
+            "job does: validate-dev's slow-tier markers, less the tests left to validate-dev"
+        ),
+    )
     arguments = parser.parse_args(argv)
     if arguments.run and (arguments.head or arguments.diff):
         parser.error("--run runs the working tree's tests, so it cannot be combined with --head or --diff")
@@ -2994,6 +3011,8 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("--head and --diff are two ways to name a commit; give one")
     if arguments.run and arguments.graph:
         parser.error("--run runs the working tree's tests, so it cannot be combined with --graph")
+    if arguments.slow and not arguments.run:
+        parser.error("--slow runs the selection's slow tests after the rest, so it needs --run")
 
     root = repository_root()
     started = time.monotonic()
@@ -3044,7 +3063,32 @@ def main(argv: list[str] | None = None) -> int:
         f"after {time.monotonic() - run_started:.0f} s.",
         file=sys.stderr,
     )
-    return 0 if status == 5 else status  # 5: every selected test was deselected by the markers
+    status = 0 if status == 5 else status  # 5: every selected test was deselected by the markers
+    if not arguments.slow:
+        return status
+    return max(status, run_slow_tests(root, sorted(selection.tests)))
+
+
+def run_slow_tests(root: Path, tests: list[str]) -> int:
+    """The slow tests of the selection, as a pull request's `slow-tests` job runs them (v1-e41-t29):
+    the files that may hold one, validate-dev's markers, the tests left to validate-dev deselected,
+    and a skip counted as a failure. 0 when they passed or there were none."""
+    slow_files = [test for test in tests if ci_slow_tests.may_hold_slow_tests(root, test)]
+    if not slow_files:
+        print("Slow tests: none of the selected files holds one this run takes.", file=sys.stderr)
+        return 0
+    sys.stdout.flush()
+    started = time.monotonic()
+    with tempfile.TemporaryDirectory(prefix="affected-slow-") as scratch:
+        outcome = ci_slow_tests.run(slow_files, Path(scratch) / "slow-tests.xml", root=root)
+    for problem in outcome.problems:
+        print(f"   {problem}", file=sys.stderr)
+    print(
+        f"Slow tests: {len(slow_files)} test files, pytest exited {outcome.exit_code} after "
+        f"{time.monotonic() - started:.0f} s; {'failed' if outcome.problems else 'passed'}.",
+        file=sys.stderr,
+    )
+    return 1 if outcome.problems else 0
 
 
 if __name__ == "__main__":

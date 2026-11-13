@@ -418,6 +418,10 @@ def run_tier(
         "-p",
         "no:cacheprovider",
         "-rfEs",
+        # Each tier's 25 slowest tests, so a log names the cost of each file (v1-e41-t29): until then
+        # the slow job's log gave only its total, and the PR's slow-tests job is bounded by what
+        # these tests cost on a runner.
+        "--durations=25",
     ]
     print(f"\n== {tier.name} tier: {' '.join(command)}", flush=True)
     completed = subprocess.run(command, cwd=cwd, env=dict(environment), check=False)

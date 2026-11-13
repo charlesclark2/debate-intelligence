@@ -53,7 +53,7 @@ spec:
         The operator's first scheduled run after the apply records a pull started with
         --scheduled (operator).
 status:
-  phase: Pending
+  phase: InProgress
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

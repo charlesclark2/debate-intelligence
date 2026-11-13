@@ -42,7 +42,7 @@ spec:
         warning with its evidence range, the card stays VERIFIED, and a deletion that
         removes none gives no warning, by tests shown failing first.
 status:
-  phase: InProgress
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

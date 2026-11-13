@@ -24,7 +24,7 @@ production `ResilientProvider` in a `ProviderRegistry`, answer from recorded bod
 | Test | What it shows |
 |---|---|
 | `failures::test_a_provider_outage_makes_the_search_partial_exit_6_naming_the_provider` | both adapters asked through the registry for one search: OpenAlex's outage is reported per provider (`openalex: error`), the feed's two items are the results (`rss: ok`), exit 6 `SEARCH_PARTIAL` |
-| `research::test_search_auto_cut_3_writes_three_verified_cards_cut_from_their_snapshots_and_verify_passes_the_bundle` | OpenAlex's recorded works become the ranked results that `--auto-cut 3` cuts |
+| `research::test_search_auto_cut_3_writes_three_verified_cards_and_a_bannered_unverified_one_and_verify_agrees` | OpenAlex's recorded works become the ranked results that `--auto-cut 3` cuts |
 
 ## 2. Accessible URL → verified card works end to end with tag, cite, verbatim evidence, underlining, and DOCX export
 
@@ -35,7 +35,7 @@ Covered.
 | `failures::test_cut_writes_each_kind_of_sources_card_from_its_snapshot_and_verify_agrees[news]` | `cut <URL>`, exit 0, VERIFIED: the DOCX holds the tag, the short cite `Whitfield 26`, the page's second paragraph verbatim and its underlined run; `verify` passes it |
 | `failures::test_cut_writes_each_kind_of_sources_card_from_its_snapshot_and_verify_agrees[think-tank]` | the same for a think-tank report (`Ellery et al. 26`) |
 | `failures::test_cut_writes_each_kind_of_sources_card_from_its_snapshot_and_verify_agrees[open-access journal]` | the same for an open-access journal PDF, cited from Crossref's recorded answer (`Okonkwo-Hale et al. 26`) |
-| `research::test_search_auto_cut_3_writes_three_verified_cards_cut_from_their_snapshots_and_verify_passes_the_bundle` | search → `--auto-cut 3` → one DOCX bundle of three VERIFIED cards under one block heading, its embedded manifest equal to `bundle.manifest.json`, and `verify bundle.docx` exit 0 |
+| `research::test_search_auto_cut_3_writes_three_verified_cards_and_a_bannered_unverified_one_and_verify_agrees` | search → `--auto-cut 3` → one DOCX bundle of three VERIFIED cards under one block heading and, in its section under "UNVERIFIED — not finished cards", the government press release's card with `CITATION_UNVERIFIED` (ranked before the third VERIFIED card since `v1-e08-t24`, never counted toward the three), its embedded manifest equal to `bundle.manifest.json`; `verify bundle.docx` agrees card by card, three VERIFIED and the bannered one UNVERIFIED with `CITATION_UNVERIFIED`, exit 1 (`v1-e08-t26`) |
 
 ## 3. No generated evidence can pass verification unless it is reproducible from a stored source snapshot
 
@@ -43,8 +43,8 @@ Covered.
 
 | Test | What it shows |
 |---|---|
-| `research::test_search_auto_cut_3_writes_three_verified_cards_cut_from_their_snapshots_and_verify_passes_the_bundle` | each VERIFIED card's evidence is the stored snapshot document's text at the card's offsets, those offsets are the ones worked out by hand from the page's paragraphs, and the raw snapshot is the recorded page's bytes |
-| `research::test_the_bundle_does_not_verify_where_its_snapshots_are_not_stored` | the same bundle, verified against a data directory that never stored its sources: every card UNVERIFIED with `SNAPSHOT_MISSING`, exit 1 |
+| `research::test_search_auto_cut_3_writes_three_verified_cards_and_a_bannered_unverified_one_and_verify_agrees` | each card's evidence, the bannered UNVERIFIED card's too, is the stored snapshot document's text at the card's offsets, those offsets are the ones worked out by hand from the page's paragraphs, and the raw snapshot is the recorded page's bytes |
+| `research::test_the_bundle_does_not_verify_where_its_snapshots_are_not_stored` | the same bundle, verified against a data directory that never stored its sources: every card UNVERIFIED with `SNAPSHOT_MISSING`, the bannered one with `CITATION_UNVERIFIED` before it, exit 1 |
 | `failures::test_a_hand_edited_evidence_word_in_an_exported_docx_makes_verify_fail_with_manual_edit` | one evidence word changed in an exported DOCX: UNVERIFIED with `MANUAL_EDIT`, exit 1; the untouched file still verifies |
 
 ## 4. Golden-card tests verify exact text and formatting against representative debate cards
@@ -71,7 +71,7 @@ and in what the command prints, never a message's wording.
 | `failures::test_a_provider_outage_makes_the_search_partial_exit_6_naming_the_provider` | exit 6, `SEARCH_PARTIAL`, the failed provider named |
 | `failures::test_a_hand_edited_evidence_word_in_an_exported_docx_makes_verify_fail_with_manual_edit` | exit 1, `UNVERIFIED`, `MANUAL_EDIT` |
 | `research::test_the_bundle_does_not_verify_where_its_snapshots_are_not_stored` | exit 1, `UNVERIFIED`, `SNAPSHOT_MISSING` |
-| `research::test_search_auto_cut_3_writes_three_verified_cards_cut_from_their_snapshots_and_verify_passes_the_bundle` | the robots-disallowed and paywalled results listed in `report.json` as `SKIPPED` with their access status |
+| `research::test_search_auto_cut_3_writes_three_verified_cards_and_a_bannered_unverified_one_and_verify_agrees` | the robots-disallowed and paywalled results listed in `report.json` as `SKIPPED` with their access status |
 
 ## Beyond §11: the V1 caselist workflow
 

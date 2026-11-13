@@ -6,38 +6,106 @@
 | Spec | [`plan_specs/v1/e40-cloud-caselist-run/t44-a-scheduled-run-refuses-a-second-run-within-hours.yaml`](../../plan_specs/v1/e40-cloud-caselist-run/t44-a-scheduled-run-refuses-a-second-run-within-hours.yaml) |
 | Epic / release | `v1-e40-cloud-caselist-run` / `v1.8` |
 | Branch | `task/v1-e40-t44-a-scheduled-run-refuses-a-second-run-within-hours` |
-| Session status | IN PROGRESS <!-- COMPLETE / PARTIAL / BLOCKED --> |
+| Session status | COMPLETE <!-- COMPLETE / PARTIAL / BLOCKED --> |
 
 ## Summary
 
-Stopped at the proposal, as the spec asks (2026-11-12). Nothing is implemented yet. The proposal
-below (N, how a scheduled start is told apart from a hand run, which recorded runs count, where the
-refusal sits, and what an unreadable run log does) waits for the PM's ruling. The one fact the
-PM should look at first: today the schedule passes **no** override, and a hand run starts the same
-task definition with the same command, so nothing the container sees today tells the two apart. The
-proposal needs a Terraform change to `aws_scheduler_schedule.run`, which this task only proposes
-(infrastructure/ is read-only here), so the guard this task adds stays inert in the cloud until a
-later task applies it.
+A pull started with the new `caselist pull --scheduled` now reads the bucket's run log before
+anything else. It refuses with `RecentRunRecorded` (`RECENT_RUN_RECORDED`, exit 1) when the log
+records a `caselist pull` run of mode `run` that started within the last 24 hours and was not a
+refusal by the lock or by this guard. The check comes before the lock is taken, the restore and the
+sync service's build, so the token is never read and OpenCaselist is never called. The refusal is
+recorded and announced as `RunLockHeld` is, and its notice and hint name the cure in the PM's words.
+A pull without `--scheduled` is a hand run and is never asked. A run log that cannot be read lets the
+run go on to the lock, with a warning. The refusal joins `landscape_staleness.LOCK_REFUSALS`, with its
+parametrised case. What the PM should look at first: the guard is inert in the cloud until the
+schedule passes `--scheduled`, which is the PM's next Terraform task (follow-ups, verbatim), so this
+branch is safe to merge and deploy before it (ruling 2). Every criterion passed, and the Goal is
+`Succeeded`. The affected set is 8,620 tests, so it was left to the PR's CI and its relevant parts
+were run here (checks below).
 
 ## Plan nodes
 
-<!-- One row per Plan graph node, in the order they were completed. -->
-
 | Node | Status | Notes |
 |---|---|---|
-| | | |
+| `a-scheduled-run-refuses-a-second-run-wit` (Second run guard) | Done | Proposal, PM ruling, skeleton committed and tests run red against it, guard built, 18 planted breaks plus one plant in a test. |
 
 ## Acceptance criteria
 
-<!-- Goal criteria (ac1…) and every node criterion. Status: PASS / FAIL / NOT RUN. -->
-
 | Criterion | Status | Evidence (command → result) |
 |---|---|---|
-| | | |
+| ac1: the proposal is ruled on by the PM | PASS | Proposal committed in `51f4569`. The PM's rulings of 2026-11-12, all five accepted, with additions to 2, 3 and 4 (Decisions below). |
+| ac1: a scheduled pull with a run within N hours is refused before the lock and any OpenCaselist call, a hand run is not, by tests shown failing first | PASS | Red against the skeleton (`5b2b3b3`, a guard that refuses nothing): `.venv/bin/python scripts/hard_stop.py 115 .venv/bin/python -m pytest packages/debate_core/tests/application/caselist/test_scheduled_pull_guard.py -n 0 -q --tb=line` → **15 failed, 11 passed**. The 15 are the three refusal tests (raised `RunStateBundleMissing`, not `RecentRunRecorded`, so the lock and the restore had run), the unreadable-log test (no warning line), 10 counting cases and the latest-run test. The 11 that passed are what must not refuse: the hand run, the run past 24 hours and the bucket with no run log, plus the 8 cases that count nothing (the 5 refusals, a `--publish-pending` pull, 24 h exactly, last week). The CLI's usage errors, red the same way: `... -m pytest packages/debate_cli/tests/bucket_mode/test_scheduled_pull_guard.py -n 0` → **3 failed, 1 passed** (exit 1, not 2). Green after: the same files → 27 passed (28 with the banner-words test) and 4 passed. Planted breaks below. |
+| Node: Second run guard tests pass (`uv run pytest packages/debate_core/tests -k "pull and guard"`) | PASS | `.venv/bin/python scripts/hard_stop.py 115 uv run pytest packages/debate_core/tests -k "pull and guard"` → **28 passed in 22.06s**, exit 0. It selects exactly `test_scheduled_pull_guard.py`'s 28 tests: 11 functions, one of them with 18 cases. |
+
+### Planted breaks
+
+Each was applied to the committed source, run against its tests, and restored with `git checkout HEAD --`
+(driver kept in the session's scratchpad; `git status` clean after). Every one failed on its own
+assertion, not a crash:
+
+| Break | Tests failed (assertion) |
+|---|---|
+| The guard asked of a hand run too (`if bracket is not None`) | core hand-run test; CLI hand-run half (an error envelope) |
+| The guard after the lock and restore | 3 refusal tests (`RunStateBundleMissing` raised first), unreadable-log test |
+| Window inclusive (`<=`) | `exactly_24_hours_ago`, the lets-through-after-24-hours test |
+| Lock refusals counted | 5 refusal cases (`refused_by_*`, including this guard's own) |
+| `--publish-pending` pulls counted | `a_publish_pending_pull` |
+| Failed runs not counted | `failed_at_a_stage`, `stopped_on_an_expired_login`, `stopped_by_sigterm`, `lost_its_lease` |
+| An unreadable log refuses | unreadable-log test ("the lock decides, as before the guard") |
+| The earliest run named, not the latest | latest-run test |
+| The refusal's record published (`record_stays_local = False`) | core: bucket changed; CLI: `RUN_LOCK_NOT_HELD` instead of `RECENT_RUN_RECORDED` (the lock's fence refused the publish) |
+| The generic failed-run notice | notice test (`Notification` differs) |
+| No hint from `fix_for` | notice test |
+| No cure in the notice | notice test |
+| `banner_words` without the class | **survived** at first; caught after `test_a_scheduled_pull_guard_refusal_reads_back_with_the_lock_refusals_banner_words` was added (`ec5f176`) |
+| The CLI never passes `scheduled` | CLI retry half (exit 0, not refused) |
+| `--scheduled` allowed in local mode | `in_local_mode` |
+| `--scheduled` allowed with `--dry-run` | `beside_dry_run` |
+| The container's bracket on the real clock (no `now=`) | CLI retry half (real 2026-11-12 is not within 24 h of the test clock's run) |
+| A second module builds a `SyncRunMonitor` (`backfile_import.py`) | `test_the_composition_root_alone_builds_the_run_monitor` |
+| (test-side plant) a pull record written into the bucket's run log after a backfile import | the run-log equality; with that line disabled, the scheduled pull straight after is refused |
+
+Removing `RecentRunRecorded` from `LOCK_REFUSALS` → `test_landscape_staleness.py` **5 failed, 37 passed**:
+both parametrised `[RecentRunRecorded]` cases, the new `test_the_lock_refusals_are_the_ones_parametrised_here`,
+and the two tests that read a log of refusals. Restored → 42 passed.
+
+### Checks before the report
+
+| Check | Result |
+|---|---|
+| `uv run scripts/affected_tests.py` | 361 of 752 test files; `--collect-only -m "not slow and not live"` over them: **8,620 tests** (36 s to collect). Over two minutes, so **not run**, per the PM's rule of 2026-10-19 (v1-e31-t26). The PR's `ci` check runs it. |
+| Always-run list plus the docs checks (`tests/architecture/ tests/specs/ test_app.py test_help_rendering.py test_container_factories.py tests/docs/ tests/scripts/test_check_command_blocks.py tests/scripts/test_docs_index.py`) | 735 passed in 34 s |
+| `packages/debate_cli/tests/bucket_mode/` (all 19 files, in three runs; one run of all of it hit the 115 s stop) plus `test_only_caselist_pull_writes_the_run_log.py` | 88 + 87 + 120 passed |
+| Every debate_core and debate_cli test file naming `run_pull`, `BucketRun`, `notifications_for`, `banner_words`, `LOCK_REFUSALS`, `RunState`, `fix_for`, `PullBracket`, `landscape_staleness` or `SyncRunMonitor` outside bucket_mode (36 files, two runs) | 289 + 493 passed |
+| `packages/debate_cli/tests/commands/test_caselist_pull*.py` (3 files) | 82 passed |
+| `uv run ruff check .` and `uv run ruff format --check .` | clean |
+| `uv run pyright` on the 13 changed Python files | 0 errors, 0 warnings |
+| `uv run lint-imports` | 20 kept, 0 broken |
+| `scripts/check_thin_handlers.py`, `scripts/check_links.py`, `scripts/check_command_blocks.py`, `scripts/docs_index.py --check-descriptions` | all OK (74 handlers within 25 statements) |
+| `uv run scripts/validate_specs.py` | OK: 669 files, 41 epics, 606 tasks, 22 releases |
 
 ## Files changed
 
-<!-- Group by package or directory; one line on why each group changed. -->
+* `debate_core.application.caselist.recent_run` (new): the window, the cure sentence and
+  `RecentRunRecorded`.
+* `debate_core.application.caselist.bucket_run`: `BucketRun.refuse_after_a_recent_run` and
+  `latest_counting_run`, plus a `now` clock.
+* `debate_core.application.caselist.run_state`: `RunState.recorded_runs`, the bucket's run log read
+  without restoring, listed first as `parses_owed` is.
+* `debate_core.application.caselist_sync`: `run_pull(scheduled=)`, which asks the bracket before the
+  lock; `PullBracket` gains the method; `fix_for` gives the refusal's hint.
+* `debate_core.application.sync_runs`: the notice (`RECENT_RUN_RECORDED_TITLE`) and the lock
+  refusal's banner words.
+* `debate_core.application.landscape_staleness`: `RecentRunRecorded` joins `LOCK_REFUSALS`.
+* `debate_cli.commands.caselist_pull`: `--scheduled` and its three usage errors.
+  `debate_cli.container`: the bracket's clock.
+* Tests: `packages/debate_core/tests/application/caselist/test_scheduled_pull_guard.py` (new);
+  `test_landscape_staleness.py` (its parametrised case and the pin on `LOCK_REFUSALS`);
+  `packages/debate_cli/tests/bucket_mode/test_scheduled_pull_guard.py` (new);
+  `test_backfile_import.py` (the run-log pin); `packages/debate_cli/tests/test_only_caselist_pull_writes_the_run_log.py` (new).
+* `docs/runbooks/caselist-cloud-run.md`: "A scheduled run refused after a recent run", and a pointer
+  to it from the retry paragraph.
 
 ## Deviations from the spec
 
@@ -45,7 +113,35 @@ None.
 
 ## Decisions and assumptions
 
-### Proposal awaiting the PM's ruling (2026-11-12)
+### The PM's rulings of 2026-11-12, as applied
+
+1. **N = 24 hours**, accepted. A hand run between Tuesday 06:00 and Wednesday 06:00 making that
+   Wednesday's scheduled run refuse is an accepted cost: late, not lost. `RECENT_RUN_WINDOW`.
+2. **`caselist pull --scheduled`, passed only by the schedule**, accepted, with the usage errors as
+   proposed (beside `--dry-run` or `--publish-pending`, or in local mode: exit 2). Until the schedule
+   passes it the guard is inert, so this code is safe to merge and deploy before any Terraform change.
+   The Terraform change is the PM's own task in the next batch (follow-ups).
+3. **Counting as proposed, plus: only `caselist pull` records count.** Checked: the run log has one
+   writer, `SyncRunMonitor`, built only by the composition root and asked for only by
+   `caselist pull`, and `caselist backfile-import` writes no record to it. The record has no command
+   field (frozen since `v1-e34-t19`), so the guard can't filter by command; the pins are what make
+   "every `run` record is a pull" true. `test_a_backfile_import_writes_no_record_a_scheduled_pull_counts`
+   runs an import and then, at the same moment, a scheduled pull that runs, so the guard doesn't
+   depend on the no-import window. `test_only_caselist_pull_writes_the_run_log.py` fails on any new
+   builder, asker or namer of the run log.
+4. **The refusal as proposed, plus the cure**: the notice and the hint both say "a hand run (the
+   cloud-run runbook's Step 8) is never refused by this guard", beside the earlier run's id and start
+   time (`HAND_RUN_CURE`). The runbook section says the same, and a test pins it.
+5. **An unreadable run log goes on to the lock**, with the warning line, as proposed.
+
+Choices left to me: the guard's place is `BucketRun.refuse_after_a_recent_run`, called by
+`run_pull` inside the monitor before `bracket.start`, and the error class lives in its own module,
+`caselist/recent_run.py`. `landscape_staleness` and `sync_runs` both import that class, and
+`bucket_run` imports `LOCK_REFUSALS` from `landscape_staleness`, so a module of its own avoids an
+import cycle. The bucket's run log is listed before it is read, as `parses_owed` lists, because under
+a prefix-conditioned grant a missing key reads as refused. An absent log means no recorded run.
+
+### Proposal as ruled on (2026-11-12)
 
 **What the schedules are today** (`infrastructure/modules/caselist_run/`, read only):
 
@@ -164,18 +260,41 @@ selects them, run red first against a guard that refuses nothing.
 <!-- Commands the operator must run (anything over ~2 minutes), with where to run them, the exact
 command, expected runtime and what success looks like. Also GitHub/AWS settings to change. -->
 
-None.
+None (the PM: no command today, and no deploy). The affected set, 8,620 tests, is the PR's `ci`
+check's to run, as the PM's rule of 2026-10-19 says; it needs no hand-off.
 
 ## Follow-up work
 
 <!-- Bugs, gaps or ideas outside this task's scope, each with the task or epic it belongs to.
 The PM decides whether they become spec changes or new tasks. -->
 
-* The schedule's `input` override (proposal point 2) needs a task with infrastructure/ in its
-  packages and an image deploy; until then the guard is inert in the cloud.
-* With the universal RunTask target, the schedule could pass a `clientToken` built from the
-  invocation, which would stop ECS from placing a second task for a retried ambiguous call at all.
-  Not verified that the execution id stays the same across one invocation's retries.
+* **The schedule passes `--scheduled`** (the PM files it in the next batch, with infrastructure/ in its
+  packages: an image carrying `--scheduled` released, pushed and its digest pinned; the plan read by
+  the PM; never applied on a Wednesday; AWS's Scheduler documentation read first for how a templated
+  ECS target passes `input`, with the universal target as the fallback). The proposed resource change
+  and the NOT VERIFIED note, verbatim from the proposal:
+
+  * resource `aws_scheduler_schedule.run`, file `infrastructure/modules/caselist_run/run_task.tf`,
+    block `target`: a new attribute
+    `input = jsonencode({ containerOverrides = [{ name = local.run_container_name, command = ["--json", "caselist", "pull", "--scheduled"] }] })`.
+    ECS keeps the entry point (`timeout ... debate-research`) and replaces the command only.
+  * The apply must carry an image that knows `--scheduled`: an older image answers the option as a
+    usage error (exit 2) and the week does not run. The sequence is the usual one: release, image
+    push, new digest in owner.auto.tfvars, plan, apply, all in one plan.
+  * Not verified (no live call today): that a templated ECS target passes `input` to RunTask as
+    `overrides`. AWS's EventBridge rules do; Scheduler's page should be read before the apply.
+    If it does not, the universal target `arn:aws:scheduler:::aws-sdk:ecs:runTask` takes the whole
+    RunTask request, `overrides` included.
+
+  Once it is applied, the runbook's sentence "Until the schedule passes `--scheduled`, the guard does
+  nothing" comes out, in that task.
+* **(Unverified) a ClientToken from the schedule.** With the universal RunTask target, the schedule
+  could pass a `clientToken` built from the invocation, so that ECS never places a second task for a
+  retried ambiguous call. Not verified: whether the execution id stays the same across one
+  invocation's retries, and how long ECS keeps a client token.
+* **Limits the guard leaves, named and not changed** (no change to the lock): a run killed hard
+  writes no record, so a start after its 30-minute lease runs, as today; a run whose end-of-run save
+  of the state files failed releases the lock with no record in the bucket.
 
 ## PM review
 

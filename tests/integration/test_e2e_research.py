@@ -29,6 +29,10 @@ Expected values are written by hand from the fixtures (working agreement 6):
 the open-access PDF (4th, 0.2213, against the press release's 0.1464; v1-e08-t26's report has the
 scores), fill it before the press release is reached, so its bundle holds VERIFIED cards only and
 `verify` exits 0.
+
+A test added here or renamed changes a pin elsewhere: the slow job's planted-break test
+(`tests/scripts/test_ci_slow_tests_the_affected_set_reaches.py`, v1-e41-t29) counts this file's
+tests and names what each one's failure says under its planted Crossref break.
 """
 
 from __future__ import annotations

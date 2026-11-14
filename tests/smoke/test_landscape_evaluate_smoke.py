@@ -352,7 +352,7 @@ def test_landscape_evaluate_reads_a_holdout_as_counts_only(
 
     assert checked.exit_code == ExitCode.OK, checked.output
     assert (
-        json.loads(checked.stdout)["data"]["holdout"],
+        json.loads(checked.stdout)["data"].get("holdout"),
         json.loads(checked.stdout)["data"]["labelled"],
     ) == (True, 4)
     assert replayed.exit_code == ExitCode.OK, replayed.output

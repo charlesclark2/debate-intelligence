@@ -60,7 +60,7 @@ spec:
       description: >-
         Charlie signs off that the corpus is representative of how the team actually cuts cards.
 status:
-  phase: Pending
+  phase: InProgress
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

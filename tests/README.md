@@ -1,10 +1,13 @@
 # tests
 
-Cross-package tests. `fixtures/` holds recorded HTTP/model fixtures, `golden_cards/` holds
-golden DOCX/JSON cards (invented files built by the test builders — no real team, caselist or camp
-file or excerpt is committed anywhere in this repository, scrubbed or otherwise: see v1-e31-t02,
-v1-e31-t03 and v1-e31-t05),
-`integration/` holds the end-to-end recorded suite (`v1-e09-t05`), every module of it marked `slow`, so
+Cross-package tests. `fixtures/` holds recorded HTTP/model fixtures. Everything committed here is
+invented, built by the test builders: no real team, caselist or camp file or excerpt is committed
+anywhere in this repository, scrubbed or otherwise (v1-e31-t02, v1-e31-t03 and v1-e31-t05). The one
+exception is E09's golden corpus, `fixtures/golden_cards/`: one scrubbed excerpt per case of a card
+the coach cut or re-cut and reviewed for names, on the terms in its `README.md` (rulings of
+2026-11-14). No source page or snapshot is committed; the cases record only their digests, URL and
+offsets. `golden/` holds the golden tests, `integration/` holds the end-to-end recorded suite
+(`v1-e09-t05`), every module of it marked `slow`, so
 validate-dev's slow tier and the nightly run take it and pull requests do not; `cli/` holds the
 cross-package command-line tests that run on every pull request: `fetch` over the recorded
 cassettes, the installed `verify` as a process, and the launchd installer. Package unit tests live in

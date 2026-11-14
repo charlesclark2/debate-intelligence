@@ -293,7 +293,7 @@ def test_search_auto_cut_2_stops_before_the_press_release_and_verify_passes_the_
     ] == [(card["card_id"], card["snapshot_id"], "VERIFIED", []) for card in cards]
     # verify read each card against its stored snapshot, not only its citation.
     for verdict in result["cards"]:
-        assert SNAPSHOT_CHECKS <= set(verdict["checks_run"]), verdict["checks_run"]
+        assert set(verdict["checks_run"]) >= SNAPSHOT_CHECKS, verdict["checks_run"]
     assert (result["document"]["body_cards"], result["document"]["unclaimed_body_cards"]) == (2, [])
 
 

@@ -633,9 +633,62 @@ recorded beside ac2 but not part of it.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-11-14
 
 **Notes:**
+
+Accepted for a partial merge. The session's work is done. ac1's plan read and ac2's Wednesday run are
+the operator's, so the Goal stays `InProgress`.
+
+* **Decision 1 is the documentation read the brief asked for.** It cites six pages with their URLs
+  and quotes, read 2026-11-13, before any change. The finding (no page says the templated ECS
+  target's Input reaches RunTask) is stated plainly, not guessed, and the universal target follows by
+  the PM's rule.
+* **The change is as ruled.** The universal target carries RunTask's camelCase request, with exactly
+  what the template sent (Decision 5). The scheduler role's policy is unchanged, and a run started by
+  hand keeps the task definition's command. `check_image_plan.py` learns the universal shape for the
+  move and for every later image plan. Its known-revision rule reads both shapes, leaving
+  `v1-e41-t13` an easy follow-on.
+* **The evidence is thorough.**
+  * The red runs: 43 of 44 Terraform tests passed with the new one failing at its three assertions,
+    then 2/1, 20/14 and 20/34 for the pytest files.
+  * The PM's mutant (`--scheduled` dropped) is caught by both the Terraform and the pytest tests, and
+    all nine mutants on the check are caught at its `PLAN` line, none by a crash.
+  * The plan-time evaluation was probed with a wrong dead-letter ARN, showing the test reads the plan
+    and not only the source.
+* **Decision 4 is right.** `--scheduled --dry-run` is a usage error by t44's ruling 2, so the one-off
+  runs `--dry-run` alone and proves the field names, the image and the start. Wednesday's run proves
+  the option. The confirmation that a dry run takes no lock, writes no run record and downloads
+  nothing is read from the code, with the files named.
+* **Deviations 1 to 5: accepted.**
+  * 1 is the narrowest possible change to `v1-e40-t09`'s test: exactly one input, in `run_task.tf`,
+    naming no backfile. A planted input on the login's schedule still fails it.
+  * 4 records the PM's Q2 ruling.
+  * The PM records `tests/docs` in the spec's packages in the next batch.
+* **Decision 7 corrects the PM's Q3 premise.** Prod has no run task or schedule until its
+  `caselist_image_digest` is set (apply B). So this weekend's promotion plan creates no prod
+  schedule, and t48's universal target reaches prod when apply B creates it at the home's move
+  (promotion item 14), under that move's own plan read. Nothing about t48 rides in this weekend's
+  prod plan.
+* **Decision 6 is acknowledged.** That the schedule is updated in place is checked by the check's
+  refusal of a replace and by the PM's read of the plan.
+* **The checks:**
+  * The affected set (120 files) stopped at its bound under load and goes to `ci` under agreement 10,
+    with the bounded subsets green.
+  * `terraform_checks.sh` passed offline.
+  * Dev has moved by `v1-e06-t17`: if `scripts/task pr` asks, `scripts/task sync`.
+* **Follow-up 1, ruled:** if CloudTrail shows `(no command override)`, `aws ecs describe-tasks ...
+  --query 'tasks[0].overrides.containerOverrides[0].command'` may stand in, for the one-off and for
+  ac2. It is read while the task runs or within the hour after it stops, and prints the command alone.
+* **The operator's order:**
+  * blocks 0 to 7, then send the PM the check's line, the `Plan:` line and the plan text;
+  * the apply (block 8) only after the PM's word, on Sunday 2026-11-15 or Monday 2026-11-16;
+  * blocks 9 to 13 the same day;
+  * 16 and 17 after 07:00 Chicago on Wednesday 2026-11-18.
+
+  At block 2, the release must also be green on validate-dev.
+
+`scripts/task pr --partial`

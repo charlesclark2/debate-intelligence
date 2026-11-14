@@ -6,14 +6,33 @@
 | Spec | [`plan_specs/v1/e32-argument-landscape/t50-a-second-labelled-sample-held-out.yaml`](../../plan_specs/v1/e32-argument-landscape/t50-a-second-labelled-sample-held-out.yaml) |
 | Epic / release | `v1-e32-argument-landscape` / `v1.2` |
 | Branch | `task/v1-e32-t50-a-second-labelled-sample-held-out` |
-| Session status | IN PROGRESS: stopped at the spec's stop for the PM's ruling on the proposal <!-- COMPLETE / PARTIAL / BLOCKED --> |
+| Session status | PARTIAL: built and tested as ruled; the draw, the two sittings and `--check-sample` on the real store are the operator's (ac3) <!-- COMPLETE / PARTIAL / BLOCKED --> |
 
 ## Summary
 
-Stopped at the spec's stop, as the PM's brief of 2026-11-14 asks. No code has been written. The proposal
-below sets out the holdout's size from the interval wanted at 0.85, the draw (strata, seed, snapshot), the
-card identity that keeps every copy of the first sample out, LD, rows 16, 33 and 57, and the labels-file
-copy. The build waits for the PM's ruling. Prerequisites t46, t53, t55 and t58 are `Succeeded`.
+The PM ruled the proposal on 2026-11-14 ([the ruling](#the-pms-ruling-2026-11-14)), and the build follows it:
+
+* **The draw.** `compare_local_classifier.py holdout-sample` draws 120 cards by the first sample's rule (strata
+  60/40/20, seed 20261114) from the 2026-11-03 snapshot of this Mac's store. It keeps out every card that shares
+  a cluster, an exact fingerprint, a reading or a document with any of the first sample's 60, and takes one
+  card per cluster. It prints each exclusion's count and stops, by count, on a first-sample card with no
+  occurrence row. It writes its own files under its own names, and refuses to write over any file.
+* **The sitting.** `label_holdout_sample.py` takes the two sittings of 60. Rows 16, 33 and 57 of the first
+  sample come at the end of the second, each answered `at:<id>`, `also <label>` or `side`.
+* **The evaluation.** `landscape evaluate --holdout-*` reads the holdout beside the first sample, as counts and
+  scores only; `--breakdown` refuses a holdout; `--check-sample` reads it.
+
+The tests are on invented cards and stores. They were run red against a refuse-nothing skeleton (39 of 52
+failing, each at an assertion) and catch all 13 mutants, the PM's included: a holdout card sharing a cluster
+with a first-sample card in another team's file. The node's criterion passes (35 tests).
+
+**ac3 is the operator's:** the draw, the coach's two sittings and `--check-sample` on the real store. Their
+blocks are in [the runbook](../runbooks/landscape-model-evaluation-record.md#the-held-out-sample-the-draw-and-the-coachs-two-sittings-v1-e32-t50).
+So the Goal stays `InProgress`. The record run is not authorized: its commands and estimates are in
+[the record run, for the PM's ruling](#the-record-run-for-the-pms-ruling-after-both-sittings). Since `v1-e32-t53`
+(taxonomy 1.5.1), the first sample's kept cassettes no longer replay, so a side-by-side score needs the first
+sample re-recorded on each route as well. That is about $0.62 to $0.74 on `deep_audit` and $0.21 to $0.25 on
+`high_volume`.
 
 ## The proposal (2026-11-13, for the PM's ruling)
 
@@ -194,45 +213,324 @@ STAMP=$(date +%Y-%m-%d-%H%M%S); for F in policy-2026-27-nhi-coach-sample-labelle
 Success: four digest lines, each file's digest the same as its copy's, and no `STOP`. The holdout's file
 first exists once the draw has written it, so before the draw the block names it missing; that is expected.
 
+## The PM's ruling (2026-11-14)
+
+Recorded as given, in short:
+
+1. **Size:** 120, strata 60/40/20, two sittings of 60; the table and the Wilson method as given.
+2. **Seed** 20261114. **Snapshot (b):** 2026-11-03 from this Mac's own store, parsed at `2026.10.27-docx-7`,
+   recorded beside the holdout's scores in `landscape-model-evaluation.md`. The new file names as proposed;
+   the draw keeps refusing to overwrite the first sample's files.
+3. **Exclusions:** all of section 3, against all 60 drawn: a first-sample card's cluster (exact fingerprint
+   checked too), the same `MatchItem` fingerprint, any first-sample document, and at most one card per
+   cluster inside the holdout. A first-sample card with no occurrence row stops the draw, printing a count
+   only. Each exclusion's count is printed. The mutant as proposed.
+4. **LD:** a separate task, filed by the PM in the next batch, sat only once the Policy holdout has its score.
+   The PM amends `v1-e32-t07` ac4's "Policy and LD" in the same batch.
+5. **Rows 16, 33 and 57:** `at:<id>`, `also <label>` or `side`, after the holdout's cards at the end of the
+   second sitting. `side` writes nothing and names the row on the last line.
+6. **Confirmed:** the holdout header; counts and scores only (no row numbers, per-card outcomes or answer ids);
+   `--breakdown` refuses it; `first_sample` and `holdout` side by side in the JSON; `--check-sample` reads it;
+   the sitting shows no model, score, stratum or mark. The record run is not authorized: the report gives the
+   record commands per route measured so far, with a token and cost estimate from the 1.3.1 re-record, and the
+   PM rules on them after both sittings.
+7. **Labels copy:** the zsh block as given, before and after each sitting.
+
+FYI accepted: `debate_cli`'s `landscape.py` (thin `--holdout-*` options) is a Deviation citing this ruling.
+
+## The build
+
+Every name below is an invented test's or a code identifier; no card, tag, heading or label of the store was
+read by the session.
+
+### The draw (`debate_core/arguments/landscape/holdout_sample.py`, `application/holdout_sample_draw.py`)
+
+* **`coach_sample()` gains two keyword arguments, both off by default**, so the first sample's draw is
+  unchanged:
+  * `strata`, other shares of the same three strata;
+  * `cluster_of`, which with the one-card-per-document rule keeps one card per cluster.
+* **`holdout_sample()` applies the ruling's rules to every candidate**, against every first-sample card
+  drawn:
+  * a first-sample card's `cluster_id`;
+  * its `exact_fingerprint`;
+  * its `MatchItem.fingerprint`;
+  * its document.
+
+  A candidate with no occurrence row is also kept out, and counted. Each rule's count is kept: the rules
+  overlap, so a card is counted under each rule it meets and once in `excluded`. The draw then runs
+  `coach_sample()` on the eligible cards, at 60/40/20 and seed 20261114, one per cluster. A first-sample card
+  with no identity, or one with no occurrence row, raises `FirstSampleCardsMissing(missing, of)`, whose
+  message gives the counts and never an id.
+* **`card_identities()`** names every card of one reading by item id. The read fingerprint comes from
+  `read_items`, and the exact fingerprint and cluster from that reading's own `occurrences.jsonl`, joined on
+  source and first paragraph, as `landscape_cards` joins them.
+* **`holdout_sample_lines()`** writes the rows file. Its header adds `"holdout": true`, the seed, the
+  shares, every exclusion count, and `drawn_from`: the caselist, topic, snapshot, version directory, parser
+  version and fingerprint versions.
+* **The mark** (`HOLDOUT_KEY`, `holdout_header`, `is_holdout`) is in `holdout_mark.py`, a module of its own.
+  The evaluation and the CLI read only the mark, and importing the draw would load scikit-learn:
+  `test_container_factories` caught that during this session.
+
+### The draw's command (`scripts/compare_local_classifier.py holdout-sample`)
+
+* `--snapshot`, `--labels-out` and `--dry-run`, with seed 20261114 by default.
+* It reads the store at the snapshot and refuses a version directory with no occurrence table. It builds the
+  feature table, trains both models on the seed, reads the first sample's rows file and draws.
+* It prints every count, then writes three new files, each opened for exclusive creation:
+  * `<topic>-holdout-<snapshot>-features.jsonl`;
+  * `<topic>-holdout-<snapshot>-sample.jsonl`;
+  * the coach's CSV at `--labels-out`, with an empty `also` column, and its sidecar through
+    `record_first_digest`.
+* It refuses an existing target, and a target that is one of the first sample's files, before reading the
+  store (`--dry-run` included for the latter).
+* The first sample's commands (`compare`, `sample`, `score-sample`, `train-queue-order`) still find their one
+  feature table: files with `-holdout-` in the name are left out of their glob.
+
+### The sitting (`application/holdout_sitting.py`, `scripts/label_holdout_sample.py`)
+
+* `--rows 1-60`, then `61-120`, shown in the sample's own order. Each card shows its tag, its headings and the
+  side its file was disclosed on (from `sides_by_row`), and its current label if it has one.
+* The coach types a label and stance, `at:<id>`, `none` or `unsure`, with an optional `, <second label>`.
+  `row_labels` validates it. A refusal is asked again and is never echoed, and an `unsure` card takes no
+  second label.
+* `--side-rows 16,33,57`, with the first sample's files and `--first-snapshot`, adds the separate part. Each
+  card shows its tag, headings, side and labels, and takes `at:<id>`, `also <label>` or `side`. `side` writes
+  nothing, and the sitting's last line names its rows.
+* Both files are read through the t58 guard before anything is shown. Each changed file is written once, at
+  the end, with `write_sitting` (a dated copy, the file, then the sidecar). Ctrl-C writes nothing.
+  `rewritten_cells` generalizes t46's `relabelled_sample` to the `position` and `also` columns.
+* The end prints counts only: labelled, unsure, blank and second labels, then the first sample's rows written
+  and the side line.
+
+### The evaluation (`application/landscape_model_evaluation.py`, `debate_cli/commands/landscape.py`)
+
+* `break_down` refuses a rows file marked a holdout (`EVALUATION_REFUSED`, "never broken down card by card").
+* `check_sample` reads a holdout and sets `holdout`. `--check-sample`'s JSON adds `"holdout": true` only for
+  one, so the first sample's JSON is unchanged.
+* `evaluate_beside` evaluates the first sample and the holdout, each at its own snapshot, and returns both
+  with the holdout's `drawn_from`. Before any model is asked, it refuses a holdout whose rows file is not
+  marked, a first sample whose rows file is, and a pair that shares a card or a document (counts only).
+* `landscape evaluate --holdout-sample/--holdout-sample-rows/--holdout-snapshot` replays both. `data` is
+  `bar_reads_sample` (`holdout`), `first_sample` and `holdout`; the last holds the same summary keys plus
+  `drawn_from`. It exits 0 when both stages ran, every scan of both is clean, and the holdout meets the bar.
+  The options are refused:
+  * with `--breakdown` (`HOLDOUT_COUNTS_ONLY`);
+  * with `--model-mode record` (`HOLDOUT_RECORDS_ALONE`: the holdout is recorded alone, as `--sample`);
+  * with `--check-sample` (`CHECK_SAMPLE_ASKS_NO_MODEL`);
+  * when given without all three (`HOLDOUT_NEEDS_ITS_FILES`).
+
+  The command's handler stays at the 25-statement budget: its closing lines moved into `_finish`.
+* `sides_by_row` gives every row's disclosed sides, whether or not the row is labelled. The sitting needs it,
+  because t46's `sample_sides` reads labelled rows only.
+
+### Tests, run red first
+
+The tests are in five new files, and one test is added to the smoke suite:
+
+* `packages/debate_core/tests/arguments/landscape/test_holdout_sample.py` (13 tests): the draw by hand, each
+  rule's count, the mutant's card, the strata and seed, one per cluster, the stop by count, and the rows
+  file's header.
+* `packages/debate_core/tests/application/test_holdout_sitting.py` (13): ranges, labels with a stance and a
+  second label, refusals, nothing of a model shown, the three choices, `side`'s last line, and the cells
+  written.
+* `packages/debate_core/tests/application/test_holdout_sample_reading.py` (12), on `synthetic26`:
+  identities, side by side, the refusals before any model call, `--breakdown` refused, `--check-sample`, and
+  sides.
+* `packages/debate_cli/tests/test_landscape_evaluate_holdout.py` (7), through the container: recorded alone,
+  replayed beside, and each refusal's code.
+* `tests/scripts/test_holdout_sample_script.py` (7), on a planted store with an occurrence table: no shared
+  document or cluster, the files written and the first sample's unchanged, no overwrite, a dry run, the stop,
+  and the first sample's commands.
+* `tests/smoke/test_landscape_evaluate_smoke.py::test_landscape_evaluate_reads_a_holdout_as_counts_only`.
+
+**The red run** was against commit `4f8c81e`, a skeleton with every signature in place and no rule applied:
+no exclusion, no mark, no refusal, no overwrite check. **39 of 52 failed.** Three of them failed on a missing
+key, not an assertion; they were made to fail at their assertions (`1007d8c`) and were run red
+again. Three were corrected after the red run, because they picked `aff-two`'s copy of a card where
+`aff-one`'s was meant; on the skeleton they still fail, since the skeleton refuses no shared card.
+
+The 13 that passed on the skeleton test code it kept whole: the range parser, the cell rewriter, the
+displays, `drawn_from`, the seed's determinism, the first sample's breakdown, and the dry run writing
+nothing. The smoke check failed on the skeleton's sources at its assertion
+(`assert (None, 4) == (True, 4)`) and passes on HEAD.
+
+**The mutants**, each applied to the committed code, run against the five files, and restored from HEAD:
+
+| Mutant | Tests failing |
+|---|---|
+| **The PM's: a candidate in a first-sample card's cluster is not kept out** | **5**, among them `test_a_card_sharing_a_cluster_with_a_first_sample_card_in_another_teams_file_is_never_drawn` and the script's no-shared-cluster test |
+| The exact-fingerprint rule off | 4 |
+| The reading (`MatchItem` fingerprint) rule off | 3 |
+| The document rule off | 5 |
+| The no-occurrence-row stop off | 3. The `f2` case fails on an `AttributeError`, not an assertion. The `f1` case and the script's stop test fail at their assertions. |
+| The first sample measured short of one card (as if against the labelled only) | 9 |
+| One card per cluster off | 3 |
+| The holdout's `--breakdown` refusal off (service) | 2 |
+| The holdout's `--breakdown` refusal off (CLI) | 1 |
+| The shared-document check off | 1 |
+| The overwrite refusal off | 1 |
+| The first sample's feature-table glob takes the holdout's too | 1 |
+| The side line names no row | 1 |
+
+All 13 are caught.
+
+## The record run, for the PM's ruling after both sittings
+
+Not run, and not authorized by the ruling. These are the commands per route measured so far: `deep_audit`
+(Claude Sonnet 4.6, 1.3.1 recorded on the first sample) and `high_volume` (Claude Haiku 4.5, last recorded
+under 1.2.0). Both use prompt 1.3.1 and taxonomy 1.5.1.
+
+**The finding that shapes them.** `v1-e32-t53` moved `policy-2026-27-nhi` to 1.5.1, and a request's cassette
+key carries the taxonomy version. So none of the first sample's kept recordings (all at 1.5.0 or earlier)
+replays from a checkout at 1.5.1 (`landscape-model-evaluation.md`, t53's section). A side-by-side replay
+therefore needs, on each route:
+
+* the holdout recorded alone, as `--sample`;
+* the first sample's 47 recorded again at 1.5.1;
+* then the replay beside, with no call.
+
+A recording takes one sample at a time; `--model-mode record` with `--holdout-*` is refused.
+
+**The estimate.** It is linear in the cards asked, from the 1.3.1 re-record: 43,165 input and 5,235 output
+tokens for 47 cards in 5 calls (2 of them repairs), about 918 and 111 a card. Prices are from
+`config/model_pricing.yaml`. The holdout asks only its labelled cards: about 94 if the coach labels at the
+first sample's rate (47 of 60), at most 120.
+
+| Route | First sample (47) | Holdout (94 / 120) | In all |
+|---|---|---|---|
+| `deep_audit`, $0.003 / $0.015 per 1,000 | 43,165 in, 5,235 out: $0.208 | 86,330 in, 10,470 out: $0.416 / 110,209 in, 13,366 out: $0.531 | $0.62 / $0.74 |
+| `high_volume`, $0.001 / $0.005 per 1,000 | same tokens: $0.069 | $0.139 / $0.177 | $0.21 / $0.25 |
+
+The calls are 3 for the first sample and 5 or 6 for the holdout, plus any repairs. The stage's batches run
+one after another, so the budget guard holds the spend so far plus one call's ceiling: on `deep_audit` about
+$0.37, from t55's $1.106 for three. Both routes on one day stay under dev's $2.00 if nothing else spends that
+day.
+
+The commands, for the PM to rule on. They are not in the runbook until ruled. The first block checks both
+samples, then records `deep_audit`:
+
+```bash
+cd /Users/charlesclark/Documents/debate/debate-intelligence-tool/debate-intelligence-worktrees/v1-e32-t50-a-second-labelled-sample-held-out
+```
+
+```bash
+HOLD=~/Documents/debate/landscape-review/policy-2026-27-nhi-holdout-sample-labelled.csv
+HROWS=~/.debate-research/dev/landscape/local-classifier/hspolicy26/policy-2026-27-nhi-holdout-2026-11-03-sample.jsonl
+SAMPLE=~/Documents/debate/landscape-review/policy-2026-27-nhi-coach-sample-labelled.csv
+ROWS=~/.debate-research/dev/landscape/local-classifier/hspolicy26/policy-2026-27-nhi-coach-sample.jsonl
+if env | grep -q '^DEBATE_'; then echo "STOP: a DEBATE_ variable is set; unset it and paste again"; elif pgrep -f "caselist pull" >/dev/null; then echo "STOP: a caselist pull is running; wait for it to finish"; elif ! CHECK=$(uv run debate-research --json landscape evaluate --caselist hspolicy26 --snapshot 2026-11-03 --sample "$HOLD" --sample-rows "$HROWS" --check-sample); then echo "$CHECK"; echo "STOP: the holdout's check failed; paste its JSON and record nothing"; elif ! printf '%s\n' "$CHECK" | grep -qF '"holdout": true'; then echo "$CHECK"; echo "STOP: that rows file is not the holdout's; record nothing"; elif ! uv run debate-research --json landscape evaluate --caselist hspolicy26 --snapshot 2026-10-20 --sample "$SAMPLE" --sample-rows "$ROWS" --check-sample; then echo "STOP: the first sample's check failed; record nothing"; elif ! aws sts get-caller-identity --profile debate-dev-bedrock >/dev/null; then echo "STOP: the Bedrock profile is not logged in; log in and paste again"; else echo "$CHECK"; uv run debate-research --json landscape evaluate --caselist hspolicy26 --snapshot 2026-11-03 --sample "$HOLD" --sample-rows "$HROWS" --model-mode record --route deep_audit; uv run debate-research --json landscape evaluate --caselist hspolicy26 --snapshot 2026-10-20 --sample "$SAMPLE" --sample-rows "$ROWS" --model-mode record --route deep_audit; fi
+```
+
+The same for `high_volume`, the prompt's own route, is the same block with both `--route deep_audit` dropped.
+Then the replay beside, with no call (once per route; drop `--route deep_audit` for `high_volume`):
+
+```bash
+HOLD=~/Documents/debate/landscape-review/policy-2026-27-nhi-holdout-sample-labelled.csv
+HROWS=~/.debate-research/dev/landscape/local-classifier/hspolicy26/policy-2026-27-nhi-holdout-2026-11-03-sample.jsonl
+SAMPLE=~/Documents/debate/landscape-review/policy-2026-27-nhi-coach-sample-labelled.csv
+ROWS=~/.debate-research/dev/landscape/local-classifier/hspolicy26/policy-2026-27-nhi-coach-sample.jsonl
+if env | grep -q '^DEBATE_'; then echo "STOP: a DEBATE_ variable is set; unset it and paste again"; else uv run debate-research --json landscape evaluate --caselist hspolicy26 --snapshot 2026-10-20 --sample "$SAMPLE" --sample-rows "$ROWS" --holdout-sample "$HOLD" --holdout-sample-rows "$HROWS" --holdout-snapshot 2026-11-03 --route deep_audit; fi
+```
+
+The JSON is counts only: `first_sample`, `holdout` (with `drawn_from`) and `bar_reads_sample` `holdout`.
+
 ## Plan nodes
 
 | Node | Status | Notes |
 |---|---|---|
-| `a-second-labelled-sample-held-out` (Holdout sample) | NOT STARTED | Waits on the PM's ruling on the proposal |
+| `a-second-labelled-sample-held-out` (Holdout sample) | DONE | Built as ruled; its criterion passes (below) |
 
 ## Acceptance criteria
 
 | Criterion | Status | Evidence (command → result) |
 |---|---|---|
-| ac1: the second sample's size, from the interval wanted at 0.85 and the coach's time, ruled on by the PM | NOT RUN | Proposed above (120 drawn); waits on the PM's ruling |
-| ac2: drawn by the strata and seed rule with no card from the first, by tests on invented cards shown failing first, and the evaluation reads it as a holdout beside the first | NOT RUN | Built after the ruling |
-| ac3: the coach labels it in a sitting and `--check-sample` reads it (operator, recorded by the PM) | NOT RUN | Operator, after the build |
-| Node: Holdout sample tests pass (`uv run pytest packages/debate_core/tests/arguments/landscape -k sample`) | NOT RUN | Built after the ruling |
+| ac1: the second sample's size, from the interval wanted at 0.85 and the coach's time, ruled on by the PM | PASS | The PM's ruling of 2026-11-14: 120 drawn, 60/40/20, Wilson ([above](#the-pms-ruling-2026-11-14)) |
+| ac2: drawn by the strata and seed rule with no card from the first, by tests on invented cards shown failing first, and the evaluation reads it as a holdout beside the first | PASS (code and tests); the real draw is the operator's | Red against `4f8c81e`: 39 of 52 failed, each at an assertion. Green: 52 of 52, plus the smoke check. 13 mutants caught, the PM's by 5 tests. `evaluate_beside` and `--holdout-*` read it beside the first. |
+| ac3: the coach labels it in a sitting and `--check-sample` reads it (operator, recorded by the PM) | NOT RUN | Operator: the runbook's held-out section, steps 1 to 5 |
+| Node: Holdout sample tests pass (`uv run pytest packages/debate_core/tests/arguments/landscape -k sample`) | PASS | `35 passed in 3.59s` |
 
 ## Files changed
 
-* `docs/session-reports/v1-e32-t50-a-second-labelled-sample-held-out.md`: this proposal.
+* `packages/debate_core/src/debate_core/arguments/landscape/holdout_sample.py` (new): the draw and its
+  exclusions.
+* `packages/debate_core/src/debate_core/arguments/landscape/holdout_mark.py` (new): the rows file's mark.
+* `packages/debate_core/src/debate_core/arguments/landscape/local_classifier.py`: `coach_sample(strata=,
+  cluster_of=)`, `write_sample_csv(second_label_column=)`, `SECOND_LABEL_COLUMN`.
+* `packages/debate_core/src/debate_core/application/holdout_sample_draw.py` (new): `card_identities`,
+  `drawn_from`.
+* `packages/debate_core/src/debate_core/application/holdout_sitting.py` (new): the sitting's rules.
+* `packages/debate_core/src/debate_core/application/coach_sample_relabel.py`: `rewritten_cells`.
+* `packages/debate_core/src/debate_core/application/landscape_model_evaluation.py`: `break_down`'s refusal,
+  `check_sample`'s flag, `evaluate_beside`, `sides_by_row`, `taxonomy_at`, `SampleFiles`, `SamplesBeside`.
+* `packages/debate_cli/src/debate_cli/commands/landscape.py`: the `--holdout-*` options and refusals, and
+  `--check-sample`'s `holdout`.
+* `scripts/compare_local_classifier.py`: `holdout-sample`; the first sample's glob leaves out `-holdout-`.
+* `scripts/label_holdout_sample.py` (new): the sitting.
+* Tests: the five new files above and one smoke test.
+* `docs/runbooks/landscape-model-evaluation-record.md`: the held-out section (draw, copy, two sittings).
+* `docs/data/landscape-model-evaluation.md`: the held-out sample as ruled, with its snapshot and parser beside
+  the scores to come.
+* This report.
 
 ## Deviations from the spec
 
-None so far. The constraints already list `debate_cli` tests but not `debate_cli`'s source (the evaluate
-command's `--holdout-*` options are in `packages/debate_cli/src/debate_cli/commands/landscape.py`). Unless
-the PM says otherwise, that command is edited as a thin adapter and recorded here.
+* **`packages/debate_cli/src` is outside `constraints.packages`.** The `--holdout-*` options and their refusals
+  are in `debate_cli/commands/landscape.py`, a thin adapter over the service. The PM accepted this in the
+  ruling of 2026-11-14.
+* **`tests/scripts` and `tests/smoke` are outside `constraints.packages` too.** The draw's command is tested
+  where the first sample's is (`tests/scripts/test_compare_local_classifier.py`'s neighbour), and the evaluate
+  smoke suite gains one test for the new surface. `plan_specs/README.md` asks for a smoke node for a changed
+  CLI surface, and the spec has none. The PM may add both paths to the spec.
+* No other change of scope.
 
 ## Decisions and assumptions
 
 * The interval method is Wilson's, because it reproduces the record's two intervals.
 * The forecast counted share (0.633) is 1.3.1's, since the holdout is measured on 1.3.1.
+* **The exclusions come before the strata.** Excluded cards are removed first, and `coach_sample()`'s rule, its
+  threshold, median cut and populations included, runs on the eligible cards. So the holdout's weights stand
+  for the cards it could be drawn from. The alternative was to cut the strata on every unplaced card and draw
+  only from the eligible ones. That would weight some cells by cards that could never be drawn.
+* **One seed for the split, the solver and the draw**, as `sample` uses one: 20261114 trains the proxy as
+  well, so the holdout's threshold is its own.
+* **The bar reads the holdout** when both samples are evaluated (`bar_reads_sample`), since the spec reads the
+  bar as met only on a sample held out from tuning. The first sample is reported beside it, and its scans and
+  stops count toward the exit code.
+* **The draw writes the holdout CSV's sidecar itself**, through the t58 one-time step, since nothing has
+  sat on the file yet.
+* **A first-sample card counts as missing** when the reading does not hold it, as well as when the occurrence
+  table has no row for it. Either way its copies cannot be shown absent.
+* **In the sitting, a label typed without a second label clears the card's second label**, so what is typed
+  is what is written. In a fresh holdout row there is none to clear.
 
 ## Operator follow-ups
 
-None yet. The labels-file copy block is in [section 7](#7-the-labels-files-copied-aside-before-and-after-the-sitting)
-for when the sitting is scheduled.
+In order, every block in [the runbook's held-out section](../runbooks/landscape-model-evaluation-record.md#the-held-out-sample-the-draw-and-the-coachs-two-sittings-v1-e32-t50),
+from this worktree until it merges:
+
+1. the draw as a dry run, pasting back its counts;
+2. the draw;
+3. the labels-file copy, the coach's first sitting (rows 1 to 60) with `--check-sample`, and the copy again;
+4. the copy, the second sitting (rows 61 to 120, then the first sample's rows 16, 33 and 57) with both
+   `--check-sample`s, and the copy again.
+
+The record run waits on the PM's ruling ([above](#the-record-run-for-the-pms-ruling-after-both-sittings)).
+
+**The affected set did not finish locally.** `uv run scripts/affected_tests.py --run --slow` selects 157 files,
+5,298 tests. Within the 115-second cap it reached 65% with two failures:
+`test_container_factories.py::test_importing_the_container_or_the_app_loads_no_integration`, for the container
+and the app. Both were caused by scikit-learn loading through the evaluation's import of the draw, and both
+were fixed by `holdout_mark.py` (`a550a5e`); both pass now. Two bounded halves then ran 1,949 of 1,991 and
+3,273 of 3,305 with no other failure. The other 72, and the slow tier, are left to the pull request's CI.
+ruff, ruff format, pyright (whole project), lint-imports, the thin-handler check, the command-block check,
+the docs index and the link check pass.
 
 ## Follow-up work
 
-* If the PM agrees LD is separate: an LD sample pair (first and holdout) on hsld26's de-extinction topic, using
-  this task's draw (section 4).
+* The LD sample pair, as ruled (the PM files it).
+* After the second sitting: a follow-up on t46's other-side rule for the rows answered `side`, filed by the PM
+  from the sitting's last line.
+* `v1-e32-t61` (the labels-file copy built in), until which the copy block stays manual.
 
 ## PM review
 

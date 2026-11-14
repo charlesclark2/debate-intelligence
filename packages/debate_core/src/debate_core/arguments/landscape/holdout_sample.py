@@ -28,11 +28,13 @@ or a team; the counts are numbers.
 
 from __future__ import annotations
 
+import json
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
-from typing import Any, Final
+from typing import Any, Final, cast
 
 from debate_core.arguments.landscape.local_classifier import (
+    UNPLACED,
     CoachSample,
     Comparison,
     FeatureRow,
@@ -164,10 +166,77 @@ def holdout_sample(
     from. Raises :class:`FirstSampleCardsMissing` when a first-sample card has no identity or no occurrence
     row. The rules are the module's; each candidate is measured against every first-sample card drawn.
     """
-    first = list(first_sample)  # skeleton: excludes nothing and refuses nothing yet
-    sample = coach_sample(taxonomy, rows, comparisons, stratified_by=stratified_by, seed=seed)
-    nothing = HoldoutExclusions(len(first), 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
-    return HoldoutDraw(sample=sample, exclusions=nothing, seed=seed, strata=tuple(strata))
+    first = list(first_sample)
+    known = [identities.get(item.item_id) for item in first]
+    missing = sum(one is None or one.cluster_id is None for one in known)
+    if missing:
+        raise FirstSampleCardsMissing(missing, len(first))
+    found = [cast(CardIdentity, one) for one in known]
+    clusters = {one.cluster_id for one in found}
+    exact = {one.exact_fingerprint for one in found}
+    read = {one.read_fingerprint for one in found}
+    documents = {item.source_sha256 for item in first}
+    model = comparisons[stratified_by]
+    candidates = [
+        row for row in rows if row.placement == UNPLACED and model.predictions.get(row.item_id) is not None
+    ]
+    counts = {"cluster": 0, "exact": 0, "read": 0, "document": 0, "none": 0}
+    kept_out: set[str] = set()
+    for row in candidates:
+        identity = identities.get(row.item_id)
+        met = {
+            "cluster": identity is not None and identity.cluster_id in clusters,
+            "exact": identity is not None and identity.exact_fingerprint in exact,
+            "read": identity is not None and identity.read_fingerprint in read,
+            "document": row.source_sha256 in documents,
+            "none": identity is None or identity.cluster_id is None,
+        }
+        for rule, hit in met.items():
+            counts[rule] += hit
+        if any(met.values()):
+            kept_out.add(row.item_id)
+    eligible = [row for row in rows if row.item_id not in kept_out]
+    cluster_of = {
+        item_id: identity.cluster_id
+        for item_id, identity in identities.items()
+        if identity.cluster_id is not None and item_id not in kept_out
+    }
+    shares = tuple(strata)
+    sample = coach_sample(
+        taxonomy,
+        eligible,
+        comparisons,
+        stratified_by=stratified_by,
+        seed=seed,
+        strata=shares,
+        cluster_of=cluster_of,
+    )
+    drawn = {item.item_id for item in sample.items}
+    drawn_clusters = {cluster_of[item_id] for item_id in drawn if item_id in cluster_of}
+    passed_over = sum(
+        row.item_id not in drawn and cluster_of.get(row.item_id) in drawn_clusters
+        for row in candidates
+        if row.item_id not in kept_out
+    )
+    return HoldoutDraw(
+        sample=sample,
+        exclusions=HoldoutExclusions(
+            first_sample_cards=len(first),
+            first_sample_documents=len(documents),
+            first_sample_clusters=len(clusters),
+            candidates=len(candidates),
+            same_cluster=counts["cluster"],
+            same_exact_fingerprint=counts["exact"],
+            same_read_fingerprint=counts["read"],
+            same_document=counts["document"],
+            no_occurrence_row=counts["none"],
+            excluded=len(kept_out),
+            eligible=len(candidates) - len(kept_out),
+            one_per_cluster=passed_over,
+        ),
+        seed=seed,
+        strata=shares,
+    )
 
 
 def holdout_sample_lines(draw: HoldoutDraw, *, drawn_from: Mapping[str, object]) -> list[str]:
@@ -176,12 +245,29 @@ def holdout_sample_lines(draw: HoldoutDraw, *, drawn_from: Mapping[str, object])
     :func:`~debate_core.arguments.landscape.local_classifier.sample_lines`, with its header marked
     `"holdout": true`, and the seed, the strata's shares, the exclusions' counts and `drawn_from` (the
     snapshot, the store's version directory, the parser and fingerprint versions) beside it."""
-    return sample_lines(draw.sample)  # skeleton: no mark yet
+    lines = sample_lines(draw.sample)
+    header = cast(dict[str, Any], json.loads(lines[0]))
+    header |= {
+        HOLDOUT_KEY: True,
+        "seed": draw.seed,
+        "strata": dict(draw.strata),
+        "exclusions": draw.exclusions.as_json(),
+        "drawn_from": dict(drawn_from),
+    }
+    return [json.dumps(header, sort_keys=True, separators=(",", ":")) + "\n", *lines[1:]]
 
 
 def holdout_header(rows: Iterable[str]) -> dict[str, Any] | None:
     """The header of a held-out sample's rows file; None for any other, the first sample's included."""
-    return None  # skeleton: no rows file is a holdout's yet
+    first = next((line for line in rows if line.strip()), None)
+    try:
+        loaded: object = json.loads(first) if first is not None else None
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(loaded, dict):
+        return None
+    header = cast(dict[str, Any], loaded)
+    return header if header.get(HOLDOUT_KEY) is True else None
 
 
 def is_holdout(rows: Iterable[str]) -> bool:

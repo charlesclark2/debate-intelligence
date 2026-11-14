@@ -24,6 +24,9 @@ from typing import Final
 from debate_core.application.landscape_seeding import SeedReading
 from debate_core.application.ports.parsed_store import OccurrenceRecord, parse_version_directory
 from debate_core.arguments.landscape.holdout_sample import CardIdentity
+from debate_core.arguments.landscape.matcher import read_items
+from debate_core.arguments.landscape.source_headings import CaselistNames
+from debate_core.domain.landscape_classification import ItemKind
 
 __all__ = ["drawn_from", "card_identities"]
 
@@ -33,7 +36,26 @@ _NO_FINGERPRINT_VERSION: Final = "none"
 def card_identities(reading: SeedReading, occurrences: Iterable[OccurrenceRecord]) -> dict[str, CardIdentity]:
     """Every card of `reading` by item id: its read fingerprint, and its exact fingerprint and cluster from
     `occurrences` when the table holds a row for it (a card's rows agree on both, one per disclosure)."""
-    return {}  # skeleton: no identity read yet
+    by_card: dict[tuple[str, int], tuple[str, str]] = {}
+    for row in occurrences:
+        by_card.setdefault(
+            (row.source_sha256, row.first_element_index), (row.exact_fingerprint, row.cluster_id)
+        )
+    names = CaselistNames(reading.caselist_names)
+    identities: dict[str, CardIdentity] = {}
+    for source in reading.sources:
+        for item in read_items(source, names):
+            if item.kind is not ItemKind.CARD or item.first_element_index is None:
+                continue
+            found = by_card.get((source.sha256, item.first_element_index))
+            identities[item.item_id] = CardIdentity(
+                item_id=item.item_id,
+                source_sha256=source.sha256,
+                read_fingerprint=item.fingerprint,
+                exact_fingerprint=found[0] if found is not None else None,
+                cluster_id=found[1] if found is not None else None,
+            )
+    return identities
 
 
 def drawn_from(

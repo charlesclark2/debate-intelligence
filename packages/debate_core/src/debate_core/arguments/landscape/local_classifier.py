@@ -904,8 +904,8 @@ def coach_sample(
     drawn as well, so two copies of one card are never both in the sample; a card it does not name
     shares a cluster with none.
     """
-    shares = SAMPLE_STRATA  # skeleton: the shares and clusters are not read yet
-    clusters: Mapping[str, str] = {}
+    shares = _shares(strata)
+    clusters = cluster_of or {}
     model = comparisons[stratified_by]
     threshold = model.threshold if model.threshold is not None else _FALLBACK_THRESHOLD
     candidates = sorted(

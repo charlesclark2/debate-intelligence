@@ -13,6 +13,7 @@ from __future__ import annotations
 import hashlib
 import io
 import json
+import re
 from collections.abc import Sequence
 from datetime import date
 from pathlib import Path
@@ -71,13 +72,14 @@ def occurrences(world: SyntheticRun) -> list[OccurrenceRecord]:
     ]
 
 
-def item_ids(world: SyntheticRun, card: tuple[str, str]) -> list[str]:
-    """Every item id of the card with this tag and cite, in the table's order."""
+def item_ids(world: SyntheticRun, card: tuple[str, str], *, disclosed: str | None = None) -> list[str]:
+    """Every item id of the card with this tag and cite, in the table's order; with `disclosed`, only the
+    copy first disclosed that week (`aff-one`'s costs card is 2026-09-08's, `aff-two`'s 2026-09-15's)."""
     exact = hashlib.sha256(f"{card[0]}|{card[1]}".encode()).hexdigest()
     return [
         card_item_id(row.source_sha256, row.first_element_index)
         for row in occurrences(world)
-        if row.exact_fingerprint == exact
+        if row.exact_fingerprint == exact and disclosed in (None, row.snapshot)
     ]
 
 
@@ -258,7 +260,7 @@ def labels(*labels: str) -> io.StringIO:
 async def test_the_holdout_is_evaluated_beside_the_first_sample_each_at_its_own_snapshot(
     world: SyntheticRun,
 ) -> None:
-    first = item_ids(world, COSTS)[:1]
+    first = item_ids(world, COSTS, disclosed="2026-09-08")
     holdout = item_ids(world, FRAMING)
 
     beside = await service(world, asks=True).evaluate_beside(
@@ -289,7 +291,7 @@ async def test_a_pair_that_shares_a_card_or_document_or_is_mixed_up_is_refused_b
     world: SyntheticRun, case: str, refusal: str
 ) -> None:
     costs, solvency, framing = (
-        item_ids(world, COSTS)[0],
+        item_ids(world, COSTS, disclosed="2026-09-08")[0],
         item_ids(world, SOLVENCY)[0],
         item_ids(world, FRAMING)[0],
     )
@@ -300,7 +302,7 @@ async def test_a_pair_that_shares_a_card_or_document_or_is_mixed_up_is_refused_b
         "first marked": ([costs], [framing], True, True),
     }[case]
 
-    with pytest.raises(EvaluationRefused, match=refusal) as refused:
+    with pytest.raises(EvaluationRefused, match=re.escape(refusal)) as refused:
         await service(world, asks=False).evaluate_beside(
             SYNTHETIC_RUN_CASELIST,
             SampleFiles(labels("costs-advantage"), rows_file(first, holdout=first_marked), SNAPSHOT),
@@ -357,7 +359,12 @@ async def test_check_sample_reads_the_holdout_and_says_it_is_one(world: Syntheti
 @pytest.mark.anyio
 async def test_every_row_gets_its_files_sides_labelled_or_not(world: SyntheticRun) -> None:
     rows = rows_file(
-        [item_ids(world, COSTS)[0], item_ids(world, FRAMING)[0], f"{'0' * 64}:card:0"], holdout=True
+        [
+            item_ids(world, COSTS, disclosed="2026-09-08")[0],
+            item_ids(world, FRAMING)[0],
+            f"{'0' * 64}:card:0",
+        ],
+        holdout=True,
     )
 
     sides = await service(world, asks=False).sides_by_row(SYNTHETIC_RUN_CASELIST, rows, snapshot=SNAPSHOT)

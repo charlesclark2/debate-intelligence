@@ -651,9 +651,10 @@ def _evaluate_beside(
 ) -> None:
     """The first sample and the held-out one, evaluated side by side in replay (`v1-e32-t50`)."""
     holdout_sample, holdout_rows, holdout_snapshot = holdout
-    assert (
-        holdout_sample is not None and holdout_rows is not None and holdout_snapshot is not None
-    )  # skeleton
+    if holdout_sample is None or holdout_rows is None or holdout_snapshot is None:
+        _end(cli, ctx, _HOLDOUT_NEEDS_ITS_FILES)
+    if refusal is not None:
+        _end(cli, ctx, refusal)
     labels, first_rows, first_snapshot = first
     held_out = io.StringIO(read_labels_file(holdout_sample), newline="")
     service = cli.services.landscape_evaluation(

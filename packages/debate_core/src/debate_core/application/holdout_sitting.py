@@ -33,6 +33,7 @@ from debate_core.application.landscape_model_evaluation import (
     coach_label,
     row_labels,
 )
+from debate_core.arguments.landscape.evaluation_breakdown import ANSWERS_PREFIX
 from debate_core.domain.landscape import Taxonomy
 
 __all__ = [
@@ -121,12 +122,39 @@ def run_holdout_sitting(
     refuses, or a second label on a row labelled `unsure`, is asked again, the rule said and the typed text
     never repeated. The typed text is read in lower case, as every position id is written.
     """
-    changes: dict[int, dict[str, str]] = {}  # skeleton: takes what is typed, unread
+    active = {one.id for one in taxonomy.active_positions}
+    changes: dict[int, dict[str, str]] = {}
     for number, row in enumerate(rows, start=1):
-        _say_card(say, number, len(rows), shown[row])
-        typed = ask("Label: ").strip()
-        if typed:
-            changes[row] = {_POSITION: typed, SECOND_LABEL_COLUMN: ""}
+        one = shown[row]
+        _say_card(say, number, len(rows), one)
+        while True:
+            typed = ask("Label (an id, at:<id>, none or unsure; a second after a comma; Enter skips): ")
+            typed = typed.strip().casefold()
+            if not typed:
+                break
+            first, _, second = (part.strip() for part in typed.partition(","))
+            try:
+                read = row_labels(row, first, second, taxonomy)
+            except EvaluationRefused as refused:
+                say(f"Not taken: {_refusal(refused, row)}. Type another label, or press Enter to skip it.")
+                continue
+            if read is None and (second or not first):
+                say("Not taken: an unsure card takes no second label. Type another label, or press Enter.")
+                continue
+            if read is None:
+                cells = {_POSITION: UNSURE_LABEL, SECOND_LABEL_COLUMN: ""}
+            else:
+                label, also = read
+                cells = {
+                    _POSITION: label.written,
+                    SECOND_LABEL_COLUMN: also.written if also is not None else "",
+                }
+            if (cells[_POSITION], cells[SECOND_LABEL_COLUMN]) != (
+                _written(one.label, active),
+                _written(one.also, active),
+            ):
+                changes[row] = cells
+            break
     return changes
 
 
@@ -154,11 +182,40 @@ def run_side_rows(
     else is asked again, and so is a choice the evaluation would refuse, the rule said and the typed text
     never repeated.
     """
-    cells: dict[int, dict[str, str]] = {}  # skeleton: takes what is typed, unread
+    say("")
+    say(
+        f"Now {len(rows)} cards of the first sample. Each was labelled as reading its position in a file "
+        "disclosed only on the side opposite it."
+    )
+    say(
+        f"For each, type at:<id> if it answers the position, {ALSO_CHOICE} <label> for a second label you "
+        f"accept, or {SIDE_CHOICE} if your label stands and the side rule is wrong here."
+    )
+    cells: dict[int, dict[str, str]] = {}
+    side_rule: list[int] = []
     for number, row in enumerate(rows, start=1):
-        _say_card(say, number, len(rows), shown[row])
-        cells[row] = {_POSITION: ask("Choice: ").strip()}
-    return SideRowAnswers(cells=cells, side_rule=())
+        one = shown[row]
+        _say_card(say, number, len(rows), one)
+        while True:
+            typed = ask(f"at:<id>, {ALSO_CHOICE} <label>, or {SIDE_CHOICE}: ").strip().casefold()
+            if typed == SIDE_CHOICE:
+                side_rule.append(row)
+                break
+            if typed.startswith(ANSWERS_PREFIX):
+                found = _answers(row, typed, one, taxonomy, say)
+                if found is not None:
+                    cells[row] = {_POSITION: found}
+                    break
+                continue
+            word, _, second = typed.partition(" ")
+            if word == ALSO_CHOICE and second.strip():
+                found = _second(row, second.strip(), one, taxonomy, say)
+                if found is not None:
+                    cells[row] = {SECOND_LABEL_COLUMN: found}
+                    break
+                continue
+            say(f"Not taken: type at:<id>, {ALSO_CHOICE} <label>, or {SIDE_CHOICE}.")
+    return SideRowAnswers(cells=cells, side_rule=tuple(side_rule))
 
 
 def _answers(
@@ -210,4 +267,6 @@ def holdout_counts(
 
 def side_rule_line(side_rule: Sequence[int]) -> str:
     """The sitting's last line: the first-sample rows answered `side`, by number, for the PM's follow-up."""
-    return ""  # skeleton: names no row yet
+    if not side_rule:
+        return "The side rule: no row was answered side."
+    return "The side rule is wrong here, the coach says, on row(s) " + ", ".join(map(str, side_rule)) + "."

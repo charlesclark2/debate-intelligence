@@ -289,7 +289,11 @@ async def _read_table(arguments: argparse.Namespace) -> tuple[Path, FeatureTable
     """The caselist's feature table, its taxonomy, and the table's sources a removal has reached since."""
     data_dir = _outside_the_repository(arguments.data_dir, "--data-dir")
     directory = output_directory(data_dir, arguments.caselist)
-    tables = sorted(directory.glob("*-features.jsonl")) if directory.is_dir() else []
+    tables = (
+        sorted(path for path in directory.glob("*-features.jsonl") if HOLDOUT_MARK not in path.name)
+        if directory.is_dir()
+        else []
+    )
     if len(tables) != 1:
         raise Refused(
             f"expected one feature table under {directory}, found {len(tables)}; run `features` first"
@@ -596,7 +600,9 @@ def _print_holdout(draw: HoldoutDraw, taxonomy: Taxonomy) -> None:
 
 
 def _new_file(path: Path) -> Path:
-    return path  # skeleton: writes over a file
+    if path.exists():
+        raise Refused(f"{path} is there already; the draw writes over no file")
+    return path
 
 
 async def _holdout_sample(arguments: argparse.Namespace) -> int:
@@ -614,6 +620,8 @@ async def _holdout_sample(arguments: argparse.Namespace) -> int:
     features_path, rows_path = holdout_paths(directory, reading.topic_id, read.snapshot)
     first_files = {path.resolve() for path in sample_paths(directory, reading.topic_id)}
     for path in (features_path, rows_path, labels_out):
+        if path.resolve() in first_files:
+            raise Refused(f"{path} is the first sample's; the draw never writes it")
         if not arguments.dry_run:
             _new_file(path)
     occurrences = await LocalParsedStore(data_dir).read_occurrences(arguments.caselist, reading.version)
@@ -653,15 +661,15 @@ async def _holdout_sample(arguments: argparse.Namespace) -> int:
         print("Dry run: nothing was written.")
         print(f"Runtime {time.perf_counter() - started:.1f} s.")
         return 0
-    with _new_file(features_path).open("w", encoding="utf-8") as stream:
+    with _new_file(features_path).open("x", encoding="utf-8") as stream:
         stream.writelines(feature_table_lines(table))
-    with _new_file(rows_path).open("w", encoding="utf-8") as stream:
+    with _new_file(rows_path).open("x", encoding="utf-8") as stream:
         stream.writelines(holdout_sample_lines(draw, drawn_from=source))
     coach_file = io.StringIO(newline="")
     write_sample_csv(coach_file, draw.sample, heading_teams(table.rows), second_label_column=True)
     data = coach_file.getvalue().encode("utf-8")
     labels_out.parent.mkdir(parents=True, exist_ok=True)
-    with _new_file(labels_out).open("wb") as stream:
+    with _new_file(labels_out).open("xb") as stream:
         stream.write(data)
     digest = record_first_digest(labels_out, expect=labels_digest(data))
     print(f"Wrote the holdout's feature table to {features_path}.")

@@ -85,6 +85,7 @@ from debate_core.arguments.landscape.evaluation_breakdown import (
     scored_stance,
     stratum_scores,
 )
+from debate_core.arguments.landscape.holdout_sample import holdout_header
 from debate_core.arguments.landscape.matcher import MatchItem, PositionMatcher, read_items
 from debate_core.arguments.landscape.model_stage import (
     ModelCandidate,
@@ -969,6 +970,11 @@ class LandscapeModelEvaluationService:
 
         Refused for a held-out sample (`v1-e32-t50`): it is reported as counts and scores only."""
         lines = list(rows)
+        if holdout_header(lines) is not None:
+            raise EvaluationRefused(
+                "the rows file is the held-out sample's, which is reported as counts and scores only and "
+                "never broken down card by card"
+            )
         prepared = await self._prepared(caselist, sample, lines, snapshot)
         return await break_down_labelled_cards(
             prepared.reading,
@@ -993,7 +999,7 @@ class LandscapeModelEvaluationService:
         labelled = _labelled(sample, lines, taxonomy)
         by_label_kind, second_labels = coach_sample_counts(labelled, taxonomy)
         return CoachSampleCheck(
-            holdout=False,
+            holdout=holdout_header(lines) is not None,
             by_stance=stance_counts(labelled),
             caselist=caselist,
             topic_id=taxonomy.topic_id,
@@ -1028,8 +1034,22 @@ class LandscapeModelEvaluationService:
         Refused, before any model is asked, when `holdout`'s rows file is not marked a holdout, when `first`'s
         is, or when the two share a card or a document (counts only): the draw keeps every card and document
         of the first sample out of the holdout, so a shared one means the files were mixed up."""
-        first_rows, holdout_rows = list(first.rows), list(holdout.rows)  # skeleton: no check yet
-        header: dict[str, object] = {}
+        first_rows, holdout_rows = list(first.rows), list(holdout.rows)
+        header = holdout_header(holdout_rows)
+        if header is None:
+            raise EvaluationRefused("the held-out sample's rows file is not marked a holdout")
+        if holdout_header(first_rows) is not None:
+            raise EvaluationRefused("the first sample's rows file is marked a holdout")
+        first_cards, holdout_cards = _rows_items(first_rows), _rows_items(holdout_rows)
+        shared = len(set(first_cards.values()) & set(holdout_cards.values()))
+        documents = {_document(one) for one in first_cards.values()} & {
+            _document(one) for one in holdout_cards.values()
+        }
+        if shared or documents:
+            raise EvaluationRefused(
+                f"the held-out sample shares {shared} card(s) and {len(documents)} document(s) with the "
+                "first sample; it is drawn to share none"
+            )
         first_result = await self.evaluate(caselist, first.sample, first_rows, snapshot=first.snapshot)
         holdout_result = await self.evaluate(
             caselist, holdout.sample, holdout_rows, snapshot=holdout.snapshot
@@ -1047,7 +1067,22 @@ class LandscapeModelEvaluationService:
         """The sides each row's file was disclosed on, for every row of a rows file, labelled or not: what the
         held-out sample's sitting shows beside a card (`v1-e32-t50`). Reads no label and asks no model; a row
         whose card the store no longer holds has no side."""
-        return {}  # skeleton: no side read yet
+        topic, _, through = await self._resolved(caselist, snapshot)
+        reading = await read_seed_sources(
+            store=self._parsed,
+            local=self._local,
+            suppression=self._suppression,
+            topic=topic,
+            caselist=caselist,
+            through=through,
+            topic_map=self._taxonomies.topic_map(),
+        )
+        by_source = {
+            source.sha256: frozenset(team.side.value for team in source.teams) for source in reading.sources
+        }
+        return {
+            row: by_source.get(_document(item_id), frozenset()) for row, item_id in _rows_items(rows).items()
+        }
 
     async def taxonomy_at(self, caselist: str, snapshot: date) -> Taxonomy:
         """The taxonomy the caselist's snapshot is on, as every reading of a sample at it reads the labels."""

@@ -407,13 +407,30 @@ def test_the_replay_of_v1_e08_t24s_merge_hands_the_slow_job_the_e2e_test_it_brok
     assert not any(E2E_RESEARCH.startswith(node) for node in RULED_LEFT_TO_VALIDATE_DEV)
 
 
-def failure_texts(junit: Path) -> list[str]:
+def failure_texts(junit: Path) -> dict[str, str]:
+    """Each failed test case's name → its failure's message and text."""
     root = ElementTree.parse(junit).getroot()
-    return [
-        f"{failure.get('message') or ''}\n{failure.text or ''}"
+    return {
+        str(case.get("name")): f"{failure.get('message') or ''}\n{failure.text or ''}"
         for case in root.iter("testcase")
         for failure in case.findall("failure")
-    ]
+    }
+
+
+#: Under the plant, by hand: what each e2e research test's failure names. The two `--auto-cut 3`
+#: scenarios end SHORT, two VERIFIED cards of three; the clean `--auto-cut 2` bundle (v1-e08-t28)
+#: still fills from the news article, so it fails naming the journal article's page and its reason.
+JOURNAL_ARTICLE = "https://journal.synthetic-conservation.example/doi/pdf/10.5555/jscs.2026.0012"
+SHORT = ("AUTO_CUT_SHORT", "SHORT: 2 of 3 cards VERIFIED")
+PLANTED_FAILURES = {
+    (
+        "test_search_auto_cut_3_writes_three_verified_cards_and_a_bannered_unverified_one_and_verify_agrees"
+    ): SHORT,
+    "test_the_bundle_does_not_verify_where_its_snapshots_are_not_stored": SHORT,
+    "test_search_auto_cut_2_stops_before_the_press_release_and_verify_passes_the_whole_bundle": (
+        f"'{JOURNAL_ARTICLE}': ('unverified', ['CITATION_UNVERIFIED'])",
+    ),
+}
 
 
 def test_a_planted_break_only_a_slow_test_sees_passes_the_parts_and_fails_the_slow_job(
@@ -436,18 +453,19 @@ def test_a_planted_break_only_a_slow_test_sees_passes_the_parts_and_fails_the_sl
     assert parts.returncode == 5, parts.stdout + parts.stderr  # the parts' markers run none of it
 
     unplanted = ci_slow_tests.run([E2E_RESEARCH], tmp_path / "unplanted.xml", root=REPO_ROOT, workers="0")
-    assert unplanted.problems == [] and unplanted.counts is not None and unplanted.counts.tests == 2
+    assert unplanted.problems == [] and unplanted.counts is not None and unplanted.counts.tests == 3
 
     monkeypatch.setenv("PYTEST_ADDOPTS", f"-p {PLANT_MODULE}")
     junit = tmp_path / "planted.xml"
     planted = ci_slow_tests.run([E2E_RESEARCH], junit, root=REPO_ROOT, workers="0")
-    assert planted.counts is not None and planted.counts.failures == 2, planted.problems
+    assert planted.counts is not None and planted.counts.failures == 3, planted.problems
     texts = failure_texts(junit)
-    for text in texts:
+    assert set(texts) == set(PLANTED_FAILURES), sorted(texts)
+    for name, text in texts.items():
         assert "AssertionError" in text, text
         assert "INTERNAL_ERROR" not in text, "a crash is not a catch"
-        assert "AUTO_CUT_SHORT" in text or "SHORT: 2 of 3 cards VERIFIED" in text, text
-    assert any("CITATION_UNVERIFIED" in text for text in texts), texts
+        assert any(marker in text for marker in PLANTED_FAILURES[name]), (name, text)
+    assert any("CITATION_UNVERIFIED" in text for text in texts.values()), texts
 
 
 # --------------------------------------------------------------------------------------------

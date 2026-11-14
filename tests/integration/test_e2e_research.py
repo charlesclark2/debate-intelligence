@@ -240,6 +240,13 @@ def test_search_auto_cut_2_stops_before_the_press_release_and_verify_passes_the_
     assert searched.exit_code == ExitCode.OK, searched.output
     report = json.loads((out.parent / "report.json").read_text(encoding="utf-8"))
     assert (report["wanted"], report["verified"], report["stop_reason"]) == (2, 2, "COMPLETE")
+    # By page and reason first, so a card that stops verifying is named with its reason codes.
+    unverified = {
+        entry["url"]: (entry["section"], entry["reasons"])
+        for entry in report["entries"]
+        if entry["status"] == "UNVERIFIED"
+    }
+    assert unverified == {}, unverified
     assert report["unverified"] == 0
     skipped = {
         entry["url"]: entry["access_status"] for entry in report["entries"] if entry["status"] == "SKIPPED"

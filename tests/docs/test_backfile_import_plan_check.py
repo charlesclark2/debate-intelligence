@@ -329,9 +329,12 @@ def terraform_files() -> list[Path]:
     return sorted(path for path in INFRASTRUCTURE.rglob("*.tf") if ".terraform" not in path.parts)
 
 
-def test_no_schedule_but_the_logins_and_the_runs_is_declared_and_neither_passes_an_input() -> None:
+def test_no_schedule_but_the_logins_and_the_runs_is_declared_and_only_the_runs_passes_an_input() -> None:
     """A schedule that starts a backfile import would be a third schedule, an EventBridge rule with an
-    ECS target, or an input (RunTask overrides) on one of the two. None exists."""
+    ECS target, or an input (RunTask overrides) on one of the two. None exists. Since `v1-e40-t48` the
+    run's schedule has the one input, the universal RunTask target's request, whose one override is the
+    weekly pull's `--scheduled` (the module's `the_run_schedule_starts_its_pull_with_scheduled` pins it
+    whole); `run_task.tf` still names no backfile."""
     schedules = {
         (path.relative_to(REPO_ROOT).as_posix(), name)
         for path in terraform_files()
@@ -343,9 +346,17 @@ def test_no_schedule_but_the_logins_and_the_runs_is_declared_and_neither_passes_
         ("infrastructure/modules/caselist_run/login_task.tf", "login"),
         ("infrastructure/modules/caselist_run/run_task.tf", "run"),
     }
+    inputs = [
+        (path.relative_to(REPO_ROOT).as_posix(), line.strip())
+        for path in terraform_files()
+        for line in path.read_text(encoding="utf-8").splitlines()
+        if re.match(r"^\s*input\s*=", line)
+    ]
+    assert inputs == [
+        ("infrastructure/modules/caselist_run/run_task.tf", "input    = jsonencode(local.run_task_request)")
+    ]
     for path in terraform_files():
         text = path.read_text(encoding="utf-8")
-        assert not re.search(r"^\s*input\s*=", text, re.M), f"{path}: a target input"
         assert "ecs_target" not in text, f"{path}: an EventBridge rule that starts a task"
         assert "backfile" not in text.lower() or path.name == "alerts.tf", f"{path} names a backfile"
 

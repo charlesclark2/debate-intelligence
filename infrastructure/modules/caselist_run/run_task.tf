@@ -12,7 +12,9 @@
 # (ADR-0020 (1) 6): `timeout` sends the CLI SIGTERM at six hours, as `docker stop` would, and
 # SIGKILL two minutes later, and the task exits non-zero. ECS's own stop gives the same two
 # minutes. The caselists are `caselist.sync_caselists` in the bundled profile (ADR-0020 (5)): the
-# command names none.
+# command names none. The schedule overrides the command with `--json caselist pull --scheduled`
+# (v1-e40-t48), through Scheduler's universal RunTask target; a run started by hand keeps the
+# task definition's.
 #
 # Only the execution role pulls the image and writes the log, and no secret reaches the task
 # through ECS's `secrets` field: the CLI reads the token itself, with the run role, through the
@@ -74,6 +76,45 @@ locals {
     { name = "DEBATE_CASELIST__ALERT_TOPIC_ARN", value = local.alert_topic_arn },
     { name = "AWS_REGION", value = local.region },
   ]
+
+  # What the schedule runs (v1-e40-t48): the task definition's command, `--json caselist pull`, with
+  # `--scheduled`, so v1-e40-t44's guard refuses a start within 24 hours of a recorded run. A run
+  # started by hand keeps the task definition's command, and the guard never asks it.
+  run_scheduled_command = ["--json", "caselist", "pull", "--scheduled"]
+
+  # Scheduler's universal target for RunTask, and the request it sends, in the camelCase of ECS's
+  # RunTask API reference (https://docs.aws.amazon.com/AmazonECS/latest/APIReference/API_RunTask.html,
+  # read 2026-11-13). AWS's Scheduler pages do not say whether a templated ECS target's Input reaches
+  # RunTask as overrides (read 2026-11-13; v1-e40-t48's report quotes them), and the universal target's
+  # Input is documented as "the request parameters that EventBridge Scheduler sends to the target API"
+  # (the PM's ruling of 2026-11-14). It is the request the templated target sent, with the override:
+  # the same revision by its full ARN, which RunTask requires to match the scheduler role's Resource;
+  # the same cluster by ARN, so the role's ecs:cluster condition holds; no tags, so no ecs:TagResource.
+  # The scheduler role's policy is unchanged.
+  #
+  # The revision's ARN is in the Input, so a plan that replaces the task definition shows the whole
+  # Input as known after apply. The module's tests pin it, and the runbook reads it back after the
+  # apply ("The schedule passes --scheduled").
+  run_task_target_arn = "arn:${local.partition}:scheduler:::aws-sdk:ecs:runTask"
+  run_task_request = local.create_run_task ? {
+    cluster              = aws_ecs_cluster.run.arn
+    taskDefinition       = aws_ecs_task_definition.run[0].arn
+    count                = 1
+    launchType           = "FARGATE"
+    platformVersion      = "LATEST"
+    enableExecuteCommand = false
+    enableECSManagedTags = false
+    networkConfiguration = {
+      awsvpcConfiguration = {
+        subnets        = [for subnet in aws_subnet.public : subnet.id]
+        securityGroups = [aws_security_group.run.id]
+        assignPublicIp = "ENABLED"
+      }
+    }
+    overrides = {
+      containerOverrides = [{ name = local.run_container_name, command = local.run_scheduled_command }]
+    }
+  } : null
 
   run_image = local.create_run_task ? "${aws_ecr_repository.run.repository_url}@${var.image_digest}" : null
 
@@ -294,24 +335,12 @@ resource "aws_scheduler_schedule" "run" {
     mode = "OFF"
   }
 
+  # The universal RunTask target and its request (run_task_request above, v1-e40-t48): this revision
+  # on the run's cluster, as the templated target started it, with the command `--scheduled`.
   target {
-    arn      = aws_ecs_cluster.run.arn
+    arn      = local.run_task_target_arn
     role_arn = aws_iam_role.run_scheduler[0].arn
-
-    ecs_parameters {
-      task_definition_arn     = aws_ecs_task_definition.run[0].arn
-      task_count              = 1
-      launch_type             = "FARGATE"
-      platform_version        = "LATEST"
-      enable_execute_command  = false
-      enable_ecs_managed_tags = false
-
-      network_configuration {
-        subnets          = [for subnet in aws_subnet.public : subnet.id]
-        security_groups  = [aws_security_group.run.id]
-        assign_public_ip = true
-      }
-    }
+    input    = jsonencode(local.run_task_request)
 
     # A launch ECS refused is tried again (v1-e40-t42, the PM's ruling of 2026-11-05): three times at
     # most, all within an hour of 06:00. On 2026-11-04 RunTask answered ServerException, nothing
@@ -326,8 +355,9 @@ resource "aws_scheduler_schedule" "run" {
     # OpenCaselist; while the first run holds its lease, the second is refused (RunLockHeld),
     # downloads nothing and writes nothing. It could take the lock only after the first run had
     # finished and released it. A run has finished in 56 minutes (2026-10-28), inside the event age,
-    # but three retries land far earlier than any run's end. A scheduled pull that refuses after a
-    # recent run is the PM's follow-up.
+    # but three retries land far earlier than any run's end. And since v1-e40-t48 the schedule's pull
+    # is `--scheduled`, which refuses to start within 24 hours of a run the bucket's log records
+    # (v1-e40-t44), so a retry after the first run's end does nothing either.
     #
     # Nor would a second run spend the week's downloads again: the download ledger, five per rolling
     # 24 hours, is kept in the bucket and saved before each download, so a run starts from what is

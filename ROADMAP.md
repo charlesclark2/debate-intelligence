@@ -63,12 +63,12 @@ v2.3's extension work.
 | [v1.0](plan_specs/releases/v1.0.yaml) | Foundation & verified evidence core | 3 | 55 | 55 | 252 |
 | [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 4 | 125 | 107 | 550 |
 | [v1.2](plan_specs/releases/v1.2.yaml) | Argument landscape & file building | 3 | 99 | 83 | 366 |
-| [v1.3](plan_specs/releases/v1.3.yaml) | URL → verified card | 2 | 26 | 18 | 129 |
+| [v1.3](plan_specs/releases/v1.3.yaml) | URL → verified card | 2 | 27 | 20 | 131 |
 | [v1.4](plan_specs/releases/v1.4.yaml) | Federated research from the CLI | 2 | 54 | 31 | 166 |
 | [v1.5](plan_specs/releases/v1.5.yaml) | V1 quality gate & team pilot | 1 | 7 | 1 | 66 |
 | [v1.6](plan_specs/releases/v1.6.yaml) | Public team website | 3 | 31 | 22 | 169 |
 | [v1.7](plan_specs/releases/v1.7.yaml) | Team evidence search pilot | 1 | 32 | 25 | 102 |
-| [v1.8](plan_specs/releases/v1.8.yaml) | Weekly caselist run in the cloud | 2 | 79 | 48 | 144 |
+| [v1.8](plan_specs/releases/v1.8.yaml) | Weekly caselist run in the cloud | 2 | 79 | 49 | 144 |
 | [v2.0](plan_specs/releases/v2.0.yaml) | Cloud platform foundation | 3 | 17 | 0 | 164 |
 | [v2.1](plan_specs/releases/v2.1.yaml) | Web app, debate tub & async jobs | 3 | 18 | 0 | 198 |
 | [v2.2](plan_specs/releases/v2.2.yaml) | Research workspace | 2 | 12 | 0 | 117 |
@@ -464,10 +464,11 @@ A student can run `debate-research cut <URL>` and receive a verified, tagged, ci
 | [`verify` warns when a deletion in a .docx body removes a negation](plan_specs/v1/e06-card-cutting/t10-verify-docx-flags-a-removed-negation.yaml) `v1-e06-t10-verify-docx-flags-a-removed-negation` | Succeeded | 1 | 1.0 |
 | [Exporting a .docx refuses a card whose format profile is not the one it renders in](plan_specs/v1/e06-card-cutting/t11-export-docx-refuses-a-mismatched-profile.yaml) `v1-e06-t11-export-docx-refuses-a-mismatched-profile` | Pending | 1 | 0.5 |
 | [A pasted copy's cite fields can be stated when it is stored, so a card cut from it has a usable cite](plan_specs/v1/e06-card-cutting/t12-pasted-copy-cite-stated-by-the-user.yaml) `v1-e06-t12-pasted-copy-cite-stated-by-the-user` | Succeeded | 1 | 2.0 |
-| [A cite can carry a year-only or year-and-month date without inventing a day](plan_specs/v1/e06-card-cutting/t13-year-and-month-dates-in-a-cite.yaml) `v1-e06-t13-year-and-month-dates-in-a-cite` | Pending | 1 | 2.0 |
+| [A cite can carry a year-only or year-and-month date without inventing a day](plan_specs/v1/e06-card-cutting/t13-year-and-month-dates-in-a-cite.yaml) `v1-e06-t13-year-and-month-dates-in-a-cite` | Succeeded | 1 | 2.0 |
 | [A stated cite the domain refuses is reported as a refusal, not an internal error](plan_specs/v1/e06-card-cutting/t14-refused-stated-cite-is-a-refusal.yaml) `v1-e06-t14-refused-stated-cite-is-a-refusal` | Pending | 1 | 1.0 |
 | [A whole-word deletion right after a cut's marker is read as a deletion, not a manual edit](plan_specs/v1/e06-card-cutting/t15-a-deletion-beside-a-cut-marker-is-a-deletion.yaml) `v1-e06-t15-a-deletion-beside-a-cut-marker-is-a-deletion` | Succeeded | 2 | 2.0 |
 | [An untouched export whose cut joins two words with no space verifies](plan_specs/v1/e06-card-cutting/t16-a-cut-that-joins-two-words-verifies.yaml) `v1-e06-t16-a-cut-that-joins-two-words-verifies` | Succeeded | 1 | 2.0 |
+| [A cut is always shown: a marker removed at a punctuation join is refused, and a hand-typed `...` counts as the marker](plan_specs/v1/e06-card-cutting/t17-a-cut-is-always-shown.yaml) `v1-e06-t17-a-cut-is-always-shown` | Succeeded | 1 | 2.0 |
 
 
 ### v1.4 — Federated research from the CLI
@@ -602,7 +603,7 @@ Whitefish Bay Debate has a public, mobile-friendly team website: team informatio
 
 | Task | Status | Prereqs | Est. hours |
 |---|---|---|---|
-| [District donation process](plan_specs/v1/e38-donations/t01-district-donation-process.yaml) `v1-e38-t01-district-donation-process` | Pending | 1 | 6.0 |
+| [District donation process](plan_specs/v1/e38-donations/t01-district-donation-process.yaml) `v1-e38-t01-district-donation-process` | InProgress | 1 | 6.0 |
 | [Donation page](plan_specs/v1/e38-donations/t02-donation-page.yaml) `v1-e38-t02-donation-page` | Pending | 4 | 9.0 |
 | [Opt-in donor recognition](plan_specs/v1/e38-donations/t03-donor-recognition.yaml) `v1-e38-t03-donor-recognition` | Pending | 3 | 6.0 |
 
@@ -740,7 +741,7 @@ The weekly caselist run (pull, import, publish, parse, search index) runs in the
 | [debate_api no longer declares markdown-it-py, which it gets through debate-core](plan_specs/v1/e41-delivery-tooling-upkeep/t26-debate-api-drops-its-own-markdown-it-py.yaml) `v1-e41-t26-debate-api-drops-its-own-markdown-it-py` | Pending | 2 | 1.0 |
 | [The spec validator refuses an unfinished task with no prerequisites unless it says why](plan_specs/v1/e41-delivery-tooling-upkeep/t27-a-task-names-its-prerequisites-or-why-it-has-none.yaml) `v1-e41-t27-a-task-names-its-prerequisites-or-why-it-has-none` | Succeeded | 1 | 2.0 |
 | [The IANA time zone database ships with the build on every platform, not only Windows](plan_specs/v1/e41-delivery-tooling-upkeep/t28-tzdata-installed-on-every-platform.yaml) `v1-e41-t28-tzdata-installed-on-every-platform` | Pending | 1 | 0.5 |
-| [A pull request's ci runs the slow tests its affected set reaches](plan_specs/v1/e41-delivery-tooling-upkeep/t29-a-pull-requests-ci-runs-the-slow-tests-it-reaches.yaml) `v1-e41-t29-a-pull-requests-ci-runs-the-slow-tests-it-reaches` | Pending | 1 | 2.0 |
+| [A pull request's ci runs the slow tests its affected set reaches](plan_specs/v1/e41-delivery-tooling-upkeep/t29-a-pull-requests-ci-runs-the-slow-tests-it-reaches.yaml) `v1-e41-t29-a-pull-requests-ci-runs-the-slow-tests-it-reaches` | Succeeded | 1 | 2.0 |
 
 
 ## V2

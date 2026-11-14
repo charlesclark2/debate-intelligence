@@ -548,7 +548,7 @@ Golden-card and LLM evaluations gate prompt/model changes; the CLI is packaged a
 
 | Task | Status | Prereqs | Est. hours |
 |---|---|---|---|
-| [Golden card fixtures from team files](plan_specs/v1/e09-v1-quality-pilot/t01-golden-card-fixtures.yaml) `v1-e09-t01-golden-card-fixtures` | Pending | 1 | 12.0 |
+| [Golden card fixtures from team files](plan_specs/v1/e09-v1-quality-pilot/t01-golden-card-fixtures.yaml) `v1-e09-t01-golden-card-fixtures` | InProgress | 1 | 12.0 |
 | [Golden DOCX regression tests](plan_specs/v1/e09-v1-quality-pilot/t02-docx-golden-tests.yaml) `v1-e09-t02-docx-golden-tests` | Pending | 1 | 7.0 |
 | [Card selection and underlining eval harness](plan_specs/v1/e09-v1-quality-pilot/t03-span-eval-harness.yaml) `v1-e09-t03-span-eval-harness` | Pending | 2 | 9.0 |
 | [Prompt/model promotion gate](plan_specs/v1/e09-v1-quality-pilot/t04-prompt-promotion-gate.yaml) `v1-e09-t04-prompt-promotion-gate` | Pending | 3 | 5.5 |
@@ -705,7 +705,7 @@ The weekly caselist run (pull, import, publish, parse, search index) runs in the
 | [The run lock tells a test when a writer starts waiting, so the shared-renewal test is not a thread race](plan_specs/v1/e40-cloud-caselist-run/t45-run-lock-offers-a-test-hook-when-a-writer-waits.yaml) `v1-e40-t45-run-lock-offers-a-test-hook-when-a-writer-waits` | Pending | 1 | 1.0 |
 | [A backfile with no directory at the running parser version is named](plan_specs/v1/e40-cloud-caselist-run/t46-a-backfile-without-the-running-parsers-directory-is-named.yaml) `v1-e40-t46-a-backfile-without-the-running-parsers-directory-is-named` | Succeeded | 1 | 1.0 |
 | [Prod receives each backfile once, by hand, before the run's home moves](plan_specs/v1/e40-cloud-caselist-run/t47-prods-one-time-backfile-publish.yaml) `v1-e40-t47-prods-one-time-backfile-publish` | Pending | 2 | 2.0 |
-| [The weekly schedule starts its pull with --scheduled, so the recent-run guard is live](plan_specs/v1/e40-cloud-caselist-run/t48-the-schedule-passes-scheduled.yaml) `v1-e40-t48-the-schedule-passes-scheduled` | Pending | 1 | 2.0 |
+| [The weekly schedule starts its pull with --scheduled, so the recent-run guard is live](plan_specs/v1/e40-cloud-caselist-run/t48-the-schedule-passes-scheduled.yaml) `v1-e40-t48-the-schedule-passes-scheduled` | InProgress | 1 | 2.0 |
 | [A smoke check reads caselist runs --remote's backfile parser line on an installed build](plan_specs/v1/e40-cloud-caselist-run/t49-a-smoke-check-for-the-backfile-parser-line.yaml) `v1-e40-t49-a-smoke-check-for-the-backfile-parser-line` | Pending | 1 | 1.0 |
 | [A cloud run stopped on a token error, or refused its secret, emails the cure a person can act on](plan_specs/v1/e40-cloud-caselist-run/t50-a-stopped-run-notice-for-a-token-error-gives-the-cloud-cure.yaml) `v1-e40-t50-a-stopped-run-notice-for-a-token-error-gives-the-cloud-cure` | Pending | 1 | 2.0 |
 

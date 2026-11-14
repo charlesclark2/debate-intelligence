@@ -638,3 +638,32 @@ reset to the merge base `c6b9fe4` and one commit, `f4c8973`, whose tree is byte-
 pre-rewrite head. The name counts 0 over `git log -p c6b9fe4..HEAD` (2 before the rewrite),
 recorded in Decisions. (2) Operator follow-up 2 (import and check) is under "At the resume", ahead of
 the record step; step 1 is marked done, with 45 shortlisted, 15 per event.
+
+## PM review (2026-11-14, second)
+
+**Verdict:** ACCEPTED
+<!-- ACCEPTED / CHANGES_REQUESTED -->
+
+**Reviewed by / date:** PM (Claude), 2026-11-14
+
+**Notes:**
+
+Accepted for a partial merge. Both changes are done, and the Goal stays `InProgress`.
+
+* **The rewrite was checked by the PM, read-only.**
+  * `origin/dev..HEAD` is two commits, `f4c8973` (the tooling, on the merge base `c6b9fe4`) and
+    `afd06d9` (this report).
+  * The worktree is clean.
+  * The count method is sound: 2 before the rewrite, so it could fail, then 0 after, messages and
+    authors included.
+  * The pre-rewrite commits are only in this machine's object store, and a push sends only what the
+    branch reaches.
+* **The import is under "At the resume",** and the list step is marked done. One stale sentence in
+  the Summary, "The import can run now", is superseded by Operator follow-ups and needs no further
+  edit.
+* **The coach's picks are in, held locally:** 26 cards (Policy 8, LD 9, PF 9), which meets ac1's 24
+  with room for two drops at the record step.
+* **The resume follows the PM batch** that amends ac1, ac2, ac4, the record-sources, label-offsets
+  and scrub-and-signoff nodes, the packages, and v1-e09-t02 to t04.
+
+`scripts/task pr --partial`

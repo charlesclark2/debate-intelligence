@@ -91,6 +91,7 @@ __all__ = [
     "SAMPLE_COLUMNS",
     "SAMPLE_SCHEMA",
     "SAMPLE_STRATA",
+    "SECOND_LABEL_COLUMN",
     "TARGET_PRECISION",
     "UNPLACED",
     "WITHHELD_HEADING",
@@ -175,6 +176,9 @@ WITHHELD_HEADING: Final = "[a heading one team used]"
 _MINIMUM_SHOWN_HEADING_TEAMS: Final = 2
 
 SAMPLE_COLUMNS: Final = ("sample_row", "tag", "headings", "position", "note")
+
+SECOND_LABEL_COLUMN: Final = "also"
+"""The column of a second label the coach accepts (`v1-e32-t41`), as the evaluation reads it."""
 
 SAMPLE_STRATA: Final = (
     ("at-or-above-threshold", 30),
@@ -865,6 +869,17 @@ def _strata_of(confidences: Sequence[float], threshold: float) -> Callable[[floa
     return stratum
 
 
+def _shares(strata: Sequence[tuple[str, int]]) -> tuple[tuple[str, int], ...]:
+    """`strata` as :func:`coach_sample` draws them: :data:`SAMPLE_STRATA`'s names in its order, each with a
+    share of at least one. Raises `ValueError` for any other names, which no score could read."""
+    found = tuple(strata)
+    if tuple(name for name, _ in found) != tuple(name for name, _ in SAMPLE_STRATA):
+        raise ValueError("a sample's strata are SAMPLE_STRATA's, in its order, with their own shares")
+    if any(share < 1 for _, share in found):
+        raise ValueError("every stratum's share is at least one card")
+    return found
+
+
 def coach_sample(
     taxonomy: Taxonomy,
     rows: Sequence[FeatureRow],
@@ -872,6 +887,8 @@ def coach_sample(
     *,
     stratified_by: str,
     seed: int = DEFAULT_SEED,
+    strata: Sequence[tuple[str, int]] = SAMPLE_STRATA,
+    cluster_of: Mapping[str, str] | None = None,
 ) -> CoachSample:
     """Up to 60 unplaced cards for the coach to label, at most one per document, in a seeded order.
 
@@ -881,7 +898,14 @@ def coach_sample(
     last cannot take goes back to the first that still has cards. Inside a
     stratum the predicted kinds take turns, largest first, and each kind's cards come in seeded-digest
     order. Only unplaced cards that model predicts are drawn.
+
+    `strata` gives other shares of the same strata: the held-out sample's 60, 40 and 20 (`v1-e32-t50`).
+    With `cluster_of`, each card's near-duplicate cluster by item id, at most one card per cluster is
+    drawn as well, so two copies of one card are never both in the sample; a card it does not name
+    shares a cluster with none.
     """
+    shares = SAMPLE_STRATA  # skeleton: the shares and clusters are not read yet
+    clusters: Mapping[str, str] = {}
     model = comparisons[stratified_by]
     threshold = model.threshold if model.threshold is not None else _FALLBACK_THRESHOLD
     candidates = sorted(
@@ -896,20 +920,17 @@ def coach_sample(
     for row in candidates:
         prediction = predicted[row.item_id]
         by_stratum[stratum_of(prediction.confidence)][_kind(taxonomy, prediction.position_id)].append(row)
-    used: set[str] = set()
+    used = _Used(clusters)
     chosen: list[tuple[str, FeatureRow]] = []
     carried = 0
-    for name, share in SAMPLE_STRATA:
+    for name, share in shares:
         taken = _take(by_stratum[name], share + carried, used)
         chosen += [(name, row) for row in taken]
         carried = share + carried - len(taken)
-    for name, _ in SAMPLE_STRATA:
+    for name, _ in shares:
         if not carried:
             break
-        left = {
-            kind: [row for row in rows if row.source_sha256 not in used]
-            for kind, rows in by_stratum[name].items()
-        }
+        left = {kind: [row for row in rows if not used.holds(row)] for kind, rows in by_stratum[name].items()}
         taken = _take(left, carried, used)
         chosen += [(name, row) for row in taken]
         carried -= len(taken)
@@ -938,18 +959,37 @@ def coach_sample(
     )
 
 
-def _take(kinds: Mapping[str, list[FeatureRow]], wanted: int, used: set[str]) -> list[FeatureRow]:
+class _Used:
+    """The documents, and the clusters when the sample knows them, a drawn card has taken."""
+
+    def __init__(self, cluster_of: Mapping[str, str]) -> None:
+        self._cluster_of = cluster_of
+        self._documents: set[str] = set()
+        self._clusters: set[str] = set()
+
+    def holds(self, row: FeatureRow) -> bool:
+        cluster = self._cluster_of.get(row.item_id)
+        return row.source_sha256 in self._documents or (cluster is not None and cluster in self._clusters)
+
+    def add(self, row: FeatureRow) -> None:
+        self._documents.add(row.source_sha256)
+        cluster = self._cluster_of.get(row.item_id)
+        if cluster is not None:
+            self._clusters.add(cluster)
+
+
+def _take(kinds: Mapping[str, list[FeatureRow]], wanted: int, used: _Used) -> list[FeatureRow]:
     queues = {kind: list(rows) for kind, rows in kinds.items()}
     turn = sorted(queues, key=lambda kind: (-len(queues[kind]), kind))
     taken: list[FeatureRow] = []
     while len(taken) < wanted and any(queues.values()):
         for kind in turn:
             queue = queues[kind]
-            while queue and queue[0].source_sha256 in used:
+            while queue and used.holds(queue[0]):
                 queue.pop(0)
             if queue and len(taken) < wanted:
                 row = queue.pop(0)
-                used.add(row.source_sha256)
+                used.add(row)
                 taken.append(row)
     return taken
 
@@ -963,15 +1003,22 @@ def heading_teams(rows: Iterable[FeatureRow]) -> dict[str, int]:
     return {heading: len(found) for heading, found in teams.items()}
 
 
-def write_sample_csv(stream: TextIO, sample: CoachSample, teams_by_heading: Mapping[str, int]) -> None:
+def write_sample_csv(
+    stream: TextIO,
+    sample: CoachSample,
+    teams_by_heading: Mapping[str, int],
+    *,
+    second_label_column: bool = False,
+) -> None:
     """The coach's file: each card's row number, tag and headings, and empty `position` and `note`.
 
     The headings are the normalized ones the model read, outermost first; one fewer than two teams use
     is shown as :data:`WITHHELD_HEADING`. Nothing else: no prediction, confidence, stratum, path, school
-    or team code.
+    or team code. With `second_label_column`, an empty `also` column follows, for a second label the
+    coach accepts (`v1-e32-t41`), as the held-out sample's file has from the start (`v1-e32-t50`).
     """
     writer = csv.writer(stream, lineterminator="\n")
-    writer.writerow(SAMPLE_COLUMNS)
+    writer.writerow((*SAMPLE_COLUMNS, *((SECOND_LABEL_COLUMN,) if second_label_column else ())))
     for item in sample.items:
         if item.row is None:
             raise ValueError("a sample read back holds no text to write")
@@ -979,7 +1026,8 @@ def write_sample_csv(stream: TextIO, sample: CoachSample, teams_by_heading: Mapp
             heading if teams_by_heading.get(heading, 0) >= _MINIMUM_SHOWN_HEADING_TEAMS else WITHHELD_HEADING
             for heading in item.row.headings
         ]
-        writer.writerow((item.sample_row, item.row.tag or "", " > ".join(shown), "", ""))
+        cells = (item.sample_row, item.row.tag or "", " > ".join(shown), "", "")
+        writer.writerow((*cells, *(("",) if second_label_column else ())))
 
 
 def _prediction_json(prediction: Prediction | None) -> dict[str, object] | None:

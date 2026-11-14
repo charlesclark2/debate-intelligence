@@ -536,6 +536,17 @@ occurrence row.
   (now 1.5.1) and the coach's overrides have changed since, and either can place cards that were unplaced.
   The session did not measure which.
 
+**Step 2, the draw (the operator's, 2026-11-14), as pasted.** Every count is the dry run's, line for line.
+It wrote its three new files and nothing else, in 126.7 s:
+
+* the feature table, `policy-2026-27-nhi-holdout-2026-11-03-features.jsonl`;
+* the rows file, marked a holdout, `policy-2026-27-nhi-holdout-2026-11-03-sample.jsonl`;
+* the coach's CSV, `policy-2026-27-nhi-holdout-sample-labelled.csv`, with SHA-256
+  `45c5e6ff4175b2ac039b208bbd4323e061b14eaeeb5649c5ca37e3ff1b4ab09f` recorded beside it.
+
+`shasum -a 256 -c` read the sidecar as `OK`, and the CSV is read-only. Next are steps 3 and 4: the copy, the
+coach's first sitting, and the copy again.
+
 **The affected set did not finish locally.** `uv run scripts/affected_tests.py --run --slow` selects 157 files,
 5,298 tests. Within the 115-second cap it reached 65% with two failures:
 `test_container_factories.py::test_importing_the_container_or_the_app_loads_no_integration`, for the container

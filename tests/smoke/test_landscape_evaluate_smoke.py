@@ -322,3 +322,46 @@ def test_landscape_evaluate_refuses_a_labels_file_its_sidecar_does_not_record(
     assert error["code"] == "LABELS_FILE_CHANGED"
     assert (error["details"]["found"], error["details"]["recorded"]) == (found[:12], recorded[:12])
     assert f"{sample}.sha256" in error["message"]
+
+
+def test_landscape_evaluate_reads_a_holdout_as_counts_only(
+    installed_cli: InstalledCli, evaluation: tuple[SyntheticRun, Path, Path], tmp_path: Path
+) -> None:
+    """`v1-e32-t50`: the same rows, their header marked a held-out sample's. `--check-sample` reads it and
+    says so, a replay scores it, `--breakdown` refuses it, and evaluating it beside a first sample of the same
+    four cards is refused before any model is asked, for sharing them."""
+    world, sample, rows = evaluation
+    lines = rows.read_text(encoding="utf-8").splitlines()
+    held_out = tmp_path / "holdout-sample.jsonl"
+    header = {**json.loads(lines[0]), "holdout": True, "drawn_from": {"snapshot": SNAPSHOT}}
+    held_out.write_text("\n".join([json.dumps(header), *lines[1:]]) + "\n", encoding="utf-8")
+    beside = (
+        "--holdout-sample",
+        str(sample),
+        "--holdout-sample-rows",
+        str(held_out),
+        "--holdout-snapshot",
+        SNAPSHOT,
+    )
+
+    checked = evaluate(installed_cli, world, sample, held_out, "--check-sample")
+    replayed = evaluate(installed_cli, world, sample, held_out)
+    broken_down = evaluate(installed_cli, world, sample, held_out, "--breakdown")
+    shared = evaluate(installed_cli, world, sample, rows, *beside)
+    not_both = evaluate(installed_cli, world, sample, rows, "--breakdown", *beside)
+
+    assert checked.exit_code == ExitCode.OK, checked.output
+    assert (
+        json.loads(checked.stdout)["data"]["holdout"],
+        json.loads(checked.stdout)["data"]["labelled"],
+    ) == (True, 4)
+    assert replayed.exit_code == ExitCode.OK, replayed.output
+    assert json.loads(replayed.stdout)["data"]["pipeline"]["counted"] == 4
+    assert json.loads(broken_down.stdout)["error"]["code"] == "EVALUATION_REFUSED"
+    assert "never broken down card by card" in json.loads(broken_down.stdout)["error"]["message"]
+    assert json.loads(shared.stdout)["error"]["code"] == "EVALUATION_REFUSED"
+    assert "shares 4 card(s)" in json.loads(shared.stdout)["error"]["message"]
+    assert json.loads(not_both.stdout)["error"]["code"] == "HOLDOUT_COUNTS_ONLY"
+    for result in (checked, replayed, broken_down, shared):
+        for identity in IDENTITIES:
+            assert identity not in result.output

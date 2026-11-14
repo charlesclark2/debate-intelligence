@@ -152,6 +152,7 @@ async def test_a_card_the_table_holds_no_row_for_has_no_cluster_or_body(world: S
 
     identities = card_identities(await reading(world), kept)
 
+    assert framing in identities, "every card the reading holds is named"
     assert (identities[framing].cluster_id, identities[framing].exact_fingerprint) == (None, None)
     assert identities[framing].read_fingerprint
 

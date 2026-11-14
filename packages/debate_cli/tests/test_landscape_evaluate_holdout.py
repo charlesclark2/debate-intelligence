@@ -240,7 +240,7 @@ def test_check_sample_reads_the_holdout_alone_and_says_so(
 
     assert held_out.exit_code == ExitCode.OK, held_out.output
     data = json.loads(held_out.stdout)["data"]
-    assert (data["holdout"], data["labelled"], data["by_label_kind"]) == (True, 1, {"da": 1})
+    assert (data.get("holdout"), data["labelled"], data["by_label_kind"]) == (True, 1, {"da": 1})
     assert "holdout" not in json.loads(plain.stdout)["data"]
     assert both.exit_code == ExitCode.USAGE_ERROR
     assert error(both)["code"] == "CHECK_SAMPLE_ASKS_NO_MODEL"

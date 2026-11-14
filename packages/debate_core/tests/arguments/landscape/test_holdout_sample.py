@@ -329,7 +329,7 @@ def test_the_rows_file_is_marked_a_holdout_with_its_seed_strata_exclusions_and_s
     lines = holdout_sample_lines(draw, drawn_from=DRAWN_FROM)
 
     header = json.loads(lines[0])
-    assert header[HOLDOUT_KEY] is True
+    assert header.get(HOLDOUT_KEY) is True
     assert (header["seed"], header["strata"]) == (
         20261114,
         {"at-or-above-threshold": 60, "just-below-threshold": 40, "far-below-threshold": 20},

@@ -639,6 +639,19 @@ pre-rewrite head. The name counts 0 over `git log -p c6b9fe4..HEAD` (2 before th
 recorded in Decisions. (2) Operator follow-up 2 (import and check) is under "At the resume", ahead of
 the record step; step 1 is marked done, with 45 shortlisted, 15 per event.
 
+## Criteria still open after the changes (2026-11-14)
+
+Recorded by the PM from this session's acceptance-criteria table above, unchanged by the two
+changes, so that `scripts/task pr --partial` reads them after the first review:
+
+| Criterion | Status |
+|---|---|
+| ac1: at least 24 cases, balanced, `INDEX.md` | NOT RUN (the import is the resume's; the coach's 26 picks are held locally) |
+| ac2: offsets reproduce the evidence from the recorded snapshot | NOT RUN (resume; the operator's `check` over the local folder under Q2 B) |
+| ac3: coach-authored span labels per case | NOT RUN (resume) |
+| ac4: no metadata, comments or tracked-change authors, every case attested | PASS on invented files and the committed fixtures (none yet); over real cases at the resume |
+| ac5: coach sign-off | NOT RUN (resume) |
+
 ## PM review (2026-11-14, second)
 
 **Verdict:** ACCEPTED

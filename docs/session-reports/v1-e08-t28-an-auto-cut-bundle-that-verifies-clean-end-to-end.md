@@ -144,9 +144,35 @@ None.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-11-14
 
 **Notes:**
+
+Accepted. ac1 and the node pass, and the Goal is `Succeeded`. The architecture's §11 criterion 2
+now has its end-to-end scenario.
+
+* **The measurement came first, as the brief asked.**
+  * Sizes 1 to 4 were run with no code change, and the scratch test was never committed.
+  * The table records statuses, reasons, ranks and hosts only.
+  * Every card auto-cut produced before the press release verifies with no reason code, and all ten
+    checks ran on each.
+  * So the regression guard after v1-e06-t15 to t17 found nothing. N = 2 is the largest size before
+    the press release, not a size chosen to avoid a defect, and it reaches two cards.
+* **The two scenarios pin both sides of verify's exit.**
+  * The inverted red run shows the new test fails when verify refuses a clean bundle.
+  * The mutant (one UNVERIFIED card exits 0) is caught by the existing `--auto-cut 3` test, which is
+    correct: the new test's bundle holds no UNVERIFIED card, so it cannot catch it by construction.
+  * The `checks_run` assertion, that the six snapshot checks ran, stops an exit 0 from coming out of
+    a verifier that read only the citation.
+* **The existing tests are byte for byte unchanged** (additions only). One argument list is
+  duplicated in exchange, which is acceptable.
+* **Expectations are hand-written from v1-e08-t26's ranks and t04's paragraphs** (agreement 6), with
+  the measurement only confirming them.
+* **The checks.** The affected set stopped at its bound at about 94% and goes to `ci` under agreement
+  10. The always-run list and the slow integration tier are green. The one `git fetch origin dev`
+  was read-only and against GitHub, not a provider host, which is acceptable.
+
+`scripts/task pr`

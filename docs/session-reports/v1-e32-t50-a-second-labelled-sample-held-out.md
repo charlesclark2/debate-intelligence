@@ -501,6 +501,41 @@ from this worktree until it merges:
 5. on one day after both sittings, not a Wednesday: the ruled record run (step 6), on `deep_audit` then
    `high_volume`, then the replay side by side on each, sending the PM the JSON objects only.
 
+**Step 1, the dry run (the operator's, 2026-11-14), as pasted: counts only.** It passed every condition in
+the runbook: version `2026.10.27-docx-7`, 120 drawn, no `STOP`, and no first-sample card without an
+occurrence row.
+
+* Read 3,869 source entries, 3,825 parsed, all 3,825 on `policy-2026-27-nhi`.
+* Measured against the first sample's 60 cards: 60 documents, 57 clusters. Three first-sample cards share a
+  cluster with another first-sample card: the first sample kept one card per document but not one per
+  cluster.
+* 55,531 candidates. Kept out by rule (the rules overlap):
+
+  | Rule | Cards kept out |
+  |---|---|
+  | In a first-sample card's cluster | 2,552 |
+  | With a first-sample card's exact fingerprint | 1,797 |
+  | Read alike to a first-sample card | 636 |
+  | From a first-sample document | 1,128 |
+  | With no occurrence row | 0 |
+  | Kept out by any rule | 3,628 |
+
+  That leaves 51,903 eligible.
+* Drew 120 cards from 120 documents, seed 20261114. 3,640 eligible cards share a cluster with a drawn card and
+  were not drawn.
+
+  | Stratum | Drawn | Eligible | Drawn by kind |
+  |---|---|---|---|
+  | At or above the threshold | 60 of 60 | 10,284 | advantage, aff, cp, da, k and t, 10 each |
+  | Just below | 40 of 40 | 20,811 | advantage, aff, cp, da and k 6 each; t and theory 5 each |
+  | Far below | 20 of 20 | 20,808 | advantage, aff, cp, da, k and t 3 each; theory 2 |
+
+* Runtime 113.5 s.
+* One thing for the PM to note, not a stop: the 55,531 candidates at 2026-11-03 are fewer than the 56,661
+  unplaced cards the first sample's strata counted at 2026-10-20, though the snapshot is later. The taxonomy
+  (now 1.5.1) and the coach's overrides have changed since, and either can place cards that were unplaced.
+  The session did not measure which.
+
 **The affected set did not finish locally.** `uv run scripts/affected_tests.py --run --slow` selects 157 files,
 5,298 tests. Within the 115-second cap it reached 65% with two failures:
 `test_container_factories.py::test_importing_the_container_or_the_app_loads_no_integration`, for the container

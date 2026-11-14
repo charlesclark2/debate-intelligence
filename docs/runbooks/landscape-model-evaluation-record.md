@@ -477,8 +477,8 @@ ruled it on 2026-11-14:
   of their own.
 * **Never tuned on.** The holdout is reported as counts and scores only. `--breakdown` refuses it.
 
-The record run is **not** part of this section. It waits on the PM's ruling after both sittings, and its
-commands are in `v1-e32-t50`'s session report until then.
+* **The record run** (step 6) was ruled on 2026-11-14 as a narrow exception to the hold on live model runs:
+  these recordings only, on one day after both sittings, never on a Wednesday.
 
 Run every block from a checkout holding `v1-e32-t50`: its task worktree until it merges, a checkout of `dev`
 after. Go to it:
@@ -612,4 +612,77 @@ What to paste back: the sitting's last three lines and the two JSON objects, not
 * the side-rule line, which names rows by number.
 
 The holdout's JSON says `"holdout": true`. The first sample's says `labelled` 47, or 48 if row 33 took an
-`at:` label. Then run step 3 again. The record run waits on the PM's ruling.
+`at:` label. Then run step 3 again.
+
+### 6. The record run, then the two samples side by side (ruled 2026-11-14)
+
+The PM's ruling of 2026-11-14 allows these recordings and no other live run, as a narrow exception to the hold
+on live model runs:
+
+* **When:** on one day, after both sittings and their `--check-sample`s, and not on a Wednesday (each block
+  refuses one).
+* **What:** both routes, `deep_audit` (Claude Sonnet 4.6) and `high_volume` (Claude Haiku 4.5), at prompt 1.3.1
+  and taxonomy 1.5.1. On each route, in this order:
+  * the holdout, recorded alone as `--sample` (a recording with `--holdout-*` is refused);
+  * the first sample's 47, recorded again, because taxonomy 1.5.1 (`v1-e32-t53`) moved the cassette keys and
+    none of its kept recordings replays;
+  * the two side by side, replayed with no call.
+* **The cost:** about $0.95 in all, from the 1.3.1 re-record's tokens. That is about $0.62 to $0.74 on
+  `deep_audit` and $0.21 to $0.25 on `high_volume`, for a holdout of 94 to 120 labelled cards. The batches run
+  one after another, so the budget guard holds the day's spend plus one call's ceiling (about $0.37 on
+  `deep_audit`), inside dev's $2.00 if nothing else spends that day.
+* **Nothing is published.** The cassettes go to `model-cassettes-deep_audit/` and `model-cassettes/`, beside
+  the older ones, under their own keys.
+
+Each recording block checks both samples first (the holdout's must say `"holdout": true`) and the Bedrock
+login, then records the holdout and then the first sample. Expected runtime: 4 to 8 minutes a route.
+
+`deep_audit`:
+
+```bash
+HOLD=~/Documents/debate/landscape-review/policy-2026-27-nhi-holdout-sample-labelled.csv
+HROWS=~/.debate-research/dev/landscape/local-classifier/hspolicy26/policy-2026-27-nhi-holdout-2026-11-03-sample.jsonl
+SAMPLE=~/Documents/debate/landscape-review/policy-2026-27-nhi-coach-sample-labelled.csv
+ROWS=~/.debate-research/dev/landscape/local-classifier/hspolicy26/policy-2026-27-nhi-coach-sample.jsonl
+if env | grep -q '^DEBATE_'; then echo "STOP: a DEBATE_ variable is set; unset it and paste again"; elif [ "$(date +%u)" = "3" ]; then echo "STOP: it is Wednesday; the PM's ruling keeps the record run off Wednesdays"; elif pgrep -f "caselist pull" >/dev/null; then echo "STOP: a caselist pull is running; wait for it to finish"; elif ! CHECK=$(uv run debate-research --json landscape evaluate --caselist hspolicy26 --snapshot 2026-11-03 --sample "$HOLD" --sample-rows "$HROWS" --check-sample); then echo "$CHECK"; echo "STOP: the holdout's check failed; paste its JSON and record nothing"; elif ! printf '%s\n' "$CHECK" | grep -qF '"holdout": true'; then echo "$CHECK"; echo "STOP: that rows file is not the holdout's; record nothing"; elif ! uv run debate-research --json landscape evaluate --caselist hspolicy26 --snapshot 2026-10-20 --sample "$SAMPLE" --sample-rows "$ROWS" --check-sample; then echo "STOP: the first sample's check failed; record nothing"; elif ! aws sts get-caller-identity --profile debate-dev-bedrock >/dev/null; then echo "STOP: the Bedrock profile is not logged in; log in and paste again"; else echo "$CHECK"; uv run debate-research --json landscape evaluate --caselist hspolicy26 --snapshot 2026-11-03 --sample "$HOLD" --sample-rows "$HROWS" --model-mode record --route deep_audit; uv run debate-research --json landscape evaluate --caselist hspolicy26 --snapshot 2026-10-20 --sample "$SAMPLE" --sample-rows "$ROWS" --model-mode record --route deep_audit; fi
+```
+
+`high_volume`, the prompt's own route:
+
+```bash
+HOLD=~/Documents/debate/landscape-review/policy-2026-27-nhi-holdout-sample-labelled.csv
+HROWS=~/.debate-research/dev/landscape/local-classifier/hspolicy26/policy-2026-27-nhi-holdout-2026-11-03-sample.jsonl
+SAMPLE=~/Documents/debate/landscape-review/policy-2026-27-nhi-coach-sample-labelled.csv
+ROWS=~/.debate-research/dev/landscape/local-classifier/hspolicy26/policy-2026-27-nhi-coach-sample.jsonl
+if env | grep -q '^DEBATE_'; then echo "STOP: a DEBATE_ variable is set; unset it and paste again"; elif [ "$(date +%u)" = "3" ]; then echo "STOP: it is Wednesday; the PM's ruling keeps the record run off Wednesdays"; elif pgrep -f "caselist pull" >/dev/null; then echo "STOP: a caselist pull is running; wait for it to finish"; elif ! CHECK=$(uv run debate-research --json landscape evaluate --caselist hspolicy26 --snapshot 2026-11-03 --sample "$HOLD" --sample-rows "$HROWS" --check-sample); then echo "$CHECK"; echo "STOP: the holdout's check failed; paste its JSON and record nothing"; elif ! printf '%s\n' "$CHECK" | grep -qF '"holdout": true'; then echo "$CHECK"; echo "STOP: that rows file is not the holdout's; record nothing"; elif ! uv run debate-research --json landscape evaluate --caselist hspolicy26 --snapshot 2026-10-20 --sample "$SAMPLE" --sample-rows "$ROWS" --check-sample; then echo "STOP: the first sample's check failed; record nothing"; elif ! aws sts get-caller-identity --profile debate-dev-bedrock >/dev/null; then echo "STOP: the Bedrock profile is not logged in; log in and paste again"; else echo "$CHECK"; uv run debate-research --json landscape evaluate --caselist hspolicy26 --snapshot 2026-11-03 --sample "$HOLD" --sample-rows "$HROWS" --model-mode record; uv run debate-research --json landscape evaluate --caselist hspolicy26 --snapshot 2026-10-20 --sample "$SAMPLE" --sample-rows "$ROWS" --model-mode record; fi
+```
+
+Then the replay side by side, with no call, once on each route. `deep_audit`:
+
+```bash
+HOLD=~/Documents/debate/landscape-review/policy-2026-27-nhi-holdout-sample-labelled.csv
+HROWS=~/.debate-research/dev/landscape/local-classifier/hspolicy26/policy-2026-27-nhi-holdout-2026-11-03-sample.jsonl
+SAMPLE=~/Documents/debate/landscape-review/policy-2026-27-nhi-coach-sample-labelled.csv
+ROWS=~/.debate-research/dev/landscape/local-classifier/hspolicy26/policy-2026-27-nhi-coach-sample.jsonl
+if env | grep -q '^DEBATE_'; then echo "STOP: a DEBATE_ variable is set; unset it and paste again"; else uv run debate-research --json landscape evaluate --caselist hspolicy26 --snapshot 2026-10-20 --sample "$SAMPLE" --sample-rows "$ROWS" --holdout-sample "$HOLD" --holdout-sample-rows "$HROWS" --holdout-snapshot 2026-11-03 --route deep_audit; fi
+```
+
+`high_volume`:
+
+```bash
+HOLD=~/Documents/debate/landscape-review/policy-2026-27-nhi-holdout-sample-labelled.csv
+HROWS=~/.debate-research/dev/landscape/local-classifier/hspolicy26/policy-2026-27-nhi-holdout-2026-11-03-sample.jsonl
+SAMPLE=~/Documents/debate/landscape-review/policy-2026-27-nhi-coach-sample-labelled.csv
+ROWS=~/.debate-research/dev/landscape/local-classifier/hspolicy26/policy-2026-27-nhi-coach-sample.jsonl
+if env | grep -q '^DEBATE_'; then echo "STOP: a DEBATE_ variable is set; unset it and paste again"; else uv run debate-research --json landscape evaluate --caselist hspolicy26 --snapshot 2026-10-20 --sample "$SAMPLE" --sample-rows "$ROWS" --holdout-sample "$HOLD" --holdout-sample-rows "$HROWS" --holdout-snapshot 2026-11-03; fi
+```
+
+What to send the PM: **the JSON objects only**. Those are the two sample checks, the two recordings and the
+side-by-side replay, per route. They hold counts, ids and scores only:
+
+* A holdout's summary holds no row numbers, per-card outcomes or answer ids, and `--breakdown` refuses it.
+* In the side-by-side JSON, `bar_reads_sample` is `holdout`. Exit 0 means both stages ran to the end, every scan
+  of both is clean, and the holdout's pipeline meets the bar.
+* Exit 1 `EVALUATION_BELOW_BAR` carries the same counts in `error.details`.
+* A stop before any answer (`MODEL_ACCESS_DENIED`, a budget refusal) recorded nothing. Paste it, and do not run
+  the block again before the PM has read it.

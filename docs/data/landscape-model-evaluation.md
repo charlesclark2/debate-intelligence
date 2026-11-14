@@ -720,6 +720,9 @@ of 2026-11-14 on the size, the draw and the exclusions, as recorded in `v1-e32-t
 * **The draw:** `coach_sample()`'s rule (`v1-e32-t21`), seed **20261114**, with the proxy model retrained on
   the holdout's own snapshot. Its threshold, strata cuts and populations are its own, and its score is never
   pooled with the first sample's.
+* **Its stratum weights are its own** (the PM's ruling (a), 2026-11-14). The exclusions come before the strata,
+  so the threshold, the median cut and the populations, and so the weights of its weighted score, are the
+  eligible cards': the cards it could be drawn from. They are not pooled with the first sample's weights.
 * **The snapshot: 2026-11-03, from this Mac's store, parsed at `2026.10.27-docx-7`**, under taxonomy
   `policy-2026-27-nhi` 1.5.1 and prompt 1.3.1. The first sample stays at 2026-10-20.
 * **No card of the first sample.** Measured against all 60 drawn, not only the 47 labelled, the draw keeps
@@ -735,8 +738,10 @@ of 2026-11-14 on the size, the draw and the exclusions, as recorded in `v1-e32-t
 * **LD** gets a separate pair of samples in a task the PM files. Its sitting waits until the Policy holdout
   has its score.
 
-The scores are recorded here by the PM once the coach has sat both sittings and the PM has ruled the record
-run. Each is recorded beside the snapshot and parser version the holdout was drawn from:
+The scores are recorded here by the PM from the record run the ruling allows: both routes, on one day after both
+sittings, not on a Wednesday, as an exception to the hold on live runs for these recordings only. Each is
+recorded beside the snapshot and parser version the holdout was drawn from. With both samples evaluated, the
+exit code reads the bar on the holdout:
 
 | Route | Prompt | Holdout: snapshot, parser | Holdout, pipeline (95%) | First sample, pipeline |
 |---|---|---|---|---|

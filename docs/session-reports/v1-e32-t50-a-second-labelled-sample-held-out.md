@@ -6,7 +6,7 @@
 | Spec | [`plan_specs/v1/e32-argument-landscape/t50-a-second-labelled-sample-held-out.yaml`](../../plan_specs/v1/e32-argument-landscape/t50-a-second-labelled-sample-held-out.yaml) |
 | Epic / release | `v1-e32-argument-landscape` / `v1.2` |
 | Branch | `task/v1-e32-t50-a-second-labelled-sample-held-out` |
-| Session status | PARTIAL: built and tested as ruled; the draw, the two sittings and `--check-sample` on the real store are the operator's (ac3) <!-- COMPLETE / PARTIAL / BLOCKED --> |
+| Session status | PARTIAL, ready for the PM's verdict on a partial merge: built and tested as ruled; ac3 (the draw, both sittings, `--check-sample`) and the ruled record run are the operator's <!-- COMPLETE / PARTIAL / BLOCKED --> |
 
 ## Summary
 
@@ -26,13 +26,13 @@ The tests are on invented cards and stores. They were run red against a refuse-n
 failing, each at an assertion) and catch all 13 mutants, the PM's included: a holdout card sharing a cluster
 with a first-sample card in another team's file. The node's criterion passes (35 tests).
 
-**ac3 is the operator's:** the draw, the coach's two sittings and `--check-sample` on the real store. Their
-blocks are in [the runbook](../runbooks/landscape-model-evaluation-record.md#the-held-out-sample-the-draw-and-the-coachs-two-sittings-v1-e32-t50).
-So the Goal stays `InProgress`. The record run is not authorized: its commands and estimates are in
-[the record run, for the PM's ruling](#the-record-run-for-the-pms-ruling-after-both-sittings). Since `v1-e32-t53`
-(taxonomy 1.5.1), the first sample's kept cassettes no longer replay, so a side-by-side score needs the first
-sample re-recorded on each route as well. That is about $0.62 to $0.74 on `deep_audit` and $0.21 to $0.25 on
-`high_volume`.
+**What is left is the operator's, so the Goal stays `InProgress`.** ac3 (the draw, the coach's two sittings
+and `--check-sample` on the real store) and the record run are both run from the runbook's
+[held-out section](../runbooks/landscape-model-evaluation-record.md#the-held-out-sample-the-draw-and-the-coachs-two-sittings-v1-e32-t50).
+The PM's second ruling of 2026-11-14 ([below](#the-pms-second-ruling-2026-11-14)) allows the record run as a
+narrow exception to the hold on live runs. It runs both routes on one day after both sittings, not on a
+Wednesday, for about $0.95. It also confirms the three decisions and accepts the deviations, and leaves the
+affected set to the pull request's CI. This report is ready for the PM's verdict on a partial merge.
 
 ## The proposal (2026-11-13, for the PM's ruling)
 
@@ -374,65 +374,46 @@ nothing. The smoke check failed on the skeleton's sources at its assertion
 
 All 13 are caught.
 
-## The record run, for the PM's ruling after both sittings
+## The PM's second ruling (2026-11-14)
 
-Not run, and not authorized by the ruling. These are the commands per route measured so far: `deep_audit`
-(Claude Sonnet 4.6, 1.3.1 recorded on the first sample) and `high_volume` (Claude Haiku 4.5, last recorded
-under 1.2.0). Both use prompt 1.3.1 and taxonomy 1.5.1.
+Recorded as given, in short:
 
-**The finding that shapes them.** `v1-e32-t53` moved `policy-2026-27-nhi` to 1.5.1, and a request's cassette
-key carries the taxonomy version. So none of the first sample's kept recordings (all at 1.5.0 or earlier)
-replays from a checkout at 1.5.1 (`landscape-model-evaluation.md`, t53's section). A side-by-side replay
-therefore needs, on each route:
+1. **The record run:** both routes, `deep_audit` and `high_volume`, at prompt 1.3.1 and taxonomy 1.5.1, in the
+   order proposed: the holdout recorded alone; the first sample's 47 recorded again, since 1.5.1 moved the
+   cassette keys; then the replay side by side, with no call. About $0.95 in all, inside one day's $2.00
+   guard. A narrow exception to the hold on live model runs, for these recordings only. The operator runs them
+   on one day after both sittings, not on a Wednesday, and sends the PM the evaluation's counts and scores.
+   No other live run is authorized.
+2. **Decisions confirmed:**
+   * (a) the exclusions come before the strata, with a note in `landscape-model-evaluation.md` that the
+     holdout's stratum weights are its own and not pooled;
+   * (b) with both samples evaluated, the exit code reads the bar on the holdout, while the first sample's
+     scans and stops still count;
+   * (c) the draw writes the holdout CSV's sidecar.
+3. **Deviations accepted:** `debate_cli` src, `tests/scripts` and `tests/smoke`; the PM adds them to the spec's
+   packages in the next batch. The smoke test is welcome.
+4. **The affected set** is left to the pull request's CI under working agreement 10.
 
-* the holdout recorded alone, as `--sample`;
-* the first sample's 47 recorded again at 1.5.1;
-* then the replay beside, with no call.
+What this session did with it:
 
-A recording takes one sample at a time; `--model-mode record` with `--holdout-*` is refused.
+* **The record run is now step 6 of the runbook's held-out section**, as four blocks: a recording on each route
+  and a side-by-side replay on each. Each recording block refuses a Wednesday (`date +%u` is 3), a set
+  `DEBATE_` variable, a running pull, a holdout check without `"holdout": true`, a failed first-sample check
+  and a logged-out Bedrock profile, before any call. All eleven blocks of the section pass `zsh -n`.
+* **The weights note** is in `landscape-model-evaluation.md`'s held-out section, with the ruling on when the
+  scores are recorded and that the bar reads the holdout.
 
-**The estimate.** It is linear in the cards asked, from the 1.3.1 re-record: 43,165 input and 5,235 output
-tokens for 47 cards in 5 calls (2 of them repairs), about 918 and 111 a card. Prices are from
-`config/model_pricing.yaml`. The holdout asks only its labelled cards: about 94 if the coach labels at the
-first sample's rate (47 of 60), at most 120.
+The estimate behind the $0.95 is linear in the cards asked, from the 1.3.1 re-record: 43,165 input and 5,235
+output tokens for 47 cards in 5 calls (2 of them repairs), at `config/model_pricing.yaml`'s prices. The holdout
+asks only its labelled cards: about 94 at the first sample's rate (47 of 60), at most 120.
 
 | Route | First sample (47) | Holdout (94 / 120) | In all |
 |---|---|---|---|
 | `deep_audit`, $0.003 / $0.015 per 1,000 | 43,165 in, 5,235 out: $0.208 | 86,330 in, 10,470 out: $0.416 / 110,209 in, 13,366 out: $0.531 | $0.62 / $0.74 |
 | `high_volume`, $0.001 / $0.005 per 1,000 | same tokens: $0.069 | $0.139 / $0.177 | $0.21 / $0.25 |
 
-The calls are 3 for the first sample and 5 or 6 for the holdout, plus any repairs. The stage's batches run
-one after another, so the budget guard holds the spend so far plus one call's ceiling: on `deep_audit` about
-$0.37, from t55's $1.106 for three. Both routes on one day stay under dev's $2.00 if nothing else spends that
-day.
-
-The commands, for the PM to rule on. They are not in the runbook until ruled. The first block checks both
-samples, then records `deep_audit`:
-
-```bash
-cd /Users/charlesclark/Documents/debate/debate-intelligence-tool/debate-intelligence-worktrees/v1-e32-t50-a-second-labelled-sample-held-out
-```
-
-```bash
-HOLD=~/Documents/debate/landscape-review/policy-2026-27-nhi-holdout-sample-labelled.csv
-HROWS=~/.debate-research/dev/landscape/local-classifier/hspolicy26/policy-2026-27-nhi-holdout-2026-11-03-sample.jsonl
-SAMPLE=~/Documents/debate/landscape-review/policy-2026-27-nhi-coach-sample-labelled.csv
-ROWS=~/.debate-research/dev/landscape/local-classifier/hspolicy26/policy-2026-27-nhi-coach-sample.jsonl
-if env | grep -q '^DEBATE_'; then echo "STOP: a DEBATE_ variable is set; unset it and paste again"; elif pgrep -f "caselist pull" >/dev/null; then echo "STOP: a caselist pull is running; wait for it to finish"; elif ! CHECK=$(uv run debate-research --json landscape evaluate --caselist hspolicy26 --snapshot 2026-11-03 --sample "$HOLD" --sample-rows "$HROWS" --check-sample); then echo "$CHECK"; echo "STOP: the holdout's check failed; paste its JSON and record nothing"; elif ! printf '%s\n' "$CHECK" | grep -qF '"holdout": true'; then echo "$CHECK"; echo "STOP: that rows file is not the holdout's; record nothing"; elif ! uv run debate-research --json landscape evaluate --caselist hspolicy26 --snapshot 2026-10-20 --sample "$SAMPLE" --sample-rows "$ROWS" --check-sample; then echo "STOP: the first sample's check failed; record nothing"; elif ! aws sts get-caller-identity --profile debate-dev-bedrock >/dev/null; then echo "STOP: the Bedrock profile is not logged in; log in and paste again"; else echo "$CHECK"; uv run debate-research --json landscape evaluate --caselist hspolicy26 --snapshot 2026-11-03 --sample "$HOLD" --sample-rows "$HROWS" --model-mode record --route deep_audit; uv run debate-research --json landscape evaluate --caselist hspolicy26 --snapshot 2026-10-20 --sample "$SAMPLE" --sample-rows "$ROWS" --model-mode record --route deep_audit; fi
-```
-
-The same for `high_volume`, the prompt's own route, is the same block with both `--route deep_audit` dropped.
-Then the replay beside, with no call (once per route; drop `--route deep_audit` for `high_volume`):
-
-```bash
-HOLD=~/Documents/debate/landscape-review/policy-2026-27-nhi-holdout-sample-labelled.csv
-HROWS=~/.debate-research/dev/landscape/local-classifier/hspolicy26/policy-2026-27-nhi-holdout-2026-11-03-sample.jsonl
-SAMPLE=~/Documents/debate/landscape-review/policy-2026-27-nhi-coach-sample-labelled.csv
-ROWS=~/.debate-research/dev/landscape/local-classifier/hspolicy26/policy-2026-27-nhi-coach-sample.jsonl
-if env | grep -q '^DEBATE_'; then echo "STOP: a DEBATE_ variable is set; unset it and paste again"; else uv run debate-research --json landscape evaluate --caselist hspolicy26 --snapshot 2026-10-20 --sample "$SAMPLE" --sample-rows "$ROWS" --holdout-sample "$HOLD" --holdout-sample-rows "$HROWS" --holdout-snapshot 2026-11-03 --route deep_audit; fi
-```
-
-The JSON is counts only: `first_sample`, `holdout` (with `drawn_from`) and `bar_reads_sample` `holdout`.
+The batches run one after another, so the guard holds the day's spend plus one call's ceiling (about $0.37 on
+`deep_audit`, from t55's $1.106 for three calls).
 
 ## Plan nodes
 
@@ -446,7 +427,7 @@ The JSON is counts only: `first_sample`, `holdout` (with `drawn_from`) and `bar_
 |---|---|---|
 | ac1: the second sample's size, from the interval wanted at 0.85 and the coach's time, ruled on by the PM | PASS | The PM's ruling of 2026-11-14: 120 drawn, 60/40/20, Wilson ([above](#the-pms-ruling-2026-11-14)) |
 | ac2: drawn by the strata and seed rule with no card from the first, by tests on invented cards shown failing first, and the evaluation reads it as a holdout beside the first | PASS (code and tests); the real draw is the operator's | Red against `4f8c81e`: 39 of 52 failed, each at an assertion. Green: 52 of 52, plus the smoke check. 13 mutants caught, the PM's by 5 tests. `evaluate_beside` and `--holdout-*` read it beside the first. |
-| ac3: the coach labels it in a sitting and `--check-sample` reads it (operator, recorded by the PM) | NOT RUN | Operator: the runbook's held-out section, steps 1 to 5 |
+| ac3: the coach labels it in a sitting and `--check-sample` reads it (operator, recorded by the PM) | NOT RUN | Operator: the runbook's held-out section, steps 1 to 5; then the ruled record run, step 6 |
 | Node: Holdout sample tests pass (`uv run pytest packages/debate_core/tests/arguments/landscape -k sample`) | PASS | `35 passed in 3.59s` |
 
 ## Files changed
@@ -467,36 +448,40 @@ The JSON is counts only: `first_sample`, `holdout` (with `drawn_from`) and `bar_
 * `scripts/compare_local_classifier.py`: `holdout-sample`; the first sample's glob leaves out `-holdout-`.
 * `scripts/label_holdout_sample.py` (new): the sitting.
 * Tests: the five new files above and one smoke test.
-* `docs/runbooks/landscape-model-evaluation-record.md`: the held-out section (draw, copy, two sittings).
-* `docs/data/landscape-model-evaluation.md`: the held-out sample as ruled, with its snapshot and parser beside
-  the scores to come.
+* `docs/runbooks/landscape-model-evaluation-record.md`: the held-out section (the draw, the copy, the two
+  sittings, and the ruled record run).
+* `docs/data/landscape-model-evaluation.md`: the held-out sample as ruled, with its own stratum weights, and its
+  snapshot and parser beside the scores to come.
 * This report.
 
 ## Deviations from the spec
 
-* **`packages/debate_cli/src` is outside `constraints.packages`.** The `--holdout-*` options and their refusals
-  are in `debate_cli/commands/landscape.py`, a thin adapter over the service. The PM accepted this in the
-  ruling of 2026-11-14.
-* **`tests/scripts` and `tests/smoke` are outside `constraints.packages` too.** The draw's command is tested
-  where the first sample's is (`tests/scripts/test_compare_local_classifier.py`'s neighbour), and the evaluate
-  smoke suite gains one test for the new surface. `plan_specs/README.md` asks for a smoke node for a changed
-  CLI surface, and the spec has none. The PM may add both paths to the spec.
-* No other change of scope.
+All three were accepted in the PM's second ruling of 2026-11-14. The PM adds the paths to the spec's
+`constraints.packages` in the next batch:
+
+* **`packages/debate_cli/src`.** The `--holdout-*` options and their refusals are in
+  `debate_cli/commands/landscape.py`, a thin adapter over the service.
+* **`tests/scripts`.** The draw's command is tested beside the first sample's, in
+  `tests/scripts/test_holdout_sample_script.py`.
+* **`tests/smoke`.** One smoke test is added for the new evaluate surface. `plan_specs/README.md` asks for one
+  for a changed CLI surface, and the spec had no smoke node.
+
+No other change of scope.
 
 ## Decisions and assumptions
 
 * The interval method is Wilson's, because it reproduces the record's two intervals.
 * The forecast counted share (0.633) is 1.3.1's, since the holdout is measured on 1.3.1.
-* **The exclusions come before the strata.** Excluded cards are removed first, and `coach_sample()`'s rule, its
+* **The exclusions come before the strata** (confirmed, ruling (a)). Excluded cards are removed first, and `coach_sample()`'s rule, its
   threshold, median cut and populations included, runs on the eligible cards. So the holdout's weights stand
   for the cards it could be drawn from. The alternative was to cut the strata on every unplaced card and draw
   only from the eligible ones. That would weight some cells by cards that could never be drawn.
 * **One seed for the split, the solver and the draw**, as `sample` uses one: 20261114 trains the proxy as
   well, so the holdout's threshold is its own.
-* **The bar reads the holdout** when both samples are evaluated (`bar_reads_sample`), since the spec reads the
+* **The bar reads the holdout** (confirmed, ruling (b)) when both samples are evaluated (`bar_reads_sample`), since the spec reads the
   bar as met only on a sample held out from tuning. The first sample is reported beside it, and its scans and
   stops count toward the exit code.
-* **The draw writes the holdout CSV's sidecar itself**, through the t58 one-time step, since nothing has
+* **The draw writes the holdout CSV's sidecar itself** (confirmed, ruling (c)), through the t58 one-time step, since nothing has
   sat on the file yet.
 * **A first-sample card counts as missing** when the reading does not hold it, as well as when the occurrence
   table has no row for it. Either way its copies cannot be shown absent.
@@ -514,14 +499,16 @@ from this worktree until it merges:
 4. the copy, the second sitting (rows 61 to 120, then the first sample's rows 16, 33 and 57) with both
    `--check-sample`s, and the copy again.
 
-The record run waits on the PM's ruling ([above](#the-record-run-for-the-pms-ruling-after-both-sittings)).
+5. on one day after both sittings, not a Wednesday: the ruled record run (step 6), on `deep_audit` then
+   `high_volume`, then the replay side by side on each, sending the PM the JSON objects only.
 
 **The affected set did not finish locally.** `uv run scripts/affected_tests.py --run --slow` selects 157 files,
 5,298 tests. Within the 115-second cap it reached 65% with two failures:
 `test_container_factories.py::test_importing_the_container_or_the_app_loads_no_integration`, for the container
 and the app. Both were caused by scikit-learn loading through the evaluation's import of the draw, and both
 were fixed by `holdout_mark.py` (`a550a5e`); both pass now. Two bounded halves then ran 1,949 of 1,991 and
-3,273 of 3,305 with no other failure. The other 72, and the slow tier, are left to the pull request's CI.
+3,273 of 3,305 with no other failure. The other 72, and the slow tier, are left to the pull request's CI, as
+the PM ruled under working agreement 10.
 ruff, ruff format, pyright (whole project), lint-imports, the thin-handler check, the command-block check,
 the docs index and the link check pass.
 

@@ -159,7 +159,7 @@ is public, and the second ruling replaced Q2 with B; `ce36398` carried that out.
   named the corpus folder ("no other part of the repository may read them"). That condition
   protected committed pages, and under Q2 B there are none. Kept, it would also have failed
   v2-e14-t05's planned tests over these cards. `ce36398` removes it; it can come back from
-  `01045ec` if the PM wants the excerpts guarded too. Its red run, planted break and two mutants
+  `01045ec` (pre-rewrite, local only) if the PM wants the excerpts guarded too. Its red run, planted break and two mutants
   are below for the record.
 
 **Red run of the attestation** against a skeleton that refuses nothing (`ask` returns yes and prints nothing, `import`
@@ -432,8 +432,25 @@ printed nothing, and with the new default nothing reads that path.
   counts only).
   * The first invented author's first name matched one caselist's school and team words, so it was
     replaced; the replacement matches none.
-  * The earlier name is still in this branch's history (`1788c90`..`501e0cc`). The squash merge
-    leaves it out of `dev`.
+  * The earlier name was in this branch's history (`1788c90`..`501e0cc`) until the rewrite below,
+    which removed it before any push.
+  * Per the PM's note of 2026-11-14, later screening of that kind is the operator's to run, and a
+    session gets only pass or fail.
+* **The branch was rewritten before any push** (PM review, 2026-11-14). The repository is public,
+  and a pull request's commits stay reachable on GitHub after a squash merge.
+  * The PM's review edit was committed first (`c8b7097`, the pre-rewrite head).
+  * Then `git reset --soft` to the merge base with `dev` (`c6b9fe4`) and one commit, `f4c8973`. Its
+    tree is byte-identical to the pre-rewrite head: `git diff c8b7097 f4c8973` prints 0 lines.
+  * The count, by a scratch script that reads the replaced first name from the commit that replaced
+    it and prints only counts:
+    * over `git log -p c6b9fe4..c8b7097`, before the rewrite: **2**, the line that added it and the
+      line that removed it, so the count can fail;
+    * over `git log -p c6b9fe4..HEAD` after the rewrite, messages and authors included: **0**,
+      whole word and ignoring case alike;
+    * after this report's own commit on top: **0** again (recounted below the PM review).
+  * The commit hashes cited elsewhere in this report (`1788c90`, `eca18c3`, `501e0cc`, `01045ec`,
+    `ce36398`, `8561c0f`) are pre-rewrite commits. Their content is all in `f4c8973`, and none was
+    pushed. They remain in this machine's object store until the reflog expires.
   * The store's `.sqlite3` file is byte-identical (mtime unchanged); its `-shm` and `-wal` sidecars
     moved.
 
@@ -445,11 +462,12 @@ Q2 (Decisions). Restoring it for the excerpts alone is a one-commit change.
 
 ## Operator follow-ups
 
-**Now.** Step 1 writes nothing into the repo; step 2 writes the attested excerpts. (Two steps of
-earlier drafts are gone: the repository-visibility check, since the operator confirmed it is
-public and Q2 is B, and creating a denylist, which the product owner's ruling made unnecessary.)
+**Done.** Two steps of earlier drafts are gone. The repository-visibility check went because the
+operator confirmed the repository is public, so Q2 is B. Creating a denylist went because the
+product owner's ruling made it unnecessary.
 
-*1. List the candidates* (read-only, expected 1 to 3 minutes; it prints nothing until the end):
+*1. List the candidates*: **done.** The operator ran it, and 45 were shortlisted, 15 per event. The
+command, for a re-run (read-only, 1 to 3 minutes):
 
 ```bash
 cd /Users/charlesclark/Documents/debate/debate-intelligence-tool/debate-intelligence-worktrees/v1-e09-t01-golden-card-fixtures
@@ -475,11 +493,16 @@ pick for names before importing it:
 open ~/golden-card-shortlist/shortlist.md
 ```
 
-*2. Import the picks and check them*, when the coach has picked (seconds per card). Run it in a
-terminal with the coach present. The import asks about each ID: "did the coach cut or re-cut this
+**At the resume.** The import waits for the resume (PM review). Before the pull request, an import
+into this worktree would put real excerpts on a branch that is about to be pushed, outside the
+reviewed state.
+
+*2. Import the picks and check them*, in the resumed task's worktree (seconds per card). Run it in
+a terminal with the coach present. The import asks about each ID: "did the coach cut or re-cut this
 card, and review it for names? Type yes to import it". The coach checks the ID in `shortlist.md`
-and types `yes` only for a card the coach cut or re-cut and has reviewed for names. Any other answer refuses that card. Replace `PICKED-IDS-HERE` with the
-coach's IDs, separated by spaces or commas. An ID that is not in the shortlist is refused, so the
+and types `yes` only for a card the coach cut or re-cut and has reviewed for names. Any other
+answer refuses that card. Replace `PICKED-IDS-HERE` with the coach's IDs, separated by spaces or
+commas. An ID that is not in the shortlist is refused, so the
 placeholder imports nothing:
 
 ```bash
@@ -504,7 +527,7 @@ uv run python scripts/import_golden_card.py check
 
 Success: `docx checked:` equal to N, then `denylist: off`, and the last line `clean`.
 
-**At the resume.** *3. Record the sources* (a network call;
+*3. Record the sources*, after the import (a network call;
 about 5 to 10 seconds per case under the fetcher's politeness limits). It fetches each case's
 source link into the dev store, with the profile pinned and any leftover data-directory override
 cleared. It keeps the JSON reports, which hold no page text, outside the repo:
@@ -609,3 +632,9 @@ For the record, what is accepted:
 
 Append the two changes and a line under this review. The PM then appends an `ACCEPTED` review with
 the merge line `scripts/task pr --partial`.
+
+**Session, 2026-11-14: both changes are done.** (1) The branch was rewritten before any push: a soft
+reset to the merge base `c6b9fe4` and one commit, `f4c8973`, whose tree is byte-identical to the
+pre-rewrite head. The name counts 0 over `git log -p c6b9fe4..HEAD` (2 before the rewrite),
+recorded in Decisions. (2) Operator follow-up 2 (import and check) is under "At the resume", ahead of
+the record step; step 1 is marked done, with 45 shortlisted, 15 per event.

@@ -47,7 +47,7 @@ from debate_core.application.holdout_sitting import (
     side_rule_line,
     sitting_range,
 )
-from debate_core.arguments.landscape.holdout_sample import is_holdout
+from debate_core.arguments.landscape.holdout_mark import is_holdout
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_CONFIG_DIR = REPO_ROOT / "config" / "landscape"

@@ -33,6 +33,7 @@ from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, Final, cast
 
+from debate_core.arguments.landscape.holdout_mark import HOLDOUT_KEY, holdout_header, is_holdout
 from debate_core.arguments.landscape.local_classifier import (
     UNPLACED,
     CoachSample,
@@ -67,9 +68,6 @@ HOLDOUT_STRATA: Final = (
     ("far-below-threshold", 20),
 )
 """The first sample's strata, their shares doubled: 120 cards (the PM's ruling of 2026-11-14)."""
-
-HOLDOUT_KEY: Final = "holdout"
-"""The rows file's header key that marks a held-out sample: reported as counts and scores only."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -255,21 +253,3 @@ def holdout_sample_lines(draw: HoldoutDraw, *, drawn_from: Mapping[str, object])
         "drawn_from": dict(drawn_from),
     }
     return [json.dumps(header, sort_keys=True, separators=(",", ":")) + "\n", *lines[1:]]
-
-
-def holdout_header(rows: Iterable[str]) -> dict[str, Any] | None:
-    """The header of a held-out sample's rows file; None for any other, the first sample's included."""
-    first = next((line for line in rows if line.strip()), None)
-    try:
-        loaded: object = json.loads(first) if first is not None else None
-    except json.JSONDecodeError:
-        return None
-    if not isinstance(loaded, dict):
-        return None
-    header = cast(dict[str, Any], loaded)
-    return header if header.get(HOLDOUT_KEY) is True else None
-
-
-def is_holdout(rows: Iterable[str]) -> bool:
-    """Whether a rows file is a held-out sample's: its header says `"holdout": true`."""
-    return holdout_header(rows) is not None

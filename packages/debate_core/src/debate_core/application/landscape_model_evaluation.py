@@ -85,7 +85,7 @@ from debate_core.arguments.landscape.evaluation_breakdown import (
     scored_stance,
     stratum_scores,
 )
-from debate_core.arguments.landscape.holdout_sample import holdout_header
+from debate_core.arguments.landscape.holdout_mark import holdout_header
 from debate_core.arguments.landscape.matcher import MatchItem, PositionMatcher, read_items
 from debate_core.arguments.landscape.model_stage import (
     ModelCandidate,

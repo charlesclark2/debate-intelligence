@@ -497,8 +497,7 @@ from this worktree until it merges:
 2. the draw;
 3. the labels-file copy, the coach's first sitting (rows 1 to 60) with `--check-sample`, and the copy again;
 4. the copy, the second sitting (rows 61 to 120, then the first sample's rows 16, 33 and 57) with both
-   `--check-sample`s, and the copy again.
-
+   `--check-sample`s, and the copy again;
 5. on one day after both sittings, not a Wednesday: the ruled record run (step 6), on `deep_audit` then
    `high_volume`, then the replay side by side on each, sending the PM the JSON objects only.
 

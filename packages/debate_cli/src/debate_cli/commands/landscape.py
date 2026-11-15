@@ -197,6 +197,14 @@ reported as counts and scores only, so `--breakdown` refuses it, given either wa
 refused (`HOLDOUT_RECORDS_ALONE`), and the holdout is recorded alone as `--sample`. `--check-sample` reads a
 holdout given as `--sample`, and says so in `data.holdout`.
 
+`--holdout-scan-hits` (the PM's ruling of 2026-11-14) lists a holdout's own scan hits, given as `--sample`,
+for this terminal only. The scan reads every cassette of the prompt, so the listing keeps the holdout's: the
+cassettes whose cards its replay sent, and the repairs whose failed prompt holds them. Each hit is numbered,
+with its text, field, kind, marks and words, and no row, outcome or answer. It replays only, and takes no
+`--json`, `--breakdown`, `--check-sample`, `--model-mode record` or `--holdout-*`
+(`HOLDOUT_HITS_TERMINAL_ONLY`). A rows file not marked a holdout is refused, as is a batch with no cassette
+among those the scan reads. A pipe gets the counts, never the words.
+
 `--route <task class>` (`v1-e32-t43`) measures the same cards on another generative route of the routing
 file: that route's model and settings answer the prompt's `high_volume` calls, for the router and the
 budget guard alike, and the cassettes are recorded to and replayed and scanned from

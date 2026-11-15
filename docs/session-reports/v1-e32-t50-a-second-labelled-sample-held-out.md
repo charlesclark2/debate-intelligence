@@ -6,7 +6,7 @@
 | Spec | [`plan_specs/v1/e32-argument-landscape/t50-a-second-labelled-sample-held-out.yaml`](../../plan_specs/v1/e32-argument-landscape/t50-a-second-labelled-sample-held-out.yaml) |
 | Epic / release | `v1-e32-argument-landscape` / `v1.2` |
 | Branch | `task/v1-e32-t50-a-second-labelled-sample-held-out` |
-| Session status | PARTIAL, ready for the PM's verdict on a partial merge: built and tested as ruled; ac3 run by the operator on 2026-11-13 and 2026-11-14 (the draw, both sittings, `--check-sample`), for the PM to record; the ruled record run is the operator's <!-- COMPLETE / PARTIAL / BLOCKED --> |
+| Session status | PARTIAL, ready for the PM's review: built and tested as ruled, the holdout's scan-hit listing included (the PM's third ruling); ac3 and the ruled record run are done by the operator, ac3 for the PM to record; the operator's verdicts on the holdout's `high_volume` scan hits are to come <!-- COMPLETE / PARTIAL / BLOCKED --> |
 
 ## Summary
 
@@ -21,19 +21,37 @@ The PM ruled the proposal on 2026-11-14 ([the ruling](#the-pms-ruling-2026-11-14
   sample come at the end of the second, each answered `at:<id>`, `also <label>` or `side`.
 * **The evaluation.** `landscape evaluate --holdout-*` reads the holdout beside the first sample, as counts and
   scores only; `--breakdown` refuses a holdout; `--check-sample` reads it.
+* **The holdout's own scan hits** (the PM's third ruling). `landscape evaluate --holdout-scan-hits` lists, for a
+  terminal only, the hits of the holdout's own cassettes: numbered, with no row, outcome or answer.
 
 The tests are on invented cards and stores. They were run red against a refuse-nothing skeleton (39 of 52
 failing, each at an assertion) and catch all 13 mutants, the PM's included: a holdout card sharing a cluster
 with a first-sample card in another team's file. The node's criterion passes (35 tests).
 
-**What is left is the operator's, so the Goal stays `InProgress`.** ac3 (the draw, the coach's two sittings
-and `--check-sample` on the real store) ran on 2026-11-13 and 2026-11-14, for the PM to record. The record
-run is next. Both run from the runbook's
-[held-out section](../runbooks/landscape-model-evaluation-record.md#the-held-out-sample-the-draw-and-the-coachs-two-sittings-v1-e32-t50).
-The PM's second ruling of 2026-11-14 ([below](#the-pms-second-ruling-2026-11-14)) allows the record run as a
-narrow exception to the hold on live runs. It runs both routes on one day after both sittings, not on a
-Wednesday, for about $0.95. It also confirms the three decisions and accepts the deviations, and leaves the
-affected set to the pull request's CI. This report is ready for the PM's verdict on a partial merge.
+**The held-out score: the bar is not met on either route.**
+
+| Route | Holdout, pipeline (95%) | First sample, pipeline |
+|---|---|---|
+| `deep_audit`, Claude Sonnet 4.6 | 44 of 77, 0.571 (0.46 to 0.68) | 14 of 21, 0.667 (a batch of 20 refused) |
+| `high_volume`, Claude Haiku 4.5 | 39 of 82, 0.476 (0.37 to 0.58) | 23 of 35, 0.657 |
+
+Prompt 1.3.1 and taxonomy 1.5.1 on both routes. The holdout was drawn at snapshot 2026-11-03, parser
+`2026.10.27-docx-7`. The operator ran the ruled record run on 2026-11-14 for about $0.78, and the replay side
+by side on each route. Both exit 1 with `EVALUATION_BELOW_BAR`, and the bar reads the holdout. The hold on
+live model runs stands. The details, and the three findings the PM ruled on, are under
+[Operator follow-ups](#operator-follow-ups).
+
+**The Goal stays `InProgress`.** Two things are left:
+
+* ac3 (the draw on 2026-11-13, the coach's two sittings and `--check-sample` on 2026-11-14) passed in the
+  operator's run, for the PM to record.
+* The operator's verdicts on the holdout's `high_volume` scan hits are still to come. The listing the PM
+  ruled for is built, and step 7 of the runbook's
+  [held-out section](../runbooks/landscape-model-evaluation-record.md#the-held-out-sample-the-draw-and-the-coachs-two-sittings-v1-e32-t50)
+  runs it.
+
+No further live call is authorized, and none is needed. The affected set is left to the pull request's CI, as
+ruled. This report is ready for the PM's review.
 
 ## The proposal (2026-11-13, for the PM's ruling)
 
@@ -416,6 +434,79 @@ asks only its labelled cards: about 94 at the first sample's rate (47 of 60), at
 The batches run one after another, so the guard holds the day's spend plus one call's ceiling (about $0.37 on
 `deep_audit`, from t55's $1.106 for three calls).
 
+## The PM's third ruling (2026-11-14)
+
+On the record run's findings, as relayed:
+
+1. **(a) Leave the first sample's 20 refused `deep_audit` cards.** The bar reads the holdout, which lost no
+   batch, and the first sample's score is context only. No further live call is authorized.
+2. **(a) A terminal-only listing of the holdout's scan hits.** Hit numbers and the words around each, for the
+   operator's eyes only, with no row, outcome or answer id, tested offline in this task. The operator judges
+   each hit by number, as on 2026-11-05, and only the verdicts come back. The runbook's step 5 is not run on
+   the first sample until the listing exists.
+
+It also recorded the finding on rows 16, 33 and 57: only row 33's `side` goes to the follow-up on t46's
+other-side rule.
+
+### The listing (`arguments/landscape/holdout_scan.py`, `landscape evaluate --holdout-scan-hits`)
+
+* **Which texts.** The scan reads every cassette of the route's classify prompt at its version, and every
+  repair of it filed under the caselist, so the listing keeps the holdout's own:
+  * a classify cassette whose request's `items` are a card list the holdout's replay sent, compared as
+    parsed JSON, so spacing does not matter;
+  * a repair whose failed prompt holds such a list.
+
+  The service replays the holdout as `evaluate` asks it, with no model call, and lists the hits of its input
+  batches, then its cassettes, then its repairs. The scan's own functions read them (`input_batch_hits`,
+  `cassette_hits`, `repair_cassette_hits`), and each hit keeps its marks.
+* **What it shows.** One line per hit: its number, the text (`cassette 1`, renumbered among the holdout's
+  own), the field, the kind, the marks, `(no mark sets it aside)` where none does, and the words around it.
+  A head line gives the counts.
+* **What it refuses.**
+  * A rows file not marked a holdout. The first sample's hits are the breakdown's.
+  * A batch the replay sent with no cassette among those the scan reads, so the filter can never leave the
+    holdout's texts out silently.
+  * `--json`, `--breakdown`, `--check-sample`, `--model-mode record` and `--holdout-*`
+    (`HOLDOUT_HITS_TERMINAL_ONLY`).
+
+  When stdout is not a terminal, it prints the head line and a `withheld` count, never a word. The runbook
+  uses that output for what is pasted back.
+* **The handler stays at 25 statements.** Two pairs of assignments in `evaluate` became one each, and the
+  new branch went in their place.
+* **Tests, offline:**
+  * 5 in `packages/debate_core/tests/arguments/landscape/test_holdout_scan.py`;
+  * 9 in `packages/debate_cli/tests/test_landscape_evaluate_holdout.py`, through `synthetic26`. Each sample's
+    rationale names an invented school, and the listing shows the holdout's and not the first sample's.
+* **Red first.** Against a refuse-nothing skeleton, which kept every text, refused nothing, printed to a pipe
+  and dropped the notice and the marks, 12 of the then 13 new tests failed, each at an assertion. The 13th is
+  the set-aside control: its expected `left` is 0, which the skeleton returns.
+* **Mutants.** 11 were run, one at a time:
+  * cassettes kept without the sent list;
+  * repairs kept without it;
+  * `left` counting every hit;
+  * input batches not listed;
+  * a first sample's rows file accepted;
+  * missing cassettes not refused;
+  * `--json` accepted;
+  * a recording accepted;
+  * hits printed to a pipe;
+  * no notice;
+  * no `(no mark sets it aside)`.
+
+  10 were caught. "Input batches not listed" survived, because no test put a hit in a card sent. The added
+  test `test_a_hit_in_a_card_the_holdout_sent_is_listed_under_its_input_batch` catches it.
+* **Checks.** All pass:
+  * ruff and ruff format;
+  * pyright on the whole project;
+  * lint-imports (20 contracts kept);
+  * the thin-handler check;
+  * the command-block check;
+  * the links and the docs index.
+
+  The tests run for the change:
+  * `test_container_factories.py`, the holdout files and the evaluate smoke check: 70 passed;
+  * `test_landscape_command.py -k "evaluate or breakdown or check_sample"`: 40 passed.
+
 ## Plan nodes
 
 | Node | Status | Notes |
@@ -428,7 +519,7 @@ The batches run one after another, so the guard holds the day's spend plus one c
 |---|---|---|
 | ac1: the second sample's size, from the interval wanted at 0.85 and the coach's time, ruled on by the PM | PASS | The PM's ruling of 2026-11-14: 120 drawn, 60/40/20, Wilson ([above](#the-pms-ruling-2026-11-14)) |
 | ac2: drawn by the strata and seed rule with no card from the first, by tests on invented cards shown failing first, and the evaluation reads it as a holdout beside the first | PASS (code and tests); the real draw is the operator's | Red against `4f8c81e`: 39 of 52 failed, each at an assertion. Green: 52 of 52, plus the smoke check. 13 mutants caught, the PM's by 5 tests. `evaluate_beside` and `--holdout-*` read it beside the first. |
-| ac3: the coach labels it in a sitting and `--check-sample` reads it (operator, recorded by the PM) | PASS (the operator's run; the PM records it) | The draw on 2026-11-13, then two sittings on 2026-11-14: 111 of 120 labelled, 9 unsure. `--check-sample` reads `"holdout": true` and `labelled` 111; the file's SHA-256 is `7d1ada7b…`. The first sample is unchanged at 47 ([Operator follow-ups](#operator-follow-ups)). The ruled record run, step 6, is next |
+| ac3: the coach labels it in a sitting and `--check-sample` reads it (operator, recorded by the PM) | PASS (the operator's run; the PM records it) | The draw on 2026-11-13, then two sittings on 2026-11-14: 111 of 120 labelled, 9 unsure. `--check-sample` reads `"holdout": true` and `labelled` 111; the file's SHA-256 is `7d1ada7b…`. The first sample is unchanged at 47 ([Operator follow-ups](#operator-follow-ups)). The ruled record run followed on 2026-11-14 |
 | Node: Holdout sample tests pass (`uv run pytest packages/debate_core/tests/arguments/landscape -k sample`) | PASS | `35 passed in 3.59s` |
 
 ## Files changed
@@ -448,9 +539,12 @@ The batches run one after another, so the guard holds the day's spend plus one c
   `--check-sample`'s `holdout`.
 * `scripts/compare_local_classifier.py`: `holdout-sample`; the first sample's glob leaves out `-holdout-`.
 * `scripts/label_holdout_sample.py` (new): the sitting.
-* Tests: the five new files above and one smoke test.
+* `packages/debate_core/src/debate_core/arguments/landscape/holdout_scan.py` (new): the holdout's own texts and
+  their hits; `LandscapeModelEvaluationService.holdout_scan_hits`; `--holdout-scan-hits` and
+  `HOLDOUT_HITS_TERMINAL_ONLY` in `debate_cli/commands/landscape.py` (the third ruling).
+* Tests: the five new files above, `test_holdout_scan.py`, and one smoke test.
 * `docs/runbooks/landscape-model-evaluation-record.md`: the held-out section (the draw, the copy, the two
-  sittings, and the ruled record run).
+  sittings, the ruled record run, and step 7, the holdout's own scan hits).
 * `docs/data/landscape-model-evaluation.md`: the held-out sample as ruled, with its own stratum weights, and its
   snapshot and parser beside the scores to come.
 * This report.
@@ -467,7 +561,8 @@ All three were accepted in the PM's second ruling of 2026-11-14. The PM adds the
 * **`tests/smoke`.** One smoke test is added for the new evaluate surface. `plan_specs/README.md` asks for one
   for a changed CLI surface, and the spec had no smoke node.
 
-No other change of scope.
+The third ruling's listing is in the same two paths (`packages/debate_cli/src` and `packages/debate_core`), so it
+adds no path. No other change of scope.
 
 ## Decisions and assumptions
 
@@ -500,7 +595,11 @@ from this worktree until it merges:
 4. the copy, the second sitting (rows 61 to 120, then the first sample's rows 16, 33 and 57) with both
    `--check-sample`s, and the copy again;
 5. on one day after both sittings, not a Wednesday: the ruled record run (step 6), on `deep_audit` then
-   `high_volume`, then the replay side by side on each, sending the PM the JSON objects only.
+   `high_volume`, then the replay side by side on each, sending the PM the JSON objects only;
+6. step 7: the holdout's own `high_volume` scan hits, first piped (the counts are pasted back), then in the
+   terminal for the operator's eyes. Only the verdicts come back, by hit number.
+
+Steps 1 to 6 are done (below). Step 7 is next.
 
 **Step 1, the dry run (the operator's, 2026-11-13, before the draw), as pasted: counts only.** It passed every condition in
 the runbook: version `2026.10.27-docx-7`, 120 drawn, no `STOP`, and no first-sample card without an
@@ -668,7 +767,7 @@ On each route the holdout placed 3 of its 4 cards labelled `none`.
 * **The evidence guard held.** One holdout answer on `deep_audit` was refused as `ECHOES_EVIDENCE`, so no
   quoted text was counted.
 
-**Three things for the PM:**
+**Three things for the PM** (ruled on 2026-11-14: [the third ruling](#the-pms-third-ruling-2026-11-14)):
 
 1. **The first sample on `deep_audit` lost a batch of 20.** The terminal printed "structured output failed
    validation" three times, and the 5 calls fit 3 batches (20, 20 and 7) and 2 repairs. One batch's repair
@@ -721,7 +820,8 @@ with `EVALUATION_BELOW_BAR` and `bar_reads_sample: "holdout"`.
 * The `high_volume` replay's message is the scan's, as in the recordings.
 * Both samples' `scan` objects are the same, as finding 2 explains.
 
-The JSON objects go to the PM, with the findings above, for the ruling.
+The JSON objects went to the PM with the findings above. The PM ruled on 2026-11-14
+([the third ruling](#the-pms-third-ruling-2026-11-14)). The listing is built, and step 7 runs it.
 
 **The affected set did not finish locally.** `uv run scripts/affected_tests.py --run --slow` selects 157 files,
 5,298 tests. Within the 115-second cap it reached 65% with two failures:
@@ -741,6 +841,9 @@ the docs index and the link check pass.
 * The side rows' two faults, if the sitting is used again: check each side row against its current label
   before showing it, and count an answer as written only when it changes a cell.
 * `v1-e32-t61` (the labels-file copy built in), until which the copy block stays manual.
+* The scan's scope beside a holdout. In the side-by-side JSON both samples' `scan` objects are the route's
+  whole cassette directory at the prompt version, so the holdout's `scan` is not its own. A follow-up could
+  scope each sample's scan to its own texts, as `holdout_scan.own_cassettes` does for the listing.
 
 ## PM review
 

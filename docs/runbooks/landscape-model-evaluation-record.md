@@ -686,3 +686,42 @@ side-by-side replay, per route. They hold counts, ids and scores only:
 * Exit 1 `EVALUATION_BELOW_BAR` carries the same counts in `error.details`.
 * A stop before any answer (`MODEL_ACCESS_DENIED`, a budget refusal) recorded nothing. Paste it, and do not run
   the block again before the PM has read it.
+
+### 7. The holdout's own scan hits, in the terminal (ruled 2026-11-14)
+
+An evaluation's cassette scan reads every cassette of the route at the prompt's version, not one sample's.
+`--holdout-scan-hits` lists the holdout's own: the cassettes whose cards its replay sent, and the repairs
+whose failed prompt holds them. It replays and calls no model. Run it on a route whose holdout scan is
+unclean. In the record run of 2026-11-14 that is `high_volume`, the default route. Expected runtime: about
+a minute each.
+
+Section 5's breakdown of the first sample also reads the holdout's cassettes, so it is not run while a
+holdout's hits are unjudged. On 2026-11-14 it is not needed at all: the first sample's own cassettes were
+all set aside, and the one text left is the holdout's.
+
+**First, the counts, piped, which is safe to paste.** Through a pipe the command prints its counts and
+withholds every hit's words.
+
+```bash
+HOLD=~/Documents/debate/landscape-review/policy-2026-27-nhi-holdout-sample-labelled.csv
+HROWS=~/.debate-research/dev/landscape/local-classifier/hspolicy26/policy-2026-27-nhi-holdout-2026-11-03-sample.jsonl
+if env | grep -q '^DEBATE_'; then echo "STOP: a DEBATE_ variable is set; unset it and paste again"; else uv run debate-research landscape evaluate --caselist hspolicy26 --snapshot 2026-11-03 --sample "$HOLD" --sample-rows "$HROWS" --holdout-scan-hits | cat; fi
+```
+
+Paste back the two lines it prints: the texts and hits counted, and the `withheld` line. Success is 6 input
+batches and 6 cassettes, the holdout's batches on that route, and at least one hit with no mark that sets it
+aside.
+
+**Then the hits, in the terminal, for your eyes only.** **Do not paste or copy this output anywhere: not
+into a Claude session, a chat, a report or an issue.** It is the same command without the pipe, and it lists
+each hit with the words around it.
+
+```bash
+HOLD=~/Documents/debate/landscape-review/policy-2026-27-nhi-holdout-sample-labelled.csv
+HROWS=~/.debate-research/dev/landscape/local-classifier/hspolicy26/policy-2026-27-nhi-holdout-2026-11-03-sample.jsonl
+if env | grep -q '^DEBATE_'; then echo "STOP: a DEBATE_ variable is set; unset it and paste again"; else uv run debate-research landscape evaluate --caselist hspolicy26 --snapshot 2026-11-03 --sample "$HOLD" --sample-rows "$HROWS" --holdout-scan-hits; fi
+```
+
+Report the verdicts only. For each hit, give its number and whether its words name a team, a school or a
+tournament, or are an ordinary word that shares them (as on 2026-11-05), for example `1: ordinary word`.
+Start with the hits marked `(no mark sets it aside)`. Never give the words themselves.

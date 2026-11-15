@@ -27,6 +27,15 @@ untouched. Five commands:
   stays at 90%, t21's threshold, as the review queue's order model. From the next `classify` or
   `landscape report` run the queue is ordered by its confidence and shows its position as a
   suggestion at or above that threshold. It places no card.
+* **`holdout-sample`** (`v1-e32-t50`) draws the held-out sample: 120 unplaced cards by `sample`'s rule
+  (strata 60, 40 and 20, seed 20261114, the PM's ruling of 2026-11-14) from the store at `--snapshot`,
+  sharing no card with the first sample: no card of a first-sample card's cluster or exact fingerprint,
+  none read alike to one, none from a first-sample document, and one card per cluster
+  (:mod:`~debate_core.arguments.landscape.holdout_sample`). It prints each exclusion's count. A
+  first-sample card with no occurrence row stops it, by count. It writes its own feature table and rows
+  file (`<topic>-holdout-<snapshot>-features.jsonl` and `-sample.jsonl`) and the coach's CSV at
+  `--labels-out` with its sidecar, and refuses to write over any file, the first sample's included.
+  `--dry-run` draws and prints the counts and writes nothing.
 
 Every file is written under `<data dir>/landscape/local-classifier/<caselist>/`, and nowhere else:
 they are derived from the caselist's cards, so they follow the data directory's retention and are
@@ -43,6 +52,8 @@ Read-only for every store; it starts no worker process.
     uv run python scripts/compare_local_classifier.py score-sample --caselist hspolicy26 \\
         --labels ~/Documents/debate/landscape-review/policy-2026-27-nhi-coach-sample.csv
     uv run python scripts/compare_local_classifier.py train-queue-order --caselist hspolicy26
+    uv run python scripts/compare_local_classifier.py holdout-sample --caselist hspolicy26 \\
+        --snapshot 2026-11-03 --labels-out <the coach's holdout CSV> --dry-run
 """
 
 from __future__ import annotations
@@ -57,14 +68,21 @@ import sys
 import time
 from collections import Counter
 from collections.abc import Callable, Mapping, Sequence
+from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
 
 from debate_core.application.caselist.evidence_listing import LocalEvidence
 from debate_core.application.caselist.suppression import RecordedSuppressionList
-from debate_core.application.coach_sample_labels_file import LabelsFileRefused, read_labels_file
+from debate_core.application.coach_sample_labels_file import (
+    LabelsFileRefused,
+    labels_digest,
+    read_labels_file,
+    record_first_digest,
+)
 from debate_core.application.errors import DomainError
-from debate_core.application.landscape_seeding import read_seed_sources
+from debate_core.application.holdout_sample_draw import card_identities, drawn_from
+from debate_core.application.landscape_seeding import SeedReading, read_seed_sources
 from debate_core.application.landscape_staleness import LandscapeStalenessCheck
 from debate_core.application.local_classifier_comparison import (
     FeatureTable,
@@ -74,6 +92,14 @@ from debate_core.application.local_classifier_comparison import (
     sources_no_longer_live,
 )
 from debate_core.application.review_queue_order import QueueOrderModelFile, model_file_text
+from debate_core.arguments.landscape.holdout_sample import (
+    HOLDOUT_SEED,
+    HOLDOUT_STRATA,
+    FirstSampleCardsMissing,
+    HoldoutDraw,
+    holdout_sample,
+    holdout_sample_lines,
+)
 from debate_core.arguments.landscape.local_classifier import (
     DEFAULT_MINIMUM_FEATURE_TEAMS,
     DEFAULT_SEED,
@@ -112,6 +138,8 @@ POSITION_ROWS_SHOWN = 20
 """A position is printed when at least this many held-out cards are labelled or predicted as it."""
 MODELS = {"specified": False, "proxy": True}
 """Each model's name, and whether it is trained and scored without the headings that place on their own."""
+HOLDOUT_MARK = "-holdout-"
+"""In the name of each file of the held-out sample, which the first sample's commands never read."""
 STRATIFIED_BY = "proxy"
 """The model the coach sample is stratified on. The specified model reads the headings its labels come
 from, so its held-out threshold says nothing about the cards those headings miss."""
@@ -177,8 +205,18 @@ def _ratio(value: float | None) -> str:
 # ------------------------------------------------------------------------------------------------
 
 
-async def _features(arguments: argparse.Namespace) -> int:
-    started = time.perf_counter()
+@dataclass(frozen=True)
+class _Reading:
+    data_dir: Path
+    snapshot: date
+    repository: YamlTaxonomyRepository
+    suppression: RecordedSuppressionList
+    reading: SeedReading
+
+
+async def _read_store(arguments: argparse.Namespace) -> _Reading:
+    """The caselist's sources on its topic, read from the store through the snapshot (the newest unless one
+    is named), at the store's newest version directory unless `--version` names one."""
     data_dir = _outside_the_repository(arguments.data_dir, "--data-dir")
     repository = YamlTaxonomyRepository.load(arguments.config_dir)
     objects = FsEvidenceObjectStore(data_dir)
@@ -210,8 +248,21 @@ async def _features(arguments: argparse.Namespace) -> int:
         f"Read {arguments.caselist} {reading.version} through {snapshot}: {reading.entries} source entries, "
         f"{reading.parsed} parsed, {len(reading.sources)} on {resolved.topic.id}."
     )
+    return _Reading(data_dir, snapshot, repository, suppression, reading)
+
+
+async def _features(arguments: argparse.Namespace) -> int:
+    started = time.perf_counter()
+    read = await _read_store(arguments)
+    data_dir, snapshot, repository, suppression, reading = (
+        read.data_dir,
+        read.snapshot,
+        read.repository,
+        read.suppression,
+        read.reading,
+    )
     if not reading.sources:
-        print(f"FAILED: 0 sources read for {resolved.topic.id}; no table was written.", file=sys.stderr)
+        print(f"FAILED: 0 sources read for {reading.topic_id}; no table was written.", file=sys.stderr)
         return 1
     table = await build_feature_table(
         reading, repository, suppression, through=snapshot, review_threshold=arguments.threshold
@@ -238,7 +289,11 @@ async def _read_table(arguments: argparse.Namespace) -> tuple[Path, FeatureTable
     """The caselist's feature table, its taxonomy, and the table's sources a removal has reached since."""
     data_dir = _outside_the_repository(arguments.data_dir, "--data-dir")
     directory = output_directory(data_dir, arguments.caselist)
-    tables = sorted(directory.glob("*-features.jsonl")) if directory.is_dir() else []
+    tables = (
+        sorted(path for path in directory.glob("*-features.jsonl") if HOLDOUT_MARK not in path.name)
+        if directory.is_dir()
+        else []
+    )
     if len(tables) != 1:
         raise Refused(
             f"expected one feature table under {directory}, found {len(tables)}; run `features` first"
@@ -468,6 +523,12 @@ def sample_paths(directory: Path, topic_id: str) -> tuple[Path, Path]:
     return directory / f"{topic_id}-coach-sample.csv", directory / f"{topic_id}-coach-sample.jsonl"
 
 
+def holdout_paths(directory: Path, topic_id: str, snapshot: date) -> tuple[Path, Path]:
+    """The held-out sample's feature table, and its rows file: its own names, beside the first sample's."""
+    stem = f"{topic_id}{HOLDOUT_MARK}{snapshot.isoformat()}"
+    return directory / f"{stem}-features.jsonl", directory / f"{stem}-sample.jsonl"
+
+
 async def _sample(arguments: argparse.Namespace) -> int:
     started = time.perf_counter()
     directory, table, taxonomy = await _live_table(arguments)
@@ -498,6 +559,122 @@ async def _sample(arguments: argparse.Namespace) -> int:
         )
     print(f"Wrote the coach's file to {csv_path}.")
     print(f"Wrote the sampled cards' ids and predictions to {items_path}.")
+    print(f"Runtime {time.perf_counter() - started:.1f} s.")
+    return 0
+
+
+# ------------------------------------------------------------------------------------------------
+# holdout-sample
+# ------------------------------------------------------------------------------------------------
+
+
+def _print_holdout(draw: HoldoutDraw, taxonomy: Taxonomy) -> None:
+    kept = draw.exclusions
+    print(
+        f"Measured against the first sample's {kept.first_sample_cards} cards: {kept.first_sample_documents} "
+        f"documents, {kept.first_sample_clusters} clusters."
+    )
+    print(f"Candidates: {kept.candidates} unplaced cards the {STRATIFIED_BY} model predicts.")
+    print(f"  in a first-sample card's cluster: {kept.same_cluster}")
+    print(f"  with a first-sample card's exact fingerprint: {kept.same_exact_fingerprint}")
+    print(f"  read alike to a first-sample card (headings and tag): {kept.same_read_fingerprint}")
+    print(f"  from a first-sample document: {kept.same_document}")
+    print(f"  with no occurrence row: {kept.no_occurrence_row}")
+    print(f"  kept out by any rule: {kept.excluded}; eligible: {kept.eligible}")
+    sample = draw.sample
+    print(
+        f"Drew {len(sample.items)} cards from {len({item.source_sha256 for item in sample.items})} "
+        f"documents, seed {draw.seed}; {kept.one_per_cluster} eligible cards share a cluster with a drawn "
+        "card and were not drawn."
+    )
+    for stratum, share in draw.strata:
+        kinds = Counter(
+            taxonomy.resolve(prediction.position_id).kind.value
+            for item in sample.items
+            if item.stratum == stratum and (prediction := item.predictions[sample.stratified_by]) is not None
+        )
+        print(
+            f"  {stratum}: {sum(kinds.values())} of {share} wanted, from {sample.populations[stratum]} "
+            f"eligible cards ({', '.join(f'{kind} {n}' for kind, n in sorted(kinds.items())) or 'none'})"
+        )
+
+
+def _new_file(path: Path) -> Path:
+    if path.exists():
+        raise Refused(f"{path} is there already; the draw writes over no file")
+    return path
+
+
+async def _holdout_sample(arguments: argparse.Namespace) -> int:
+    started = time.perf_counter()
+    data_dir = _outside_the_repository(arguments.data_dir, "--data-dir")
+    labels_out = _outside_the_repository(arguments.labels_out, "--labels-out")
+    directory = output_directory(data_dir, arguments.caselist)
+    read = await _read_store(arguments)
+    reading = read.reading
+    if not reading.sources:
+        raise Refused(f"0 sources read for {reading.topic_id}; nothing was drawn")
+    _, first_rows = sample_paths(directory, reading.topic_id)
+    if not first_rows.is_file():
+        raise Refused(f"no first sample under {directory}; the holdout is measured against it")
+    features_path, rows_path = holdout_paths(directory, reading.topic_id, read.snapshot)
+    first_files = {path.resolve() for path in sample_paths(directory, reading.topic_id)}
+    for path in (features_path, rows_path, labels_out):
+        if path.resolve() in first_files:
+            raise Refused(f"{path} is the first sample's; the draw never writes it")
+        if not arguments.dry_run:
+            _new_file(path)
+    occurrences = await LocalParsedStore(data_dir).read_occurrences(arguments.caselist, reading.version)
+    if occurrences is None:
+        raise Refused(f"{reading.version} holds no occurrence table, so no card identity to exclude by")
+    table = await build_feature_table(
+        reading,
+        read.repository,
+        read.suppression,
+        through=read.snapshot,
+        review_threshold=DEFAULT_REVIEW_THRESHOLD,
+    )
+    taxonomy = read.repository.taxonomy(table.topic_id)
+    with first_rows.open(encoding="utf-8") as stream:
+        first = read_sample(stream)
+    comparisons = _comparisons(arguments, table, taxonomy)
+    try:
+        draw = holdout_sample(
+            taxonomy,
+            table.rows,
+            comparisons,
+            card_identities(reading, occurrences),
+            first.items,
+            stratified_by=STRATIFIED_BY,
+            seed=arguments.seed,
+            strata=HOLDOUT_STRATA,
+        )
+    except FirstSampleCardsMissing as missing:
+        print(f"STOPPED: {missing}.", file=sys.stderr)
+        return 1
+    _print_holdout(draw, taxonomy)
+    source = drawn_from(reading, occurrences, snapshot=read.snapshot.isoformat())
+    print(
+        f"Drawn from {source['version']} (parser {source['parser_version']}), snapshot {source['snapshot']}."
+    )
+    if arguments.dry_run:
+        print("Dry run: nothing was written.")
+        print(f"Runtime {time.perf_counter() - started:.1f} s.")
+        return 0
+    with _new_file(features_path).open("x", encoding="utf-8") as stream:
+        stream.writelines(feature_table_lines(table))
+    with _new_file(rows_path).open("x", encoding="utf-8") as stream:
+        stream.writelines(holdout_sample_lines(draw, drawn_from=source))
+    coach_file = io.StringIO(newline="")
+    write_sample_csv(coach_file, draw.sample, heading_teams(table.rows), second_label_column=True)
+    data = coach_file.getvalue().encode("utf-8")
+    labels_out.parent.mkdir(parents=True, exist_ok=True)
+    with _new_file(labels_out).open("xb") as stream:
+        stream.write(data)
+    digest = record_first_digest(labels_out, expect=labels_digest(data))
+    print(f"Wrote the holdout's feature table to {features_path}.")
+    print(f"Wrote its rows file, marked a holdout, to {rows_path}.")
+    print(f"Wrote the coach's file to {labels_out}, and its SHA-256 beside it: {digest}.")
     print(f"Runtime {time.perf_counter() - started:.1f} s.")
     return 0
 
@@ -662,6 +839,7 @@ def main(
         ("sample", "Write 60 unplaced cards for the coach to label."),
         ("score-sample", "Score both models on the coach's labels."),
         ("train-queue-order", "Train the proxy and write it as the review queue's order model."),
+        ("holdout-sample", "Draw the held-out sample, sharing no card with the first."),
     ):
         command = commands.add_parser(name, help=help_text)
         command.add_argument("--caselist", required=True, help="The caselist slug.")
@@ -671,13 +849,26 @@ def main(
             default=DEFAULT_DATA_DIR,
             help="The data directory. Default: the dev one.",
         )
-        if name == "features":
+        if name in ("features", "holdout-sample"):
             command.add_argument(
                 "--snapshot", type=date.fromisoformat, help="YYYY-MM-DD. Default: the newest weekly snapshot."
             )
             command.add_argument(
                 "--version", help="The parsed store's version directory. Default: the newest."
             )
+        if name == "holdout-sample":
+            command.add_argument("--seed", type=int, default=HOLDOUT_SEED, help=f"Default: {HOLDOUT_SEED}.")
+            command.add_argument(
+                "--minimum-teams",
+                type=int,
+                default=DEFAULT_MINIMUM_FEATURE_TEAMS,
+                help=f"A token fewer teams carry is no feature. Default: {DEFAULT_MINIMUM_FEATURE_TEAMS}.",
+            )
+            command.add_argument(
+                "--labels-out", type=Path, required=True, help="Where the coach's CSV is written; a new file."
+            )
+            command.add_argument("--dry-run", action="store_true", help="Draw and count; write nothing.")
+        elif name == "features":
             command.add_argument(
                 "--threshold",
                 type=float,
@@ -701,6 +892,7 @@ def main(
         "sample": _sample,
         "score-sample": _score_sample,
         "train-queue-order": _train_queue_order,
+        "holdout-sample": _holdout_sample,
     }
     try:
         refuse_an_unsafe_environment(os.environ if environ is None else environ, processes)

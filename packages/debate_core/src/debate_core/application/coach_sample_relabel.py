@@ -39,6 +39,7 @@ __all__ = [
     "disclosed_side",
     "relabel_counts",
     "relabelled_sample",
+    "rewritten_cells",
     "run_sitting",
     "shown_rows",
     "sitting_rows",
@@ -101,7 +102,17 @@ def relabelled_sample(text: str, labels: Mapping[int, str]) -> str:
     cells' values and its line ending. With no change, `text` comes back as it was. Raises `ValueError` for
     a row the sample does not have.
     """
-    if not labels:
+    return rewritten_cells(text, {row: {"position": label} for row, label in labels.items()})
+
+
+def rewritten_cells(text: str, cells: Mapping[int, Mapping[str, str]]) -> str:
+    """The coach's CSV `text` with, for each row of `cells`, each named column's cell set to its value.
+
+    :func:`relabelled_sample` for any columns: a held-out sitting writes `position` and `also`
+    (`v1-e32-t50`). Every other row keeps its bytes, and a changed row its other cells and its line ending.
+    Raises `ValueError` for a row the sample does not have, or a column its header does not name.
+    """
+    if not cells:
         return text
     consumed: list[str] = []
 
@@ -112,22 +123,29 @@ def relabelled_sample(text: str, labels: Mapping[int, str]) -> str:
 
     written: list[str] = []
     found: set[int] = set()
-    row_column = position_column = -1
+    row_column = -1
+    columns: dict[str, int] = {}
     for number, record in enumerate(csv.reader(lines())):
         raw = "".join(consumed)
         consumed.clear()
         if number == 0:
-            row_column, position_column = record.index("sample_row"), record.index("position")
-        elif record and int(record[row_column]) in labels:
+            row_column = record.index("sample_row")
+            named = {name for values in cells.values() for name in values}
+            unknown = sorted(named - set(record))
+            if unknown:
+                raise ValueError(f"the coach's sample has no {unknown[0]} column")
+            columns = {name: record.index(name) for name in named}
+        elif record and int(record[row_column]) in cells:
             row = int(record[row_column])
-            record[position_column] = labels[row]
+            for name, value in cells[row].items():
+                record[columns[name]] = value
             found.add(row)
             ending = raw[len(raw.rstrip("\r\n")) :]
             out = io.StringIO(newline="")
             csv.writer(out, lineterminator=ending or "\n").writerow(record)
             raw = out.getvalue()
         written.append(raw)
-    missing = sorted(set(labels) - found)
+    missing = sorted(set(cells) - found)
     if missing:
         raise ValueError(f"row {missing[0]} is not in the coach's sample")
     return "".join(written)

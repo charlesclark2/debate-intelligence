@@ -71,7 +71,7 @@ spec:
         The coach labels it in a sitting and `--check-sample` reads it (operator, recorded
         by the PM).
 status:
-  phase: Pending
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

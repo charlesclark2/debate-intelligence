@@ -27,6 +27,14 @@ One evaluation, for one caselist (one format) at its newest weekly snapshot unle
 
 Nothing is cached and no report is written: the evaluation measures the stage and changes no placement.
 Every count is a number; no tag, heading or label text is returned or logged.
+
+**The held-out sample** (`v1-e32-t50`). A rows file whose header says `"holdout": true`
+(:mod:`~debate_core.arguments.landscape.holdout_sample`) is never broken down card by card: a prompt is tuned
+from which cards it gets wrong, and the holdout never says. :meth:`LandscapeModelEvaluationService.break_down`
+refuses it; :meth:`~LandscapeModelEvaluationService.evaluate` and
+:meth:`~LandscapeModelEvaluationService.check_sample` read it as counts and scores; and
+:meth:`~LandscapeModelEvaluationService.evaluate_beside` reads the first sample and the holdout side by side,
+each at its own snapshot, refusing a pair that shares a card or a document.
 """
 
 from __future__ import annotations
@@ -77,6 +85,8 @@ from debate_core.arguments.landscape.evaluation_breakdown import (
     scored_stance,
     stratum_scores,
 )
+from debate_core.arguments.landscape.holdout_mark import holdout_header
+from debate_core.arguments.landscape.holdout_scan import HoldoutScanHits, holdout_scan_hits
 from debate_core.arguments.landscape.matcher import MatchItem, PositionMatcher, read_items
 from debate_core.arguments.landscape.model_stage import (
     ModelCandidate,
@@ -117,7 +127,9 @@ __all__ = [
     "LabelledAnswers",
     "LabelledCard",
     "LandscapeModelEvaluationService",
+    "SampleFiles",
     "SampleSides",
+    "SamplesBeside",
     "ask_labelled_cards",
     "break_down_labelled_cards",
     "coach_label",
@@ -402,6 +414,8 @@ class CoachSampleCheck:
     """The rows with a second label, by that label's kind."""
     by_stance: dict[str, int] = field(default_factory=dict[str, int])
     """The rows labelled a position, by their label's stance (`v1-e32-t46`)."""
+    holdout: bool = False
+    """Whether the rows file is a held-out sample's (`v1-e32-t50`)."""
 
 
 def coach_sample_counts(
@@ -953,8 +967,15 @@ class LandscapeModelEvaluationService:
     async def break_down(
         self, caselist: str, sample: TextIO, rows: Iterable[str], *, snapshot: date | None = None
     ) -> EvaluationBreakdown:
-        """:meth:`evaluate`, broken down card by card, with the scan's hits for the operator's terminal."""
+        """:meth:`evaluate`, broken down card by card, with the scan's hits for the operator's terminal.
+
+        Refused for a held-out sample (`v1-e32-t50`): it is reported as counts and scores only."""
         lines = list(rows)
+        if holdout_header(lines) is not None:
+            raise EvaluationRefused(
+                "the rows file is the held-out sample's, which is reported as counts and scores only and "
+                "never broken down card by card"
+            )
         prepared = await self._prepared(caselist, sample, lines, snapshot)
         return await break_down_labelled_cards(
             prepared.reading,
@@ -969,15 +990,53 @@ class LandscapeModelEvaluationService:
             snapshot=prepared.through,
         )
 
+    async def holdout_scan_hits(
+        self, caselist: str, sample: TextIO, rows: Iterable[str], *, snapshot: date | None = None
+    ) -> HoldoutScanHits:
+        """The held-out sample's own scan hits, for the operator's terminal (`v1-e32-t50`, the PM's ruling of
+        2026-11-14): the stage is asked as :meth:`evaluate` asks it, so a replay finds the holdout's
+        cassettes, and only the holdout's texts are read. No card, row, outcome or answer comes back.
+
+        Refused for a rows file not marked a holdout, and when a batch the replay sent has no cassette among
+        those the scan reads, so a listing never leaves out the holdout's own texts unsaid."""
+        lines = list(rows)
+        if holdout_header(lines) is None:
+            raise EvaluationRefused(
+                "the holdout's scan hits are listed from a held-out sample's rows file; this one is not "
+                "marked a holdout"
+            )
+        prepared = await self._prepared(caselist, sample, lines, snapshot)
+        stage = self._stage(len(prepared.labelled))
+        asked = await ask_labelled_cards(prepared.reading, prepared.labelled, stage, prepared.taxonomy)
+        sent = asked.outcome.sent_inputs
+        listed = holdout_scan_hits(
+            sent,
+            scanned_cassettes(self._cassette_texts(), stage.prompt_version),
+            scanned_repairs(self._repair_cassette_texts(), prepared.reading.caselist, stage.prompt_version),
+            ScanNames.of(
+                prepared.reading.caselist_names,
+                asked.tournaments,
+                taxonomy_text=committed_positions(prepared.taxonomy),
+            ),
+        )
+        if listed.cassettes < len(sent):
+            raise EvaluationRefused(
+                f"{listed.cassettes} of the held-out sample's {len(sent)} batch(es) have a cassette among "
+                "those the scan reads; record the holdout, then list its hits"
+            )
+        return listed
+
     async def check_sample(
         self, caselist: str, sample: TextIO, rows: Iterable[str], *, snapshot: date | None = None
     ) -> CoachSampleCheck:
         """Read the coach's sample against the caselist's taxonomy as :meth:`evaluate` reads it, and count it,
         reading no source and asking no model (`v1-e32-t41`). Refused exactly as the evaluation refuses it."""
         _, taxonomy, through = await self._resolved(caselist, snapshot)
-        labelled = _labelled(sample, rows, taxonomy)
+        lines = list(rows)
+        labelled = _labelled(sample, lines, taxonomy)
         by_label_kind, second_labels = coach_sample_counts(labelled, taxonomy)
         return CoachSampleCheck(
+            holdout=holdout_header(lines) is not None,
             by_stance=stance_counts(labelled),
             caselist=caselist,
             topic_id=taxonomy.topic_id,
@@ -1005,6 +1064,67 @@ class LandscapeModelEvaluationService:
             if one.sample_row is not None
         }
         return SampleSides(taxonomy=prepared.taxonomy, labelled=prepared.labelled, sides=sides)
+
+    async def evaluate_beside(self, caselist: str, first: SampleFiles, holdout: SampleFiles) -> SamplesBeside:
+        """The first sample and the held-out one, each evaluated at its own snapshot as :meth:`evaluate` does.
+
+        Refused, before any model is asked, when `holdout`'s rows file is not marked a holdout, when `first`'s
+        is, or when the two share a card or a document (counts only): the draw keeps every card and document
+        of the first sample out of the holdout, so a shared one means the files were mixed up."""
+        first_rows, holdout_rows = list(first.rows), list(holdout.rows)
+        header = holdout_header(holdout_rows)
+        if header is None:
+            raise EvaluationRefused("the held-out sample's rows file is not marked a holdout")
+        if holdout_header(first_rows) is not None:
+            raise EvaluationRefused("the first sample's rows file is marked a holdout")
+        first_cards, holdout_cards = _rows_items(first_rows), _rows_items(holdout_rows)
+        shared = len(set(first_cards.values()) & set(holdout_cards.values()))
+        documents = {_document(one) for one in first_cards.values()} & {
+            _document(one) for one in holdout_cards.values()
+        }
+        if shared or documents:
+            raise EvaluationRefused(
+                f"the held-out sample shares {shared} card(s) and {len(documents)} document(s) with the "
+                "first sample; it is drawn to share none"
+            )
+        first_result = await self.evaluate(caselist, first.sample, first_rows, snapshot=first.snapshot)
+        holdout_result = await self.evaluate(
+            caselist, holdout.sample, holdout_rows, snapshot=holdout.snapshot
+        )
+        drawn = header.get("drawn_from")
+        return SamplesBeside(
+            first_sample=first_result,
+            holdout=holdout_result,
+            drawn_from=cast(dict[str, object], drawn) if isinstance(drawn, dict) else {},
+        )
+
+    async def sides_by_row(
+        self, caselist: str, rows: Iterable[str], *, snapshot: date
+    ) -> dict[int, frozenset[str]]:
+        """The sides each row's file was disclosed on, for every row of a rows file, labelled or not: what the
+        held-out sample's sitting shows beside a card (`v1-e32-t50`). Reads no label and asks no model; a row
+        whose card the store no longer holds has no side."""
+        topic, _, through = await self._resolved(caselist, snapshot)
+        reading = await read_seed_sources(
+            store=self._parsed,
+            local=self._local,
+            suppression=self._suppression,
+            topic=topic,
+            caselist=caselist,
+            through=through,
+            topic_map=self._taxonomies.topic_map(),
+        )
+        by_source = {
+            source.sha256: frozenset(team.side.value for team in source.teams) for source in reading.sources
+        }
+        return {
+            row: by_source.get(_document(item_id), frozenset()) for row, item_id in _rows_items(rows).items()
+        }
+
+    async def taxonomy_at(self, caselist: str, snapshot: date) -> Taxonomy:
+        """The taxonomy the caselist's snapshot is on, as every reading of a sample at it reads the labels."""
+        _, taxonomy, _ = await self._resolved(caselist, snapshot)
+        return taxonomy
 
     async def _resolved(self, caselist: str, snapshot: date | None) -> tuple[Topic, Taxonomy, date]:
         """The topic the caselist's snapshot is on and its taxonomy, and the snapshot: the given one or the
@@ -1046,6 +1166,45 @@ class SampleSides:
     taxonomy: Taxonomy
     labelled: tuple[LabelledCard, ...]
     sides: Mapping[int, frozenset[str]]
+
+
+@dataclass(frozen=True, slots=True)
+class SampleFiles:
+    """One sample to evaluate: the coach's CSV as read through its guard, its rows file, and its snapshot."""
+
+    sample: TextIO
+    rows: Iterable[str]
+    snapshot: date | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class SamplesBeside:
+    """The first sample's evaluation and the held-out sample's, side by side (`v1-e32-t50`): counts only."""
+
+    first_sample: FormatEvaluation
+    holdout: FormatEvaluation
+    drawn_from: Mapping[str, object]
+    """What the holdout was drawn from, from its rows file's header: snapshot, version directory, parser."""
+
+
+def _rows_items(rows: Iterable[str]) -> dict[int, str]:
+    """A rows file's item ids by sample row; the header and any other line are passed over."""
+    found: dict[int, str] = {}
+    for line in rows:
+        if not line.strip():
+            continue
+        loaded: object = json.loads(line)
+        if isinstance(loaded, dict):
+            data = cast(dict[str, object], loaded)
+            row, item_id = data.get("sample_row"), data.get("item_id")
+            if isinstance(row, int) and isinstance(item_id, str):
+                found[row] = item_id
+    return found
+
+
+def _document(item_id: str) -> str:
+    """The source digest an item id begins with."""
+    return item_id.split(":", 1)[0]
 
 
 def _labelled(sample: TextIO, rows: Iterable[str], taxonomy: Taxonomy) -> tuple[LabelledCard, ...]:

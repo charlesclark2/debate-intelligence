@@ -12,7 +12,8 @@ prompt version is never served to another: a 1.1.0 request finds no 1.0.0 casset
 checkout runs prompt 1.2.0, whose answers carry a stance: its re-record, on both routes, after the coach's
 relabelling sitting, is [its section](#prompt-120-the-coachs-relabelling-sitting-then-both-routes-v1-e32-t46).
 Since `v1-e32-t55` a checkout runs prompt 1.3.1, re-recorded on `deep_audit` by
-[the last section](#prompt-131-the-re-record-on-deep_audit-v1-e32-t55).
+[its section](#prompt-131-the-re-record-on-deep_audit-v1-e32-t55). The held-out sample of `v1-e32-t50` is
+drawn and labelled by [the last section](#the-held-out-sample-the-draw-and-the-coachs-two-sittings-v1-e32-t50).
 
 ## Before you start
 
@@ -459,3 +460,268 @@ SAMPLE=~/Documents/debate/landscape-review/policy-2026-27-nhi-coach-sample-label
 ROWS=~/.debate-research/dev/landscape/local-classifier/hspolicy26/policy-2026-27-nhi-coach-sample.jsonl
 if env | grep -q '^DEBATE_'; then echo "STOP: a DEBATE_ variable is set; unset it and paste again"; else uv run debate-research landscape evaluate --caselist hspolicy26 --snapshot 2026-10-20 --sample "$SAMPLE" --sample-rows "$ROWS" --breakdown --route deep_audit; fi
 ```
+
+## The held-out sample: the draw and the coach's two sittings (`v1-e32-t50`)
+
+The bar is read on a second sample, held out from tuning, before any route is declared to meet it. The PM
+ruled it on 2026-11-14:
+
+* **120 cards**, the first sample's strata doubled: 60 at or above the proxy model's threshold, 40 just below,
+  20 far below. The seed is 20261114.
+* **The snapshot is 2026-11-03, from this Mac's own store**, parsed at `2026.10.27-docx-7`. No restore.
+* **No card of the first sample:** the draw keeps out every card in a first-sample card's cluster or with its
+  exact fingerprint, every card read alike to one (the same headings and tag), and every card from a
+  first-sample document, measured against all 60 drawn. It also takes at most one card per cluster. If a
+  first-sample card has no occurrence row, the draw stops and prints a count only.
+* **Two sittings of 60.** At the end of the second, the first sample's rows 16, 33 and 57 follow, as a part
+  of their own.
+* **Never tuned on.** The holdout is reported as counts and scores only. `--breakdown` refuses it.
+
+* **The record run** (step 6) was ruled on 2026-11-14 as a narrow exception to the hold on live model runs:
+  these recordings only, on one day after both sittings, never on a Wednesday.
+
+Run every block from a checkout holding `v1-e32-t50`: its task worktree until it merges, a checkout of `dev`
+after. Go to it:
+
+```bash
+cd /Users/charlesclark/Documents/debate/debate-intelligence-tool/debate-intelligence-worktrees/v1-e32-t50-a-second-labelled-sample-held-out
+```
+
+### 1. The draw, as a dry run
+
+Reads the store at 2026-11-03, trains both models (seed 20261114), draws the holdout and prints counts. It
+writes nothing. Expected runtime: several minutes, about as long as the first sample's `features` and `sample`
+together; not measured on the real store.
+
+```bash
+HOLD=~/Documents/debate/landscape-review/policy-2026-27-nhi-holdout-sample-labelled.csv
+if env | grep -q '^DEBATE_'; then echo "STOP: a DEBATE_ variable is set; unset it and paste again"; elif pgrep -f "caselist pull" >/dev/null; then echo "STOP: a caselist pull is running; wait for it to finish"; elif [ -e "$HOLD" ]; then echo "STOP: the holdout's labels file is there already; draw nothing and tell the PM"; else uv run python scripts/compare_local_classifier.py holdout-sample --caselist hspolicy26 --snapshot 2026-11-03 --labels-out "$HOLD" --dry-run; fi
+```
+
+What to read, and paste back: **every line it prints**. They are counts, ids and versions only.
+
+* `Read hspolicy26 2026.10.27-docx-7 through 2026-11-03: ...`.
+* `Measured against the first sample's 60 cards: 60 documents, ...`.
+* One count per exclusion rule, and how many cards were kept out and how many are eligible.
+* `Drew 120 cards from 120 documents, seed 20261114`. Each stratum's line says how many of its share it took.
+* `Drawn from 2026.10.27-docx-7 (parser 2026.10.27-docx-7), snapshot 2026-11-03.`
+* `Dry run: nothing was written.`
+
+Stop before step 2 on any of these:
+
+* a `STOP:` or `Refused:` line;
+* `STOPPED: N of the first sample's 60 cards have no row in the occurrence table`. The PM rules on it.
+* fewer than 120 drawn, or a version other than `2026.10.27-docx-7`.
+
+### 2. The draw
+
+The same command without `--dry-run`. It writes three new files and refuses to write over any file, the
+first sample's included:
+
+* the holdout's feature table and rows file, under
+  `~/.debate-research/dev/landscape/local-classifier/hspolicy26/`, named
+  `policy-2026-27-nhi-holdout-2026-11-03-features.jsonl` and `-sample.jsonl`. The rows file's header says
+  `"holdout": true`.
+* the coach's CSV, at `$HOLD`, with its sidecar.
+
+The block then checks the sidecar with `shasum` and makes the CSV read-only.
+
+```bash
+HOLD=~/Documents/debate/landscape-review/policy-2026-27-nhi-holdout-sample-labelled.csv
+if env | grep -q '^DEBATE_'; then echo "STOP: a DEBATE_ variable is set; unset it and paste again"; elif pgrep -f "caselist pull" >/dev/null; then echo "STOP: a caselist pull is running; wait for it to finish"; elif [ -e "$HOLD" ]; then echo "STOP: the holdout's labels file is there already; draw nothing and tell the PM"; elif ! uv run python scripts/compare_local_classifier.py holdout-sample --caselist hspolicy26 --snapshot 2026-11-03 --labels-out "$HOLD"; then echo "STOP: the draw stopped; paste its last lines to the PM"; elif ! (cd ~/Documents/debate/landscape-review && shasum -a 256 -c policy-2026-27-nhi-holdout-sample-labelled.csv.sha256); then echo "STOP: the holdout's labels file does not match its sidecar"; else chmod a-w "$HOLD"; echo "OK: the holdout is drawn and its labels file is read-only"; fi
+```
+
+Paste back every line. The counts must be the dry run's. Then come the lines that name the three files and
+the CSV's SHA-256, then `...: OK` from `shasum` and the `OK:` line.
+
+### 3. Before and after each sitting: copy both labels files aside
+
+Run these two blocks **just before** each sitting and **again just after** it (the PM's ruling, until
+`v1-e32-t61` is built). The second block keeps a timestamped, read-only copy of each labels file and never
+writes over an existing copy. It checks each copy byte for byte and prints the SHA-256 of each file and its
+copy.
+
+```bash
+cd ~/Documents/debate/landscape-review
+```
+
+```bash
+STAMP=$(date +%Y-%m-%d-%H%M%S); for F in policy-2026-27-nhi-coach-sample-labelled.csv policy-2026-27-nhi-holdout-sample-labelled.csv; do if [ ! -f "$F" ]; then echo "STOP: $F is missing"; elif ! cp -n "$F" "${F%.csv}.kept-${STAMP}.csv" || ! cmp -s "$F" "${F%.csv}.kept-${STAMP}.csv"; then echo "STOP: the copy of $F failed"; else chmod a-w "${F%.csv}.kept-${STAMP}.csv"; shasum -a 256 "$F" "${F%.csv}.kept-${STAMP}.csv"; fi; done
+```
+
+Success is four digest lines, each file's digest the same as its copy's, and no `STOP`. Paste them back:
+they are digests and file names only. Then go back to the checkout, with the `cd` block at the top of this
+section, before the sitting.
+
+### 4. The first sitting: holdout rows 1 to 60
+
+The coach sits at the terminal. The cards come in the sample's own order. Each shows the coach's tag and
+headings from the CSV and the side its file was disclosed on (read from the store at 2026-11-03, about half a
+minute). Nothing is shown of a model, a score, a stratum or a mark.
+
+The coach types a label:
+
+* a position id for a card that reads the position;
+* `at:<id>` for one that answers it;
+* `none`, or `unsure`;
+* a second label they accept after a comma, as in `rural-adv, at:politics-da`.
+
+Enter leaves a card blank. A label the evaluation would refuse is asked again. The sitting writes once, at
+the end: first a dated copy of the file it replaces, then the file, then its sidecar. Ctrl-C writes nothing.
+The block makes the file writable for the sitting and read-only after it. Then `--check-sample` reads the
+result: a few seconds, no card read, no model asked.
+
+```bash
+HOLD=~/Documents/debate/landscape-review/policy-2026-27-nhi-holdout-sample-labelled.csv
+HROWS=~/.debate-research/dev/landscape/local-classifier/hspolicy26/policy-2026-27-nhi-holdout-2026-11-03-sample.jsonl
+if env | grep -q '^DEBATE_'; then echo "STOP: a DEBATE_ variable is set; unset it and paste again"; elif pgrep -f "caselist pull" >/dev/null; then echo "STOP: a caselist pull is running; wait for it to finish"; elif pgrep -x "Microsoft Excel" >/dev/null; then echo "STOP: Microsoft Excel is running; quit it first, so it cannot save over the labels file"; elif ! chmod u+w "$HOLD"; then echo "STOP: the holdout's labels file could not be made writable for the sitting"; elif ! uv run python scripts/label_holdout_sample.py --caselist hspolicy26 --snapshot 2026-11-03 --sample "$HOLD" --sample-rows "$HROWS" --rows 1-60; then chmod a-w "$HOLD"; echo "STOP: the sitting stopped; paste its last line only"; else chmod a-w "$HOLD"; uv run debate-research --json landscape evaluate --caselist hspolicy26 --snapshot 2026-11-03 --sample "$HOLD" --sample-rows "$HROWS" --check-sample; fi
+```
+
+What to paste back: **the sitting's `Done.` line** (counts only) **and the JSON object**, nothing else. The
+cards stay in the terminal. Success is `"holdout": true` and `labelled` with the `Done.` line's count. Stop on
+a `STOP:` line, a `Stopped:` line or `EVALUATION_REFUSED`. Then run step 3 again.
+
+### 5. The second sitting: holdout rows 61 to 120, then the first sample's rows 16, 33 and 57
+
+Run step 3 first, then the `cd` block. This sitting is step 4's for rows 61 to 120. Then the three
+first-sample rows follow, each with its tag, headings, side and the coach's current label. Each was labelled
+as reading its position in a file disclosed only on the side opposite it. For each, the coach types one of
+three:
+
+* `at:<id>`, which replaces the label;
+* `also <label>`, which sets a second label;
+* `side`, meaning "my label stands and the side rule is wrong here". It writes nothing.
+
+The last line names the rows answered `side`, for the PM's follow-up on `v1-e32-t46`'s other-side rule. Both
+files are read through their guards before the sitting starts, and each is written, if it changed, with its
+own dated copy and sidecar. The block makes both writable for the sitting and read-only after it, then reads
+both with `--check-sample`.
+
+```bash
+HOLD=~/Documents/debate/landscape-review/policy-2026-27-nhi-holdout-sample-labelled.csv
+HROWS=~/.debate-research/dev/landscape/local-classifier/hspolicy26/policy-2026-27-nhi-holdout-2026-11-03-sample.jsonl
+SAMPLE=~/Documents/debate/landscape-review/policy-2026-27-nhi-coach-sample-labelled.csv
+ROWS=~/.debate-research/dev/landscape/local-classifier/hspolicy26/policy-2026-27-nhi-coach-sample.jsonl
+if env | grep -q '^DEBATE_'; then echo "STOP: a DEBATE_ variable is set; unset it and paste again"; elif pgrep -f "caselist pull" >/dev/null; then echo "STOP: a caselist pull is running; wait for it to finish"; elif pgrep -x "Microsoft Excel" >/dev/null; then echo "STOP: Microsoft Excel is running; quit it first, so it cannot save over the labels files"; elif ! chmod u+w "$HOLD" "$SAMPLE"; then echo "STOP: the labels files could not be made writable for the sitting"; elif ! uv run python scripts/label_holdout_sample.py --caselist hspolicy26 --snapshot 2026-11-03 --sample "$HOLD" --sample-rows "$HROWS" --rows 61-120 --side-rows 16,33,57 --first-sample "$SAMPLE" --first-sample-rows "$ROWS" --first-snapshot 2026-10-20; then chmod a-w "$HOLD" "$SAMPLE"; echo "STOP: the sitting stopped; paste its last line only"; else chmod a-w "$HOLD" "$SAMPLE"; uv run debate-research --json landscape evaluate --caselist hspolicy26 --snapshot 2026-11-03 --sample "$HOLD" --sample-rows "$HROWS" --check-sample; uv run debate-research --json landscape evaluate --caselist hspolicy26 --snapshot 2026-10-20 --sample "$SAMPLE" --sample-rows "$ROWS" --check-sample; fi
+```
+
+What to paste back: the sitting's last three lines and the two JSON objects, nothing else:
+
+* the `Done.` line;
+* `The first sample's rows: N written, M answered side.`;
+* the side-rule line, which names rows by number.
+
+The holdout's JSON says `"holdout": true`. The first sample's says `labelled` 47, or 48 if row 33 took an
+`at:` label. Then run step 3 again.
+
+### 6. The record run, then the two samples side by side (ruled 2026-11-14)
+
+The PM's ruling of 2026-11-14 allows these recordings and no other live run, as a narrow exception to the hold
+on live model runs:
+
+* **When:** on one day, after both sittings and their `--check-sample`s, and not on a Wednesday (each block
+  refuses one).
+* **What:** both routes, `deep_audit` (Claude Sonnet 4.6) and `high_volume` (Claude Haiku 4.5), at prompt 1.3.1
+  and taxonomy 1.5.1. On each route, in this order:
+  * the holdout, recorded alone as `--sample` (a recording with `--holdout-*` is refused);
+  * the first sample's 47, recorded again, because taxonomy 1.5.1 (`v1-e32-t53`) moved the cassette keys and
+    none of its kept recordings replays;
+  * the two side by side, replayed with no call.
+* **The cost:** about $0.95 in all, from the 1.3.1 re-record's tokens. That is about $0.62 to $0.74 on
+  `deep_audit` and $0.21 to $0.25 on `high_volume`, for a holdout of 94 to 120 labelled cards. The batches run
+  one after another, so the budget guard holds the day's spend plus one call's ceiling (about $0.37 on
+  `deep_audit`), inside dev's $2.00 if nothing else spends that day.
+* **Nothing is published.** The cassettes go to `model-cassettes-deep_audit/` and `model-cassettes/`, beside
+  the older ones, under their own keys.
+
+Each recording block checks both samples first (the holdout's must say `"holdout": true`) and the Bedrock
+login, then records the holdout and then the first sample. Expected runtime: 4 to 8 minutes a route.
+
+`deep_audit`:
+
+```bash
+HOLD=~/Documents/debate/landscape-review/policy-2026-27-nhi-holdout-sample-labelled.csv
+HROWS=~/.debate-research/dev/landscape/local-classifier/hspolicy26/policy-2026-27-nhi-holdout-2026-11-03-sample.jsonl
+SAMPLE=~/Documents/debate/landscape-review/policy-2026-27-nhi-coach-sample-labelled.csv
+ROWS=~/.debate-research/dev/landscape/local-classifier/hspolicy26/policy-2026-27-nhi-coach-sample.jsonl
+if env | grep -q '^DEBATE_'; then echo "STOP: a DEBATE_ variable is set; unset it and paste again"; elif [ "$(date +%u)" = "3" ]; then echo "STOP: it is Wednesday; the PM's ruling keeps the record run off Wednesdays"; elif pgrep -f "caselist pull" >/dev/null; then echo "STOP: a caselist pull is running; wait for it to finish"; elif ! CHECK=$(uv run debate-research --json landscape evaluate --caselist hspolicy26 --snapshot 2026-11-03 --sample "$HOLD" --sample-rows "$HROWS" --check-sample); then echo "$CHECK"; echo "STOP: the holdout's check failed; paste its JSON and record nothing"; elif ! printf '%s\n' "$CHECK" | grep -qF '"holdout": true'; then echo "$CHECK"; echo "STOP: that rows file is not the holdout's; record nothing"; elif ! uv run debate-research --json landscape evaluate --caselist hspolicy26 --snapshot 2026-10-20 --sample "$SAMPLE" --sample-rows "$ROWS" --check-sample; then echo "STOP: the first sample's check failed; record nothing"; elif ! aws sts get-caller-identity --profile debate-dev-bedrock >/dev/null; then echo "STOP: the Bedrock profile is not logged in; log in and paste again"; else echo "$CHECK"; uv run debate-research --json landscape evaluate --caselist hspolicy26 --snapshot 2026-11-03 --sample "$HOLD" --sample-rows "$HROWS" --model-mode record --route deep_audit; uv run debate-research --json landscape evaluate --caselist hspolicy26 --snapshot 2026-10-20 --sample "$SAMPLE" --sample-rows "$ROWS" --model-mode record --route deep_audit; fi
+```
+
+`high_volume`, the prompt's own route:
+
+```bash
+HOLD=~/Documents/debate/landscape-review/policy-2026-27-nhi-holdout-sample-labelled.csv
+HROWS=~/.debate-research/dev/landscape/local-classifier/hspolicy26/policy-2026-27-nhi-holdout-2026-11-03-sample.jsonl
+SAMPLE=~/Documents/debate/landscape-review/policy-2026-27-nhi-coach-sample-labelled.csv
+ROWS=~/.debate-research/dev/landscape/local-classifier/hspolicy26/policy-2026-27-nhi-coach-sample.jsonl
+if env | grep -q '^DEBATE_'; then echo "STOP: a DEBATE_ variable is set; unset it and paste again"; elif [ "$(date +%u)" = "3" ]; then echo "STOP: it is Wednesday; the PM's ruling keeps the record run off Wednesdays"; elif pgrep -f "caselist pull" >/dev/null; then echo "STOP: a caselist pull is running; wait for it to finish"; elif ! CHECK=$(uv run debate-research --json landscape evaluate --caselist hspolicy26 --snapshot 2026-11-03 --sample "$HOLD" --sample-rows "$HROWS" --check-sample); then echo "$CHECK"; echo "STOP: the holdout's check failed; paste its JSON and record nothing"; elif ! printf '%s\n' "$CHECK" | grep -qF '"holdout": true'; then echo "$CHECK"; echo "STOP: that rows file is not the holdout's; record nothing"; elif ! uv run debate-research --json landscape evaluate --caselist hspolicy26 --snapshot 2026-10-20 --sample "$SAMPLE" --sample-rows "$ROWS" --check-sample; then echo "STOP: the first sample's check failed; record nothing"; elif ! aws sts get-caller-identity --profile debate-dev-bedrock >/dev/null; then echo "STOP: the Bedrock profile is not logged in; log in and paste again"; else echo "$CHECK"; uv run debate-research --json landscape evaluate --caselist hspolicy26 --snapshot 2026-11-03 --sample "$HOLD" --sample-rows "$HROWS" --model-mode record; uv run debate-research --json landscape evaluate --caselist hspolicy26 --snapshot 2026-10-20 --sample "$SAMPLE" --sample-rows "$ROWS" --model-mode record; fi
+```
+
+Then the replay side by side, with no call, once on each route. `deep_audit`:
+
+```bash
+HOLD=~/Documents/debate/landscape-review/policy-2026-27-nhi-holdout-sample-labelled.csv
+HROWS=~/.debate-research/dev/landscape/local-classifier/hspolicy26/policy-2026-27-nhi-holdout-2026-11-03-sample.jsonl
+SAMPLE=~/Documents/debate/landscape-review/policy-2026-27-nhi-coach-sample-labelled.csv
+ROWS=~/.debate-research/dev/landscape/local-classifier/hspolicy26/policy-2026-27-nhi-coach-sample.jsonl
+if env | grep -q '^DEBATE_'; then echo "STOP: a DEBATE_ variable is set; unset it and paste again"; else uv run debate-research --json landscape evaluate --caselist hspolicy26 --snapshot 2026-10-20 --sample "$SAMPLE" --sample-rows "$ROWS" --holdout-sample "$HOLD" --holdout-sample-rows "$HROWS" --holdout-snapshot 2026-11-03 --route deep_audit; fi
+```
+
+`high_volume`:
+
+```bash
+HOLD=~/Documents/debate/landscape-review/policy-2026-27-nhi-holdout-sample-labelled.csv
+HROWS=~/.debate-research/dev/landscape/local-classifier/hspolicy26/policy-2026-27-nhi-holdout-2026-11-03-sample.jsonl
+SAMPLE=~/Documents/debate/landscape-review/policy-2026-27-nhi-coach-sample-labelled.csv
+ROWS=~/.debate-research/dev/landscape/local-classifier/hspolicy26/policy-2026-27-nhi-coach-sample.jsonl
+if env | grep -q '^DEBATE_'; then echo "STOP: a DEBATE_ variable is set; unset it and paste again"; else uv run debate-research --json landscape evaluate --caselist hspolicy26 --snapshot 2026-10-20 --sample "$SAMPLE" --sample-rows "$ROWS" --holdout-sample "$HOLD" --holdout-sample-rows "$HROWS" --holdout-snapshot 2026-11-03; fi
+```
+
+What to send the PM: **the JSON objects only**. Those are the two sample checks, the two recordings and the
+side-by-side replay, per route. They hold counts, ids and scores only:
+
+* A holdout's summary holds no row numbers, per-card outcomes or answer ids, and `--breakdown` refuses it.
+* In the side-by-side JSON, `bar_reads_sample` is `holdout`. Exit 0 means both stages ran to the end, every scan
+  of both is clean, and the holdout's pipeline meets the bar.
+* Exit 1 `EVALUATION_BELOW_BAR` carries the same counts in `error.details`.
+* A stop before any answer (`MODEL_ACCESS_DENIED`, a budget refusal) recorded nothing. Paste it, and do not run
+  the block again before the PM has read it.
+
+### 7. The holdout's own scan hits, in the terminal (ruled 2026-11-14)
+
+An evaluation's cassette scan reads every cassette of the route at the prompt's version, not one sample's.
+`--holdout-scan-hits` lists the holdout's own: the cassettes whose cards its replay sent, and the repairs
+whose failed prompt holds them. It replays and calls no model. Run it on a route whose holdout scan is
+unclean. In the record run of 2026-11-14 that is `high_volume`, the default route. Expected runtime: about
+a minute each.
+
+Section 5's breakdown of the first sample also reads the holdout's cassettes, so it is not run while a
+holdout's hits are unjudged. On 2026-11-14 it is not needed at all: the first sample's own cassettes were
+all set aside, and the one text left is the holdout's.
+
+**First, the counts, piped, which is safe to paste.** Through a pipe the command prints its counts and
+withholds every hit's words.
+
+```bash
+HOLD=~/Documents/debate/landscape-review/policy-2026-27-nhi-holdout-sample-labelled.csv
+HROWS=~/.debate-research/dev/landscape/local-classifier/hspolicy26/policy-2026-27-nhi-holdout-2026-11-03-sample.jsonl
+if env | grep -q '^DEBATE_'; then echo "STOP: a DEBATE_ variable is set; unset it and paste again"; else uv run debate-research landscape evaluate --caselist hspolicy26 --snapshot 2026-11-03 --sample "$HOLD" --sample-rows "$HROWS" --holdout-scan-hits | cat; fi
+```
+
+Paste back the two lines it prints: the texts and hits counted, and the `withheld` line. Success is 6 input
+batches and 6 cassettes, the holdout's batches on that route, and at least one hit with no mark that sets it
+aside.
+
+**Then the hits, in the terminal, for your eyes only.** **Do not paste or copy this output anywhere: not
+into a Claude session, a chat, a report or an issue.** It is the same command without the pipe, and it lists
+each hit with the words around it.
+
+```bash
+HOLD=~/Documents/debate/landscape-review/policy-2026-27-nhi-holdout-sample-labelled.csv
+HROWS=~/.debate-research/dev/landscape/local-classifier/hspolicy26/policy-2026-27-nhi-holdout-2026-11-03-sample.jsonl
+if env | grep -q '^DEBATE_'; then echo "STOP: a DEBATE_ variable is set; unset it and paste again"; else uv run debate-research landscape evaluate --caselist hspolicy26 --snapshot 2026-11-03 --sample "$HOLD" --sample-rows "$HROWS" --holdout-scan-hits; fi
+```
+
+Report the verdicts only. For each hit, give its number and whether its words name a team, a school or a
+tournament, or are an ordinary word that shares them (as on 2026-11-05), for example `1: ordinary word`.
+Start with the hits marked `(no mark sets it aside)`. Never give the words themselves.

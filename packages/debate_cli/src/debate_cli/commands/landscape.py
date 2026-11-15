@@ -185,6 +185,26 @@ and the command that writes it; so is a file with no sidecar (`LABELS_DIGEST_MIS
 one-time step that records it) and a sidecar that is not one line of a digest and a name
 (`LABELS_DIGEST_UNREADABLE`).
 
+The held-out sample (`v1-e32-t50`) is a second sample drawn by the first's rule sharing no card with it, its
+rows file's header marked `"holdout": true`. `--holdout-sample`, `--holdout-sample-rows` and
+`--holdout-snapshot` evaluate it beside the first sample (`--sample`, `--sample-rows`, `--snapshot`), each
+replayed at its own snapshot: `data.first_sample` and `data.holdout` hold the two summaries, and
+`data.holdout.drawn_from` the snapshot, version directory and parser the holdout was drawn from. The bar reads
+the holdout's pipeline (`data.bar_reads_sample`): exit `0` when both stages ran to the end, every scan of both
+is clean and the holdout meets the bar. A pair that shares a card or a document is refused. The holdout is
+reported as counts and scores only, so `--breakdown` refuses it, given either way
+(`HOLDOUT_COUNTS_ONLY`); a recording takes one sample, so `--model-mode record` with `--holdout-*` is
+refused (`HOLDOUT_RECORDS_ALONE`), and the holdout is recorded alone as `--sample`. `--check-sample` reads a
+holdout given as `--sample`, and says so in `data.holdout`.
+
+`--holdout-scan-hits` (the PM's ruling of 2026-11-14) lists a holdout's own scan hits, given as `--sample`,
+for this terminal only. The scan reads every cassette of the prompt, so the listing keeps the holdout's: the
+cassettes whose cards its replay sent, and the repairs whose failed prompt holds them. Each hit is numbered,
+with its text, field, kind, marks and words, and no row, outcome or answer. It replays only, and takes no
+`--json`, `--breakdown`, `--check-sample`, `--model-mode record` or `--holdout-*`
+(`HOLDOUT_HITS_TERMINAL_ONLY`). A rows file not marked a holdout is refused, as is a batch with no cassette
+among those the scan reads. A pipe gets the counts, never the words.
+
 `--route <task class>` (`v1-e32-t43`) measures the same cards on another generative route of the routing
 file: that route's model and settings answer the prompt's `high_volume` calls, for the router and the
 budget guard alike, and the cassettes are recorded to and replayed and scanned from
@@ -199,6 +219,7 @@ from __future__ import annotations
 import asyncio
 import dataclasses
 import io
+import json
 import shlex
 import sys
 from datetime import date
@@ -225,6 +246,8 @@ from debate_core.application.landscape_model_evaluation import (
     CoachSampleCheck,
     EvaluationBreakdown,
     FormatEvaluation,
+    SampleFiles,
+    SamplesBeside,
 )
 from debate_core.application.landscape_model_stage import (
     CLASSIFICATION_TASK_CLASS,
@@ -262,12 +285,14 @@ from debate_core.arguments.landscape.evaluation_breakdown import (
     second_label_counts,
     weighted_accuracy,
 )
+from debate_core.arguments.landscape.holdout_scan import HoldoutScanHits
 from debate_core.arguments.landscape.model_stage import NameScan
 from debate_core.arguments.landscape.scan_hits import (
     MARKS_THAT_SET_A_HIT_ASIDE,
     ScanHit,
     hit_counts,
     mark_counts,
+    sets_aside,
 )
 from debate_core.domain.landscape_classification import Stance
 from debate_core.domain.landscape_pages import (
@@ -496,6 +521,33 @@ def evaluate(
             "asks no model and reads no card.",
         ),
     ] = False,
+    holdout_sample: Annotated[
+        Path | None,
+        typer.Option(
+            "--holdout-sample",
+            exists=True,
+            dir_okay=False,
+            help="The coach's held-out sample CSV, evaluated beside --sample as counts and scores only.",
+        ),
+    ] = None,
+    holdout_sample_rows: Annotated[
+        Path | None,
+        typer.Option(
+            "--holdout-sample-rows", exists=True, dir_okay=False, help="The held-out sample's rows file."
+        ),
+    ] = None,
+    holdout_snapshot: Annotated[
+        str | None,
+        typer.Option("--holdout-snapshot", help="The held-out sample's snapshot, YYYY-MM-DD."),
+    ] = None,
+    holdout_scan_hits: Annotated[
+        bool,
+        typer.Option(
+            "--holdout-scan-hits",
+            help="Replay only: the held-out sample's own scan hits, given as --sample, listed in this "
+            "terminal only; no row, outcome or answer.",
+        ),
+    ] = False,
     json_output: Annotated[
         bool, typer.Option("--json", help="Write one machine-readable JSON object to stdout.")
     ] = False,
@@ -504,7 +556,22 @@ def evaluate(
     cli = cli_context(ctx)
     if json_output and not cli.output.is_json:
         cli.output = CliOutput(OutputMode.JSON, verbose=cli.output.verbose)
-    labels = io.StringIO(read_labels_file(sample), newline="")
+    labels, holdout = (
+        io.StringIO(read_labels_file(sample), newline=""),
+        (holdout_sample, holdout_sample_rows, holdout_snapshot),
+    )
+    if holdout_scan_hits:
+        return _holdout_scan_hits(
+            cli,
+            ctx,
+            caselist,
+            (labels, sample_rows, snapshot),
+            config_dir,
+            route=route,
+            alone=not (breakdown or check_sample or json_output or cli.output.is_json)
+            and model_mode is EvaluationMode.REPLAY
+            and holdout == (None, None, None),
+        )
     if check_sample:
         return _check_sample(
             cli,
@@ -513,7 +580,23 @@ def evaluate(
             (labels, sample_rows),
             snapshot,
             config_dir,
-            alone=not breakdown and route is None and model_mode is EvaluationMode.REPLAY,
+            alone=not breakdown
+            and route is None
+            and model_mode is EvaluationMode.REPLAY
+            and holdout == (None, None, None),
+        )
+    if holdout != (None, None, None):
+        return _evaluate_beside(
+            cli,
+            ctx,
+            caselist,
+            (labels, sample_rows, snapshot),
+            holdout,
+            config_dir,
+            refusal=(_HOLDOUT_COUNTS_ONLY if breakdown else None)
+            or (_HOLDOUT_RECORDS_ALONE if model_mode is EvaluationMode.RECORD else None)
+            or _route_refusal(route),
+            route=route,
         )
     recording = model_mode is EvaluationMode.RECORD
     refusal = (
@@ -541,11 +624,198 @@ def evaluate(
     if broken_down is not None:
         payload["breakdown"] = breakdown_summary(broken_down)
         display = "\n".join([display, *_breakdown_lines(broken_down), *_hit_lines(broken_down)])
-    passed = result.stopped is None and result.meets_target and result.scans_clean
-    if passed or not cli.output.is_json:
+    _finish(
+        cli,
+        ctx,
+        payload,
+        display,
+        None
+        if result.stopped is None and result.meets_target and result.scans_clean
+        else _evaluation_failure(result, payload),
+    )
+
+
+def _finish(
+    cli: CliContext,
+    ctx: typer.Context,
+    payload: dict[str, JsonValue],
+    display: str,
+    failure: CommandFailure | None,
+) -> None:
+    """Print the summary (in JSON, only when it passed: a failure carries it in its details), then end on the
+    failure if there is one."""
+    if failure is None or not cli.output.is_json:
         cli.output.success(command_name(ctx), payload, display=display)
-    if not passed:
-        _end(cli, ctx, _evaluation_failure(result, payload))
+    if failure is not None:
+        _end(cli, ctx, failure)
+
+
+_HOLDOUT_COUNTS_ONLY: Final = CommandFailure(
+    code="HOLDOUT_COUNTS_ONLY",
+    message="the held-out sample is reported as counts and scores only, never broken down card by card; "
+    "--breakdown takes no --holdout-sample",
+    exit_code=ExitCode.USAGE_ERROR,
+    hint="Drop --breakdown; break down only the first sample, on its own.",
+)
+
+_HOLDOUT_RECORDS_ALONE: Final = CommandFailure(
+    code="HOLDOUT_RECORDS_ALONE",
+    message="a recording asks about one sample's cards; --model-mode record takes no --holdout-sample",
+    exit_code=ExitCode.USAGE_ERROR,
+    hint="Record the held-out sample alone, as --sample, then evaluate the two side by side in replay.",
+)
+
+_HOLDOUT_NEEDS_ITS_FILES: Final = CommandFailure(
+    code="HOLDOUT_NEEDS_ITS_FILES",
+    message="the held-out sample needs --holdout-sample, --holdout-sample-rows and --holdout-snapshot "
+    "together",
+    exit_code=ExitCode.USAGE_ERROR,
+    hint="Give all three, or none.",
+)
+
+_HOLDOUT_HITS_ALONE: Final = CommandFailure(
+    code="HOLDOUT_HITS_TERMINAL_ONLY",
+    message="--holdout-scan-hits lists the held-out sample's scan hits in this terminal only, from a replay; "
+    "it takes no --json, no --breakdown, no --check-sample, no --model-mode record and no --holdout-sample",
+    exit_code=ExitCode.USAGE_ERROR,
+    hint="Give the holdout as --sample and --sample-rows, with --holdout-scan-hits and, if needed, --route.",
+)
+
+
+def _holdout_scan_hits(
+    cli: CliContext,
+    ctx: typer.Context,
+    caselist: str,
+    files: tuple[TextIO, Path, str | None],
+    config_dir: Path | None,
+    *,
+    route: TaskClass | None,
+    alone: bool,
+) -> None:
+    """`--holdout-scan-hits`: the held-out sample's own scan hits, numbered, for this terminal only
+    (`v1-e32-t50`, the PM's ruling of 2026-11-14). The operator judges each by number."""
+    refusal = None if alone else _HOLDOUT_HITS_ALONE
+    if refusal is not None or (refusal := _route_refusal(route)) is not None:
+        _end(cli, ctx, refusal)
+    labels, sample_rows, snapshot = files
+    service = cli.services.landscape_evaluation(
+        config_dir=landscape_config_dir(config_dir), record=False, route=route
+    )
+    with sample_rows.open(encoding="utf-8") as rows:
+        listed = asyncio.run(
+            service.holdout_scan_hits(
+                caselist, labels, rows, snapshot=parse_snapshot_date(snapshot) if snapshot else None
+            )
+        )
+    payload: dict[str, JsonValue] = {
+        "hits": len(listed.hits),
+        "left": listed.left,
+        "input_batches": listed.input_batches,
+        "cassettes": listed.cassettes,
+        "repair_cassettes": listed.repair_cassettes,
+    }
+    cli.output.success(command_name(ctx), payload, display="\n".join(holdout_hit_lines(listed)))
+
+
+def holdout_hit_lines(listed: HoldoutScanHits) -> list[str]:
+    """The held-out sample's own hits, one numbered line each, for a terminal; a count of them withheld
+    otherwise. A line names the text, the field, the kind, the marks and the words: no row, outcome or
+    answer."""
+    head = (
+        f"The held-out sample's own texts: {listed.input_batches} input batch(es), {listed.cassettes} "
+        f"cassette(s), {listed.repair_cassettes} repair cassette(s). {len(listed.hits)} scan hit(s), "
+        f"{listed.left} with no mark that sets a hit aside. No model was asked."
+    )
+    if not listed.hits:
+        return [head]
+    if not _stdout_is_a_terminal():
+        return [head, f"{len(listed.hits)} scan hit(s) withheld: stdout is not a terminal. Run it in one."]
+    lines = [head, "", HITS_NOTICE]
+    for number, hit in enumerate(listed.hits, start=1):
+        marked = " (a team's name)" if hit.team_name else ""
+        vocabulary = " (a taxonomy word)" if hit.in_taxonomy else ""
+        key = " (a JSON key)" if hit.json_key else ""
+        sent = " (in the cards sent)" if hit.in_input else ""
+        left = "" if sets_aside(hit) else " (no mark sets it aside)"
+        lines.append(
+            f"  {number}. {hit.text} | {hit.where.value} | {hit.kind.value}{marked}{vocabulary}{key}{sent}"
+            f"{left} | ... {hit.before} [{hit.matched}] {hit.after} ..."
+        )
+    return lines
+
+
+BAR_READS_SAMPLE: Final = "holdout"
+"""Which sample the bar is read on when both are evaluated: the held-out one (`v1-e32-t50`)."""
+
+
+def _evaluate_beside(
+    cli: CliContext,
+    ctx: typer.Context,
+    caselist: str,
+    first: tuple[TextIO, Path, str | None],
+    holdout: tuple[Path | None, Path | None, str | None],
+    config_dir: Path | None,
+    *,
+    refusal: CommandFailure | None,
+    route: TaskClass | None,
+) -> None:
+    """The first sample and the held-out one, evaluated side by side in replay (`v1-e32-t50`)."""
+    holdout_sample, holdout_rows, holdout_snapshot = holdout
+    if holdout_sample is None or holdout_rows is None or holdout_snapshot is None:
+        _end(cli, ctx, _HOLDOUT_NEEDS_ITS_FILES)
+    if refusal is not None:
+        _end(cli, ctx, refusal)
+    labels, first_rows, first_snapshot = first
+    held_out = io.StringIO(read_labels_file(holdout_sample), newline="")
+    service = cli.services.landscape_evaluation(
+        config_dir=landscape_config_dir(config_dir), record=False, route=route
+    )
+    with first_rows.open(encoding="utf-8") as rows, holdout_rows.open(encoding="utf-8") as held_out_rows:
+        beside = asyncio.run(
+            service.evaluate_beside(
+                caselist,
+                SampleFiles(
+                    labels, list(rows), parse_snapshot_date(first_snapshot) if first_snapshot else None
+                ),
+                SampleFiles(held_out, list(held_out_rows), parse_snapshot_date(holdout_snapshot)),
+            )
+        )
+    payload = beside_summary(beside, route=route)
+    _finish(cli, ctx, payload, _beside_display(beside), _beside_failure(beside, payload))
+
+
+def beside_summary(beside: SamplesBeside, *, route: TaskClass | None = None) -> dict[str, JsonValue]:
+    """`data` of an evaluation with the held-out sample: the two summaries side by side, and what the
+    holdout was drawn from. Counts and scores only, as every summary is."""
+    drawn = cast(dict[str, JsonValue], json.loads(json.dumps(dict(beside.drawn_from))))
+    return {
+        "bar_reads_sample": BAR_READS_SAMPLE,
+        "first_sample": evaluation_summary(beside.first_sample, route=route),
+        "holdout": {**evaluation_summary(beside.holdout, route=route), "drawn_from": drawn},
+    }
+
+
+def _beside_display(beside: SamplesBeside) -> str:
+    return "\n".join(
+        [
+            "The first sample:",
+            _evaluation_display(beside.first_sample),
+            "The held-out sample (the bar reads its pipeline):",
+            _evaluation_display(beside.holdout),
+        ]
+    )
+
+
+def _beside_failure(beside: SamplesBeside, payload: dict[str, JsonValue]) -> CommandFailure | None:
+    """Why the evaluation with the holdout failed: a name either sample's scans found, then a stage either
+    stopped, then the holdout under the bar; None when it passed."""
+    both = (beside.first_sample, beside.holdout)
+    judged = (
+        next((one for one in both if not one.scans_clean), None)
+        or next((one for one in both if one.stopped is not None), None)
+        or (beside.holdout if not beside.holdout.meets_target else None)
+    )
+    return None if judged is None else _evaluation_failure(judged, payload)
 
 
 _BREAKDOWN_RECORDS_NOTHING: Final = CommandFailure(
@@ -616,6 +886,7 @@ def sample_check_summary(checked: CoachSampleCheck) -> dict[str, JsonValue]:
             "by_kind": dict(checked.second_labels),
         },
         "by_stance": dict(checked.by_stance),
+        **({"holdout": True} if checked.holdout else {}),
     }
 
 

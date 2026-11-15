@@ -697,3 +697,53 @@ The coach's review of 2026-11-08, recorded as the PM gave it. Ids, versions and 
 * **The landscape's cache.** A taxonomy version is part of the classification cache's key, so the next
   `landscape report` on hspolicy26 re-places every card. Stage one reads no description, so its
   placements and counts are unchanged, and with `--model-mode none` (the default) no model is called.
+
+## The held-out sample (`v1-e32-t50`, ruled 2026-11-14)
+
+The first sample's 47 labelled cards cannot say whether a route meets the bar. 23 of 33 counted runs from
+0.53 to 0.83 at 95%, and prompts 1.1.0 to 1.3.1 were tuned on those same cards. So before any route is
+declared to meet the bar, a second sample is drawn and read as a holdout, beside the first. The PM's ruling
+of 2026-11-14 on the size, the draw and the exclusions, as recorded in `v1-e32-t50`'s report:
+
+* **Size: 120 drawn**, strata 60, 40 and 20 (the first sample's 30, 20 and 10 doubled), in two sittings of
+  60. It is expected to count about 76: 47 of 60 were labelled and 38 of 47 counted under 1.3.1, so about
+  0.633 of the cards drawn. The interval method is Wilson's score interval at 95%, because it reproduces the
+  record's (23 of 33: 0.527 to 0.826; 24 of 32: 0.579 to 0.867).
+
+  | Drawn (strata) | Counted, about | 95% interval at 0.85 | at 0.75 | Coach, at t46's pace | at twice it |
+  |---|---|---|---|---|---|
+  | 60 (30/20/10) | 38 | 0.71 to 0.93 | 0.59 to 0.86 | 22 min | 43 min |
+  | 90 (45/30/15) | 57 | 0.74 to 0.92 | 0.62 to 0.84 | 32 min | 65 min |
+  | **120 (60/40/20)** | **76** | **0.75 to 0.91** | **0.64 to 0.83** | **43 min** | **86 min** |
+  | 150 (75/50/25) | 95 | 0.76 to 0.91 | 0.65 to 0.83 | 54 min | 108 min |
+
+* **The draw:** `coach_sample()`'s rule (`v1-e32-t21`), seed **20261114**, with the proxy model retrained on
+  the holdout's own snapshot. Its threshold, strata cuts and populations are its own, and its score is never
+  pooled with the first sample's.
+* **Its stratum weights are its own** (the PM's ruling (a), 2026-11-14). The exclusions come before the strata,
+  so the threshold, the median cut and the populations, and so the weights of its weighted score, are the
+  eligible cards': the cards it could be drawn from. They are not pooled with the first sample's weights.
+* **The snapshot: 2026-11-03, from this Mac's store, parsed at `2026.10.27-docx-7`**, under taxonomy
+  `policy-2026-27-nhi` 1.5.1 and prompt 1.3.1. The first sample stays at 2026-10-20.
+* **No card of the first sample.** Measured against all 60 drawn, not only the 47 labelled, the draw keeps
+  out every card:
+  * in a first-sample card's near-duplicate cluster, with the exact fingerprint checked too;
+  * read alike to one (the same headings and tag);
+  * from a first-sample document.
+
+  It also takes at most one card per cluster inside the holdout. The identities come from one occurrence
+  table (`card-fingerprint-v4`). A first-sample card with no occurrence row stops the draw, by count.
+* **Never tuned on.** The rows file's header says `"holdout": true`. Its evaluation gives counts and scores
+  only, never a row, a card's outcome or an answer id, and `--breakdown` refuses it.
+* **LD** gets a separate pair of samples in a task the PM files. Its sitting waits until the Policy holdout
+  has its score.
+
+The scores are recorded here by the PM from the record run the ruling allows: both routes, on one day after both
+sittings, not on a Wednesday, as an exception to the hold on live runs for these recordings only. Each is
+recorded beside the snapshot and parser version the holdout was drawn from. With both samples evaluated, the
+exit code reads the bar on the holdout:
+
+| Route | Prompt | Holdout: snapshot, parser | Holdout, pipeline (95%) | First sample, pipeline |
+|---|---|---|---|---|
+| `deep_audit` (Claude Sonnet 4.6) | 1.3.1 | 2026-11-03, `2026.10.27-docx-7` | not yet recorded | 26 of 38, 0.684 |
+| `high_volume` (Claude Haiku 4.5) | 1.3.1 | 2026-11-03, `2026.10.27-docx-7` | not yet recorded | not recorded under 1.3.1 |

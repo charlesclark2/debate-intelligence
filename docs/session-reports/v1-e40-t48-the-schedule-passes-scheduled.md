@@ -692,3 +692,471 @@ the operator's, so the Goal stays `InProgress`.
   At block 2, the release must also be green on validate-dev.
 
 `scripts/task pr --partial`
+
+## Resumed 2026-11-15: the Input in the SDK's PascalCase, and the run schedule's fix plan
+
+| | |
+|---|---|
+| Session status | PARTIAL, as briefed: the fix is built and tested. The Goal stays `InProgress`: ac1's apply and ac2's Wednesday read are the operator's |
+| Branch | `task/v1-e40-t48-the-schedule-passes-scheduled`, recreated from `origin/dev` at `76da7c1` |
+| Brief | The PM's context of 2026-11-15 (dev's apply partly failed), and the PM's note of 2026-11-15 on `v1-e05-t20` |
+
+### Summary
+
+Dev's apply of Sunday 2026-11-15 (image `v1.1.0-dev.439`, `sha256:764f9ba4f621...`) was refused at the
+run schedule: "ValidationException: Invalid RequestJson provided. Reason Request payload is missing the
+following field(s): TaskDefinition." Scheduler validates a universal target's Input against the AWS
+SDK's PascalCase member names. The run schedule was left on the ECS template, starting revision `:15`,
+which the apply deregistered, and the run scheduler role's policy now names `:17` alone. As it stands,
+Wednesday's run would be refused.
+
+This session fixes that:
+
+* **The module.** The module's Input uses the SDK's names, each checked against the AWS SDK for .NET
+  V3's ECS model (read 2026-11-15).
+* **The check.** `check_image_plan.py` reads the Input's `TaskDefinition`. A new `--run-schedule-only`
+  mode checks the fix plan: the run schedule alone, updated in place, `0 to add, 1 to change, 0 to
+  destroy`. Its Input is known in this plan, so the check reads it key by key. Beside it, and only
+  there, `v1-e05-t20`'s grant policy updated in place is allowed and named on a line of its own (the
+  PM's note).
+* **The runbook.** The read-back and the one-off builder parse PascalCase. The CloudTrail reads keep
+  camelCase, which CloudTrail records as the service's API reference documents. A new section, "The
+  run schedule alone, after the apply of 2026-11-15", holds the state read, the plan, the apply and the
+  fallback.
+
+The operator's blocks are in run order under Operator follow-ups below.
+
+### Acceptance criteria
+
+| Criterion | Status | Evidence (command → result) |
+|---|---|---|
+| ac1: the schedule's target passes `--scheduled`, shown by the plan's diff and a plan-time test, with the documentation's answer on input recorded, and the PM has read the plan before the operator's apply | NOT RUN (the fix plan, the PM's read and the apply are the operator's, Monday or Tuesday) | **Plan-time test: PASS on PascalCase.** `the_run_schedule_starts_its_pull_with_scheduled` now pins the PascalCase request whole. Red against the camelCase module: `TF_CLI_CONFIG_FILE=<mirror> TF_DATA_DIR=<scratch> terraform -chdir=infrastructure/modules/caselist_run test -no-color` → **41 passed, 3 failed**, nothing skipped (the three runs that read the Input). Green after `bb053e2`: **44 passed, 0 failed**. **The documentation's answer** is recorded, now with AWS's validator's answer (Decision 8). **The plan's diff:** in the fix plan the Input is known, so the PM reads the command in the diff (Operator follow-up 3). Sunday's plan was read by the PM; its apply failed at the run schedule. |
+| ac2: the operator's first scheduled run after the apply records a pull started with `--scheduled` | NOT RUN (Wednesday 2026-11-18) | Operator follow-ups 12 and 13, unchanged. If the fix is not applied by Tuesday night, ac2 cannot pass this week (Decision 12). |
+| Node: Schedule passes --scheduled tests pass (`uv run pytest tests/infrastructure -k schedule`) | PASS | `.venv/bin/python scripts/hard_stop.py 115 uv run pytest tests/infrastructure -k schedule` → **95 passed in 1.90s**: both files' tests. The 41 deselected are the cost-allocation and model-budget tests. |
+
+**Red runs, each before its change:**
+
+* **The module's source tests** against the module before `bb053e2`: `... -m pytest tests/infrastructure -n 0 -k "pull_with_scheduled or pascal_case"` → **2 failed**. Green after: **2 passed**.
+* **The fixtures moved to PascalCase**, run against the check and runbook as they were: `... -m pytest tests/infrastructure -n 0` → **9 failed, 86 passed**. Eight were the check's known-revision cases and the runbook's read-back and one-off builder, which still parsed camelCase. The ninth was the source test pinning the old line.
+* **The check's new mode**, against a skeleton that accepted `--run-schedule-only` and checked nothing new: `... -m pytest tests/infrastructure -n 0` → **27 failed, 102 passed**. The fix-mode cases that passed are refusals today's image check already makes with the expected words: a replace, a disabled schedule, a change outside the module, every bedrock refusal (Identity Center), the flag beside another mode, and the image check's own refusal of the fix plan.
+* **The runbook's tests**, against the runbook before `441c625`: **10 failed, 126 passed**. Seven were the new section's and three the PascalCase parsers.
+* **Green after each:** `tests/infrastructure` → **136 passed**. On the way, one test's own expected request (`test_the_one_off_is_the_applied_target_with_only_the_command_a_dry_run`) was still camelCase from the first session; it is corrected in `fae2516`.
+
+**Mutants.** Each was applied in place, and three test files run with `-n 0`: the two in `tests/infrastructure` and `tests/scripts/test_caselist_run_image_plan_check.py`. The baseline is 179 passed. Every one is caught at an assertion, not by a crash.
+
+| Mutant | Result |
+|---|---|
+| `run_task.tf`: `taskDefinition` in camelCase (the PM's) | `terraform test`: **41 passed, 3 failed**, 0 skipped |
+| `run_task.tf`: `--scheduled` dropped (the first session's, again) | `terraform test`: **42 passed, 2 failed**, 0 skipped |
+| check: the grant allowance also lets a replace through (the PM's) | **3 failed** (the replaced policy, either order, and its named line) |
+| check: the grant allowance lets any field change | 1 failed (the policy moved to another permission set) |
+| check: the Input's revision not compared | 1 failed |
+| check: the Input's names not compared (camelCase passes) | 1 failed |
+| check: the template's settings and the command not compared | 4 failed |
+| check: an unknown Input accepted | 1 failed |
+| check: the scheduler policy's revision not compared | 1 failed |
+| check: the revision's image not compared | 1 failed |
+| check: the run task definition allowed to change | 1 failed |
+| check: the move's target rules skipped in the new mode | 3 failed |
+| check: the known-revision rule reading camelCase | 5 failed |
+
+**Before the report:**
+
+* **The affected set:** `.venv/bin/python scripts/hard_stop.py 115 uv run scripts/affected_tests.py --run --slow` → `116 of 779 test files (14.9%) chosen`. It was stopped at its 115-second limit (exit 124) at 84% with no failure, the load near 24. Over two minutes, so it is left to the pull request's `ci` check (agreement 10). Within the bound instead:
+  * the 15 package test files that read `caselist-cloud-run.md` → **198 passed in 43.76s**;
+  * `tests/architecture tests/specs tests/infrastructure tests/docs tests/scripts/test_caselist_run_image_plan_check.py -m "not slow and not live"` → **804 passed in 17.28s**;
+  * the changed test files with `-m slow` → **156 deselected**, none slow.
+* **Formatting and lint:** `uv run --frozen ruff format --check .` → `2149 files already formatted`; `uv run --frozen ruff check .` → `All checks passed!`
+* **Types:** `uv run --frozen pyright` (whole project) → `0 errors, 0 warnings, 0 informations`.
+* **Imports:** `uv run --frozen lint-imports` → `Contracts: 20 kept, 0 broken.`
+* **Specs:** `uv run scripts/validate_specs.py` → `OK: 690 files, 41 epics, 627 tasks, 22 releases`, no warning naming t48.
+* **Docs:** `uv run scripts/check_command_blocks.py` → `OK: no # comments in 738 shell code blocks`; `uv run --frozen python scripts/check_links.py` → `OK: 3926 relative links and anchors`.
+* **Terraform:** `TF_CLI_CONFIG_FILE=<the mirror rc> bash scripts/terraform_checks.sh` (offline) → `All Terraform checks passed.`, exit 0, 38 s. Its `.terraform` directories were removed, and no lock file changed.
+
+### Files changed
+
+* `infrastructure/modules/caselist_run/run_task.tf`: the Input's keys in PascalCase, and the comment saying why.
+* `infrastructure/modules/caselist_run/tests/caselist_run.tftest.hcl`: the three runs that read the Input read PascalCase keys. The CloudTrail patterns' `requestParameters.taskDefinition` is unchanged.
+* `ops/caselist_run/check_image_plan.py`: `TaskDefinition` in `known_revision`, and `--run-schedule-only` with the grant allowance.
+* `docs/runbooks/caselist-cloud-run.md`: the PascalCase parsers, and the prose on why. The one-off's heading is now "The request, proved in dev before Wednesday". New section "The run schedule alone, after the apply of 2026-11-15 (`v1-e40-t48`)".
+* `tests/infrastructure/test_the_schedule_passes_scheduled.py`: fixtures in PascalCase, and a test that the request uses the SDK's names.
+* `tests/infrastructure/test_the_run_schedule_alone_after_the_failed_apply.py` (new): the fix mode, the grant allowance, and the new section's blocks.
+* This report.
+
+### Deviations from the spec
+
+None. (`tests/docs` is in the spec's packages since the PM's batch of 2026-11-14; this session did not
+change it.)
+
+### Decisions and assumptions
+
+**8. AWS's validator supersedes the PM's ruling Q1 (A).** Ruling Q1 (A) chose the RunTask API
+reference's camelCase. Scheduler refused it at UpdateSchedule on 2026-11-15 (request ID
+`40ed8070-c741-4ac1-a718-88c05243ef73`): "Request payload is missing the following field(s):
+TaskDefinition". So it validates the universal target's Input against the SDK's PascalCase member
+names, and Decision 1's open question is answered by AWS itself. The names are now each checked
+against the AWS SDK for .NET V3's ECS model, read 2026-11-15:
+
+* "RunTaskRequest Class" (<https://docs.aws.amazon.com/sdkfornet/v3/apidocs/items/ECS/TRunTaskRequest.html>):
+  `Cluster`, `Count`, `EnableECSManagedTags`, `EnableExecuteCommand`, `LaunchType`,
+  `NetworkConfiguration`, `Overrides`, `PlatformVersion`, `TaskDefinition` (and others unused).
+* "NetworkConfiguration Class" (`.../ECS/TNetworkConfiguration.html`): `AwsvpcConfiguration`.
+* "AwsVpcConfiguration Class" (`.../ECS/TAwsVpcConfiguration.html`): `AssignPublicIp`, `SecurityGroups`,
+  `Subnets`.
+* "TaskOverride Class" (`.../ECS/TTaskOverride.html`): `ContainerOverrides`.
+* "ContainerOverride Class" (`.../ECS/TContainerOverride.html`): `Command`, `Name`.
+
+The one-off dry run still runs. The validator settles the names, and a start shows that RunTask runs
+the request and the image starts.
+
+**9. CloudTrail keeps the API's camelCase, confirmed from AWS's documentation.**
+
+* "CloudTrail record contents for management, data, and network activity events"
+  (<https://docs.aws.amazon.com/awscloudtrail/latest/userguide/cloudtrail-event-reference-record-contents.html>,
+  read 2026-11-15), on `requestParameters`: "The parameters, if any, that were sent with the request.
+  These parameters are documented in the API reference documentation for the appropriate AWS service."
+* "Log Amazon ECS API calls using AWS CloudTrail"
+  (<https://docs.aws.amazon.com/AmazonECS/latest/developerguide/logging-using-cloudtrail.html>, read
+  2026-11-15): its example ECS event records `"requestParameters": {"clusterName": "default"}`, which is
+  the API reference's camelCase.
+
+Scheduler calls ECS's RunTask, so CloudTrail records that call's parameters (`overrides`,
+`containerOverrides`, `command`), not Scheduler's Input. The CloudTrail reads, and the alert rules
+that read `requestParameters.taskDefinition`, stay as they are.
+
+**10. A mode for the fix plan.** In the fix plan the run task definition is not replaced, so its ARN,
+and the whole Input, are known. The image check's known-revision rule would refuse exactly that. So
+`--run-schedule-only` reads the Input instead, key by key:
+
+* the SDK's names and no others;
+* `TaskDefinition` equal to the run task definition's current ARN, which the plan shows unchanged;
+* that revision runs the owner file's image;
+* the run scheduler policy names that revision;
+* `Cluster`, `Count`, `LaunchType`, `PlatformVersion`, `EnableExecuteCommand`, `EnableECSManagedTags` and
+  the network (in any subnet order) equal to the ECS template's own values before the plan;
+* `Overrides` exactly the run container's `--json caselist pull --scheduled`.
+
+The role, the retries and the dead-letter queue must be unchanged, the templated parameters gone, the
+schedule updated in place and `ENABLED` throughout, and nothing else in the module may change.
+
+The expected counts are `0 to add, 1 to change, 0 to destroy`. The other resources of Sunday's plan
+were applied: both task definitions, both policies and the login schedule. The run schedule's failed
+update left its state as it was. The runbook's state read (follow-up 2) confirms the state before the
+plan. The check's exact `PLAN OK` line for revision `:17` and `sha256:764f9ba4f621...` is quoted in the
+runbook and held by a test to what the check prints for that state.
+
+**11. The grant beside it** (the PM's note of 2026-11-15). Only in `--run-schedule-only`, and only
+`module.bedrock_access.aws_ssoadmin_permission_set_inline_policy.invoker[0]` with actions exactly
+`update` and `inline_policy` its only changed attribute, passes outside the module. Then the counts are
+`0 to add, 2 to change, 0 to destroy`, and a second line reads `PLAN OK, outside module.caselist_run:
+... updated in place, its inline_policy alone (v1-e05-t20's grant): read its diff in the plan`.
+
+Anything else of `module.bedrock_access` stays an Identity Center change, which never passes: a replace
+(either order), an add, a destroy, another attribute, its permission set or an account assignment. A
+replaced policy is also named as more than its update in place. The image, memory and universal-target
+modes never allow it.
+
+**12. The fallback if the fix is not applied by Tuesday night.** Wednesday's 06:00 start is refused,
+because the run scheduler role may run `:17` alone and the schedule asks for `:15`. Expect a
+launch-refused email for each refused try (up to four within the hour), then the dead-letter queue's
+alarm. After 06:00 Chicago, the operator starts the week by hand with the runbook's Step 8, "One run by
+hand". It starts the family's newest ACTIVE revision, `:17` (the image with `--scheduled`), without
+`--scheduled`, so the guard does not ask it. ac2 then cannot pass that week; it moves to the first
+scheduled run after the fix's apply. The new runbook section says the same.
+
+### Operator follow-ups
+
+Nothing to run before the PM's review. After this merges into dev: steps 1 to 3, then the PM's read;
+step 4 on Monday 2026-11-16 or Tuesday 2026-11-17, never a Wednesday; steps 5 to 9 the same day (10
+and 11 only on a failed one-off); steps 12 and 13 after 07:00 Chicago on Wednesday 2026-11-18. If
+follow-up 1 of the first PM review applies, `aws ecs describe-tasks ... --query
+'tasks[0].overrides.containerOverrides[0].command'` may stand in for step 8's command. `$WT` is the
+apply worktree:
+
+**0. Set the worktree.**
+
+```bash
+WT="$HOME/Documents/debate/debate-intelligence-tool/debate-intelligence-worktrees/caselist-credentials-dev"
+cd "$WT" || echo "WT does not exist: $WT"
+```
+
+**1. The worktree at `origin/dev`, with the PascalCase fix merged.**
+
+**Operator command** (expected runtime seconds)
+Where: `$WT`
+```bash
+cd "$WT"
+git fetch origin
+git switch --detach origin/dev
+grep -q 'TaskDefinition       = aws_ecs_task_definition.run' infrastructure/modules/caselist_run/run_task.tf && grep -q -- '--run-schedule-only' ops/caselist_run/check_image_plan.py && echo "ok: $(pwd) at origin/dev $(git rev-parse --short HEAD), the PascalCase fix merged" || echo "NOT MERGED: origin/dev has no PascalCase fix; wait for it to merge"
+git status --porcelain | grep -v 'owner.auto.tfvars' | head -3
+```
+Success looks like `ok: <the worktree> at origin/dev <commit>, the PascalCase fix merged`, and nothing
+after it.
+
+**2. The run schedule as it stands, before the plan.**
+
+**Operator command** (expected runtime seconds)
+Where: `$WT`
+```bash
+cd "$WT"
+AWS_PROFILE=debate-admin aws scheduler get-schedule --region us-east-1 --group-name debate-dev-caselist-run --name debate-dev-caselist-run --output json > /tmp/caselist-run-schedule-before-fix.json && python3 -I - /tmp/caselist-run-schedule-before-fix.json <<'STATE'
+import json, sys
+schedule = json.load(open(sys.argv[1]))
+target = schedule.get("Target") or {}
+arn = str(target.get("Arn", ""))
+if arn.endswith(":scheduler:::aws-sdk:ecs:runTask"):
+    print("target: " + arn)
+    try:
+        revision = str(json.loads(target["Input"]).get("TaskDefinition", ""))
+    except (KeyError, TypeError, ValueError):
+        revision = ""
+else:
+    print("target: the ECS template, cluster " + arn.rpartition("/")[2])
+    revision = str((target.get("EcsParameters") or {}).get("TaskDefinitionArn", ""))
+print("revision: " + (revision.rpartition("task-definition/")[2] or "(none)"))
+print("state: " + str(schedule.get("State", "")))
+STATE
+```
+Success looks like `target: the ECS template, cluster debate-dev-caselist-run`, then `revision:
+debate-dev-caselist-run:15`, then `state: ENABLED`: the state the plan below is checked against. Anything
+else goes to the PM before the plan.
+
+**3. The one dev plan, checked with `--run-schedule-only`: send the PM the check's lines, the `Plan:` line and `/tmp/caselist-run-schedule-alone-plan.txt`, and stop.**
+
+**Operator command** (expected runtime ~2 min)
+Where: `$WT`
+```bash
+cd "$WT"
+rm -f infrastructure/envs/dev/caselist-run-schedule-alone.tfplan /tmp/caselist-run-schedule-alone-plan.json
+if env | grep -qE '^(TF_VAR_|TF_WORKSPACE=|TF_DATA_DIR=|TF_CLI_ARGS)'; then echo "STOP: a Terraform override is set in this shell"; else AWS_PROFILE=debate-admin terraform -chdir=infrastructure/envs/dev init -input=false >/dev/null && AWS_PROFILE=debate-admin terraform -chdir=infrastructure/envs/dev plan -input=false -no-color -out=caselist-run-schedule-alone.tfplan | tee /tmp/caselist-run-schedule-alone-plan.txt | tail -3; fi
+AWS_PROFILE=debate-admin terraform -chdir=infrastructure/envs/dev show -json caselist-run-schedule-alone.tfplan > /tmp/caselist-run-schedule-alone-plan.json
+python3 -I ops/caselist_run/check_image_plan.py /tmp/caselist-run-schedule-alone-plan.json infrastructure/envs/dev/owner.auto.tfvars --run-schedule-only
+```
+**What to read, and what stops you.** Send the PM the check's lines, the plan's `Plan:` line and
+`/tmp/caselist-run-schedule-alone-plan.txt`. Apply only after the PM's word. The only lines that pass:
+
+* without `v1-e05-t20`, `Plan: 0 to add, 1 to change, 0 to destroy.` and one line:
+  `PLAN OK: 0 to add, 1 to change, 0 to destroy; the run schedule alone moved onto Scheduler's universal RunTask target, starting debate-dev-caselist-run:17 with --json caselist pull --scheduled on its cluster, network and launch settings as before, and its role and every other target setting as before; the run scheduler role's policy names that revision, which runs the image sha256:764f9ba4f621...; the run schedule ENABLED throughout; nothing else changes`
+* with `v1-e05-t20` merged, `Plan: 0 to add, 2 to change, 0 to destroy.` and two lines:
+  `PLAN OK: 0 to add, 2 to change, 0 to destroy; the run schedule alone moved onto Scheduler's universal RunTask target, starting debate-dev-caselist-run:17 with --json caselist pull --scheduled on its cluster, network and launch settings as before, and its role and every other target setting as before; the run scheduler role's policy names that revision, which runs the image sha256:764f9ba4f621...; the run schedule ENABLED throughout; nothing else in module.caselist_run changes`
+  and `PLAN OK, outside module.caselist_run: module.bedrock_access.aws_ssoadmin_permission_set_inline_policy.invoker[0] updated in place, its inline_policy alone (v1-e05-t20's grant): read its diff in the plan`.
+  The PM reads both, the grant's diff included.
+
+A `PLAN STOP:` line goes to the PM before any apply.
+
+**4. The apply, after the PM's word, on Monday 2026-11-16 or Tuesday 2026-11-17.**
+
+**Operator command** (expected runtime ~1 min)
+Where: `$WT`, after the PM's word, on Monday 2026-11-16 or Tuesday 2026-11-17, never a Wednesday
+```bash
+cd "$WT"
+RUNNING="$(AWS_PROFILE=debate-admin aws ecs list-tasks --region us-east-1 --cluster debate-dev-caselist-run --desired-status RUNNING --query 'length(taskArns)' --output text)" || RUNNING="unknown"
+if [ "$(TZ=America/Chicago date +%A)" = "Wednesday" ]; then echo "STOP: it is Wednesday in Chicago, the run's day; apply on another day"; elif env | grep -qE '^(TF_VAR_|TF_WORKSPACE=|TF_DATA_DIR=|TF_CLI_ARGS)'; then echo "STOP: a Terraform override is set in this shell"; elif [ "$RUNNING" = "0" ]; then AWS_PROFILE=debate-admin terraform -chdir=infrastructure/envs/dev apply -input=false caselist-run-schedule-alone.tfplan; else echo "STOP: ${RUNNING} tasks running on debate-dev-caselist-run, or the count could not be read; apply when it is 0"; fi
+AWS_PROFILE=debate-admin terraform -chdir=infrastructure/envs/dev output caselist_run_schedule_state
+```
+Success looks like `Apply complete! Resources: 0 added, 1 changed, 0 destroyed.` (`2 changed` beside
+`v1-e05-t20`), then `"ENABLED"`. No `-login-task-changed` email is expected: the login does not change.
+Then the [read-back](../runbooks/caselist-cloud-run.md#the-read-back-before-the-next-scheduled-run), which must print `target:
+arn:aws:scheduler:::aws-sdk:ecs:runTask` and `command: ["--json", "caselist", "pull", "--scheduled"]`,
+and the [one-off dry run](../runbooks/caselist-cloud-run.md#the-request-proved-in-dev-before-wednesday-a-one-off-dry-run) the same day,
+its CloudTrail line and the task's exit `0` its evidence.
+
+**5. The read-back: it must show the universal target with `--scheduled`.**
+
+**Operator command** (expected runtime seconds)
+Where: `$WT`, after the apply
+```bash
+cd "$WT"
+AWS_PROFILE=debate-admin aws scheduler get-schedule --region us-east-1 --group-name debate-dev-caselist-run --name debate-dev-caselist-run --query Target --output json > /tmp/caselist-run-schedule-target.json && python3 -I - /tmp/caselist-run-schedule-target.json <<'TARGET'
+import json, sys
+target = json.load(open(sys.argv[1]))
+arn = str(target.get("Arn", ""))
+print("target: " + (arn if arn.endswith(":scheduler:::aws-sdk:ecs:runTask") else "the ECS template, not the universal RunTask target"))
+try:
+    command = json.loads(target["Input"])["Overrides"]["ContainerOverrides"][0]["Command"]
+except (KeyError, IndexError, TypeError, ValueError):
+    print("command: none: the target has no RunTask Input with a command override")
+else:
+    print("command: " + json.dumps(command))
+TARGET
+```
+Success looks like `target: arn:aws:scheduler:::aws-sdk:ecs:runTask`, then `command: ["--json",
+"caselist", "pull", "--scheduled"]`. Anything else goes to the PM with the two lines, before Wednesday.
+
+**6. The one-off dry run's target.**
+
+**Operator command** (expected runtime under a second)
+Where: `$WT`, in the shell that ran the read-back
+```bash
+cd "$WT"
+rm -f /tmp/caselist-run-oneoff-target.json
+python3 -I - /tmp/caselist-run-schedule-target.json /tmp/caselist-run-oneoff-target.json <<'ONEOFF'
+import json, sys
+source, out = sys.argv[1], sys.argv[2]
+target = json.load(open(source))
+try:
+    request = json.loads(target["Input"])
+    [override] = request["Overrides"]["ContainerOverrides"]
+except (KeyError, TypeError, ValueError):
+    sys.exit("STOP: the schedule's target has no RunTask Input with one container override; run the read-back first")
+if not str(target.get("Arn", "")).endswith(":scheduler:::aws-sdk:ecs:runTask") or override.get("Command") != ["--json", "caselist", "pull", "--scheduled"]:
+    sys.exit("STOP: the schedule is not the applied universal target with --scheduled; run the read-back first")
+override["Command"] = ["--json", "caselist", "pull", "--dry-run"]
+target["Input"] = json.dumps(request, separators=(",", ":"))
+json.dump(target, open(out, "w"))
+print("one-off target: " + target["Arn"])
+print("one-off command: " + json.dumps(override["Command"]))
+ONEOFF
+```
+Success looks like `one-off target: arn:aws:scheduler:::aws-sdk:ecs:runTask`, then `one-off command:
+["--json", "caselist", "pull", "--dry-run"]`. A `STOP:` line means the read-back did not show the
+applied target: go back to it.
+
+**7. Create the one-off (the same day as the apply).**
+
+**Operator command** (expected runtime seconds)
+Where: `$WT`, in the same shell, on the day of the apply
+```bash
+cd "$WT"
+ONEOFF_AT="$(date -u -v+10M '+at(%Y-%m-%dT%H:%M:%S)')"
+RUNNING="$(AWS_PROFILE=debate-admin aws ecs list-tasks --region us-east-1 --cluster debate-dev-caselist-run --desired-status RUNNING --query 'length(taskArns)' --output text)" || RUNNING="unknown"
+if [ "$(TZ=America/Chicago date +%A)" = "Wednesday" ]; then echo "STOP: it is Wednesday in Chicago, the run's day"; elif [ "$RUNNING" = "0" ] && [ -s /tmp/caselist-run-oneoff-target.json ]; then AWS_PROFILE=debate-admin aws scheduler create-schedule --region us-east-1 --group-name debate-dev-caselist-run --name debate-dev-caselist-run-field-name-proof --schedule-expression "$ONEOFF_AT" --schedule-expression-timezone UTC --flexible-time-window Mode=OFF --action-after-completion DELETE --target file:///tmp/caselist-run-oneoff-target.json --query ScheduleArn --output text >/dev/null && echo "created the one-off for ${ONEOFF_AT} UTC"; elif [ "$RUNNING" = "0" ]; then echo "STOP: no one-off target; run the block above first"; else echo "STOP: ${RUNNING} tasks running on debate-dev-caselist-run, or the count could not be read; start the one-off when it is 0"; fi
+```
+Success looks like `created the one-off for at(<time>) UTC`. Then wait about 25 minutes: ten for the
+start, a few for the dry run, and up to fifteen for CloudTrail to show the event.
+
+**8. The one-off's evidence: CloudTrail's RunTask line (about 25 minutes later).**
+
+**Operator command** (expected runtime seconds)
+Where: `$WT`, about 25 minutes after the one-off was created
+```bash
+cd "$WT"
+rm -f /tmp/caselist-run-runtask-events.json /tmp/caselist-run-runtask-task.txt
+AWS_PROFILE=debate-admin aws cloudtrail lookup-events --region us-east-1 --lookup-attributes AttributeKey=EventName,AttributeValue=RunTask --start-time "$(date -u -v-3H +%Y-%m-%dT%H:%M:%SZ)" --query 'Events[].CloudTrailEvent' --output json > /tmp/caselist-run-runtask-events.json && python3 -I - /tmp/caselist-run-runtask-events.json debate-dev-caselist-run-scheduler /tmp/caselist-run-runtask-task.txt <<'RUNTASK'
+import json, sys
+events_file, role, task_file = sys.argv[1], sys.argv[2], sys.argv[3]
+found = []
+for raw in json.load(open(events_file)) or []:
+    event = json.loads(raw)
+    named = str((event.get("userIdentity") or {}).get("arn", "")).partition(":assumed-role/")[2].split("/")[0]
+    if named != role:
+        continue
+    try:
+        command = json.dumps(event["requestParameters"]["overrides"]["containerOverrides"][0]["command"])
+    except (KeyError, IndexError, TypeError):
+        command = "(no command override)"
+    tasks = (event.get("responseElements") or {}).get("tasks") or []
+    task = str(tasks[0].get("taskArn", "")).rsplit("/", 1)[-1] if tasks else "(no task)"
+    found.append((str(event.get("eventTime", "")), named, command, task))
+for line in sorted(found):
+    print("  ".join(line))
+if found:
+    open(task_file, "w").write(sorted(found)[-1][3] + "\n")
+else:
+    print("none: no RunTask by " + role + " in the window")
+RUNTASK
+```
+Success looks like one line, `<time>  debate-dev-caselist-run-scheduler  ["--json", "caselist", "pull",
+"--dry-run"]  <task id>`. `none:` means CloudTrail has not shown it yet, or the one-off never called
+RunTask: run the block again ten minutes later, and if it is still `none` see "A failed proof" below.
+`(no task)` means ECS refused the start: the launch-refused email says why.
+
+**9. The one-off's evidence: the task exited 0.**
+
+**Operator command** (expected runtime seconds)
+Where: `$WT`, after the CloudTrail block printed a task id
+```bash
+cd "$WT"
+TASK_ID="$(cat /tmp/caselist-run-runtask-task.txt 2>/dev/null)"
+if [ -z "$TASK_ID" ] || [ "$TASK_ID" = "(no task)" ]; then echo "STOP: no task id from the CloudTrail block; run it first"; else AWS_PROFILE=debate-admin aws ecs describe-tasks --region us-east-1 --cluster debate-dev-caselist-run --tasks "$TASK_ID" --query 'tasks[0].[lastStatus,stopCode,containers[0].exitCode]' --output text; fi
+```
+Success looks like `STOPPED	EssentialContainerExited	0`. `RUNNING` or `PENDING` means it is not done:
+run it again in a few minutes. Send the PM the CloudTrail line and this one: the proof passed.
+
+**10. Only on a failed one-off: is it still there?**
+
+**Operator command** (expected runtime seconds)
+Where: `$WT`
+```bash
+cd "$WT"
+AWS_PROFILE=debate-admin aws scheduler get-schedule --region us-east-1 --group-name debate-dev-caselist-run --name debate-dev-caselist-run-field-name-proof --query '[Name,State,ScheduleExpression]' --output text
+```
+If it printed the one-off's name, delete it. The block names the one-off alone, never the weekly
+schedule.
+
+**11. Only on a failed one-off, and only if the block above printed its name: delete it.**
+
+**Operator command** (expected runtime seconds)
+Where: `$WT`, only after the block above printed `debate-dev-caselist-run-field-name-proof`
+```bash
+cd "$WT"
+AWS_PROFILE=debate-admin aws scheduler delete-schedule --region us-east-1 --group-name debate-dev-caselist-run --name debate-dev-caselist-run-field-name-proof && echo "deleted the one-off"
+```
+Then send the PM what the proof printed, and the email if one came. The PM rules before Wednesday
+whether to fix forward with the other casing or apply the templated target again.
+
+**12. Wednesday 2026-11-18 (ac2): the schedule's RunTask.**
+
+**Operator command** (expected runtime seconds)
+Where: `$WT`, after 07:00 Chicago on Wednesday 2026-11-18
+```bash
+cd "$WT"
+rm -f /tmp/caselist-run-runtask-events.json /tmp/caselist-run-runtask-task.txt
+AWS_PROFILE=debate-admin aws cloudtrail lookup-events --region us-east-1 --lookup-attributes AttributeKey=EventName,AttributeValue=RunTask --start-time 2026-11-18T11:00:00Z --end-time 2026-11-18T14:00:00Z --query 'Events[].CloudTrailEvent' --output json > /tmp/caselist-run-runtask-events.json && python3 -I - /tmp/caselist-run-runtask-events.json debate-dev-caselist-run-scheduler /tmp/caselist-run-runtask-task.txt <<'RUNTASK'
+import json, sys
+events_file, role, task_file = sys.argv[1], sys.argv[2], sys.argv[3]
+found = []
+for raw in json.load(open(events_file)) or []:
+    event = json.loads(raw)
+    named = str((event.get("userIdentity") or {}).get("arn", "")).partition(":assumed-role/")[2].split("/")[0]
+    if named != role:
+        continue
+    try:
+        command = json.dumps(event["requestParameters"]["overrides"]["containerOverrides"][0]["command"])
+    except (KeyError, IndexError, TypeError):
+        command = "(no command override)"
+    tasks = (event.get("responseElements") or {}).get("tasks") or []
+    task = str(tasks[0].get("taskArn", "")).rsplit("/", 1)[-1] if tasks else "(no task)"
+    found.append((str(event.get("eventTime", "")), named, command, task))
+for line in sorted(found):
+    print("  ".join(line))
+if found:
+    open(task_file, "w").write(sorted(found)[-1][3] + "\n")
+else:
+    print("none: no RunTask by " + role + " in the window")
+RUNTASK
+```
+Success looks like `2026-11-18T12:00:<ss>Z  debate-dev-caselist-run-scheduler  ["--json", "caselist",
+"pull", "--scheduled"]  <task id>`. **And that week's run record:**
+
+**13. Wednesday 2026-11-18 (ac2): that week's run record.**
+
+**Operator command** (expected runtime ~1 min)
+Where: your Mac, the installed build
+```bash
+aws sso login --profile debate-dev-evidence
+debate-research caselist runs --remote --last 1
+```
+Success looks like a run started on 2026-11-18 a few minutes after 12:00 UTC. The two together are
+ac2. Prod's first scheduled run after the home moves gets the same read with `prod` for `dev`,
+recorded beside ac2 but not part of it.
+
+### Follow-up work
+
+* **The runbook's first plan check (`--universal-target`) is now a past one.** It is kept for its tests
+  and for the record. Prod's move onto the universal target comes at its own apply B, which creates the
+  schedule (the first PM review, on Decision 7).
+* **v1-e41-t13** can use `revision_problem`, which reads both shapes and now the PascalCase Input.
+
+## PM review
+
+<!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
+this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
+
+**Verdict:** PENDING
+<!-- ACCEPTED / CHANGES_REQUESTED -->
+
+**Reviewed by / date:**
+
+**Notes:**

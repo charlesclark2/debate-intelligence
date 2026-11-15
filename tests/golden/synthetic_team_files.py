@@ -79,6 +79,8 @@ class SyntheticCard:
     commented: bool = False
     footnoted: bool = False
     underlined: tuple[str, ...] = field(default=())
+    highlight_only: bool = False
+    """Write each warrant highlighted but not underlined, as a cutter sometimes leaves one."""
 
     def warrant(self, position: int) -> str:
         return (
@@ -118,7 +120,8 @@ def _card_xml(card: SyntheticCard, link_id: str | None) -> str:
                 + run_xml(card.tracked_insertion)
                 + "</w:ins>"
             )
-        runs += run_xml(card.warrant(position), character_style="StyleUnderline", highlight="cyan")
+        underline_style = None if card.highlight_only else "StyleUnderline"
+        runs += run_xml(card.warrant(position), character_style=underline_style, highlight="cyan")
         runs += run_xml(closing)
         if position == 0 and card.footnoted:
             runs += '<w:r><w:footnoteReference w:id="1"/></w:r>'

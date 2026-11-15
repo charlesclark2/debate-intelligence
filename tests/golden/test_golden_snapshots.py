@@ -11,14 +11,10 @@ agreement 6): offsets by finding the invented words in the invented page, digest
 
 from __future__ import annotations
 
-import asyncio
 import hashlib
 import json
 import subprocess
 import sys
-from collections.abc import Coroutine
-from dataclasses import dataclass
-from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any
 
@@ -29,67 +25,25 @@ sys.path.insert(0, str(REPO_ROOT / "scripts"))
 
 import golden_snapshots as snaps  # noqa: E402
 import import_golden_card as golden  # noqa: E402
-from tests.golden.synthetic_team_files import FILLER, SyntheticCard, coach_attests, team_file  # noqa: E402
+from tests.golden.snapshot_world import (  # noqa: E402
+    LINKS,
+    MARKERS,
+    PAGE,
+    PAGE_BYTES,
+    SEGMENTS,
+    SENTINEL,
+    World,
+    build_world,
+    card,
+    envelope,
+    tree,
+    write_json,
+)
 
 from debate_core.application.article_fetch import FetchReport, SnapshotSummary  # noqa: E402
-from debate_core.application.snapshot_service import SnapshotService  # noqa: E402
-from debate_core.domain import AccessStatus, ProvenanceMode, SourceSnapshot  # noqa: E402
-from debate_core.integrations.local import (  # noqa: E402
-    DATABASE_FILENAME,
-    FsSnapshotStore,
-    SqliteArticleRepository,
-    SqliteDatabase,
-)
-from debate_core.testing.builders import build_article, readable_id  # noqa: E402
-from debate_core.testing.fakes.clock_and_ids import FixedClock, SequentialIdGenerator  # noqa: E402
-
-TEST_KEY = b"a test key that is not the operator's".ljust(32, b".")
-IMPORTED_ON = date(2026, 11, 14)
-FETCHED_AT = datetime(2026, 11, 14, 15, 30, tzinfo=UTC)
-MARKERS = ("…", "...", "[…]", "[...]", "***")
-
-#: A word only the invented page holds, outside the card: it must never reach the terminal.
-SENTINEL = "Quorvexalind"
-
-WARRANT = "the warrant the card is read for"
-
-#: The card the corpus is built around: two paragraphs, an omission cut in the first.
-CARD_BODY = (
-    f"Plain words {FILLER} {{warrant}} and more … after the cut.",
-    f"A second paragraph {FILLER} {{warrant}}.",
-)
-
-#: The page it was cut from, as the extractor would give it: already normalized, so the stored text
-#: is this string exactly. The card skips its first and last paragraphs and, where its `…` stands,
-#: the words "words the cutter skipped"; the card runs the page's second and third paragraphs
-#: together as one paragraph's line break.
-PAGE = (
-    f"A {SENTINEL} preamble the card leaves out.\n\n"
-    f"Plain words {FILLER} {WARRANT} and more words the cutter skipped after the cut.\n\n"
-    f"A second paragraph {FILLER} {WARRANT}.\n\n"
-    "A closing line the card leaves out."
-)
-PAGE_BYTES = f"<html><body><p>{PAGE}</p></body></html>".encode()
-
-#: The card's two segments of PAGE, found by hand: from "Plain words" to "and more", and from
-#: "after the cut." to the end of the third paragraph.
-SEGMENTS = [
-    [PAGE.index("Plain words"), PAGE.index(" words the cutter skipped")],
-    [PAGE.index("after the cut."), PAGE.index("\n\nA closing line")],
-]
-
-LINKS = {
-    "accessible": "https://www.brookings.edu/articles/accessible-grid",
-    "paywalled": "https://www.nytimes.com/2026/01/02/us/paywalled-grid.html",
-    "errored": "https://www.reuters.com/world/errored-grid",
-    "unreported": "https://www.rand.org/pubs/unreported-grid.html",
-    "mislinked": "https://www.cfr.org/article/mislinked-grid",
-}
-
-
-def run[ResultT](coroutine: Coroutine[Any, Any, ResultT]) -> ResultT:
-    return asyncio.run(coroutine)
-
+from debate_core.domain import AccessStatus  # noqa: E402
+from debate_core.integrations.local import DATABASE_FILENAME, FsSnapshotStore, SqliteDatabase  # noqa: E402
+from debate_core.testing.builders import readable_id  # noqa: E402
 
 # ------------------------------------------------------------------------------------------------
 # Comparison form
@@ -148,34 +102,6 @@ def test_no_segments_reproduce_nothing() -> None:
 # ------------------------------------------------------------------------------------------------
 
 
-def _envelope(
-    requested_url: str,
-    status: str,
-    *,
-    snapshot_id: str | None = None,
-    provenance: str = "PUBLISHER_RETRIEVED",
-) -> dict[str, Any]:
-    """The fetch command's `--json` envelope: the report under `data`, or under `error.details`."""
-    report: dict[str, Any] = {
-        "requested_url": requested_url,
-        "canonical_url": requested_url,
-        "final_url": requested_url if snapshot_id else None,
-        "title": f"{SENTINEL} page title",
-        "access_status": status,
-        "provenance_mode": provenance if snapshot_id else None,
-        "snapshot": {"snapshot_id": snapshot_id, "sha256": "0" * 64} if snapshot_id else None,
-    }
-    if status == "ACCESSIBLE":
-        return {"ok": True, "data": report}
-    return {"ok": False, "error": {"code": "SOURCE_NOT_ACCESSIBLE", "exit_code": 3, "details": report}}
-
-
-def _write(path: Path, envelope: dict[str, Any] | str) -> Path:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(envelope if isinstance(envelope, str) else json.dumps(envelope), encoding="utf-8")
-    return path
-
-
 def test_the_reader_uses_only_fields_the_fetch_report_has() -> None:
     # The reader is written against the fetch command's report; a renamed field would read as no report.
     assert {"requested_url", "final_url", "access_status", "provenance_mode", "snapshot"} <= set(
@@ -190,19 +116,19 @@ LINK = "https://www.example.org/a"
 @pytest.mark.parametrize(
     ("envelope", "outcome"),
     [
-        (_envelope(LINK, "ACCESSIBLE", snapshot_id="snap-1"), snaps.FetchOutcome.RECORD),
-        (_envelope(LINK, "PAYWALLED"), snaps.FetchOutcome.DROP),
-        (_envelope(LINK, "BLOCKED"), snaps.FetchOutcome.DROP),
-        (_envelope(LINK, "ROBOTS_DISALLOWED"), snaps.FetchOutcome.DROP),
-        (_envelope(LINK, "NOT_FOUND"), snaps.FetchOutcome.DROP),
-        (_envelope(LINK, "UNSUPPORTED_TYPE"), snaps.FetchOutcome.DROP),
-        (_envelope(LINK, "ERROR"), snaps.FetchOutcome.FETCH_AGAIN),
+        (envelope(LINK, "ACCESSIBLE", snapshot_id="snap-1"), snaps.FetchOutcome.RECORD),
+        (envelope(LINK, "PAYWALLED"), snaps.FetchOutcome.DROP),
+        (envelope(LINK, "BLOCKED"), snaps.FetchOutcome.DROP),
+        (envelope(LINK, "ROBOTS_DISALLOWED"), snaps.FetchOutcome.DROP),
+        (envelope(LINK, "NOT_FOUND"), snaps.FetchOutcome.DROP),
+        (envelope(LINK, "UNSUPPORTED_TYPE"), snaps.FetchOutcome.DROP),
+        (envelope(LINK, "ERROR"), snaps.FetchOutcome.FETCH_AGAIN),
         (
-            _envelope("https://www.example.org/b", "ACCESSIBLE", snapshot_id="snap-1"),
+            envelope("https://www.example.org/b", "ACCESSIBLE", snapshot_id="snap-1"),
             snaps.FetchOutcome.ANOTHER_LINK,
         ),
         (
-            _envelope(LINK, "ACCESSIBLE", snapshot_id="snap-1", provenance="USER_SUPPLIED"),
+            envelope(LINK, "ACCESSIBLE", snapshot_id="snap-1", provenance="USER_SUPPLIED"),
             snaps.FetchOutcome.NOT_RETRIEVED,
         ),
         (
@@ -215,7 +141,7 @@ LINK = "https://www.example.org/a"
 def test_each_fetch_report_reads_as_its_outcome(
     tmp_path: Path, envelope: dict[str, Any] | str, outcome: snaps.FetchOutcome
 ) -> None:
-    assert snaps.read_fetch_report(_write(tmp_path / "case.json", envelope), LINK).outcome is outcome
+    assert snaps.read_fetch_report(write_json(tmp_path / "case.json", envelope), LINK).outcome is outcome
 
 
 def test_a_missing_fetch_report_is_no_report(tmp_path: Path) -> None:
@@ -239,87 +165,6 @@ def test_the_dropped_statuses_are_every_status_that_says_the_page_is_not_readabl
 # ------------------------------------------------------------------------------------------------
 
 
-def _cards(names: list[str]) -> list[SyntheticCard]:
-    return [
-        SyntheticCard(
-            tag=f"Demand growth strains the {name} reserve margin",
-            short_cite="Okonkwo 26",
-            cite_rest=" [Ada Okonkwo, senior analyst, 3-4-2026, {link}]",
-            link=LINKS[name],
-            body=list(CARD_BODY),
-        )
-        for name in names
-    ]
-
-
-@dataclass
-class World:
-    root: Path
-    store: Path
-    fetches: Path
-    snapshots: Path
-    fixtures: Path
-    ids: SequentialIdGenerator
-
-    def case_for(self, name: str) -> str:
-        """The case ID the importer gave the card whose link is `name`'s."""
-        (case,) = [c for c in golden._existing_cases(self.fixtures) if c["source_link"] == LINKS[name]]
-        return case["case_id"]
-
-    def store_page(self, url: str, page_bytes: bytes = PAGE_BYTES, text: str = PAGE) -> SourceSnapshot:
-        """Store a page the way `debate-research fetch` does: an article, its snapshot, its blobs."""
-        database = SqliteDatabase.open(self.store)
-        try:
-            articles = SqliteArticleRepository(database)
-            article_id = readable_id("ART", len(self.ids_used) + 1)
-            run(articles.save(build_article(article_id=article_id, canonical_url=url)))
-            service = SnapshotService(
-                blobs=FsSnapshotStore(self.store), clock=FixedClock(), id_generator=self.ids
-            )
-            snapshot = run(
-                service.create(
-                    article_id=article_id,
-                    raw_bytes=page_bytes,
-                    extracted_text=text,
-                    canonical_url=url,
-                    retrieved_at=FETCHED_AT,
-                    extractor_version="invented-extractor/1",
-                    provenance_mode=ProvenanceMode.PUBLISHER_RETRIEVED,
-                    access_status=AccessStatus.ACCESSIBLE,
-                    content_type="text/html",
-                )
-            )
-            run(articles.save_snapshot(snapshot))
-        finally:
-            database.close()
-        self.ids_used.append(snapshot.snapshot_id)
-        return snapshot
-
-    ids_used: list[str]
-
-    def report(self, name: str, envelope: dict[str, Any]) -> None:
-        _write(self.fetches / f"{self.case_for(name)}.json", envelope)
-
-    def record(self, *extra: str) -> int:
-        return golden.main(
-            [
-                "record",
-                "--fetches",
-                str(self.fetches),
-                "--store",
-                str(self.store),
-                "--snapshots",
-                str(self.snapshots),
-                "--fixtures",
-                str(self.fixtures),
-                *extra,
-            ]
-        )
-
-    def check(self) -> int:
-        return golden.main(["check", "--fixtures", str(self.fixtures), "--snapshots", str(self.snapshots)])
-
-
 @pytest.fixture
 def world(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> World:
     """Five invented cases, imported; a store holding the accessible one's page; and its reports.
@@ -329,45 +174,18 @@ def world(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> World:
     """
     # The repository's own worktree list is git metadata outside the repository; no test reads it.
     monkeypatch.setattr(snaps, "_checkouts", lambda repository: [REPO_ROOT.resolve()])
-    debate = tmp_path / "debate"
     layout = (
-        ("2025-2026", "Policy", ["accessible", "paywalled"]),
-        ("2024-2025", "LD", ["errored", "unreported"]),
-        ("2026-2027", "PF", ["mislinked"]),
+        ("2025-2026", "Policy", [card(name, LINKS[name]) for name in ("accessible", "paywalled")]),
+        ("2024-2025", "LD", [card(name, LINKS[name]) for name in ("errored", "unreported")]),
+        ("2026-2027", "PF", [card("mislinked", LINKS["mislinked"])]),
     )
-    for season, event, names in layout:
-        (debate / season / event).mkdir(parents=True)
-        (debate / season / event / "team file.docx").write_bytes(team_file(_cards(names)))
-    listing = golden.list_candidates([debate / season for season, _, _ in layout], (), TEST_KEY)
-    fixtures = tmp_path / "golden_cards"
-    imported, refused = golden.import_candidates(
-        listing.candidates,
-        [c.candidate_id for c in listing.candidates],
-        golden.NO_DENYLIST,
-        fixtures,
-        today=IMPORTED_ON,
-        attest=coach_attests,
-    )
-    assert (len(imported), refused) == (5, [])
-    built = World(
-        root=tmp_path,
-        store=tmp_path / "store",
-        fetches=tmp_path / "fetches",
-        snapshots=tmp_path / "golden-snapshots",
-        fixtures=fixtures,
-        ids=SequentialIdGenerator(),
-        ids_used=[],
-    )
+    built = build_world(tmp_path, layout, dict(LINKS))
     snapshot = built.store_page(LINKS["accessible"])
-    built.report("accessible", _envelope(LINKS["accessible"], "ACCESSIBLE", snapshot_id=snapshot.snapshot_id))
-    built.report("paywalled", _envelope(LINKS["paywalled"], "PAYWALLED"))
-    built.report("errored", _envelope(LINKS["errored"], "ERROR"))
-    built.report("mislinked", _envelope(LINKS["accessible"], "ACCESSIBLE", snapshot_id=snapshot.snapshot_id))
+    built.report("accessible", envelope(LINKS["accessible"], "ACCESSIBLE", snapshot_id=snapshot.snapshot_id))
+    built.report("paywalled", envelope(LINKS["paywalled"], "PAYWALLED"))
+    built.report("errored", envelope(LINKS["errored"], "ERROR"))
+    built.report("mislinked", envelope(LINKS["accessible"], "ACCESSIBLE", snapshot_id=snapshot.snapshot_id))
     return built
-
-
-def _tree(root: Path) -> dict[str, bytes]:
-    return {p.relative_to(root).as_posix(): p.read_bytes() for p in sorted(root.rglob("*")) if p.is_file()}
 
 
 # ------------------------------------------------------------------------------------------------
@@ -378,12 +196,12 @@ def _tree(root: Path) -> dict[str, bytes]:
 def test_the_dry_run_reads_everything_and_writes_nothing(
     world: World, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    before = (_tree(world.fixtures), _tree(world.store))
+    before = (tree(world.fixtures), tree(world.store))
 
     assert world.record() == 1  # two cases are not recorded: no report, and another link
     out = capsys.readouterr().out
 
-    assert (_tree(world.fixtures), _tree(world.store)) == before
+    assert (tree(world.fixtures), tree(world.store)) == before
     assert not world.snapshots.exists()
     assert "would record: 1" in out
     assert f"would drop: 1\n  {world.case_for('paywalled')}: PAYWALLED" in out
@@ -448,13 +266,13 @@ def test_record_reads_the_store_without_writing_to_it(
 ) -> None:
     database = world.store / DATABASE_FILENAME
     before = hashlib.sha256(database.read_bytes()).hexdigest()
-    blobs = _tree(world.store / "blobs")
+    blobs = tree(world.store / "blobs")
 
     world.record("--execute")
     capsys.readouterr()
 
     assert hashlib.sha256(database.read_bytes()).hexdigest() == before
-    assert _tree(world.store / "blobs") == blobs
+    assert tree(world.store / "blobs") == blobs
 
 
 def test_record_reads_a_snapshot_still_in_the_write_ahead_log(
@@ -468,7 +286,7 @@ def test_record_reads_a_snapshot_still_in_the_write_ahead_log(
         snapshot = world.store_page(LINKS["accessible"] + "?again", page_bytes=page)
         assert (world.store / f"{DATABASE_FILENAME}-wal").stat().st_size > 0
         world.report(
-            "accessible", _envelope(LINKS["accessible"], "ACCESSIBLE", snapshot_id=snapshot.snapshot_id)
+            "accessible", envelope(LINKS["accessible"], "ACCESSIBLE", snapshot_id=snapshot.snapshot_id)
         )
         world.record("--execute")
     finally:
@@ -491,7 +309,7 @@ def test_a_snapshot_the_store_does_not_hold_is_not_recorded(
 ) -> None:
     case_id = world.case_for("accessible")
     world.report(
-        "accessible", _envelope(LINKS["accessible"], "ACCESSIBLE", snapshot_id=readable_id("SNAP", 99))
+        "accessible", envelope(LINKS["accessible"], "ACCESSIBLE", snapshot_id=readable_id("SNAP", 99))
     )
 
     assert world.record("--execute") == 1
@@ -603,7 +421,7 @@ def recorded(world: World, capsys: pytest.CaptureFixture[str]) -> tuple[World, s
     for name in ("errored", "unreported", "mislinked"):
         golden.shutil.rmtree(world.fixtures / world.case_for(name))
     case_id = world.case_for("accessible")
-    _write(world.fixtures / case_id / golden.EXPECTED_NAME, _expected(case_id, SEGMENTS))
+    write_json(world.fixtures / case_id / golden.EXPECTED_NAME, _expected(case_id, SEGMENTS))
     capsys.readouterr()
     return world, case_id
 
@@ -661,13 +479,13 @@ def _remove_offsets(world: World, case_id: str) -> None:
 
 def _shift_offsets(world: World, case_id: str) -> None:
     shifted = [[SEGMENTS[0][0] + 1, SEGMENTS[0][1]], SEGMENTS[1]]
-    _write(world.fixtures / case_id / golden.EXPECTED_NAME, _expected(case_id, shifted))
+    write_json(world.fixtures / case_id / golden.EXPECTED_NAME, _expected(case_id, shifted))
 
 
 def _drop_the_cut(world: World, case_id: str) -> None:
     # One segment over the whole passage: it quotes the words the card's "…" left out.
     whole = [[SEGMENTS[0][0], SEGMENTS[1][1]]]
-    _write(world.fixtures / case_id / golden.EXPECTED_NAME, _expected(case_id, whole))
+    write_json(world.fixtures / case_id / golden.EXPECTED_NAME, _expected(case_id, whole))
 
 
 @pytest.mark.parametrize(

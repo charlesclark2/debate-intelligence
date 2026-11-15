@@ -123,6 +123,8 @@ inside the repository is an error**: asking for a check and getting none would p
 
 Reads every file under the fixtures folder: each `.docx` must carry no author or `lastModifiedBy`,
 no company or manager, no comments or people part, and no tracked-change author but `Redacted`.
+The one author allowed is the renderer's own name, `debate-research`, and only in a case's
+`expected.docx`, which the platform's renderer wrote and which names the tool, never a person.
 With `--denylist`, no file may hold a listed entry either. It prints counts, whether a denylist was
 used, and the case paths that fail, never what matched.
 
@@ -200,6 +202,11 @@ from debate_core.domain.debate_files import (  # noqa: E402
     ParsedDocument,
 )
 from debate_core.domain.style_profile import StructuralUnit  # noqa: E402
+from debate_core.evidence.docx_manifest_part import (  # noqa: E402
+    MANIFEST_PART_NAME,
+    MANIFEST_PROPERTIES_PART_NAME,
+)
+from debate_core.evidence.docx_renderer import DOCUMENT_AUTHOR  # noqa: E402
 from debate_core.integrations.docx_file_writer.base_template import load_base_template  # noqa: E402
 from debate_core.integrations.docx_file_writer.package_writer import write_package  # noqa: E402
 from debate_core.integrations.docx_file_writer.run_copier import (  # noqa: E402
@@ -268,6 +275,19 @@ OPENING_WORDS: Final = 15
 CANDIDATE_DIGEST_LENGTH: Final = 10
 
 EXCERPT_NAME: Final = "team-card.docx"
+#: A case's expected render (`label_golden_card.py --render-expected`), written by the platform's
+#: renderer, which names itself, :data:`RENDERER_AUTHOR`, as the document's author.
+EXPECTED_RENDER_NAME: Final = "expected.docx"
+RENDERER_AUTHOR: Final = DOCUMENT_AUTHOR
+#: The parts a render embeds its card manifest in, and their relationships: ids, offsets and the
+#: card the render shows, never a person.
+RENDERER_PARTS: Final = frozenset(
+    {
+        MANIFEST_PART_NAME.lstrip("/"),
+        MANIFEST_PROPERTIES_PART_NAME.lstrip("/"),
+        "customXml/_rels/item1.xml.rels",
+    }
+)
 CASE_NAME: Final = "case.json"
 INDEX_NAME: Final = "INDEX.md"
 SHORTLIST_NAME: Final = "shortlist.md"
@@ -1369,19 +1389,30 @@ def write_index(fixtures_dir: Path) -> None:
 # --------------------------------------------------------------------------------------------
 
 
-def metadata_problems(package: bytes) -> list[str]:
-    """What in `package` still names a person: never the value, only where it is."""
+def metadata_problems(package: bytes, *, rendered: bool = False) -> list[str]:
+    """What in `package` still names a person: never the value, only where it is.
+
+    `rendered` is for a document the platform's renderer wrote (a case's `expected.docx`): it names
+    the tool as author and last editor (:data:`RENDERER_AUTHOR`), never a person, and embeds its
+    card manifest as custom XML (:data:`RENDERER_PARTS`). Those two, by exact value and exact part
+    name, are all it allows that a team file's excerpt may not hold.
+    """
+    tool_author = RENDERER_AUTHOR if rendered else None
+    allowed_parts = RENDERER_PARTS if rendered else frozenset()
     problems: list[str] = []
     with zipfile.ZipFile(BytesIO(package)) as archive:
         names = [info.filename for info in archive.infolist() if not info.is_dir()]
         for name in names:
+            if name in allowed_parts:
+                continue
             if name in scrub.DROPPED_PARTS or name.startswith(scrub.DROPPED_PART_PREFIXES):
                 problems.append(f"{name} is present")
         if "docProps/core.xml" in names:
             core = _parse_xml(archive.read("docProps/core.xml"))
             for namespace, tag in ((DC_NS, "creator"), (CORE_NS, "lastModifiedBy")):
                 for element in core.iter(f"{{{namespace}}}{tag}"):
-                    if (element.text or "").strip():
+                    value = (element.text or "").strip()
+                    if value and value != tool_author:
                         problems.append(f"docProps/core.xml {tag} is set")
         if "docProps/app.xml" in names:
             app = _parse_xml(archive.read("docProps/app.xml"))
@@ -1442,7 +1473,10 @@ def check_fixtures(fixtures_dir: Path, denylist: scrub.ReplacementList) -> Check
         if path.suffix == ".docx":
             report.docx_checked += 1
             content = path.read_bytes()
-            report.metadata_problems += [(relative, problem) for problem in metadata_problems(content)]
+            rendered = path.name == EXPECTED_RENDER_NAME
+            report.metadata_problems += [
+                (relative, problem) for problem in metadata_problems(content, rendered=rendered)
+            ]
             hits += _denylist_hits_in_package(content, denylist)
         else:
             report.text_files_checked += 1

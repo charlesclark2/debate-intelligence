@@ -637,8 +637,66 @@ first sample.
 Neither fault needs code for this task now: the sittings are done, and the labels are the coach's. Both are
 in Follow-up work.
 
-Next are step 3 after the second sitting, then the record run, step 6. The record run goes on one day
-after both sittings, not on a Wednesday; 2026-11-15 is a Sunday.
+**Step 3 after the second sitting** was not pasted back, but it was taken: the session read only the
+digests of the copies, stamped `2026-11-14-224901`. They are `553374704519…` for the first sample and
+`7d1ada7b…` for the holdout, the files as the sitting left them.
+
+**Step 6, the ruled record run (the operator's, 2026-11-14, a Saturday, after both sittings), as pasted.**
+It ran both routes on the same day, as the ruling's "on one day" allows (its reason: both routes on one day
+stay under dev's $2). Each block's checks passed, and the two `--check-sample`s matched step 5's. All four
+recordings exit 1 with `EVALUATION_BELOW_BAR`, and none was interrupted. All four were taken at prompt 1.3.1
+and taxonomy 1.5.1.
+
+| Route | Sample | Calls | Counted | Correct | Accuracy (95%) | Coverage | Refused | Below threshold | Scans |
+|---|---|---|---|---|---|---|---|---|---|
+| `deep_audit` | holdout, 111 | 7 | 77 | 44 | 0.571 (0.46 to 0.68) | 0.694 | 7 (`NO_POSITION` 6, `ECHOES_EVIDENCE` 1) | 27 | clean |
+| `deep_audit` | first, 47 | 5 | 21 | 14 | 0.667 (0.45 to 0.83) | 0.447 | 20 (`BATCH_REFUSED`) | 6 | clean |
+| `high_volume` | holdout, 111 | 6 | 82 | 39 | 0.476 (0.37 to 0.58) | 0.739 | 17 (`NO_POSITION`) | 12 | **not clean** |
+| `high_volume` | first, 47 | 3 | 35 | 23 | 0.657 (0.49 to 0.79) | 0.745 | 5 (`NO_POSITION`) | 7 | **not clean** |
+
+The intervals are Wilson intervals, computed by the session from the counts. The pipeline equals the model
+alone on the holdout: the headings placed none of its cards. On the first sample, the headings placed 4.
+On each route the holdout placed 3 of its 4 cards labelled `none`.
+
+* **The bar is not met on either route.** Even the upper ends of the holdout's intervals, 0.68 and 0.58, are
+  below 0.85, so the hold on live model runs stands. The holdout counted 77 cards on `deep_audit`, against
+  the "about 76" expected from the first sample's rate.
+* **The tokens and cost.** `deep_audit`: 113,390 in and 15,918 out. `high_volume`: 125,910 in and 14,557 out.
+  At `config/model_pricing.yaml`'s prices, that is about $0.58 on Claude Sonnet 4.6 ($3 and $15 per million)
+  and $0.20 on Claude Haiku 4.5 ($1 and $5), **about $0.78 in all**. That is inside the ruled $0.95 and
+  dev's $2.00 for the day.
+* **The evidence guard held.** One holdout answer on `deep_audit` was refused as `ECHOES_EVIDENCE`, so no
+  quoted text was counted.
+
+**Three things for the PM, before the replay is read:**
+
+1. **The first sample on `deep_audit` lost a batch of 20.** The terminal printed "structured output failed
+   validation" three times, and the 5 calls fit 3 batches (20, 20 and 7) and 2 repairs. One batch's repair
+   succeeded and the other's failed, so its 20 cards were refused as `BATCH_REFUSED`. Coverage is 0.447, and
+   its 14 of 21 cannot be compared with t55's 26 of 38 on the same 47. A recording of those 20 again is a
+   live call outside the ruling. The session did not ask for it.
+
+   The holdout on `deep_audit` printed the message once and lost no batch: its 7 calls are 6 batches and 1
+   repair. Neither `high_volume` recording printed it.
+2. **Both `high_volume` cassette scans are unclean.** In each, one cassette text holds a hit that no
+   trusted mark sets aside as a JSON key's name or a taxonomy word:
+   * the holdout, with 6 texts, 5 set aside and 23 hits;
+   * the first sample, with 9 texts, 8 set aside and 30 hits.
+
+   The prompt-input scans are clean on both routes, so the word is most likely in the model's answer, not
+   in a card sent. The session has not seen where it is, and does not know which. 1.2.0's `high_volume`
+   cassettes also had hits, which the operator judged ordinary words on 2026-11-05. The cassettes stay local in `model-cassettes/`, and nothing is published.
+   * **The first sample's hits** can be judged by the runbook's step 5, in the terminal only.
+   * **The holdout's cannot.** `--breakdown` refuses a holdout, as ruled, and step 5 is `--breakdown`, so no
+     command lists the holdout's hits, even for the operator's eyes. This gap is the session's, from its
+     build. The PM can choose:
+     * to keep or set aside the `high_volume` holdout cassettes unjudged; the score is below the bar either
+       way;
+     * or to allow a terminal-only listing of the holdout's scan hits, with no outcome, row or answer id.
+3. **The second labels.** 32 of the holdout's 111 rows have one (step 5), so it is scored more leniently
+   than the first sample. The bar is not met even with that leniency.
+
+Next are the two replays side by side, which make no call (step 6's third and fourth blocks).
 
 **The affected set did not finish locally.** `uv run scripts/affected_tests.py --run --slow` selects 157 files,
 5,298 tests. Within the 115-second cap it reached 65% with two failures:

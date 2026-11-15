@@ -156,6 +156,7 @@ def report_payload(
         "search_status": outcome.status.value,
         "partial_providers": list[JsonValue](_partial_providers(outcome)),
         "cost_usd": report.cost_usd,
+        "command_cost_usd": report.command_cost_usd,
         "bundle": str(files.bundle) if files.bundle is not None else None,
         "manifest": str(files.manifest) if files.manifest is not None else None,
         "report": str(files.report),

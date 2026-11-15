@@ -84,6 +84,7 @@ __all__ = [
     "BatchNeed",
     "BatchReport",
     "BatchStopReason",
+    "CommandSpend",
     "Cutting",
     "Retrieving",
     "SpendReading",
@@ -274,6 +275,13 @@ class BatchReport:
     wanted: int
     entries: tuple[BatchEntry, ...]
     stop_reason: BatchStopReason
+    command_cost_usd: float | None = None
+    """What the whole command has spent on model calls, as its budget run counts it (v1-e08-t22): the
+    figure `--max-cost` limits, read from the run once the cuts are over. It is the cuts' calls and
+    every other call the command made, `--expand-llm`'s among them, so it is never less than
+    :attr:`cost_usd`. None when the service was given no run to read, when the run's spend could not
+    be read, or when :attr:`cost_usd` is None: the cuts are part of the command, so a cut whose cost is
+    unknown makes the command's unknown too."""
 
     @property
     def verified(self) -> tuple[CutResult, ...]:
@@ -347,6 +355,15 @@ class SpendTally:
             _READING.reset(token)
 
 
+class CommandSpend(Protocol):
+    """What the whole command has spent so far:
+    :class:`~debate_core.application.budget.RunSpend`, over the command's one budget run."""
+
+    def usd(self) -> float | None:
+        """The run's spend in USD, or None when it is unknown."""
+        ...
+
+
 # ------------------------------------------------------------------------------------------------
 # The walk
 # ------------------------------------------------------------------------------------------------
@@ -355,10 +372,20 @@ class SpendTally:
 class BatchCutService:
     """Cuts a search's results in rank order until N cards are VERIFIED. Holds no state between runs."""
 
-    def __init__(self, *, fetching: Retrieving, cutting: Cutting, spend: SpendTally | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        fetching: Retrieving,
+        cutting: Cutting,
+        spend: SpendTally | None = None,
+        command_spend: CommandSpend | None = None,
+    ) -> None:
+        """`spend` tallies each cut's own calls; `command_spend` is the command's budget run, read for
+        :attr:`BatchReport.command_cost_usd` once the walk is over."""
         self._fetching = fetching
         self._cutting = cutting
         self._spend = spend or SpendTally()
+        self._command_spend = command_spend
 
     async def cut(self, request: BatchCutRequest) -> BatchReport:
         """Walk `request.candidates`; see the module docstring. Raises only what is not a DomainError."""

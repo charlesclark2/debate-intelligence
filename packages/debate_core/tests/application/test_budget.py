@@ -27,6 +27,7 @@ from debate_core.application.budget import (
     BudgetRun,
     CalendarMonth,
     CallCeiling,
+    RunSpend,
     Spend,
     UnpricedModelError,
     UnreadableUsageLog,
@@ -1119,3 +1120,62 @@ async def test_the_test_profile_s_zero_daily_budget_refuses_a_live_call_at_the_c
     assert delegate.calls == []
     assert (raised.value.limit_name, raised.value.model_id) == ("per-day", "anthropic.claude-haiku-5-5")
     assert raised.value.ceiling_usd == pytest.approx(0.0010263)
+
+
+# ---------------------------------------------------------------------------------------------
+# What a run has spent, for the auto-cut report's command_cost_usd (v1-e08-t22)
+# ---------------------------------------------------------------------------------------------
+
+
+async def test_the_auto_cut_command_cost_is_what_the_per_run_limit_counted_through_every_router(
+    log: UsageLog, pricing: ModelPricing
+) -> None:
+    """Two routers of one run, as `--expand-llm`'s and the cuts' are: the second's refusal names what
+    the run spent through both, and the run's spend reads the same figure afterwards."""
+    log.append(earlier_record(0.25))
+    first = metered_chain(MeteredRouter([(VALID, 1000, 1000)]), log, pricing, BudgetLimits(per_run_usd=0.007))
+    second = metered_chain(MeteredRouter([(VALID, 100, 100)]), log, pricing, BudgetLimits(per_run_usd=0.007))
+    await first.generate_structured(TaskClass.HIGH_VOLUME, WARMING, ContractPassage)
+    await second.generate_structured(TaskClass.HIGH_VOLUME, WARMING, ContractPassage)
+    with pytest.raises(BudgetExceededError) as refused:
+        await second.generate_structured(TaskClass.HIGH_VOLUME, WARMING, ContractPassage)
+
+    spent = RunSpend(BudgetRun(RUN), ledger=log, clock=FixedClock(LATE_EVENING), local_zone=CHICAGO).usd()
+
+    # 1000 tokens in at $0.001/1K and 1000 out at $0.005/1K, then 100 and 100: $0.006 and $0.0006.
+    assert spent == pytest.approx(0.0066)
+    assert spent == refused.value.spent_usd, "the figure the per-run limit was checked against"
+
+
+def test_the_auto_cut_command_cost_counts_the_runs_own_calls_on_every_day_it_ran(log: UsageLog) -> None:
+    """A run past midnight in Chicago is one run: both days' calls count, another run's never do, and a
+    call with no price adds nothing, as it adds nothing to what the limit counts."""
+    log.append(earlier_record(0.125, run_id=RUN))
+    log.append(earlier_record(0.5))
+    log.append(earlier_record(0.25, run_id=RUN, at=LATE_EVENING + timedelta(hours=2)))
+    log.append(earlier_record(None, run_id=RUN, at=LATE_EVENING + timedelta(hours=2)))
+    after_midnight = FixedClock(LATE_EVENING + timedelta(hours=3))
+
+    spent = RunSpend(BudgetRun(RUN), ledger=log, clock=after_midnight, local_zone=CHICAGO).usd()
+
+    assert log.path_for(THE_DAY).is_file() and log.path_for(THE_DAY + timedelta(days=1)).is_file()
+    assert spent == 0.375
+
+
+def test_the_auto_cut_command_cost_asks_the_ledger_for_the_run_as_its_guards_do() -> None:
+    ledger = StillLedger(run_usd=0.0123, day_usd=4.0, month_usd=40.0)
+
+    spent = RunSpend(BudgetRun(RUN), ledger=ledger, clock=FixedClock(LATE_EVENING), local_zone=CHICAGO).usd()
+
+    assert spent == 0.0123
+    assert ledger.asked == [(RUN, THE_DAY, CalendarMonth(2026, 9))]
+
+
+def test_a_usage_log_that_cannot_be_read_makes_the_auto_cut_command_cost_unknown(log: UsageLog) -> None:
+    log.append(earlier_record(0.01, run_id=RUN))
+    with log.path_for(THE_DAY).open("a", encoding="utf-8") as file:
+        file.write("not a record\n")
+
+    spent = RunSpend(BudgetRun(RUN), ledger=log, clock=FixedClock(LATE_EVENING), local_zone=CHICAGO).usd()
+
+    assert spent is None

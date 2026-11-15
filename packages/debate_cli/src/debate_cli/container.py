@@ -707,12 +707,22 @@ def _naming_live_mode_under_the_replay_default(
     and so does every router a script or an eval runner builds itself, the landscape's among them.
     """
     from debate_core.integrations.models.errors import MissingFixtureError
-    from debate_core.integrations.models.model_mode import MODEL_MODE_VARIABLE, ModelMode
+    from debate_core.integrations.models.model_mode import ModelMode
 
-    chosen = MODEL_MODE_VARIABLE in os.environ
-    if settings.models.provider is ModelProvider.FAKE or mode is not ModelMode.REPLAY or chosen:
+    if mode is not ModelMode.REPLAY or not _replay_is_the_default(settings):
         return router
     return _LiveModeHintRouter(router, refusal=MissingFixtureError)
+
+
+def _replay_is_the_default(settings: Settings) -> bool:
+    """Whether a real provider's calls replay only because nobody chose a mode: `DEBATE_MODEL_MODE` unset.
+
+    `cut`, `search` and `daily` have no `--model-mode` option, so the variable is the only way a person
+    chooses one; the `test` profile's fixture fake reads no mode, so it is never the replay default.
+    """
+    from debate_core.integrations.models.model_mode import MODEL_MODE_VARIABLE
+
+    return settings.models.provider is not ModelProvider.FAKE and MODEL_MODE_VARIABLE not in os.environ
 
 
 class _LiveModeHintRouter:
@@ -1665,6 +1675,15 @@ class ServiceContainer:
                 _committed_root(str(ARGUMENT_TAXONOMY_PATH)) / ARGUMENT_TAXONOMY_PATH
             ),
         )
+
+    def replay_is_the_default(self) -> bool:
+        """Whether this run's model calls replay only because nobody chose a mode (`v1-e06-t09`).
+
+        True on a real provider with `DEBATE_MODEL_MODE` unset: then the card and search routers refuse
+        a call nobody recorded with :data:`LIVE_MODE_HINT`, and an auto-cut's table counts the results
+        refused so. False for a mode a person chose, `replay` among them, and for the fixture fake.
+        """
+        return _replay_is_the_default(self.settings)
 
     def _card_model_router(self, registry: PromptRegistry) -> ModelRouter:
         """The router `cut`'s `card.select` and `card.markup` calls go to, chosen as every model router is.

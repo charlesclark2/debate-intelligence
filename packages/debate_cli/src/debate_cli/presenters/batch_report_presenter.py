@@ -32,6 +32,7 @@ from debate_cli.output import CommandFailure, JsonValue, TableSpec
 from debate_cli.presenters.search_presenter import footer_lines
 from debate_core.application.batch_cut_service import (
     BatchEntry,
+    BatchEntryStatus,
     BatchNeed,
     BatchReport,
     BatchStopReason,
@@ -54,6 +55,8 @@ __all__ = [
 
 AUTO_CUT_SHORT_CODE = "AUTO_CUT_SHORT"
 BUDGET_EXCEEDED_CODE = "BUDGET_EXCEEDED"
+_MISSING_FIXTURE_CODE = "MISSING_FIXTURE_ERROR"
+"""A cut refused because nobody recorded its model call: what the line under the table counts."""
 
 _STOP_WORDS = {
     BatchStopReason.COMPLETE: "every card wanted is VERIFIED",
@@ -166,14 +169,31 @@ def _title(report: BatchReport, heading: str) -> str:
 
 
 def report_table(
-    report: BatchReport, outcome: SearchOutcome, need: BatchNeed, files: AutoCutFiles
+    report: BatchReport,
+    outcome: SearchOutcome,
+    need: BatchNeed,
+    files: AutoCutFiles,
+    *,
+    replay_is_the_default: bool,
 ) -> TableSpec:
-    """The per-result table, then the provider footer, the files and the total cost."""
-    return batch_report_table(report, footer_lines(outcome), need.heading, files)
+    """The per-result table, then the provider footer, the files and the total cost.
+
+    With `replay_is_the_default` (the container's
+    :meth:`~debate_cli.container.ServiceContainer.replay_is_the_default`), a last line counts the
+    results refused because nobody recorded their calls (`v1-e06-t09`).
+    """
+    return batch_report_table(
+        report, footer_lines(outcome), need.heading, files, replay_is_the_default=replay_is_the_default
+    )
 
 
 def batch_report_table(
-    report: BatchReport, footer: list[str], heading: str, files: AutoCutFiles
+    report: BatchReport,
+    footer: list[str],
+    heading: str,
+    files: AutoCutFiles,
+    *,
+    replay_is_the_default: bool,
 ) -> TableSpec:
     """:func:`report_table` over any footer: a search's, or a daily digest's (v1-e08-t07)."""
     rows = [
@@ -196,12 +216,32 @@ def batch_report_table(
     if files.bundle is not None and files.manifest is not None:
         below += [f"Bundle: {files.bundle}", f"Manifest: {files.manifest}"]
     below += [f"Report: {files.report}", f"Model cost: {_cost(report.cost_usd)}"]
+    refused = sum(
+        1
+        for entry in report.entries
+        if entry.status is BatchEntryStatus.FAILED and _MISSING_FIXTURE_CODE in entry.reasons
+    )
+    if replay_is_the_default and refused:
+        below.append(_refused_under_the_default(refused))
     return TableSpec(
         columns=("Rank", "URL", "Access", "Card", "Reasons", "Cost"),
         rows=rows,
         title=_title(report, heading),
         caption=f"Stopped: {_STOP_WORDS[report.stop_reason]}.",
         lines_below=below,
+    )
+
+
+def _refused_under_the_default(count: int) -> str:
+    """The table's last line when `count` results were refused under the replay default (`v1-e06-t09`).
+
+    The PM's wording (ruling of 2026-11-14), one result in the singular. Printed to the terminal only:
+    `--json` and the report carry each refusal's own message, which names live mode, and no key.
+    """
+    refused = "1 result was refused" if count == 1 else f"{count} results were refused"
+    return (
+        f"{refused} because replay is the default. For real model calls, export DEBATE_MODEL_MODE=live "
+        '(see "Real model calls" in docs/guides/daily-digests.md).'
     )
 
 

@@ -348,9 +348,45 @@ The PM decides whether they become spec changes or new tasks. -->
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-11-14
 
 **Notes:**
+
+Accepted. ac1 and the node pass, and the Goal is `Succeeded`.
+
+* **The measurement came first and found a real defect.** The four emails were recorded exactly
+  through the real command on moto, with no AWS and nothing sent. The refused-secret email was wrong
+  three ways: "will be retried" where a person is needed, blaming the machine or the bucket, and
+  offering a hand run that is refused the same way.
+* **Built as ruled.**
+  * The token arm has t40's cure quoted from the table and no verdict sentence.
+  * The refused-secret arm is keyed on the structured `operation`, never the message, and names the
+    code, not the class.
+  * The same escalation from one `fix_for` goes into the log's hint and the details' hint.
+  * The exit codes and the Mac are unchanged.
+  * The environment is the record's own and is pinned in dev and prod at the notice level, where it
+    enters.
+* **The evidence is strong.**
+  * The red run: 21 failed at assertions, with the Mac and S3 pins passing before and after.
+  * All 12 mutants were caught at assertions, the PM's five among them.
+  * The no-class-name test checks that it holds `StoreAccessDenied`, so it cannot pass vacuously.
+* **The three rewritten tests are accepted.** They pinned the very notice the ruling changes.
+* **Two decisions are accepted.**
+  * The arm recognises the refused secret by comparing the details' hint with the cure constant.
+    That is a project constant, not a message, and a test pins the hint to the cure, so a future
+    rewording or a change to `hint_for_a_record` that altered it fails a test rather than silently
+    dropping the arm.
+  * The backfile import shares the escalation. It is a cloud task the secret can refuse too.
+* **The checks.** The affected set (366 files) goes to `ci` under agreement 10. The bounded runs are
+  green (270, 543, 169, 155 and 707 passed), with the classifier-denied directory run covered by its
+  33 relevant files. If `scripts/task pr` asks, `scripts/task sync`.
+* **Follow-ups:**
+  1. A prod variant of the CLI's bucket-mode test world goes on the PM's V1.x list, as a p3. The core
+     tests pin both environments meanwhile.
+  2. The alerts runbook's new row will say that the task-stopped alarm's exit-3 email arrives beside
+     it. That is a one-sentence PM doc edit in the next batch, not a task.
+
+`scripts/task pr`

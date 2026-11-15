@@ -88,7 +88,12 @@ from debate_core.testing.fakes.clock_and_ids import FixedClock
 from debate_core.testing.fakes.model_router import ScriptedModelRouter
 from debate_core.testing.virtual_time import run_in_virtual_time
 
-from .model_mode_hints import LIVE_MODE_HINT, RECORD_HINT
+from .model_mode_hints import (
+    LIVE_MODE_HINT,
+    RECORD_HINT,
+    REFUSED_UNDER_THE_DEFAULT_WORDS,
+    refused_under_the_default_line,
+)
 
 runner = CliRunner()
 
@@ -2592,3 +2597,69 @@ def test_auto_cut_under_the_replay_default_reports_each_refused_cut_with_the_liv
         assert detail.startswith("no recorded answer for prompt card.select@")
         assert detail.endswith(f". {LIVE_MODE_HINT}")
     assert not out.exists()
+
+
+# The line under the table (the PM's ruling of 2026-11-14 on v1-e06-t09): terminal only, the default only.
+
+
+def one_line(text: str) -> str:
+    return " ".join(text.split())
+
+
+def test_auto_cut_under_the_replay_default_says_under_its_table_how_many_results_were_refused(
+    cutting: Seams, tmp_path: Path
+) -> None:
+    cutting.card_router = None
+    cutting.live_models = live()
+
+    result = auto_cut(tmp_path / "bundle.docx")
+
+    assert result.exit_code == ExitCode.AUTO_CUT_SHORT, result.output
+    printed = one_line(result.stdout)
+    assert one_line(refused_under_the_default_line(4)) in printed, "four accessible pages, each refused"
+    assert printed.index("Stopped: every result was tried.") < printed.index(REFUSED_UNDER_THE_DEFAULT_WORDS)
+    assert REFUSED_UNDER_THE_DEFAULT_WORDS not in one_line(result.stderr), (
+        "the panel's hint is AUTO_CUT_SHORT's"
+    )
+
+
+def test_auto_cut_under_a_replay_chosen_with_debate_model_mode_prints_no_refused_line(
+    cutting: Seams, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    cutting.card_router = None
+    cutting.live_models = live()
+    monkeypatch.setenv("DEBATE_MODEL_MODE", "replay")
+
+    result = auto_cut(tmp_path / "bundle.docx")
+
+    assert result.exit_code == ExitCode.AUTO_CUT_SHORT, result.output
+    assert "MISSING_FIXTURE_ERROR" in result.stdout, "the cuts were refused, as under the default"
+    assert REFUSED_UNDER_THE_DEFAULT_WORDS not in one_line(result.output)
+
+
+def test_auto_cut_under_the_replay_default_with_no_refused_cut_prints_no_refused_line(
+    cutting: Seams, tmp_path: Path
+) -> None:
+    cutting.live_models = live()
+
+    result = auto_cut(tmp_path / "bundle.docx")
+
+    assert result.exit_code == ExitCode.OK, result.output
+    assert "MISSING_FIXTURE_ERROR" not in result.stdout
+    assert REFUSED_UNDER_THE_DEFAULT_WORDS not in one_line(result.output)
+
+
+def test_auto_cut_json_under_the_replay_default_carries_no_refused_line(
+    cutting: Seams, tmp_path: Path
+) -> None:
+    cutting.card_router = None
+    cutting.live_models = live()
+
+    result = auto_cut(tmp_path / "bundle.docx", json_output=True)
+
+    assert result.exit_code == ExitCode.AUTO_CUT_SHORT, result.output
+    assert envelope(result)["error"]["code"] == "AUTO_CUT_SHORT"
+    assert REFUSED_UNDER_THE_DEFAULT_WORDS not in one_line(result.output)
+    assert REFUSED_UNDER_THE_DEFAULT_WORDS not in (tmp_path / "bundle.report.json").read_text(
+        encoding="utf-8"
+    )

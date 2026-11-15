@@ -30,3 +30,19 @@ FAKE_HINT: Final = (
     "Write the answer with FixtureDirectory.write (tests/fixtures/model_cassettes/README.md); "
     "the fake router never asks a real model."
 )
+
+
+def refused_under_the_default_line(count: int) -> str:
+    """The line under an auto-cut table when `count` results were refused under the replay default.
+
+    The PM's wording (ruling of 2026-11-14 on v1-e06-t09), with one result said in the singular.
+    """
+    refused = "1 result was refused" if count == 1 else f"{count} results were refused"
+    return (
+        f"{refused} because replay is the default. For real model calls, export DEBATE_MODEL_MODE=live "
+        '(see "Real model calls" in docs/guides/daily-digests.md).'
+    )
+
+
+REFUSED_UNDER_THE_DEFAULT_WORDS: Final = "because replay is the default"
+"""Words of that line, and of no other output, for a test that the line is absent."""

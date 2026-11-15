@@ -49,7 +49,7 @@ from debate_core.evidence.selection_contract import CARD_SELECT_PROMPT_ID
 from debate_core.integrations import html_extractor as html_extractor
 from debate_core.integrations.discovery.feed_config import FeedConfig, FeedReview, FeedSource
 
-from .model_mode_hints import LIVE_MODE_HINT
+from .model_mode_hints import LIVE_MODE_HINT, REFUSED_UNDER_THE_DEFAULT_WORDS, refused_under_the_default_line
 
 runner = CliRunner()
 
@@ -1100,6 +1100,69 @@ def test_auto_cut_under_the_replay_default_reports_each_refused_cut_with_the_liv
             assert detail.startswith("no recorded answer for prompt card.select@")
             assert detail.endswith(f". {LIVE_MODE_HINT}")
     assert not (tmp_path / DIGESTS / "politics-2026-09-17.docx").exists()
+
+
+def one_line(text: str) -> str:
+    return " ".join(text.split())
+
+
+def test_auto_cut_under_the_replay_default_says_under_its_table_how_many_results_were_refused(
+    cutting: Seams, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The PM's ruling of 2026-11-14 on v1-e06-t09: a line under the table, in the terminal only."""
+    cutting.card_router = None
+    monkeypatch.setenv("DEBATE_MODELS__PROVIDER", "bedrock")
+
+    result = daily("politics", "--date", "2026-09-17", "--auto-cut", "2")
+
+    assert result.exit_code == ExitCode.AUTO_CUT_SHORT, result.output
+    printed = one_line(result.stdout)
+    assert one_line(refused_under_the_default_line(2)) in printed, "the news page and the think tank's"
+    assert printed.index("Stopped: every result was tried.") < printed.index(REFUSED_UNDER_THE_DEFAULT_WORDS)
+    assert REFUSED_UNDER_THE_DEFAULT_WORDS not in one_line(result.stderr), (
+        "the panel's hint is AUTO_CUT_SHORT's"
+    )
+
+
+def test_auto_cut_under_a_replay_chosen_with_debate_model_mode_prints_no_refused_line(
+    cutting: Seams, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    cutting.card_router = None
+    monkeypatch.setenv("DEBATE_MODELS__PROVIDER", "bedrock")
+    monkeypatch.setenv("DEBATE_MODEL_MODE", "replay")
+
+    result = daily("politics", "--date", "2026-09-17", "--auto-cut", "2")
+
+    assert result.exit_code == ExitCode.AUTO_CUT_SHORT, result.output
+    assert "MISSING_FIXTURE_ERROR" in result.stdout, "the cuts were refused, as under the default"
+    assert REFUSED_UNDER_THE_DEFAULT_WORDS not in one_line(result.output)
+
+
+def test_auto_cut_under_the_replay_default_with_no_refused_cut_prints_no_refused_line(
+    cutting: Seams, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("DEBATE_MODELS__PROVIDER", "bedrock")
+
+    result = daily("politics", "--date", "2026-09-17", "--auto-cut", "2")
+
+    assert result.exit_code == ExitCode.OK, result.output
+    assert "MISSING_FIXTURE_ERROR" not in result.stdout
+    assert REFUSED_UNDER_THE_DEFAULT_WORDS not in one_line(result.output)
+
+
+def test_auto_cut_json_under_the_replay_default_carries_no_refused_line(
+    cutting: Seams, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    cutting.card_router = None
+    monkeypatch.setenv("DEBATE_MODELS__PROVIDER", "bedrock")
+
+    result = daily("politics", "--date", "2026-09-17", "--auto-cut", "2", json_output=True)
+
+    assert result.exit_code == ExitCode.AUTO_CUT_SHORT, result.output
+    assert envelope(result)["error"]["code"] == "AUTO_CUT_SHORT"
+    assert REFUSED_UNDER_THE_DEFAULT_WORDS not in one_line(result.output)
+    report = (tmp_path / DIGESTS / "politics-2026-09-17.report.json").read_text(encoding="utf-8")
+    assert REFUSED_UNDER_THE_DEFAULT_WORDS not in report
 
 
 def test_two_days_auto_cut_runs_into_one_digest_directory_keep_both_reports(

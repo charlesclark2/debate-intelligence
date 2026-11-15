@@ -457,19 +457,25 @@ def test_record_reads_the_store_without_writing_to_it(
     assert _tree(world.store / "blobs") == blobs
 
 
-def test_record_reads_a_store_a_writer_still_holds_open(
+def test_record_reads_a_snapshot_still_in_the_write_ahead_log(
     world: World, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    # An open writer keeps a -wal file; the read must go through it, and still write nothing.
-    writer = SqliteDatabase.open(world.store)
+    # While another connection holds the database open, a write stays in the -wal file, not in the
+    # database file: a read of the file alone would not find this snapshot.
+    holder = SqliteDatabase.open(world.store)
     try:
-        assert (world.store / f"{DATABASE_FILENAME}-wal").exists()
+        page = PAGE_BYTES + b"<!-- fetched again -->"
+        snapshot = world.store_page(LINKS["accessible"] + "?again", page_bytes=page)
+        assert (world.store / f"{DATABASE_FILENAME}-wal").stat().st_size > 0
+        world.report(
+            "accessible", _envelope(LINKS["accessible"], "ACCESSIBLE", snapshot_id=snapshot.snapshot_id)
+        )
         world.record("--execute")
     finally:
-        writer.close()
+        holder.close()
 
     assert "recorded: 1" in capsys.readouterr().out
-    assert (world.snapshots / world.case_for("accessible") / snaps.RAW_NAME).read_bytes() == PAGE_BYTES
+    assert (world.snapshots / world.case_for("accessible") / snaps.RAW_NAME).read_bytes() == page
 
 
 def test_record_prints_no_page_text_title_or_link(world: World, capsys: pytest.CaptureFixture[str]) -> None:

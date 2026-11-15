@@ -544,8 +544,34 @@ It wrote its three new files and nothing else, in 126.7 s:
 * the coach's CSV, `policy-2026-27-nhi-holdout-sample-labelled.csv`, with SHA-256
   `45c5e6ff4175b2ac039b208bbd4323e061b14eaeeb5649c5ca37e3ff1b4ab09f` recorded beside it.
 
-`shasum -a 256 -c` read the sidecar as `OK`, and the CSV is read-only. Next are steps 3 and 4: the copy, the
-coach's first sitting, and the copy again.
+`shasum -a 256 -c` read the sidecar as `OK`, and the CSV is read-only.
+
+**Step 4, the coach's first sitting (the operator's, 2026-11-14), as pasted: counts only.** Holdout rows 1
+to 60. The sitting wrote once, at the end. It first kept the file it replaced as
+`policy-2026-27-nhi-holdout-sample-labelled.before-sitting-2026-11-14-2112.csv`, then wrote the file and its
+sidecar. The new SHA-256 is `ea5f586bb88aac2b9b59ffea939485b38049f1663d5b57f7c14ab1446b55fd34`.
+
+* `Done.` line: 60 cards; 56 labelled (10 with a second label), 4 unsure, 0 left blank.
+* `--check-sample`: `"holdout": true`, taxonomy 1.5.1, snapshot 2026-11-03, `labelled` 56, the same count as
+  the `Done.` line, which is the runbook's success condition.
+
+  | Label kind | Rows |
+  |---|---|
+  | advantage | 14 |
+  | cp | 7 |
+  | da | 12 |
+  | k | 9 |
+  | t | 10 |
+  | none | 4 |
+
+  By stance: 44 read and 8 answer, which with the 4 `none` makes 56. The 10 second labels are 8 advantage
+  and 2 da.
+* No row was labelled `aff` or `theory`. The draw drew 19 `aff` and 7 `theory` cards across all 120 rows by
+  the proxy model's kind, but the sample's order mixes the strata, so these 60 rows are not a stratum. The
+  session draws no conclusion from it before the second sitting.
+
+The step 3 copy digests from before and after this sitting were not pasted back. The session records only
+the sitting's own dated copy, above. Next are step 3 again, the second sitting (step 5) and step 3 after it.
 
 **The affected set did not finish locally.** `uv run scripts/affected_tests.py --run --slow` selects 157 files,
 5,298 tests. Within the 115-second cap it reached 65% with two failures:

@@ -105,3 +105,21 @@ def test_a_hit_a_mark_sets_aside_is_listed_but_not_left() -> None:
         (HitField.RATIONALE, True, False)
     ]
     assert listed.left == 0
+
+
+def test_a_hit_in_a_card_the_holdout_sent_is_listed_under_its_input_batch() -> None:
+    items = [
+        {
+            "item": "c1",
+            "headings": ["1NC"],
+            "tag": "Brindle Valley says probability first",
+            "cite": "Szabo 24",
+        }
+    ]
+
+    listed = holdout_scan_hits((json.dumps(items),), [], [], NAMES)
+
+    assert [(hit.text, hit.where, hit.matched, hit.in_input) for hit in listed.hits] == [
+        ("input batch 1", HitField.TAG, "brindle valley", True)
+    ]
+    assert listed.left == 1

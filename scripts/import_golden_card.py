@@ -158,6 +158,14 @@ do, and writes nothing (working agreement 11). The store's database is opened re
 snapshot folder must be outside the repository and every worktree. It prints counts and case IDs,
 never a page's text or title.
 
+## `review`: the coach's sign-off sheet
+
+    uv run python scripts/import_golden_card.py review --output ~/golden-card-shortlist/review.md
+
+Writes, outside the repository, a sheet listing every case (ID, event, season, source type,
+research need, its segment and span counts and its folder) and the sign-off questions of ac5. It
+holds the cards' tags, so it refuses a path inside the repository, and prints only the case count.
+
 Owned by `v1-e09-t01-golden-card-fixtures`.
 """
 
@@ -253,6 +261,7 @@ __all__ = [
     "record_lines",
     "record_sources",
     "render_index",
+    "render_review",
     "source_link",
     "strip_cutter_mark",
     "team_card",
@@ -1617,6 +1626,62 @@ def record_lines(report: RecordReport, *, execute: bool) -> list[str]:
     return lines
 
 
+REVIEW_QUESTIONS: Final = (
+    "Does this corpus represent how the team actually cuts cards, across Policy, LD and PF? "
+    "(yes or no, and what is missing if no)",
+    "For each case, do the underlines and highlights of `expected.docx` match your card in "
+    "`team-card.docx`? (list the case IDs that do not, and what differs)",
+    "Is any case one you would not want the platform measured on? (list the case IDs)",
+)
+
+
+def render_review(fixtures_dir: Path) -> str:
+    """The coach's review sheet: every case with its event, source type and research need, then the
+    sign-off questions. It holds the cards' tags, so it is written outside the repository."""
+    cases = sorted(_existing_cases(fixtures_dir), key=lambda case: case["case_id"])
+    lines = [
+        "# Golden corpus: the coach's review",
+        "",
+        "Local to this machine: never commit, paste or send this file. It holds the cards' tags.",
+        "",
+        "For each case, open its two documents side by side: `team-card.docx`, your card as it was",
+        "imported, and `expected.docx`, the card as the platform renders it from the recorded source",
+        "page, with your underlining and highlighting carried over. Then answer the questions at the end.",
+        "",
+        "| Case | Event | Season | Source type | Research need "
+        "| Segments | Underlines | Highlights | Folder |",
+        "|---|---|---|---|---|---|---|---|---|",
+    ]
+    for case in cases:
+        folder = fixtures_dir / case["case_id"]
+        expected_path = folder / EXPECTED_NAME
+        expected = json.loads(expected_path.read_text(encoding="utf-8")) if expected_path.is_file() else None
+        spans = expected["spans"] if expected else []
+        counts = (
+            (
+                str(len(expected["segments"])),
+                str(sum(1 for span in spans if span["style"] == "underline")),
+                str(sum(1 for span in spans if span["style"] == "highlight")),
+            )
+            if expected
+            else ("not labelled", "", "")
+        )
+        lines.append(
+            f"| `{case['case_id']}` | {case['event']} | {case['season']} | {case['source_type']} | "
+            f"{_cell(case['research_need'])} | {' | '.join(counts)} | `{folder}` |"
+        )
+    by_event = Counter(case["event"] for case in cases)
+    lines += [
+        "",
+        f"{len(cases)} cases: " + ", ".join(f"{event} {by_event[event]}" for event in EVENTS) + ".",
+        "",
+        "## Sign-off",
+        "",
+    ]
+    lines += [f"{number}. {question}" for number, question in enumerate(REVIEW_QUESTIONS, start=1)]
+    return "\n".join(lines) + "\n"
+
+
 # --------------------------------------------------------------------------------------------
 # Command line
 # --------------------------------------------------------------------------------------------
@@ -1662,6 +1727,10 @@ def _build_parser() -> argparse.ArgumentParser:
     recording.add_argument("--execute", action="store_true", help="record and drop; without it, a dry run")
     recording.add_argument("--fixtures", type=Path, default=FIXTURES_DIR, help=argparse.SUPPRESS)
 
+    reviewing = commands.add_parser("review", help="write the coach's review sheet outside the repo")
+    reviewing.add_argument("--output", type=Path, required=True, help="the sheet, outside the repository")
+    reviewing.add_argument("--fixtures", type=Path, default=FIXTURES_DIR, help=argparse.SUPPRESS)
+
     indexing = commands.add_parser("index", help="rewrite INDEX.md from the cases")
     indexing.add_argument("--fixtures", type=Path, default=FIXTURES_DIR, help=argparse.SUPPRESS)
     return parser
@@ -1698,6 +1767,15 @@ def main(
     if arguments.command == "index":
         write_index(arguments.fixtures)
         print(f"{INDEX_NAME}: {len(_existing_cases(arguments.fixtures))} cases")
+        return 0
+    if arguments.command == "review":
+        if _inside_repository(arguments.output):
+            print("the review sheet holds the cards' tags; write it outside the repository", file=sys.stderr)
+            return 2
+        output = arguments.output.expanduser()
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_text(render_review(arguments.fixtures), encoding="utf-8")
+        print(f"review sheet: {len(_existing_cases(arguments.fixtures))} cases")
         return 0
     if arguments.command == "record":
         folder = arguments.snapshots.expanduser()

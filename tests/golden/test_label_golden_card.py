@@ -358,3 +358,34 @@ def test_check_flags_a_person_named_in_a_render(rendered: World, capsys: pytest.
 
     assert golden.main(["check", "--fixtures", str(rendered.fixtures)]) == 1
     assert "docProps/core.xml creator is set" in capsys.readouterr().out
+
+
+# ------------------------------------------------------------------------------------------------
+# The coach's review sheet
+# ------------------------------------------------------------------------------------------------
+
+
+def test_the_review_sheet_lists_every_case_and_the_sign_off_questions(
+    rendered: World, capsys: pytest.CaptureFixture[str]
+) -> None:
+    sheet = rendered.root / "outside" / "review.md"
+
+    assert golden.main(["review", "--output", str(sheet), "--fixtures", str(rendered.fixtures)]) == 0
+
+    text = sheet.read_text(encoding="utf-8")
+    marked = rendered.case_for("marked")
+    assert (
+        f"| `{marked}` | Policy | 2025-26 | think tank | Demand growth strains the marked reserve margin "
+        f"| 2 | 2 | 2 | `{rendered.fixtures / marked}` |"
+    ) in text
+    assert "5 cases: Policy 2, LD 0, PF 3." in text
+    assert text.endswith(f"3. {golden.REVIEW_QUESTIONS[2]}\n")
+    assert capsys.readouterr().out == "review sheet: 5 cases\n"
+
+
+def test_the_review_sheet_is_never_written_inside_the_repository(capsys: pytest.CaptureFixture[str]) -> None:
+    inside = REPO_ROOT / "tests" / "fixtures" / "golden_cards" / "review.md"
+
+    assert golden.main(["review", "--output", str(inside)]) == 2
+    assert not inside.exists()
+    assert "write it outside the repository" in capsys.readouterr().err

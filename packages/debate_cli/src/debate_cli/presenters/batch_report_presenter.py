@@ -1,4 +1,4 @@
-"""What `search --auto-cut N` prints and writes: the per-result table and report.json (`v1-e08-t06`).
+"""What `search --auto-cut N` prints and writes: the per-result table and the report (`v1-e08-t06`).
 
 Rendering only. Which results were cut, skipped or failed, and why the run ended, are
 :class:`~debate_core.application.batch_cut_service.BatchCutService`'s, read off its
@@ -9,9 +9,11 @@ Rendering only. Which results were cut, skipped or failed, and why the run ended
 One row per result the batch tried, in rank order: its rank, URL, access status, card status, the
 reason codes and the cost of its model calls. Below it, the search's provider footer (so a partial
 search is never silent, even when N cards were verified), then where the bundle, its manifest and
-report.json were written.
+the report were written.
 
-## report.json
+## The report
+
+`<bundle stem>.report.json` beside the bundle (v1-e08-t18), the path `AutoCutFiles.report` is given.
 
 :func:`report_payload`: the run's settings, why it ended, the providers that did not answer in full,
 the total cost, the files, and every entry with its `section`, `verified` or `unverified`, which is
@@ -63,7 +65,7 @@ _STOP_WORDS = {
 
 @dataclass(frozen=True, slots=True)
 class AutoCutSettings:
-    """What the command line asked of the batch, as report.json records it."""
+    """What the command line asked of the batch, as the report records it."""
 
     wanted: int
     concurrency: int
@@ -73,7 +75,11 @@ class AutoCutSettings:
 
 @dataclass(frozen=True, slots=True)
 class AutoCutFiles:
-    """Where the batch wrote: the bundle and its manifest only when a card was cut, and report.json."""
+    """Where the batch wrote: the bundle and its manifest only when a card was cut, and the report.
+
+    With no card cut, `bundle` and `manifest` are None, written as null: the report then says that this
+    run wrote no bundle, whatever bundle of the same name an earlier run left beside it (v1-e08-t18).
+    """
 
     report: Path
     bundle: Path | None = None
@@ -105,7 +111,7 @@ def _section(entry: BatchEntry) -> str | None:
 
 
 def entry_json(entry: BatchEntry) -> dict[str, JsonValue]:
-    """One entry of report.json: what became of one result the batch tried."""
+    """One entry of the report: what became of one result the batch tried."""
     return {
         "rank": entry.rank,
         "url": entry.url,
@@ -129,7 +135,7 @@ def report_payload(
     settings: AutoCutSettings,
     files: AutoCutFiles,
 ) -> dict[str, JsonValue]:
-    """report.json, and the `auto_cut` object of the `--json` output."""
+    """The report, `<bundle stem>.report.json`, and the `auto_cut` object of the `--json` output."""
     return {
         "search_id": outcome.search.search_id,
         "query": outcome.search.query,

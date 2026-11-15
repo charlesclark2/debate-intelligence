@@ -711,13 +711,16 @@ listed on another date are left out; running a date again lists its own again. W
 listed is kept by canonical URL and DOI in `<data dir>/daily/seen/<preset>.json`, written only after
 the digest file is, so a run that fails marks nothing seen. `--auto-cut N` then cuts the new results
 as `search --auto-cut` does, each group's top result first and each card cut for its own argument and
-need, into `<preset>-<date>.docx` beside the digest.
+need, into `<preset>-<date>.docx` beside the digest, with its manifest and its report,
+`<preset>-<date>.manifest.json` and `<preset>-<date>.report.json` (`v1-e08-t18`): one report per
+preset and date, so the next day's run does not replace it. `search --auto-cut` names its report
+after `--output` the same way, `<name>.report.json`.
 
 A preset's providers are configuration, so they count as the profile's enabled ones do (`v1-e07-t15`):
 `nhi` on a machine without the api.data.gov key names GovInfo with its cure in the footer, and the
 digest is complete if the others answered. So does a preset provider the profile does not enable at
 all (`v1-e07-t23`): the footer names it `not configured: not counted as partial: not enabled in
-settings (providers.enabled); enable it in providers.enabled`. With `--auto-cut`, report.json's
+settings (providers.enabled); enable it in providers.enabled`. With `--auto-cut`, the report's
 `partial_providers` names only the providers that made the digest partial; the ones left out of its
 status are still in the JSON's `providers`, with their reasons.
 

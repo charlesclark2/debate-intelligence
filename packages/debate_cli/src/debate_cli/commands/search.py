@@ -183,7 +183,8 @@ def search(
             "--output",
             dir_okay=False,
             writable=True,
-            help="With --auto-cut: the .docx bundle. Its manifest and report.json are written beside it.",
+            help="With --auto-cut: the .docx bundle. Its manifest and report, <name>.manifest.json and "
+            "<name>.report.json, are written beside it.",
         ),
     ] = None,
     card_format: Annotated[
@@ -217,7 +218,7 @@ def search(
     With --auto-cut N, the results are then cut in rank order, skipping any that are paywalled,
     blocked or robots-disallowed, until N cards are VERIFIED. Verified cards go under one block
     heading in --output; UNVERIFIED cards only in its separate "UNVERIFIED — not finished cards"
-    section, and never count toward N. A table and report.json say what became of each result.
+    section, and never count toward N. A table and the report say what became of each result.
 
     Exit codes:
     0  complete: every provider answered, with results; with --auto-cut, N cards are VERIFIED

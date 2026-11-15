@@ -1029,7 +1029,7 @@ def test_auto_cut_hands_the_new_results_to_the_batch_each_groups_first_then_the_
     result = daily("politics", "--date", "2026-09-17", "--auto-cut", "2")
 
     assert result.exit_code == ExitCode.OK, result.output
-    report = json.loads((tmp_path / DIGESTS / "report.json").read_text(encoding="utf-8"))
+    report = json.loads((tmp_path / DIGESTS / "politics-2026-09-17.report.json").read_text(encoding="utf-8"))
     assert [(entry["rank"], entry["url"], entry["status"]) for entry in report["entries"]] == [
         (1, NEWS_PAGE, "VERIFIED"),
         (2, PAYWALLED_PAGE, "SKIPPED"),
@@ -1071,8 +1071,40 @@ def test_auto_cut_with_no_new_results_is_short_and_writes_no_bundle(cutting: Sea
 
     assert result.exit_code == ExitCode.AUTO_CUT_SHORT, result.output
     assert not (tmp_path / DIGESTS / "politics-2026-09-18.docx").exists()
-    report = json.loads((tmp_path / DIGESTS / "report.json").read_text(encoding="utf-8"))
+    report = json.loads((tmp_path / DIGESTS / "politics-2026-09-18.report.json").read_text(encoding="utf-8"))
     assert report["entries"] == []
+
+
+def test_two_days_auto_cut_runs_into_one_digest_directory_keep_both_reports(
+    cutting: Seams, tmp_path: Path
+) -> None:
+    """Each day's report is `<preset>-<date>.report.json`, beside that day's digest and bundle (v1-e08-t18).
+
+    The second day finds nothing new, so it writes no bundle and its report says so: `bundle` is null.
+    """
+    digests = tmp_path / DIGESTS
+    assert daily("politics", "--date", "2026-09-17", "--auto-cut", "2").exit_code == ExitCode.OK
+    first = (digests / "politics-2026-09-17.report.json").read_bytes()
+
+    result = daily("politics", "--date", "2026-09-18", "--window", "2d", "--auto-cut", "1")
+
+    assert result.exit_code == ExitCode.AUTO_CUT_SHORT, result.output
+    assert (digests / "politics-2026-09-17.report.json").read_bytes() == first
+    earlier = json.loads(first)
+    later = json.loads((digests / "politics-2026-09-18.report.json").read_text(encoding="utf-8"))
+    assert (earlier["date"], earlier["verified"], earlier["bundle"], earlier["report"]) == (
+        "2026-09-17",
+        2,
+        str(DIGESTS / "politics-2026-09-17.docx"),
+        str(DIGESTS / "politics-2026-09-17.report.json"),
+    )
+    assert (later["date"], later["entries"], later["bundle"], later["report"]) == (
+        "2026-09-18",
+        [],
+        None,
+        str(DIGESTS / "politics-2026-09-18.report.json"),
+    )
+    assert not (digests / "report.json").exists()
 
 
 # ------------------------------------------------------------------------------------------------

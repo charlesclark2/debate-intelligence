@@ -26,8 +26,10 @@ directory, `<data dir>/daily/seen/<preset>.json`, never beside the digests.
 
 Hands the digest's new results to `search --auto-cut`'s batch, which cuts them until N cards are
 VERIFIED: each group's top result first, each cut for its own argument and need. The bundle is
-`<preset>-<date>.docx` beside the digest, with its manifest and `report.json`, named as `search
---auto-cut` names them.
+`<preset>-<date>.docx` beside the digest, with its manifest and its report,
+`<preset>-<date>.manifest.json` and `<preset>-<date>.report.json`, named as `search --auto-cut` names
+them: each day's report beside that day's bundle, so the next day's run does not replace it, and running
+a date again replaces that date's digest, bundle and report together (v1-e08-t18).
 
 ## Exit codes
 
@@ -257,7 +259,7 @@ def _auto_cut(
     digest_data: dict[str, JsonValue],
     options: AutoCutOptions,
 ) -> None:
-    """Cut the digest's new results into the bundle, write report.json, print the table, end with the code."""
+    """Cut the digest's new results into the bundle, write its report, print the table, end with the code."""
     need = digest_bundle_need(digest)
     candidates = digest_batch_candidates(digest)
     report, files = _run(cut_and_write(cli.services.batch_cutting(), candidates, need, options))

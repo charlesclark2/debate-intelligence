@@ -73,7 +73,7 @@ and in what the command prints, never a message's wording.
 | `failures::test_a_provider_outage_makes_the_search_partial_exit_6_naming_the_provider` | exit 6, `SEARCH_PARTIAL`, the failed provider named |
 | `failures::test_a_hand_edited_evidence_word_in_an_exported_docx_makes_verify_fail_with_manual_edit` | exit 1, `UNVERIFIED`, `MANUAL_EDIT` |
 | `research::test_the_bundle_does_not_verify_where_its_snapshots_are_not_stored` | exit 1, `UNVERIFIED`, `SNAPSHOT_MISSING` |
-| `research::test_search_auto_cut_3_writes_three_verified_cards_and_a_bannered_unverified_one_and_verify_agrees` | the robots-disallowed and paywalled results listed in `report.json` as `SKIPPED` with their access status |
+| `research::test_search_auto_cut_3_writes_three_verified_cards_and_a_bannered_unverified_one_and_verify_agrees` | the robots-disallowed and paywalled results listed in `bundle.report.json` as `SKIPPED` with their access status |
 
 ## Beyond §11: the V1 caselist workflow
 

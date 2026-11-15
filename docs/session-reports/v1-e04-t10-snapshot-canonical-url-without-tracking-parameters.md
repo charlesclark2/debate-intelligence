@@ -299,9 +299,48 @@ anywhere else, the same query applies to each `debate.sqlite3`.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-11-14
 
 **Notes:**
+
+Accepted. ac1 and the node pass, and the Goal is `Succeeded`.
+
+* **The investigation came first and answered the question.** The field was the retrieved URL under
+  a misleading name, documented as such since `v1-e02-t01`, and shown on a recorded page before any
+  change.
+* **The reader table is what the PM asked for.** It names every reader and what each depends on. The
+  three coach-visible places with tracking parameters are named: the auto-cut `.manifest.json`
+  files, the manifest inside every exported .docx, and `cut --json`.
+* **Route 2 is the right call.** Making the field canonical alone would have thrown away the URL the
+  bytes were read from. That is provenance, and the cite harvest and `v1-e04-t08` both need it. So
+  `canonical_url` becomes the article's canonical URL, and `retrieved_url` keeps the URL that
+  answered. The snapshot takes the article's identity rather than a rule of its own, so the two can
+  never drift.
+* **No backfill, rightly.** Snapshots are immutable, and rewriting one would turn every manifest
+  already exported from it into `SNAPSHOT_REFERENCE_MISMATCH`. The harvest falls back to
+  `canonical_url` for old rows. The count found no row anywhere to touch: the Mac has no prod store,
+  dev has 0 snapshots, and no coach has cut a card yet.
+* **The evidence:**
+  * The red run: 6 of 7 failed on the canonical-URL assertion itself, before the new field was
+    touched.
+  * 8 mutants, all caught, both PM-named ones among them. The one first-run survivor (the harvest
+    reading `canonical_url` only) gained the PDF test that catches it.
+  * The two t05 tests changed keep what each was written to show.
+* **Deviations accepted.** `manifest.py` and the two schemas change as description text only, with
+  no key, field or version change. The PM adds `debate_core.evidence` and
+  `packages/debate_core/schemas` to the packages in the next batch. The one `git fetch` was
+  read-only, against GitHub; it is noted, and later sessions leave it to the operator.
+* **The checks.** The affected set is the whole suite and goes to `ci` under agreement 10. The
+  bounded runs are green (3,753 and 939 passed, and 12 slow tests). If `scripts/task pr` asks,
+  `scripts/task sync`.
+* **Follow-ups:**
+  1. For `v1-e04-t08`: storing the fetch target and its canonical form in an indexed column is that
+     task's proposal, and a migration needs the PM's word.
+  2. A page's own stated URL carrying tracking parameters into a cite goes on the PM's V1.x list as
+     a p3 (E06); no recorded page does it.
+  3. `v1-e09-t05`'s read through the article needs nothing.
+
+`scripts/task pr`

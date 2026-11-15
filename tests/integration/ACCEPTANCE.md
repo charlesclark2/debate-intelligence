@@ -36,6 +36,7 @@ Covered.
 | `failures::test_cut_writes_each_kind_of_sources_card_from_its_snapshot_and_verify_agrees[think-tank]` | the same for a think-tank report (`Ellery et al. 26`) |
 | `failures::test_cut_writes_each_kind_of_sources_card_from_its_snapshot_and_verify_agrees[open-access journal]` | the same for an open-access journal PDF, cited from Crossref's recorded answer (`Okonkwo-Hale et al. 26`) |
 | `research::test_search_auto_cut_3_writes_three_verified_cards_and_a_bannered_unverified_one_and_verify_agrees` | search → `--auto-cut 3` → one DOCX bundle of three VERIFIED cards under one block heading and, in its section under "UNVERIFIED — not finished cards", the government press release's card with `CITATION_UNVERIFIED` (ranked before the third VERIFIED card since `v1-e08-t24`, never counted toward the three), its embedded manifest equal to `bundle.manifest.json`; `verify bundle.docx` agrees card by card, three VERIFIED and the bannered one UNVERIFIED with `CITATION_UNVERIFIED`, exit 1 (`v1-e08-t26`) |
+| `research::test_search_auto_cut_2_stops_before_the_press_release_and_verify_passes_the_whole_bundle` | the same search with `--auto-cut 2`: its two cards, the think-tank report and the open-access PDF, are ranked above the press release, so the search stops before it; the bundle holds VERIFIED cards only, with no UNVERIFIED section, and `verify bundle.docx` passes the whole bundle, exit 0 (`v1-e08-t28`) |
 
 ## 3. No generated evidence can pass verification unless it is reproducible from a stored source snapshot
 
@@ -44,6 +45,7 @@ Covered.
 | Test | What it shows |
 |---|---|
 | `research::test_search_auto_cut_3_writes_three_verified_cards_and_a_bannered_unverified_one_and_verify_agrees` | each card's evidence, the bannered UNVERIFIED card's too, is the stored snapshot document's text at the card's offsets, those offsets are the ones worked out by hand from the page's paragraphs, and the raw snapshot is the recorded page's bytes |
+| `research::test_search_auto_cut_2_stops_before_the_press_release_and_verify_passes_the_whole_bundle` | the same for the clean bundle's two cards, and `verify` ran its snapshot checks on each (`snapshot_integrity`, `card_matches_snapshot`, `evidence_reconstructed`, `evidence_text_exact` among them) before it passed it |
 | `research::test_the_bundle_does_not_verify_where_its_snapshots_are_not_stored` | the same bundle, verified against a data directory that never stored its sources: every card UNVERIFIED with `SNAPSHOT_MISSING`, the bannered one with `CITATION_UNVERIFIED` before it, exit 1 |
 | `failures::test_a_hand_edited_evidence_word_in_an_exported_docx_makes_verify_fail_with_manual_edit` | one evidence word changed in an exported DOCX: UNVERIFIED with `MANUAL_EDIT`, exit 1; the untouched file still verifies |
 

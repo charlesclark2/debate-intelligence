@@ -39,7 +39,7 @@ spec:
         An e2e auto-cut bundle of VERIFIED cards only verifies with exit 0, every card
         checked against its snapshot.
 status:
-  phase: Pending
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

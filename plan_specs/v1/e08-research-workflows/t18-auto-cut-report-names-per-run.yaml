@@ -43,7 +43,7 @@ spec:
         Two auto-cut runs into one directory keep both reports, by a test shown failing
         first, and the guide names the report's file.
 status:
-  phase: InProgress
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

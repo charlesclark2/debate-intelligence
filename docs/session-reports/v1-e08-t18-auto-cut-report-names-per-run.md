@@ -6,46 +6,84 @@
 | Spec | [`plan_specs/v1/e08-research-workflows/t18-auto-cut-report-names-per-run.yaml`](../../plan_specs/v1/e08-research-workflows/t18-auto-cut-report-names-per-run.yaml) |
 | Epic / release | `v1-e08-research-workflows` / `v1.4` |
 | Branch | `task/v1-e08-t18-auto-cut-report-names-per-run` |
-| Session status | BLOCKED: waiting for the PM's ruling on the report's name (proposal below) <!-- COMPLETE / PARTIAL / BLOCKED --> |
+| Session status | COMPLETE <!-- COMPLETE / PARTIAL / BLOCKED --> |
 
 ## Summary
 
-No code is changed yet. As the PM asked (2026-11-14), this session proposes first and stops for the
-ruling: the proposal, the survey of every reader of the fixed name and the old-file answer are under
-**Decisions and assumptions**. The Goal stays InProgress.
+An auto-cut run's report is now named after its bundle, as the PM ruled on 2026-11-14:
+`search --auto-cut --output nhi.docx` writes `nhi.report.json`, and `daily politics --auto-cut`
+writes `politics-<date>.report.json`, each beside its bundle and its manifest (unchanged). Two runs
+into one directory keep both reports. The fixed `report.json` is never written, opened, renamed or
+deleted. The change is one property, `AutoCutOptions.report` in `debate_cli`. Both commands name their
+files through it. The rest is tests, help text, docstrings, the README and a new `--auto-cut` section
+in `docs/guides/daily-digests.md`. The report already said when a run wrote no bundle (`"bundle":
+null`), so per the ruling nothing changed there. The PM may want to look first at the two-run tests and
+the second mutant: only those tests catch a report name that is fixed but not `report.json`.
 
 ## Plan nodes
 
-<!-- One row per Plan graph node, in the order they were completed. -->
-
 | Node | Status | Notes |
 |---|---|---|
-| | | |
+| `auto-cut-report-names-per-run` (Report names) | Done | Red run first (17 failed), then the change, green (24 passed on the node's command); two mutants caught |
 
 ## Acceptance criteria
 
-<!-- Goal criteria (ac1…) and every node criterion. Status: PASS / FAIL / NOT RUN. -->
-
 | Criterion | Status | Evidence (command → result) |
 |---|---|---|
-| | | |
+| ac1: Two auto-cut runs into one directory keep both reports, by a test shown failing first, and the guide names the report's file | PASS | **Red, before the change** (`.venv/bin/python scripts/hard_stop.py 115 .venv/bin/python -m pytest packages/debate_cli/tests/test_search_command.py packages/debate_cli/tests/test_daily_command.py -k auto_cut -q --tb=line`) → `17 failed, 11 passed`, every failure a missing per-bundle report (12× `bundle.report.json`, 1× `first.report.json`, 2× `politics-2026-09-17.report.json`, 1× `politics-2026-09-18.report.json`) and 1× the `Report:` line naming `report.json`. The new tests among them: `test_two_auto_cut_runs_into_one_directory_keep_both_reports_each_beside_its_own_bundle` (search, `first.docx` then `second.docx`; the first report's bytes are unchanged after the second run, each names its own bundle, manifest and report, no `report.json`) and `test_two_days_auto_cut_runs_into_one_digest_directory_keep_both_reports` (daily, 2026-09-17 then 2026-09-18). **Green**: same command → `28 passed`. **Guide**: `docs/guides/daily-digests.md`, section "`--auto-cut`: cards from the digest, and the report of each run", names `politics-2026-11-14.report.json` and `nhi.report.json` and the old `report.json` |
+| Node: Report names tests pass (`uv run pytest packages/debate_cli/tests/test_search_command.py -k auto_cut`) | PASS | `24 passed in 3.47s` |
+
+**Mutants** (each applied to the committed code, run, and restored with `git checkout HEAD --`; tree
+clean after each):
+
+| Mutant in `AutoCutOptions.report` | Result |
+|---|---|
+| `return self.output.parent / "report.json"` (the fixed name again, as the PM asked) | caught: search and daily `-k auto_cut` → `17 failed, 11 passed`, each on the missing `<bundle>.report.json`, both new tests among them; slow e2e (`tests/integration/test_e2e_research.py -m slow`) → `2 failed, 1 passed` |
+| `return self.output.parent / "bundle.report.json"` (fixed, but the name every single-run test uses) | caught by the new two-run search test alone: `1 failed, 23 passed`. Without it no test would see a report name fixed per directory |
+
+## Checks before the report
+
+| Command | Result |
+|---|---|
+| `.venv/bin/python scripts/hard_stop.py 115 uv run scripts/affected_tests.py --run --slow` | 115 of 767 test files chosen from 13 changed files; **stopped at the 115-second limit** (exit 124) at load ~3–17, with no failure printed before the stop. Under agreement 10 the affected set is left to the pull request's `ci` check |
+| `pytest tests/architecture tests/specs -n auto -m "not slow and not live"` (always-run list) | `339 passed in 6.81s` |
+| `pytest packages/debate_cli/tests -n auto -m "not slow and not live"` (the changed package's test directory) | stopped at the 115-second limit at load ~19–25 (other work on the machine); 1,872 passed, none failed, before the stop. Its auto-cut, daily, search, presenter, app, help and container tests passed in full separately (`160 passed`, and in the always-run list) |
+| `pytest tests/integration/test_e2e_research.py -m slow` | `3 passed in 2.98s` |
+| `pytest tests/docs tests/scripts/test_check_command_blocks.py tests/scripts/test_docs_index.py` | `356 passed in 3.55s` |
+| `uv run scripts/check_command_blocks.py` | OK, 719 blocks in 261 files |
+| `uv run ruff format --check .` / `uv run ruff check .` | 2124 files already formatted / All checks passed |
+| `uv run pyright packages/debate_cli tests/integration` | 0 errors, 0 warnings |
+| `uv run lint-imports` / `uv run scripts/check_thin_handlers.py` | 20 kept, 0 broken / 74 handlers within 25 statements |
+| `uv run scripts/validate_specs.py` | OK: 685 files, 41 epics, 622 tasks, 22 releases |
 
 ## Files changed
 
-<!-- Group by package or directory; one line on why each group changed. -->
+* `packages/debate_cli/src/debate_cli/search_auto_cut.py`: the report's name (`REPORT_SUFFIX`,
+  `AutoCutOptions.report`) and the module docstring.
+* `packages/debate_cli/src/debate_cli/commands/search.py`, `commands/daily.py`,
+  `presenters/batch_report_presenter.py`, `presenters/daily_presenter.py`: `--output`'s help and
+  docstrings name `<name>.report.json` / `<preset>-<date>.report.json`, and what a null `bundle` means.
+* `packages/debate_cli/README.md`: the `daily` section names the three files.
+* `packages/debate_cli/tests/test_search_command.py`, `test_daily_command.py`: the two-run tests, the
+  existing reads moved to the new name, the "no report" checks covering both names.
+* `tests/integration/test_e2e_research.py`, `tests/integration/ACCEPTANCE.md`: the path only (see
+  Deviations).
+* `docs/guides/daily-digests.md`: the `--auto-cut` section.
+* `plan_specs/.../t18-auto-cut-report-names-per-run.yaml`: phase `Succeeded`.
 
 ## Deviations from the spec
 
-* **`tests/integration/test_e2e_research.py` and `tests/integration/ACCEPTANCE.md` are outside
-  `constraints.packages`** (`debate_cli, debate_core.application, packages/debate_cli/tests,
-  docs/guides`) but read the fixed name, so the end-to-end tests would go red on dev's push run
-  without the edit. Proposed: edit them (the path only) and add `tests/integration` to
-  `constraints.packages`; waiting on the PM.
+* **`tests/integration/test_e2e_research.py` and `tests/integration/ACCEPTANCE.md` edited outside
+  `constraints.packages`**, by the PM's ruling of 2026-11-14 ("(2) Yes. Edit
+  tests/integration/test_e2e_research.py and tests/integration/ACCEPTANCE.md, path only, with no
+  assertion changed or weakened. Record it as a Deviation citing this ruling. The PM adds
+  tests/integration to the spec's packages in the next batch."). The change is `"report.json"` →
+  `"bundle.report.json"` in two reads and in one table cell; no assertion changed.
 * `packages/debate_cli/README.md` is under `debate_cli`; read as in scope.
 
 ## Decisions and assumptions
 
-### Proposal for the PM's ruling: `<bundle stem>.report.json`
+### Proposal for the PM's ruling: `<bundle stem>.report.json` (written before the ruling, kept as proposed)
 
 **Recommended: name the report after the bundle, `<stem>.report.json`**, made the same way as the
 manifest (`AutoCutOptions.manifest`, `<stem>.manifest.json`), in `AutoCutOptions.report`
@@ -109,29 +147,54 @@ Left where it is, never renamed or deleted: the new build never writes or opens 
 reader must still find one, since nothing reads the report back. It is the last pre-upgrade run's
 report; the guide says so in one sentence, so a coach is not puzzled by it.
 
-### After the ruling (plan)
+### The PM's ruling (2026-11-14), applied as given
 
-1. Tests first, shown failing on this commit: two `search --auto-cut` runs with different `--output`
-   into one directory keep both reports; two `daily --auto-cut` runs of different dates into one
-   digest directory keep both; each report beside its own bundle and manifest; `report.json` not
-   written. Existing tests move to the new name.
-2. The change in `AutoCutOptions.report`, help, docstrings, README, guide.
-3. A mutant committed alone that writes `report.json` again, run against the new tests.
-4. Affected set, ruff, pyright, lint-imports, `validate_specs.py`.
+> (1) <bundle stem>.report.json, for search and daily alike, built in debate_cli beside the manifest's
+> and digest's names. [...] The rule "running a date again writes its digest again" carries over: one
+> report per preset per date, and the same --output replaces bundle, manifest and report together. Old
+> report.json files are left in place and never renamed or deleted. The guide says in one sentence that
+> such a file is the last report from before the upgrade.
+>
+> (2) Yes. Edit tests/integration/test_e2e_research.py and tests/integration/ACCEPTANCE.md, path only,
+> with no assertion changed or weakened. Record it as a Deviation citing this ruling.
+>
+> On the quirk: [...] If the report does not already say that this run wrote no bundle [...] add one
+> field that says so [...]. If it already says so, name the field in the report and change nothing.
+
+### A report beside an older bundle of the same name: the field is `bundle`
+
+It already says so, so nothing changed. Both payloads write `"bundle": null` (and `"manifest": null`)
+when the run cut no card: `report_payload` (`batch_report_presenter.py`) and `auto_cut_payload`
+(`daily_presenter.py`) both write `str(files.bundle) if files.bundle is not None else None`, and
+`cut_and_write` returns `AutoCutFiles(report=...)` with no bundle when nothing was cut. Beside them,
+`verified` and `unverified` are both 0. Tests pinning it: search,
+`test_auto_cut_under_max_cost_ends_on_a_model_with_no_price` (`report["bundle"] is None`, already
+there); daily, the new `test_two_days_auto_cut_runs_into_one_digest_directory_keep_both_reports`,
+whose second day cuts nothing and asserts `bundle` is `None`. Only docstrings changed: `AutoCutFiles`
+and the module docstring of `search_auto_cut.py` say what a null `bundle` means. The guide says it to
+the coach.
+
+### Choices the ruling left to the session
+
+* `REPORT_FILE_NAME` (exported, imported nowhere) became `REPORT_SUFFIX = ".report.json"`, used by
+  `AutoCutOptions.report` as `output.with_name(f"{output.stem}{REPORT_SUFFIX}")`, the manifest's form.
+* The two "no report is written" checks in `test_search_command.py` (a usage error, a search no
+  provider answered) would have passed for free under the new name, so each now asserts that neither
+  `bundle.report.json` nor `report.json` exists.
+* The README has no `search --auto-cut` file section; its `daily` section names the three files and
+  says `search` names its report after `--output`. The guide's new section covers both commands.
 
 ## Operator follow-ups
 
-<!-- Commands the operator must run (anything over ~2 minutes), with where to run them, the exact
-command, expected runtime and what success looks like. Also GitHub/AWS settings to change. -->
-
-None.
+None. The affected set ran past 115 seconds, so under agreement 10 it is left to the pull request's
+`ci` check, with no hand-off.
 
 ## Follow-up work
 
-<!-- Bugs, gaps or ideas outside this task's scope, each with the task or epic it belongs to.
-The PM decides whether they become spec changes or new tasks. -->
-
-None.
+* (FYI, unchanged by the ruling.) A run that cuts no card writes its report but leaves an earlier
+  run's bundle and manifest of the same name in place. The report says so (`bundle` is null) and the
+  guide tells the coach; whether such a run should also remove or rename the older bundle is the PM's
+  call (E08).
 
 ## PM review
 

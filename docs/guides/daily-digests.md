@@ -85,6 +85,45 @@ one folder keep both reports.
 A file named just `report.json` in the folder is the last report from before the upgrade: this build
 never reads, replaces or deletes it, so keep it or delete it as you like.
 
+## Real model calls
+
+`--auto-cut` asks a model where each card's evidence is and what to underline, as `debate-research cut`
+does, and `search --expand-llm` asks one for extra queries. Unless you say otherwise, a build runs these
+calls in **replay**: it answers a call only from an answer recorded on this machine before, and never
+calls a model itself. Replay is the default so that a program nobody set up never sends your research to
+a model or spends anything.
+
+On a machine where nothing was recorded, a cut in replay is refused with `MISSING_FIXTURE_ERROR`, and
+the message ends by saying how to make the real call. In an `--auto-cut` run every result it tries is
+refused the same way: the table's Reasons column says `MISSING_FIXTURE_ERROR` for each, the run is
+short, and the message is in each entry of the run's report.
+
+To make real calls, set `DEBATE_MODEL_MODE=live` in your shell. It lasts until you close that terminal
+window:
+
+```console
+$ export DEBATE_MODEL_MODE=live
+$ debate-research daily politics --auto-cut 3
+```
+
+To go back to replay in the same window:
+
+```console
+$ unset DEBATE_MODEL_MODE
+```
+
+In live mode each call is a real model call, on the model this environment's routing file names for it,
+and it costs money. Live mode records nothing, so running the same cut again calls the model again. The
+budget still holds every call:
+
+* `--max-cost USD`, on `daily --auto-cut` and `search --auto-cut`, is the most that one command may
+  spend. A call that could take it past that is refused before it is made, and the cards already cut
+  are kept.
+* The daily limit (`models.budget_usd_daily`), and the monthly one when it is set, refuse a call that
+  would pass them, however many commands you run that day.
+
+`debate-research usage` shows what today's calls cost and the limits they are held to.
+
 ## Digests written before this change
 
 Before v1-e08-t25 a digest with no `--date` took the UTC date, so a digest run in the evening in

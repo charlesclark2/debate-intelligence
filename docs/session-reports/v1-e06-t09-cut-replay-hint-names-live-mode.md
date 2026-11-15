@@ -20,10 +20,11 @@ has a `--model-mode` option, so the variable is the only way to choose. A replay
 `DEBATE_MODEL_MODE=replay` keeps the record hint, and so do the `test` profile's fake, `landscape
 evaluate` and every router a script builds itself. The default model mode is unchanged. A new guide
 section, "Real model calls", is in `docs/guides/daily-digests.md`, and the CLI README links it.
-**Look first at the PM question below:** under the default, a coach's `search --auto-cut` or
-`daily --auto-cut` terminal shows no hint at all. It shows only the code in the Reasons column, and
-AUTO_CUT_SHORT's unchanged "Try a broader query" hint. The live hint is in the report file and
-`--json` only.
+Then the PM ruled B (2026-11-14), in this task: under the default, the `search --auto-cut` and
+`daily --auto-cut` table now ends with one line counting the results refused that way ("4 results
+were refused because replay is the default. For real model calls, export DEBATE_MODEL_MODE=live (see
+"Real model calls" in docs/guides/daily-digests.md)."). It is never printed under a chosen replay or
+with nothing refused, and never in `--json` or the report. AUTO_CUT_SHORT keeps its own hint.
 
 ## Measurement before any change (amendment step 1)
 
@@ -70,6 +71,8 @@ throwaway in-process run, which was deleted afterwards.
 | ac1: `cut` refused for an unrecorded call names DEBATE_MODEL_MODE=live in its hint, and another command's MISSING_FIXTURE_ERROR hint is unchanged, by tests shown failing first | PASS | Red run on commit `10587cf` (the tests alone, before the code): `.venv/bin/python scripts/hard_stop.py 115 .venv/bin/python -m pytest <the five test files below> -k "replay_default or replay_chosen or fixture_fake or keeps_the_record_hint" -n 0 -q --tb=no -rA` → **5 failed, 5 passed**. The 5 failures are the live-hint tests (cut JSON, cut panel, `--expand-llm`, `search --auto-cut`, `daily --auto-cut`), each failing at `endswith(LIVE_MODE_HINT)` on a message ending "…Record it with DEBATE_MODEL_MODE=record and credentials, outside CI (…); replay never calls a real model.". The 5 that passed pin hints that must not change: a replay chosen for `cut` and for `--expand-llm`, the fixture fake, `landscape evaluate`, and a router a script builds. They cannot fail before a change, so each was shown failing under a mutant (below). Same command after `73c796c` → **10 passed**. Smoke check: **1 failed** against the pre-task `container.py`, at its `"set DEBATE_MODEL_MODE=live in this shell …" in message` assertion, and **passed** after. "Another command" is read under the amendment: `landscape evaluate`, a chosen replay, the fake and a script keep their hints. |
 | Node: Live hint tests pass (`uv run pytest packages/debate_cli/tests/test_cut_command.py -k "replay or fixture"`) | PASS | `.venv/bin/python scripts/hard_stop.py 115 uv run pytest packages/debate_cli/tests/test_cut_command.py -k "replay or fixture"` → `4 passed in 3.20s` |
 | Amendment step 4: mutants (one gives the live hint to an eval runner, one gives the record hint to cut) | PASS | Six mutants, below, each caught at an assertion line. |
+| PM ruling B: the line under the auto-cut table, for both commands. It appears under the default with N counted, and is absent under an explicit replay, with nothing refused, and from `--json`. Tests shown failing first. | PASS | Red run on commit `798aa9a` (tests alone): `.venv/bin/python scripts/hard_stop.py 115 .venv/bin/python -m pytest packages/debate_cli/tests/test_search_command.py packages/debate_cli/tests/test_daily_command.py packages/debate_cli/tests/test_batch_report_refused_line.py -k "refused_line or how_many_results or refused_result or chosen_mode" -n 0 -q --tb=no -rA` → **5 failed, 6 passed**. The two end-to-end "line appears" tests (`search`: N = 4, `daily`: N = 2) failed at their `refused_under_the_default_line(N) in printed` assertion. The three presenter tests failed with a `TypeError` (no `replay_is_the_default` parameter yet). That is an API-level red, not a catch, so their assertions are proven by mutants instead. The six absence tests (explicit replay, nothing refused, `--json` and report, for each command) passed at red, as absence must, and are proven by mutants too. Same command after `be1975c` → **11 passed**. |
+| PM ruling B: a mutant that prints the line under an explicit replay | PASS | Three mutants, below: one per command, and one in the container. |
 
 ### Mutants
 
@@ -87,6 +90,25 @@ so agreement 8's database rule does not apply. Every catch below is an `assert �
 | `search --expand-llm` gets the record hint back: `_build_search_model_router` returns the bare router | `test_expand_llm_refused_under_the_replay_default_names_live_mode_in_its_hint` (1 failed) |
 | A script gets the live hint: debate_core's record-and-replay `_HINT` set to the live text | the script test, `landscape evaluate`, both chosen-replay tests (4 failed) |
 
+The refactor for ruling B moved two of these targets: the "chosen replay ignored" and "fake not left
+out" mutants now act on `_replay_is_the_default`. I reran the set on the new code. The eval runner,
+`cut`, `--expand-llm` and script mutants were caught as before (1, 4, 1 and 4 failed). The fake mutant
+(`return MODEL_MODE_VARIABLE not in os.environ`) was caught by
+`test_a_cut_refused_by_the_fixture_fake_keeps_the_fakes_own_hint`, and the chosen-replay one is the
+container row of the next table.
+
+Mutants for ruling B's line, run against the line tests and the chosen-replay hint tests the same
+way, each restored with `git checkout HEAD --` (clean after):
+
+| Mutant | Caught by |
+|---|---|
+| **The line under an explicit replay, `search`**: `search_auto_cut.py` passes `default = True` | `search`'s `test_auto_cut_under_a_replay_chosen_with_debate_model_mode_prints_no_refused_line` (1 failed) |
+| **The line under an explicit replay, `daily`**: `daily.py` passes `default = True` | `daily`'s `test_auto_cut_under_a_replay_chosen_with_debate_model_mode_prints_no_refused_line` (1 failed) |
+| **The container takes a chosen replay for the default**: `_replay_is_the_default` ignores `DEBATE_MODEL_MODE` | both commands' explicit-replay line tests, and the chosen-replay hint tests for `cut` and `--expand-llm` (4 failed) |
+| The line with nothing refused (`if replay_is_the_default:` alone) | both commands' "no refused cut" tests and the presenter's (3 failed) |
+| Every FAILED entry counted, whatever its code | the presenter's singular test (it counted 2) and its "nothing refused" test (2 failed) |
+| The line written into the JSON and the report (a `refused_note` payload key, both commands) | both commands' `--json` tests (2 failed) |
+
 ### Checks before the report
 
 | Check | Result |
@@ -102,6 +124,10 @@ so agreement 8's database rule does not apply. Every catch below is an `assert �
 | `uv run --frozen python scripts/check_thin_handlers.py` | `OK: 74 CLI command and API route handlers within 25 statements` |
 | `uv run --frozen python scripts/check_command_blocks.py` / `check_links.py` / `docs_index.py --check-descriptions` | OK: 721 blocks / 3889 links and anchors / 72 descriptions |
 | `uv run scripts/validate_specs.py` | `OK: 685 files, 41 epics, 622 tasks, 22 releases` |
+| After ruling B: the changed files in full, plus the pins and `test_presenters_configuration_gaps_named_with_their_cure.py` (`-n 8`) | `312 passed in 13.76s` |
+| After ruling B: the always-run list, docs checks and `test_container_factories.py` | `735 passed in 24.11s` |
+| After ruling B: `uv run --frozen pyright` / `lint-imports` / `check_thin_handlers.py` / `ruff check` | `0 errors` / `20 kept, 0 broken` / `74 … within 25 statements` / `All checks passed!` |
+| After ruling B: the affected set | Not rerun. The container still changes, so it reaches the same selection that stopped at 115 seconds above, and it is left to the PR's `ci` check (agreement 10). |
 
 ## Files changed
 
@@ -121,6 +147,12 @@ so agreement 8's database rule does not apply. Every catch below is an `assert �
   keeps the record hint, and links the guide.
 * `docs/guides/daily-digests.md`: new section, "Real model calls".
 * `tests/smoke/test_cut_smoke.py`: an installed build's first cut, with no cassette, names live mode.
+* Ruling B: `ServiceContainer.replay_is_the_default()` and `_replay_is_the_default` in `container.py`.
+  `batch_report_table` and `report_table` take `replay_is_the_default` and end the table with the
+  counted line. `search_auto_cut.py` and `commands/daily.py` pass the container's answer. Tests: the new
+  `packages/debate_cli/tests/test_batch_report_refused_line.py`, four tests each in
+  `test_search_command.py` and `test_daily_command.py`, and the expected line in `model_mode_hints.py`.
+  The guide shows the line.
 * The spec's Goal phase is now `Succeeded`.
 
 ## Deviations from the spec
@@ -131,6 +163,12 @@ so agreement 8's database rule does not apply. Every catch below is an `assert �
    `search --auto-cut` and `daily --auto-cut` get the live hint under the default. ac1's "another
    command's … hint is unchanged" is tested on what the amendment keeps: `landscape evaluate`, a
    chosen replay, the fake and a script.
+   **Under the same amendment, the PM's ruling B (2026-11-14):** the `search --auto-cut` and
+   `daily --auto-cut` tables end with a line counting the results refused under the replay default.
+   It is terminal output only, adds no JSON or report key, and changes no error's hint. The presenter
+   ([batch_report_presenter.py](../../packages/debate_cli/src/debate_cli/presenters/batch_report_presenter.py))
+   is told the mode by the container's new `ServiceContainer.replay_is_the_default()`, which both
+   commands call.
 2. **`docs/guides` joins the packages**, as the amendment says: `docs/guides/daily-digests.md`'s
    "Real model calls" section.
 3. **`tests/smoke/test_cut_smoke.py` is outside `constraints.packages`.** Working agreement 5 asks
@@ -166,6 +204,18 @@ so agreement 8's database rule does not apply. Every catch below is an `assert �
   their own `--model-mode` option, run from a checkout only, and are the operator's eval tooling.
 * The guide gives no dollar figure: it names `--max-cost`, `models.budget_usd_daily`, the monthly
   limit and `debate-research usage`.
+* **The line's wording is the PM's, except for one result.** The PM's text is "<N> results were
+  refused because …". For N = 1 the line says "1 result was refused because …", and the rest of the
+  sentence is the PM's word for word. Say if you want "1 results were refused" kept literally.
+* **What the line counts:** entries with status `FAILED` whose reasons include `MISSING_FIXTURE_ERROR`.
+  It is printed only when the container says replay is the default. Under the default, every such
+  refusal comes from the card router this task wraps. The count is a presentation tally, read off the
+  BatchReport the service built, so it decides no status.
+* **"The default" for the line is the hint's rule:** a real provider with `DEBATE_MODEL_MODE` unset.
+  It now lives in one function, `_replay_is_the_default`, which the router wrapper and
+  `ServiceContainer.replay_is_the_default()` both use, so the line and the hint cannot disagree.
+* The line is the last line under the table, after `Model cost:`, so it is the last thing on stdout
+  before the AUTO_CUT_SHORT panel.
 
 ## Operator follow-ups
 
@@ -174,38 +224,14 @@ None. The affected set is over the two-minute line, so the pull request's `ci` c
 
 ## Follow-up work
 
-1. **PM question: the auto-cut terminal under the replay default.** The relay block is below.
-2. `packages/debate_cli/README.md`'s `search --expand-llm` paragraph (the "`--expand-llm` also asks a
+1. `packages/debate_cli/README.md`'s `search --expand-llm` paragraph (the "`--expand-llm` also asks a
    model…" sentence) could link "Real model calls" as well. It is left as is, because the `cut`
    section is the mention the amendment names.
-3. The guide's `docs-index` description does not mention real model calls. Changing it would change
+2. The guide's `docs-index` description does not mention real model calls. Changing it would change
    the generated index on dev, so I left it.
 
-```text
-PM question from v1-e06-t09 (cut replay hint names live mode):
-
-Measured: under the replay default, a coach's `search --auto-cut N` or `daily --auto-cut N` prints a
-table whose Reasons column says MISSING_FIXTURE_ERROR for every result tried, then the AUTO_CUT_SHORT
-panel with its own, unchanged hint: "Try a broader query, a larger --max-results, or cut a paywalled
-source from your own copy with fetch --paste and cut --from-paste." The live-mode hint this task adds
-is in each entry of <bundle>.report.json and under --json only, so the terminal never says to set
-DEBATE_MODEL_MODE=live.
-
-Options:
-  A. Leave it. The report and --json carry the hint, and the guide's "Real model calls" says what
-     MISSING_FIXTURE_ERROR in the Reasons column means.
-  B. One line under the auto-cut table when any entry was refused MISSING_FIXTURE_ERROR under the
-     replay default, e.g. "N results were refused: replay is the default. For real calls, export
-     DEBATE_MODEL_MODE=live (see "Real model calls" in docs/guides/daily-digests.md)." No error's hint
-     changes.
-  C. Give AUTO_CUT_SHORT the live hint when every failure was MISSING_FIXTURE_ERROR under the default.
-     This changes another error's hint, which the amendment kept unchanged.
-
-Recommendation: B, as a small follow-up task in debate_cli (the batch report presenter and the
-container's knowledge of the default). Why: the coach's first auto-cut is the most likely first
-contact with replay, and today the only sentence on screen points them at the query. B adds a fact
-without touching any error's hint.
-```
+The PM question this report first raised (the auto-cut terminal under the replay default) was
+answered by ruling B and is built in this task.
 
 ## PM review
 

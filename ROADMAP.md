@@ -62,13 +62,13 @@ v2.3's extension work.
 |---|---|---|---|---|---|
 | [v1.0](plan_specs/releases/v1.0.yaml) | Foundation & verified evidence core | 3 | 55 | 55 | 252 |
 | [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 4 | 125 | 107 | 550 |
-| [v1.2](plan_specs/releases/v1.2.yaml) | Argument landscape & file building | 3 | 99 | 83 | 366 |
-| [v1.3](plan_specs/releases/v1.3.yaml) | URL → verified card | 2 | 27 | 20 | 131 |
-| [v1.4](plan_specs/releases/v1.4.yaml) | Federated research from the CLI | 2 | 54 | 32 | 166 |
+| [v1.2](plan_specs/releases/v1.2.yaml) | Argument landscape & file building | 3 | 102 | 84 | 376 |
+| [v1.3](plan_specs/releases/v1.3.yaml) | URL → verified card | 2 | 27 | 22 | 131 |
+| [v1.4](plan_specs/releases/v1.4.yaml) | Federated research from the CLI | 2 | 55 | 34 | 168 |
 | [v1.5](plan_specs/releases/v1.5.yaml) | V1 quality gate & team pilot | 1 | 7 | 1 | 66 |
-| [v1.6](plan_specs/releases/v1.6.yaml) | Public team website | 3 | 31 | 22 | 169 |
+| [v1.6](plan_specs/releases/v1.6.yaml) | Public team website | 3 | 32 | 22 | 170 |
 | [v1.7](plan_specs/releases/v1.7.yaml) | Team evidence search pilot | 1 | 32 | 25 | 102 |
-| [v1.8](plan_specs/releases/v1.8.yaml) | Weekly caselist run in the cloud | 2 | 79 | 49 | 144 |
+| [v1.8](plan_specs/releases/v1.8.yaml) | Weekly caselist run in the cloud | 2 | 79 | 50 | 144 |
 | [v2.0](plan_specs/releases/v2.0.yaml) | Cloud platform foundation | 3 | 17 | 0 | 164 |
 | [v2.1](plan_specs/releases/v2.1.yaml) | Web app, debate tub & async jobs | 3 | 18 | 0 | 198 |
 | [v2.2](plan_specs/releases/v2.2.yaml) | Research workspace | 2 | 12 | 0 | 117 |
@@ -337,7 +337,7 @@ Weekly argument-landscape reports show which positions are being read and with w
 | [Dev back on the 5.5 models, and prod's Bedrock grant applied, once the quotas are restored](plan_specs/v1/e05-model-router/t17-switch-back-to-the-5-5-models.yaml) `v1-e05-t17-switch-back-to-the-5-5-models` | Cancelled | 3 | 2.0 |
 | [The cost allocation tags are active by Terraform, so the budgets that filter on them never read zero again](plan_specs/v1/e05-model-router/t18-cost-allocation-tags-in-terraform.yaml) `v1-e05-t18-cost-allocation-tags-in-terraform` | Succeeded | 1 | 1.0 |
 | [The cost allocation tags' import blocks are removed once both tags are in state](plan_specs/v1/e05-model-router/t19-cost-allocation-tag-imports-removed.yaml) `v1-e05-t19-cost-allocation-tag-imports-removed` | Succeeded | 1 | 0.5 |
-| [Prod's model routes, grant and first calls on the models dev already uses](plan_specs/v1/e05-model-router/t20-prod-routes-on-the-4x-models.yaml) `v1-e05-t20-prod-routes-on-the-4x-models` | Pending | 3 | 3.0 |
+| [Prod's model routes, grant and first calls on the models dev already uses](plan_specs/v1/e05-model-router/t20-prod-routes-on-the-4x-models.yaml) `v1-e05-t20-prod-routes-on-the-4x-models` | Pending | 2 | 3.0 |
 
 #### [E32 — Argument Landscape Reports](plan_specs/v1/e32-argument-landscape/epic.yaml)
 
@@ -349,7 +349,7 @@ Weekly argument-landscape reports show which positions are being read and with w
 | [Trends and per-school views](plan_specs/v1/e32-argument-landscape/t04-trend-and-school-views.yaml) `v1-e32-t04-trend-and-school-views` | Succeeded | 1 | 9.0 |
 | [`debate-research landscape` command](plan_specs/v1/e32-argument-landscape/t05-landscape-cli.yaml) `v1-e32-t05-landscape-cli` | Succeeded | 2 | 10.0 |
 | [LD de-extinction position taxonomy](plan_specs/v1/e32-argument-landscape/t06-ld-de-extinction-taxonomy.yaml) `v1-e32-t06-ld-de-extinction-taxonomy` | Succeeded | 1 | 3.0 |
-| [Model classification of what headings cannot place](plan_specs/v1/e32-argument-landscape/t07-model-classification-stage.yaml) `v1-e32-t07-model-classification-stage` | InProgress | 3 | 8.0 |
+| [Model classification of what headings cannot place](plan_specs/v1/e32-argument-landscape/t07-model-classification-stage.yaml) `v1-e32-t07-model-classification-stage` | Cancelled | 3 | 8.0 |
 | [A released position id is never deleted or reused](plan_specs/v1/e32-argument-landscape/t08-released-position-ids.yaml) `v1-e32-t08-released-position-ids` | Succeeded | 1 | 3.0 |
 | [Each Policy affirmative round's plan, counted first, so the landscape names what affs read](plan_specs/v1/e32-argument-landscape/t09-policy-plan-texts.yaml) `v1-e32-t09-policy-plan-texts` | Succeeded | 1 | 5.0 |
 | [Impact cards per DA and advantage in the landscape report](plan_specs/v1/e32-argument-landscape/t10-impact-cards-per-position.yaml) `v1-e32-t10-impact-cards-per-position` | Succeeded | 1 | 4.0 |
@@ -392,7 +392,7 @@ Weekly argument-landscape reports show which positions are being read and with w
 | [The purge and removal runbooks' cassette blocks reach a route's cassettes](plan_specs/v1/e32-argument-landscape/t47-route-cassettes-in-the-purge-and-removal-blocks.yaml) `v1-e32-t47-route-cassettes-in-the-purge-and-removal-blocks` | Pending | 1 | 1.0 |
 | [A landscape model call can be recorded from a synthetic card with a command](plan_specs/v1/e32-argument-landscape/t48-landscape-report-records-a-synthetic-cassette.yaml) `v1-e32-t48-landscape-report-records-a-synthetic-cassette` | Pending | 1 | 2.0 |
 | [Prompt 1.3.0 and stage one: a card defending its own side's position reads it, and an answer is never the position it answers](plan_specs/v1/e32-argument-landscape/t49-prompt-1-3-0-own-side-answers-and-the-coachs-rulings.yaml) `v1-e32-t49-prompt-1-3-0-own-side-answers-and-the-coachs-rulings` | Succeeded | 1 | 4.0 |
-| [A second labelled sample, held out from tuning, before the bar is read as met](plan_specs/v1/e32-argument-landscape/t50-a-second-labelled-sample-held-out.yaml) `v1-e32-t50-a-second-labelled-sample-held-out` | Pending | 4 | 3.0 |
+| [A second labelled sample, held out from tuning, before the bar is read as met](plan_specs/v1/e32-argument-landscape/t50-a-second-labelled-sample-held-out.yaml) `v1-e32-t50-a-second-labelled-sample-held-out` | Succeeded | 4 | 3.0 |
 | [Late disclosures from tournaments before the de-extinction topic are counted on 2026-11-10 and 2026-11-17, and weekly after](plan_specs/v1/e32-argument-landscape/t51-late-disclosures-from-pre-topic-tournaments-counted.yaml) `v1-e32-t51-late-disclosures-from-pre-topic-tournaments-counted` | InProgress | 1 | 2.0 |
 | [A seeded taxonomy is reviewed by the coach one question at a time, and the decisions are applied by one command](plan_specs/v1/e32-argument-landscape/t52-guided-taxonomy-review-and-apply.yaml) `v1-e32-t52-guided-taxonomy-review-and-apply` | Pending | 2 | 4.0 |
 | [generic-k's description, rewritten as v1-e32-t49 proposed, for the coach's review](plan_specs/v1/e32-argument-landscape/t53-generic-k-description-for-the-coachs-review.yaml) `v1-e32-t53-generic-k-description-for-the-coachs-review` | Succeeded | 1 | 1.0 |
@@ -406,6 +406,9 @@ Weekly argument-landscape reports show which positions are being read and with w
 | [A labels sitting keeps a copy of the file it writes, not only the one it replaces](plan_specs/v1/e32-argument-landscape/t61-a-sitting-keeps-the-file-it-writes.yaml) `v1-e32-t61-a-sitting-keeps-the-file-it-writes` | Pending | 1 | 1.0 |
 | [The note on withheld tags carries its counts on a line of their own, so the scan passes over its text](plan_specs/v1/e32-argument-landscape/t62-the-withheld-tags-notes-counts-on-a-line-of-their-own.yaml) `v1-e32-t62-the-withheld-tags-notes-counts-on-a-line-of-their-own` | Pending | 1 | 1.0 |
 | [The bundle scan passes over every kind of term on the report's own fixed lines, not only a tournament](plan_specs/v1/e32-argument-landscape/t63-every-scan-kind-passed-over-on-the-reports-own-lines.yaml) `v1-e32-t63-every-scan-kind-passed-over-on-the-reports-own-lines` | Pending | 1 | 1.0 |
+| [The coach can correct any heading's placement, not only the headings the review queue lists](plan_specs/v1/e32-argument-landscape/t64-every-placement-can-be-corrected.yaml) `v1-e32-t64-every-placement-can-be-corrected` | Pending | 1 | 3.0 |
+| [A card the matcher could not place inherits the position of the block it is read in, measured first](plan_specs/v1/e32-argument-landscape/t65-a-card-inherits-its-blocks-position.yaml) `v1-e32-t65-a-card-inherits-its-blocks-position` | Pending | 2 | 3.0 |
+| [A block of cards the matcher left unplaced is classified as a whole from its tags in order, scored on the coach's labels](plan_specs/v1/e32-argument-landscape/t66-a-block-is-classified-from-its-tags-in-order.yaml) `v1-e32-t66-a-block-is-classified-from-its-tags-in-order` | Pending | 1 | 4.0 |
 
 #### [E33 — Evidence File Builder](plan_specs/v1/e33-file-builder/epic.yaml)
 
@@ -446,7 +449,7 @@ A student can run `debate-research cut <URL>` and receive a verified, tagged, ci
 | [How extraction and access classification behave on real pages, measured in place](plan_specs/v1/e04-article-retrieval/t07-real-page-measurement.yaml) `v1-e04-t07-real-page-measurement` | Pending | 1 | 2.0 |
 | [An Article found by its DOI and by a URL a snapshot was fetched from](plan_specs/v1/e04-article-retrieval/t08-article-lookup-by-identifier-and-fetched-url.yaml) `v1-e04-t08-article-lookup-by-identifier-and-fetched-url` | Pending | 1 | 3.0 |
 | [fetch --paste can report the access status of the user's own copy](plan_specs/v1/e04-article-retrieval/t09-reported-status-for-pasted-text.yaml) `v1-e04-t09-reported-status-for-pasted-text` | Pending | 1 | 1.0 |
-| [A snapshot's canonical URL drops the tracking parameters its article's does](plan_specs/v1/e04-article-retrieval/t10-snapshot-canonical-url-without-tracking-parameters.yaml) `v1-e04-t10-snapshot-canonical-url-without-tracking-parameters` | Pending | 2 | 1.0 |
+| [A snapshot's canonical URL drops the tracking parameters its article's does](plan_specs/v1/e04-article-retrieval/t10-snapshot-canonical-url-without-tracking-parameters.yaml) `v1-e04-t10-snapshot-canonical-url-without-tracking-parameters` | Succeeded | 2 | 1.0 |
 
 #### [E06 — Card Cutting, Citation & Export](plan_specs/v1/e06-card-cutting/epic.yaml)
 
@@ -460,7 +463,7 @@ A student can run `debate-research cut <URL>` and receive a verified, tagged, ci
 | [`debate-research cut` command](plan_specs/v1/e06-card-cutting/t06-cut-command.yaml) `v1-e06-t06-cut-command` | Succeeded | 3 | 7.0 |
 | [Verify DOCX files](plan_specs/v1/e06-card-cutting/t07-verify-docx.yaml) `v1-e06-t07-verify-docx` | Succeeded | 2 | 8.0 |
 | [`cut` can cut a card from the user's own stored copy of an article, with that provenance](plan_specs/v1/e06-card-cutting/t08-cut-from-a-stored-pasted-copy.yaml) `v1-e06-t08-cut-from-a-stored-pasted-copy` | Succeeded | 1 | 3.0 |
-| [`cut` refused for an unrecorded model call says to set DEBATE_MODEL_MODE=live for a real cut](plan_specs/v1/e06-card-cutting/t09-cut-replay-hint-names-live-mode.yaml) `v1-e06-t09-cut-replay-hint-names-live-mode` | Pending | 1 | 0.5 |
+| [`cut` refused for an unrecorded model call says to set DEBATE_MODEL_MODE=live for a real cut](plan_specs/v1/e06-card-cutting/t09-cut-replay-hint-names-live-mode.yaml) `v1-e06-t09-cut-replay-hint-names-live-mode` | Succeeded | 1 | 0.5 |
 | [`verify` warns when a deletion in a .docx body removes a negation](plan_specs/v1/e06-card-cutting/t10-verify-docx-flags-a-removed-negation.yaml) `v1-e06-t10-verify-docx-flags-a-removed-negation` | Succeeded | 1 | 1.0 |
 | [Exporting a .docx refuses a card whose format profile is not the one it renders in](plan_specs/v1/e06-card-cutting/t11-export-docx-refuses-a-mismatched-profile.yaml) `v1-e06-t11-export-docx-refuses-a-mismatched-profile` | Pending | 1 | 0.5 |
 | [A pasted copy's cite fields can be stated when it is stored, so a card cut from it has a usable cite](plan_specs/v1/e06-card-cutting/t12-pasted-copy-cite-stated-by-the-user.yaml) `v1-e06-t12-pasted-copy-cite-stated-by-the-user` | Succeeded | 1 | 2.0 |
@@ -505,6 +508,7 @@ A student can run `debate-research cut <URL>` and receive a verified, tagged, ci
 | [The no-provider hint fits a provider enabled but unbuilt, and the partial message names only the providers that count](plan_specs/v1/e07-discovery-adapters/t24-the-no-provider-hint-and-the-partial-message-name-only-what-counts.yaml) `v1-e07-t24-the-no-provider-hint-and-the-partial-message-name-only-what-counts` | Pending | 1 | 1.0 |
 | [Semantic Scholar's bulk search is weighed against relevance search, and its pace keeps a margin under one a second](plan_specs/v1/e07-discovery-adapters/t25-semantic-scholar-bulk-search-weighed-and-a-pace-margin.yaml) `v1-e07-t25-semantic-scholar-bulk-search-weighed-and-a-pace-margin` | Pending | 1 | 2.0 |
 | [Semantic Scholar goes back to HTTPS once its keyed HTTPS endpoint works, and prod enables it](plan_specs/v1/e07-discovery-adapters/t26-semantic-scholar-back-on-https-and-enabled-in-prod.yaml) `v1-e07-t26-semantic-scholar-back-on-https-and-enabled-in-prod` | Blocked | 1 | 1.0 |
+| [OpenAlex answers a crossed search instead of refusing every query with HTTP 400](plan_specs/v1/e07-discovery-adapters/t27-openalex-answers-a-crossed-search.yaml) `v1-e07-t27-openalex-answers-a-crossed-search` | Pending | 1 | 2.0 |
 
 #### [E08 — Federated Research Workflows](plan_specs/v1/e08-research-workflows/epic.yaml)
 
@@ -527,11 +531,11 @@ A student can run `debate-research cut <URL>` and receive a verified, tagged, ci
 | [LD research starts broad and narrows from what the first page turns up](plan_specs/v1/e08-research-workflows/t15-ld-research-starts-broad-and-narrows-from-the-first-page.yaml) `v1-e08-t15-ld-research-starts-broad-and-narrows-from-the-first-page` | Succeeded | 1 | 3.0 |
 | [A DA's mechanism queries cross the link templates the coach chose, and a preset may name more mechanisms](plan_specs/v1/e08-research-workflows/t16-mechanism-queries-cross-the-chosen-link-templates.yaml) `v1-e08-t16-mechanism-queries-cross-the-chosen-link-templates` | InProgress | 2 | 3.0 |
 | [`--max-cost` is one limit for the whole command, whatever routers it builds](plan_specs/v1/e08-research-workflows/t17-one-max-cost-across-every-router-a-command-builds.yaml) `v1-e08-t17-one-max-cost-across-every-router-a-command-builds` | Succeeded | 1 | 2.0 |
-| [An auto-cut run's report does not replace the last run's in the same directory](plan_specs/v1/e08-research-workflows/t18-auto-cut-report-names-per-run.yaml) `v1-e08-t18-auto-cut-report-names-per-run` | Pending | 2 | 1.0 |
+| [An auto-cut run's report does not replace the last run's in the same directory](plan_specs/v1/e08-research-workflows/t18-auto-cut-report-names-per-run.yaml) `v1-e08-t18-auto-cut-report-names-per-run` | Succeeded | 2 | 1.0 |
 | [A batching provider's footer counts the distinct works it returned, not one per query](plan_specs/v1/e08-research-workflows/t19-a-batching-providers-footer-counts-distinct-works.yaml) `v1-e08-t19-a-batching-providers-footer-counts-distinct-works` | Pending | 1 | 1.0 |
 | [A typed query with an unbalanced parenthesis or a bare operator cannot change or break the joined search](plan_specs/v1/e08-research-workflows/t20-a-typed-query-that-would-break-the-joined-search.yaml) `v1-e08-t20-a-typed-query-that-would-break-the-joined-search` | Succeeded | 1 | 2.0 |
 | [Two results sharing a DOI are one work, even under two OpenAlex work ids](plan_specs/v1/e08-research-workflows/t21-a-shared-doi-overrules-differing-openalex-ids.yaml) `v1-e08-t21-a-shared-doi-overrules-differing-openalex-ids` | Succeeded | 1 | 1.0 |
-| [The auto-cut report states the whole command's spend beside its own calls' cost](plan_specs/v1/e08-research-workflows/t22-auto-cut-report-states-the-commands-whole-cost.yaml) `v1-e08-t22-auto-cut-report-states-the-commands-whole-cost` | Pending | 1 | 1.0 |
+| [The auto-cut report states the whole command's spend beside its own calls' cost](plan_specs/v1/e08-research-workflows/t22-auto-cut-report-states-the-commands-whole-cost.yaml) `v1-e08-t22-auto-cut-report-states-the-commands-whole-cost` | Succeeded | 1 | 1.0 |
 | [A politics DA's link queries pair the DA's agenda item with the plan's mechanism](plan_specs/v1/e08-research-workflows/t23-politics-da-links-pair-the-agenda-item-with-the-plans-mechanism.yaml) `v1-e08-t23-politics-da-links-pair-the-agenda-item-with-the-plans-mechanism` | Pending | 2 | 4.0 |
 | [On a search of many queries, the ranking keeps the results the coach marks relevant above the providers' own order](plan_specs/v1/e08-research-workflows/t24-the-ranking-keeps-a-multi-query-searchs-relevant-results-up.yaml) `v1-e08-t24-the-ranking-keeps-a-multi-query-searchs-relevant-results-up` | Succeeded | 2 | 4.0 |
 | [A daily digest's queries find what the feeds carry, measured on a real digest first](plan_specs/v1/e08-research-workflows/t25-digest-queries-and-the-feeds-every-word-rule.yaml) `v1-e08-t25-digest-queries-and-the-feeds-every-word-rule` | Succeeded | 1 | 2.0 |
@@ -598,6 +602,7 @@ Whitefish Bay Debate has a public, mobile-friendly team website: team informatio
 | [A check dated after the season says so, and the schedule and results use one season end](plan_specs/v1/e37-calendar-and-announcements/t14-season-end-warning-and-one-definition.yaml) `v1-e37-t14-season-end-warning-and-one-definition` | Pending | 1 | 1.0 |
 | [News is in the header navigation and stays in the footer](plan_specs/v1/e37-calendar-and-announcements/t15-news-in-the-header-and-the-footer.yaml) `v1-e37-t15-news-in-the-header-and-the-footer` | Succeeded | 2 | 1.0 |
 | [Announcement guard follow-ups: a name's published form in free text, an image that exists, and names after the season rolls over](plan_specs/v1/e37-calendar-and-announcements/t16-announcement-guard-follow-ups.yaml) `v1-e37-t16-announcement-guard-follow-ups` | Pending | 2 | 2.0 |
+| [A speaker award in a partner event names the speaker alone](plan_specs/v1/e37-calendar-and-announcements/t17-a-speaker-award-names-the-speaker-alone.yaml) `v1-e37-t17-a-speaker-award-names-the-speaker-alone` | Pending | 1 | 1.0 |
 
 #### [E38 — Team Donations](plan_specs/v1/e38-donations/epic.yaml)
 
@@ -676,7 +681,7 @@ The weekly caselist run (pull, import, publish, parse, search index) runs in the
 | [Prod's parsed store re-parsed after a parser bump, from a copy restored with its sources](plan_specs/v1/e40-cloud-caselist-run/t16-prod-reparse-after-a-parser-bump.yaml) `v1-e40-t16-prod-reparse-after-a-parser-bump` | InProgress | 2 | 2.0 |
 | [A landscape report counts the weeks the cloud run pulled, from a copy restored from the bucket](plan_specs/v1/e40-cloud-caselist-run/t17-landscape-report-from-the-cloud-runs-state.yaml) `v1-e40-t17-landscape-report-from-the-cloud-runs-state` | Succeeded | 1 | 3.0 |
 | [In bucket mode a failed parse stage names the cloud cure, never a publish from the operator's Mac](plan_specs/v1/e40-cloud-caselist-run/t18-cloud-parse-stage-cure.yaml) `v1-e40-t18-cloud-parse-stage-cure` | Succeeded | 0 | 2.0 |
-| [The weekly cloud run builds the landscape reports, counted for cost first](plan_specs/v1/e40-cloud-caselist-run/t19-landscape-stage-in-the-weekly-run.yaml) `v1-e40-t19-landscape-stage-in-the-weekly-run` | Pending | 2 | 4.0 |
+| [The weekly cloud run builds the landscape reports, counted for cost first](plan_specs/v1/e40-cloud-caselist-run/t19-landscape-stage-in-the-weekly-run.yaml) `v1-e40-t19-landscape-stage-in-the-weekly-run` | Pending | 1 | 4.0 |
 | [The caselist pull table's Detail column shortens digests as its panel does](plan_specs/v1/e40-cloud-caselist-run/t20-pull-table-shortens-digests.yaml) `v1-e40-t20-pull-table-shortens-digests` | Pending | 1 | 1.0 |
 | [A restored working copy carries a marker, so leftover copies are found exactly](plan_specs/v1/e40-cloud-caselist-run/t21-restored-copy-marker.yaml) `v1-e40-t21-restored-copy-marker` | Succeeded | 0 | 1.0 |
 | [In bucket mode the login banner and the parse stage's other hints point at the cloud run, not the operator's Mac](plan_specs/v1/e40-cloud-caselist-run/t22-bucket-mode-hints-point-at-the-cloud.yaml) `v1-e40-t22-bucket-mode-hints-point-at-the-cloud` | Succeeded | 0 | 1.0 |
@@ -707,7 +712,7 @@ The weekly caselist run (pull, import, publish, parse, search index) runs in the
 | [Prod receives each backfile once, by hand, before the run's home moves](plan_specs/v1/e40-cloud-caselist-run/t47-prods-one-time-backfile-publish.yaml) `v1-e40-t47-prods-one-time-backfile-publish` | Pending | 2 | 2.0 |
 | [The weekly schedule starts its pull with --scheduled, so the recent-run guard is live](plan_specs/v1/e40-cloud-caselist-run/t48-the-schedule-passes-scheduled.yaml) `v1-e40-t48-the-schedule-passes-scheduled` | InProgress | 1 | 2.0 |
 | [A smoke check reads caselist runs --remote's backfile parser line on an installed build](plan_specs/v1/e40-cloud-caselist-run/t49-a-smoke-check-for-the-backfile-parser-line.yaml) `v1-e40-t49-a-smoke-check-for-the-backfile-parser-line` | Pending | 1 | 1.0 |
-| [A cloud run stopped on a token error, or refused its secret, emails the cure a person can act on](plan_specs/v1/e40-cloud-caselist-run/t50-a-stopped-run-notice-for-a-token-error-gives-the-cloud-cure.yaml) `v1-e40-t50-a-stopped-run-notice-for-a-token-error-gives-the-cloud-cure` | Pending | 1 | 2.0 |
+| [A cloud run stopped on a token error, or refused its secret, emails the cure a person can act on](plan_specs/v1/e40-cloud-caselist-run/t50-a-stopped-run-notice-for-a-token-error-gives-the-cloud-cure.yaml) `v1-e40-t50-a-stopped-run-notice-for-a-token-error-gives-the-cloud-cure` | Succeeded | 1 | 2.0 |
 
 #### [E41 — Delivery Tooling Upkeep](plan_specs/v1/e41-delivery-tooling-upkeep/epic.yaml)
 

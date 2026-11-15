@@ -512,6 +512,13 @@ $ DEBATE_MODEL_MODE=live uv run debate-research cut https://www.example.org/news
 The model is called only in `live` or `record` mode (`DEBATE_MODEL_MODE`); otherwise its answers are
 replayed from `<data dir>/cards/model-cassettes/`, and the `test` profile's fixture fake answers from
 `tests/fixtures/model_outputs/`. Cassettes hold the articles' numbered text, so they stay on this machine.
+When `DEBATE_MODEL_MODE` is unset, a call nobody recorded is refused with `MISSING_FIXTURE_ERROR` and a
+hint to set `DEBATE_MODEL_MODE=live` for a real call, which is a model call on the environment's route
+that the budget counts (`v1-e06-t09`). `search --expand-llm` is refused the same way, and each refused
+cut in a `search --auto-cut` or `daily --auto-cut` report carries the same message. A replay chosen
+with `DEBATE_MODEL_MODE=replay`, and a router a script or an eval runner builds itself, keep the hint
+to record a cassette. For a coach, [Real model calls](../../docs/guides/daily-digests.md#real-model-calls)
+says what replay is, why it is the default, and how to set live mode for a session.
 Progress is one line per stage on stderr: `fetch`, `extract`, `select`, `verify`, `export`, as event
 objects under `--json`. A person then sees a table of the card id, status, file, source, snapshot,
 model calls and the manifest's SHA-256. `--json` prints one envelope: the card id and status, the file,

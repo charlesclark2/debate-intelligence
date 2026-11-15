@@ -88,6 +88,13 @@ from debate_core.testing.fakes.clock_and_ids import FixedClock
 from debate_core.testing.fakes.model_router import ScriptedModelRouter
 from debate_core.testing.virtual_time import run_in_virtual_time
 
+from .model_mode_hints import (
+    LIVE_MODE_HINT,
+    RECORD_HINT,
+    REFUSED_UNDER_THE_DEFAULT_WORDS,
+    refused_under_the_default_line,
+)
+
 runner = CliRunner()
 
 FIXTURES: Final = Path(__file__).resolve().parent / "fixtures" / "search"
@@ -2527,3 +2534,132 @@ def test_help_says_a_search_suggests_narrower_searches() -> None:
     assert result.exit_code == ExitCode.OK
     help_text = " ".join(result.stdout.replace("│", " ").split())
     assert "up to 5 narrower searches to copy" in help_text
+
+
+# ------------------------------------------------------------------------------------------------
+# A refusal under the replay default names live mode (v1-e06-t09, the PM's amendment of 2026-11-14)
+# ------------------------------------------------------------------------------------------------
+
+
+@pytest.fixture
+def on_bedrock(seams: Seams) -> Seams:
+    """`seams` with every model router built by the container, on a real provider as on a coach's
+    installed build, and no model mode chosen (the `DEBATE_*` sweep cleared `DEBATE_MODEL_MODE`): each
+    router replays an empty cassette directory under the data directory, and nothing reaches a model."""
+    seams.live_models = live()
+    return seams
+
+
+def test_expand_llm_refused_under_the_replay_default_names_live_mode_in_its_hint(on_bedrock: Seams) -> None:
+    result = search(
+        "health insurance", "--argument", "politics-da", "--need", "link", "--expand-llm", json_output=True
+    )
+
+    assert result.exit_code == ExitCode.DOMAIN_FAILURE, result.output
+    error = envelope(result)["error"]
+    assert error["code"] == "MISSING_FIXTURE_ERROR"
+    assert error["message"].startswith(f"no recorded answer for prompt {EXPAND_PROMPT_ID}@")
+    assert error["message"].endswith(f". {LIVE_MODE_HINT}")
+    assert "DEBATE_MODEL_MODE=record" not in error["message"]
+
+
+def test_expand_llm_refused_under_a_replay_chosen_with_debate_model_mode_keeps_the_record_hint(
+    on_bedrock: Seams, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("DEBATE_MODEL_MODE", "replay")
+
+    result = search(
+        "health insurance", "--argument", "politics-da", "--need", "link", "--expand-llm", json_output=True
+    )
+
+    error = envelope(result)["error"]
+    assert error["code"] == "MISSING_FIXTURE_ERROR"
+    assert error["message"].endswith(f". {RECORD_HINT}")
+    assert "DEBATE_MODEL_MODE=live" not in error["message"]
+
+
+def test_auto_cut_under_the_replay_default_reports_each_refused_cut_with_the_live_mode_hint(
+    cutting: Seams, tmp_path: Path
+) -> None:
+    cutting.card_router = None
+    cutting.live_models = live()
+    out = tmp_path / "bundle.docx"
+
+    result = auto_cut(out)
+
+    assert result.exit_code == ExitCode.AUTO_CUT_SHORT, result.output
+    entries = report_json(tmp_path)["entries"]
+    assert {entry["status"] for entry in entries} == {"FAILED", "SKIPPED"}, "no cut got past its first call"
+    refused = [entry for entry in entries if entry["status"] == "FAILED"]
+    for entry in refused:
+        assert entry["reasons"] == ["MISSING_FIXTURE_ERROR"]
+        (detail,) = entry["details"]
+        assert detail.startswith("no recorded answer for prompt card.select@")
+        assert detail.endswith(f". {LIVE_MODE_HINT}")
+    assert not out.exists()
+
+
+# The line under the table (the PM's ruling of 2026-11-14 on v1-e06-t09): terminal only, the default only.
+
+
+def one_line(text: str) -> str:
+    return " ".join(text.split())
+
+
+def test_auto_cut_under_the_replay_default_says_under_its_table_how_many_results_were_refused(
+    cutting: Seams, tmp_path: Path
+) -> None:
+    cutting.card_router = None
+    cutting.live_models = live()
+
+    result = auto_cut(tmp_path / "bundle.docx")
+
+    assert result.exit_code == ExitCode.AUTO_CUT_SHORT, result.output
+    printed = one_line(result.stdout)
+    assert one_line(refused_under_the_default_line(4)) in printed, "four accessible pages, each refused"
+    assert printed.index("Stopped: every result was tried.") < printed.index(REFUSED_UNDER_THE_DEFAULT_WORDS)
+    assert REFUSED_UNDER_THE_DEFAULT_WORDS not in one_line(result.stderr), (
+        "the panel's hint is AUTO_CUT_SHORT's"
+    )
+
+
+def test_auto_cut_under_a_replay_chosen_with_debate_model_mode_prints_no_refused_line(
+    cutting: Seams, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    cutting.card_router = None
+    cutting.live_models = live()
+    monkeypatch.setenv("DEBATE_MODEL_MODE", "replay")
+
+    result = auto_cut(tmp_path / "bundle.docx")
+
+    assert result.exit_code == ExitCode.AUTO_CUT_SHORT, result.output
+    assert "MISSING_FIXTURE_ERROR" in result.stdout, "the cuts were refused, as under the default"
+    assert REFUSED_UNDER_THE_DEFAULT_WORDS not in one_line(result.output)
+
+
+def test_auto_cut_under_the_replay_default_with_no_refused_cut_prints_no_refused_line(
+    cutting: Seams, tmp_path: Path
+) -> None:
+    cutting.live_models = live()
+
+    result = auto_cut(tmp_path / "bundle.docx")
+
+    assert result.exit_code == ExitCode.OK, result.output
+    assert "MISSING_FIXTURE_ERROR" not in result.stdout
+    assert REFUSED_UNDER_THE_DEFAULT_WORDS not in one_line(result.output)
+
+
+def test_auto_cut_json_under_the_replay_default_carries_no_refused_line(
+    cutting: Seams, tmp_path: Path
+) -> None:
+    cutting.card_router = None
+    cutting.live_models = live()
+
+    result = auto_cut(tmp_path / "bundle.docx", json_output=True)
+
+    assert result.exit_code == ExitCode.AUTO_CUT_SHORT, result.output
+    assert envelope(result)["error"]["code"] == "AUTO_CUT_SHORT"
+    assert REFUSED_UNDER_THE_DEFAULT_WORDS not in one_line(result.output)
+    assert REFUSED_UNDER_THE_DEFAULT_WORDS not in (tmp_path / "bundle.report.json").read_text(
+        encoding="utf-8"
+    )

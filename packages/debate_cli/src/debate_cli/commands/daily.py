@@ -269,7 +269,10 @@ def _auto_cut(
     data: dict[str, JsonValue] = {"digest": digest_data, "auto_cut": payload}
     exit_code = exit_code_for_batch(report)
     if exit_code is ExitCode.OK or not cli.output.is_json:
-        display = batch_report_table(report, auto_cut_footer(digest), need.heading, files)
+        default = cli.services.replay_is_the_default()
+        display = batch_report_table(
+            report, auto_cut_footer(digest), need.heading, files, replay_is_the_default=default
+        )
         cli.output.success(command_name(ctx), data, display=display)
     if exit_code is not ExitCode.OK:
         _end(cli, ctx, report_failure(report, data, exit_code))

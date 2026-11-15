@@ -65,6 +65,8 @@ from debate_core.integrations import html_extractor as html_extractor
 from debate_core.integrations.models.fake_router import FakeModelRouter
 from debate_core.testing.fakes.model_router import ScriptedModelRouter
 
+from .model_mode_hints import FAKE_HINT, LIVE_MODE_HINT, RECORD_HINT
+
 runner = CliRunner()
 
 NOW: Final = datetime(2026, 10, 26, 15, 0, tzinfo=UTC)
@@ -538,6 +540,78 @@ def test_a_need_no_model_answer_was_recorded_for_exit_code_is_1_and_saves_nothin
     assert envelope(result)["error"]["code"] == "MISSING_FIXTURE_ERROR"
     assert not out.exists()
     assert stored_cards(data_dir) == []
+
+
+# --------------------------------------------------------------------------------------------
+# A refusal under the replay default names live mode (v1-e06-t09, the PM's amendment of 2026-11-14)
+# --------------------------------------------------------------------------------------------
+
+
+@pytest.fixture
+def on_bedrock(seams: Seams, monkeypatch: pytest.MonkeyPatch) -> Seams:
+    """`seams` on a real provider, as on a coach's installed build, with no model mode chosen (the
+    `DEBATE_*` sweep cleared `DEBATE_MODEL_MODE`): the container builds the replay router over an
+    empty `<data dir>/cards/model-cassettes/`, and nothing can reach a model."""
+    monkeypatch.setenv("DEBATE_MODELS__PROVIDER", "bedrock")
+    return seams
+
+
+def flattened(text: str) -> str:
+    """`text` with the panel's borders gone and every run of whitespace one space."""
+    return " ".join(text.replace("│", " ").replace("╭", " ").replace("╰", " ").split())
+
+
+@pytest.mark.usefixtures("on_bedrock")
+def test_a_cut_refused_under_the_replay_default_names_live_mode_in_its_hint_and_saves_nothing(
+    seams: Seams, data_dir: Path, out: Path
+) -> None:
+    result = cut_news(out, json_output=True)
+
+    assert result.exit_code == ExitCode.DOMAIN_FAILURE, result.output
+    error = envelope(result)["error"]
+    assert error["code"] == "MISSING_FIXTURE_ERROR"
+    assert error["message"].startswith("no recorded answer for prompt card.select@")
+    assert error["message"].endswith(f". {LIVE_MODE_HINT}")
+    assert "DEBATE_MODEL_MODE=record" not in error["message"]
+    assert not out.exists()
+    assert stored_cards(data_dir) == []
+
+
+@pytest.mark.usefixtures("on_bedrock")
+def test_a_cut_refused_under_the_replay_default_prints_the_live_mode_hint_in_its_panel(
+    seams: Seams, out: Path
+) -> None:
+    result = cut_news(out)
+
+    assert result.exit_code == ExitCode.DOMAIN_FAILURE, result.output
+    printed = flattened(result.stderr)
+    assert "MISSING_FIXTURE_ERROR" in printed
+    assert LIVE_MODE_HINT in printed
+    assert "DEBATE_MODEL_MODE=record" not in printed
+
+
+@pytest.mark.usefixtures("on_bedrock")
+def test_a_cut_refused_under_a_replay_chosen_with_debate_model_mode_keeps_the_record_hint(
+    seams: Seams, out: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("DEBATE_MODEL_MODE", "replay")
+
+    result = cut_news(out, json_output=True)
+
+    assert result.exit_code == ExitCode.DOMAIN_FAILURE, result.output
+    error = envelope(result)["error"]
+    assert error["code"] == "MISSING_FIXTURE_ERROR"
+    assert error["message"].endswith(f". {RECORD_HINT}")
+    assert "DEBATE_MODEL_MODE=live" not in error["message"]
+
+
+def test_a_cut_refused_by_the_fixture_fake_keeps_the_fakes_own_hint(seams: Seams, out: Path) -> None:
+    result = cut(NEWS_URL, "--need", "an answer nobody recorded", "--output", str(out), json_output=True)
+
+    error = envelope(result)["error"]
+    assert error["code"] == "MISSING_FIXTURE_ERROR"
+    assert error["message"].endswith(f". {FAKE_HINT}")
+    assert "DEBATE_MODEL_MODE=live" not in error["message"]
 
 
 # --------------------------------------------------------------------------------------------

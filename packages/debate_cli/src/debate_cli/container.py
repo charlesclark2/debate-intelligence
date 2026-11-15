@@ -148,7 +148,7 @@ from __future__ import annotations
 import functools
 import os
 import sys
-from collections.abc import Callable, Iterator, Mapping
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import TracebackType
@@ -323,6 +323,7 @@ from debate_core.retrieval.extraction import ContentTypeDispatcher
 
 if TYPE_CHECKING:  # pragma: no cover - imported for the type checker only; see the factories
     from mypy_boto3_s3.client import S3Client
+    from pydantic import BaseModel
 
     from debate_core.application.caselist.backfile_import import BackfileImportService
     from debate_core.application.caselist.backfile_survey import BackfileSurvey
@@ -330,10 +331,18 @@ if TYPE_CHECKING:  # pragma: no cover - imported for the type checker only; see 
         OpenEvMetadataReimportInBucket,
     )
     from debate_core.application.caselist_login import ScheduledLogin, SecretText, TabroomPasswordSecret
+    from debate_core.domain.model_contracts import (
+        EmbeddingResponse,
+        ModelParams,
+        ModelPrompt,
+        ModelResponse,
+        RerankResponse,
+    )
     from debate_core.integrations.discovery.feed_config import FeedConfig
     from debate_core.integrations.discovery.registry import ProviderRegistry
     from debate_core.integrations.docx_parser import DebateDocxParser
     from debate_core.integrations.local import SqliteDatabase
+    from debate_core.integrations.models.errors import MissingFixtureError
     from debate_core.integrations.models.model_mode import ModelMode
     from debate_core.integrations.models.prompt_registry import PromptRegistry
     from debate_core.integrations.models.record_replay import CassetteDirectory
@@ -673,6 +682,97 @@ class _PortIdGenerator:
 
     def new_id(self) -> str:
         return new_id()
+
+
+LIVE_MODE_HINT: Final = (
+    "Replay is the default, and it answers only from calls recorded on this machine. For a real call, "
+    "set DEBATE_MODEL_MODE=live in this shell (export DEBATE_MODEL_MODE=live) and run the command again: "
+    "each call is then a model call on this environment's route, which the budget counts. "
+    '"Real model calls" in docs/guides/daily-digests.md says more.'
+)
+"""What a call nobody recorded is told when nobody chose a model mode (`v1-e06-t09`, the PM's amendment of
+2026-11-14): the coach's fix, a real call, in place of the record-and-replay router's hint, which is the
+fix for whoever records cassettes. No price and no figure: the route and the budget say what it costs."""
+
+
+def _naming_live_mode_under_the_replay_default(
+    router: ModelRouter, settings: Settings, mode: ModelMode
+) -> ModelRouter:
+    """`router`, refusing an unrecorded call with :data:`LIVE_MODE_HINT` when replay is only the default.
+
+    For the routers `cut`, `search` and `daily` build (`v1-e06-t09`). Replay is the default when
+    `DEBATE_MODEL_MODE` is unset: none of these commands has a `--model-mode` option, so the variable is
+    the only way a person chooses one, and a replay chosen with it keeps the record hint. The `test`
+    profile's fixture fake reads no mode and keeps its own hint. Every other error passes unchanged,
+    and so does every router a script or an eval runner builds itself, the landscape's among them.
+    """
+    from debate_core.integrations.models.errors import MissingFixtureError
+    from debate_core.integrations.models.model_mode import ModelMode
+
+    if mode is not ModelMode.REPLAY or not _replay_is_the_default(settings):
+        return router
+    return _LiveModeHintRouter(router, refusal=MissingFixtureError)
+
+
+def _replay_is_the_default(settings: Settings) -> bool:
+    """Whether a real provider's calls replay only because nobody chose a mode: `DEBATE_MODEL_MODE` unset.
+
+    `cut`, `search` and `daily` have no `--model-mode` option, so the variable is the only way a person
+    chooses one; the `test` profile's fixture fake reads no mode, so it is never the replay default.
+    """
+    from debate_core.integrations.models.model_mode import MODEL_MODE_VARIABLE
+
+    return settings.models.provider is not ModelProvider.FAKE and MODEL_MODE_VARIABLE not in os.environ
+
+
+class _LiveModeHintRouter:
+    """A replay router whose refusal of an unrecorded call ends with :data:`LIVE_MODE_HINT` (`v1-e06-t09`).
+
+    The refusal keeps its code, `MISSING_FIXTURE_ERROR`, its exit code and its fields (the call, the
+    prompt and version, the fixture key, where the answer was looked for), so `cut` ends the same way and
+    an auto-cut's report entry carries the same reason; only the sentence after them changes. It is
+    rebuilt from those fields, and the router's own refusal is its cause: the detail a cassette filed
+    under the same key adds (the request it recorded) is the recorder's, and `--verbose` prints it.
+    """
+
+    def __init__(self, inner: ModelRouter, *, refusal: type[MissingFixtureError]) -> None:
+        self._inner = inner
+        self._refusal = refusal
+
+    async def generate_structured[OutputT: BaseModel](
+        self,
+        task_class: TaskClass,
+        prompt: ModelPrompt,
+        schema: type[OutputT],
+        params: ModelParams | None = None,
+    ) -> ModelResponse[OutputT]:
+        try:
+            return await self._inner.generate_structured(task_class, prompt, schema, params)
+        except self._refusal as refused:
+            raise _with_live_mode_hint(refused) from refused
+
+    async def embed(self, texts: Sequence[str]) -> EmbeddingResponse:
+        try:
+            return await self._inner.embed(texts)
+        except self._refusal as refused:
+            raise _with_live_mode_hint(refused) from refused
+
+    async def rerank(self, query: str, documents: Sequence[str]) -> RerankResponse:
+        try:
+            return await self._inner.rerank(query, documents)
+        except self._refusal as refused:
+            raise _with_live_mode_hint(refused) from refused
+
+
+def _with_live_mode_hint(refused: MissingFixtureError) -> MissingFixtureError:
+    return type(refused)(
+        call=refused.call,
+        key=refused.key,
+        location=refused.location,
+        prompt_id=refused.prompt_id,
+        prompt_version=refused.prompt_version,
+        hint=LIVE_MODE_HINT,
+    )
 
 
 PARSED_DIRECTORY: Final = Path("parsed")
@@ -1576,6 +1676,15 @@ class ServiceContainer:
             ),
         )
 
+    def replay_is_the_default(self) -> bool:
+        """Whether this run's model calls replay only because nobody chose a mode (`v1-e06-t09`).
+
+        True on a real provider with `DEBATE_MODEL_MODE` unset: then the card and search routers refuse
+        a call nobody recorded with :data:`LIVE_MODE_HINT`, and an auto-cut's table counts the results
+        refused so. False for a mode a person chose, `replay` among them, and for the fixture fake.
+        """
+        return _replay_is_the_default(self.settings)
+
     def _card_model_router(self, registry: PromptRegistry) -> ModelRouter:
         """The router `cut`'s `card.select` and `card.markup` calls go to, chosen as every model router is.
 
@@ -1585,7 +1694,9 @@ class ServiceContainer:
         model. Its cassettes are kept in `<data dir>/cards/model-cassettes/`: they hold the numbered
         text of the articles cut, so they are this machine's data and never committed, as the
         landscape's are. Record and live wrap the Bedrock router, imported only then, behind the usage
-        log and the budget (`v1-e05-t07`). A test registers its own router under `"card_model_router"`.
+        log and the budget (`v1-e05-t07`). When replay is only the default, a call nobody recorded is
+        refused with :data:`LIVE_MODE_HINT` (`v1-e06-t09`). A test registers its own router under
+        `"card_model_router"`.
         """
         return self.singleton("card_model_router", lambda: self._build_card_model_router(registry))
 
@@ -1601,7 +1712,7 @@ class ServiceContainer:
             from debate_core.integrations.bedrock import bedrock_router_factory
 
             real_router = bedrock_router_factory(registry)
-        return build_model_router(
+        router = build_model_router(
             settings,
             mode=mode,
             real_router=real_router,
@@ -1610,6 +1721,7 @@ class ServiceContainer:
             usage_log=self.usage_log(),
             cassette_dir=settings.storage.data_dir / CARD_CASSETTES_DIRECTORY,
         )
+        return _naming_live_mode_under_the_replay_default(router, settings, mode)
 
     def discovery_providers(self) -> ProviderRegistry:
         """The discovery providers `providers.enabled` names, each wrapped in its breaker (`v1-e08-t05`).
@@ -1868,8 +1980,9 @@ class ServiceContainer:
         the mode `DEBATE_MODEL_MODE` names, replay when it names none, so a run nobody configured reaches
         no model; record and live wrap the Bedrock router behind the usage log and the budget. The call
         is routed by its task class, `high_volume`. Cassettes are kept in
-        `<data dir>/search/model-cassettes/`. A test registers its own router under
-        `"search_model_router"`.
+        `<data dir>/search/model-cassettes/`, and when replay is only the default a call nobody recorded
+        is refused with :data:`LIVE_MODE_HINT`, as `cut`'s is (`v1-e06-t09`). A test registers its own
+        router under `"search_model_router"`.
         """
         return self.singleton("search_model_router", lambda: self._build_search_model_router(registry))
 
@@ -1885,7 +1998,7 @@ class ServiceContainer:
             from debate_core.integrations.bedrock import bedrock_router_factory
 
             real_router = bedrock_router_factory(registry)
-        return build_model_router(
+        router = build_model_router(
             settings,
             mode=mode,
             real_router=real_router,
@@ -1894,6 +2007,7 @@ class ServiceContainer:
             usage_log=self.usage_log(),
             cassette_dir=settings.storage.data_dir / SEARCH_CASSETTES_DIRECTORY,
         )
+        return _naming_live_mode_under_the_replay_default(router, settings, mode)
 
     def format_profiles(self) -> dict[str, ResolvedFormatProfile]:
         """The card format profiles by name (`v1-e06-t03`), from the committed `config/format_profiles`.

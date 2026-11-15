@@ -37,6 +37,8 @@ from debate_core.testing.fakes.model_router import ScriptedModelRouter
 from debate_core.testing.landscape_run import SYNTHETIC_RUN_CASELIST, SyntheticRun, plant_synthetic_run
 from debate_core.testing.landscape_store import PARSER_VERSION
 
+from .model_mode_hints import LIVE_MODE_HINT, RECORD_HINT
+
 runner = CliRunner()
 
 SNAPSHOT: Final = "2026-09-15"
@@ -192,6 +194,22 @@ def test_evaluate_on_a_route_replays_its_own_cassettes_and_the_default_route_fin
     assert len(bedrock_stand_in.policies) == 1, "replay builds no real router"
     assert default.exit_code != ExitCode.OK
     assert json.loads(default.stdout)["error"]["code"] == "MISSING_FIXTURE_ERROR"
+
+
+def test_an_evaluation_refused_for_an_unrecorded_call_keeps_the_record_hint(
+    world: SyntheticRun, sample: tuple[Path, Path]
+) -> None:
+    """An eval runner replays on purpose: its refusal is for whoever records, never the live hint a coach's
+    `cut` gets under the replay default (v1-e06-t09). No model mode is chosen here, as a coach's `cut`."""
+    assert "DEBATE_MODEL_MODE" not in os.environ
+
+    result = evaluate(world, sample)
+
+    error = json.loads(result.stdout)["error"]
+    assert error["code"] == "MISSING_FIXTURE_ERROR"
+    assert error["message"].endswith(f". {RECORD_HINT}")
+    assert LIVE_MODE_HINT not in error["message"]
+    assert "DEBATE_MODEL_MODE=live" not in error["message"]
 
 
 def test_landscape_cassettes_on_a_route_counts_that_directorys_cassettes(

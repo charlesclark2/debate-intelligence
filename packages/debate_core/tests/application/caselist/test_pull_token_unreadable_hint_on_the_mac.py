@@ -39,8 +39,9 @@ from .test_pull_notification_says_retry_or_person import (
 )
 from .test_pull_token_missing_hint_on_the_mac import (
     LOG_IN_AGAIN,
+    NO_READABLE_TOKEN_TITLE,
+    THE_NO_TOKEN_CURE_IN_THE_CLOUD,
     THE_PULL,
-    THE_UNFINISHED_RUN_CURE_IN_THE_CLOUD,
     ReadsNoToken,
     pull,
     the_details,
@@ -63,10 +64,10 @@ STOPPED_ON_THE_MAC: Final = (
 )
 
 STOPPED_IN_THE_CLOUD: Final = (
-    f"{WHERE} stopped: an error recorded as CASELIST_TOKEN_UNREADABLE. A person should look: at least "
-    "one failure here will be the same on the next scheduled run."
+    f"{WHERE} stopped: an error recorded as CASELIST_TOKEN_UNREADABLE, so it fetched nothing from "
+    "OpenCaselist."
 )
-"""What a bucket-mode run stopped for an unreadable token said before `v1-e34-t36`, and says still."""
+"""What a bucket-mode run stopped for an unreadable token says since `v1-e40-t50`: no verdict."""
 
 THE_LOGOUT: Final = "`debate-research caselist auth logout`"
 THE_LOGIN: Final = "`debate-research caselist auth login`"
@@ -158,11 +159,11 @@ async def test_a_mac_run_stopped_by_token_missing_is_not_told_to_log_out(world: 
 
 
 # ------------------------------------------------------------------------------------------------
-# In bucket mode: the notice as it was, word for word
+# In bucket mode: the Wednesday login (`v1-e40-t50`)
 # ------------------------------------------------------------------------------------------------
 
 
-async def test_a_bucket_mode_run_stopped_by_token_unreadable_is_unchanged(world: World) -> None:
+async def test_a_bucket_mode_run_stopped_by_token_unreadable_names_the_wednesday_login(world: World) -> None:
     await pull(world, the_service(world, ReadsAnUnreadableToken(world), bucket_mode=True), bucket_mode=True)
 
     assert [type(one) for one in world.raised] == [CaselistTokenUnreadable]
@@ -176,10 +177,10 @@ async def test_a_bucket_mode_run_stopped_by_token_unreadable_is_unchanged(world:
     assert details["bucket_run"] is not None
 
     notification = the_one_notification(world)
-    assert notification.title == PERSON_TITLE
+    assert notification.title == NO_READABLE_TOKEN_TITLE
     assert notification.message == STOPPED_IN_THE_CLOUD
     assert notification.hint is None
-    assert notification.fix_command == THE_UNFINISHED_RUN_CURE_IN_THE_CLOUD
+    assert notification.fix_command == THE_NO_TOKEN_CURE_IN_THE_CLOUD
     assert "auth logout" not in notification.text
     assert "auth login" not in notification.text
     assert THE_WORDS not in notification.text

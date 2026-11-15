@@ -25,7 +25,7 @@ import pytest
 
 from debate_core.application.caselist_sync import CaselistSyncService, run_pull
 from debate_core.application.errors import StoreUnavailable
-from debate_core.application.ports.caselist_source import CaselistAuthExpired, CaselistTokenMissing
+from debate_core.application.ports.caselist_source import CaselistAuthExpired
 from debate_core.application.ports.notifier import Notification
 from debate_core.application.sync_runs import (
     SyncRunDetails,
@@ -33,7 +33,6 @@ from debate_core.application.sync_runs import (
     SyncRunRecord,
     banner_words,
 )
-from debate_core.integrations.opencaselist.token_store import CaselistTokenUnreadable
 from debate_core.integrations.sns import SnsNotifier
 
 from . import test_inbox_retention as inbox_retention
@@ -264,15 +263,17 @@ async def test_the_alert_email_of_a_bucket_mode_run_refused_for_auth_expired_nam
 @pytest.mark.parametrize(
     "error",
     [
-        pytest.param(CaselistTokenMissing(), id="token-missing"),
-        pytest.param(CaselistTokenUnreadable("keyring"), id="token-unreadable"),
         pytest.param(StoreUnavailable("list archives", CASELIST, "synthetic 503"), id="store-unavailable"),
     ],
 )
 async def test_a_bucket_mode_run_stopped_by_another_code_than_auth_expired_names_no_wednesday_login(
     world: World, error: Exception
 ) -> None:
-    """The neighbouring codes keep `v1-e40-t28`'s cure: the next cloud run, and no login named."""
+    """A neighbouring code keeps `v1-e40-t28`'s cure: the next cloud run, and no login named.
+
+    The two token codes were here too until `v1-e40-t50`, which gives a run stopped on either the
+    Wednesday login (`test_stopped_run_notices_for_a_token_code_or_a_refused_token_secret.py`).
+    """
     emails = await pull(
         world, the_service(world, StoppedBy(world, error), bucket_mode=True), bucket_mode=True
     )

@@ -62,17 +62,28 @@ LOG_IN_AGAIN: Final = (
 STOPPED_ON_THE_MAC: Final = f"{WHERE} stopped: no caselist_token was stored on this machine. {PERSON}"
 
 STOPPED_IN_THE_CLOUD: Final = (
-    f"{WHERE} stopped: an error recorded as CASELIST_TOKEN_MISSING. A person should look: at least one "
-    "failure here will be the same on the next scheduled run."
+    f"{WHERE} stopped: an error recorded as CASELIST_TOKEN_MISSING, so it fetched nothing from OpenCaselist."
 )
-"""What a bucket-mode run stopped for a missing token said before `v1-e34-t35`, and says still."""
+"""What a bucket-mode run stopped for a missing token says since `v1-e40-t50`: no verdict, since the
+Wednesday login comes before the next scheduled run and cures it (the PM's ruling, 2026-11-14)."""
+
+NO_READABLE_TOKEN_TITLE: Final = "caselist pull stopped: no readable caselist_token"
+"""The title of a bucket-mode run stopped on either token code (`v1-e40-t50`)."""
+
+THE_NO_TOKEN_CURE_IN_THE_CLOUD: Final = (
+    "the next Wednesday 03:00 login writes a new caselist_token to the token secret, and the run after it "
+    "takes up what this run did not finish, from the run state saved in the bucket; a backfile import "
+    'refused for it starts again after Thursday 00:00 (caselist-cloud-run.md, "A run with no readable '
+    'caselist_token"); never a login by hand, which would be a second login'
+)
+"""Its fix since `v1-e40-t50`: `v1-e40-t40`'s table cure for both token codes."""
 
 THE_UNFINISHED_RUN_CURE_IN_THE_CLOUD: Final = (
     "the next cloud run takes up what this run did not finish, from the run state saved in the bucket: "
     'the weekly run, or one started by hand (caselist-cloud-run.md, "A failed or stopped run"); never a '
     "publish from the operator's Mac"
 )
-"""A bucket-mode stopped run's fix, as before `v1-e34-t35` (`v1-e40-t28`)."""
+"""A bucket-mode stopped run's fix (`v1-e40-t28`); since `v1-e40-t50` not the two token codes'."""
 
 THE_PULL: Final = "debate-research caselist pull"
 THE_LOGIN: Final = "caselist auth login"
@@ -243,11 +254,11 @@ async def test_token_missing_hint_and_words_are_given_to_no_other_code_on_the_ma
 
 
 # ------------------------------------------------------------------------------------------------
-# In bucket mode: the notice as it was, word for word
+# In bucket mode: the Wednesday login (`v1-e40-t50`)
 # ------------------------------------------------------------------------------------------------
 
 
-async def test_a_bucket_mode_run_stopped_by_token_missing_is_unchanged(world: World) -> None:
+async def test_a_bucket_mode_run_stopped_by_token_missing_names_the_wednesday_login(world: World) -> None:
     await pull(world, the_service(world, ReadsNoToken(world), bucket_mode=True), bucket_mode=True)
 
     assert [type(one) for one in world.raised] == [CaselistTokenMissing]
@@ -261,9 +272,9 @@ async def test_a_bucket_mode_run_stopped_by_token_missing_is_unchanged(world: Wo
     assert details["bucket_run"] is not None
 
     notification = the_one_notification(world)
-    assert notification.title == PERSON_TITLE
+    assert notification.title == NO_READABLE_TOKEN_TITLE
     assert notification.message == STOPPED_IN_THE_CLOUD
     assert notification.hint is None
-    assert notification.fix_command == THE_UNFINISHED_RUN_CURE_IN_THE_CLOUD
+    assert notification.fix_command == THE_NO_TOKEN_CURE_IN_THE_CLOUD
     assert THE_LOGIN not in notification.text
     assert "no caselist_token was stored" not in notification.text

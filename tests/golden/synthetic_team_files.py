@@ -81,6 +81,8 @@ class SyntheticCard:
     underlined: tuple[str, ...] = field(default=())
     highlight_only: bool = False
     """Write each warrant highlighted but not underlined, as a cutter sometimes leaves one."""
+    emphasis: bool = False
+    """Write each warrant in Verbatim's `Emphasis` style, the underlined words a debater leans on."""
 
     def warrant(self, position: int) -> str:
         return (
@@ -120,7 +122,7 @@ def _card_xml(card: SyntheticCard, link_id: str | None) -> str:
                 + run_xml(card.tracked_insertion)
                 + "</w:ins>"
             )
-        underline_style = None if card.highlight_only else "StyleUnderline"
+        underline_style = None if card.highlight_only else "Emphasis" if card.emphasis else "StyleUnderline"
         runs += run_xml(card.warrant(position), character_style=underline_style, highlight="cyan")
         runs += run_xml(closing)
         if position == 0 and card.footnoted:

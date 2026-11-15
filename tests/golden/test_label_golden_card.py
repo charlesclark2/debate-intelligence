@@ -41,6 +41,9 @@ LINKS = {
     "unmarked": "https://www.reuters.com/world/unmarked-grid",
     "absent": "https://www.rand.org/pubs/absent-grid.html",
     "highlighted": "https://www.cfr.org/article/highlighted-grid",
+    "spaced": "https://www.csis.org/analysis/spaced-grid",
+    "emphasised": "https://www.heritage.org/report/emphasised-grid",
+    "stray": "https://www.cato.org/study/stray-grid",
 }
 
 #: The card's body with its cut unmarked: the cutter dropped "words the cutter skipped" with no `…`.
@@ -50,6 +53,16 @@ UNMARKED_BODY = (
 )
 #: A body the invented page does not hold.
 ABSENT_BODY = (f"Invented sentences {FILLER} that no page holds {{warrant}}.",)
+#: The standard body with doubled spaces and a tab, and (below) its warrants underlined with the
+#: spaces around them: the normalizer moves every offset after "Plain", and a span keeps no space.
+SPACED_BODY = (
+    f"Plain  words {FILLER}\t{{warrant}}and more … after the cut.",
+    f"A second paragraph {FILLER}{{warrant}}.",
+)
+SPACED_WARRANTS = (f" {WARRANT} ", f" {WARRANT}")
+#: A body whose last two words, "leaves out.", the page holds only in its closing line: two words
+#: are too few to call the rest of the card found there.
+STRAY_BODY = (f"A second paragraph {FILLER} {{warrant}} leaves out.",)
 
 FIRST_WARRANT = [PAGE.index(WARRANT), PAGE.index(WARRANT) + len(WARRANT)]
 SECOND_WARRANT = [PAGE.rindex(WARRANT), PAGE.rindex(WARRANT) + len(WARRANT)]
@@ -69,7 +82,16 @@ def labelled_world(
             [card("marked", LINKS["marked"]), card("unmarked", LINKS["unmarked"], UNMARKED_BODY)],
         ),
         ("2024-2025", "LD", [card("absent", LINKS["absent"], ABSENT_BODY)]),
-        ("2026-2027", "PF", [card("highlighted", LINKS["highlighted"], highlight_only=True)]),
+        (
+            "2026-2027",
+            "PF",
+            [
+                card("highlighted", LINKS["highlighted"], highlight_only=True),
+                card("spaced", LINKS["spaced"], SPACED_BODY, underlined=SPACED_WARRANTS),
+                card("emphasised", LINKS["emphasised"], emphasis=True),
+                card("stray", LINKS["stray"], STRAY_BODY),
+            ],
+        ),
     )
     world = build_world(tmp_path, layout, LINKS)
     for name, link in LINKS.items():
@@ -97,7 +119,7 @@ def _span(bounds: list[int], style: str) -> dict[str, Any]:
 def test_the_coachs_underlines_and_highlights_become_snapshot_offsets(
     labelled_world: World, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    assert _label(labelled_world) == 1  # the absent card is not labelled
+    assert _label(labelled_world) == 1  # the absent and stray cards are not labelled
 
     out = capsys.readouterr().out
     tag = "Demand growth strains the marked reserve margin"
@@ -122,7 +144,7 @@ def test_the_coachs_underlines_and_highlights_become_snapshot_offsets(
         f"{labelled_world.case_for('marked')}: 2 segments (0 unmarked cuts), 2 underlines, 2 highlights, "
         "0 highlighted characters outside the underlining"
     ) in out
-    assert "labelled 3, not labelled 1" in out
+    assert "labelled 5, not labelled 2" in out
 
 
 def test_a_cut_the_cutter_did_not_mark_is_found_and_counted(
@@ -163,14 +185,51 @@ def test_a_highlight_outside_the_underlining_is_cut_back_and_counted(
     ) in capsys.readouterr().out
 
 
+def test_spans_follow_the_normalizer_and_keep_no_space_at_their_edges(
+    labelled_world: World, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _label(labelled_world)
+
+    expected = _expected(labelled_world, "spaced")
+    assert expected["segments"] == SEGMENTS
+    assert expected["spans"] == _expected(labelled_world, "marked")["spans"]
+
+
+def test_verbatims_emphasis_is_underlining(labelled_world: World, capsys: pytest.CaptureFixture[str]) -> None:
+    _label(labelled_world)
+
+    assert _expected(labelled_world, "emphasised")["spans"] == [
+        _span(FIRST_WARRANT, "highlight"),
+        _span(FIRST_WARRANT, "underline"),
+        _span(SECOND_WARRANT, "highlight"),
+        _span(SECOND_WARRANT, "underline"),
+    ]
+
+
+def test_a_few_words_found_elsewhere_do_not_finish_a_card(
+    labelled_world: World, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _label(labelled_world)
+
+    case_id = labelled_world.case_for("stray")
+    found = len(f"A second paragraph {FILLER} {WARRANT}")
+    whole = len(f"A second paragraph {FILLER} {WARRANT} leaves out.")
+    assert (
+        f"{case_id}: NOT LABELLED: a stretch of the card is not in the snapshot "
+        f"(stretch 1 of 1, {found} of {whole} characters found)"
+    ) in capsys.readouterr().out
+    assert not (labelled_world.fixtures / case_id / golden.EXPECTED_NAME).exists()
+
+
 def test_every_label_passes_the_operators_check_and_the_structure_test(
     labelled_world: World, capsys: pytest.CaptureFixture[str]
 ) -> None:
     _label(labelled_world)
-    golden.shutil.rmtree(labelled_world.fixtures / labelled_world.case_for("absent"))
+    for name in ("absent", "stray"):
+        golden.shutil.rmtree(labelled_world.fixtures / labelled_world.case_for(name))
 
     assert labelled_world.check() == 0
-    assert "snapshots verified: 3 of 3\nevidence reproduced: 3 of 3" in capsys.readouterr().out
+    assert "snapshots verified: 5 of 5\nevidence reproduced: 5 of 5" in capsys.readouterr().out
     for case_dir in sorted(p for p in labelled_world.fixtures.iterdir() if p.is_dir()):
         expected = json.loads((case_dir / golden.EXPECTED_NAME).read_text(encoding="utf-8"))
         assert snaps.expected_structure_problems(expected, case_dir.name) == []
@@ -199,7 +258,8 @@ def test_a_snapshot_copy_that_no_longer_verifies_is_not_labelled(
 @pytest.fixture
 def rendered(labelled_world: World, capsys: pytest.CaptureFixture[str]) -> World:
     _label(labelled_world)
-    golden.shutil.rmtree(labelled_world.fixtures / labelled_world.case_for("absent"))
+    for name in ("absent", "stray"):
+        golden.shutil.rmtree(labelled_world.fixtures / labelled_world.case_for(name))
     assert _label(labelled_world, "--render-expected") == 0
     capsys.readouterr()
     return labelled_world
@@ -226,7 +286,7 @@ def test_the_render_check_passes_on_the_renders_it_wrote(
     rendered: World, capsys: pytest.CaptureFixture[str]
 ) -> None:
     assert _label(rendered, "--render-expected", "--check") == 0
-    assert "rendered and compared 3, differ 0, not rendered 0" in capsys.readouterr().out
+    assert "rendered and compared 5, differ 0, not rendered 0" in capsys.readouterr().out
 
 
 def test_the_render_check_fails_when_a_label_changes_or_a_render_is_missing(

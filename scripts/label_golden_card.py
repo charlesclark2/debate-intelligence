@@ -239,8 +239,14 @@ def _align(snapshot_text: str, stretches: Sequence[tuple[str, list[int]]]) -> _A
     cursor = 0
     for number, (view, positions) in enumerate(stretches, start=1):
         remaining, remaining_positions = view, positions
+        after_unmarked_cut = False
+        matched = 0
         while remaining:
-            found = page.find(remaining, cursor)
+            # Both sides of a cut the cutter did not mark need the minimum: a short tail found
+            # anywhere after the head is no evidence of where the rest of the card is. (A tail that
+            # short has no usable prefix either, so it is refused below.)
+            too_short = after_unmarked_cut and len(_word_ends(remaining)) < MINIMUM_UNMARKED_WORDS
+            found = -1 if too_short else page.find(remaining, cursor)
             if found >= 0:
                 taken = len(remaining)
             else:
@@ -254,7 +260,6 @@ def _align(snapshot_text: str, stretches: Sequence[tuple[str, list[int]]]) -> _A
                     else:
                         high = middle - 1
                 if best < 0:
-                    matched = len(view) - len(remaining)
                     raise LabelRefused(
                         LabelProblem.NOT_FOUND,
                         f"stretch {number} of {len(stretches)}, {matched} of {len(view)} characters found",
@@ -262,6 +267,7 @@ def _align(snapshot_text: str, stretches: Sequence[tuple[str, list[int]]]) -> _A
                 taken = usable[best]
                 found = page.find(remaining[:taken], cursor)
                 alignment.unmarked_cuts += 1
+                after_unmarked_cut = True
             for index in range(taken):
                 alignment.to_snapshot[remaining_positions[index]] = page_positions[found + index]
             start, end = page_positions[found], page_positions[found + taken - 1] + 1
@@ -270,6 +276,7 @@ def _align(snapshot_text: str, stretches: Sequence[tuple[str, list[int]]]) -> _A
                 start = alignment.segments.pop()[0]
             alignment.segments.append((start, end))
             cursor = found + taken
+            matched += taken
             rest, rest_positions = remaining[taken:], remaining_positions[taken:]
             skipped = len(rest) - len(rest.lstrip(" "))
             remaining, remaining_positions = rest[skipped:], rest_positions[skipped:]

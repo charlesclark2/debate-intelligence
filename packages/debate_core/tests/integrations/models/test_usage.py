@@ -345,9 +345,10 @@ ROUTED_MODELS = {
         "rerank": "cohere.rerank-v3-5:0",
     },
     "model_routing.prod.yaml": {
-        "complex_reasoning": "anthropic.claude-sonnet-5-5",
-        "high_volume": "anthropic.claude-haiku-5-5",
-        "deep_audit": "anthropic.claude-opus-5-5",
+        # The models dev routes to, class for class, while the 5.5 quotas are held at zero (v1-e05-t20).
+        "complex_reasoning": "anthropic.claude-haiku-4-5-20251001-v1:0",
+        "high_volume": "anthropic.claude-haiku-4-5-20251001-v1:0",
+        "deep_audit": "anthropic.claude-sonnet-4-6",
         "embeddings": "amazon.titan-embed-text-v2:0",
         "rerank": "cohere.rerank-v3-5:0",
     },

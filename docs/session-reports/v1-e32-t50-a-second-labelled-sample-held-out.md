@@ -859,9 +859,45 @@ the docs index and the link check pass.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-11-14
 
 **Notes:**
+
+Accepted. ac1, ac2, ac3 and the node pass, and the Goal is `Succeeded`.
+
+* **ac3 is recorded by the PM here**, from the operator's run as reported. The draw ran on
+  2026-11-13, and the two sittings and `--check-sample` on 2026-11-14: 111 of 120 labelled, 9
+  unsure. Before `scripts/task pr`, the session sets the spec's phase to `Succeeded` and commits it,
+  with no other change.
+* **The result is the one the holdout exists to give.** On cards never used for tuning, prompt 1.3.1
+  scored 0.571 on deep_audit (44 of 77; 95%: 0.46 to 0.68) and 0.476 on high_volume (39 of 82; 0.37
+  to 0.58) against the 0.85 bar. The first sample's 0.75 was flattered by tuning. The product owner
+  decided the V1 scope from it the same day: v1-e32-t07 is cancelled, and v1-e32-t64, t65 and t66
+  are filed. The record run cost about $0.78, inside the ruled authorization.
+* **Built as ruled.**
+  * The exclusions are by evidence: cluster, fingerprint and document, measured against all 60
+    drawn.
+  * The holdout is read beside the first sample and never feeds tuning, and the bar reads the
+    holdout.
+  * Rulings 1 (a) and 2 (a): the first sample's refused batch is left as it is, and the terminal-only
+    scan-hit listing exists. Through it the operator judged all 44 hits ordinary words by number,
+    hit 12 included.
+  * The high_volume holdout cassettes are kept, and nothing is published.
+* **The evidence:**
+  * the red runs against refuse-nothing skeletons;
+  * for the listing, 12 of 13 new tests failed at an assertion;
+  * 11 mutants, of which 10 were caught and the survivor gained its catching test.
+* **Deviations accepted** as in the second ruling. The PM's batch of 2026-11-14 adds `debate_cli`,
+  `tests/scripts` and `tests/smoke` to the packages. If the two pull requests meet on the spec,
+  `scripts/task sync`.
+* **The affected set** goes to `ci` under agreement 10.
+* **Follow-ups:**
+  1. The LD sample pair, row 33's follow-up on t46's other-side rule, the side rows' two faults and
+     scoping each sample's scan to its own cassettes go on the PM's V1.x list. Each matters only if
+     v1-e32-t66 proceeds.
+  2. `v1-e32-t61` stays a ready p3. Until it is built, the copy block stays manual.
+
+`scripts/task pr`

@@ -46,6 +46,13 @@ Each entry carries what its model calls cost, read from the usage log as the cal
 own even with others running beside it. A replayed or fake answer costs nothing and records nothing,
 so its entry says 0. An entry with a call the pricing file does not price says `None`, not 0.
 
+The report's :attr:`BatchReport.cost_usd` is the cuts' calls alone. Its
+:attr:`BatchReport.command_cost_usd` is the whole command's (v1-e08-t22): what the command's one budget
+run spent, read from the usage log once the walk is over
+(:class:`~debate_core.application.budget.RunSpend`), the figure `--max-cost` limits. With
+`--expand-llm` it includes the expansion's call, which no cut made. It is read, never added up from the
+entries.
+
 ## What an entry never holds
 
 Evidence text, a tag, a cite or a model's words: ranks, URLs, the result's title, statuses, codes,
@@ -59,7 +66,7 @@ import asyncio
 from collections.abc import Generator, Sequence
 from contextlib import contextmanager
 from contextvars import ContextVar
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from enum import StrEnum
 from typing import Final, Protocol
 
@@ -399,7 +406,10 @@ class BatchCutService:
                     continue
                 walk.started()
                 group.create_task(self._attempt(candidate, request, walk))
-        return walk.report()
+        report = walk.report()
+        if self._command_spend is None or report.cost_usd is None:
+            return report
+        return replace(report, command_cost_usd=self._command_spend.usd())
 
     async def _attempt(self, candidate: BatchCandidate, request: BatchCutRequest, walk: _Walk) -> None:
         """Fetch and cut one candidate under the semaphore, and add its entry; never raises a DomainError."""

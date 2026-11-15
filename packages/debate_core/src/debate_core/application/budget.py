@@ -328,7 +328,14 @@ class RunSpend:
 
     def usd(self) -> float | None:
         """What the run has spent, in USD; None when the ledger cannot be read, so it is unknown."""
-        return 0.0  # skeleton: reads nothing yet
+        now = self._clock.now()
+        try:
+            spend = self._ledger.spent(
+                self.run.run_id, local_day(now, self._local_zone), CalendarMonth.of(now)
+            )
+        except UnreadableUsageLog:
+            return None
+        return spend.run_usd
 
 
 class BudgetGuard:

@@ -85,6 +85,25 @@ one folder keep both reports.
 A file named just `report.json` in the folder is the last report from before the upgrade: this build
 never reads, replaces or deletes it, so keep it or delete it as you like.
 
+### What a run cost
+
+The report gives two costs in US dollars, side by side:
+
+| Key | What it counts |
+|---|---|
+| `cost_usd` | the cuts' own model calls; each entry's `cost_usd` is that one cut's |
+| `command_cost_usd` | everything the command spent on model calls: the cuts and any other call it made |
+
+The budget limit for one command, `--max-cost` on `search --auto-cut`, counts `command_cost_usd`. With
+`search --expand-llm`, the call that asks a model for extra queries is part of the command but not of
+any cut, so `command_cost_usd` is more than `cost_usd`. A daily digest's queries come from its
+templates and ask no model, so for `daily --auto-cut` the two are the same. Both are `0` when every
+answer came from a recording, and both are `null` when a cut's call had no price in the pricing file.
+
+The `Model cost:` line under the table gives the cuts' cost. When the whole command spent more, it gives
+both and says which one the limit counts: "Model cost: $… for the cuts, $… for the whole command (the
+--max-cost limit counts the whole command)". `--json` carries both keys in its `auto_cut` object.
+
 ## Real model calls
 
 `--auto-cut` asks a model where each card's evidence is and what to underline, as `debate-research cut`
@@ -122,9 +141,10 @@ In live mode each call is a real model call, on the model this environment's rou
 and it costs money. Live mode records nothing, so running the same cut again calls the model again. The
 budget still holds every call:
 
-* `--max-cost USD`, on `daily --auto-cut` and `search --auto-cut`, is the most that one command may
-  spend. A call that could take it past that is refused before it is made, and the cards already cut
-  are kept.
+* `--max-cost USD`, on `search --auto-cut`, is the most that one command may spend, its expansion's
+  call and its cuts' together. A call that could take it past that is refused before it is made, and
+  the cards already cut are kept. `daily` has no `--max-cost`; the per-run setting,
+  `models.budget_usd_per_run`, when it is set, holds a `daily --auto-cut` the same way.
 * The daily limit (`models.budget_usd_daily`), and the monthly one when it is set, refuse a call that
   would pass them, however many commands you run that day.
 

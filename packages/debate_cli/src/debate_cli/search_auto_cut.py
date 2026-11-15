@@ -19,13 +19,14 @@ without `--auto-cut` is a usage error, as is an unknown profile; nothing is sear
 ## Files
 
 Beside `--output` (`<name>.docx`): `<name>.manifest.json`, the same cards' manifest, and
-`<name>.report.json`, one entry per result tried. The report is named after the bundle (v1-e08-t18), so
-a second run into the same directory with another `--output` keeps the first run's report, and the
-same `--output` replaces bundle, manifest and report together. A `report.json` an earlier build wrote
-is never opened, renamed or deleted. The bundle and the manifest are written only when a card was cut,
-VERIFIED or not, and the report always: one whose `bundle` is null says that this run wrote no bundle,
-whatever bundle of the same name an earlier run left. Each is written in one step, a file beside it
-renamed into place.
+`<name>.report.json`, one entry per result tried, with the cuts' cost (`cost_usd`) and beside it the
+whole command's (`command_cost_usd`, v1-e08-t22), which is what `--max-cost` counts. The report is named
+after the bundle (v1-e08-t18), so a second run into the same directory with another `--output` keeps the
+first run's report, and the same `--output` replaces bundle, manifest and report together. A
+`report.json` an earlier build wrote is never opened, renamed or deleted. The bundle and the manifest
+are written only when a card was cut, VERIFIED or not, and the report always: one whose `bundle` is null
+says that this run wrote no bundle, whatever bundle of the same name an earlier run left. Each is
+written in one step, a file beside it renamed into place.
 
 ## Exit codes
 

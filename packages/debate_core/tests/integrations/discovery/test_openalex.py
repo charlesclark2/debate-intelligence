@@ -1384,6 +1384,93 @@ async def test_a_503_with_retry_after_is_unavailable_not_rate_limited() -> None:
     assert len(replayed.sent()) == 1
 
 
+# --------------------------------------------------------------------------------------------
+# A refusal says why: OpenAlex's own message, sanitized and cut (v1-e07-t27)
+# --------------------------------------------------------------------------------------------
+
+URL_TOO_LONG_SAID: Final = (
+    "HTTP 400: the provider refused the request; OpenAlex said: Your request URL is 8291 bytes, over the "
+    "8190-byte limit (roughly 8 KB, mostly the 'search' value). Send the query as OQL in a POST body, "
+    "which has no length limit, or split a large Boolean query..."
+)
+"""By hand from `works_refused_url_too_long.json`: its `message` (324 characters) cut at the last space
+within 197 characters, and `...`, so at most 200 characters of OpenAlex's text."""
+
+
+async def test_a_400_keeps_openalexs_message_cut_to_about_200_characters() -> None:
+    replayed = replay_with_respx(build_over)(recording("works_refused_url_too_long"))
+
+    with pytest.raises(ProviderUnavailable) as caught:
+        await replayed.provider.search(HEALTH_INSURANCE)
+
+    assert str(caught.value) == f"openalex: {URL_TOO_LONG_SAID}"
+    said = str(caught.value).split("OpenAlex said: ", 1)[1]
+    assert len(said) <= 200
+    assert len(replayed.sent()) == 1
+
+
+async def test_a_400_message_loses_any_url_query_the_key_and_its_line_breaks() -> None:
+    """By hand from `works_refused_quoting_the_request.json`: the quoted request URL keeps its path and
+    loses its query, the key it names bare becomes `***`, and the tab and the line break are spaces."""
+    replayed = replay_with_respx(build_over)(recording("works_refused_quoting_the_request"))
+
+    with pytest.raises(ProviderUnavailable) as caught:
+        await replayed.provider.search(HEALTH_INSURANCE)
+
+    assert str(caught.value) == (
+        "openalex: HTTP 400: the provider refused the request; OpenAlex said: "
+        "Could not parse search for https://api.openalex.org/works (key ***)."
+    )
+
+
+@pytest.mark.parametrize(
+    ("status", "content", "expected"),
+    [
+        (400, b"<html><body>Bad Request</body></html>", "HTTP 400: the provider refused the request"),
+        (400, b'{"error": "Invalid query"}', "HTTP 400: the provider refused the request; OpenAlex said: Invalid query"),
+        (400, b'{"error": "Bad", "message": "  "}', "HTTP 400: the provider refused the request; OpenAlex said: Bad"),
+        (400, b'{"message": 42}', "HTTP 400: the provider refused the request"),
+        (400, b'["message"]', "HTTP 400: the provider refused the request"),
+        (400, b"", "HTTP 400: the provider refused the request"),
+        (403, b'{"message": "Invalid API key."}', "HTTP 403: the provider refused the request; OpenAlex said: Invalid API key."),
+        (503, b'{"message": "Search is down for maintenance"}', "HTTP 503; OpenAlex said: Search is down for maintenance"),
+    ],
+    ids=["html", "error only", "blank message", "message not text", "not an object", "empty", "403", "503"],
+)
+async def test_a_refusal_says_openalexs_message_when_its_body_has_one(
+    status: int, content: bytes, expected: str
+) -> None:
+    """The JSON `message`, or its `error` when the message is missing or blank; anything else keeps
+    today's reason, which is all a body that is not OpenAlex's JSON (a proxy's HTML page) leaves."""
+    router = respx.MockRouter(assert_all_mocked=True)
+    router.get(OPENALEX_WORKS_URL).return_value = httpx.Response(status, content=content)
+
+    with pytest.raises(ProviderUnavailable) as caught:
+        await build_over(httpx.MockTransport(router.async_handler)).search(HEALTH_INSURANCE)
+
+    assert str(caught.value) == f"openalex: {expected}"
+
+
+async def test_every_query_of_a_refused_crossed_search_carries_openalexs_message() -> None:
+    """The ac3 search's shape: 37 queries, every request refused with a message. Both halves are refused,
+    so three requests; the call raises, and its reason, which the footer prints for all 37, says why."""
+    said = {"error": "Invalid query", "message": "Your search is too long (2272 characters; the limit is 1500)"}
+    sent: list[httpx.Request] = []
+
+    def refuse(request: httpx.Request) -> httpx.Response:
+        sent.append(request)
+        return httpx.Response(400, json=said)
+
+    with pytest.raises(ProviderUnavailable) as caught:
+        await build_over(httpx.MockTransport(refuse)).search_each(numbered_queries(37))
+
+    assert str(caught.value) == (
+        "openalex: HTTP 400: the provider refused the request; OpenAlex said: "
+        "Your search is too long (2272 characters; the limit is 1500)"
+    )
+    assert len(sent) == 3
+
+
 async def test_a_malformed_body_is_unavailable() -> None:
     replayed = replay_with_respx(build_over)(recording("works_malformed"))
     with pytest.raises(ProviderUnavailable, match="openalex: unreadable response: JSONDecodeError"):
@@ -1521,7 +1608,13 @@ async def test_no_secret_reaches_a_log_line_an_error_a_repr_or_a_health_snapshot
     caplog.set_level(logging.DEBUG)
     clock = FixedClock()
     surfaces: list[str] = []
-    for name in ("works_search", "works_rate_limited", "works_unavailable", "works_malformed"):
+    for name in (
+        "works_search",
+        "works_rate_limited",
+        "works_unavailable",
+        "works_malformed",
+        "works_refused_quoting_the_request",
+    ):
         registry, replayed = registry_over(name, clock)
         surfaces += [repr(registry), repr(replayed.provider), repr(registry.providers[0])]
         try:

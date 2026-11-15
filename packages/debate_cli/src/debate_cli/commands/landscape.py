@@ -277,12 +277,14 @@ from debate_core.arguments.landscape.evaluation_breakdown import (
     second_label_counts,
     weighted_accuracy,
 )
+from debate_core.arguments.landscape.holdout_scan import HoldoutScanHits
 from debate_core.arguments.landscape.model_stage import NameScan
 from debate_core.arguments.landscape.scan_hits import (
     MARKS_THAT_SET_A_HIT_ASIDE,
     ScanHit,
     hit_counts,
     mark_counts,
+    sets_aside,
 )
 from debate_core.domain.landscape_classification import Stance
 from debate_core.domain.landscape_pages import (
@@ -530,6 +532,14 @@ def evaluate(
         str | None,
         typer.Option("--holdout-snapshot", help="The held-out sample's snapshot, YYYY-MM-DD."),
     ] = None,
+    holdout_scan_hits: Annotated[
+        bool,
+        typer.Option(
+            "--holdout-scan-hits",
+            help="Replay only: the held-out sample's own scan hits, given as --sample, listed in this "
+            "terminal only; no row, outcome or answer.",
+        ),
+    ] = False,
     json_output: Annotated[
         bool, typer.Option("--json", help="Write one machine-readable JSON object to stdout.")
     ] = False,
@@ -538,8 +548,22 @@ def evaluate(
     cli = cli_context(ctx)
     if json_output and not cli.output.is_json:
         cli.output = CliOutput(OutputMode.JSON, verbose=cli.output.verbose)
-    labels = io.StringIO(read_labels_file(sample), newline="")
-    holdout = (holdout_sample, holdout_sample_rows, holdout_snapshot)
+    labels, holdout = (
+        io.StringIO(read_labels_file(sample), newline=""),
+        (holdout_sample, holdout_sample_rows, holdout_snapshot),
+    )
+    if holdout_scan_hits:
+        return _holdout_scan_hits(
+            cli,
+            ctx,
+            caselist,
+            (labels, sample_rows, snapshot),
+            config_dir,
+            route=route,
+            alone=not (breakdown or check_sample or json_output or cli.output.is_json)
+            and model_mode is EvaluationMode.REPLAY
+            and holdout == (None, None, None),
+        )
     if check_sample:
         return _check_sample(
             cli,
@@ -592,8 +616,15 @@ def evaluate(
     if broken_down is not None:
         payload["breakdown"] = breakdown_summary(broken_down)
         display = "\n".join([display, *_breakdown_lines(broken_down), *_hit_lines(broken_down)])
-    passed = result.stopped is None and result.meets_target and result.scans_clean
-    _finish(cli, ctx, payload, display, None if passed else _evaluation_failure(result, payload))
+    _finish(
+        cli,
+        ctx,
+        payload,
+        display,
+        None
+        if result.stopped is None and result.meets_target and result.scans_clean
+        else _evaluation_failure(result, payload),
+    )
 
 
 def _finish(
@@ -633,6 +664,77 @@ _HOLDOUT_NEEDS_ITS_FILES: Final = CommandFailure(
     exit_code=ExitCode.USAGE_ERROR,
     hint="Give all three, or none.",
 )
+
+_HOLDOUT_HITS_ALONE: Final = CommandFailure(
+    code="HOLDOUT_HITS_TERMINAL_ONLY",
+    message="--holdout-scan-hits lists the held-out sample's scan hits in this terminal only, from a replay; "
+    "it takes no --json, no --breakdown, no --check-sample, no --model-mode record and no --holdout-sample",
+    exit_code=ExitCode.USAGE_ERROR,
+    hint="Give the holdout as --sample and --sample-rows, with --holdout-scan-hits and, if needed, --route.",
+)
+
+
+def _holdout_scan_hits(
+    cli: CliContext,
+    ctx: typer.Context,
+    caselist: str,
+    files: tuple[TextIO, Path, str | None],
+    config_dir: Path | None,
+    *,
+    route: TaskClass | None,
+    alone: bool,
+) -> None:
+    """`--holdout-scan-hits`: the held-out sample's own scan hits, numbered, for this terminal only
+    (`v1-e32-t50`, the PM's ruling of 2026-11-14). The operator judges each by number."""
+    refusal = None if alone else _HOLDOUT_HITS_ALONE
+    if refusal is not None or (refusal := _route_refusal(route)) is not None:
+        _end(cli, ctx, refusal)
+    labels, sample_rows, snapshot = files
+    service = cli.services.landscape_evaluation(
+        config_dir=landscape_config_dir(config_dir), record=False, route=route
+    )
+    with sample_rows.open(encoding="utf-8") as rows:
+        listed = asyncio.run(
+            service.holdout_scan_hits(
+                caselist, labels, rows, snapshot=parse_snapshot_date(snapshot) if snapshot else None
+            )
+        )
+    payload: dict[str, JsonValue] = {
+        "hits": len(listed.hits),
+        "left": listed.left,
+        "input_batches": listed.input_batches,
+        "cassettes": listed.cassettes,
+        "repair_cassettes": listed.repair_cassettes,
+    }
+    cli.output.success(command_name(ctx), payload, display="\n".join(holdout_hit_lines(listed)))
+
+
+def holdout_hit_lines(listed: HoldoutScanHits) -> list[str]:
+    """The held-out sample's own hits, one numbered line each, for a terminal; a count of them withheld
+    otherwise. A line names the text, the field, the kind, the marks and the words: no row, outcome or
+    answer."""
+    head = (
+        f"The held-out sample's own texts: {listed.input_batches} input batch(es), {listed.cassettes} "
+        f"cassette(s), {listed.repair_cassettes} repair cassette(s). {len(listed.hits)} scan hit(s), "
+        f"{listed.left} with no mark that sets a hit aside. No model was asked."
+    )
+    if not listed.hits:
+        return [head]
+    if not _stdout_is_a_terminal():
+        return [head, f"{len(listed.hits)} scan hit(s) withheld: stdout is not a terminal. Run it in one."]
+    lines = [head, "", HITS_NOTICE]
+    for number, hit in enumerate(listed.hits, start=1):
+        marked = " (a team's name)" if hit.team_name else ""
+        vocabulary = " (a taxonomy word)" if hit.in_taxonomy else ""
+        key = " (a JSON key)" if hit.json_key else ""
+        sent = " (in the cards sent)" if hit.in_input else ""
+        left = "" if sets_aside(hit) else " (no mark sets it aside)"
+        lines.append(
+            f"  {number}. {hit.text} | {hit.where.value} | {hit.kind.value}{marked}{vocabulary}{key}{sent}"
+            f"{left} | ... {hit.before} [{hit.matched}] {hit.after} ..."
+        )
+    return lines
+
 
 BAR_READS_SAMPLE: Final = "holdout"
 """Which sample the bar is read on when both are evaluated: the held-out one (`v1-e32-t50`)."""

@@ -86,6 +86,7 @@ from debate_core.arguments.landscape.evaluation_breakdown import (
     stratum_scores,
 )
 from debate_core.arguments.landscape.holdout_mark import holdout_header
+from debate_core.arguments.landscape.holdout_scan import HoldoutScanHits, holdout_scan_hits
 from debate_core.arguments.landscape.matcher import MatchItem, PositionMatcher, read_items
 from debate_core.arguments.landscape.model_stage import (
     ModelCandidate,
@@ -988,6 +989,42 @@ class LandscapeModelEvaluationService:
             populations=read_sample_populations(lines),
             snapshot=prepared.through,
         )
+
+    async def holdout_scan_hits(
+        self, caselist: str, sample: TextIO, rows: Iterable[str], *, snapshot: date | None = None
+    ) -> HoldoutScanHits:
+        """The held-out sample's own scan hits, for the operator's terminal (`v1-e32-t50`, the PM's ruling of
+        2026-11-14): the stage is asked as :meth:`evaluate` asks it, so a replay finds the holdout's
+        cassettes, and only the holdout's texts are read. No card, row, outcome or answer comes back.
+
+        Refused for a rows file not marked a holdout, and when a batch the replay sent has no cassette among
+        those the scan reads, so a listing never leaves out the holdout's own texts unsaid."""
+        lines = list(rows)
+        if holdout_header(lines) is None:
+            raise EvaluationRefused(
+                "the holdout's scan hits are listed from a held-out sample's rows file; this one is not "
+                "marked a holdout"
+            )
+        prepared = await self._prepared(caselist, sample, lines, snapshot)
+        stage = self._stage(len(prepared.labelled))
+        asked = await ask_labelled_cards(prepared.reading, prepared.labelled, stage, prepared.taxonomy)
+        sent = asked.outcome.sent_inputs
+        listed = holdout_scan_hits(
+            sent,
+            scanned_cassettes(self._cassette_texts(), stage.prompt_version),
+            scanned_repairs(self._repair_cassette_texts(), prepared.reading.caselist, stage.prompt_version),
+            ScanNames.of(
+                prepared.reading.caselist_names,
+                asked.tournaments,
+                taxonomy_text=committed_positions(prepared.taxonomy),
+            ),
+        )
+        if listed.cassettes < len(sent):
+            raise EvaluationRefused(
+                f"{listed.cassettes} of the held-out sample's {len(sent)} batch(es) have a cassette among "
+                "those the scan reads; record the holdout, then list its hits"
+            )
+        return listed
 
     async def check_sample(
         self, caselist: str, sample: TextIO, rows: Iterable[str], *, snapshot: date | None = None

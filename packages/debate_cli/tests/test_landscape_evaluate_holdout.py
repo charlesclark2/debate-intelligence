@@ -4,7 +4,8 @@
 card, labelled costs-advantage, and the holdout `neg-two`'s framing card, labelled spending-da, its rows file
 marked a holdout. The Bedrock router is replaced by a scripted one that answers both rightly; nothing
 reaches AWS. Each sample is recorded alone, then the two are replayed side by side. The holdout is reported as
-counts and scores only: `--breakdown` refuses it, given either way. Every school, tag and cite here is
+counts and scores only: `--breakdown` refuses it, given either way. Its own scan hits are listed, for a
+terminal only, by `--holdout-scan-hits` (the PM's ruling of 2026-11-14). Every school, tag and cite here is
 invented.
 """
 
@@ -23,6 +24,7 @@ from tests.fixtures.model_routing import EXAMPLE_ROUTING_FILE
 from typer.testing import CliRunner, Result
 
 from debate_cli.app import create_app
+from debate_cli.commands import landscape as landscape_module
 from debate_cli.exit_codes import ExitCode
 from debate_core.application.coach_sample_labels_file import digest_line, digest_path, labels_digest
 from debate_core.application.ports.model_router import ModelRouter
@@ -50,6 +52,9 @@ DRAWN_FROM: Final = {
 
 
 class AnswersByTag(ScriptedModelRouter):
+    rationales: dict[str, str] = {}
+    """A rationale by tag, in place of the plain one: how a test plants a school in one sample's cassette."""
+
     def __init__(self) -> None:
         super().__init__(model_id="anthropic.claude-opus-5-5")
 
@@ -66,7 +71,7 @@ class AnswersByTag(ScriptedModelRouter):
                 "item": item["item"],
                 "position_id": ANSWERS[item["tag"]],
                 "confidence": 0.9,
-                "rationale": "the tag states the argument",
+                "rationale": self.rationales.get(item["tag"], "the tag states the argument"),
                 **({"stance": "reads"} if issubclass(schema, ModelStancedPositionAnswers) else {}),
             }
             for item in items
@@ -244,3 +249,158 @@ def test_check_sample_reads_the_holdout_alone_and_says_so(
     assert "holdout" not in json.loads(plain.stdout)["data"]
     assert both.exit_code == ExitCode.USAGE_ERROR
     assert error(both)["code"] == "CHECK_SAMPLE_ASKS_NO_MODEL"
+
+
+PLANTED: Final = {
+    "probability first": "as Brindle Valley reads it",
+    "premiums are rising fast": "as Quillmere Academy reads it",
+}
+
+
+@pytest.fixture
+def recorded(
+    world: SyntheticRun,
+    samples: tuple[tuple[Path, Path], tuple[Path, Path]],
+    monkeypatch: pytest.MonkeyPatch,
+) -> tuple[tuple[Path, Path], tuple[Path, Path]]:
+    """Both samples recorded alone, each card's rationale naming a school: the holdout's one, the first's
+    another. The scan reads both samples' cassettes; the listing keeps the holdout's."""
+    monkeypatch.setattr(AnswersByTag, "rationales", PLANTED)
+    for one in samples:
+        recorded = evaluate(world, one, "--model-mode", "record")
+        assert recorded.exit_code != ExitCode.OK, recorded.output
+        assert error(recorded)["details"]["scan"]["cassettes"]["clean"] is False
+    return samples
+
+
+def hits(world: SyntheticRun, sample: tuple[Path, Path], *arguments: str) -> Result:
+    labels, rows = sample
+    command = [
+        "landscape",
+        "evaluate",
+        "--config-dir",
+        str(world.config_dir),
+        "--caselist",
+        SYNTHETIC_RUN_CASELIST,
+    ]
+    command += ["--snapshot", SNAPSHOT, "--sample", str(labels), "--sample-rows", str(rows)]
+    return runner.invoke(create_app(), [*arguments, *command, "--holdout-scan-hits"])
+
+
+def _item_id_shas(rows: Path) -> list[str]:
+    return [
+        json.loads(line)["item_id"].split(":", 1)[0]
+        for line in rows.read_text(encoding="utf-8").splitlines()[1:]
+    ]
+
+
+def test_the_holdouts_own_hits_are_listed_by_number_in_the_terminal_and_the_first_samples_are_not(
+    world: SyntheticRun,
+    recorded: tuple[tuple[Path, Path], tuple[Path, Path]],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    first, holdout = recorded
+    monkeypatch.setattr(landscape_module, "_stdout_is_a_terminal", lambda: True)
+
+    result = hits(world, holdout)
+
+    assert result.exit_code == ExitCode.OK, result.output
+    assert "1 input batch(es), 1 cassette(s), 0 repair cassette(s)" in result.output
+    assert landscape_module.HITS_NOTICE in result.output
+    listed = [line for line in result.output.splitlines() if line.startswith("  1. ")]
+    assert listed == [
+        "  1. cassette 1 | model rationale | school (no mark sets it aside) | "
+        "... as [brindle valley] reads it ..."
+    ]
+    assert "  2. " not in result.output
+    assert "1 scan hit(s), 1 with no mark that sets a hit aside" in result.output
+    assert "quillmere" not in result.output.casefold()
+    for absent in ("spending-da", "costs-advantage", "row ", "correct", *_item_id_shas(holdout[1])):
+        assert absent not in result.output, absent
+
+
+def test_the_holdouts_hits_are_withheld_when_stdout_is_not_a_terminal(
+    world: SyntheticRun, recorded: tuple[tuple[Path, Path], tuple[Path, Path]]
+) -> None:
+    _, holdout = recorded
+
+    result = hits(world, holdout)
+
+    assert result.exit_code == ExitCode.OK, result.output
+    assert "1 scan hit(s) withheld: stdout is not a terminal" in result.output
+    assert "brindle" not in result.output.casefold()
+
+
+@pytest.mark.parametrize(
+    "extra",
+    [("--breakdown",), ("--check-sample",), ("--model-mode", "record"), ("--holdout-snapshot", SNAPSHOT)],
+)
+def test_the_holdouts_hits_take_no_other_mode(
+    world: SyntheticRun,
+    recorded: tuple[tuple[Path, Path], tuple[Path, Path]],
+    monkeypatch: pytest.MonkeyPatch,
+    extra: tuple[str, ...],
+) -> None:
+    _, holdout = recorded
+    monkeypatch.setattr(landscape_module, "_stdout_is_a_terminal", lambda: True)
+    labels, rows = holdout
+    command = [
+        "landscape",
+        "evaluate",
+        "--config-dir",
+        str(world.config_dir),
+        "--caselist",
+        SYNTHETIC_RUN_CASELIST,
+    ]
+    command += ["--snapshot", SNAPSHOT, "--sample", str(labels), "--sample-rows", str(rows)]
+
+    result = runner.invoke(create_app(), [*command, "--holdout-scan-hits", *extra])
+
+    assert result.exit_code == ExitCode.USAGE_ERROR, result.output
+    assert "HOLDOUT_HITS_TERMINAL_ONLY" in result.output
+    assert "brindle" not in result.output.casefold()
+
+
+def test_the_holdouts_hits_are_never_written_as_json(
+    world: SyntheticRun,
+    recorded: tuple[tuple[Path, Path], tuple[Path, Path]],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _, holdout = recorded
+    monkeypatch.setattr(landscape_module, "_stdout_is_a_terminal", lambda: True)
+
+    result = hits(world, holdout, "--json")
+
+    assert result.exit_code == ExitCode.USAGE_ERROR, result.output
+    assert error(result)["code"] == "HOLDOUT_HITS_TERMINAL_ONLY"
+    assert "brindle" not in result.output.casefold()
+
+
+def test_the_first_samples_rows_file_is_refused_its_hits_are_the_breakdowns(
+    world: SyntheticRun, recorded: tuple[tuple[Path, Path], tuple[Path, Path]]
+) -> None:
+    first, _ = recorded
+
+    result = hits(world, first)
+
+    assert result.exit_code != ExitCode.OK
+    assert "not marked a holdout" in result.output
+    assert "quillmere" not in result.output.casefold()
+
+
+def test_a_listing_that_finds_fewer_cassettes_than_batches_is_refused(
+    world: SyntheticRun,
+    recorded: tuple[tuple[Path, Path], tuple[Path, Path]],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _, holdout = recorded
+    monkeypatch.setattr(landscape_module, "_stdout_is_a_terminal", lambda: True)
+    monkeypatch.setattr(
+        "debate_core.arguments.landscape.holdout_scan.own_cassettes", lambda cassettes, sent: []
+    )
+
+    result = hits(world, holdout)
+
+    assert result.exit_code != ExitCode.OK
+    assert "0 of the held-out sample's 1 batch(es) have a cassette" in result.output
+    assert "brindle" not in result.output.casefold()

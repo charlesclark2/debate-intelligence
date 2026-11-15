@@ -322,3 +322,21 @@ async def test_a_snapshot_stored_with_the_retrieved_url_as_its_canonical_url_rea
         NEWS_CANONICAL_URL,
         "/science/2026/09/14/mammoth-revival-years-away",
     )
+
+
+async def test_a_page_stating_no_canonical_url_is_cited_from_the_url_it_was_read_from(
+    store: LocalStore,
+) -> None:
+    """The cite's URL of last resort is the retrieved URL, canonicalized; its `raw` is that URL as read."""
+    outcome = await retrieve(store, served_at("government-pdf", REPORT_PDF_WITH_QUERY))
+    snapshot, _ = await stored(store, outcome)
+    citations = CitationService(
+        articles=store.articles, snapshots=store.snapshots, edit_log=InMemoryCardEditLog()
+    )
+
+    cite = (await citations.resolve(outcome.article, await store.snapshots.load(snapshot))).citation
+
+    assert (cite.canonical_url.value, cite.canonical_url.raw) == (
+        REPORT_PDF_CANONICAL_URL,
+        REPORT_PDF_WITH_QUERY,
+    )

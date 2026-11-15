@@ -23,7 +23,7 @@ spec:
     guide which is which. Tests with recorded calls.
   priority: 3
   constraints:
-    packages: [debate_core.application, debate_cli, packages/debate_core/tests, packages/debate_cli/tests]
+    packages: [debate_core.application, debate_cli, packages/debate_core/tests, packages/debate_cli/tests, docs/guides]
     forbidden:
       - A real model call in a test
       - A price written from memory

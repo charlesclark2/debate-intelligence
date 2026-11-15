@@ -27,9 +27,16 @@ spec:
     card as a scrubbed DOCX excerpt and the expected rendered DOCX. Copies only: no test reads live paths.
     Files are scrubbed of debater names, school codes and docProps authors. Boundaries: comparison logic is
     t02; span metrics are t03; format profile derivation was v1-e06-t03 (its samples can be reused).
+    (PM amendment 2026-11-14, from the rulings of the same day.) The repository is public. Q1:
+    each case's excerpt is a card the coach cut or re-cut and reviewed for names, attested per card in
+    case.json; no roster denylist is required (the product owner's ruling). Q2 B: no source page or
+    snapshot enters the repository; case.json records each snapshot's raw and normalized SHA-256, URL,
+    fetch date and access status and the card's offsets, and the snapshots stay in a local folder
+    outside the repository. ac2's integrity check is the operator's import_golden_card.py check over
+    that folder, not a test. CI runs a structure test, the metadata scrub and the tooling tests.
   priority: 1
   constraints:
-    packages: [tests/fixtures/golden_cards, scripts]
+    packages: [tests/fixtures/golden_cards, tests/golden, scripts]
     forbidden:
       - Test code reading from ~/Documents/debate or any path outside the repo
       - Committing student names, emails, school codes or docProps author metadata
@@ -47,15 +54,18 @@ spec:
     - id: ac2
       description: >-
         Each case's expected evidence offsets reproduce the team card's evidence text exactly from the
-        recorded snapshot under the current normalizer (validated by a fixture-integrity test).
+        recorded snapshot under the current normalizer, by the operator's import_golden_card.py check
+        over the local snapshot folder, which also verifies each snapshot's SHA-256 (PM amendment
+        2026-11-14).
     - id: ac3
       description: >-
         Each case has a coach-authored span label set (underline and highlight ranges with purpose) derived
         from the team's original card markup.
     - id: ac4
       description: >-
-        A scrub test confirms no fixture DOCX carries author/lastModifiedBy metadata and no roster name from
-        a local, uncommitted denylist file appears in fixtures.
+        A scrub test confirms no fixture DOCX carries author or lastModifiedBy metadata, comments or
+        tracked-change authors, and every case carries the coach's attestation (PM amendment
+        2026-11-14; no roster denylist is required).
     - id: ac5
       description: >-
         Charlie signs off that the corpus is representative of how the team actually cuts cards.
@@ -96,15 +106,16 @@ spec:
         kind: Task
         name: Record source snapshots
         description: >-
-          Fetch each accessible source once with the E04 fixture recorder (developer machine, not CI) and
-          store the recorded response and normalized snapshot per case; drop cases that are no longer
-          accessible.
+          Fetch each accessible source once with debate-research fetch (developer machine, not CI),
+          copy each snapshot to a local folder outside the repository, and record its digests, URL,
+          fetch date and access status in case.json; drop cases that are no longer accessible (PM
+          amendment 2026-11-14).
         dependsOn: [select-and-copy]
         estimatedEffort: 3h
         acceptanceCriteria:
           - type: artifact_exists
             name: Snapshot recorded for cases
-            path: tests/fixtures/golden_cards/policy-001/snapshot.normalized.txt
+            path: tests/fixtures/golden_cards/policy-001/case.json
       - id: label-offsets
         kind: Task
         name: Convert original markup to offset labels
@@ -116,9 +127,14 @@ spec:
         estimatedEffort: 4h
         acceptanceCriteria:
           - type: test_passes
-            name: Fixture integrity tests pass
+            name: Golden corpus structure tests pass
             command: uv
-            args: [run, pytest, tests/golden/test_fixture_integrity.py]
+            args: [run, pytest, tests/golden]
+          - type: custom
+            name: Operator's integrity check is clean
+            description: >-
+              The operator's import_golden_card.py check over the local snapshot folder verifies every
+              digest and reproduces every case's evidence from its offsets (PM amendment 2026-11-14).
       - id: expected-renders
         kind: Task
         name: Generate expected DOCX renders
@@ -136,7 +152,7 @@ spec:
         kind: Task
         name: Scrub test and coach sign-off
         description: >-
-          Add the metadata/denylist scrub test and obtain Charlie's approval of the corpus.
+          Add the metadata and attestation scrub test and obtain Charlie's approval of the corpus.
         dependsOn: [expected-renders]
         estimatedEffort: 1h
         acceptanceCriteria:

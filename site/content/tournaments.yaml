@@ -42,36 +42,9 @@ season: '2026-27'
 
 # The day this file was last changed. Update it with every edit: the page shows it, and calendar
 # apps are given it as the time each entry was issued.
-revised: 2026-10-30
+revised: 2026-11-14
 
 tournaments:
-  - id: west-bend-online-2026
-    name: West Bend High School
-    start: 2026-10-30
-    events: [public-forum, lincoln-douglas]
-    held: online-at-school
-    overnight: no
-    status: confirmed
-
-  - id: west-bend-2026
-    name: West Bend High School
-    start: 2026-11-07
-    events: [policy, lincoln-douglas, public-forum]
-    held: in-person
-    where: West Bend, Wisconsin
-    overnight: no
-    status: confirmed
-
-  - id: badgerland-2026
-    name: Badgerland
-    start: 2026-11-13
-    end: 2026-11-14
-    events: [policy, lincoln-douglas, public-forum]
-    held: in-person
-    where: Madison, Wisconsin
-    overnight: possibly
-    status: confirmed
-
   - id: brookfield-east-2026
     name: Brookfield East High School
     start: 2026-11-21
@@ -80,17 +53,7 @@ tournaments:
     where: Brookfield, Wisconsin
     overnight: no
     status: confirmed
-
-  - id: glenbrooks-2026
-    name: Glenbrooks
-    start: 2026-11-21
-    end: 2026-11-23
-    events: [policy]
-    held: in-person
-    where: Glenview, Illinois
-    overnight: yes
-    status: confirmed
-    notes: Varsity only.
+    notes: Novice and varsity.
 
   - id: whitefish-bay-home-2026
     name: Whitefish Bay home tournament

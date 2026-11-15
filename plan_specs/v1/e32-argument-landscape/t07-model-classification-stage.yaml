@@ -14,6 +14,14 @@ metadata:
   annotations:
     debate/title: "Model classification of what headings cannot place"
 spec:
+  # Cancelled by the PM, 2026-11-14, by the product owner's decision of the same day. The per-card
+  # model stage it built stays in the code, off by default (`landscape run` asks no model unless
+  # told to). On v1-e32-t50's held-out sample, never used for tuning, it scored 0.571 (deep_audit)
+  # and 0.476 (high_volume) against the 0.85 bar, because a card's argument comes from the block it
+  # is read in, which a tag judged alone does not show. ac4's bar moves to v1-e32-t66 (a block
+  # classified from its tags in order); ac5's live run waits for a stage that meets it. V1 ships the
+  # deterministic landscape with v1-e32-t64's corrections and v1-e32-t65's inheritance. The spec is
+  # kept as the record.
   # Filed by the PM, 2026-10-22, from the coach's priorities of 2026-10-22 (v1-e32-t02 split: deterministic first, the model stage after).
   description: >-
     Stage two of position classification, split from v1-e32-t02 so the first Policy report did
@@ -97,7 +105,7 @@ spec:
         docs/data/landscape/first-run-policy.md, and the coach has reviewed the newly
         classified positions.
 status:
-  phase: InProgress
+  phase: Cancelled
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

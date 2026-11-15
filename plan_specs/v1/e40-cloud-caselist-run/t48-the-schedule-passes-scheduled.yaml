@@ -32,7 +32,7 @@ spec:
     guard does nothing until the schedule passes --scheduled comes out.
   priority: 2
   constraints:
-    packages: [infrastructure/modules/caselist_run, ops, docs/runbooks, tests/infrastructure]
+    packages: [infrastructure/modules/caselist_run, ops, docs/runbooks, tests/infrastructure, tests/docs]
     forbidden:
       - An apply by a session
       - An apply on a Wednesday

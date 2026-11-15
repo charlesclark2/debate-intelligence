@@ -352,6 +352,14 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e05-t13-dev-routes-to-callable-claude-models
+    - id: ext-v1-e32-t66-a-block-is-classified-from-its-tags-in-order
+      kind: External
+      name: 'Prerequisite from E32: A block of cards the matcher left unplaced is classified as a whole from its tags in order, scored on the coach''s labels'
+      description: >-
+        Cross-epic prerequisite owned by v1-e32-argument-landscape (release v1.2).
+      inputs:
+        goalRef: v1-e32-t66-a-block-is-classified-from-its-tags-in-order
+        specRef: plan_specs/v1/e32-argument-landscape/t66-a-block-is-classified-from-its-tags-in-order.yaml
     - id: t14
       kind: Task
       name: 'A cheaper model for the high-volume route, chosen by the coach-labelled evaluation'
@@ -362,7 +370,7 @@ spec:
         goalRef: v1-e05-t14-cheaper-model-for-high-volume-evaluated-first
       dependsOn:
       - t13
-      - ext-v1-e32-t07-model-classification-stage
+      - ext-v1-e32-t66-a-block-is-classified-from-its-tags-in-order
       acceptanceCriteria:
       - type: command_succeeds
         name: Task spec v1-e05-t14-cheaper-model-for-high-volume-evaluated-first reports phase Succeeded
@@ -482,7 +490,6 @@ spec:
       dependsOn:
       - t13
       - t08
-      - ext-v1-e32-t07-model-classification-stage
       acceptanceCriteria:
       - type: command_succeeds
         name: Task spec v1-e05-t20-prod-routes-on-the-4x-models reports phase Succeeded

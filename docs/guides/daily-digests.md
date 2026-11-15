@@ -1,4 +1,4 @@
-<!-- docs-index: For the coach: what a `debate-research daily` digest covers, the hours it searches, the time zone it is dated in, and what --date and --window change -->
+<!-- docs-index: For the coach: what a `debate-research daily` digest covers, the hours it searches, the time zone it is dated in, what --date and --window change, --auto-cut's report and cost, and real model calls -->
 # Daily digests: a guide for the coach
 
 `debate-research daily <preset>` writes one digest of new research for a preset in

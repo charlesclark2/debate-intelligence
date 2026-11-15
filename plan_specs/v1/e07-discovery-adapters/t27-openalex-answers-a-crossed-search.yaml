@@ -1,0 +1,85 @@
+# TASK v1-e07-t27-openalex-answers-a-crossed-search - OpenAlex answers a crossed search instead of refusing every query with HTTP 400
+# Epic: E07 Discovery Provider Adapters | Release: v1.4 (Federated research from the CLI) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e07-t27-openalex-answers-a-crossed-search
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.4
+    debate/epic: v1-e07-discovery-adapters
+  annotations:
+    debate/title: "OpenAlex answers a crossed search instead of refusing every query with HTTP 400"
+spec:
+  # Filed by the PM, 2026-11-14, from the operator's searches of 2026-11-14.
+  description: >-
+    On 2026-11-14, on v1.1.0-dev.439, v1-e08-t16's ac3 search ('national health insurance',
+    --argument politics-da --need link, --topic policy-2026-27-nhi, --max-results 200: 37
+    queries, 30 of them crossed) recorded openalex as outcome error, queries 37, failed 37,
+    results 0, reasons 'HTTP 400: the provider refused the request'. A plain search ('national
+    health insurance', --providers openalex, --max-results 5) answered at once with 5 results.
+    So OpenAlex refuses the request this search builds, not every request. Offline first: build,
+    with no call, the OpenAlex request or requests the adapter sends for that search (the joined
+    request per page), and report their length, their number of OR terms and any character a
+    crossed template adds. Read OpenAlex's documentation for its search syntax and limits
+    (docs.openalex.org, with the page and the date). Have the adapter keep OpenAlex's own error
+    message (its JSON message, sanitized and cut short) in the provider's reasons, so a refusal
+    says why. Propose the fix (for example, splitting a joined request under the documented
+    limit) and stop for the PM's ruling. Then the operator repeats the search.
+  priority: 2
+  constraints:
+    packages: [debate_core.integrations.discovery, packages/debate_core/tests, docs/guides]
+    forbidden:
+      - A live provider call by a session or in a test
+      - A query dropped silently to fit a limit
+      - OpenAlex's message kept uncut, or with a credential in it
+  context:
+    - kind: TaskRef
+      name: v1-e07-t02-openalex-adapter
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        The offline measurement and the documentation's limits are recorded, and the
+        proposal is ruled on by the PM before code.
+    - id: ac2
+      description: >-
+        The ruled fix holds by tests on recorded-shape fixtures shown failing first, and the
+        operator's repeat of v1-e08-t16's ac3 search records openalex with an outcome other
+        than error and results above zero (operator).
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e07-t27-openalex-answers-a-crossed-search-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.4
+    debate/epic: v1-e07-discovery-adapters
+spec:
+  description: >-
+    OpenAlex answers a crossed search instead of refusing every query with HTTP 400.
+  goalRef:
+    name: v1-e07-t27-openalex-answers-a-crossed-search
+  graph:
+    nodes:
+      - id: openalex-answers-a-crossed-search
+        kind: Task
+        name: OpenAlex crossed search
+        description: >-
+          OpenAlex answers a crossed search instead of refusing every query with HTTP 400.
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: OpenAlex crossed search tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/integrations/discovery, -k, openalex]
+status:
+  phase: Pending

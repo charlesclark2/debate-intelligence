@@ -26,7 +26,7 @@ spec:
     here covers both commands.
   priority: 3
   constraints:
-    packages: [debate_cli, debate_core.application, packages/debate_cli/tests, docs/guides]
+    packages: [debate_cli, debate_core.application, packages/debate_cli/tests, docs/guides, tests/integration]
     forbidden:
       - Business logic in debate_cli
       - A live network or model call in a test

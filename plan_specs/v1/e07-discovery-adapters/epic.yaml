@@ -606,5 +606,24 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e07-t26-semantic-scholar-back-on-https-and-enabled-in-prod
+    - id: t27
+      kind: Task
+      name: 'OpenAlex answers a crossed search instead of refusing every query with HTTP 400'
+      description: >-
+        OpenAlex answers a crossed search instead of refusing every query with HTTP 400.
+      inputs:
+        specRef: plan_specs/v1/e07-discovery-adapters/t27-openalex-answers-a-crossed-search.yaml
+        goalRef: v1-e07-t27-openalex-answers-a-crossed-search
+      dependsOn:
+      - t02
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e07-t27-openalex-answers-a-crossed-search reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e07-t27-openalex-answers-a-crossed-search
 status:
   phase: Pending

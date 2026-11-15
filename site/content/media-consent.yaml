@@ -56,6 +56,20 @@ students:
     consentReference: MC-2026-003
     season: '2026-27'
     dateChecked: 2026-10-27
+  # The two partners named in the West Bend Challenger and Badgerland results: forms confirmed on
+  # file by Charlie on 2026-11-14, references assigned by him the same day.
+  - publishedName: Yvette Nikolova
+    publishedForm: full-name-and-class-year
+    graduationYear: 2028
+    consentReference: MC-2026-004
+    season: '2026-27'
+    dateChecked: 2026-11-14
+  - publishedName: Astrid Clauss
+    publishedForm: full-name-and-class-year
+    graduationYear: 2029
+    consentReference: MC-2026-005
+    season: '2026-27'
+    dateChecked: 2026-11-14
 # Example of the shape, for when the first entry is added:
 #   - publishedName: Jordan Rivera
 #     publishedForm: full-name-and-class-year
@@ -165,6 +179,9 @@ permittedNamePhrases:
   - Iowa Caucus
   - West Bend
   - West Bend High School
+  # The tournament's own name for the West Bend tournament of 2026-11-07, as content/results.yaml
+  # names it (Charlie, 2026-11-14). A tournament, not a person.
+  - West Bend Challenger
   - Apple Valley High School
   - Brookfield East High School
   - Madison West

@@ -647,7 +647,8 @@ returns sources, not cards, and access stays `UNKNOWN` until `fetch` or `cut` re
 `--save PATH` writes the same search object to a file. `--expand-llm` also asks a model for up to three
 extra queries, replayed from `<data dir>/search/model-cassettes/` unless `DEBATE_MODEL_MODE` is `live`
 or `record`; it is off unless given, and a model that cannot be asked leaves a warning on stderr and the
-template queries alone.
+template queries alone. Under the replay default a refused expansion's hint names live mode: see
+[Real model calls](../../docs/guides/daily-digests.md#real-model-calls).
 
 **Narrowing a search: start broad, then hone in on what the first page finds** (`v1-e08-t15`). Search
 the topic in a word or two first. OpenAlex gives each work it returns a handful of keywords, short

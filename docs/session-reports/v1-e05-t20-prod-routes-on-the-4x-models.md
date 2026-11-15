@@ -6,7 +6,7 @@
 | Spec | [`plan_specs/v1/e05-model-router/t20-prod-routes-on-the-4x-models.yaml`](../../plan_specs/v1/e05-model-router/t20-prod-routes-on-the-4x-models.yaml) |
 | Epic / release | `v1-e05-model-router` / `v1.2` |
 | Branch | `task/v1-e05-t20-prod-routes-on-the-4x-models` |
-| Session status | PARTIAL: the session's work is done; ac3 is the operator's and ac2 waits on the PM's ruling |
+| Session status | PARTIAL: the session's work is done and ready for review, with the PM's rulings of 2026-11-15 recorded; ac3 is the operator's, so the Goal stays `InProgress` |
 
 ## Summary
 
@@ -20,22 +20,31 @@ resources to ten. The module's tests pin the ten at apply and at plan time, and 
 first, along with the Python pins. Seven mutants were all caught: prod sent back to a 5.5 model, and
 five ways of widening the grant. **What the PM should read first:** prod's set already exists. It was
 created on 2026-11-03 with nobody assigned, and it already grants Haiku 4.5 and Sonnet 4.6, so for prod
-this change is a narrowing plus your account assignment. It can ride in the promotion's prod plan.
-ac2, prod reusing dev's classifications, is proposed NOT APPLICABLE until a landscape model stage is
-on (Q1). ac3 is the operator's, and the Goal stays `InProgress`.
+this change is a narrowing plus your account assignment. It rides in the promotion's prod plan if
+this merges before the cut (ruling Q3). Dev's matching update rides in `v1-e40-t48`'s Monday dev plan
+if t48 has not been applied by then. One check in step 2 of the runbook reads every case. **PM rulings
+of 2026-11-15:**
+* ac2 is NOT APPLICABLE until a landscape model stage is on in prod (Q1).
+* `complex_reasoning` on Haiku 4.5 is confirmed for now; v1-e09-t03/t04's golden evaluation decides it
+  before the student release (Q2).
+* The grant rides in the promotion's prod plan, and dev's in t48's plan when it has not been applied
+  (Q3).
+* Your assignment is created in the same plan as the grant change (Q4).
+
+ac3 is the operator's, and the Goal stays `InProgress`.
 
 ## Plan nodes
 
 | Node | Status | Notes |
 |---|---|---|
-| `prod-routes-on-the-4x-models` (Prod on 4.x) | Session part done | Quotas read first (operator), red tests committed (`e6c77b8`), routing and grant (`52be95c`), runbook (`c415f38`). The node criterion passes; the Goal's ac2 and ac3 are open |
+| `prod-routes-on-the-4x-models` (Prod on 4.x) | Session part done | Quotas read first (operator), red tests committed (`e6c77b8`), routing and grant (`52be95c`), runbook (`c415f38`), the PM's rulings (this report's last commit). The node criterion passes; ac2 is NOT APPLICABLE by ruling, ac3 is open |
 
 ## Acceptance criteria
 
 | Criterion | Status | Evidence (command → result) |
 |---|---|---|
 | ac1: prod's routing names the models dev routes to (or the PM's ruling for a class that differs), the grant names exactly what the routing files route to, the prices are from the pricing file, and the module's tests pin it, shown failing first | PASS | **Quotas first** (operator, 2026-11-15, the block in Operator follow-ups): Haiku 4.5 `5000000.0` and Sonnet 4.6 `6000000.0`, cross-region and global cross-region, in each of us-east-1, us-east-2 and us-west-2; none zero. **Red** (`e6c77b8`, routing unchanged): `pytest test_settings_environments.py test_usage.py -k "prod_routes or quota_is_held or pricing_file_has"` → `3 failed, 1 passed`, each at its assertion (prod's routes, the 5.5 models found in prod, the routed-models table). `terraform test` (offline mirror) → `Failure! 7 passed, 4 failed`, all 7 errors `Test assertion failed`: the ten resources (apply, prod's count, the two plan-time runs), the two conditioned profiles, and no wildcard or 5.5 resource. **Green** (`52be95c`): `terraform test` → `Success! 11 passed, 0 failed`; `pytest test_settings_environments.py integrations/models/` → `604 passed in 4.06s`. **Prices:** both models were already in `config/model_pricing.yaml` (operator reading of 2026-10-27), and `test_pricing_file_has_an_entry_for_every_model_the_routing_files_route` holds every routed model priced. **No class differs from dev's** (Decisions 1). **Mutants:** 7 of 7 caught (table below) |
-| ac2: prod makes no model call for an item dev has classified at the same prompt version and model, by test, before prod's first live call | NOT RUN | Proposed NOT APPLICABLE until a landscape model stage is on, under the PM's amendment of 2026-11-14 (none is on in V1). A test is not cheap with today's cache: Deviations 1, relay Q1 |
+| ac2: prod makes no model call for an item dev has classified at the same prompt version and model, by test, before prod's first live call | NOT APPLICABLE | The PM's ruling of 2026-11-15 (Q1): not applicable until a landscape model stage is on in prod; the PM amends ac2 in the next batch. Nothing in V1 calls the stage. The reuse becomes a condition of `v1-e32-t66` before any prod live call: the model in `ClassificationKey`, and prod reading dev's classifications. A test is not cheap with today's cache: Deviations 1 |
 | ac3: prod's plan and apply, the PM reading the plan, the first call answered on each prod route, and the spend budget's lists checked after the first billed calls (operator) | NOT RUN | The operator's and the PM's, after the merge and the promotion's cut. The order and the blocks are in Operator follow-ups |
 | Node: `uv run pytest packages/debate_core/tests -k "routing or bedrock or budget"` | PASS | `.venv/bin/python scripts/hard_stop.py 115 .venv/bin/python -m pytest packages/debate_core/tests -k "routing or bedrock or budget" -q` → `287 passed in 55.17s` |
 
@@ -72,20 +81,29 @@ with `git checkout HEAD --`. Every failure was `Test assertion failed`, with no 
 * Docs: `scripts/check_command_blocks.py` → `OK: no # comments in 735 shell code blocks`;
   `scripts/check_links.py` → `OK: 3921 relative links and anchors`; `scripts/docs_index.py
   --check-descriptions` → all 72 described.
-* **Step 2's new plan check, exercised offline.** The block is lifted from the runbook and run on six
-  synthetic plan files:
-  * `PLAN OK` for dev's policy update alone, and for prod's update with the assignment inside a
-    promotion with two other changes (it counts those as 2);
-  * `PLAN STOP` for a wildcard added, a 5.5 profile kept, another user's assignment, and the set
-    replaced.
+* **Step 2's update check, exercised offline**, after the rulings. The check is lifted from the
+  runbook and run on eight synthetic plans:
+  * `PLAN OK` for dev's update alone;
+  * `PLAN OK` for dev's update inside a plan shaped like t48's (two task definitions replaced, four
+    updates), with 6 counted outside;
+  * `PLAN OK` for prod's update with your assignment inside a promotion that creates another
+    assignment, with 2 outside and 2 created in the whole plan;
+  * `PLAN STOP` for a permission set replaced elsewhere in the plan;
+  * `PLAN STOP` for an account assignment destroyed elsewhere, printing its key as `["<name>"]`;
+  * `PLAN STOP` for another user's assignment, also masked;
+  * `PLAN STOP` for a wildcard added and for a 5.5 profile kept.
 
+  After the routing file's comment change: `terraform test` → `Success! 11 passed, 0 failed`;
+  `pytest test_settings_environments.py integrations/models/` → `604 passed in 4.32s`.
   The spend-names block below was exercised the same way: `SPEND NAMES OK: nothing to add` for prod
   on dev's names, and `NOT LISTED` for a new usage type and for a new service.
 
 ## Files changed
 
 * **`config/model_routing.prod.yaml`**: the three Claude routes go to dev's models, and the header
-  says why, with the quota reading. **`config/model_routing.dev.yaml`**: only its header comment
+  says why, with the quota reading. It also says that `complex_reasoning` on Haiku 4.5 is confirmed
+  for now, not final: v1-e09-t03's and v1-e09-t04's golden evaluation decides whether it moves to
+  Sonnet 4.6 before the student release, a routing change only, since the grant names both (ruling Q2). **`config/model_routing.dev.yaml`**: only its header comment
   changed. It said dev runs one tier cheaper than prod and that prod was unchanged, which is no longer
   true.
 * **`infrastructure/modules/bedrock_access/tests/bedrock_access.tftest.hcl`**: the hand-written pins go
@@ -99,11 +117,13 @@ with `git checkout HEAD --`. Every failure was `Test assertion failed`, with no 
   **`.../integrations/models/test_usage.py`**: prod's row of `ROUTED_MODELS`.
 * **`docs/runbooks/bedrock-access.md`**:
   * what the sets grant (ten resources);
-  * step 2's update check, rewritten for this change and reading `module.bedrock_access` alone, so
-    it runs on a promotion's prod plan;
+  * step 2's update check, rewritten for this change. It reads `module.bedrock_access` alone, and over
+    the whole plan refuses a permission set or account assignment destroyed or replaced (ruling Q4).
+    It has one short block per plan it can read: a plan of its own, t48's Monday dev plan, or the
+    promotion's prod plan (ruling Q3);
   * the first-apply check's counts;
   * `--no-cli-pager` and the 2026-11-15 reading on the quota command;
-  * the order for prod, prod's first-call block and how to read it.
+  * the order for prod, dev's either-case rule, prod's first-call block and how to read it.
 * **`infrastructure/modules/model_spend_budget/{main.tf,README.md}`** and
   **`docs/runbooks/aws-account-baseline.md`**: comments only. They said `v1-e05-t17` would add "the
   5.5 models of prod's routes". They now say prod's routes are the names already listed, and that
@@ -111,7 +131,8 @@ with `git checkout HEAD --`. Every failure was `Test assertion failed`, with no 
 
 ## Deviations from the spec
 
-1. **ac2 is proposed NOT APPLICABLE until a landscape model stage is on; it is not tested here.** A test
+1. **ac2 is NOT APPLICABLE until a landscape model stage is on in prod (the PM's ruling of 2026-11-15,
+   Q1); it is not tested here, and the PM amends ac2 in the next batch.** A test
    of the reuse rule is not cheap with the existing classification cache:
    * `ClassificationKey` is topic, taxonomy version, override digest, prompt version and item
      fingerprint, with **no model id**. "Classified at the same prompt version and model" cannot be
@@ -121,8 +142,8 @@ with `git checkout HEAD --`. Every failure was `Test assertion failed`, with no 
      `<data_dir>/landscape/classifications/<caselist>.jsonl`, and **no prod run reads dev's**.
 
    A test of prod reusing dev's results would first need a feature: the model in the key, and a way
-   for prod to read or import dev's cache. That is a task of its own, and it belongs with the stage
-   that turns on. The PM amends the spec (relay Q1).
+   for prod to read or import dev's cache. By the ruling no task is filed now: that reuse becomes a
+   condition of `v1-e32-t66` before any prod live call, written into t66's description by the PM.
 2. **The spec's description says "Then prod's plan and apply"**, as if prod's grant were new. Prod's set
    has existed since 2026-11-03 with nobody assigned and the 22-resource grant of the time (the
    evidence-search runbook's step 11 record, main at `3f827613`). So prod's plan is one policy update,
@@ -131,13 +152,13 @@ with `git checkout HEAD --`. Every failure was `Test assertion failed`, with no 
 
 ## Decisions and assumptions
 
-1. **Class for class, with no ruling needed.** Prod sent `deep_audit` to Opus 5.5, and dev routes it to
-   Sonnet 4.6, so prod now does too. Nothing in V1 calls `deep_audit` (no `TaskClass.DEEP_AUDIT` in any
-   caller), so I found no reason it needs another model. Class for class also puts prod's
-   `complex_reasoning`, card selection for `cut` and auto-cut, on Haiku 4.5 rather than prod's former
-   Sonnet tier. That is what dev routes and what the spec asks; it is in relay Q2 only for confirmation.
-   Keeping prod's routes equal to dev's also means a classification ever shared between them would be
-   at the same model.
+1. **Class for class, confirmed for now (the PM's ruling of 2026-11-15, Q2).** Prod sent `deep_audit`
+   to Opus 5.5, and dev routes it to Sonnet 4.6, so prod now does too. Nothing in V1 calls
+   `deep_audit`: no `TaskClass.DEEP_AUDIT` appears in any caller. `complex_reasoning`, card selection for
+   `cut` and auto-cut, goes to Haiku 4.5 in prod, as in dev. This is not final: card selection is the
+   core of what students get, so v1-e09-t03's and v1-e09-t04's golden evaluation decides whether it
+   moves to Sonnet 4.6 before the student release. The grant names both models, so that move would be
+   a routing change only. The routing file's comment says so.
 2. **The quota read covers prod.** Dev and prod are one account (ADR-0010), so there is one set of quotas.
    It was read anyway, as the PM asked, in the three regions a `us.` profile sends calls to.
 3. **`test_dev_routes_differ_from_prod_in_the_model_alone`** (test_routing_policy.py) is kept. It passes
@@ -169,24 +190,66 @@ the PM before its apply.
    for region in us-east-1 us-east-2 us-west-2; do echo "== $region"; aws service-quotas list-service-quotas --no-cli-pager --profile debate-admin --region "$region" --service-code bedrock --query "Quotas[?contains(QuotaName, 'tokens per minute') && (contains(QuotaName, 'Haiku 4.5') || contains(QuotaName, 'Sonnet 4.6'))].[QuotaName, Value]" --output text; done
    ```
 
-2. **After this merges into `dev`: dev's plan and apply.** Dev's set gets the same policy update, and
-   it is a dev plan, not a prod one. In a dev worktree at `origin/dev`, run
-   [bedrock-access.md](../runbooks/bedrock-access.md) Before you start with `ENVIRONMENT=dev`, then
-   step 1. The plan should read `Plan: 0 to add, 1 to change, 0 to destroy.`
-   Then step 2's **update** block, which should print `PLAN OK: module.bedrock_access: 1 policy update,
-   no assignment created; bedrock:InvokeModel on 10 resources, 6 Claude models through the 2 profiles;
-   12 removed, none added; changes outside module.bedrock_access: 0`. Then the PM's read, then step 3:
-   `0 added, 1 changed`.
-3. **Before the promotion's prod plan:** prod's `owner.auto.tfvars` gains your
-   `bedrock_invoker_user_names` line, from Before you start's second block with `ENVIRONMENT=prod`, in
-   the worktree the promotion plans prod from. It should print `1`.
-4. **The promotion's prod plan carries this change** if this merges into `dev` before the cut. That is
-   the PM's preference; no separate prod plan is made. Run step 2's update block on that plan, with the
-   promotion's saved plan file in place of `bedrock-access.tfplan`. It should print `PLAN OK:
-   module.bedrock_access: 1 policy update, and your assignment created; ... 12 removed, none added;
-   changes outside module.bedrock_access: <the promotion's own count>`. If this merges after the cut,
-   the change waits for the next promotion: prod's current set already grants both 4.x models, and
-   prod's routes reach the stable build only with a promotion anyway.
+2. **Dev's plan for the same policy update, after this merges into `dev`** (ruling Q3). Never a
+   second dev plan the same day, never on a Wednesday. Use exactly one of these two cases.
+
+   **(a) `v1-e40-t48`'s fix has not been applied yet: dev's change rides in t48's Monday dev plan.**
+   The PM tells the t48 session to expect an in-place update of `module.bedrock_access` in it. t48's
+   own check passes only when nothing outside its change moves, so it is widened there. Run t48's
+   blocks 0 to 7 as written; its block 1 switches the worktree to `origin/dev`, which then carries this
+   task. Then, in t48's worktree and shell, after its block 7 has written its plan's JSON, run this
+   (seconds):
+
+   ```bash
+   cd "$WT"
+   grep -q 'claude-haiku-4-5' config/model_routing.prod.yaml && echo "ok: $(git rev-parse --short HEAD) carries v1-e05-t20" || echo "STOP: this worktree has no v1-e05-t20; its plan holds no bedrock change"
+   PLAN_JSON=/tmp/caselist-schedule-scheduled-plan.json
+   ```
+
+   Then run the check block of [bedrock-access.md step 2](../runbooks/bedrock-access.md#when-the-set-already-exists-one-inline-policy-updated),
+   the one that starts `test -s "$PLAN_JSON"`, in the same shell. It should print `PLAN OK:
+   module.bedrock_access: 1 policy update, no assignment created; bedrock:InvokeModel on 10 resources,
+   6 Claude models through the 2 profiles; 12 removed, none added; changes outside
+   module.bedrock_access: <t48's count>; permission sets or account assignments created in the whole
+   plan: 0, none destroyed or replaced`. t48's `Plan:` line then has one change more than t48 alone.
+   Send the PM both checks' lines with t48's plan. t48's apply, its block 8, applies both, and
+   bedrock-access.md's step 3 is not run.
+
+   **(b) t48's fix is already applied: dev's plan of its own.** In the dev apply worktree at
+   `origin/dev`, run [bedrock-access.md](../runbooks/bedrock-access.md) Before you start with
+   `ENVIRONMENT=dev`, then step 1. The plan should read `Plan: 0 to add, 1 to change, 0 to destroy.`.
+   Then run this (seconds):
+
+   ```bash
+   cd "$WT"
+   PLAN_JSON="/tmp/bedrock-access-${ENVIRONMENT}-plan.json"
+   AWS_PROFILE=debate-admin terraform -chdir="infrastructure/envs/${ENVIRONMENT}" show -json bedrock-access.tfplan > "$PLAN_JSON"
+   ```
+
+   Then run the same check block. It should print the line above, with `changes outside
+   module.bedrock_access: 0`. After the PM's word, run step 3; it should read `0 added, 1 changed`.
+3. **Before the promotion's prod plan** (ruling Q4): add your `bedrock_invoker_user_names` line to prod's
+   `owner.auto.tfvars`, with Before you start's second block and `ENVIRONMENT=prod`, in the worktree
+   the promotion plans prod from. It should print `1`. The value is never pasted into a session or a
+   chat; the block prints only the count.
+4. **The promotion's prod plan carries this change** if this merges into `dev` before the cut. No
+   separate prod plan is made. In the promotion's worktree, with `PROMOTION_PLAN` set to that plan's
+   saved file, relative to `infrastructure/envs/prod`, run this (seconds):
+
+   ```bash
+   PROMOTION_PLAN='the-promotions-saved-plan.tfplan'
+   PLAN_JSON=/tmp/bedrock-access-prod-plan.json
+   AWS_PROFILE=debate-admin terraform -chdir=infrastructure/envs/prod show -json "$PROMOTION_PLAN" > "$PLAN_JSON"
+   ```
+
+   Then run step 2's check block in the same shell, with `SSO_USER_NAME` set as Before you start sets
+   it. It should print `PLAN OK: module.bedrock_access: 1 policy update, and your assignment created;
+   ...; 12 removed, none added; changes outside module.bedrock_access: <the promotion's count>;
+   permission sets or account assignments created in the whole plan: <at least 1>, none destroyed or
+   replaced`. A destroyed or replaced permission set or account assignment anywhere is `PLAN STOP`.
+   Creating one is expected, and is what the PM reads for. If this merges after the cut, the change
+   waits for the next promotion. Prod's current set already grants both 4.x models, and prod's routes
+   reach the stable build only with a promotion anyway.
 5. **After the apply: prod's profile**, step 4 with `ENVIRONMENT=prod`. It should print
    `AWSReservedSSO_DebateProdBedrockInvoker`.
 6. **Prod's first calls**, from the same `origin/main` worktree after the promotion (`$WT`, per the
@@ -251,35 +314,20 @@ the PM before its apply.
    and applied as [aws-account-baseline.md](../runbooks/aws-account-baseline.md#applying-a-change-to-the-budget)
    says. That root is account-wide, not a prod plan. Paste back the whole output; it holds no amounts.
 
-**Relay prompt for the PM** (paste-ready):
+**The PM's rulings of 2026-11-15**, as recorded above:
 
-> v1-e05-t20: the session's part is done; ac3 is the operator's. Four questions.
->
-> Q1. **ac2 (prod reusing dev's classifications).** A test isn't cheap today. `ClassificationKey` has
-> no model id, and each environment's cache lives in its own data directory, which no prod run reads.
-> (a) Amend ac2 to NOT APPLICABLE until a landscape model stage is on, and file a task, with the
-> stage that turns on, that adds the model to the key and lets prod read dev's cache (recommended:
-> nothing in V1 calls the stage, and the test would need that feature first). (b) Build it in this task.
->
-> Q2. **Class for class puts prod's `complex_reasoning` (cut and auto-cut card selection) on Haiku
-> 4.5**, as dev, rather than prod's former Sonnet tier. `deep_audit` goes to Sonnet 4.6, and nothing in
-> V1 calls it. (a) Confirm (recommended: it is what dev measured and what the spec says, at a third of
-> Sonnet 4.6's price). (b) Rule `complex_reasoning` to Sonnet 4.6 in prod: a separate change, and the
-> grant is unchanged, since both models are routed.
->
-> Q3. **Prod's grant change rides in the promotion's prod plan** if this merges before the cut, with
-> step 2's new update block run on that plan, reading `module.bedrock_access` alone (recommended). If
-> it misses the cut, it waits for the next promotion. Dev's plan for the same policy update is made
-> on its own after the merge.
->
-> Q4. **Prod's set has nobody assigned.** The operator's `bedrock_invoker_user_names` line goes into
-> prod's `owner.auto.tfvars` before the promotion's prod plan, so the assignment is in the same plan
-> (recommended). The alternative is a later prod plan, which would be the weekend's second.
+* **Q1 (a):** ac2 is NOT APPLICABLE until a landscape model stage is on in prod.
+* **Q2 (a):** `complex_reasoning` stays on Haiku 4.5 for now; v1-e09-t03/t04 decide it.
+* **Q3 (a):** the grant rides in the promotion's prod plan; dev's in t48's Monday plan if t48 is
+  unapplied.
+* **Q4 (a):** your assignment is created in the promotion's prod plan; a destroyed or replaced
+  permission set or assignment is refused.
 
 ## Follow-up work
 
-1. **The classification cache's key gains the model id, and prod can read dev's results.** This is ac2's
-   precondition, filed with whichever landscape model stage turns on (E32). It is not V1.
+1. **No task is filed for ac2's reuse** (ruling Q1). The model in `ClassificationKey`, and prod reading
+   dev's classifications, become a condition of `v1-e32-t66` before any prod live call, written into
+   t66's description by the PM.
 2. **The `doctor --routing-file` row on an installed stable build** would show the bundled prod routes
    without a model call. Nothing here needs it, but the PM may want it in the promotion's smoke list.
 

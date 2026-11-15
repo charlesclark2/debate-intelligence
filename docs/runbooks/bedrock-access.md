@@ -195,35 +195,70 @@ to the PM. Either way the PM reads the plan before step 3.
 A routing change after the first apply changes the grant and nothing else. This block is
 `v1-e05-t20`'s: the routes move from the 5.5 models to dev's Haiku 4.5 and Sonnet 4.6, so the grant
 loses twelve resources and gains none. It reads only the changes under `module.bedrock_access`, so it
-works on a plan of its own and on a promotion's prod plan, whose other changes that promotion's own
-checks read; it counts those others and names none of them.
+works on a plan of its own and on a larger plan the change rides in (a promotion's prod plan, or
+another task's dev plan), whose other changes that plan's own checks read; it counts those others and
+names none of them. Over the whole plan it refuses one thing more: a permission set or an account
+assignment destroyed or replaced, wherever it is. Creating one is expected, and is what the PM reads
+the plan for.
 
 `PLAN OK` only when, under `module.bedrock_access`, the set's inline policy is updated in place and
 nothing else changes, except an account assignment created for `$SSO_USER_NAME` (prod's first plan
 after `v1-e05-t20`); a new policy of `bedrock:InvokeModel` alone on ten resources, six of them through
-the two profiles, each of those models conditioned on exactly those profiles; nothing added; and
-exactly the twelve resources of the 5.5 models removed: the Haiku, Sonnet and Opus 5.5 profiles in
-us-east-1, and those three models in us-east-1, us-east-2 and us-west-2. It prints the account id as
-`<account-id>`.
+the two profiles, each of those models conditioned on exactly those profiles; nothing added; exactly
+the twelve resources of the 5.5 models removed: the Haiku, Sonnet and Opus 5.5 profiles in us-east-1,
+and those three models in us-east-1, us-east-2 and us-west-2; and no permission set or account
+assignment anywhere in the plan destroyed or replaced. It prints the account id as `<account-id>` and
+every user name as `<name>`.
 
-**Operator command** (expected runtime ~1 min)
-Where: `$WT`
+**Which plan it reads.** Set `PLAN_JSON` by the one of these three that fits, then run the check.
+
+*A plan of its own* (step 1's `bedrock-access.tfplan`), in `$WT`:
+
 ```bash
 cd "$WT"
-AWS_PROFILE=debate-admin terraform -chdir="infrastructure/envs/${ENVIRONMENT}" show -json bedrock-access.tfplan > "/tmp/bedrock-access-${ENVIRONMENT}-plan.json"
-python3 -I - "/tmp/bedrock-access-${ENVIRONMENT}-plan.json" "$SSO_USER_NAME" <<'BEDROCKPOLICYUPDATE'
+PLAN_JSON="/tmp/bedrock-access-${ENVIRONMENT}-plan.json"
+AWS_PROFILE=debate-admin terraform -chdir="infrastructure/envs/${ENVIRONMENT}" show -json bedrock-access.tfplan > "$PLAN_JSON"
+```
+
+*Dev's change riding in `v1-e40-t48`'s Monday dev plan* (the PM's ruling of 2026-11-15: never a
+second dev plan the same day). In t48's apply worktree and shell, after t48's block 7 has written its
+plan's JSON, and only when that worktree carries this task:
+
+```bash
+cd "$WT"
+grep -q 'claude-haiku-4-5' config/model_routing.prod.yaml && echo "ok: $(git rev-parse --short HEAD) carries v1-e05-t20" || echo "STOP: this worktree has no v1-e05-t20; its plan holds no bedrock change"
+PLAN_JSON=/tmp/caselist-schedule-scheduled-plan.json
+```
+
+*Prod's change riding in the promotion's prod plan*, in the worktree the promotion plans prod from.
+`PROMOTION_PLAN` is that plan's saved file, relative to `infrastructure/envs/prod`:
+
+```bash
+PROMOTION_PLAN='the-promotions-saved-plan.tfplan'
+PLAN_JSON=/tmp/bedrock-access-prod-plan.json
+AWS_PROFILE=debate-admin terraform -chdir=infrastructure/envs/prod show -json "$PROMOTION_PLAN" > "$PLAN_JSON"
+```
+
+**The check.**
+
+**Operator command** (expected runtime seconds)
+Where: the same shell
+```bash
+test -s "$PLAN_JSON" || echo "STOP: no plan JSON at $PLAN_JSON"
+python3 -I - "$PLAN_JSON" "$SSO_USER_NAME" <<'BEDROCKPOLICYUPDATE'
 import json, re, sys
 plan = json.load(open(sys.argv[1]))
 user = sys.argv[2]
 prefix = "module.bedrock_access."
 policy_address = prefix + "aws_ssoadmin_permission_set_inline_policy.invoker[0]"
 assignment_address = prefix + 'aws_ssoadmin_account_assignment.invokers["' + user + '"]'
+access_types = ("aws_ssoadmin_permission_set", "aws_ssoadmin_account_assignment")
 expected_removed = sorted(
     ["arn:aws:bedrock:us-east-1:<account-id>:inference-profile/us.anthropic.claude-" + m + "-5-5" for m in ("haiku", "sonnet", "opus")]
     + ["arn:aws:bedrock:" + r + "::foundation-model/anthropic.claude-" + m + "-5-5" for r in ("us-east-1", "us-east-2", "us-west-2") for m in ("haiku", "sonnet", "opus")]
 )
-def masked(arns):
-    return sorted(re.sub(r":[0-9]{12}:", ":<account-id>:", a) for a in arns)
+def masked(texts):
+    return sorted(re.sub(r'\["[^"]*"\]', '["<name>"]', re.sub(r":[0-9]{12}:", ":<account-id>:", t)) for t in texts)
 def listed(value):
     return [value] if isinstance(value, str) else list(value or [])
 def statements_of(change, side):
@@ -233,6 +268,10 @@ changes = [c for c in plan.get("resource_changes", []) if c["change"]["actions"]
 ours = [c for c in changes if c["address"].startswith(prefix)]
 elsewhere = len(changes) - len(ours)
 problems = []
+dropped = [c["address"] + " " + "/".join(c["change"]["actions"]) for c in changes if c.get("type") in access_types and "delete" in c["change"]["actions"]]
+created = [c for c in changes if c.get("type") in access_types and c["change"]["actions"] == ["create"]]
+if dropped:
+    problems.append("permission sets or account assignments destroyed or replaced: " + str(masked(dropped)))
 summary = sorted(c["address"] + " " + "/".join(c["change"]["actions"]) for c in ours)
 allowed = [sorted([policy_address + " update"]), sorted([policy_address + " update", assignment_address + " create"])]
 if summary not in allowed:
@@ -268,17 +307,28 @@ if added:
 if removed != expected_removed:
     problems.append("removed " + str(removed) + ", expected " + str(expected_removed))
 assigned = "and your assignment created" if len(summary) == 2 else "no assignment created"
-print(("PLAN OK: module.bedrock_access: 1 policy update, " + assigned + "; bedrock:InvokeModel on 10 resources, 6 Claude models through the 2 profiles; 12 removed, none added" if not problems else "PLAN STOP: " + "; ".join(problems)) + "; changes outside module.bedrock_access: " + str(elsewhere))
+counts = "changes outside module.bedrock_access: " + str(elsewhere) + "; permission sets or account assignments created in the whole plan: " + str(len(created)) + ", none destroyed or replaced" if not dropped else "changes outside module.bedrock_access: " + str(elsewhere)
+print(("PLAN OK: module.bedrock_access: 1 policy update, " + assigned + "; bedrock:InvokeModel on 10 resources, 6 Claude models through the 2 profiles; 12 removed, none added" if not problems else "PLAN STOP: " + "; ".join(problems)) + "; " + counts)
 BEDROCKPOLICYUPDATE
 ```
-Success looks like `PLAN OK: module.bedrock_access: 1 policy update, no assignment created;
-bedrock:InvokeModel on 10 resources, 6 Claude models through the 2 profiles; 12 removed, none added;
-changes outside module.bedrock_access: 0` for dev's plan of its own. Prod's reads `and your assignment
-created` the first time, and on a promotion's plan the last count is that promotion's other changes,
-which its own checks read; there, put that plan's saved file in place of `bedrock-access.tfplan` in
-the block's first line. **`PLAN STOP` stops everything**: send its line and the plan to the PM.
-Either way the PM reads the plan before step 3. A later routing change adds or removes other
-resources, so its task rewrites `expected_removed`, the check on what is added, and the counts here.
+
+**What it prints for each plan:**
+
+* **A plan of its own, in dev:** `PLAN OK: module.bedrock_access: 1 policy update, no assignment
+  created; bedrock:InvokeModel on 10 resources, 6 Claude models through the 2 profiles; 12 removed,
+  none added; changes outside module.bedrock_access: 0; permission sets or account assignments created
+  in the whole plan: 0, none destroyed or replaced`.
+* **In `v1-e40-t48`'s dev plan:** the same, with t48's own changes as the outside count. t48's plan
+  then reads one change more than t48 alone, and t48's own check is told by the PM to expect it. One
+  apply, t48's, applies both, and this runbook's step 3 is not run for dev.
+* **In the promotion's prod plan:** `... 1 policy update, and your assignment created; ...`, with the
+  promotion's other changes as the outside count. The assignment is one of the permission sets or
+  account assignments created in the whole plan, and the rest are the promotion's own. That plan's
+  apply is the promotion's, in place of step 3.
+
+**`PLAN STOP` stops everything**: send its line and the plan to the PM. Either way the PM reads the
+plan before any apply. A later routing change adds or removes other resources, so its task rewrites
+`expected_removed`, the check on what is added, and the counts here.
 
 ## Step 3 — The apply
 
@@ -574,10 +624,14 @@ resources of the time. `v1-e05-t20` narrows it to the ten above and assigns it, 
    build's new routing file. Never two prod plans the same weekend, and never on a Wednesday.
 2. **Before that prod plan**, prod's `owner.auto.tfvars` gains your `bedrock_invoker_user_names` line,
    by [Before you start](#before-you-start)'s second block with `ENVIRONMENT=prod`, in the worktree the
-   promotion plans from. Without it the set stays assigned to nobody (the root's `check` warns).
-3. **The prod plan**, with step 2's update block run on it: `PLAN OK` with `and your assignment
-   created`. The PM reads the plan.
-4. **The apply** (step 3), then the profile (step 4) with `ENVIRONMENT=prod`.
+   promotion plans from, so the assignment is created in that same plan (the PM's ruling of
+   2026-11-15). Without it the set stays assigned to nobody (the root's `check` warns). The name is
+   never pasted into a session or a chat: the block prints a count.
+3. **The prod plan**, with step 2's check run on it ([the promotion's case](#when-the-set-already-exists-one-inline-policy-updated)):
+   `PLAN OK` with `and your assignment created`. A plan that destroys or replaces a permission set or
+   an account assignment anywhere is refused; creating one is expected, and is what the PM reads for.
+4. **The apply**, the promotion's (or step 3 for a plan of its own), then the profile (step 4) with
+   `ENVIRONMENT=prod`.
 5. **Prod's first calls** (step 7, [Prod's first calls](#step-7--the-first-real-call-on-each-claude-route)),
    from the same worktree, with the block below in place of step 7's: it reads prod's routing file
    alone. Steps 5, 6 and 8 are the account's and are not repeated.
@@ -585,8 +639,14 @@ resources of the time. `v1-e05-t20` narrows it to the ten above and assigns it, 
    Cost Explorer shows a day's charges up to a day late. Prod's calls bill under the same names as
    dev's, which the budget already lists, so the expected result is nothing new.
 
-Dev's plan for the same policy update (step 2's block, `PLAN OK ... no assignment created ... 0`) is
-made and applied after `v1-e05-t20` merges into `dev`, on its own; it is a dev plan, not a prod one.
+**Dev's plan for the same policy update** is a dev plan, not a prod one, and is never a second dev plan
+the same day (the PM's ruling of 2026-11-15):
+
+* if `v1-e40-t48`'s fix has not been applied when `v1-e05-t20` merges, dev's change rides in t48's
+  Monday dev plan: step 2's check in [t48's case](#when-the-set-already-exists-one-inline-policy-updated)
+  on t48's plan JSON, and t48's apply applies both;
+* otherwise it is a plan of its own: Before you start and steps 1 to 3 with `ENVIRONMENT=dev`, the
+  check printing `no assignment created` and `changes outside module.bedrock_access: 0`.
 
 The worktree, from `origin/main`:
 

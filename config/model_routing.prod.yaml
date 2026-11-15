@@ -19,6 +19,11 @@
 # and high_volume go to Haiku 4.5, and deep_audit, which no V1 command calls, to Sonnet 4.6, each
 # route keeping its region, max_tokens and timeout. Prices are config/model_pricing.yaml's. The move to
 # the 5.x models is v1-e41-t20.
+#
+# complex_reasoning on Haiku 4.5 is confirmed for now, not final (the PM's ruling of 2026-11-15): card
+# selection is the core of what students get, so v1-e09-t03's and v1-e09-t04's golden evaluation decides
+# whether it moves to Sonnet 4.6 before the student release. The grant already names both models
+# (infrastructure/modules/bedrock_access reads this file), so that move is a routing change only.
 
 version: 1
 

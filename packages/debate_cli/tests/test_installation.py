@@ -89,7 +89,9 @@ def test_the_container_wires_these_integrations() -> None:
     # `discovery.google_news_rss` and `discovery.openalex` inside the discovery providers factory, with
     # `discovery.registry` there and under TYPE_CHECKING, and `discovery.feed_config` under TYPE_CHECKING too;
     # and `discovery.crossref` in the same factory (v1-e07-t03), with `discovery.federal_register` and
-    # `discovery.govinfo` there (v1-e07-t07), and `discovery.semantic_scholar` there too (v1-e07-t04).
+    # `discovery.govinfo` there (v1-e07-t07), and `discovery.semantic_scholar` there too (v1-e07-t04);
+    # and `models.errors` inside the card and search model router factories, and under TYPE_CHECKING, for
+    # the live-mode hint of a refusal under the replay default (v1-e06-t09).
     assert wired_integrations() == (
         "debate_core.integrations.bedrock",
         "debate_core.integrations.cloudwatch_audit",
@@ -122,6 +124,7 @@ def test_the_container_wires_these_integrations() -> None:
         "debate_core.integrations.local.sqlite_caselist_repository",
         "debate_core.integrations.local.suppression_list",
         "debate_core.integrations.local.version_directories",
+        "debate_core.integrations.models.errors",
         "debate_core.integrations.models.factory",
         "debate_core.integrations.models.model_mode",
         "debate_core.integrations.models.prompt_registry",
@@ -266,7 +269,7 @@ def test_the_check_exits_zero_and_reports_json_for_this_checkout(capsys: pytest.
     report = json.loads(capsys.readouterr().out)
     assert report["complete"] is True
     assert report["covered"] is True
-    assert len(report["imported"]) == len(report["wired"]) == 45
+    assert len(report["imported"]) == len(report["wired"]) == 46
 
 
 # ---------------------------------------------------------------------------------------------

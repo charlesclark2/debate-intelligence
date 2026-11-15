@@ -546,6 +546,7 @@ def test_a_need_no_model_answer_was_recorded_for_exit_code_is_1_and_saves_nothin
 # A refusal under the replay default names live mode (v1-e06-t09, the PM's amendment of 2026-11-14)
 # --------------------------------------------------------------------------------------------
 
+
 @pytest.fixture
 def on_bedrock(seams: Seams, monkeypatch: pytest.MonkeyPatch) -> Seams:
     """`seams` on a real provider, as on a coach's installed build, with no model mode chosen (the

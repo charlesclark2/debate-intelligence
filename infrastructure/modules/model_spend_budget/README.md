@@ -38,6 +38,6 @@ service is one of the four and its usage type one of the four. The usage type is
 other Amazon Bedrock spend in the account that is not this project's. There is no `Project` tag in
 the filter: model charges carry none, and with one the budget would read $0.
 
-**A model never billed has no name here.** A new model (the 5.5 models of prod's routes, through
-`v1-e05-t17`) is added after its first billed call: re-run the counts in the runbook, add the names
+**A model never billed has no name here.** A new model (the 5.x models, through `v1-e41-t20`;
+prod's routes since `v1-e05-t20` are the Haiku 4.5 and Sonnet 4.6 already listed) is added after its first billed call: re-run the counts in the runbook, add the names
 to `local.model_services` and `local.model_usage_types`, and to the test's hand-written lists.

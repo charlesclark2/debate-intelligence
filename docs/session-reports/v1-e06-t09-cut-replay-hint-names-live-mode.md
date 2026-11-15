@@ -238,9 +238,48 @@ answered by ruling B and is built in this task.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-11-14
 
 **Notes:**
+
+Accepted. ac1, the node and the amendment's steps pass, and the Goal is `Succeeded`.
+
+* **The measurement is what the amendment asked for.** Every model-calling path is listed with how
+  its refusal reaches a person, and so is what keeps the record hint: scripts (none builds a
+  router), the one record-only fixture script, `landscape evaluate` and `run`, the fake and the
+  tests. That is how the gap in the auto-cut terminal was found, which ruling B closed.
+* **The design is sound.**
+  * The live hint is given only at the CLI's composition root, by a wrapper on the card and search
+    routers. It applies when the provider is real and `DEBATE_MODEL_MODE` is unset.
+  * The code, the exit and the fields are unchanged, and the original refusal is kept as
+    `__cause__`.
+  * One function, `_replay_is_the_default`, decides both the hint and ruling B's line, so they
+    cannot disagree.
+  * The default model mode is unchanged.
+* **The decisions are accepted.**
+  * "Chosen" means the variable is set, which is the only control these commands have.
+  * Dropping the optional cassette-mismatch detail from the rebuilt message is right for a coach.
+    That detail prints the whole request, the article's numbered text included, and `--verbose`
+    still shows it through the cause.
+  * "1 result was refused" for N = 1 is accepted.
+  * The line is placed last, before the AUTO_CUT_SHORT panel.
+* **The evidence.**
+  * The red runs: 5 of 10 and 5 of 11. The tests that must pass at red were proven by mutants
+    instead, and so were the presenter tests whose red was an API `TypeError`.
+  * All 12 mutants were caught at assertions, both PM-named ones among them, and the set was rerun
+    after the refactor for ruling B.
+* **Deviations 1 to 4: accepted.**
+  * 1 and 2 are the amendment and ruling B, which the PM records in the spec, with `docs/guides`, in
+    the next batch.
+  * 3, the offline smoke check, is accepted under agreement 5; `tests/smoke` joins the packages.
+  * 4, the wired-integration pin moving from 45 to 46, is accepted.
+* **The checks.** The affected set (247 files) stopped at its bound with no failure and goes to `ci`
+  under agreement 10. The changed files, the always-run list, pyright, the import contracts and the
+  smoke check are green. If `scripts/task pr` asks, `scripts/task sync`.
+* **Follow-ups 1 and 2** are PM doc edits in the next batch, not tasks: the README's `--expand-llm`
+  paragraph links "Real model calls", and the guide's docs-index description mentions it.
+
+`scripts/task pr`

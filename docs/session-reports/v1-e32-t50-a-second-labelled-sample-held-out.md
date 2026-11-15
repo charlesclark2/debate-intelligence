@@ -6,7 +6,7 @@
 | Spec | [`plan_specs/v1/e32-argument-landscape/t50-a-second-labelled-sample-held-out.yaml`](../../plan_specs/v1/e32-argument-landscape/t50-a-second-labelled-sample-held-out.yaml) |
 | Epic / release | `v1-e32-argument-landscape` / `v1.2` |
 | Branch | `task/v1-e32-t50-a-second-labelled-sample-held-out` |
-| Session status | PARTIAL, ready for the PM's verdict on a partial merge: built and tested as ruled; ac3 (the draw, both sittings, `--check-sample`) and the ruled record run are the operator's <!-- COMPLETE / PARTIAL / BLOCKED --> |
+| Session status | PARTIAL, ready for the PM's verdict on a partial merge: built and tested as ruled; ac3 run by the operator on 2026-11-13 and 2026-11-14 (the draw, both sittings, `--check-sample`), for the PM to record; the ruled record run is the operator's <!-- COMPLETE / PARTIAL / BLOCKED --> |
 
 ## Summary
 
@@ -27,7 +27,8 @@ failing, each at an assertion) and catch all 13 mutants, the PM's included: a ho
 with a first-sample card in another team's file. The node's criterion passes (35 tests).
 
 **What is left is the operator's, so the Goal stays `InProgress`.** ac3 (the draw, the coach's two sittings
-and `--check-sample` on the real store) and the record run are both run from the runbook's
+and `--check-sample` on the real store) ran on 2026-11-13 and 2026-11-14, for the PM to record. The record
+run is next. Both run from the runbook's
 [held-out section](../runbooks/landscape-model-evaluation-record.md#the-held-out-sample-the-draw-and-the-coachs-two-sittings-v1-e32-t50).
 The PM's second ruling of 2026-11-14 ([below](#the-pms-second-ruling-2026-11-14)) allows the record run as a
 narrow exception to the hold on live runs. It runs both routes on one day after both sittings, not on a
@@ -427,7 +428,7 @@ The batches run one after another, so the guard holds the day's spend plus one c
 |---|---|---|
 | ac1: the second sample's size, from the interval wanted at 0.85 and the coach's time, ruled on by the PM | PASS | The PM's ruling of 2026-11-14: 120 drawn, 60/40/20, Wilson ([above](#the-pms-ruling-2026-11-14)) |
 | ac2: drawn by the strata and seed rule with no card from the first, by tests on invented cards shown failing first, and the evaluation reads it as a holdout beside the first | PASS (code and tests); the real draw is the operator's | Red against `4f8c81e`: 39 of 52 failed, each at an assertion. Green: 52 of 52, plus the smoke check. 13 mutants caught, the PM's by 5 tests. `evaluate_beside` and `--holdout-*` read it beside the first. |
-| ac3: the coach labels it in a sitting and `--check-sample` reads it (operator, recorded by the PM) | NOT RUN | Operator: the runbook's held-out section, steps 1 to 5; then the ruled record run, step 6 |
+| ac3: the coach labels it in a sitting and `--check-sample` reads it (operator, recorded by the PM) | PASS (the operator's run; the PM records it) | The draw on 2026-11-13, then two sittings on 2026-11-14: 111 of 120 labelled, 9 unsure. `--check-sample` reads `"holdout": true` and `labelled` 111; the file's SHA-256 is `7d1ada7b…`. The first sample is unchanged at 47 ([Operator follow-ups](#operator-follow-ups)). The ruled record run, step 6, is next |
 | Node: Holdout sample tests pass (`uv run pytest packages/debate_core/tests/arguments/landscape -k sample`) | PASS | `35 passed in 3.59s` |
 
 ## Files changed
@@ -501,7 +502,7 @@ from this worktree until it merges:
 5. on one day after both sittings, not a Wednesday: the ruled record run (step 6), on `deep_audit` then
    `high_volume`, then the replay side by side on each, sending the PM the JSON objects only.
 
-**Step 1, the dry run (the operator's, 2026-11-14), as pasted: counts only.** It passed every condition in
+**Step 1, the dry run (the operator's, 2026-11-13, before the draw), as pasted: counts only.** It passed every condition in
 the runbook: version `2026.10.27-docx-7`, 120 drawn, no `STOP`, and no first-sample card without an
 occurrence row.
 
@@ -536,7 +537,7 @@ occurrence row.
   (now 1.5.1) and the coach's overrides have changed since, and either can place cards that were unplaced.
   The session did not measure which.
 
-**Step 2, the draw (the operator's, 2026-11-14), as pasted.** Every count is the dry run's, line for line.
+**Step 2, the draw (the operator's, 2026-11-13; its files are stamped 23:04 local time), as pasted.** Every count is the dry run's, line for line.
 It wrote its three new files and nothing else, in 126.7 s:
 
 * the feature table, `policy-2026-27-nhi-holdout-2026-11-03-features.jsonl`;
@@ -579,9 +580,65 @@ sidecar. The new SHA-256 is `ea5f586bb88aac2b9b59ffea939485b38049f1663d5b57f7c14
 * the holdout's CSV, `ea5f586bb88aac2b9b59ffea939485b38049f1663d5b57f7c14ab1446b55fd34`: the digest the
   sitting printed.
 
-The step 3 copy from before this sitting was not pasted back. Before the sitting the holdout file was the
-draw's, and the sitting kept its own dated copy of it, above. Next are step 3 again, the second sitting
-(step 5), and step 3 after it.
+**The step 3 copy before the first sitting** was not pasted back, but it was taken: the session read only the
+digests of the copies in the operator's folder. They are stamped `2026-11-13-230713`, three minutes after the
+draw wrote its files at 23:04. The holdout copy is `45c5e6ff…`, the drawn file, and the first sample's is
+`553374704519…`.
+
+**Step 5, the coach's second sitting (the operator's, 2026-11-14), as pasted: counts only.** This covered
+holdout rows 61 to 120, then the first sample's rows 16, 33 and 57. Step 3 had run first; the session read
+the copies' digests, stamped `2026-11-14-212122`: `ea5f586b…` for the holdout and `553374704519…` for the
+first sample.
+
+* `Done.` line: 60 cards; 55 labelled (22 with a second label), 5 unsure, 0 left blank.
+* `The first sample's rows: 1 written, 2 answered side.` The side-rule line names rows 33 and 57.
+* The holdout's `--check-sample` gives `"holdout": true`, taxonomy 1.5.1 and snapshot 2026-11-03.
+  `labelled` is 111, which is 56 plus 55. The other 9 of the 120 rows are unsure (4 and 5). No row is blank.
+
+  | Label kind | Rows |
+  |---|---|
+  | advantage | 28 |
+  | aff | 1 |
+  | cp | 19 |
+  | da | 17 |
+  | k | 22 |
+  | t | 20 |
+  | none | 4 |
+
+  By stance: 82 read and 25 answer, which with the 4 `none` makes 111. **32 of the 111 rows have a second
+  label** (advantage 22, cp 4, da 5, k 1), against 2 of the first sample's 47. A second label lets either
+  label count as right, so the holdout's scores and the first sample's are not scored under the same
+  leniency. The session reports this and draws no conclusion from it. No row is labelled `theory`.
+* The first sample's `--check-sample` gives t58's counts for the 2026-11-06 labels: `labelled` 47,
+  advantage 16, aff 1, cp 7, da 5, k 9, none 2 and t 7, with 9 answers and 36 reads. It also shows 2 second
+  labels, both advantage. **Its file is byte for byte the same as before the sitting.** Its digest is still
+  `553374704519…`, the same as the sitting's dated copy (`before-sitting-2026-11-14-2203`) and the step 3 copy.
+* **The holdout's file after both sittings** has SHA-256
+  `7d1ada7bc00942e536d05c95766b063b2e5353f87d7cd8e2544b5977992c349e`, the digest its sidecar records. The
+  sitting kept the file it replaced as `before-sitting-2026-11-14-2203`, which is `ea5f586b…`.
+
+**Two faults in the side rows, both found in this sitting. Neither changed a label.**
+
+1. **Rows 16 and 57 no longer conflicted with the side rule.** I chose the three rows from t49's report.
+   That report read the labels from before the coach's sitting of 2026-11-06, which changed both rows:
+   * row 16 became `at:inequality-advantage`, so it answers the position, as a negative file would;
+   * row 57 became `kritikal-aff`, an affirmative position in a file disclosed on the affirmative.
+
+   Only row 33, `costs-advantage` in a file disclosed only on the negative, still conflicted.
+   `SIDE_RULE_ROWS` names the rows, and the sitting never checks them against the current labels. On row 57
+   the prompt offered no way to say "already consistent", so the coach answered `side`, on the session's
+   advice. **For the PM's follow-up on t46's other-side rule, count row 33 only.** Row 57's `side` means
+   the label already agrees with its file's side.
+2. **"1 written" counts an answer that matches the current value.** Row 16 was "written", yet no byte of
+   the first sample changed. The coach's answer matched the row's current label. The sitting records a
+   cell for every `at:` or `also` answer without comparing it with the cell's current value, so it rewrote
+   the file, its dated copy and its sidecar with the same bytes.
+
+Neither fault needs code for this task now: the sittings are done, and the labels are the coach's. Both are
+in Follow-up work.
+
+Next are step 3 after the second sitting, then the record run, step 6. The record run goes on one day
+after both sittings, not on a Wednesday; 2026-11-15 is a Sunday.
 
 **The affected set did not finish locally.** `uv run scripts/affected_tests.py --run --slow` selects 157 files,
 5,298 tests. Within the 115-second cap it reached 65% with two failures:
@@ -596,8 +653,10 @@ the docs index and the link check pass.
 ## Follow-up work
 
 * The LD sample pair, as ruled (the PM files it).
-* After the second sitting: a follow-up on t46's other-side rule for the rows answered `side`, filed by the PM
-  from the sitting's last line.
+* A follow-up on t46's other-side rule for row 33, filed by the PM. The sitting's last line names rows 33
+  and 57, but row 57's label already agrees with its file's side ([step 5](#operator-follow-ups)).
+* The side rows' two faults, if the sitting is used again: check each side row against its current label
+  before showing it, and count an answer as written only when it changes a cell.
 * `v1-e32-t61` (the labels-file copy built in), until which the copy block stays manual.
 
 ## PM review

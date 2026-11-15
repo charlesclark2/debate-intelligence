@@ -1,0 +1,82 @@
+# TASK v1-e37-t17-a-speaker-award-names-the-speaker-alone - A speaker award in a partner event names the speaker alone
+# Epic: E37 — Calendar & Announcements (Coach-Editable) | Release: v1.6 (Public team website) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e37-t17-a-speaker-award-names-the-speaker-alone
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.6
+    debate/epic: v1-e37-calendar-and-announcements
+  annotations:
+    debate/title: "A speaker award in a partner event names the speaker alone"
+spec:
+  # Filed by the PM, 2026-11-14, from policy version 1.4 (Results and awards 1), approved by Charlie on 2026-11-14.
+  description: >-
+    Policy version 1.4 (docs/policies/website-publishing.md, Results and awards 1, approved by
+    Charlie on 2026-11-14) makes a speaker award an individual's award: in a partner event
+    (Policy, Public Forum) it names the speaker alone, with their graduation year, and its
+    team-level form is 'a Whitefish Bay debater', never 'a Whitefish Bay team'.
+    site/src/lib/results.ts refuses one partner named in a partner event for every placing
+    today. Build the rule: a speaker placing (top speaker, second speaker to tenth speaker)
+    names exactly one student in any event, and its team-level form is labels.individual; every
+    other placing in a partner event still names both partners or neither, and every consent
+    rule is unchanged. Update content/results.yaml's header comment and
+    docs/guides/coach-website-editing.md's Results section to say so. Tests use invented names
+    only. The two speaker awards Charlie reported on 2026-11-14 are added to
+    content/results.yaml by the PM after this merges, never by the session.
+  priority: 2
+  constraints:
+    packages: [site/src/lib, site/tests, site/content/results.yaml, docs/guides]
+    forbidden:
+      - A real student's name in a test, a fixture, a report or a commit message
+      - A partnership published with one half named for any placing but a speaker award
+      - Any rule loosened beyond policy version 1.4
+  context:
+    - kind: TaskRef
+      name: v1-e37-t06-season-results
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        A speaker award in a Policy or Public Forum entry naming one student builds and
+        prints that student's published form, naming two is refused, and one with no
+        students prints 'a Whitefish Bay debater', while every other partner-event placing
+        still names both partners or neither, by tests with invented names shown failing
+        first.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e37-t17-a-speaker-award-names-the-speaker-alone-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.6
+    debate/epic: v1-e37-calendar-and-announcements
+spec:
+  description: >-
+    A speaker award in a partner event names the speaker alone.
+  goalRef:
+    name: v1-e37-t17-a-speaker-award-names-the-speaker-alone
+  graph:
+    nodes:
+      - id: a-speaker-award-names-the-speaker-alone
+        kind: Task
+        name: Speaker awards
+        description: >-
+          A speaker award in a partner event names the speaker alone.
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Speaker awards tests pass
+            command: pnpm
+            args: [--dir, site, test, --, results]
+status:
+  phase: Pending

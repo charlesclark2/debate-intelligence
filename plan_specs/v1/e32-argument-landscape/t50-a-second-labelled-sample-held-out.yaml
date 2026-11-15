@@ -36,7 +36,7 @@ spec:
     before this sitting.
   priority: 3
   constraints:
-    packages: [debate_core.application, debate_core.arguments, scripts, packages/debate_core/tests, packages/debate_cli/tests, docs/data, docs/runbooks]
+    packages: [debate_core.application, debate_core.arguments, debate_cli, scripts, packages/debate_core/tests, packages/debate_cli/tests, tests/scripts, tests/smoke, docs/data, docs/runbooks]
     forbidden:
       - Card text, a tag, heading or label text in the report, docs, logs or a test
       - A school, team code or debater name anywhere

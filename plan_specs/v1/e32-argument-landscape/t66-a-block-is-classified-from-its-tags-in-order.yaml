@@ -1,0 +1,85 @@
+# TASK v1-e32-t66-a-block-is-classified-from-its-tags-in-order - A block of cards the matcher left unplaced is classified as a whole from its tags in order, scored on the coach's labels
+# Epic: E32 Argument Landscape Reports | Release: v1.2 (Argument landscape & file building) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e32-t66-a-block-is-classified-from-its-tags-in-order
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e32-argument-landscape
+  annotations:
+    debate/title: "A block of cards the matcher left unplaced is classified as a whole from its tags in order, scored on the coach's labels"
+spec:
+  # Filed by the PM, 2026-11-14, from the product owner's decision of 2026-11-14 that context-based classification is wanted in V1 if it meets the bar.
+  description: >-
+    Where v1-e32-t65's inheritance leaves a block unplaced, the model sees the block, not one
+    card: its headings and its cards' tags in file order (a counterplan's text as written, per
+    data-use policy 1.23), never an evidence body, a school, a team code, a team name or a
+    debater name. Proposal first: the block's definition (t65's), the prompt (a new version of
+    landscape.classify_position or its own id), the batch shape, the cost at the committed
+    prices, and how a block's answer scores per card against the coach's existing labels (each
+    card takes its block's answer). Stop for the PM's ruling. Then build it; tune only on
+    v1-e32-t21's first sample, and score once on v1-e32-t50's holdout against the 0.85 bar.
+    Every record run is the operator's, after the PM authorizes it, and the hold on other live
+    runs stands. If the holdout misses the bar, the stage stays off by default and the score is
+    recorded in docs/data/landscape-model-evaluation.md.
+  priority: 2
+  constraints:
+    packages: [debate_core.arguments, debate_core.application, debate_core.domain, prompts, packages/debate_core/tests, packages/debate_cli/tests, docs/data]
+    forbidden:
+      - An evidence body, a school, a team code, a team name or a debater name in a prompt input or a cassette
+      - A prompt tuned on the holdout
+      - A live model call by a session
+      - The stage on by default without the bar met on the holdout
+  context:
+    - kind: TaskRef
+      name: v1-e32-t65-a-card-inherits-its-blocks-position
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        The proposal is ruled on by the PM before code.
+    - id: ac2
+      description: >-
+        Replayed from the operator's recordings, the holdout's per-card score is recorded
+        against the 0.85 bar with the input and cassette scans clean, and the stage is on by
+        default only if the bar is met.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e32-t66-a-block-is-classified-from-its-tags-in-order-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e32-argument-landscape
+spec:
+  description: >-
+    A block of cards the matcher left unplaced is classified as a whole from its tags in order,
+    scored on the coach's labels.
+  goalRef:
+    name: v1-e32-t66-a-block-is-classified-from-its-tags-in-order
+  graph:
+    nodes:
+      - id: a-block-is-classified-from-its-tags-in-o
+        kind: Task
+        name: Block classification
+        description: >-
+          A block of cards the matcher left unplaced is classified as a whole from its
+          tags in order, scored on the coach's labels.
+        estimatedEffort: 4h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Block classification tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests, -k, block and classif]
+status:
+  phase: Pending

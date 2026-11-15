@@ -44,7 +44,7 @@
 season: '2026-27'
 
 # The day this file was last changed. Update it with every edit: the page shows it.
-revised: 2026-10-30
+revised: 2026-11-14
 
 # The words around the results. House style: no em dashes, and no acronym left unexplained.
 labels:
@@ -91,3 +91,35 @@ results:
     division: novice
     placing: state qualifying leg
     students: [Marianna Troicki]
+
+  # West Bend Challenger, from Charlie on 2026-11-14. Off the schedule since that day.
+  - tournament: West Bend Challenger
+    date: 2026-11-07
+    event: policy
+    division: varsity
+    placing: first place
+    students: [Yvette Nikolova, Astrid Clauss]
+
+  - tournament: West Bend Challenger
+    date: 2026-11-07
+    event: policy
+    division: varsity
+    placing: state qualifying leg
+    students: [Yvette Nikolova, Astrid Clauss]
+
+  # Badgerland, from Charlie on 2026-11-14. Off the schedule since that day.
+  - tournament: Badgerland
+    date: 2026-11-13
+    end: 2026-11-14
+    event: policy
+    division: varsity
+    placing: first place
+    students: [Yvette Nikolova, Astrid Clauss]
+
+  - tournament: Badgerland
+    date: 2026-11-13
+    end: 2026-11-14
+    event: policy
+    division: varsity
+    placing: state qualifying leg
+    students: [Yvette Nikolova, Astrid Clauss]

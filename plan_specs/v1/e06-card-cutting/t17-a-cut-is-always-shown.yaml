@@ -32,7 +32,7 @@ spec:
     only; the renderer keeps writing '…'.
   priority: 2
   constraints:
-    packages: [debate_core.evidence, packages/debate_core/tests]
+    packages: [debate_core.evidence, debate_core.application, packages/debate_core/schemas, debate_cli, packages/debate_core/tests, packages/debate_cli/tests, docs/evidence]
     forbidden:
       - A hidden cut reported as VERIFIED
       - A changed or added word reported as verified

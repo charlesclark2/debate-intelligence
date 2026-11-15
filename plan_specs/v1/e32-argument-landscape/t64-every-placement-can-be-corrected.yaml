@@ -1,0 +1,85 @@
+# TASK v1-e32-t64-every-placement-can-be-corrected - The coach can correct any heading's placement, not only the headings the review queue lists
+# Epic: E32 Argument Landscape Reports | Release: v1.2 (Argument landscape & file building) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e32-t64-every-placement-can-be-corrected
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e32-argument-landscape
+  annotations:
+    debate/title: "The coach can correct any heading's placement, not only the headings the review queue lists"
+spec:
+  # Filed by the PM, 2026-11-14, from the product owner's decision of 2026-11-14 that V1 ships the deterministic landscape with overrides.
+  description: >-
+    V1 ships the landscape without the per-card model stage (the product owner, 2026-11-14,
+    after v1-e32-t50's holdout), so the coach must be able to correct what the deterministic
+    matcher placed. The review queue (v1-e32-t02 ac4) lists only headings nothing placed, or
+    placed under the review threshold, and the coach's decisions become OverrideRules that the
+    matcher reads before any alias. A heading an alias placed confidently but wrongly never
+    reaches the coach. Add a placements listing: every placed normalized heading with its
+    position, how it was placed (alias, override, tag, or v1-e32-t65's inheritance once built)
+    and its document, team and card counts, in the queue's CSV shape with a decision column, so
+    that a decision on a placed heading replaces its placement from the next run through the
+    same apply step. Headings fewer than minimum_teams teams use stay out and are counted, as in
+    the queue. Propose first, with counts only on the newest hspolicy26 snapshot (placed
+    headings by how they were placed), whether corrections finer than a heading are needed, and
+    the command's shape; stop for the PM's ruling before code.
+  priority: 2
+  constraints:
+    packages: [debate_core.arguments, debate_core.application, debate_cli, packages/debate_core/tests, packages/debate_cli/tests, docs/guides]
+    forbidden:
+      - A school, team code, team name, path or file name in the listing
+      - A decision applied that names no position of the taxonomy
+      - A model call
+  context:
+    - kind: TaskRef
+      name: v1-e32-t02-position-classification
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        The proposal, with its counts, is ruled on by the PM before code.
+    - id: ac2
+      description: >-
+        A decision on a heading an alias placed replaces that placement from the next run,
+        and the review queue's own decisions behave as before, by tests on synthetic
+        disclosures shown failing first.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e32-t64-every-placement-can-be-corrected-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e32-argument-landscape
+spec:
+  description: >-
+    The coach can correct any heading's placement, not only the headings the review queue lists.
+  goalRef:
+    name: v1-e32-t64-every-placement-can-be-corrected
+  graph:
+    nodes:
+      - id: every-placement-can-be-corrected
+        kind: Task
+        name: Correct a placement
+        description: >-
+          The coach can correct any heading's placement, not only the headings the review
+          queue lists.
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Correct a placement tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests, -k, override or placement]
+status:
+  phase: Pending

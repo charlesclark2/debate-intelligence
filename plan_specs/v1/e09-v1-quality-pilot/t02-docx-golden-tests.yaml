@@ -25,6 +25,10 @@ spec:
     readable diff of the first divergent paragraph/run. An explicit `--update-goldens` flow regenerates
     expected files for intentional changes and requires coach review in the PR. Boundaries: does not judge
     span choice quality (t03) and does not change the renderer.
+    (PM amendment 2026-11-14, from v1-e09-t01's Q2 B.) The golden corpus's source snapshots
+    stay in a local folder outside the repository, which is public. The golden evaluation this task
+    builds runs on the operator's machine against that folder, as the parser evaluation does, and CI
+    runs only what needs no snapshot.
   priority: 1
   constraints:
     packages: [tests/golden, scripts]

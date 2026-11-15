@@ -1,0 +1,90 @@
+# TASK v1-e32-t65-a-card-inherits-its-blocks-position - A card the matcher could not place inherits the position of the block it is read in, measured first
+# Epic: E32 Argument Landscape Reports | Release: v1.2 (Argument landscape & file building) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e32-t65-a-card-inherits-its-blocks-position
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e32-argument-landscape
+  annotations:
+    debate/title: "A card the matcher could not place inherits the position of the block it is read in, measured first"
+spec:
+  # Filed by the PM, 2026-11-14, from the product owner's point of 2026-11-14 that a card's argument comes from the block it sits in.
+  description: >-
+    The product owner's point of 2026-11-14: a card's argument comes from the block it is read
+    in (a counterplan's text, then its solvency and net-benefit cards; a disadvantage's
+    uniqueness, link, internal link and impact), so a tag judged alone is ambiguous. The cards
+    that reach the per-card model stage are those whose headings named no position, which is why
+    it scored 0.571 and 0.476 on v1-e32-t50's holdout against the 0.85 bar. Measure first,
+    counts only, on the newest hspolicy26 and hsld26 snapshots: of the cards the matcher leaves
+    unplaced, how many sit in a block (the innermost heading's section, or a run of cards
+    between headings, as the reader defines it; say which) whose other cards the matcher placed,
+    to one position or to several. Score inheritance per card against the coach's labels: choose
+    any parameter on v1-e32-t21's first sample only, then score once on v1-e32-t50's holdout.
+    Propose a deterministic rule (for example, inherit only when the block's placed cards agree)
+    and stop for the PM's ruling. Then build it in the matcher, before the review queue, with
+    its placement kind named as inherited in the report and the queue.
+  priority: 2
+  constraints:
+    packages: [debate_core.arguments, debate_core.application, scripts, packages/debate_core/tests, docs/data]
+    forbidden:
+      - A model call
+      - A school, team code, team name or debater name in output, a report or a test
+      - A parameter chosen on the holdout
+  context:
+    - kind: TaskRef
+      name: v1-e32-t21-local-classifier-comparison
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e32-t50-a-second-labelled-sample-held-out
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        The measurement, and the proposed rule with its score on the first sample and once
+        on the holdout, are ruled on by the PM before code.
+    - id: ac2
+      description: >-
+        A card inherits its block's position only as ruled, and every inherited placement is
+        named as inherited in the report and the review queue, by tests on synthetic
+        disclosures shown failing first.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e32-t65-a-card-inherits-its-blocks-position-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e32-argument-landscape
+spec:
+  description: >-
+    A card the matcher could not place inherits the position of the block it is read in,
+    measured first.
+  goalRef:
+    name: v1-e32-t65-a-card-inherits-its-blocks-position
+  graph:
+    nodes:
+      - id: a-card-inherits-its-blocks-position
+        kind: Task
+        name: Block inheritance
+        description: >-
+          A card the matcher could not place inherits the position of the block it is read
+          in, measured first.
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Block inheritance tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests, -k, inherit]
+status:
+  phase: Pending

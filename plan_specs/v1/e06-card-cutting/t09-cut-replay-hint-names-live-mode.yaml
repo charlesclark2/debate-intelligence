@@ -22,9 +22,14 @@ spec:
     right fix for a test author, not for a coach cutting a card. In `cut`'s output only, the
     hint says that a real cut runs with DEBATE_MODEL_MODE=live, and what that costs (a model
     call on the environment's route). Every other command's hint is unchanged.
+    (PM amendment 2026-11-14, built.) The scope is every debate-research command whose refusal
+    comes from the replay default (cut, search --expand-llm, search --auto-cut, daily --auto-cut), not
+    cut alone, overriding "a change to another command's hint" for this one hint; a chosen replay, the
+    fake, landscape evaluate and scripts keep the record hint. Ruling B: the auto-cut table ends with
+    one line counting the results refused under the default. The guide gains "Real model calls".
   priority: 3
   constraints:
-    packages: [debate_cli, packages/debate_cli/tests]
+    packages: [debate_cli, packages/debate_cli/tests, docs/guides, tests/smoke]
     forbidden:
       - A change to the default model mode
       - A change to another command's hint

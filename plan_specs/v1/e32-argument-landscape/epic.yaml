@@ -1383,5 +1383,66 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e32-t63-every-scan-kind-passed-over-on-the-reports-own-lines
+    - id: t64
+      kind: Task
+      name: 'The coach can correct any heading''s placement, not only the headings the review queue lists'
+      description: >-
+        The coach can correct any heading's placement, not only the headings the review
+        queue lists.
+      inputs:
+        specRef: plan_specs/v1/e32-argument-landscape/t64-every-placement-can-be-corrected.yaml
+        goalRef: v1-e32-t64-every-placement-can-be-corrected
+      dependsOn:
+      - t02
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e32-t64-every-placement-can-be-corrected reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e32-t64-every-placement-can-be-corrected
+    - id: t65
+      kind: Task
+      name: 'A card the matcher could not place inherits the position of the block it is read in, measured first'
+      description: >-
+        A card the matcher could not place inherits the position of the block it is read in,
+        measured first.
+      inputs:
+        specRef: plan_specs/v1/e32-argument-landscape/t65-a-card-inherits-its-blocks-position.yaml
+        goalRef: v1-e32-t65-a-card-inherits-its-blocks-position
+      dependsOn:
+      - t21
+      - t50
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e32-t65-a-card-inherits-its-blocks-position reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e32-t65-a-card-inherits-its-blocks-position
+    - id: t66
+      kind: Task
+      name: 'A block of cards the matcher left unplaced is classified as a whole from its tags in order, scored on the coach''s labels'
+      description: >-
+        A block of cards the matcher left unplaced is classified as a whole from its tags in
+        order, scored on the coach's labels.
+      inputs:
+        specRef: plan_specs/v1/e32-argument-landscape/t66-a-block-is-classified-from-its-tags-in-order.yaml
+        goalRef: v1-e32-t66-a-block-is-classified-from-its-tags-in-order
+      dependsOn:
+      - t65
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e32-t66-a-block-is-classified-from-its-tags-in-order reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e32-t66-a-block-is-classified-from-its-tags-in-order
 status:
   phase: Pending

@@ -3,8 +3,8 @@
 
 | | |
 |---|---|
-| Policy version | 1.3 |
-| Status | **Approved**, version 1.3, 2026-11-02. See [Approval](#approval). |
+| Policy version | 1.4 |
+| Status | **Approved**, version 1.4, 2026-11-14. See [Approval](#approval). |
 | Owner | Charlie Clark (product owner and head coach) |
 | Written by | v1-e36-t01-publishing-policy implementation session, 2026-09-20 |
 | Applies to | Everything published on the public Whitefish Bay debate team website at `wfbdebate.org`, in the dev preview and in prod, and every source the site is built from |
@@ -310,6 +310,9 @@ name a child. Both facts are respected here.
      "Jordan Rivera (2028), Lincoln-Douglas debate, quarterfinalist".
    - **Partner events** (Policy debate, Public Forum debate) name **both** partners with both
      graduation years. A partnership is never published with one half named.
+   - **A speaker award is an individual's award**, in a partner event too (version 1.4). It names
+     the speaker alone, with their graduation year, for example "Jordan Rivera (2028), third
+     speaker, Varsity Policy". Its team-level form is "a Whitefish Bay debater", never "a team".
 2. **Otherwise the result publishes in team-level form**, which is always available and is never
    treated as a lesser outcome to apologize for on the page:
 
@@ -703,7 +706,7 @@ policy without the answer; **open** means the answer is still needed before the 
 
 ## Approval
 
-**Version 1.3 of this policy is approved.** The core pages (`v1-e36-t04`), the first prod deploy
+**Version 1.4 of this policy is approved.** The core pages (`v1-e36-t04`), the first prod deploy
 (`v1-e36-t05`), announcements and the calendar (E37) and the donation page (E38) may proceed, each
 still subject to the [Pre-publication checklist](#pre-publication-checklist). **`v1-e36-t04` may
 include student photographs**, now that the district has confirmed its form covers website
@@ -715,10 +718,11 @@ nothing this policy governs may be published under it.
 
 | Field | Value |
 |---|---|
-| Policy version | 1.3 |
+| Policy version | 1.4 |
 | Approved by | **Charlie Clark** |
 | Role | Product owner and head coach |
-| Approval date | **2026-11-02** for version 1.3; **2026-10-27** for version 1.2; **2026-09-30** for version 1.1; **2026-09-20** for version 1.0 |
+| Approval date | **2026-11-14** for version 1.4; **2026-11-02** for version 1.3; **2026-10-27** for version 1.2; **2026-09-30** for version 1.1; **2026-09-20** for version 1.0 |
+| Changes in version 1.4 | **One rule loosened, with Charlie's approval.** [Results and awards](#results-and-awards) 1: a speaker award is an individual's award, so in a partner event it names the speaker alone, and its team-level form is "a Whitefish Bay debater". Charlie, 2026-11-14: "It is an individual award, so it should name the speaker alone." The site's results check refuses one partner named until `v1-e37-t17` builds the rule, and no speaker award in a partner event is published before it does. Recorded by the PM in the PM batch of 2026-11-14 |
 | Changes in version 1.3 | **A clarification, no rule loosened.** [The published-names allowlist](#the-published-names-allowlist) names where the list lives: the media-consent manifest's students and its reviewed phrases, with one-word entries refused unless on a short reviewed list, as `v1-e37-t03` built it. Approved by Charlie on 2026-11-02 in the PM's review of `v1-e37-t03`; recorded by the PM in the PM batch of 2026-11-02 (evening) |
 | Changes in version 1.2 | **One rule loosened, with Charlie's approval.** [Results and awards](#results-and-awards) 3: a state qualifying leg earned at a tournament is published as a result of that tournament ("State qualifying leg"), never numbered or counted, and never with the record that earned it. Charlie, 2026-10-27: qualifying legs are a big achievement for students and should be celebrated. Recorded by the PM in the PM batch of 2026-10-27 (w) |
 | Changes in version 1.1 | **A correction, no rule changed.** The address for removal requests (and every coach address on the site) is `charles.clark@wfbschools.com`, Charlie's district address; version 1.0 printed `charles.clark@wfbschools.org`, which is not his address. Approved by Charlie in the `v1-e37-t05-parent-email-signup` session on 2026-09-30 |

@@ -25,6 +25,10 @@ spec:
     image lacks (`config/landscape/`, `prompts/`; v1-e05-t12's follow-up) and where the
     landscape's state would live in bucket mode. Propose to the PM before building. Then, as
     ruled, wire the stage, fix the stale reason line, and bundle what the image needs.
+    (PM amendment 2026-11-14, the product owner's landscape decision.) V1's weekly landscape
+    stage runs the deterministic matcher and the review queue, with v1-e32-t65's inheritance once it is
+    built; it makes no model call, so the count's model-cost part is zero for V1. v1-e32-t07 is
+    cancelled and no longer a prerequisite.
   priority: 2
   constraints:
     packages: [debate_core.application, debate_core.integrations, debate_cli, scripts, ops, packages/debate_core/tests, packages/debate_cli/tests, tests/scripts, tests/smoke, docs/runbooks]
@@ -35,9 +39,6 @@ spec:
   context:
     - kind: TaskRef
       name: v1-e40-t17-landscape-report-from-the-cloud-runs-state
-      relation: dependsOn
-    - kind: TaskRef
-      name: v1-e32-t07-model-classification-stage
       relation: dependsOn
   acceptanceCriteria:
     - id: ac1

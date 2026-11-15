@@ -252,3 +252,17 @@ The Goal stays `InProgress` for the district's written reply and the coach's app
   approval node, with that policy's version bump, as the session proposes.
 
 `scripts/task pr --partial`
+
+## Operator records (recorded by the PM, 2026-11-14)
+
+Added by the PM. Nothing above is changed, and this section is not a review.
+
+The coach sent the email on 2026-11-14, shortened by him so as not to overwhelm the district: four
+questions, the draft's 1 (the payment portal and its link), 2 (a check's payee, memo line and where
+it goes), 5 (receipts and tax acknowledgments) and 13 (thanking donors by name), with an offer to
+meet at the high school. The draft's other questions were not asked, so the page takes the cautious
+default for each: it says nothing about tax deductibility and points donors to the business office;
+gifts go to the team as a whole; it does not mention a booster group. Question 15 (any approval
+before the page goes live) was not in the email; the coach will ask it in person. The page does not
+go live before it is answered. The resumed session records each answer with the role of the person
+who answered and the date, never their name.

@@ -41,7 +41,7 @@ spec:
         tracking parameters, by a test shown failing first, or the field is renamed to what
         it holds, with every reader updated.
 status:
-  phase: InProgress
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

@@ -823,6 +823,13 @@ with `EVALUATION_BELOW_BAR` and `bar_reads_sample: "holdout"`.
 The JSON objects went to the PM with the findings above. The PM ruled on 2026-11-14
 ([the third ruling](#the-pms-third-ruling-2026-11-14)). The listing is built, and step 7 runs it.
 
+**Step 7, the holdout's own `high_volume` scan hits (the operator's, 2026-11-14).** The piped counts, as
+pasted: 6 input batches, 6 cassettes and 0 repair cassettes. That is one cassette per batch, as the
+recording's 6 calls predict. There are 44 scan hits, and 1 carries no mark that sets it aside; the other 43
+are set aside by a mark. The operator then read the hits in the terminal and reported that none of their
+words names a team, a school or a tournament. The hit with no mark is to be confirmed by its number, and only
+the verdict comes back.
+
 **The affected set did not finish locally.** `uv run scripts/affected_tests.py --run --slow` selects 157 files,
 5,298 tests. Within the 115-second cap it reached 65% with two failures:
 `test_container_factories.py::test_importing_the_container_or_the_app_loads_no_integration`, for the container

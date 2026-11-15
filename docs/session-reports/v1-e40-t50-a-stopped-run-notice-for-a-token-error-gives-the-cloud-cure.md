@@ -96,6 +96,60 @@ None.
 
 <!-- Choices the spec left open, with the reasoning. -->
 
+## Questions for the PM
+
+Proposed 2026-11-14 after the measurements above. Awaiting the ruling; no code yet.
+
+**1. The two token codes, bucket mode, a run stopped on either.** This is a new arm before the
+generic stopped-run arm, keyed on the run's failure code being one of the two.
+
+* Title: `caselist pull stopped: no readable caselist_token`. It is named after the runbook section
+  the cure points to, as t33's title is.
+* Message: `Run <id> (dev) stopped: an error recorded as CASELIST_TOKEN_MISSING, so it fetched
+  nothing from OpenCaselist.` (or `…_UNREADABLE`). The code stays named, as bucket mode names these
+  two today (`_WORDS_OUTSIDE_BUCKET_MODE_ONLY`). There is no verdict sentence. Today's "at least one
+  failure here will be the same on the next scheduled run" is untrue: the Wednesday login comes before
+  that run and cures it. t33's expired-login notice has no verdict either.
+* Fix line: `CLOUD_TOKEN_CURES[code]`, which is t40's `CLOUD_NO_TOKEN_CURE`, read from the table and not
+  reworded.
+* No hint (the details' hint is `null` for these in bucket mode). `caselist runs`' banner words are
+  unchanged (`None`). The Mac is unchanged.
+
+**2. The refused secret, bucket mode, a run stopped on `StoreAccessDenied` at `GetSecretValue`.**
+
+* Title: `caselist pull stopped: token secret refused, needs a person`.
+* Message: `Run <id> (dev) was refused its read of the caselist_token secret (GetSecretValue) and
+  fetched nothing. A person is needed: the next login does not cure it, and every run is refused the
+  same way until the run role can read the secret again.`
+* Fix line: `send the PM the run's id and its error class, StoreAccessDenied (caselist-cloud-run.md,
+  "A run refused its token secret"); never an IAM or key-policy change by hand`.
+* How the notice knows it was the secret: in bucket mode, `fix_for` gives this cure for a
+  `StoreAccessDenied` whose `operation` is `GetSecretValue`. That is a structured field of the error,
+  not its message. `details_for_failure` already writes `fix_for` as the details' hint, and the new arm
+  fires when the details' hint is this cure. A bucket (S3) refusal keeps today's notice. A new
+  `SyncRunDetails` field was rejected because the details' top-level keys are pinned by the
+  dev.200-schema test.
+* `banner_words` gives `None` for it, since the title is not a verdict.
+* Runbook: a new section `## A run refused its token secret` after "A run with no readable
+  caselist_token". t40's `STORE_ACCESS_DENIED` paragraph moves there, and a one-line pointer stays.
+* Notice table: two rows in `caselist-run-alerts.md`'s "When an alert arrives". The Mac's title table in
+  `caselist-scheduled-sync.md` is left alone, because the Mac never sends these titles.
+
+**3. Exit codes: no change (recommended).** `debate_cli.exit_codes` is shared with the Mac. Changing
+`STORE_ACCESS_DENIED`'s exit would change the Mac's exit for every store refusal, which is forbidden.
+A split for bucket mode only buys nothing: the cloud's task-stopped alarm fires on any nonzero exit
+(`alerts.tf`, `anything-but 0`) and quotes the exit code. Both new titles are titles of their own, as
+t33's is, not the verdict titles, so exit 3 with "needs a person" in a title does not break
+v1-e34-t19's rule that the verdict and the exit are one decision.
+
+**4. Naming the class.** `notifications_for`'s docstring says no notification names an exception's
+class (v1-e34-t19). Item 2 names `StoreAccessDenied` in the fix line, as the PM's brief asks and as the
+runbook's escalation already does. A: name the class as written (recommended). B: name the code
+`STORE_ACCESS_DENIED` and say the class is in `caselist runs --remote --json`'s `error_class`.
+
+**5. The run's log for a refused secret.** Its hint stays `null` (recommended: the spec covers the
+email, and nothing contradicts it). Alternatively the CLI could print the same escalation as its hint.
+
 ## Operator follow-ups
 
 <!-- Commands the operator must run (anything over ~2 minutes), with where to run them, the exact

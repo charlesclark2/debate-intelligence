@@ -1709,7 +1709,10 @@ Mac's own copy of the manifest, which is not the cloud run's. A run on an image 
 When a cloud run stops on an error before its stages, or a stage fails beyond the publish alone or
 the parse alone (a failed import beside a failed publish, a failed download, a failed report stage),
 the alert email (`caselist pull failed: …` or `caselist pull finished with a failed stage`) has this
-fix line since `v1-e40-t28`:
+fix line since `v1-e40-t28`. A run stopped with no readable caselist_token, or refused its token secret,
+has an email of its own since `v1-e40-t50`
+([A run with no readable caselist_token](#a-run-with-no-readable-caselist_token),
+[A run refused its token secret](#a-run-refused-its-token-secret)):
 
 > Fix: the next cloud run takes up what this run did not finish, from the run state saved in the bucket: the weekly run, or one started by hand (caselist-cloud-run.md, "A failed or stopped run"); never a publish from the operator's Mac
 
@@ -1893,9 +1896,16 @@ record (`caselist runs --json`'s `error_message`). The command's hint is:
 
 > In bucket mode the next Wednesday 03:00 login writes a new caselist_token to the token secret, and the run after it takes up what this run did not finish, from the run state saved in the bucket; a backfile import refused for it starts again after Thursday 00:00 (caselist-cloud-run.md, "A run with no readable caselist_token"); never a login by hand, which would be a second login.
 
-The alert email is still a stopped run's, `caselist pull failed: needs a person`, `stopped: an error
-recorded as CASELIST_TOKEN_MISSING` (or `…_UNREADABLE`), with the fix line of
-[A failed or stopped run](#a-failed-or-stopped-run).
+Since `v1-e40-t50` the alert email is titled `caselist pull stopped: no readable caselist_token`. It
+says `Run <id> (dev) stopped: an error recorded as CASELIST_TOKEN_MISSING, so it fetched nothing from
+OpenCaselist.` (or `…_UNREADABLE`, and `(prod)` for a prod run), and its fix line gives the same cure:
+
+> Fix: the next Wednesday 03:00 login writes a new caselist_token to the token secret, and the run after it takes up what this run did not finish, from the run state saved in the bucket; a backfile import refused for it starts again after Thursday 00:00 (caselist-cloud-run.md, "A run with no readable caselist_token"); never a login by hand, which would be a second login
+
+It has no `needs a person` or `will be retried` verdict, because the Wednesday login comes before the next
+scheduled run and puts it right. Before `v1-e40-t50` the email was titled `caselist pull failed: needs a
+person` and had the fix line of [A failed or stopped run](#a-failed-or-stopped-run), "or one started by
+hand". A run started by hand before the login stops again, so the rule below holds for that email too.
 
 **What it means.** The login task writes the token secret every Wednesday at 03:00, three hours before
 the run, and replaces whatever the secret held. A secret with no value has had no token written since
@@ -1916,11 +1926,8 @@ is not cured by the next login either. It goes to the PM with the run's id and i
 (`caselist runs --remote --json`'s `error_class`) before anything is changed. Never change the run
 role's IAM policy or the token key's policy by hand for it.
 
-A run role that can no longer decrypt the secret (a change to its IAM policy or to the key policy) is
-not this code. In this build its read is refused, and the run stops on `STORE_ACCESS_DENIED`, error
-class `StoreAccessDenied`, `not allowed to GetSecretValue secret debate-dev-caselist-token`. The next
-login does not cure that either. It goes to the PM the same way, with its error class, which tells the
-two apart. Again, never change an IAM policy or the key policy by hand.
+A run role that can no longer read or decrypt the secret is not this code: see
+[A run refused its token secret](#a-run-refused-its-token-secret).
 
 **Never `caselist auth login` or `caselist auth logout` on the operator's Mac** for it. A login is a
 second login that week for the same account
@@ -1928,6 +1935,36 @@ second login that week for the same account
 secretsmanager` it writes only the Mac's own token, which the cloud run never reads. The logout refuses
 the Secrets Manager backend. A run on an image built before `v1-e40-t40` still says to run them (the
 error's message is the Mac's); the rule holds for that log too.
+
+## A run refused its token secret
+
+When a cloud run's read of the token secret is refused, because the run role's IAM policy or the token
+key's policy no longer lets it read or decrypt the secret, the run stops on `STORE_ACCESS_DENIED`, error
+class `StoreAccessDenied`, `not allowed to GetSecretValue secret debate-dev-caselist-token` (prod's names
+`debate-prod-caselist-token`). An IAM refusal and a decrypt refusal give the same code and class. It is
+not `CASELIST_TOKEN_UNREADABLE`, which is a secret the run could read whose value is not a token record.
+It exits `3`, as every refused store does. Since `v1-e40-t50` the alert email is titled `caselist pull
+stopped: token secret refused, needs a person`, and says `Run <id> (dev) was refused its read of the
+caselist_token secret (GetSecretValue) and fetched nothing. A person is needed: the next login does not
+cure it, and every run is refused the same way until the run role can read the secret again.` Its fix
+line is:
+
+> Fix: send the PM the run's id and its code, STORE_ACCESS_DENIED; the error class is in caselist runs --remote --json (caselist-cloud-run.md, "A run refused its token secret"); never an IAM or key-policy change by hand
+
+The run's own log carries the same words as the command's hint, after `In bucket mode`, and the run's
+details carry them as their `hint`. Before `v1-e40-t50` the email was titled `caselist
+pull failed: will be retried`, blamed "this machine or the bucket", and had the fix line of
+[A failed or stopped run](#a-failed-or-stopped-run). A bucket that refuses the run (`GetObject`,
+`PutObject`) still sends that email: only a refused read of the token secret has this one.
+
+**What it means.** Neither a retry nor the Wednesday login cures it: the login task writes a new value,
+and the run is still refused its read.
+Every weekly run stops the same way until the run role can read the secret again.
+
+**What to do.** Send the PM the run's id and the code, `STORE_ACCESS_DENIED`. Read the `error_class` from
+`debate-research caselist runs --remote --json` and send it too, since it tells this refusal apart from a
+token that cannot be read. Never change an IAM policy or the key policy by hand: the PM decides what
+changes. Nor `caselist auth login` on the operator's Mac, which writes a token the run is still refused.
 
 ## A backlog growing
 

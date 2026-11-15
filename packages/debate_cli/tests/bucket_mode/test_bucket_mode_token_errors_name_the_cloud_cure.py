@@ -534,3 +534,200 @@ def test_the_cloud_runbook_has_the_section_the_no_token_cure_names() -> None:
         in flat
     )
     assert "the run stops on `STORE_ACCESS_DENIED`, error class `StoreAccessDenied`" in flat
+
+
+# ------------------------------------------------------------------------------------------------
+# `v1-e40-t50`: the notice of a run stopped on a token code, or refused its token secret
+# ------------------------------------------------------------------------------------------------
+#
+# Measured before any change (the session report of v1-e40-t50): a bucket-mode run stopped on either
+# token code emailed `v1-e40-t28`'s "the next cloud run … or one started by hand", and one its token
+# secret refused emailed "will be retried" and "this machine or the bucket refused it". The PM's ruling
+# of 2026-11-14 gives each a title of its own and its cure, and the refused secret's output and record
+# the same escalation as their hint. On the Mac every word stays, pinned before anything changed.
+
+NO_READABLE_TOKEN_TITLE: Final = "caselist pull stopped: no readable caselist_token"
+REFUSED_SECRET_TITLE: Final = "caselist pull stopped: token secret refused, needs a person"
+
+THE_REFUSED_SECRET_CURE: Final = (
+    "send the PM the run's id and its code, STORE_ACCESS_DENIED; the error class is in caselist runs "
+    '--remote --json (caselist-cloud-run.md, "A run refused its token secret"); never an IAM or key-policy '
+    "change by hand"
+)
+"""The ruling's fix line for a refused token secret, written by hand."""
+
+THE_NO_TOKEN_CURE: Final = THE_NO_TOKEN_CURE_IN_THE_CLOUD.removeprefix("In bucket mode ").removesuffix(".")
+"""`v1-e40-t40`'s table cure, as a notice's fix line gives it: the hint above without its idiom."""
+
+REFUSED_READ: Final = "not allowed to GetSecretValue secret debate-dev-caselist-token"
+"""`StoreAccessDenied`'s message for the token secret: what happened, unchanged in both modes."""
+
+THE_TWO_REFUSALS: Final = [
+    pytest.param("AccessDeniedException", id="iam-denied"),
+    pytest.param("DecryptionFailure", id="decrypt-refused"),
+]
+"""What `GetSecretValue` answers when the run role's IAM policy, or the key policy, no longer lets it read."""
+
+
+class RefusingSecretsManager:
+    """A Secrets Manager client whose `GetSecretValue` is refused with `code`, as AWS refuses it.
+
+    moto cannot refuse a KMS decrypt, so the refusal is botocore's own `ClientError`, raised in-process.
+    """
+
+    def __init__(self, code: str) -> None:
+        self.code = code
+
+    def get_secret_value(self, **_: object) -> object:
+        from botocore.exceptions import ClientError
+
+        raise ClientError({"Error": {"Code": self.code, "Message": "refused"}}, "GetSecretValue")
+
+
+def the_secret_refuses_its_read(world: World, code: str) -> None:
+    from debate_core.integrations import secrets_manager
+
+    the_token_is_the_secret(world, "a value the refusal never shows")
+    world.monkeypatch.setattr(
+        secrets_manager, "build_secrets_manager_client", lambda **_: RefusingSecretsManager(code)
+    )
+
+
+@pytest.mark.parametrize("code", THE_TWO_REFUSALS)
+def test_a_mac_pull_its_token_secret_refused_keeps_its_output_and_notice_word_for_word(
+    world: World, code: str
+) -> None:
+    pulled_on_the_mac(world)
+    inbox = the_coachs_inbox(world)
+    the_secret_refuses_its_read(world, code)
+
+    refused = world.pull()
+
+    assert refused["exit_code"] == ExitCode.RETRIEVAL_FAILURE, refused
+    error = refused["error"]
+    assert error["code"] == "STORE_ACCESS_DENIED"
+    assert error["message"] == REFUSED_READ
+    assert error["hint"] is None
+    record, details = world.last_record()
+    assert record["error_class"] == "StoreAccessDenied"
+    assert details.get("hint") is None
+    where = f"Run {record['run_id']} (dev)"
+    assert inbox() == [
+        "caselist pull failed: will be retried\n"
+        f"{where}\n"
+        "\n"
+        f"{where} stopped: this machine or the bucket refused it. The next scheduled run should retry it: "
+        "every failure here is one a later run may not meet.\n"
+        "\n"
+        "Fix: debate-research caselist pull"
+    ]
+
+
+def test_a_mac_pull_with_no_token_keeps_its_notice_word_for_word(world: World) -> None:
+    pulled_on_the_mac(world)
+    inbox = the_coachs_inbox(world)
+    the_token_is_the_macs_file(world, None)
+
+    world.pull()
+
+    where = f"Run {the_record_of(world)['run_id']} (dev)"
+    assert inbox() == [
+        "caselist pull failed: needs a person\n"
+        f"{where}\n"
+        "\n"
+        f"{where} stopped: no caselist_token was stored on this machine. A person should look: at least one "
+        "failure here will be the same on the next scheduled run.\n"
+        "No caselist_token is stored on this machine for the environment: log in again with "
+        "`debate-research caselist auth login`.\n"
+        "\n"
+        "Fix: debate-research caselist pull"
+    ]
+
+
+@pytest.mark.parametrize(("holding", "code", "message", "details"), THE_TWO_TOKEN_CODES)
+def test_a_bucket_mode_run_stopped_by_no_readable_token_emails_the_wednesday_login(
+    world: World, tmp_path: Path, holding: str | None, code: str, message: str, details: dict[str, str]
+) -> None:
+    seeded_with_two_weeks(world)
+    in_a_cloud_task(world, tmp_path)
+    inbox = the_coachs_inbox(world)
+    the_token_is_the_secret(world, holding)
+
+    world.pull()
+
+    where = f"Run {the_record_of(world)['run_id']} (dev)"
+    assert inbox() == [
+        f"{NO_READABLE_TOKEN_TITLE}\n"
+        f"{where}\n"
+        "\n"
+        f"{where} stopped: an error recorded as {code}, so it fetched nothing from OpenCaselist.\n"
+        "\n"
+        f"Fix: {THE_NO_TOKEN_CURE}"
+    ]
+
+
+@pytest.mark.parametrize("code", THE_TWO_REFUSALS)
+def test_a_bucket_mode_pull_its_token_secret_refused_gives_the_access_denied_escalation(
+    world: World, tmp_path: Path, code: str
+) -> None:
+    """Its output, its record and its email say the same thing (the ruling, 2 and 5); the exit is still 3."""
+    seeded_with_two_weeks(world)
+    in_a_cloud_task(world, tmp_path)
+    inbox = the_coachs_inbox(world)
+    the_secret_refuses_its_read(world, code)
+
+    refused = world.pull()
+
+    assert refused["exit_code"] == ExitCode.RETRIEVAL_FAILURE, refused
+    error = refused["error"]
+    assert error["code"] == "STORE_ACCESS_DENIED"
+    assert error["message"] == REFUSED_READ
+    assert error["hint"] == f"In bucket mode {THE_REFUSED_SECRET_CURE}."
+    record, recorded = world.last_record()
+    assert record["error_class"] == "StoreAccessDenied"
+    assert recorded["hint"] == THE_REFUSED_SECRET_CURE
+    where = f"Run {record['run_id']} (dev)"
+    [email] = inbox()
+    assert email == (
+        f"{REFUSED_SECRET_TITLE}\n"
+        f"{where}\n"
+        "\n"
+        f"{where} was refused its read of the caselist_token secret (GetSecretValue) and fetched nothing. A "
+        "person is needed: the next login does not cure it, and every run is refused the same way until the "
+        "run role can read the secret again.\n"
+        "\n"
+        f"Fix: {THE_REFUSED_SECRET_CURE}"
+    )
+    for named in ("StoreAccessDenied", "ClientError", code):
+        assert named not in email
+
+
+def test_a_bucket_mode_pull_its_token_secret_refused_prints_the_access_denied_escalation_in_its_panel(
+    world: World, tmp_path: Path
+) -> None:
+    """What the cloud run's log keeps when the command is run without `--json`."""
+    seeded_with_two_weeks(world)
+    in_a_cloud_task(world, tmp_path)
+    the_secret_refuses_its_read(world, "DecryptionFailure")
+
+    result = world.invoke("caselist", "pull", "--caselist", CASELIST)
+
+    assert result.exit_code == ExitCode.RETRIEVAL_FAILURE, result.output
+    panel = flattened(result.output)
+    assert REFUSED_READ in panel
+    assert f"In bucket mode {THE_REFUSED_SECRET_CURE}." in panel
+
+
+def test_a_bucket_mode_backfile_import_its_token_secret_refused_gives_the_access_denied_escalation(
+    world: World, tmp_path: Path
+) -> None:
+    in_a_cloud_task(world, tmp_path)
+    world.monkeypatch.setenv("DEBATE_CASELIST__BACKFILE_CASELISTS", json.dumps([BACKFILE]))
+    the_secret_refuses_its_read(world, "AccessDeniedException")
+
+    refused = world.run("caselist", "backfile-import", "--caselist", BACKFILE, "--execute")
+
+    assert refused["exit_code"] == ExitCode.RETRIEVAL_FAILURE, refused
+    error = refused["error"]
+    assert error["code"] == "STORE_ACCESS_DENIED"
+    assert error["hint"] == f"In bucket mode {THE_REFUSED_SECRET_CURE}."

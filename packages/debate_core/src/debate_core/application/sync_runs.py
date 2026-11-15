@@ -148,6 +148,7 @@ from debate_core.application.caselist.run_lock import RunHomeMoved, RunLockHeld,
 from debate_core.application.caselist.status_service import CASELIST_DRIFT
 from debate_core.application.caselist_sync import (
     CLOUD_FAILURE_RATE_RUNBOOK,
+    CLOUD_REFUSED_TOKEN_SECRET_CURE,
     REQUIRED_STAGES,
     TOKEN_UNREADABLE_CODE,
     DriftKind,
@@ -169,6 +170,7 @@ from debate_core.application.errors import (
     UNMODELLED_ERROR_CODE,
     DomainError,
     NotFound,
+    StoreAccessDenied,
     StoreCredentialsExpired,
     StoreError,
     error_code_of_class,
@@ -212,7 +214,9 @@ __all__ = [
     "LOCK_BANNER_WORDS",
     "MANIFEST_PUBLISHED_AGAIN",
     "MANIFEST_PUBLISHED_AGAIN_TITLE",
+    "REFUSED_TOKEN_SECRET_TITLE",
     "NEEDS_A_PERSON",
+    "NO_READABLE_TOKEN_TITLE",
     "NEEDS_A_PERSON_TITLE",
     "PENDING_RECORDS_FILENAME",
     "SEARCH_INDEX_PUBLISH_COMMAND",
@@ -1427,6 +1431,49 @@ def cloud_cure_for(codes: Iterable[str]) -> str | None:
     return next((CLOUD_TOKEN_CURES[code] for code in codes if code in CLOUD_TOKEN_CURES), None)
 
 
+NO_READABLE_TOKEN_TITLE: Final = "caselist pull stopped: no readable caselist_token"
+"""The title of a bucket-mode run stopped on `CASELIST_TOKEN_MISSING` or `CASELIST_TOKEN_UNREADABLE`
+(`v1-e40-t50`, the PM's ruling of 2026-11-14), as `v1-e40-t33` gave the expired login one of its own. Its
+fix is the code's cure in :data:`CLOUD_TOKEN_CURES`, and it has no verdict sentence: the Wednesday login
+comes before the next scheduled run and cures it, so "the same on the next scheduled run" would be untrue,
+and a run started by hand before it stops again."""
+
+_NO_READABLE_TOKEN_CODES: Final = frozenset(
+    {error_code_of_class(CaselistTokenMissing), TOKEN_UNREADABLE_CODE}
+)
+
+REFUSED_TOKEN_SECRET_TITLE: Final = "caselist pull stopped: token secret refused, needs a person"
+"""The title of a bucket-mode run whose read of its caselist_token secret was refused (`v1-e40-t50`). It is
+a title of its own, not a verdict's: the run exits `3`, as every refused store does, and only a person can
+put the run role's access right (:data:`CLOUD_REFUSED_TOKEN_SECRET_CURE`)."""
+
+_REFUSED_TOKEN_SECRET: Final = (
+    "was refused its read of the caselist_token secret (GetSecretValue) and fetched nothing. A person is "
+    "needed: the next login does not cure it, and every run is refused the same way until the run role can "
+    "read the secret again."
+)
+
+
+def _no_readable_token_code(record: SyncRunRecord, details: SyncRunDetails) -> str | None:
+    """The token code a bucket-mode run stopped on (`v1-e40-t50`), or `None` for any other run."""
+    if details.bucket_run is None or record.error_class is None:
+        return None
+    return next((code for code in details.failure_codes if code in _NO_READABLE_TOKEN_CODES), None)
+
+
+def _refused_its_token_secret(record: SyncRunRecord, details: SyncRunDetails) -> bool:
+    """Whether a bucket-mode run stopped because its token secret refused its read (`v1-e40-t50`).
+
+    Told by the hint its details carry, which :func:`~debate_core.application.caselist_sync.fix_for` gives
+    only such a refusal, from the error's `operation`: a bucket's refusal has the same class and code.
+    """
+    return (
+        details.bucket_run is not None
+        and record.error_class == StoreAccessDenied.__name__
+        and details.hint == CLOUD_REFUSED_TOKEN_SECRET_CURE
+    )
+
+
 type RetryRule = Callable[[Sequence[str]], bool]
 """Whether a run that failed on exactly these error codes may succeed on a retry.
 
@@ -1516,6 +1563,15 @@ def notifications_for(
     cloud run "or one started by hand", which before the Wednesday login is refused again. Its title,
     message and hint are unchanged, and so is the Mac's notice.
 
+    **A bucket-mode run stopped on a token code, or refused its token secret, has a title of its own**
+    (`v1-e40-t50`, the PM's ruling of 2026-11-14). One stopped on `CASELIST_TOKEN_MISSING` or
+    `CASELIST_TOKEN_UNREADABLE` (:data:`NO_READABLE_TOKEN_TITLE`) gives the code's cure in
+    :data:`CLOUD_TOKEN_CURES`, the Wednesday login, and no verdict. One whose read of the token secret was
+    refused (:data:`REFUSED_TOKEN_SECRET_TITLE`) says a person is needed and gives the escalation to the PM
+    with the code (:data:`~debate_core.application.caselist_sync.CLOUD_REFUSED_TOKEN_SECRET_CURE`), told
+    apart from a bucket's refusal by its details' hint, which only that refusal carries. Neither names an
+    exception's class, and the Mac's notices are unchanged.
+
     **A skipped run says so, and that nothing needs a person** (`v1-e40-t29`). A pull refused because
     the weekly run's home moved to prod, as its details' `skipped` says, has a notice of its own
     (:data:`RUN_HOME_MOVED_TITLE`), the same in either mode, instead of the failed run's verdict.
@@ -1568,6 +1624,25 @@ def notifications_for(
                 title="caselist pull stopped: OpenCaselist login expired",
                 message=f"{where} was refused by OpenCaselist and fetched nothing more.",
                 fix_command=CLOUD_AUTH_EXPIRED_CURE if bucket is not None else AUTH_LOGIN_COMMAND,
+            )
+        )
+    elif (token_code := _no_readable_token_code(record, details)) is not None:
+        sent.append(
+            Notification(
+                title=NO_READABLE_TOKEN_TITLE,
+                message=(
+                    f"{where} stopped: {_what_stopped_it((token_code,), bucket_mode=True)}, "
+                    "so it fetched nothing from OpenCaselist."
+                ),
+                fix_command=CLOUD_TOKEN_CURES[token_code],
+            )
+        )
+    elif _refused_its_token_secret(record, details):
+        sent.append(
+            Notification(
+                title=REFUSED_TOKEN_SECRET_TITLE,
+                message=f"{where} {_REFUSED_TOKEN_SECRET}",
+                fix_command=CLOUD_REFUSED_TOKEN_SECRET_CURE,
             )
         )
     elif record.error_class is not None:
@@ -1902,6 +1977,8 @@ def banner_words(
     ):
         return LOCK_BANNER_WORDS
     if record.error_class == CaselistAuthExpired.__name__:
+        return None
+    if _no_readable_token_code(record, details) is not None or _refused_its_token_secret(record, details):
         return None
     retried = _retried_by_the_next_run(details.failure_codes, may_succeed_on_retry)
     return FIX_FIRST_BANNER_WORDS if retried and _a_fix_comes_first(record, details) else None

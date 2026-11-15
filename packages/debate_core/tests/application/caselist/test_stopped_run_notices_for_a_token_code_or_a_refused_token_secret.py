@@ -196,6 +196,7 @@ def test_a_mac_run_stopped_by_token_unreadable_keeps_its_notice_word_for_word() 
 def test_a_mac_run_its_token_secret_refused_keeps_its_notice_word_for_word() -> None:
     """The Mac's pull builds its token store with no profile, so the refusal carries no hint."""
     record, details = stopped(refused_secret("dev"), environment="dev", bucket_mode=False)
+    assert record.error_class == "StoreAccessDenied"
     assert details.hint is None
     assert said(the_notice(refused_secret("dev"), bucket_mode=False)) == (
         RETRY_TITLE,

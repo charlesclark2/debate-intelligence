@@ -1154,9 +1154,53 @@ recorded beside ac2 but not part of it.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-11-16
 
 **Notes:**
+
+Accepted for a partial merge. The fix is built and tested. ac1's apply and ac2's Wednesday read
+are the operator's, so the Goal stays `InProgress`.
+
+* **The cause is recorded, and the PM's error with it.** Ruling Q1 (A) chose the RunTask API
+  reference's camelCase, and Scheduler's validator refused it at UpdateSchedule with its request ID.
+  Decision 8 records that AWS answered the open question itself, and checks every PascalCase name
+  against the SDK's ECS model, with each page and the date. The failure came at apply time, before
+  any run depended on it.
+* **CloudTrail's casing was confirmed, not assumed** (Decision 9, two AWS pages). The reads and alert
+  rules keep `requestParameters`' camelCase, because CloudTrail records ECS's RunTask call, not
+  Scheduler's Input.
+* **`--run-schedule-only` is the right check for the fix plan** (Decision 10). The Input is known in
+  that plan, so it is read key by key:
+  * the SDK's names only;
+  * `TaskDefinition` equal to the current `:17`, which runs the owner file's image;
+  * the policy naming that revision;
+  * the template's own settings and the network unchanged;
+  * the command exactly `--json caselist pull --scheduled`;
+  * `0 to add, 1 to change, 0 to destroy`, nothing else in the module.
+
+  The grant allowance (Decision 11) passes only `module.bedrock_access`'s inline policy updated in
+  place, its `inline_policy` alone. Every replace, add, destroy, other attribute or assignment is
+  refused, the PM's replace mutant among them.
+* **The evidence.**
+  * Each change has a red run: 41/3 in Terraform, then 2, 9, 27 and 10 failed, then green at 44 and
+    136.
+  * All 13 mutants were caught at assertions, both PM-named ones included.
+  * `terraform_checks.sh` passed offline, and the bounded subsets are green. The affected set (116
+    files) goes to `ci` under agreement 10.
+* **The fallback is written** (Decision 12): if the fix is not applied by Tuesday night, Wednesday's
+  starts are refused, the operator runs Step 8 by hand after 06:00 Chicago, and ac2 moves to the
+  first scheduled run after the fix.
+* **For the operator:**
+  * Steps 1 to 3, then the PM's read of the plan.
+  * Step 4 on Monday 2026-11-16 or Tuesday 2026-11-17, never Wednesday.
+  * Steps 5 to 9 the same day.
+  * Steps 12 and 13 after 07:00 Chicago on Wednesday.
+* **One stale sentence:** step 11's "fix forward with the other casing or apply the templated target
+  again" predates the validator's answer. On a failed one-off now, the PM rules from what it printed.
+  No edit is needed.
+* **Follow-ups:** none new. `v1-e41-t13` stays a ready p3.
+
+`scripts/task pr --partial`

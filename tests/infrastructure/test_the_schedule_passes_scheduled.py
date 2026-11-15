@@ -104,9 +104,37 @@ def test_the_schedules_command_is_the_pull_with_scheduled() -> None:
 
     assert hcl_list(text, "run_scheduled_command") == SCHEDULED
     assert (
-        "containerOverrides = [{ name = local.run_container_name, command = local.run_scheduled_command }]"
+        "ContainerOverrides = [{ Name = local.run_container_name, Command = local.run_scheduled_command }]"
         in text
     )
+
+
+def test_the_request_uses_the_sdks_pascal_case_names() -> None:
+    """Scheduler refused the RunTask API reference's camelCase on 2026-11-15 ("missing the following
+    field(s): TaskDefinition"): every key of the request is the AWS SDK's member name."""
+    text = RUN_TASK_TF.read_text(encoding="utf-8")
+    start = text.index("  run_task_request = local.create_run_task ? {")
+    request = text[start : text.index("  } : null", start)]
+    keys = re.findall(r"^\s*([A-Za-z]+)\s*=", request, flags=re.MULTILINE)
+    named = re.findall(r"\{ ([A-Za-z]+) = local\.run_container_name, ([A-Za-z]+) = ", request)
+
+    assert keys == [
+        "Cluster",
+        "TaskDefinition",
+        "Count",
+        "LaunchType",
+        "PlatformVersion",
+        "EnableExecuteCommand",
+        "EnableECSManagedTags",
+        "NetworkConfiguration",
+        "AwsvpcConfiguration",
+        "Subnets",
+        "SecurityGroups",
+        "AssignPublicIp",
+        "Overrides",
+        "ContainerOverrides",
+    ]
+    assert named == [("Name", "Command")]
 
 
 def test_the_schedule_sends_it_through_the_universal_run_task_target() -> None:
@@ -133,24 +161,25 @@ def test_a_run_by_hand_keeps_the_task_definitions_command() -> None:
 
 
 def request(revision: int, command: list[str] = SCHEDULED) -> str:
-    """The universal target's Input as Terraform's jsonencode writes it, naming one known revision."""
+    """The universal target's Input as Terraform's jsonencode writes it: the SDK's PascalCase names,
+    and one known revision."""
     return json.dumps(
         {
-            "cluster": "arn:cluster",
-            "count": 1,
-            "enableECSManagedTags": False,
-            "enableExecuteCommand": False,
-            "launchType": "FARGATE",
-            "networkConfiguration": {
-                "awsvpcConfiguration": {
-                    "assignPublicIp": "ENABLED",
-                    "securityGroups": ["sg-1"],
-                    "subnets": ["subnet-1", "subnet-2"],
+            "Cluster": "arn:cluster",
+            "Count": 1,
+            "EnableECSManagedTags": False,
+            "EnableExecuteCommand": False,
+            "LaunchType": "FARGATE",
+            "NetworkConfiguration": {
+                "AwsvpcConfiguration": {
+                    "AssignPublicIp": "ENABLED",
+                    "SecurityGroups": ["sg-1"],
+                    "Subnets": ["subnet-1", "subnet-2"],
                 }
             },
-            "overrides": {"containerOverrides": [{"command": command, "name": "run"}]},
-            "platformVersion": "LATEST",
-            "taskDefinition": f"{REVISIONS}{revision}",
+            "Overrides": {"ContainerOverrides": [{"Command": command, "Name": "run"}]},
+            "PlatformVersion": "LATEST",
+            "TaskDefinition": f"{REVISIONS}{revision}",
         },
         separators=(",", ":"),
     )
@@ -551,18 +580,18 @@ def applied_target(command: list[str] = SCHEDULED, arn: str = UNIVERSAL) -> dict
         "RoleArn": f"arn:aws:iam::{ACCOUNT_IN_ARNS}:role/{ROLE}",
         "Input": json.dumps(
             {
-                "cluster": f"arn:aws:ecs:us-east-1:{ACCOUNT_IN_ARNS}:cluster/debate-dev-caselist-run",
-                "taskDefinition": REVISION_16,
-                "count": 1,
-                "launchType": "FARGATE",
-                "networkConfiguration": {
-                    "awsvpcConfiguration": {
-                        "subnets": ["subnet-1"],
-                        "securityGroups": ["sg-1"],
-                        "assignPublicIp": "ENABLED",
+                "Cluster": f"arn:aws:ecs:us-east-1:{ACCOUNT_IN_ARNS}:cluster/debate-dev-caselist-run",
+                "TaskDefinition": REVISION_16,
+                "Count": 1,
+                "LaunchType": "FARGATE",
+                "NetworkConfiguration": {
+                    "AwsvpcConfiguration": {
+                        "Subnets": ["subnet-1"],
+                        "SecurityGroups": ["sg-1"],
+                        "AssignPublicIp": "ENABLED",
                     }
                 },
-                "overrides": {"containerOverrides": [{"name": "run", "command": command}]},
+                "Overrides": {"ContainerOverrides": [{"Name": "run", "Command": command}]},
             }
         ),
         "RetryPolicy": {"MaximumEventAgeInSeconds": 3600, "MaximumRetryAttempts": 3},
@@ -687,7 +716,7 @@ def test_the_one_off_is_the_applied_target_with_only_the_command_a_dry_run(tmp_p
     )
     oneoff = json.loads(out.read_text(encoding="utf-8"))
     expected_request = json.loads(str(target["Input"]))
-    expected_request["overrides"]["containerOverrides"][0]["command"] = [
+    expected_request["Overrides"]["ContainerOverrides"][0]["Command"] = [
         "--json",
         "caselist",
         "pull",

@@ -53,8 +53,22 @@ schedule's target going from the ECS template to the universal target, its templ
 its Input unknown, and its role, retries and dead-letter queue as they were. It cannot be given with
 `--memory`.
 
-Prints one line. Exit `0` for `PLAN OK`, `1` for `PLAN STOP`, `2` when a file cannot be read as a
-plan's JSON or an owner file (also `PLAN STOP`).
+The universal target's Input uses the AWS SDK's PascalCase member names (`TaskDefinition`, ...):
+Scheduler refused the RunTask API reference's camelCase at dev's apply of 2026-11-15.
+
+**`--run-schedule-only`**, the plan after that failed apply, once (the runbook's "The run schedule
+alone, after the apply of 2026-11-15"). The apply replaced both task definitions and repointed both
+scheduler policies and the login schedule, and the run schedule stayed on the ECS template. From that
+state the plan changes the run schedule alone, in place, `0 to add, 1 to change, 0 to destroy`, and its
+revision is already known, so the check reads the whole Input: the SDK's names and no others, the run
+task definition's current revision (unchanged in the plan, naming the owner file's image, and the one
+the run scheduler policy names), the ECS template's own cluster, network and launch settings, and the
+command `--json caselist pull --scheduled`. Beside it, and only in this mode, v1-e05-t20's grant
+(`module.bedrock_access`'s inline policy) updated in place is allowed outside the module and is said on
+a second `PLAN OK,` line: no add, no destroy, no replace, and no other bedrock_access change.
+
+Prints one line, or two for `--run-schedule-only` beside the grant. Exit `0` for `PLAN OK`, `1` for
+`PLAN STOP`, `2` when a file cannot be read as a plan's JSON or an owner file (also `PLAN STOP`).
 """
 
 from __future__ import annotations
@@ -95,6 +109,14 @@ TEMPLATE, UNIVERSAL = "the ECS template", "Scheduler's universal RunTask target"
 # What the move onto the universal target replaces: the template's ARN (the cluster's) and parameters,
 # by the universal ARN and the Input. Every other target setting stays as it was.
 MOVED_TARGET_KEYS = ("arn", "ecs_parameters", "input")
+# --run-schedule-only (the plan after dev's failed apply of 2026-11-15): the run schedule's Input, in
+# the SDK's PascalCase names, starts the current run revision with the scheduled pull.
+SCHEDULED_COMMAND = ["--json", "caselist", "pull", "--scheduled"]
+RUN_SCHEDULER_POLICY = MODULE + "aws_iam_role_policy.run_scheduler[0]"
+# v1-e05-t20's grant, which may share that dev plan (the PM's note of 2026-11-15): its inline policy
+# updated in place, and nothing else of it.
+GRANT_POLICY = "module.bedrock_access.aws_ssoadmin_permission_set_inline_policy.invoker[0]"
+GRANT_POLICY_FIELD = "inline_policy"
 IDENTITY_CENTER = ("aws_ssoadmin_", "aws_identitystore_")
 DIGEST = re.compile(r'^caselist_image_digest\s*=\s*"(sha256:[0-9a-f]{64})"\s*$', re.M)
 CONTAINER_KEYS = (
@@ -458,14 +480,15 @@ def known_revision(change: dict[str, Any]) -> str | None:
     """The revision a schedule's target names after the apply, when the plan already knows it.
 
     Under the ECS template it is `ecs_parameters`' task_definition_arn; under the universal target
-    (`v1-e40-t48`) it is the Input's taskDefinition, and the whole Input is unknown when it names the
-    revision the apply creates.
+    (`v1-e40-t48`) it is the Input's TaskDefinition (the SDK's PascalCase name, which Scheduler validates
+    against; it refused the API reference's camelCase on 2026-11-15), and the whole Input is unknown
+    when it names the revision the apply creates.
     """
     if universal(change["after"]):
         if input_unknown(change):
             return None
         try:
-            arn = json.loads(first_target(change["after"])["input"])["taskDefinition"]
+            arn = json.loads(first_target(change["after"])["input"])["TaskDefinition"]
         except (KeyError, TypeError, ValueError):
             return "(none)"
         return str(arn).rpartition("task-definition/")[2] or str(arn)
@@ -529,6 +552,207 @@ def check_memory(changes: list[dict[str, Any]], owner: str) -> tuple[list[str], 
     return problems, said
 
 
+def revision_name(arn: object) -> str:
+    return str(arn).rpartition("task-definition/")[2] or str(arn)
+
+
+def side_of(found: dict[str, Any] | None) -> dict[str, Any]:
+    if found is None:
+        return {}
+    change = found["change"]
+    return change["after"] or change["before"] or {}
+
+
+def templated_request(target: dict[str, Any], revision: object) -> dict[str, Any] | None:
+    """The RunTask request, in the SDK's PascalCase, that the ECS template sends, starting `revision`
+    with the scheduled pull: what the universal target's Input must be."""
+    try:
+        [parameters] = target["ecs_parameters"]
+        [network] = parameters["network_configuration"]
+    except (KeyError, TypeError, ValueError):
+        return None
+    return {
+        "Cluster": target.get("arn"),
+        "TaskDefinition": revision,
+        "Count": parameters.get("task_count"),
+        "LaunchType": parameters.get("launch_type"),
+        "PlatformVersion": parameters.get("platform_version"),
+        "EnableExecuteCommand": parameters.get("enable_execute_command"),
+        "EnableECSManagedTags": parameters.get("enable_ecs_managed_tags"),
+        "NetworkConfiguration": {
+            "AwsvpcConfiguration": {
+                "Subnets": sorted(network.get("subnets") or []),
+                "SecurityGroups": sorted(network.get("security_groups") or []),
+                "AssignPublicIp": "ENABLED" if network.get("assign_public_ip") is True else "DISABLED",
+            }
+        },
+        "Overrides": {"ContainerOverrides": [{"Name": "run", "Command": SCHEDULED_COMMAND}]},
+    }
+
+
+def sorted_network(request: dict[str, Any]) -> dict[str, Any]:
+    """`request` with its subnets and security groups in sorted order, which RunTask does not mind."""
+    try:
+        vpc = dict(request["NetworkConfiguration"]["AwsvpcConfiguration"])
+        vpc["Subnets"] = sorted(vpc["Subnets"])
+        vpc["SecurityGroups"] = sorted(vpc["SecurityGroups"])
+    except (KeyError, TypeError):
+        return request
+    return request | {"NetworkConfiguration": {**request["NetworkConfiguration"], "AwsvpcConfiguration": vpc}}
+
+
+def run_schedule_input_problems(change: dict[str, Any], revision: object) -> list[str]:
+    """The run schedule's known Input: the SDK's names, the current revision, the template's own settings
+    and the scheduled command."""
+    if input_unknown(change):
+        return [
+            f"{RUN_SCHEDULE}'s Input is unknown in the plan, which means a revision this plan creates; "
+            "this plan creates none"
+        ]
+    try:
+        found = json.loads(first_target(change["after"])["input"])
+    except (KeyError, TypeError, ValueError):
+        found = None
+    if not isinstance(found, dict):
+        return [f"{RUN_SCHEDULE} has no Input that reads as a RunTask request"]
+    expected = templated_request(first_target(change["before"]), revision)
+    if expected is None:
+        return [f"{RUN_SCHEDULE}'s ECS template before the plan cannot be read"]
+    problems = []
+    missing, extra = sorted(set(expected) - set(found)), sorted(set(found) - set(expected))
+    if missing or extra:
+        problems.append(
+            f"{RUN_SCHEDULE}'s Input lacks {missing} and has names the SDK's RunTask request does not: "
+            f"{extra}"
+        )
+    if "TaskDefinition" in found and found["TaskDefinition"] != revision:
+        problems.append(
+            f"{RUN_SCHEDULE}'s Input starts {revision_name(found['TaskDefinition'])}, not the run task "
+            f"definition's current revision {revision_name(revision)}"
+        )
+    found = sorted_network(found)
+    differs = sorted(
+        k for k in set(expected) & set(found) if k != "TaskDefinition" and expected[k] != found[k]
+    )
+    if differs:
+        problems.append(
+            f"{RUN_SCHEDULE}'s Input differs from the template's settings and the scheduled command at "
+            f"{differs}"
+        )
+    return problems
+
+
+def policy_revision(found: dict[str, Any] | None) -> object:
+    """The revision the run scheduler role's policy lets it run."""
+    try:
+        statements = json.loads(side_of(found)["policy"])["Statement"]
+    except (KeyError, TypeError, ValueError):
+        return None
+    named = [
+        s.get("Resource") for s in statements if isinstance(s, dict) and s.get("Action") == "ecs:RunTask"
+    ]
+    return named[0] if len(named) == 1 else None
+
+
+def grant_allowed(found: dict[str, Any]) -> bool:
+    """v1-e05-t20's grant policy updated in place, its inline policy alone."""
+    return (
+        found["address"] == GRANT_POLICY
+        and found["change"]["actions"] == ["update"]
+        and changed_keys(found["change"]) == [GRANT_POLICY_FIELD]
+    )
+
+
+def check_run_schedule_only(changes: list[dict[str, Any]], owner: str) -> tuple[list[str], list[str]]:
+    """The plan after dev's failed apply of 2026-11-15: its problems, and what `PLAN OK` says.
+
+    That apply replaced the task definitions, repointed both scheduler policies and the login schedule,
+    and was refused at the run schedule's camelCase Input. From that state the plan changes the run
+    schedule alone, in place, onto the universal target with an Input the plan already knows: it names
+    the run task definition's current revision, which the scheduler policy names and which runs the
+    owner file's image, and the ECS template's own cluster, network and launch settings, with the
+    command `--json caselist pull --scheduled`. Beside it, v1-e05-t20's grant policy updated in place is
+    the one change allowed outside the module, said on a line of its own.
+    """
+    every = {key(found): found for found in changes}
+    grant = [found for found in changes if grant_allowed(found)]
+    digest, changed, problems, inside = screened(
+        [found for found in changes if not grant_allowed(found)], owner
+    )
+    refused_grant = [
+        label(found)
+        for found in changes
+        if found["address"] == GRANT_POLICY
+        and found["change"]["actions"] not in NOT_CHANGES
+        and not grant_allowed(found)
+    ]
+    if refused_grant:
+        problems.append(
+            f"{refused_grant[0]}: only an in-place update of its {GRANT_POLICY_FIELD} passes beside the run "
+            "schedule"
+        )
+
+    definition = every.get(RUN_TASK_DEFINITION)
+    revision = side_of(definition).get("arn")
+    if definition is None:
+        problems.append(
+            f"{RUN_TASK_DEFINITION} is not in the plan, so the revision the schedule starts cannot be read"
+        )
+    elif definition["change"]["actions"] not in NOT_CHANGES:
+        problems.append(
+            f"{RUN_TASK_DEFINITION} changes in this plan ({'/'.join(definition['change']['actions'])}): "
+            "this plan changes the run schedule alone"
+        )
+    else:
+        image = (container(definition["change"], "after") or {}).get("image")
+        if digest is not None and not str(image).endswith("@" + digest):
+            problems.append(
+                f"{RUN_TASK_DEFINITION}'s image is {image}, expected the digest in owner.auto.tfvars"
+            )
+
+    named = policy_revision(every.get(RUN_SCHEDULER_POLICY))
+    if definition is not None and named != revision:
+        problems.append(
+            f"the run scheduler role's policy names {revision_name(named)}, not the revision the schedule "
+            f"will start, {revision_name(revision)}"
+        )
+
+    found = inside.get(RUN_SCHEDULE)
+    if found is None or kind(found) != UPDATE:
+        actual = "no change" if found is None else "/".join(found["change"]["actions"])
+        problems.append(f"{RUN_SCHEDULE}: {actual}, expected an update")
+    else:
+        moved = moved_problems(RUN_SCHEDULE, found["change"])
+        problems += moved
+        if not any("'s target is" in problem for problem in moved):
+            problems += run_schedule_input_problems(found["change"], revision)
+        problem = state_problem(RUN_SCHEDULE, found["change"])
+        if problem is not None:
+            problems.append(problem)
+    unexpected = [
+        label(entry_)
+        for address, entry_ in inside.items()
+        if address not in (RUN_SCHEDULE, RUN_TASK_DEFINITION)
+    ]
+    if unexpected:
+        problems.append("an unexpected change in module.caselist_run: " + ", ".join(sorted(unexpected)))
+
+    all_changed = changed + grant
+    said = [
+        f"{counts(all_changed)}; the run schedule alone moved onto {UNIVERSAL}, starting "
+        f"{revision_name(revision)} with {' '.join(SCHEDULED_COMMAND)} on its cluster, network and launch "
+        "settings as before, and its role and every other target setting as before; the run scheduler "
+        f"role's policy names that revision, which runs the image {(digest or '')[:19]}...; the run schedule "
+        f"{SCHEDULE_STATE} throughout; nothing else {'in module.caselist_run ' if grant else ''}changes"
+    ]
+    if grant:
+        said.append(
+            f"outside module.caselist_run: {GRANT_POLICY} updated in place, its {GRANT_POLICY_FIELD} alone "
+            "(v1-e05-t20's grant): read its diff in the plan"
+        )
+    return problems, said
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Check a new run image's plan after the cutover.")
     parser.add_argument("plan", help="The saved plan as JSON: `terraform show -json <plan>`.")
@@ -539,6 +763,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         "--universal-target",
         action="store_true",
         help="Check the image plan that moves the run schedule onto Scheduler's universal RunTask target.",
+    )
+    modes.add_argument(
+        "--run-schedule-only",
+        action="store_true",
+        help="Check the plan that moves the run schedule alone onto the universal target (2026-11-15's fix).",
     )
     arguments = parser.parse_args(argv)
     try:
@@ -551,12 +780,17 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 2
     if arguments.memory:
         problems, said = check_memory(changes, owner)
+        lines = [said]
+    elif arguments.run_schedule_only:
+        problems, lines = check_run_schedule_only(changes, owner)
     else:
         problems, said = check(changes, owner, universal_target=arguments.universal_target)
+        lines = [said]
     if problems:
         print("PLAN STOP: " + "; ".join(problems))
         return 1
-    print("PLAN OK: " + said)
+    for line in lines:
+        print("PLAN OK: " + line if line is lines[0] else "PLAN OK, " + line)
     return 0
 
 

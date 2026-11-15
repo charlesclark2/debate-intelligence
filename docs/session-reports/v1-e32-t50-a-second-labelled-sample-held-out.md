@@ -6,7 +6,7 @@
 | Spec | [`plan_specs/v1/e32-argument-landscape/t50-a-second-labelled-sample-held-out.yaml`](../../plan_specs/v1/e32-argument-landscape/t50-a-second-labelled-sample-held-out.yaml) |
 | Epic / release | `v1-e32-argument-landscape` / `v1.2` |
 | Branch | `task/v1-e32-t50-a-second-labelled-sample-held-out` |
-| Session status | PARTIAL, ready for the PM's review: built and tested as ruled, the holdout's scan-hit listing included (the PM's third ruling); ac3 and the ruled record run are done by the operator, ac3 for the PM to record; the operator's verdicts on the holdout's `high_volume` scan hits are to come <!-- COMPLETE / PARTIAL / BLOCKED --> |
+| Session status | PARTIAL, ready for the PM's review: built and tested as ruled, the holdout's scan-hit listing included (the PM's third ruling); ac3, the ruled record run and step 7 are done by the operator, ac3 for the PM to record; the holdout's 44 `high_volume` scan hits were judged ordinary words <!-- COMPLETE / PARTIAL / BLOCKED --> |
 
 ## Summary
 
@@ -41,14 +41,13 @@ by side on each route. Both exit 1 with `EVALUATION_BELOW_BAR`, and the bar read
 live model runs stands. The details, and the three findings the PM ruled on, are under
 [Operator follow-ups](#operator-follow-ups).
 
-**The Goal stays `InProgress`.** Two things are left:
+**The Goal stays `InProgress` until the PM records ac3.** Where things stand:
 
 * ac3 (the draw on 2026-11-13, the coach's two sittings and `--check-sample` on 2026-11-14) passed in the
   operator's run, for the PM to record.
-* The operator's verdicts on the holdout's `high_volume` scan hits are still to come. The listing the PM
-  ruled for is built, and step 7 of the runbook's
-  [held-out section](../runbooks/landscape-model-evaluation-record.md#the-held-out-sample-the-draw-and-the-coachs-two-sittings-v1-e32-t50)
-  runs it.
+* The holdout's `high_volume` scan hits were judged with the listing the PM ruled for (step 7 of the runbook's
+  [held-out section](../runbooks/landscape-model-evaluation-record.md#the-held-out-sample-the-draw-and-the-coachs-two-sittings-v1-e32-t50)).
+  All 44 are ordinary words, including hit 12, the one no mark sets aside, so its cassettes are kept.
 
 No further live call is authorized, and none is needed. The affected set is left to the pull request's CI, as
 ruled. This report is ready for the PM's review.
@@ -599,7 +598,7 @@ from this worktree until it merges:
 6. step 7: the holdout's own `high_volume` scan hits, first piped (the counts are pasted back), then in the
    terminal for the operator's eyes. Only the verdicts come back, by hit number.
 
-Steps 1 to 6 are done (below). Step 7 is next.
+Steps 1 to 7 are done (below).
 
 **Step 1, the dry run (the operator's, 2026-11-13, before the draw), as pasted: counts only.** It passed every condition in
 the runbook: version `2026.10.27-docx-7`, 120 drawn, no `STOP`, and no first-sample card without an
@@ -827,8 +826,11 @@ The JSON objects went to the PM with the findings above. The PM ruled on 2026-11
 pasted: 6 input batches, 6 cassettes and 0 repair cassettes. That is one cassette per batch, as the
 recording's 6 calls predict. There are 44 scan hits, and 1 carries no mark that sets it aside; the other 43
 are set aside by a mark. The operator then read the hits in the terminal and reported that none of their
-words names a team, a school or a tournament. The hit with no mark is to be confirmed by its number, and only
-the verdict comes back.
+words names a team, a school or a tournament. The one hit with no mark is **hit 12: an ordinary word**, the
+operator's verdict by number, with no word given. So all 44 hits are ordinary words, the holdout's
+`high_volume` cassettes are kept, and nothing is published. The `high_volume` scan was unclean only by its
+marks: no name was in those cassettes. The scores stand as recorded. `EVALUATION_BELOW_BAR` holds on the
+accuracy alone, on both routes.
 
 **The affected set did not finish locally.** `uv run scripts/affected_tests.py --run --slow` selects 157 files,
 5,298 tests. Within the 115-second cap it reached 65% with two failures:

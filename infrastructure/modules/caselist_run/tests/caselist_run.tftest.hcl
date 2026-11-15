@@ -1395,20 +1395,20 @@ run "the_run_schedule_starts_after_the_login_and_is_disabled_by_default" {
   assert {
     condition = (
       aws_scheduler_schedule.run[0].target[0].arn == "arn:aws:scheduler:::aws-sdk:ecs:runTask"
-      && try(jsondecode(aws_scheduler_schedule.run[0].target[0].input).cluster, "") == "arn:aws:ecs:us-east-1:111122223333:cluster/debate-mock-caselist-run"
-      && try(jsondecode(aws_scheduler_schedule.run[0].target[0].input).taskDefinition, "") == "arn:aws:ecs:us-east-1:111122223333:task-definition/debate-mock-caselist-run:3"
-      && try(jsondecode(aws_scheduler_schedule.run[0].target[0].input).launchType, "") == "FARGATE"
-      && try(jsondecode(aws_scheduler_schedule.run[0].target[0].input).platformVersion, "") == "LATEST"
-      && try(jsondecode(aws_scheduler_schedule.run[0].target[0].input).enableExecuteCommand, true) == false
-      && try(jsondecode(aws_scheduler_schedule.run[0].target[0].input).networkConfiguration.awsvpcConfiguration.assignPublicIp, "") == "ENABLED"
-      && try(jsondecode(aws_scheduler_schedule.run[0].target[0].input).networkConfiguration.awsvpcConfiguration.securityGroups, []) == ["sg-0000000000000000a"]
-      && length(try(jsondecode(aws_scheduler_schedule.run[0].target[0].input).networkConfiguration.awsvpcConfiguration.subnets, [])) > 0
+      && try(jsondecode(aws_scheduler_schedule.run[0].target[0].input).Cluster, "") == "arn:aws:ecs:us-east-1:111122223333:cluster/debate-mock-caselist-run"
+      && try(jsondecode(aws_scheduler_schedule.run[0].target[0].input).TaskDefinition, "") == "arn:aws:ecs:us-east-1:111122223333:task-definition/debate-mock-caselist-run:3"
+      && try(jsondecode(aws_scheduler_schedule.run[0].target[0].input).LaunchType, "") == "FARGATE"
+      && try(jsondecode(aws_scheduler_schedule.run[0].target[0].input).PlatformVersion, "") == "LATEST"
+      && try(jsondecode(aws_scheduler_schedule.run[0].target[0].input).EnableExecuteCommand, true) == false
+      && try(jsondecode(aws_scheduler_schedule.run[0].target[0].input).NetworkConfiguration.AwsvpcConfiguration.AssignPublicIp, "") == "ENABLED"
+      && try(jsondecode(aws_scheduler_schedule.run[0].target[0].input).NetworkConfiguration.AwsvpcConfiguration.SecurityGroups, []) == ["sg-0000000000000000a"]
+      && length(try(jsondecode(aws_scheduler_schedule.run[0].target[0].input).NetworkConfiguration.AwsvpcConfiguration.Subnets, [])) > 0
     )
     error_message = "The schedule starts Terraform's revision of the run on the run's cluster: on-demand Fargate, platform 1.4.0 or later, no ECS Exec, a public address, the run's security group."
   }
 
   assert {
-    condition     = toset(try(jsondecode(aws_scheduler_schedule.run[0].target[0].input).networkConfiguration.awsvpcConfiguration.subnets, [])) == aws_scheduler_schedule.login[0].target[0].ecs_parameters[0].network_configuration[0].subnets
+    condition     = toset(try(jsondecode(aws_scheduler_schedule.run[0].target[0].input).NetworkConfiguration.AwsvpcConfiguration.Subnets, [])) == aws_scheduler_schedule.login[0].target[0].ecs_parameters[0].network_configuration[0].subnets
     error_message = "The login runs in the run's subnets: one network for both tasks."
   }
 
@@ -1492,12 +1492,16 @@ run "run_schedule_enabled_turns_the_run_on" {
 # v1-e40-t44's recent-run guard refuses a second start within 24 hours. AWS's Scheduler pages do not
 # say a templated ECS target's Input reaches RunTask as overrides (read 2026-11-13), so the schedule
 # is the universal target, arn:aws:scheduler:::aws-sdk:ecs:runTask, and its Input is the whole
-# RunTask request, in the camelCase of ECS's RunTask API reference
-# (https://docs.aws.amazon.com/AmazonECS/latest/APIReference/API_RunTask.html, read 2026-11-13).
+# RunTask request, in the PascalCase member names of the AWS SDK's ECS model: dev's apply of
+# 2026-11-15 was refused with "Request payload is missing the following field(s): TaskDefinition"
+# for the RunTask API reference's camelCase, so Scheduler validates the Input against the SDK's names
+# (RunTaskRequest, NetworkConfiguration, AwsVpcConfiguration, TaskOverride and ContainerOverride in
+# the AWS SDK for .NET V3 reference, https://docs.aws.amazon.com/sdkfornet/v3/apidocs/items/ECS/TRunTaskRequest.html,
+# read 2026-11-15).
 #
 # At plan time: the ARNs and the security group the request names are given during the plan, as a
 # real plan knows them when the task definition is not replaced; the subnets are the run's two, in
-# zone order. The request below is written out by hand from that page, not
+# zone order. The request below is written out by hand from those pages, not
 # copied from the module.
 run "the_run_schedule_starts_its_pull_with_scheduled" {
   command = plan
@@ -1537,31 +1541,31 @@ run "the_run_schedule_starts_its_pull_with_scheduled" {
   }
 
   assert {
-    condition     = try(jsondecode(aws_scheduler_schedule.run[0].target[0].input).overrides.containerOverrides, null) == [{ name = "run", command = ["--json", "caselist", "pull", "--scheduled"] }]
+    condition     = try(jsondecode(aws_scheduler_schedule.run[0].target[0].input).Overrides.ContainerOverrides, null) == [{ Name = "run", Command = ["--json", "caselist", "pull", "--scheduled"] }]
     error_message = "The schedule starts `debate-research --json caselist pull --scheduled`: the run container's command, and nothing else, overridden, so the recent-run guard (v1-e40-t44) is live."
   }
 
   assert {
     condition = try(jsondecode(aws_scheduler_schedule.run[0].target[0].input), null) == {
-      cluster              = "arn:aws:ecs:us-east-1:111122223333:cluster/debate-mock-caselist-run"
-      taskDefinition       = "arn:aws:ecs:us-east-1:111122223333:task-definition/debate-mock-caselist-run:3"
-      count                = 1
-      launchType           = "FARGATE"
-      platformVersion      = "LATEST"
-      enableExecuteCommand = false
-      enableECSManagedTags = false
-      networkConfiguration = {
-        awsvpcConfiguration = {
-          subnets        = [aws_subnet.public["us-east-1a"].id, aws_subnet.public["us-east-1b"].id]
-          securityGroups = ["sg-0000000000000000a"]
-          assignPublicIp = "ENABLED"
+      Cluster              = "arn:aws:ecs:us-east-1:111122223333:cluster/debate-mock-caselist-run"
+      TaskDefinition       = "arn:aws:ecs:us-east-1:111122223333:task-definition/debate-mock-caselist-run:3"
+      Count                = 1
+      LaunchType           = "FARGATE"
+      PlatformVersion      = "LATEST"
+      EnableExecuteCommand = false
+      EnableECSManagedTags = false
+      NetworkConfiguration = {
+        AwsvpcConfiguration = {
+          Subnets        = [aws_subnet.public["us-east-1a"].id, aws_subnet.public["us-east-1b"].id]
+          SecurityGroups = ["sg-0000000000000000a"]
+          AssignPublicIp = "ENABLED"
         }
       }
-      overrides = {
-        containerOverrides = [{ name = "run", command = ["--json", "caselist", "pull", "--scheduled"] }]
+      Overrides = {
+        ContainerOverrides = [{ Name = "run", Command = ["--json", "caselist", "pull", "--scheduled"] }]
       }
     }
-    error_message = "The Input is the RunTask request the templated target sent, in RunTask's camelCase: Terraform's revision by its full ARN (which the scheduler role's policy names), the run's cluster by ARN (its ecs:cluster condition), one on-demand Fargate task, platform LATEST, no ECS Exec, no managed tags, the run's subnets and security group with a public address, and the command override. Nothing more: no tags, so no ecs:TagResource."
+    error_message = "The Input is the RunTask request the templated target sent, in the SDK's PascalCase (camelCase was refused on 2026-11-15): Terraform's revision by its full ARN (which the scheduler role's policy names), the run's cluster by ARN (its ecs:cluster condition), one on-demand Fargate task, platform LATEST, no ECS Exec, no managed tags, the run's subnets and security group with a public address, and the command override. Nothing more: no tags, so no ecs:TagResource."
   }
 
   assert {
@@ -2317,7 +2321,7 @@ run "no_schedule_starts_a_backfile_import" {
   # one override is the weekly pull's `--scheduled`: never a backfile import.
   assert {
     condition = (
-      try(jsondecode(aws_scheduler_schedule.run[0].target[0].input).overrides, null) == { containerOverrides = [{ name = "run", command = ["--json", "caselist", "pull", "--scheduled"] }] }
+      try(jsondecode(aws_scheduler_schedule.run[0].target[0].input).Overrides, null) == { ContainerOverrides = [{ Name = "run", Command = ["--json", "caselist", "pull", "--scheduled"] }] }
       && !strcontains(aws_scheduler_schedule.run[0].target[0].input, "backfile")
       && try(aws_scheduler_schedule.login[0].target[0].input, null) == null
     )
@@ -2326,7 +2330,7 @@ run "no_schedule_starts_a_backfile_import" {
 
   assert {
     condition = (
-      try(jsondecode(aws_scheduler_schedule.run[0].target[0].input).taskDefinition, "") == aws_ecs_task_definition.run[0].arn
+      try(jsondecode(aws_scheduler_schedule.run[0].target[0].input).TaskDefinition, "") == aws_ecs_task_definition.run[0].arn
       && jsondecode(aws_ecs_task_definition.run[0].container_definitions)[0].command == ["--json", "caselist", "pull"]
       && !strcontains(aws_ecs_task_definition.run[0].container_definitions, "backfile")
     )

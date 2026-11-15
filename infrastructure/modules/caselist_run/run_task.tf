@@ -82,37 +82,41 @@ locals {
   # started by hand keeps the task definition's command, and the guard never asks it.
   run_scheduled_command = ["--json", "caselist", "pull", "--scheduled"]
 
-  # Scheduler's universal target for RunTask, and the request it sends, in the camelCase of ECS's
-  # RunTask API reference (https://docs.aws.amazon.com/AmazonECS/latest/APIReference/API_RunTask.html,
-  # read 2026-11-13). AWS's Scheduler pages do not say whether a templated ECS target's Input reaches
-  # RunTask as overrides (read 2026-11-13; v1-e40-t48's report quotes them), and the universal target's
-  # Input is documented as "the request parameters that EventBridge Scheduler sends to the target API"
-  # (the PM's ruling of 2026-11-14). It is the request the templated target sent, with the override:
-  # the same revision by its full ARN, which RunTask requires to match the scheduler role's Resource;
-  # the same cluster by ARN, so the role's ecs:cluster condition holds; no tags, so no ecs:TagResource.
-  # The scheduler role's policy is unchanged.
+  # Scheduler's universal target for RunTask, and the request it sends, in the PascalCase member
+  # names of the AWS SDK's ECS model (RunTaskRequest, NetworkConfiguration, AwsVpcConfiguration,
+  # TaskOverride, ContainerOverride: the AWS SDK for .NET V3 reference,
+  # https://docs.aws.amazon.com/sdkfornet/v3/apidocs/items/ECS/TRunTaskRequest.html, read 2026-11-15).
+  # Not the RunTask API reference's camelCase: dev's apply of 2026-11-15 was refused, "Invalid
+  # RequestJson provided. Reason Request payload is missing the following field(s): TaskDefinition",
+  # so Scheduler validates the Input against the SDK's names. AWS's Scheduler pages do not say whether
+  # a templated ECS target's Input reaches RunTask as overrides (read 2026-11-13; v1-e40-t48's report
+  # quotes them), and the universal target's Input is "the request parameters that EventBridge
+  # Scheduler sends to the target API" (the PM's ruling of 2026-11-14). It is the request the templated
+  # target sent, with the override: the same revision by its full ARN, which RunTask requires to match
+  # the scheduler role's Resource; the same cluster by ARN, so the role's ecs:cluster condition holds;
+  # no tags, so no ecs:TagResource. The scheduler role's policy is unchanged.
   #
   # The revision's ARN is in the Input, so a plan that replaces the task definition shows the whole
   # Input as known after apply. The module's tests pin it, and the runbook reads it back after the
   # apply ("The schedule passes --scheduled").
   run_task_target_arn = "arn:${local.partition}:scheduler:::aws-sdk:ecs:runTask"
   run_task_request = local.create_run_task ? {
-    cluster              = aws_ecs_cluster.run.arn
-    taskDefinition       = aws_ecs_task_definition.run[0].arn
-    count                = 1
-    launchType           = "FARGATE"
-    platformVersion      = "LATEST"
-    enableExecuteCommand = false
-    enableECSManagedTags = false
-    networkConfiguration = {
-      awsvpcConfiguration = {
-        subnets        = [for subnet in aws_subnet.public : subnet.id]
-        securityGroups = [aws_security_group.run.id]
-        assignPublicIp = "ENABLED"
+    Cluster              = aws_ecs_cluster.run.arn
+    TaskDefinition       = aws_ecs_task_definition.run[0].arn
+    Count                = 1
+    LaunchType           = "FARGATE"
+    PlatformVersion      = "LATEST"
+    EnableExecuteCommand = false
+    EnableECSManagedTags = false
+    NetworkConfiguration = {
+      AwsvpcConfiguration = {
+        Subnets        = [for subnet in aws_subnet.public : subnet.id]
+        SecurityGroups = [aws_security_group.run.id]
+        AssignPublicIp = "ENABLED"
       }
     }
-    overrides = {
-      containerOverrides = [{ name = local.run_container_name, command = local.run_scheduled_command }]
+    Overrides = {
+      ContainerOverrides = [{ Name = local.run_container_name, Command = local.run_scheduled_command }]
     }
   } : null
 

@@ -201,9 +201,39 @@ None. The affected set ran past 115 seconds, so under agreement 10 it is left to
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-11-14
 
 **Notes:**
+
+Accepted. ac1 and the node pass, and the Goal is `Succeeded`.
+
+* **The ruling is built as given, in one place.** `AutoCutOptions.report` names the report
+  `<stem>.report.json` in the manifest's own form, so search and daily both follow from it. The fixed
+  `report.json` is never written, opened, renamed or deleted, and the guide's new `--auto-cut` section
+  names both commands' files and the old one.
+* **The quirk was checked, not assumed.** The report already writes `"bundle": null` (and
+  `"manifest": null`) when a run cuts nothing, in both payloads. It is pinned for search by an
+  existing test and for daily by the new two-day test, whose second day cuts nothing. So by the
+  ruling nothing changed beyond docstrings and the guide.
+* **The evidence is strong.**
+  * The red run: 17 failed, every one a missing per-bundle report or the `Report:` line.
+  * The PM's mutant (the fixed name again) is caught by both commands' tests and the slow e2e test.
+  * The session's second mutant, a fixed name that is not `report.json`, is the better test. It
+    shows that only the new two-run search test catches a report name fixed per directory, which is
+    the bug itself.
+  * The two "no report is written" checks were tightened to cover both names, so they cannot pass
+    for free.
+* **The Deviation is accepted:** the path only, in `test_e2e_research.py` and `ACCEPTANCE.md`, with no
+  assertion changed. The PM adds `tests/integration` to the packages in the next batch.
+* **The checks.** The affected set and the whole `debate_cli` directory stopped at their bound under
+  load, with none failed before the stop (1,872 passed). They go to `ci` under agreement 10, with the
+  auto-cut, daily, search, presenter, app, help and container tests green in full. Dev has moved since
+  this branch's base: if `scripts/task pr` asks, `scripts/task sync`.
+* **Follow-up, ruled closed:** a run that cuts nothing does not remove or rename an earlier run's
+  bundle. A tool never deletes a coach's files unasked, and the report's null `bundle` and the
+  guide's sentence already say what happened. No task is filed.
+
+`scripts/task pr`

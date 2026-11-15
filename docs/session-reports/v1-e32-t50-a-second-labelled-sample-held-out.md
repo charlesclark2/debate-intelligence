@@ -570,8 +570,18 @@ sidecar. The new SHA-256 is `ea5f586bb88aac2b9b59ffea939485b38049f1663d5b57f7c14
   the proxy model's kind, but the sample's order mixes the strata, so these 60 rows are not a stratum. The
   session draws no conclusion from it before the second sitting.
 
-The step 3 copy digests from before and after this sitting were not pasted back. The session records only
-the sitting's own dated copy, above. Next are step 3 again, the second sitting (step 5) and step 3 after it.
+**Step 3 after the first sitting (the operator's, 2026-11-14), as pasted.** The copies are stamped
+`2026-11-14-212026`, eight minutes after the sitting's write at 21:12. There are four digest lines and no
+`STOP`, and each copy's digest equals its file's:
+
+* the first sample's CSV, `553374704519fd29f13a43e279a08537b28c87fbfc58372be845bc0de2b0a922`: the digest of
+  the coach's labels of 2026-11-06 that t58 recorded, so the first sitting left the first sample untouched;
+* the holdout's CSV, `ea5f586bb88aac2b9b59ffea939485b38049f1663d5b57f7c14ab1446b55fd34`: the digest the
+  sitting printed.
+
+The step 3 copy from before this sitting was not pasted back. Before the sitting the holdout file was the
+draw's, and the sitting kept its own dated copy of it, above. Next are step 3 again, the second sitting
+(step 5), and step 3 after it.
 
 **The affected set did not finish locally.** `uv run scripts/affected_tests.py --run --slow` selects 157 files,
 5,298 tests. Within the 115-second cap it reached 65% with two failures:

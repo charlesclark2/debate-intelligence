@@ -20,9 +20,9 @@ article's canonical URL there, so the two agree. **No stored row changes and non
 backfill.** Snapshots are immutable. Verify also compares a manifest's snapshot reference, `canonical_url`
 included, with the stored record, so rewriting a row would make every manifest already exported
 from it fail as `SNAPSHOT_REFERENCE_MISMATCH`. Old rows keep the URL they hold, and the one reader that
-needs a retrieved URL falls back to it for them. On the operator's Mac a count would touch no row:
-there is no production store, and the dev store has 0 snapshots. The beta coaches' stores were not
-counted. **Look first at the reader
+needs a retrieved URL falls back to it for them. A count would touch no row anywhere: the
+operator's Mac has no production store, its dev store has 0 snapshots, and the operator, who is
+also the beta's coach, has cut no card yet. **Look first at the reader
 table**, the "Coach-visible today" line, and the one survivor of the first mutation run, which a
 recorded PDF now catches.
 
@@ -185,9 +185,10 @@ Run by a scratchpad script that applies each mutant to the committed tree, runs 
   otherwise than their article printed `0||`, the blanks being `SUM` over no rows. My check without
   the join printed `snapshot_rows 0`, `article_rows 361` (articles search recorded without
   fetching). So no stored snapshot on that machine holds a fetched URL under `canonical_url`.
-  **Not counted: the beta coaches' stores.** If coaches run the CLI on their own machines, their
-  snapshots are in their own `~/.debate-research/<env>/debate.sqlite3`, and the same query (under
-  Operator follow-ups) counts each one. Where those stores live is the PM's question to answer.
+  **No other store exists.** The operator is the product owner and the beta's coach, and says
+  they have not yet cut a card with the tool (2026-11-14). So no coach's store holds a snapshot,
+  and no stored snapshot anywhere would need a backfill. Every snapshot from here on is written by
+  this change, once it is merged and installed.
 
 ## Commands run before the report
 
@@ -252,8 +253,9 @@ Run by a scratchpad script that applies each mutant to the committed tree, runs 
 ## Operator follow-ups
 
 **Done on the operator's Mac, 2026-11-14:** the production store does not exist there, and the dev
-store has 0 snapshots (results under "Existing rows and the backfill question"). The commands stay
-here for any other store, such as a beta coach's.
+store has 0 snapshots (results under "Existing rows and the backfill question"). The operator, the
+beta's only coach, has cut no card, so no other store needs counting. The commands stay here in
+case one turns up.
 
 **How many stored snapshots a backfill would touch** (read-only, seconds). This is for the PM's
 backfill question; I recommend no backfill (above). Where: the machine that holds the store, any

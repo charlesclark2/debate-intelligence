@@ -126,6 +126,36 @@ no company or manager, no comments or people part, and no tracked-change author 
 With `--denylist`, no file may hold a listed entry either. It prints counts, whether a denylist was
 used, and the case paths that fail, never what matched.
 
+With `--snapshots <folder>` it also checks every case against its source snapshot, the integrity
+check of ac2 (the PM's amendment of 2026-11-14): each case's copy in the folder must be there and
+hash to the digests `case.json` records, its text must be what the current normalizer makes of it,
+and the case's `expected.json` offsets must reproduce the team card's evidence from it
+(`scripts/golden_snapshots.py` says how both sides are compared). A missing snapshot, a changed
+digest, a case with no offsets and offsets that do not reproduce the card each fail the check, by
+case ID and reason, never by text.
+
+## `record`: each case's source snapshot, copied out of the store
+
+    uv run python scripts/import_golden_card.py record --fetches ~/golden-card-fetches \\
+        --store ~/.debate-research/dev --snapshots ~/.debate-intelligence/golden-snapshots
+
+After the operator has run `debate-research fetch <source link> --json > <fetches>/<case_id>.json`
+for every case, `record` reads each case's report:
+
+* **ACCESSIBLE**, retrieved from the publisher: the snapshot is loaded from the store, every hash
+  checked, its copy is written to `<snapshots>/<case_id>/`, and `case.json` gets its record
+  (`snapshot`: URL, canonical and final URL, fetch date, access status, the raw bytes' SHA-256 and
+  size, the normalized text's and the stored document's SHA-256, versions, paragraph count);
+* **PAYWALLED, BLOCKED, ROBOTS_DISALLOWED, NOT_FOUND or UNSUPPORTED_TYPE**: the case is dropped from
+  the corpus, its folder removed. A metered, truncated or registration-walled page is PAYWALLED;
+* **ERROR**, a missing or unreadable report, or a report for another link: nothing happens to the
+  case; fetch it again.
+
+Without `--execute` it is a dry run: it reads the reports and the store and prints what it would
+do, and writes nothing (working agreement 11). The store's database is opened read-only. The
+snapshot folder must be outside the repository and every worktree. It prints counts and case IDs,
+never a page's text or title.
+
 Owned by `v1-e09-t01-golden-card-fixtures`.
 """
 
@@ -136,6 +166,7 @@ import hashlib
 import json
 import os
 import re
+import shutil
 import sys
 import tempfile
 import zipfile
@@ -157,6 +188,7 @@ REPO_ROOT: Final = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT))
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
 
+import golden_snapshots as snapshots  # noqa: E402
 import scrub_docx_fixture as scrub  # noqa: E402
 from analyze_team_formatting import select_files  # noqa: E402
 from tests.evals.parser.digests import MissingDigestKeyError, keyed_digest, require_key  # noqa: E402
@@ -199,6 +231,7 @@ __all__ = [
     "SourceType",
     "build_excerpt",
     "check_fixtures",
+    "check_snapshots",
     "choose_shortlist",
     "classify_source",
     "count_lines",
@@ -210,9 +243,12 @@ __all__ = [
     "main",
     "metadata_problems",
     "read_shortlist",
+    "record_lines",
+    "record_sources",
     "render_index",
     "source_link",
     "strip_cutter_mark",
+    "team_card",
     "write_index",
     "write_shortlist",
 ]
@@ -1417,6 +1453,136 @@ def check_fixtures(fixtures_dir: Path, denylist: scrub.ReplacementList) -> Check
     return report
 
 
+EXPECTED_NAME: Final = "expected.json"
+
+NO_SNAPSHOT_RECORD: Final = "no snapshot record in case.json"
+NO_OFFSETS: Final = "no expected.json offsets yet"
+TEAM_CARD_UNREADABLE: Final = "the team card does not read as one card"
+NOT_REPRODUCED: Final = "the offsets do not reproduce the team card's evidence"
+
+
+def team_card(case_dir: Path, parser: DebateDocxParser) -> ParsedCard | None:
+    """The one card a case's `team-card.docx` holds, as the parser reads it, or None."""
+    document = _parse(parser, (case_dir / EXCERPT_NAME).read_bytes())
+    if document is None or len(document.cards) != 1:
+        return None
+    return document.cards[0]
+
+
+@dataclass
+class SnapshotCheck:
+    """What `check --snapshots` found: counts, and each failing case's ID and reason, no text."""
+
+    cases: int = 0
+    snapshots_verified: int = 0
+    evidence_reproduced: int = 0
+    problems: list[tuple[str, str]] = field(default_factory=list)
+
+    @property
+    def clean(self) -> bool:
+        return self.cases > 0 and not self.problems
+
+
+def check_snapshots(fixtures_dir: Path, snapshot_folder: Path) -> SnapshotCheck:
+    """Every case against its local snapshot copy: digests, then its offsets against the team card."""
+    report = SnapshotCheck()
+    parser = DebateDocxParser()
+    markers = parser.profile.cite.wiki_ellipsis_markers
+    for case in sorted(_existing_cases(fixtures_dir), key=lambda case: case["case_id"]):
+        case_id = case["case_id"]
+        report.cases += 1
+        if not isinstance(case.get("snapshot"), dict):
+            report.problems.append((case_id, NO_SNAPSHOT_RECORD))
+            continue
+        try:
+            text = snapshots.load_recorded_snapshot(
+                snapshot_folder / case_id, snapshots.SnapshotRecord.from_json(case["snapshot"])
+            )
+        except snapshots.SnapshotProblem as problem:
+            report.problems.append((case_id, problem.code.value))
+            continue
+        except KeyError:
+            report.problems.append((case_id, NO_SNAPSHOT_RECORD))
+            continue
+        report.snapshots_verified += 1
+        expected_path = fixtures_dir / case_id / EXPECTED_NAME
+        if not expected_path.is_file():
+            report.problems.append((case_id, NO_OFFSETS))
+            continue
+        card = team_card(fixtures_dir / case_id, parser)
+        if card is None:
+            report.problems.append((case_id, TEAM_CARD_UNREADABLE))
+            continue
+        segments = json.loads(expected_path.read_text(encoding="utf-8")).get("segments") or []
+        if snapshots.reproduces(text.text, segments, card.evidence_text, markers):
+            report.evidence_reproduced += 1
+        else:
+            report.problems.append((case_id, NOT_REPRODUCED))
+    return report
+
+
+@dataclass
+class RecordReport:
+    """What `record` did, or would do: each case's outcome by ID, and the access statuses seen."""
+
+    recorded: list[str] = field(default_factory=list)
+    dropped: list[tuple[str, str]] = field(default_factory=list)
+    not_recorded: list[tuple[str, str]] = field(default_factory=list)
+    statuses: Counter[str] = field(default_factory=Counter)
+
+
+def record_sources(
+    fixtures_dir: Path, fetches_dir: Path, store_dir: Path, snapshot_folder: Path, *, execute: bool
+) -> RecordReport:
+    """Record every case's snapshot from its fetch report, or drop it; without `execute`, plan only."""
+    report = RecordReport()
+    for case in sorted(_existing_cases(fixtures_dir), key=lambda case: case["case_id"]):
+        case_id = case["case_id"]
+        reading = snapshots.read_fetch_report(fetches_dir / f"{case_id}.json", case.get("source_link") or "")
+        report.statuses[reading.access_status or "no report"] += 1
+        if reading.outcome is snapshots.FetchOutcome.DROP:
+            assert reading.access_status is not None
+            report.dropped.append((case_id, reading.access_status))
+            if execute:
+                shutil.rmtree(fixtures_dir / case_id)
+                shutil.rmtree(snapshot_folder / case_id, ignore_errors=True)
+            continue
+        if reading.outcome is not snapshots.FetchOutcome.RECORD:
+            report.not_recorded.append((case_id, reading.outcome.value))
+            continue
+        assert reading.snapshot_id is not None
+        try:
+            loaded = snapshots.load_from_store(store_dir, reading.snapshot_id)
+        except snapshots.StoreError as error:
+            report.not_recorded.append((case_id, str(error)))
+            continue
+        record = snapshots.SnapshotRecord.of(loaded, url=case["source_link"], final_url=reading.final_url)
+        if execute:
+            snapshots.write_snapshot_copy(loaded, snapshot_folder / case_id)
+            case["snapshot"] = record.to_json()
+            (fixtures_dir / case_id / CASE_NAME).write_text(
+                json.dumps(case, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
+            )
+        report.recorded.append(case_id)
+    if execute:
+        write_index(fixtures_dir)
+    return report
+
+
+def record_lines(report: RecordReport, *, execute: bool) -> list[str]:
+    """What `record` prints: counts and case IDs, safe to send."""
+    verb = ("recorded", "dropped") if execute else ("would record", "would drop")
+    lines = _table("fetch reports by access status:", report.statuses)
+    lines.append(f"{verb[0]}: {len(report.recorded)}")
+    lines.append(f"{verb[1]}: {len(report.dropped)}")
+    lines += [f"  {case_id}: {status}" for case_id, status in report.dropped]
+    lines.append(f"not recorded: {len(report.not_recorded)}")
+    lines += [f"  {case_id}: {reason}" for case_id, reason in report.not_recorded]
+    if not execute:
+        lines.append("dry run: nothing written; run again with --execute to record and drop")
+    return lines
+
+
 # --------------------------------------------------------------------------------------------
 # Command line
 # --------------------------------------------------------------------------------------------
@@ -1446,6 +1612,21 @@ def _build_parser() -> argparse.ArgumentParser:
     checking = commands.add_parser("check", help="no fixture carries metadata (or a denylist entry)")
     checking.add_argument("--denylist", type=Path, default=None, help="an optional denylist; off by default")
     checking.add_argument("--fixtures", type=Path, default=FIXTURES_DIR, help=argparse.SUPPRESS)
+    checking.add_argument(
+        "--snapshots", type=Path, default=None, help="the local snapshot folder: verify digests and offsets"
+    )
+
+    recording = commands.add_parser("record", help="copy each case's snapshot out of the store, or drop it")
+    recording.add_argument("--fetches", type=Path, required=True, help="the folder of fetch reports")
+    recording.add_argument("--store", type=Path, required=True, help="the data folder the fetches used")
+    recording.add_argument(
+        "--snapshots",
+        type=Path,
+        default=snapshots.DEFAULT_SNAPSHOT_FOLDER,
+        help="the local snapshot folder, outside the repository and every worktree",
+    )
+    recording.add_argument("--execute", action="store_true", help="record and drop; without it, a dry run")
+    recording.add_argument("--fixtures", type=Path, default=FIXTURES_DIR, help=argparse.SUPPRESS)
 
     indexing = commands.add_parser("index", help="rewrite INDEX.md from the cases")
     indexing.add_argument("--fixtures", type=Path, default=FIXTURES_DIR, help=argparse.SUPPRESS)
@@ -1484,6 +1665,24 @@ def main(
         write_index(arguments.fixtures)
         print(f"{INDEX_NAME}: {len(_existing_cases(arguments.fixtures))} cases")
         return 0
+    if arguments.command == "record":
+        folder = arguments.snapshots.expanduser()
+        if not snapshots.outside_every_checkout(folder, REPO_ROOT):
+            print("the snapshot folder must be outside the repository and every worktree", file=sys.stderr)
+            return 2
+        if _inside_repository(arguments.fetches):
+            print("the fetch reports name pages; keep them outside the repository", file=sys.stderr)
+            return 2
+        recorded = record_sources(
+            arguments.fixtures,
+            arguments.fetches.expanduser(),
+            arguments.store,
+            folder,
+            execute=arguments.execute,
+        )
+        for line in record_lines(recorded, execute=arguments.execute):
+            print(line)
+        return 0 if not recorded.not_recorded else 1
     try:
         denylist = NO_DENYLIST if arguments.denylist is None else load_denylist(arguments.denylist)
     except DenylistError as error:
@@ -1514,8 +1713,16 @@ def main(
     print(
         "denylist: off" if arguments.denylist is None else f"denylist: {len(denylist.replacements)} entries"
     )
-    print("clean" if report.clean else "NOT CLEAN")
-    return 0 if report.clean else 1
+    clean = report.clean
+    if arguments.snapshots is not None:
+        against = check_snapshots(arguments.fixtures, arguments.snapshots.expanduser())
+        print(f"snapshots verified: {against.snapshots_verified} of {against.cases}")
+        print(f"evidence reproduced: {against.evidence_reproduced} of {against.cases}")
+        for case_id, problem in against.problems:
+            print(f"snapshot: {case_id}: {problem}")
+        clean = clean and against.clean
+    print("clean" if clean else "NOT CLEAN")
+    return 0 if clean else 1
 
 
 if __name__ == "__main__":  # pragma: no cover

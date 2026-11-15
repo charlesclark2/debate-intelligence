@@ -6,12 +6,11 @@
 # explains each task class, where the identifiers come from and why no Claude route sets a
 # temperature.
 #
-# Dev routes every text class one tier cheaper than prod (config/model_routing.prod.yaml): dev is
-# where a new prompt's first, wrong version runs, and it runs under a daily budget of at most $2
-# (models.budget_usd_daily in config/profiles/dev.toml, enforced by the E05 BudgetGuard). A prompt
-# that only works on the prod model is found out in validate-dev rather than on the team's corpus.
-# Embeddings and rerank are the same models as prod on purpose: a vector index built in dev with a
-# different embedding model would not be comparable with anything.
+# Dev is where a new prompt's first, wrong version runs, under a daily budget of at most $2
+# (models.budget_usd_daily in config/profiles/dev.toml, enforced by the E05 BudgetGuard). Until the 5.5
+# quotas are restored, prod routes every class to the same model as dev (below). Embeddings and rerank
+# are the same models as prod on purpose: a vector index built in dev with a different embedding model
+# would not be comparable with anything.
 #
 # Dev and prod must never share this file (the task spec forbids it). Identifiers checked against
 # the AWS Bedrock model cards on 2026-10-16 (v1-e05-t01-model-router-port).
@@ -22,10 +21,10 @@
 # refuses every call to them as "not available for this account", and they are held at zero under an
 # open AWS support case. Claude Haiku 4.5 and Sonnet 4.6 hold non-zero quotas and answered a first
 # call that day (v1-e05-t08's PM record). complex_reasoning and high_volume go to Haiku 4.5 and
-# deep_audit to Sonnet 4.6, each route keeping its region, max_tokens and timeout. Prod is unchanged.
-# When the support case restores the quotas, a later change switches dev back to Haiku 5.5 and
-# Sonnet 5.5. Haiku 4.5 costs ten times Haiku 5.5 (config/model_pricing.yaml), so high_volume runs
-# cost more here than in prod until then.
+# deep_audit to Sonnet 4.6, each route keeping its region, max_tokens and timeout. Since
+# v1-e05-t20-prod-routes-on-the-4x-models prod routes the same, class for class (AWS declined on
+# 2026-11-04 to restore the 5.5 quotas until the account shows sustained usage). The move to the 5.x
+# models is v1-e41-t20.
 
 version: 1
 

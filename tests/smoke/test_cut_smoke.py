@@ -220,6 +220,28 @@ def test_cut_writes_a_verified_docx_from_a_stored_snapshot_and_replayed_answers_
     assert events == ["fetch", "extract", "select", "verify", "export"]
 
 
+def test_cut_with_no_recorded_answer_names_live_mode_in_its_hint_offline(installed_cli: InstalledCli) -> None:
+    """A coach's first cut (v1-e06-t09): the build replays by default, nothing was recorded on this machine,
+    and the refusal says how to make the real call instead of how to record a cassette."""
+    asyncio.run(_store_news(installed_cli.data_dir))
+    out = installed_cli.workdir / "evidence.docx"
+
+    run = installed_cli.run(
+        "--json", "cut", NEWS_URL, "--need", NEWS_NEED, "--argument", NEWS_ARGUMENT, "--output", str(out)
+    )
+
+    assert run.exit_code == ExitCode.DOMAIN_FAILURE, run.output
+    error = run.envelope()["error"]
+    assert isinstance(error, dict)
+    message = error["message"]
+    assert error["code"] == "MISSING_FIXTURE_ERROR"
+    assert isinstance(message, str) and message.startswith("no recorded answer for prompt card.select@")
+    assert "set DEBATE_MODEL_MODE=live in this shell (export DEBATE_MODEL_MODE=live)" in message
+    assert "a model call on this environment's route, which the budget counts" in message
+    assert "DEBATE_MODEL_MODE=record" not in message
+    assert not out.exists()
+
+
 def test_verify_reads_the_docx_cut_wrote_and_finds_its_card_verified_offline(
     installed_cli: InstalledCli, stored_news: Path
 ) -> None:

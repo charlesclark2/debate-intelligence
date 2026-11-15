@@ -40,7 +40,7 @@ spec:
         another command's MISSING_FIXTURE_ERROR hint is unchanged, by tests shown failing
         first.
 status:
-  phase: InProgress
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

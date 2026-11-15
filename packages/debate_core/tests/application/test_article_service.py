@@ -235,7 +235,9 @@ def test_an_accessible_amp_page_is_fetched_where_it_was_given_never_at_the_guess
     # The canonicalizer's guess is the identity key, and only that.
     assert outcome.article.canonical_url == "https://www.example-news.co.uk/world/grid-storage"
     assert outcome.snapshot is not None
-    assert outcome.snapshot.canonical_url == amp
+    # The snapshot is named as its article is, and records the host it was read from (v1-e04-t10).
+    assert outcome.snapshot.canonical_url == "https://www.example-news.co.uk/world/grid-storage"
+    assert outcome.snapshot.retrieved_url == amp
 
 
 def test_an_accessible_page_behind_a_link_wrapper_is_fetched_at_its_literal_destination() -> None:
@@ -303,7 +305,8 @@ def test_an_accessible_page_with_a_same_site_canonical_is_stored_under_it_and_bo
     assert outcome.fetch_url == asked
     assert outcome.final_url == landed
     assert outcome.snapshot is not None
-    assert outcome.snapshot.canonical_url == landed
+    assert outcome.snapshot.canonical_url == canonical
+    assert outcome.snapshot.retrieved_url == landed
 
 
 def test_an_accessible_page_with_a_cross_site_canonical_keeps_the_fetched_url() -> None:

@@ -107,6 +107,7 @@ class SnapshotService:
         extractor_version: str,
         provenance_mode: ProvenanceMode,
         access_status: AccessStatus,
+        retrieved_url: str | None = None,
         content_type: str | None = None,
         owner_id: str | None = None,
         organization_id: str | None = None,
@@ -118,6 +119,9 @@ class SnapshotService:
         `extracted_text` is the extractor's output for them, which is normalized under the current
         normalizer version. `retrieved_at` must be timezone-aware and is recorded in UTC.
         `stated_citation` is the cite fields a user stated for text they supplied (`v1-e06-t12`).
+        `canonical_url` is the canonical URL of the article, as the article records it, and
+        `retrieved_url` the URL that answered the fetch, after redirects; None when nothing was
+        fetched (`v1-e04-t10`).
 
         Everything that can be refused is refused before a blob is written: text the normalizer
         rejects (a lone surrogate, the wrong Unicode database) and provenance the
@@ -148,6 +152,7 @@ class SnapshotService:
             organization_id=organization_id,
             article_id=article_id,
             canonical_url=canonical_url,
+            retrieved_url=retrieved_url,
             retrieved_at=retrieved_at,
             access_status=access_status,
             provenance_mode=provenance_mode,

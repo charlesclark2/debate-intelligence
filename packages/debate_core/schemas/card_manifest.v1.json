@@ -79,7 +79,7 @@
             "type": "string"
           },
           "canonical_url": {
-            "description": "The URL actually retrieved, after redirects.",
+            "description": "The snapshot's canonical URL: its article's, with no tracking parameters (`v1-e04-t10`). A snapshot stored before then is named by the URL that was retrieved, as its record still is.",
             "title": "Canonical Url",
             "type": "string"
           }

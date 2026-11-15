@@ -62,3 +62,11 @@ never in a URL.
     value` (2 to 4, the keyword with an apostrophe), `biodiversity conservation` and `genetic rescue`
     (both on works 5 and 6). `human-animal relations`, also on works 5 and 6, is the sixth by name, so it
     is not shown.
+* `works_refused_url_too_long.json` (v1-e07-t27) is a `400` whose JSON body is the refusal example
+  help.openalex.org/api/searching shows (read 2026-11-15): an `error` of "Request URL too long" and a
+  324-character `message`. The adapter must keep the message cut at a word boundary to at most 200
+  characters, ending in `...`.
+* `works_refused_quoting_the_request.json` (v1-e07-t27) is a `400` in the same shape whose message is
+  invented to quote a request URL with a query (`search=` and an `api_key=`), name the test key bare,
+  and carry a tab and a line break. The adapter must keep it with the URL's path but no query, the key
+  as `***`, and single spaces.

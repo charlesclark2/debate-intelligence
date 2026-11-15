@@ -1427,15 +1427,46 @@ async def test_a_400_message_loses_any_url_query_the_key_and_its_line_breaks() -
     ("status", "content", "expected"),
     [
         (400, b"<html><body>Bad Request</body></html>", "HTTP 400: the provider refused the request"),
-        (400, b'{"error": "Invalid query"}', "HTTP 400: the provider refused the request; OpenAlex said: Invalid query"),
-        (400, b'{"error": "Bad", "message": "  "}', "HTTP 400: the provider refused the request; OpenAlex said: Bad"),
+        (
+            400,
+            b'{"error": "Invalid query"}',
+            "HTTP 400: the provider refused the request; OpenAlex said: Invalid query",
+        ),
+        (
+            400,
+            b'{"error": "Bad", "message": "  "}',
+            "HTTP 400: the provider refused the request; OpenAlex said: Bad",
+        ),
+        (
+            400,
+            b'{"message": "  Search\\r\\n\\t  too long  "}',
+            "HTTP 400: the provider refused the request; OpenAlex said: Search too long",
+        ),
         (400, b'{"message": 42}', "HTTP 400: the provider refused the request"),
         (400, b'["message"]', "HTTP 400: the provider refused the request"),
         (400, b"", "HTTP 400: the provider refused the request"),
-        (403, b'{"message": "Invalid API key."}', "HTTP 403: the provider refused the request; OpenAlex said: Invalid API key."),
-        (503, b'{"message": "Search is down for maintenance"}', "HTTP 503; OpenAlex said: Search is down for maintenance"),
+        (
+            403,
+            b'{"message": "Invalid API key."}',
+            "HTTP 403: the provider refused the request; OpenAlex said: Invalid API key.",
+        ),
+        (
+            503,
+            b'{"message": "Search is down for maintenance"}',
+            "HTTP 503; OpenAlex said: Search is down for maintenance",
+        ),
     ],
-    ids=["html", "error only", "blank message", "message not text", "not an object", "empty", "403", "503"],
+    ids=[
+        "html",
+        "error only",
+        "blank message",
+        "runs of whitespace",
+        "message not text",
+        "not an object",
+        "empty",
+        "403",
+        "503",
+    ],
 )
 async def test_a_refusal_says_openalexs_message_when_its_body_has_one(
     status: int, content: bytes, expected: str
@@ -1454,7 +1485,10 @@ async def test_a_refusal_says_openalexs_message_when_its_body_has_one(
 async def test_every_query_of_a_refused_crossed_search_carries_openalexs_message() -> None:
     """The ac3 search's shape: 37 queries, every request refused with a message. Both halves are refused,
     so three requests; the call raises, and its reason, which the footer prints for all 37, says why."""
-    said = {"error": "Invalid query", "message": "Your search is too long (2272 characters; the limit is 1500)"}
+    said = {
+        "error": "Invalid query",
+        "message": "Your search is too long (2272 characters; the limit is 1500)",
+    }
     sent: list[httpx.Request] = []
 
     def refuse(request: httpx.Request) -> httpx.Response:

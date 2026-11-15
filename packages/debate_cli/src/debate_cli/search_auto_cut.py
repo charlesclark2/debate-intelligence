@@ -18,14 +18,19 @@ without `--auto-cut` is a usage error, as is an unknown profile; nothing is sear
 
 ## Files
 
-Beside `--output`: `<name>.manifest.json`, the same cards' manifest, and `report.json`, one entry per
-result tried. The bundle and the manifest are written only when a card was cut, VERIFIED or not;
-report.json always. Each is written in one step, a file beside it renamed into place.
+Beside `--output` (`<name>.docx`): `<name>.manifest.json`, the same cards' manifest, and
+`<name>.report.json`, one entry per result tried. The report is named after the bundle (v1-e08-t18), so
+a second run into the same directory with another `--output` keeps the first run's report, and the
+same `--output` replaces bundle, manifest and report together. A `report.json` an earlier build wrote
+is never opened, renamed or deleted. The bundle and the manifest are written only when a card was cut,
+VERIFIED or not, and the report always: one whose `bundle` is null says that this run wrote no bundle,
+whatever bundle of the same name an earlier run left. Each is written in one step, a file beside it
+renamed into place.
 
 ## Exit codes
 
 0 when N cards are VERIFIED, whatever the search's own status (a partial search's providers are named
-in the footer and in report.json's `partial_providers`; one the search left out of its status, missing
+in the footer and in the report's `partial_providers`; one the search left out of its status, missing
 only configuration, is in the footer but not in `partial_providers`, `v1-e07-t23`). 8
 (`AUTO_CUT_SHORT`) when every result was tried and fewer were VERIFIED, 9 (`BUDGET_EXCEEDED`) when the
 budget stopped it short. A search that could not give results ends as `search` does, with nothing cut:
@@ -72,7 +77,7 @@ from debate_core.domain.card import DEFAULT_FORMAT_PROFILE
 __all__ = [
     "DEFAULT_CONCURRENCY",
     "MAX_CONCURRENCY",
-    "REPORT_FILE_NAME",
+    "REPORT_SUFFIX",
     "AutoCutOptions",
     "auto_cut",
     "auto_cut_options",
@@ -83,7 +88,8 @@ __all__ = [
 DEFAULT_CONCURRENCY: Final = 2
 MAX_CONCURRENCY: Final = 8
 """The most cuts `--concurrency` lets run at once: never unbounded, and each host is paced by the fetcher."""
-REPORT_FILE_NAME: Final = "report.json"
+REPORT_SUFFIX: Final = ".report.json"
+"""The report is `<bundle stem>.report.json`, beside the bundle as its manifest is (v1-e08-t18)."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -102,7 +108,7 @@ class AutoCutOptions:
 
     @property
     def report(self) -> Path:
-        return self.output.parent / REPORT_FILE_NAME
+        return self.output.with_name(f"{self.output.stem}{REPORT_SUFFIX}")
 
 
 def auto_cut_options(
@@ -165,7 +171,7 @@ def auto_cut(
     search: dict[str, JsonValue],
     options: AutoCutOptions,
 ) -> None:
-    """Cut the search's results into the bundle, write report.json, print the table, end with the code."""
+    """Cut the search's results into the bundle, write its report, print the table, end with the code."""
     expansion = outcome.search.expansion
     assert expansion is not None, "--auto-cut is refused without --argument and --need"
     need = batch_need(cli.services.argument_taxonomy(), expansion, outcome.search.query)

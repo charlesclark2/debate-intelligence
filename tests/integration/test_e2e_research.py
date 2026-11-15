@@ -169,7 +169,7 @@ def test_search_auto_cut_3_writes_three_verified_cards_and_a_bannered_unverified
     searched = auto_cut_3(cli, out)
 
     assert searched.exit_code == ExitCode.OK, searched.output
-    report = json.loads((out.parent / "report.json").read_text(encoding="utf-8"))
+    report = json.loads((out.parent / "bundle.report.json").read_text(encoding="utf-8"))
     assert (report["wanted"], report["verified"], report["stop_reason"]) == (3, 3, "COMPLETE")
     assert report["unverified"] == 1
     skipped = {
@@ -242,7 +242,7 @@ def test_search_auto_cut_2_stops_before_the_press_release_and_verify_passes_the_
     searched = auto_cut(cli, out, 2)
 
     assert searched.exit_code == ExitCode.OK, searched.output
-    report = json.loads((out.parent / "report.json").read_text(encoding="utf-8"))
+    report = json.loads((out.parent / "bundle.report.json").read_text(encoding="utf-8"))
     assert (report["wanted"], report["verified"], report["stop_reason"]) == (2, 2, "COMPLETE")
     # By page and reason first, so a card that stops verifying is named with its reason codes.
     unverified = {

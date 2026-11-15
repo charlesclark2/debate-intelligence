@@ -61,6 +61,30 @@ particular day's digest.
 `--window 3d` widens either kind of digest to three days. With no `--date` that is the 72 hours before
 the run; with `--date` it is the three UTC days ending on that date. A window is 1 to 31 days.
 
+## `--auto-cut`: cards from the digest, and the report of each run
+
+`--auto-cut N` cuts the digest's new results into cards until N are VERIFIED. Three files are written
+in the digest directory beside the digest, all named for the preset and the date:
+
+| File | What it is |
+|---|---|
+| `politics-2026-11-14.docx` | the bundle of cards |
+| `politics-2026-11-14.manifest.json` | the bundle's card manifest, what `debate-research verify` reads |
+| `politics-2026-11-14.report.json` | the report: what became of each result tried, and why the run stopped |
+
+Each day's report has its own name, so tomorrow's run keeps today's. Running the same date again
+replaces that date's digest, bundle and report together. The bundle and the manifest are written only
+when a card was cut. The report is written every time, and when its `bundle` is `null` this run wrote
+no bundle. A bundle of the same name in the folder is then from an earlier run, and the report is not
+its report.
+
+`debate-research search --auto-cut N --output nhi.docx` names its files the same way, after the
+bundle: `nhi.manifest.json` and `nhi.report.json`. Two searches with different `--output` names into
+one folder keep both reports.
+
+A file named just `report.json` in the folder is the last report from before the upgrade: this build
+never reads, replaces or deletes it, so keep it or delete it as you like.
+
 ## Digests written before this change
 
 Before v1-e08-t25 a digest with no `--date` took the UTC date, so a digest run in the evening in

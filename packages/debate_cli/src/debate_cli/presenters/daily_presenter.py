@@ -317,7 +317,7 @@ def digest_failure(digest: Digest, payload: dict[str, JsonValue], exit_code: Exi
 def auto_cut_payload(
     report: BatchReport, digest: Digest, settings: AutoCutSettings, files: AutoCutFiles
 ) -> dict[str, JsonValue]:
-    """`daily --auto-cut`'s report.json, and the `auto_cut` object of its `--json` output."""
+    """`daily --auto-cut`'s `<preset>-<date>.report.json`, and the `auto_cut` object of its `--json`."""
     return {
         "preset": digest.preset.name,
         "date": digest.day.isoformat(),

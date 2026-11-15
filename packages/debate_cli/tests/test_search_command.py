@@ -1821,8 +1821,9 @@ def bundle_paragraphs(path: Path) -> list[str]:
     return [paragraph.text for paragraph in docx.Document(io.BytesIO(path.read_bytes())).paragraphs]
 
 
-def report_json(directory: Path) -> dict[str, Any]:
-    document: dict[str, Any] = json.loads((directory / "report.json").read_text(encoding="utf-8"))
+def report_json(directory: Path, bundle: str = "bundle") -> dict[str, Any]:
+    """The report of the run whose bundle is `<bundle>.docx`: `<bundle>.report.json` (v1-e08-t18)."""
+    document: dict[str, Any] = json.loads((directory / f"{bundle}.report.json").read_text(encoding="utf-8"))
     return document
 
 
@@ -1860,7 +1861,30 @@ def test_auto_cut_writes_three_verified_cards_under_one_block_heading_and_a_matc
     )
     assert report["block"] == BLOCK
     assert EVIDENCE_WORD not in result.stdout
-    assert EVIDENCE_WORD not in (tmp_path / "report.json").read_text(encoding="utf-8")
+    assert EVIDENCE_WORD not in (tmp_path / "bundle.report.json").read_text(encoding="utf-8")
+
+
+def test_two_auto_cut_runs_into_one_directory_keep_both_reports_each_beside_its_own_bundle(
+    cutting: Seams, tmp_path: Path
+) -> None:
+    """The report is `<bundle>.report.json`, so a second run's never replaces the first's (v1-e08-t18)."""
+    assert auto_cut(tmp_path / "first.docx").exit_code == ExitCode.OK
+    first = (tmp_path / "first.report.json").read_bytes()
+
+    result = auto_cut(tmp_path / "second.docx", wanted=2)
+
+    assert result.exit_code == ExitCode.OK, result.output
+    assert (tmp_path / "first.report.json").read_bytes() == first
+    for bundle, wanted in (("first", 3), ("second", 2)):
+        report = report_json(tmp_path, bundle)
+        assert report["wanted"] == wanted
+        assert (report["bundle"], report["manifest"], report["report"]) == (
+            str(tmp_path / f"{bundle}.docx"),
+            str(tmp_path / f"{bundle}.manifest.json"),
+            str(tmp_path / f"{bundle}.report.json"),
+        )
+    assert f"Report: {tmp_path / 'second.report.json'}" in result.stdout
+    assert not (tmp_path / "report.json").exists()
 
 
 def test_auto_cut_skips_paywalled_and_robots_disallowed_results_lists_them_and_goes_on(
@@ -1914,7 +1938,7 @@ def test_auto_cut_does_not_fetch_a_result_an_earlier_fetch_found_paywalled(
     assert not [url for url in cutting.articles.requested if "dailymeridian" in url]
 
 
-def test_auto_cut_report_prints_as_a_table_and_is_report_json_beside_the_bundle(
+def test_auto_cut_report_prints_as_a_table_and_is_named_after_the_bundle_beside_it(
     cutting: Seams, tmp_path: Path
 ) -> None:
     out = tmp_path / "bundle.docx"
@@ -1925,7 +1949,7 @@ def test_auto_cut_report_prints_as_a_table_and_is_report_json_beside_the_bundle(
     for column in ("Rank", "URL", "Access", "Card", "Reasons", "Cost"):
         assert column in result.stdout
     assert f"3 of 3 cards VERIFIED for {BLOCK}" in result.stdout
-    assert f"Report: {tmp_path / 'report.json'}" in result.stdout
+    assert f"Report: {tmp_path / 'bundle.report.json'}" in result.stdout
     assert "Providers: COMPLETE" in result.stdout
     report = report_json(tmp_path)
     assert (report["concurrency"], report["card_format"], report["max_cost_usd"]) == (3, "flow", None)
@@ -2296,6 +2320,7 @@ def test_auto_cut_options_that_do_not_go_together_exit_2_and_search_nothing(
     assert result.exit_code == ExitCode.USAGE_ERROR, result.output
     assert message in " ".join(result.output.split()).replace("│", "")
     assert cutting.providers.openalex_queries() == []
+    assert not (tmp_path / "bundle.report.json").exists()
     assert not (tmp_path / "report.json").exists()
 
 
@@ -2307,6 +2332,7 @@ def test_auto_cut_after_a_search_no_provider_answered_ends_as_search_does_and_cu
     result = auto_cut(tmp_path / "bundle.docx")
 
     assert result.exit_code == ExitCode.RETRIEVAL_FAILURE, result.output
+    assert not (tmp_path / "bundle.report.json").exists()
     assert not (tmp_path / "report.json").exists()
     assert not (tmp_path / "bundle.docx").exists()
     assert cutting.articles is not None

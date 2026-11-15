@@ -9,17 +9,21 @@ the comparison on hand-built reports.
 
 from __future__ import annotations
 
+from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Final
 
-from debate_cli.presenters.batch_report_presenter import AutoCutFiles, batch_report_table
+from debate_cli.presenters.batch_report_presenter import AutoCutFiles, AutoCutSettings, batch_report_table
+from debate_cli.presenters.daily_presenter import auto_cut_payload
 from debate_core.application.batch_cut_service import (
     BatchEntry,
     BatchEntryStatus,
     BatchReport,
     BatchStopReason,
 )
+from debate_core.application.digest_service import Digest, DigestWindow
 from debate_core.domain import AccessStatus
+from debate_core.domain.daily_preset import DailyPair, DailyPreset
 
 FILES: Final = AutoCutFiles(report=Path("bundle.report.json"))
 
@@ -72,3 +76,40 @@ def test_an_auto_cut_whose_command_cost_is_unknown_keeps_the_cost_line() -> None
 
 def test_an_unpriced_auto_cut_cost_keeps_the_cost_line() -> None:
     assert cost_line(0.0125, None, command_cost_usd=None) == "Model cost: unpriced"
+
+
+def test_daily_auto_cut_payload_carries_the_reports_command_cost_beside_its_cuts_cost() -> None:
+    """A digest's command costs what its cuts do, so the commands' tests cannot tell the two keys apart:
+    here the report's figures differ, as a daily command that asked a model for something else would."""
+    report = BatchReport(
+        wanted=1,
+        entries=(entry(1, 0.0125),),
+        stop_reason=BatchStopReason.CANDIDATES_EXHAUSTED,
+        command_cost_usd=0.0213,
+    )
+    preset = DailyPreset(
+        name="politics",
+        label="Politics",
+        description="An invented preset for this test.",
+        queries=("health insurance",),
+        pairs=(DailyPair(argument="politics-da", need="uniqueness"),),
+        providers=("rss",),
+    )
+    digest = Digest(
+        preset=preset,
+        day=date(2026, 9, 17),
+        window=DigestWindow(),
+        since=datetime(2026, 9, 17, tzinfo=UTC),
+        until=datetime(2026, 9, 18, tzinfo=UTC),
+        groups=(),
+        outcomes=(),
+        listed_before=0,
+        feed_topics=(),
+    )
+    settings = AutoCutSettings(wanted=1, concurrency=1, card_format="docx", max_cost_usd=None)
+
+    payload = auto_cut_payload(report, digest, settings, FILES)
+
+    assert (payload["cost_usd"], payload["command_cost_usd"]) == (0.0125, 0.0213)
+    keys = list(payload)
+    assert keys.index("command_cost_usd") == keys.index("cost_usd") + 1

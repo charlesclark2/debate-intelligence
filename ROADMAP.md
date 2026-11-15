@@ -64,7 +64,7 @@ v2.3's extension work.
 | [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 4 | 125 | 107 | 550 |
 | [v1.2](plan_specs/releases/v1.2.yaml) | Argument landscape & file building | 3 | 99 | 83 | 366 |
 | [v1.3](plan_specs/releases/v1.3.yaml) | URL → verified card | 2 | 27 | 20 | 131 |
-| [v1.4](plan_specs/releases/v1.4.yaml) | Federated research from the CLI | 2 | 54 | 31 | 166 |
+| [v1.4](plan_specs/releases/v1.4.yaml) | Federated research from the CLI | 2 | 54 | 32 | 166 |
 | [v1.5](plan_specs/releases/v1.5.yaml) | V1 quality gate & team pilot | 1 | 7 | 1 | 66 |
 | [v1.6](plan_specs/releases/v1.6.yaml) | Public team website | 3 | 31 | 22 | 169 |
 | [v1.7](plan_specs/releases/v1.7.yaml) | Team evidence search pilot | 1 | 32 | 25 | 102 |
@@ -537,7 +537,7 @@ A student can run `debate-research cut <URL>` and receive a verified, tagged, ci
 | [A daily digest's queries find what the feeds carry, measured on a real digest first](plan_specs/v1/e08-research-workflows/t25-digest-queries-and-the-feeds-every-word-rule.yaml) `v1-e08-t25-digest-queries-and-the-feeds-every-word-rule` | Succeeded | 1 | 2.0 |
 | [The end-to-end auto-cut tests follow v1-e08-t24's ranking, so validate-dev is green again](plan_specs/v1/e08-research-workflows/t26-the-end-to-end-auto-cut-test-follows-the-multi-query-ranking.yaml) `v1-e08-t26-the-end-to-end-auto-cut-test-follows-the-multi-query-ranking` | InProgress | 1 | 1.0 |
 | [`search --within` narrows a saved search's results locally, with no provider call](plan_specs/v1/e08-research-workflows/t27-search-within-a-saved-search.yaml) `v1-e08-t27-search-within-a-saved-search` | Pending | 1 | 2.0 |
-| [An end-to-end auto-cut bundle of VERIFIED cards only verifies with exit 0](plan_specs/v1/e08-research-workflows/t28-an-auto-cut-bundle-that-verifies-clean-end-to-end.yaml) `v1-e08-t28-an-auto-cut-bundle-that-verifies-clean-end-to-end` | Pending | 1 | 1.0 |
+| [An end-to-end auto-cut bundle of VERIFIED cards only verifies with exit 0](plan_specs/v1/e08-research-workflows/t28-an-auto-cut-bundle-that-verifies-clean-end-to-end.yaml) `v1-e08-t28-an-auto-cut-bundle-that-verifies-clean-end-to-end` | Succeeded | 1 | 1.0 |
 
 
 ### v1.5 — V1 quality gate & team pilot
@@ -548,7 +548,7 @@ Golden-card and LLM evaluations gate prompt/model changes; the CLI is packaged a
 
 | Task | Status | Prereqs | Est. hours |
 |---|---|---|---|
-| [Golden card fixtures from team files](plan_specs/v1/e09-v1-quality-pilot/t01-golden-card-fixtures.yaml) `v1-e09-t01-golden-card-fixtures` | Pending | 1 | 12.0 |
+| [Golden card fixtures from team files](plan_specs/v1/e09-v1-quality-pilot/t01-golden-card-fixtures.yaml) `v1-e09-t01-golden-card-fixtures` | InProgress | 1 | 12.0 |
 | [Golden DOCX regression tests](plan_specs/v1/e09-v1-quality-pilot/t02-docx-golden-tests.yaml) `v1-e09-t02-docx-golden-tests` | Pending | 1 | 7.0 |
 | [Card selection and underlining eval harness](plan_specs/v1/e09-v1-quality-pilot/t03-span-eval-harness.yaml) `v1-e09-t03-span-eval-harness` | Pending | 2 | 9.0 |
 | [Prompt/model promotion gate](plan_specs/v1/e09-v1-quality-pilot/t04-prompt-promotion-gate.yaml) `v1-e09-t04-prompt-promotion-gate` | Pending | 3 | 5.5 |
@@ -705,7 +705,7 @@ The weekly caselist run (pull, import, publish, parse, search index) runs in the
 | [The run lock tells a test when a writer starts waiting, so the shared-renewal test is not a thread race](plan_specs/v1/e40-cloud-caselist-run/t45-run-lock-offers-a-test-hook-when-a-writer-waits.yaml) `v1-e40-t45-run-lock-offers-a-test-hook-when-a-writer-waits` | Pending | 1 | 1.0 |
 | [A backfile with no directory at the running parser version is named](plan_specs/v1/e40-cloud-caselist-run/t46-a-backfile-without-the-running-parsers-directory-is-named.yaml) `v1-e40-t46-a-backfile-without-the-running-parsers-directory-is-named` | Succeeded | 1 | 1.0 |
 | [Prod receives each backfile once, by hand, before the run's home moves](plan_specs/v1/e40-cloud-caselist-run/t47-prods-one-time-backfile-publish.yaml) `v1-e40-t47-prods-one-time-backfile-publish` | Pending | 2 | 2.0 |
-| [The weekly schedule starts its pull with --scheduled, so the recent-run guard is live](plan_specs/v1/e40-cloud-caselist-run/t48-the-schedule-passes-scheduled.yaml) `v1-e40-t48-the-schedule-passes-scheduled` | Pending | 1 | 2.0 |
+| [The weekly schedule starts its pull with --scheduled, so the recent-run guard is live](plan_specs/v1/e40-cloud-caselist-run/t48-the-schedule-passes-scheduled.yaml) `v1-e40-t48-the-schedule-passes-scheduled` | InProgress | 1 | 2.0 |
 | [A smoke check reads caselist runs --remote's backfile parser line on an installed build](plan_specs/v1/e40-cloud-caselist-run/t49-a-smoke-check-for-the-backfile-parser-line.yaml) `v1-e40-t49-a-smoke-check-for-the-backfile-parser-line` | Pending | 1 | 1.0 |
 | [A cloud run stopped on a token error, or refused its secret, emails the cure a person can act on](plan_specs/v1/e40-cloud-caselist-run/t50-a-stopped-run-notice-for-a-token-error-gives-the-cloud-cure.yaml) `v1-e40-t50-a-stopped-run-notice-for-a-token-error-gives-the-cloud-cure` | Pending | 1 | 2.0 |
 

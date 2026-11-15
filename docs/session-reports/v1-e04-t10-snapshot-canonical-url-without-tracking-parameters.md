@@ -20,8 +20,9 @@ article's canonical URL there, so the two agree. **No stored row changes and non
 backfill.** Snapshots are immutable. Verify also compares a manifest's snapshot reference, `canonical_url`
 included, with the stored record, so rewriting a row would make every manifest already exported
 from it fail as `SNAPSHOT_REFERENCE_MISMATCH`. Old rows keep the URL they hold, and the one reader that
-needs a retrieved URL falls back to it for them. How many rows a count would touch needs the
-operator's store, so it is an operator command below, not computed. **Look first at the reader
+needs a retrieved URL falls back to it for them. On the operator's Mac a count would touch no row:
+there is no production store, and the dev store has 0 snapshots. The beta coaches' stores were not
+counted. **Look first at the reader
 table**, the "Coach-visible today" line, and the one survivor of the first mutation run, which a
 recorded PDF now catches.
 
@@ -176,10 +177,17 @@ Run by a scratchpad script that applies each mutant to the committed tree, runs 
 * **What stays visible**: an old snapshot keeps its tracking parameters in any new manifest that
   references it. That includes a retrieval with unchanged text, which reuses the newest snapshot as
   stored (v1-e04-t05's rule). A new snapshot is made only when the text changes.
-* **How many rows a count would touch**: not computed, because it needs the operator's store. The
-  command is under Operator follow-ups. It counts the publisher snapshots, and the rows named
-  otherwise than their article: those whose `canonical_url` is not their article's, which is every
-  row a canonical backfill would rewrite.
+* **How many rows a count would touch: none on the operator's Mac** (counted 2026-11-14, after the
+  report was first written). The production profile's store, `~/.debate-research/prod`, does not
+  exist there: `~/.debate-research/` holds only `dev/` and `dev.env`, and the count's `sqlite3` said
+  `unable to open database`. The dev store, `~/.debate-research/dev/debate.sqlite3`, has no
+  snapshots. The operator's count of all snapshots, publisher snapshots and the rows named
+  otherwise than their article printed `0||`, the blanks being `SUM` over no rows. My check without
+  the join printed `snapshot_rows 0`, `article_rows 361` (articles search recorded without
+  fetching). So no stored snapshot on that machine holds a fetched URL under `canonical_url`.
+  **Not counted: the beta coaches' stores.** If coaches run the CLI on their own machines, their
+  snapshots are in their own `~/.debate-research/<env>/debate.sqlite3`, and the same query (under
+  Operator follow-ups) counts each one. Where those stores live is the PM's question to answer.
 
 ## Commands run before the report
 
@@ -243,8 +251,13 @@ Run by a scratchpad script that applies each mutant to the committed tree, runs 
 
 ## Operator follow-ups
 
+**Done on the operator's Mac, 2026-11-14:** the production store does not exist there, and the dev
+store has 0 snapshots (results under "Existing rows and the backfill question"). The commands stay
+here for any other store, such as a beta coach's.
+
 **How many stored snapshots a backfill would touch** (read-only, seconds). This is for the PM's
-backfill question; I recommend no backfill (above). Where: your Mac, any directory. It prints three
+backfill question; I recommend no backfill (above). Where: the machine that holds the store, any
+directory. It prints three
 counts per store: all snapshots, publisher snapshots, and the rows named otherwise than their article
 (the rows a canonical backfill would rewrite). `-readonly` changes nothing, though a read of a WAL
 database can leave `-wal`/`-shm` files beside it, which is harmless. A store that does not exist

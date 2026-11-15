@@ -199,9 +199,40 @@ v1-e08-t22 asks two questions (session report, Follow-up work):
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-11-14
 
 **Notes:**
+
+Accepted. ac1 and the node pass, and the Goal is `Succeeded`.
+
+* **The figure is the budget's own.** `RunSpend` asks the usage log for the run's spend as every
+  `BudgetGuard` does. `BatchCutService` reads it after the walk, never from the entries, and the
+  report holds it. The proof is a test that checks it against a refusal's `spent_usd` from the run's
+  second guard, which is the strongest check available.
+* **"Say what you find" was answered.**
+  * daily's two figures are equal, since only the cuts call a model.
+  * `--expand-llm` makes the command cost more.
+  * The last-bits difference between two orders of addition was found and handled by comparing the
+    figures as printed. The raw-float mutant proves it matters.
+* **The decisions are accepted.**
+  * Null when a cut is unpriced, or when the log cannot be read. The command goes on, since a
+    damaged log line must not fail a run after its cuts.
+  * The PM's wording for daily too, where it cannot appear today.
+* **The evidence:** the red run, 12 failed at assertions against a skeleton, then 12 mutants all
+  caught, the PM's two among them.
+* **Both Deviations are accepted.**
+  * The guide, which the spec asks for; the PM adds `docs/guides` to the packages in the next batch.
+  * The `--max-cost` correction, which makes the guide match the code.
+* **The checks.** The affected set is the whole suite (771 files, through the root conftest's
+  import of `budget.py`) and goes to `ci` under agreement 10. `application` stopped at 96% under load
+  with no failure. If `scripts/task pr` asks, `scripts/task sync`.
+* **The two questions, ruled:**
+  1. `daily --max-cost`: (a) for V1. The per-run setting limits daily, and the guide now says so.
+     (b), the option itself, goes on the PM's V1.x list as a p3 under the December rule.
+  2. An unpriced `search.expand` with no limit: (a), accepted. Every profile sets a daily budget, and
+     under a limit the guard refuses an unpriced call before it is made.
+
+`scripts/task pr`

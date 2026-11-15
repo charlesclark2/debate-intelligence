@@ -668,7 +668,7 @@ On each route the holdout placed 3 of its 4 cards labelled `none`.
 * **The evidence guard held.** One holdout answer on `deep_audit` was refused as `ECHOES_EVIDENCE`, so no
   quoted text was counted.
 
-**Three things for the PM, before the replay is read:**
+**Three things for the PM:**
 
 1. **The first sample on `deep_audit` lost a batch of 20.** The terminal printed "structured output failed
    validation" three times, and the 5 calls fit 3 batches (20, 20 and 7) and 2 repairs. One batch's repair
@@ -678,25 +678,50 @@ On each route the holdout placed 3 of its 4 cards labelled `none`.
 
    The holdout on `deep_audit` printed the message once and lost no batch: its 7 calls are 6 batches and 1
    repair. Neither `high_volume` recording printed it.
-2. **Both `high_volume` cassette scans are unclean.** In each, one cassette text holds a hit that no
-   trusted mark sets aside as a JSON key's name or a taxonomy word:
-   * the holdout, with 6 texts, 5 set aside and 23 hits;
-   * the first sample, with 9 texts, 8 set aside and 30 hits.
+2. **One `high_volume` cassette text is unclean, and it is the holdout's.** The cassette scan does not read
+   one sample's cassettes. `scanned_cassettes` reads every cassette of the route's classify prompt at
+   1.3.1, and the repair scan reads every repair at 1.3.1 filed under hspolicy26. This is the scan's
+   existing scope (`v1-e32-t39`, `v1-e32-t40`), and this task did not change it. The counts show it:
+
+   * **The holdout's recording ran first.** It scanned 6 texts, its own 6 batches; 5 were set aside and 1
+     was left.
+   * **The first sample's recording ran second.** It scanned 9 texts, those 6 and its own 3; 8 were set
+     aside and still only 1 was left.
+
+   So the first sample's three texts are clean, and the one text left is among the holdout's six. On
+   `deep_audit`, 9 and then 12 texts were scanned, and 3 and then 5 repairs: the earlier 1.3.1 recording's
+   3 batches and 2 repairs, plus this run's. All of those are clean.
 
    The prompt-input scans are clean on both routes, so the word is most likely in the model's answer, not
-   in a card sent. The session has not seen where it is, and does not know which. 1.2.0's `high_volume`
-   cassettes also had hits, which the operator judged ordinary words on 2026-11-05. The cassettes stay local in `model-cassettes/`, and nothing is published.
-   * **The first sample's hits** can be judged by the runbook's step 5, in the terminal only.
-   * **The holdout's cannot.** `--breakdown` refuses a holdout, as ruled, and step 5 is `--breakdown`, so no
-     command lists the holdout's hits, even for the operator's eyes. This gap is the session's, from its
-     build. The PM can choose:
-     * to keep or set aside the `high_volume` holdout cassettes unjudged; the score is below the bar either
-       way;
-     * or to allow a terminal-only listing of the holdout's scan hits, with no outcome, row or answer id.
+   in a card sent. The session has not seen where it is. 1.2.0's `high_volume` cassettes also had hits,
+   which the operator judged ordinary words on 2026-11-05. The cassettes stay local in `model-cassettes/`,
+   and nothing is published.
+   * **The runbook's step 5 is not to be run on `high_volume` before the PM rules.** It is the first
+     sample's terminal listing, but it reads the same cassettes, so it would list the holdout's hit with the
+     card words around it. That would be a holdout card shown by the back door.
+   * **No command lists the holdout's hits as a holdout.** `--breakdown` refuses a holdout, as ruled. This
+     gap is the session's, from its build. The PM can choose:
+     * a terminal-only listing of the holdout's scan hits, with no outcome, row or answer id, for the
+       operator to judge by hit number;
+     * to keep the `high_volume` holdout cassettes unjudged;
+     * or to delete them. The score is below the bar either way.
+   * **In the side-by-side JSON, the two samples' `scan` objects are the same object**, for the same reason.
+     The holdout's `scan` there is not the holdout's alone.
 3. **The second labels.** 32 of the holdout's 111 rows have one (step 5), so it is scored more leniently
    than the first sample. The bar is not met even with that leniency.
 
-Next are the two replays side by side, which make no call (step 6's third and fourth blocks).
+**Step 6's replays side by side (the operator's, 2026-11-14), as pasted.** These make no call. Both exit 1
+with `EVALUATION_BELOW_BAR` and `bar_reads_sample: "holdout"`.
+
+* Each sample's counts, scores and tokens equal its recording's, number for number, on both routes.
+* `drawn_from` gives the holdout's snapshot 2026-11-03, parser and version `2026.10.27-docx-7`, and
+  `card-fingerprint-v4`.
+* The `deep_audit` replay printed "structured output failed validation" four times: the three recorded
+  failures of the first sample and the one of the holdout, replayed.
+* The `high_volume` replay's message is the scan's, as in the recordings.
+* Both samples' `scan` objects are the same, as finding 2 explains.
+
+The JSON objects go to the PM, with the findings above, for the ruling.
 
 **The affected set did not finish locally.** `uv run scripts/affected_tests.py --run --slow` selects 157 files,
 5,298 tests. Within the 115-second cap it reached 65% with two failures:

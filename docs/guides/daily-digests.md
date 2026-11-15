@@ -96,7 +96,13 @@ a model or spends anything.
 On a machine where nothing was recorded, a cut in replay is refused with `MISSING_FIXTURE_ERROR`, and
 the message ends by saying how to make the real call. In an `--auto-cut` run every result it tries is
 refused the same way: the table's Reasons column says `MISSING_FIXTURE_ERROR` for each, the run is
-short, and the message is in each entry of the run's report.
+short, and the last line under the table counts them:
+
+```text
+4 results were refused because replay is the default. For real model calls, export DEBATE_MODEL_MODE=live (see "Real model calls" in docs/guides/daily-digests.md).
+```
+
+The run's report has the full message in each refused entry.
 
 To make real calls, set `DEBATE_MODEL_MODE=live` in your shell. It lasts until you close that terminal
 window:

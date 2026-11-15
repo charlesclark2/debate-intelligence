@@ -33,9 +33,11 @@ read back and checked (`golden_snapshots.load_recorded_snapshot`) and the team c
   as the platform's markup requires (a highlight is emphasis within underlined text), and the
   characters cut back are counted. Purposes are `null`: a Verbatim card's runs say how a stretch is
   marked, never what argumentative work it does (`SpanPurpose`);
-* the segments and spans are built into the platform's own `ExtractedEvidence` and `CardMarkup`,
-  which refuse anything a card could not hold, and the segments must reproduce the team card's
-  evidence (`golden_snapshots.reproduces`, the same rule as `check --snapshots`).
+* an omission marker with nothing of the snapshot between its two sides (one inside a word) leaves
+  the case unlabelled: the platform's extractor would join the two segments into one, which no
+  longer reads as the card. Whether the segments reproduce the card is `check --snapshots`'s to
+  say, by the comparison the alignment matched in, and the render builds them into the platform's
+  `ExtractedEvidence` and `CardMarkup`, which refuse anything a card could not hold.
 
 `expected.json` holds the format, the case ID, the team's tag, its cite (short and full, as the
 excerpt holds them), the research need, the segments and the spans: offsets into the recorded
@@ -145,8 +147,8 @@ class LabelProblem(StrEnum):
     SNAPSHOT = "the snapshot copy does not verify"
     TEAM_CARD_UNREADABLE = "the team card does not read as one card"
     NOT_FOUND = "a stretch of the card is not in the snapshot"
+    NOTHING_OMITTED = "an omission marker leaves nothing of the snapshot out"
     MARKUP_REFUSED = "the platform refuses the card's segments or spans"
-    NOT_REPRODUCED = "the segments do not reproduce the team card's evidence"
 
 
 class LabelRefused(Exception):
@@ -272,8 +274,9 @@ def _align(snapshot_text: str, stretches: Sequence[tuple[str, list[int]]]) -> _A
                 alignment.to_snapshot[remaining_positions[index]] = page_positions[found + index]
             start, end = page_positions[found], page_positions[found + taken - 1] + 1
             if alignment.segments and start <= alignment.segments[-1][1]:
-                # Nothing of the snapshot lies between this stretch and the last: one segment.
-                start = alignment.segments.pop()[0]
+                # A marker with nothing of the snapshot between its two sides (inside a word): the
+                # extractor would join the two into one segment, which no longer reads as the card.
+                raise LabelRefused(LabelProblem.NOTHING_OMITTED, f"after stretch {number - 1}")
             alignment.segments.append((start, end))
             cursor = found + taken
             matched += taken
@@ -437,9 +440,6 @@ def label_case(
         EvidenceMarkupSpan(start, end, style) for style in SpanStyle for start, end in spans[style]
     ]
     segments = [[start, end] for start, end in alignment.segments]
-    _markup(_source_snapshot(case_id, record), text, segments, markup_spans)
-    if not snapshots.reproduces(text.text, segments, card.evidence_text, markers):
-        raise LabelRefused(LabelProblem.NOT_REPRODUCED)
     expected = {
         "format": snapshots.EXPECTED_FORMAT,
         "case_id": case_id,

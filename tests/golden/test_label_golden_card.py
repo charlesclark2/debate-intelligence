@@ -44,6 +44,7 @@ LINKS = {
     "spaced": "https://www.csis.org/analysis/spaced-grid",
     "emphasised": "https://www.heritage.org/report/emphasised-grid",
     "stray": "https://www.cato.org/study/stray-grid",
+    "split": "https://www.aei.org/research/split-grid",
 }
 
 #: The card's body with its cut unmarked: the cutter dropped "words the cutter skipped" with no `…`.
@@ -63,6 +64,8 @@ SPACED_WARRANTS = (f" {WARRANT} ", f" {WARRANT}")
 #: A body whose last two words, "leaves out.", the page holds only in its closing line: two words
 #: are too few to call the rest of the card found there.
 STRAY_BODY = (f"A second paragraph {FILLER} {{warrant}} leaves out.",)
+#: A body whose omission marker sits inside a word, with nothing of the page left out around it.
+SPLIT_BODY = (f"Plain wo…rds {FILLER} {{warrant}} and more words the cutter skipped after the cut.",)
 
 FIRST_WARRANT = [PAGE.index(WARRANT), PAGE.index(WARRANT) + len(WARRANT)]
 SECOND_WARRANT = [PAGE.rindex(WARRANT), PAGE.rindex(WARRANT) + len(WARRANT)]
@@ -90,6 +93,7 @@ def labelled_world(
                 card("spaced", LINKS["spaced"], SPACED_BODY, underlined=SPACED_WARRANTS),
                 card("emphasised", LINKS["emphasised"], emphasis=True),
                 card("stray", LINKS["stray"], STRAY_BODY),
+                card("split", LINKS["split"], SPLIT_BODY),
             ],
         ),
     )
@@ -119,7 +123,7 @@ def _span(bounds: list[int], style: str) -> dict[str, Any]:
 def test_the_coachs_underlines_and_highlights_become_snapshot_offsets(
     labelled_world: World, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    assert _label(labelled_world) == 1  # the absent and stray cards are not labelled
+    assert _label(labelled_world) == 1  # the absent, stray and split cards are not labelled
 
     out = capsys.readouterr().out
     tag = "Demand growth strains the marked reserve margin"
@@ -144,7 +148,7 @@ def test_the_coachs_underlines_and_highlights_become_snapshot_offsets(
         f"{labelled_world.case_for('marked')}: 2 segments (0 unmarked cuts), 2 underlines, 2 highlights, "
         "0 highlighted characters outside the underlining"
     ) in out
-    assert "labelled 5, not labelled 2" in out
+    assert "labelled 5, not labelled 3" in out
 
 
 def test_a_cut_the_cutter_did_not_mark_is_found_and_counted(
@@ -221,11 +225,25 @@ def test_a_few_words_found_elsewhere_do_not_finish_a_card(
     assert not (labelled_world.fixtures / case_id / golden.EXPECTED_NAME).exists()
 
 
+def test_a_marker_that_leaves_nothing_out_is_refused(
+    labelled_world: World, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _label(labelled_world)
+
+    case_id = labelled_world.case_for("split")
+    out = capsys.readouterr().out
+    assert (
+        f"{case_id}: NOT LABELLED: an omission marker leaves nothing of the snapshot out (after stretch 1)"
+        in out
+    )
+    assert not (labelled_world.fixtures / case_id / golden.EXPECTED_NAME).exists()
+
+
 def test_every_label_passes_the_operators_check_and_the_structure_test(
     labelled_world: World, capsys: pytest.CaptureFixture[str]
 ) -> None:
     _label(labelled_world)
-    for name in ("absent", "stray"):
+    for name in ("absent", "stray", "split"):
         golden.shutil.rmtree(labelled_world.fixtures / labelled_world.case_for(name))
 
     assert labelled_world.check() == 0
@@ -258,7 +276,7 @@ def test_a_snapshot_copy_that_no_longer_verifies_is_not_labelled(
 @pytest.fixture
 def rendered(labelled_world: World, capsys: pytest.CaptureFixture[str]) -> World:
     _label(labelled_world)
-    for name in ("absent", "stray"):
+    for name in ("absent", "stray", "split"):
         golden.shutil.rmtree(labelled_world.fixtures / labelled_world.case_for(name))
     assert _label(labelled_world, "--render-expected") == 0
     capsys.readouterr()

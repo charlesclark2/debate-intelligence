@@ -725,6 +725,8 @@ __all__ = [
     "BULK_DOWNLOAD_WINDOW",
     "CLOUD_FAILURE_RATE_RUNBOOK",
     "CLOUD_PARSE_STAGE_RUNBOOK",
+    "CLOUD_REFUSED_TOKEN_SECRET_CURE",
+    "CLOUD_REFUSED_TOKEN_SECRET_RUNBOOK",
     "DEFAULT_BULK_DOWNLOADS_PER_DAY",
     "DEFAULT_FULL_ARCHIVE_INTERVAL_DAYS",
     "INBOX_PARTIAL_DIRECTORY",
@@ -794,6 +796,7 @@ __all__ = [
     "cloud_parse_cure",
     "decide_full_archives",
     "fix_for",
+    "refused_its_token_secret",
     "full_archive_of_inbox_name",
     "inbox_files",
     "message_for",
@@ -6306,6 +6309,41 @@ _TOKEN_UNREADABLE_ON_THIS_MACHINE_FIX: Final = (
 fix, in `v1-e34-t35`'s words. The logout deletes the record without reading it."""
 
 
+TOKEN_SECRET_READ: Final = "GetSecretValue"
+"""The operation a run's read of its caselist_token secret is refused at (`ManagedSecret.read`): the only
+Secrets Manager read a pull or a backfile import makes, whose refusal is a `StoreAccessDenied` like a
+bucket's (an IAM or a decrypt refusal alike, `v1-e40-t40`)."""
+
+CLOUD_REFUSED_TOKEN_SECRET_RUNBOOK: Final = 'caselist-cloud-run.md, "A run refused its token secret"'
+"""The runbook section a bucket-mode run its token secret refused points to (`v1-e40-t50`)."""
+
+CLOUD_REFUSED_TOKEN_SECRET_CURE: Final = (
+    "send the PM the run's id and its code, STORE_ACCESS_DENIED; the error class is in caselist runs "
+    f"--remote --json ({CLOUD_REFUSED_TOKEN_SECRET_RUNBOOK}); never an IAM or key-policy change by hand"
+)
+"""The fix of a bucket-mode run whose read of its caselist_token secret was refused (`v1-e40-t50`, the PM's
+ruling of 2026-11-14): a person is needed, and the PM is told the code.
+
+The run role's IAM policy, or the token key's policy, no longer lets it read the secret, and no retry and
+no login cures that (`caselist-cloud-run.md`, which says never to change either policy by hand). It names
+the code, `STORE_ACCESS_DENIED`, and where the class is read, never the class itself: no notification
+names an exception's class (`v1-e34-t19`). It is :func:`fix_for`'s answer in bucket mode, so the run's
+details, its notice and the command's output give the same words."""
+
+
+def refused_its_token_secret(error: BaseException) -> bool:
+    """Whether `error` is a refused read of the caselist_token secret, told by its structured `operation`.
+
+    Never by its message: a bucket's refusal is the same class and code, at another operation, and keeps
+    its own words (`v1-e40-t50`).
+    """
+    return (
+        isinstance(error, StoreAccessDenied)
+        and not isinstance(error, LocalStoreAccessDenied)
+        and error.operation == TOKEN_SECRET_READ
+    )
+
+
 def message_for(error: BaseException, *, bucket_mode: bool = False) -> str:
     """What `error` says of itself where a stage's reason, a run's record or the command's output quotes it.
 
@@ -6360,9 +6398,15 @@ def fix_for(error: BaseException, *, bucket_mode: bool = False) -> str | None:
     stays as it was. An unreadable caselist_token carries the logout and then the login outside bucket
     mode, and nothing in it, for the same reason (`v1-e34-t36`).
 
+    In bucket mode a refused read of the caselist_token secret carries the escalation to the PM
+    (:data:`CLOUD_REFUSED_TOKEN_SECRET_CURE`, `v1-e40-t50`): no retry and no login cures it. On the Mac it
+    is the bucket's refusal it has always been.
+
     Public because the run monitor asks the same question of an error that ended a run before any
     stage could record it (`v1-e34-t19`): that run's notification carries the same fix.
     """
+    if bucket_mode and refused_its_token_secret(error):
+        return CLOUD_REFUSED_TOKEN_SECRET_CURE
     if isinstance(error, LocalStoreAccessDenied):
         return (
             f"This machine refused {error.resource}: check that this user can read and write it, "

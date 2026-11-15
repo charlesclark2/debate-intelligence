@@ -9,14 +9,16 @@ Rendering only. Which results were cut, skipped or failed, and why the run ended
 One row per result the batch tried, in rank order: its rank, URL, access status, card status, the
 reason codes and the cost of its model calls. Below it, the search's provider footer (so a partial
 search is never silent, even when N cards were verified), then where the bundle, its manifest and
-the report were written.
+the report were written, and what the model calls cost: the cuts' and, when it is more, the whole
+command's, which `--max-cost` limits (v1-e08-t22).
 
 ## The report
 
 `<bundle stem>.report.json` beside the bundle (v1-e08-t18), the path `AutoCutFiles.report` is given.
 
 :func:`report_payload`: the run's settings, why it ended, the providers that did not answer in full,
-the total cost, the files, and every entry with its `section`, `verified` or `unverified`, which is
+the cuts' cost (`cost_usd`) and beside it the whole command's (`command_cost_usd`, the budget run's,
+v1-e08-t22), the files, and every entry with its `section`, `verified` or `unverified`, which is
 where its card is in the bundle. It is also the `auto_cut` object of the `--json` output. Like the
 table it holds ranks, URLs, titles, statuses, codes, ids and costs: never evidence text, a tag or a
 cite, which are the bundle's.
@@ -156,6 +158,7 @@ def report_payload(
         "search_status": outcome.status.value,
         "partial_providers": list[JsonValue](_partial_providers(outcome)),
         "cost_usd": report.cost_usd,
+        "command_cost_usd": report.command_cost_usd,
         "bundle": str(files.bundle) if files.bundle is not None else None,
         "manifest": str(files.manifest) if files.manifest is not None else None,
         "report": str(files.report),
@@ -215,7 +218,7 @@ def batch_report_table(
         )
     if files.bundle is not None and files.manifest is not None:
         below += [f"Bundle: {files.bundle}", f"Manifest: {files.manifest}"]
-    below += [f"Report: {files.report}", f"Model cost: {_cost(report.cost_usd)}"]
+    below += [f"Report: {files.report}", _cost_line(report)]
     refused = sum(
         1
         for entry in report.entries
@@ -229,6 +232,22 @@ def batch_report_table(
         title=_title(report, heading),
         caption=f"Stopped: {_STOP_WORDS[report.stop_reason]}.",
         lines_below=below,
+    )
+
+
+def _cost_line(report: BatchReport) -> str:
+    """`Model cost:` and the cuts' cost, then the whole command's too when the two print differently.
+
+    Both figures are the report's (v1-e08-t22). They are compared as printed, so a whole command that
+    spent what its cuts did, summed in another order, keeps the line as it was; so does one whose cost
+    is unknown. The PM's wording (2026-11-14).
+    """
+    cuts = _cost(report.cost_usd)
+    if report.command_cost_usd is None or _cost(report.command_cost_usd) == cuts:
+        return f"Model cost: {cuts}"
+    return (
+        f"Model cost: {cuts} for the cuts, {_cost(report.command_cost_usd)} for the whole command "
+        "(the --max-cost limit counts the whole command)"
     )
 
 

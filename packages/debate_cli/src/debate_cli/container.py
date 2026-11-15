@@ -161,7 +161,7 @@ from debate_core.application.analytic_texts import AnalyticTextService
 from debate_core.application.article_fetch import ArticleFetch, Closeable
 from debate_core.application.article_service import ArticleService
 from debate_core.application.batch_cut_service import BatchCutService, SpendTally
-from debate_core.application.budget import BudgetRun
+from debate_core.application.budget import BudgetRun, RunSpend
 from debate_core.application.card_selection import CardSelector
 from debate_core.application.card_service import CardService
 from debate_core.application.caselist.bucket_run import BucketRun
@@ -1215,6 +1215,14 @@ class ServiceContainer:
         many routers it builds. The container is built once per command, so no two commands share one."""
         return self.singleton("budget_run", BudgetRun)
 
+    def run_spend(self) -> RunSpend:
+        """What :meth:`budget_run` has spent so far, from :meth:`usage_log`, as its guards count it against
+        `--max-cost` (`v1-e08-t22`): an auto-cut report's `command_cost_usd`."""
+        log = self.usage_log()
+        return RunSpend(
+            self.budget_run(), ledger=log, clock=_PortClock(self.clock()), local_zone=log.local_zone
+        )
+
     def spend_tally(self) -> SpendTally:
         """What each `search --auto-cut` cut's model calls cost (`v1-e08-t06`), as :meth:`usage_log`
         records them; a call made outside a cut is counted nowhere."""
@@ -1664,7 +1672,12 @@ class ServiceContainer:
     def _build_batch_cutting(self) -> BatchCutting:
         fetching = self.article_fetch()
         cutting = self.card_cutting()
-        service = BatchCutService(fetching=fetching, cutting=cutting.cards, spend=self.spend_tally())
+        service = BatchCutService(
+            fetching=fetching,
+            cutting=cutting.cards,
+            spend=self.spend_tally(),
+            command_spend=self.run_spend(),
+        )
         return BatchCutting(service=service, fetching=fetching, cutting=cutting)
 
     def argument_taxonomy(self) -> ArgumentTaxonomy:

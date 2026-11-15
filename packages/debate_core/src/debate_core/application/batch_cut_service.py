@@ -46,6 +46,13 @@ Each entry carries what its model calls cost, read from the usage log as the cal
 own even with others running beside it. A replayed or fake answer costs nothing and records nothing,
 so its entry says 0. An entry with a call the pricing file does not price says `None`, not 0.
 
+The report's :attr:`BatchReport.cost_usd` is the cuts' calls alone. Its
+:attr:`BatchReport.command_cost_usd` is the whole command's (v1-e08-t22): what the command's one budget
+run spent, read from the usage log once the walk is over
+(:class:`~debate_core.application.budget.RunSpend`), the figure `--max-cost` limits. With
+`--expand-llm` it includes the expansion's call, which no cut made. It is read, never added up from the
+entries.
+
 ## What an entry never holds
 
 Evidence text, a tag, a cite or a model's words: ranks, URLs, the result's title, statuses, codes,
@@ -59,7 +66,7 @@ import asyncio
 from collections.abc import Generator, Sequence
 from contextlib import contextmanager
 from contextvars import ContextVar
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from enum import StrEnum
 from typing import Final, Protocol
 
@@ -84,6 +91,7 @@ __all__ = [
     "BatchNeed",
     "BatchReport",
     "BatchStopReason",
+    "CommandSpend",
     "Cutting",
     "Retrieving",
     "SpendReading",
@@ -274,6 +282,13 @@ class BatchReport:
     wanted: int
     entries: tuple[BatchEntry, ...]
     stop_reason: BatchStopReason
+    command_cost_usd: float | None = None
+    """What the whole command has spent on model calls, as its budget run counts it (v1-e08-t22): the
+    figure `--max-cost` limits, read from the run once the cuts are over. It is the cuts' calls and
+    every other call the command made, `--expand-llm`'s among them, so it is never less than
+    :attr:`cost_usd`. None when the service was given no run to read, when the run's spend could not
+    be read, or when :attr:`cost_usd` is None: the cuts are part of the command, so a cut whose cost is
+    unknown makes the command's unknown too."""
 
     @property
     def verified(self) -> tuple[CutResult, ...]:
@@ -347,6 +362,15 @@ class SpendTally:
             _READING.reset(token)
 
 
+class CommandSpend(Protocol):
+    """What the whole command has spent so far:
+    :class:`~debate_core.application.budget.RunSpend`, over the command's one budget run."""
+
+    def usd(self) -> float | None:
+        """The run's spend in USD, or None when it is unknown."""
+        ...
+
+
 # ------------------------------------------------------------------------------------------------
 # The walk
 # ------------------------------------------------------------------------------------------------
@@ -355,10 +379,20 @@ class SpendTally:
 class BatchCutService:
     """Cuts a search's results in rank order until N cards are VERIFIED. Holds no state between runs."""
 
-    def __init__(self, *, fetching: Retrieving, cutting: Cutting, spend: SpendTally | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        fetching: Retrieving,
+        cutting: Cutting,
+        spend: SpendTally | None = None,
+        command_spend: CommandSpend | None = None,
+    ) -> None:
+        """`spend` tallies each cut's own calls; `command_spend` is the command's budget run, read for
+        :attr:`BatchReport.command_cost_usd` once the walk is over."""
         self._fetching = fetching
         self._cutting = cutting
         self._spend = spend or SpendTally()
+        self._command_spend = command_spend
 
     async def cut(self, request: BatchCutRequest) -> BatchReport:
         """Walk `request.candidates`; see the module docstring. Raises only what is not a DomainError."""
@@ -372,7 +406,10 @@ class BatchCutService:
                     continue
                 walk.started()
                 group.create_task(self._attempt(candidate, request, walk))
-        return walk.report()
+        report = walk.report()
+        if self._command_spend is None or report.cost_usd is None:
+            return report
+        return replace(report, command_cost_usd=self._command_spend.usd())
 
     async def _attempt(self, candidate: BatchCandidate, request: BatchCutRequest, walk: _Walk) -> None:
         """Fetch and cut one candidate under the semaphore, and add its entry; never raises a DomainError."""

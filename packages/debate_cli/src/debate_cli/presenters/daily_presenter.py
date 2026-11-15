@@ -336,6 +336,7 @@ def auto_cut_payload(
             partial_providers(digest.provider_statuses, uncounted=digest.uncounted)
         ),
         "cost_usd": report.cost_usd,
+        "command_cost_usd": report.command_cost_usd,
         "bundle": str(files.bundle) if files.bundle is not None else None,
         "manifest": str(files.manifest) if files.manifest is not None else None,
         "report": str(files.report),

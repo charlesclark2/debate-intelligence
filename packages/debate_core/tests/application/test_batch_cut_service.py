@@ -34,6 +34,7 @@ from debate_core.application.batch_cut_service import (
     BatchNeed,
     BatchReport,
     BatchStopReason,
+    CommandSpend,
     SpendTally,
     batch_need,
 )
@@ -192,14 +193,14 @@ def batch(
     pages: Mapping[str, str | AccessStatus],
     router: EveryPageRouter | None = None,
     spend: SpendTally | None = None,
+    command_spend: CommandSpend | None = None,
 ) -> Batch:
     world = CardWorld(router or EveryPageRouter())
     meter = Meter()
     fetching = RecordedFetching(world, {url(name): page for name, page in pages.items()}, meter)
     cutting = MeteredCutting(world, meter)
-    return Batch(
-        world, fetching, cutting, meter, BatchCutService(fetching=fetching, cutting=cutting, spend=spend)
-    )
+    service = BatchCutService(fetching=fetching, cutting=cutting, spend=spend, command_spend=command_spend)
+    return Batch(world, fetching, cutting, meter, service)
 
 
 PAGES: Final[dict[str, str | AccessStatus]] = {
@@ -557,6 +558,100 @@ async def test_a_replayed_cut_costs_nothing() -> None:
 
     assert report.entries[0].cost_usd == 0.0
     assert report.cost_usd == 0.0
+
+
+class CommandLedger:
+    """The command's budget run, as :class:`~debate_core.application.budget.RunSpend` reads it: every
+    call the command made, the expansion's before the cuts and then each cut's, as they are recorded."""
+
+    def __init__(self, expansion_usd: float) -> None:
+        self.recorded: list[float | None] = [expansion_usd]
+        self.reads = 0
+
+    def usd(self) -> float | None:
+        self.reads += 1
+        return sum(cost or 0.0 for cost in self.recorded)
+
+
+class CostingIntoTheRun(CostingRouter):
+    """:class:`CostingRouter`, recording each call in the command's run as well, as the usage log does."""
+
+    def __init__(self, tally: SpendTally, costs: Mapping[str, float | None], run: CommandLedger) -> None:
+        super().__init__(tally, costs)
+        self._run = run
+
+    async def generate_structured[OutputT: BaseModel](
+        self,
+        task_class: TaskClass,
+        prompt: ModelPrompt,
+        schema: type[OutputT],
+        params: ModelParams | None = None,
+    ) -> ModelResponse[OutputT]:
+        response = await super().generate_structured(task_class, prompt, schema, params)
+        self._run.recorded.append(self._costs[prompt.prompt_id])
+        return response
+
+
+CUT_COSTS: Final = {"card.select": 0.004, "card.markup": 0.001}
+
+
+async def test_the_auto_cut_report_reads_the_whole_commands_cost_from_its_run_once_the_cuts_are_over() -> (
+    None
+):
+    tally, run = SpendTally(), CommandLedger(expansion_usd=0.02)
+    cuts = batch(PAGES, CostingIntoTheRun(tally, CUT_COSTS, run), spend=tally, command_spend=run)
+
+    report = await cuts.cut(["news", "paywalled", "think-tank", "journal"], wanted=3, concurrency=3)
+
+    assert report.cost_usd == pytest.approx(0.015), "the cuts' own calls, as before"
+    assert report.command_cost_usd == pytest.approx(0.035), "the expansion's $0.02 and the cuts' $0.015"
+    assert run.reads == 1
+
+
+async def test_an_auto_cut_report_with_no_run_to_read_leaves_the_commands_cost_unknown() -> None:
+    tally = SpendTally()
+    cuts = batch(PAGES, CostingRouter(tally, CUT_COSTS), spend=tally)
+
+    report = await cuts.cut(["news"], wanted=1)
+
+    assert report.cost_usd == pytest.approx(0.005)
+    assert report.command_cost_usd is None
+
+
+async def test_an_auto_cut_whose_run_cannot_be_read_leaves_the_commands_cost_unknown() -> None:
+    class Unreadable:
+        def usd(self) -> float | None:
+            return None
+
+    tally = SpendTally()
+    cuts = batch(PAGES, CostingRouter(tally, CUT_COSTS), spend=tally, command_spend=Unreadable())
+
+    report = await cuts.cut(["news"], wanted=1)
+
+    assert report.cost_usd == pytest.approx(0.005)
+    assert report.command_cost_usd is None
+
+
+async def test_an_unpriced_cut_makes_the_auto_cut_reports_command_cost_unknown_too() -> None:
+    """The run counts the unpriced call as nothing, as the limit does, so its total would read low."""
+    tally, run = SpendTally(), CommandLedger(expansion_usd=0.02)
+    costs = {"card.select": 0.004, "card.markup": None}
+    cuts = batch(PAGES, CostingIntoTheRun(tally, costs, run), spend=tally, command_spend=run)
+
+    report = await cuts.cut(["news"], wanted=1)
+
+    assert report.cost_usd is None
+    assert run.usd() == pytest.approx(0.024), "what the run would say"
+    assert report.command_cost_usd is None
+
+
+async def test_a_replayed_auto_cut_with_nothing_else_spent_costs_the_command_nothing() -> None:
+    run = CommandLedger(expansion_usd=0.0)
+    cuts = batch(PAGES, command_spend=run)
+
+    report = await cuts.cut(["news"], wanted=1)
+
+    assert (report.cost_usd, report.command_cost_usd) == (0.0, 0.0)
 
 
 def test_a_call_outside_any_measured_block_is_counted_nowhere() -> None:

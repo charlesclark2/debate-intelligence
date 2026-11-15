@@ -20,7 +20,7 @@ import gc
 import json
 import os
 import re
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -40,15 +40,18 @@ from debate_cli import container as container_module
 from debate_cli.app import create_app
 from debate_cli.container import ServiceContainer
 from debate_cli.exit_codes import ExitCode
-from debate_core.application.settings import SearchProviderName
+from debate_core.application.settings import SearchProviderName, Settings
 from debate_core.domain.model_contracts import ModelParams, ModelPrompt, ModelResponse, TaskClass
 from debate_core.evidence.selection_contract import CARD_SELECT_PROMPT_ID
 
 # Imported before pytest-socket is armed: urllib3 (through trafilatura) probes for IPv6 with a socket
 # when it is first imported, which `--auto-cut`'s article fetch would otherwise do inside a test.
+# The Bedrock module (boto3) likewise, whose router factory the live-mode tests stand in for.
+from debate_core.integrations import bedrock
 from debate_core.integrations import html_extractor as html_extractor
 from debate_core.integrations.discovery.feed_config import FeedConfig, FeedReview, FeedSource
 
+from .ceiling_spending_bedrock import bedrock_stand_in, live, usage_records
 from .model_mode_hints import LIVE_MODE_HINT, REFUSED_UNDER_THE_DEFAULT_WORDS, refused_under_the_default_line
 
 runner = CliRunner()
@@ -151,6 +154,10 @@ class Seams:
     feeds: Feeds = field(default_factory=Feeds)
     articles: ReplayTransport | None = None
     card_router: NeedRecordingRouter | None = None
+    live_models: Callable[[Settings], Settings] | None = None
+    """Turns the profile's settings into a live run's: the container then builds the card router
+    itself, through the budget guard and the usage log, over the `bedrock_router_factory` a test stands
+    in for; Crossref is answered too (v1-e08-t22)."""
     crossref: CrossrefAnswers = field(default_factory=CrossrefAnswers)
     now: datetime = NOW
     """The container's fixed clock, unless `stepping_clock`."""
@@ -190,8 +197,11 @@ def seams(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Seams]:
         transport = httpx.MockTransport(seams.feeds.handle)
         self.override("discovery_transport", transport)
         self.override("article_fetch_transport", seams.articles or transport)
+        if seams.live_models is not None:
+            self.override("settings", seams.live_models(self.settings))
         if seams.card_router is not None:
             self.override("card_model_router", seams.card_router)
+        if seams.card_router is not None or seams.live_models is not None:
             self.override("crossref_transport", httpx.MockTransport(seams.crossref.handle))
 
     monkeypatch.setattr(ServiceContainer, "__init__", with_seams)
@@ -1195,6 +1205,57 @@ def test_two_days_auto_cut_runs_into_one_digest_directory_keep_both_reports(
         str(DIGESTS / "politics-2026-09-18.report.json"),
     )
     assert not (digests / "report.json").exists()
+
+
+# The report's command_cost_usd (v1-e08-t22). A digest's expansion is its templates' (v1-e08-t25), so
+# nothing but the cuts asks a model: the whole command costs what its cuts do. The card router is the
+# container's, live, over the stand-in that prices each call from the committed files, and the
+# per-run limit is set, so the guard counts every call.
+
+CUT_PROMPTS: Final = {"card.select", "card.markup"}
+
+
+@pytest.fixture
+def live_cutting(cutting: Seams, monkeypatch: pytest.MonkeyPatch) -> Seams:
+    cutting.card_router = None
+    cutting.live_models = live(per_run_usd=5.0)
+    monkeypatch.setenv("DEBATE_MODEL_MODE", "live")
+    monkeypatch.setattr(bedrock, "bedrock_router_factory", bedrock_stand_in)
+    return cutting
+
+
+def test_daily_auto_cut_costs_the_whole_command_what_its_cuts_cost(
+    live_cutting: Seams, tmp_path: Path
+) -> None:
+    result = daily("politics", "--date", "2026-09-17", "--auto-cut", "2", json_output=True)
+
+    assert result.exit_code == ExitCode.OK, result.output
+    records = usage_records(tmp_path / "data")
+    assert {record["prompt_id"] for record in records} == CUT_PROMPTS, "only the cuts asked a model"
+    assert len({record["run_id"] for record in records}) == 1
+    whole = sum(record["estimated_cost_usd"] for record in records)
+    report = json.loads((tmp_path / DIGESTS / "politics-2026-09-17.report.json").read_text(encoding="utf-8"))
+    assert report["cost_usd"] > 0
+    assert report["command_cost_usd"] == pytest.approx(whole), "what the budget run counted"
+    assert report["command_cost_usd"] == pytest.approx(report["cost_usd"])
+    keys = list(report)
+    assert keys.index("command_cost_usd") == keys.index("cost_usd") + 1, "beside cost_usd"
+    payload = envelope(result)["data"]["auto_cut"]
+    assert (payload["cost_usd"], payload["command_cost_usd"]) == (
+        report["cost_usd"],
+        report["command_cost_usd"],
+    )
+
+
+def test_daily_auto_cut_prints_the_model_cost_line_unchanged_when_the_command_cost_its_cuts(
+    live_cutting: Seams, tmp_path: Path
+) -> None:
+    result = daily("politics", "--date", "2026-09-17", "--auto-cut", "2")
+
+    assert result.exit_code == ExitCode.OK, result.output
+    whole = sum(record["estimated_cost_usd"] for record in usage_records(tmp_path / "data"))
+    assert one_line(result.stdout).endswith(f"Model cost: ${whole:.4f}")
+    assert "for the whole command" not in result.stdout
 
 
 # ------------------------------------------------------------------------------------------------

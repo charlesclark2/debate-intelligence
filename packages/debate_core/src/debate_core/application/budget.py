@@ -68,6 +68,7 @@ __all__ = [
     "CalendarMonth",
     "CallCeiling",
     "CallPricer",
+    "RunSpend",
     "Spend",
     "SpendLedger",
     "UnpricedModelError",
@@ -304,6 +305,37 @@ class BudgetRun:
         finally:
             with self._lock:
                 self._held_usd -= ceiling_usd
+
+
+class RunSpend:
+    """What one :class:`BudgetRun` has spent so far, as its guards count it against `per_run_usd`.
+
+    The run's own spend from the ledger, under the run's id (v1-e08-t22): the figure every guard of
+    the run compares with the per-run limit, which `--max-cost` sets, and which counts every router
+    the command built, `--expand-llm`'s among them. A call with no price adds nothing to it, as it adds
+    nothing to what the limit counts. Read it once the command's calls are over: a call still in
+    flight holds its ceiling in the run but is not spent yet.
+    """
+
+    def __init__(
+        self, run: BudgetRun, *, ledger: SpendLedger, clock: Clock, local_zone: tzinfo | None = None
+    ) -> None:
+        self.run = run
+        """The run whose spend this reads."""
+        self._ledger = ledger
+        self._clock = clock
+        self._local_zone = local_zone
+
+    def usd(self) -> float | None:
+        """What the run has spent, in USD; None when the ledger cannot be read, so it is unknown."""
+        now = self._clock.now()
+        try:
+            spend = self._ledger.spent(
+                self.run.run_id, local_day(now, self._local_zone), CalendarMonth.of(now)
+            )
+        except UnreadableUsageLog:
+            return None
+        return spend.run_usd
 
 
 class BudgetGuard:

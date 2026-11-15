@@ -49,6 +49,8 @@ from debate_core.evidence.selection_contract import CARD_SELECT_PROMPT_ID
 from debate_core.integrations import html_extractor as html_extractor
 from debate_core.integrations.discovery.feed_config import FeedConfig, FeedReview, FeedSource
 
+from .model_mode_hints import LIVE_MODE_HINT
+
 runner = CliRunner()
 
 FIXTURES: Final = Path(__file__).resolve().parent / "fixtures" / "daily"
@@ -1073,6 +1075,31 @@ def test_auto_cut_with_no_new_results_is_short_and_writes_no_bundle(cutting: Sea
     assert not (tmp_path / DIGESTS / "politics-2026-09-18.docx").exists()
     report = json.loads((tmp_path / DIGESTS / "politics-2026-09-18.report.json").read_text(encoding="utf-8"))
     assert report["entries"] == []
+
+
+def test_auto_cut_under_the_replay_default_reports_each_refused_cut_with_the_live_mode_hint(
+    cutting: Seams, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A real provider, as on a coach's installed build, and no model mode chosen (v1-e06-t09): the
+    container's card router replays an empty cassette directory, and nothing reaches a model."""
+    cutting.card_router = None
+    monkeypatch.setenv("DEBATE_MODELS__PROVIDER", "bedrock")
+
+    result = daily("politics", "--date", "2026-09-17", "--auto-cut", "2")
+
+    assert result.exit_code == ExitCode.AUTO_CUT_SHORT, result.output
+    report = json.loads((tmp_path / DIGESTS / "politics-2026-09-17.report.json").read_text(encoding="utf-8"))
+    assert [(entry["url"], entry["status"], entry["reasons"]) for entry in report["entries"]] == [
+        (NEWS_PAGE, "FAILED", ["MISSING_FIXTURE_ERROR"]),
+        (PAYWALLED_PAGE, "SKIPPED", ["SOURCE_NOT_ACCESSIBLE"]),
+        (THINK_TANK_PAGE, "FAILED", ["MISSING_FIXTURE_ERROR"]),
+    ]
+    for entry in report["entries"]:
+        if entry["status"] == "FAILED":
+            (detail,) = entry["details"]
+            assert detail.startswith("no recorded answer for prompt card.select@")
+            assert detail.endswith(f". {LIVE_MODE_HINT}")
+    assert not (tmp_path / DIGESTS / "politics-2026-09-17.docx").exists()
 
 
 def test_two_days_auto_cut_runs_into_one_digest_directory_keep_both_reports(

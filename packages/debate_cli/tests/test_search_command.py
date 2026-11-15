@@ -88,6 +88,8 @@ from debate_core.testing.fakes.clock_and_ids import FixedClock
 from debate_core.testing.fakes.model_router import ScriptedModelRouter
 from debate_core.testing.virtual_time import run_in_virtual_time
 
+from .model_mode_hints import LIVE_MODE_HINT, RECORD_HINT
+
 runner = CliRunner()
 
 FIXTURES: Final = Path(__file__).resolve().parent / "fixtures" / "search"
@@ -2527,3 +2529,66 @@ def test_help_says_a_search_suggests_narrower_searches() -> None:
     assert result.exit_code == ExitCode.OK
     help_text = " ".join(result.stdout.replace("│", " ").split())
     assert "up to 5 narrower searches to copy" in help_text
+
+
+# ------------------------------------------------------------------------------------------------
+# A refusal under the replay default names live mode (v1-e06-t09, the PM's amendment of 2026-11-14)
+# ------------------------------------------------------------------------------------------------
+
+
+@pytest.fixture
+def on_bedrock(seams: Seams) -> Seams:
+    """`seams` with every model router built by the container, on a real provider as on a coach's
+    installed build, and no model mode chosen (the `DEBATE_*` sweep cleared `DEBATE_MODEL_MODE`): each
+    router replays an empty cassette directory under the data directory, and nothing reaches a model."""
+    seams.live_models = live()
+    return seams
+
+
+def test_expand_llm_refused_under_the_replay_default_names_live_mode_in_its_hint(on_bedrock: Seams) -> None:
+    result = search(
+        "health insurance", "--argument", "politics-da", "--need", "link", "--expand-llm", json_output=True
+    )
+
+    assert result.exit_code == ExitCode.DOMAIN_FAILURE, result.output
+    error = envelope(result)["error"]
+    assert error["code"] == "MISSING_FIXTURE_ERROR"
+    assert error["message"].startswith(f"no recorded answer for prompt {EXPAND_PROMPT_ID}@")
+    assert error["message"].endswith(f". {LIVE_MODE_HINT}")
+    assert "DEBATE_MODEL_MODE=record" not in error["message"]
+
+
+def test_expand_llm_refused_under_a_replay_chosen_with_debate_model_mode_keeps_the_record_hint(
+    on_bedrock: Seams, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("DEBATE_MODEL_MODE", "replay")
+
+    result = search(
+        "health insurance", "--argument", "politics-da", "--need", "link", "--expand-llm", json_output=True
+    )
+
+    error = envelope(result)["error"]
+    assert error["code"] == "MISSING_FIXTURE_ERROR"
+    assert error["message"].endswith(f". {RECORD_HINT}")
+    assert "DEBATE_MODEL_MODE=live" not in error["message"]
+
+
+def test_auto_cut_under_the_replay_default_reports_each_refused_cut_with_the_live_mode_hint(
+    cutting: Seams, tmp_path: Path
+) -> None:
+    cutting.card_router = None
+    cutting.live_models = live()
+    out = tmp_path / "bundle.docx"
+
+    result = auto_cut(out)
+
+    assert result.exit_code == ExitCode.AUTO_CUT_SHORT, result.output
+    entries = report_json(tmp_path)["entries"]
+    assert {entry["status"] for entry in entries} == {"FAILED", "SKIPPED"}, "no cut got past its first call"
+    refused = [entry for entry in entries if entry["status"] == "FAILED"]
+    for entry in refused:
+        assert entry["reasons"] == ["MISSING_FIXTURE_ERROR"]
+        (detail,) = entry["details"]
+        assert detail.startswith("no recorded answer for prompt card.select@")
+        assert detail.endswith(f". {LIVE_MODE_HINT}")
+    assert not out.exists()

@@ -1108,11 +1108,15 @@ Since `v1-e40-t48` the run's schedule starts its pull as `--json caselist pull -
 [the recent-run guard](#a-scheduled-run-refused-after-a-recent-run) refuses a second start within 24
 hours. AWS's Scheduler pages do not say a templated ECS target's Input reaches RunTask as overrides
 (read 2026-11-13, quoted in `v1-e40-t48`'s report), so the schedule is Scheduler's universal RunTask
-target, `arn:aws:scheduler:::aws-sdk:ecs:runTask`. Its Input is the whole RunTask request, in the
-camelCase of ECS's RunTask API reference
-(<https://docs.aws.amazon.com/AmazonECS/latest/APIReference/API_RunTask.html>, read 2026-11-13): the
-same revision, cluster, network and launch settings the templated target sent, with the run
-container's command overridden. The scheduler role's policy does not change. A run started by hand
+target, `arn:aws:scheduler:::aws-sdk:ecs:runTask`. Its Input is the whole RunTask request, in the AWS
+SDK's PascalCase member names (`Cluster`, `TaskDefinition`, ..., `Overrides.ContainerOverrides`; the AWS
+SDK for .NET V3's ECS model,
+<https://docs.aws.amazon.com/sdkfornet/v3/apidocs/items/ECS/TRunTaskRequest.html>, read 2026-11-15):
+the same revision, cluster, network and launch settings the templated target sent, with the run
+container's command overridden. Not the RunTask API reference's camelCase: Scheduler refused that at
+dev's apply of 2026-11-15 ("Request payload is missing the following field(s): TaskDefinition"), and
+[The run schedule alone, after the apply of 2026-11-15](#the-run-schedule-alone-after-the-apply-of-2026-11-15-v1-e40-t48)
+finishes that apply. The scheduler role's policy does not change. A run started by hand
 keeps the task definition's command, `--json caselist pull`, and the guard never asks it.
 
 An image older than `v1.1.0-dev.423` answers `--scheduled` with exit 2, and the week would not run.
@@ -1282,7 +1286,7 @@ target = json.load(open(sys.argv[1]))
 arn = str(target.get("Arn", ""))
 print("target: " + (arn if arn.endswith(":scheduler:::aws-sdk:ecs:runTask") else "the ECS template, not the universal RunTask target"))
 try:
-    command = json.loads(target["Input"])["overrides"]["containerOverrides"][0]["command"]
+    command = json.loads(target["Input"])["Overrides"]["ContainerOverrides"][0]["Command"]
 except (KeyError, IndexError, TypeError, ValueError):
     print("command: none: the target has no RunTask Input with a command override")
 else:
@@ -1292,10 +1296,10 @@ TARGET
 Success looks like `target: arn:aws:scheduler:::aws-sdk:ecs:runTask`, then `command: ["--json",
 "caselist", "pull", "--scheduled"]`. Anything else goes to the PM with the two lines, before Wednesday.
 
-### The field names, proved in dev before Wednesday: a one-off dry run
+### The request, proved in dev before Wednesday: a one-off dry run
 
-The plan and the tests cannot show that Scheduler sends the Input to RunTask under these field names;
-a start can. On the day of the apply, a one-off schedule in the run's own schedule group, with the run's
+Scheduler's validator settled the names' casing at the apply of 2026-11-15; whether RunTask then runs
+the request it builds from them, the image included, only a start can show. On the day of the apply, a one-off schedule in the run's own schedule group, with the run's
 scheduler role, starts the applied target once about ten minutes ahead, with only its command swapped
 for a dry run, and deletes itself after it runs (`ActionAfterCompletion` `DELETE`). The role trusts the
 group, not one schedule, so the one-off may use it.
@@ -1304,7 +1308,7 @@ group, not one schedule, so the one-off may use it.
 lock, saves no bundle, writes no run record and downloads nothing: it restores the bucket's copy into
 the task's own disk, reads the download ledger, lists OpenCaselist with the token and stops. `--scheduled`
 cannot ride along: `--scheduled --dry-run` is a usage error, exit 2 (`v1-e40-t44`, the PM's ruling 2 of
-2026-11-12). So the one-off proves the field names and that the image starts, and Wednesday's run proves
+2026-11-12). So the one-off proves the request and that the image starts, and Wednesday's run proves
 the image accepts `--scheduled` (ac2). A dry run that exits 0 sends no email.
 
 **The one-off's target**, built from the read-back's file: the same target with the command
@@ -1322,16 +1326,16 @@ source, out = sys.argv[1], sys.argv[2]
 target = json.load(open(source))
 try:
     request = json.loads(target["Input"])
-    [override] = request["overrides"]["containerOverrides"]
+    [override] = request["Overrides"]["ContainerOverrides"]
 except (KeyError, TypeError, ValueError):
     sys.exit("STOP: the schedule's target has no RunTask Input with one container override; run the read-back first")
-if not str(target.get("Arn", "")).endswith(":scheduler:::aws-sdk:ecs:runTask") or override.get("command") != ["--json", "caselist", "pull", "--scheduled"]:
+if not str(target.get("Arn", "")).endswith(":scheduler:::aws-sdk:ecs:runTask") or override.get("Command") != ["--json", "caselist", "pull", "--scheduled"]:
     sys.exit("STOP: the schedule is not the applied universal target with --scheduled; run the read-back first")
-override["command"] = ["--json", "caselist", "pull", "--dry-run"]
+override["Command"] = ["--json", "caselist", "pull", "--dry-run"]
 target["Input"] = json.dumps(request, separators=(",", ":"))
 json.dump(target, open(out, "w"))
 print("one-off target: " + target["Arn"])
-print("one-off command: " + json.dumps(override["command"]))
+print("one-off command: " + json.dumps(override["Command"]))
 ONEOFF
 ```
 Success looks like `one-off target: arn:aws:scheduler:::aws-sdk:ecs:runTask`, then `one-off command:
@@ -1472,6 +1476,127 @@ debate-research caselist runs --remote --last 1
 Success looks like a run started on 2026-11-18 a few minutes after 12:00 UTC. The two together are
 ac2. Prod's first scheduled run after the home moves gets the same read with `prod` for `dev`,
 recorded beside ac2 but not part of it.
+
+## The run schedule alone, after the apply of 2026-11-15 (`v1-e40-t48`)
+
+Dev's apply of Sunday 2026-11-15 (image `sha256:764f9ba4f621...`, `v1.1.0-dev.439`) replaced both task
+definitions (the run's new revision is `:17`), repointed both scheduler roles' policies and the login
+schedule, and was refused at the run schedule: `ValidationException: Invalid RequestJson provided.
+Reason Request payload is missing the following field(s): TaskDefinition.` Scheduler validates a
+universal target's Input against the AWS SDK's PascalCase member names, not the RunTask API reference's
+camelCase. The run schedule stayed on the ECS template, still starting revision `:15`, which the apply
+deregistered, while the run scheduler role's policy names `:17` alone: **as it stands, Wednesday's run
+is refused.**
+
+The fix (the module's Input in PascalCase) is one dev plan that changes the run schedule alone, in
+place: `Plan: 0 to add, 1 to change, 0 to destroy.` If `v1-e05-t20` has merged into dev first, the same
+plan also updates `module.bedrock_access`'s inline policy in place, `Plan: 0 to add, 2 to change, 0 to
+destroy.`, and nothing else from it (the PM's note of 2026-11-15): one dev plan, never two the same day.
+The image and the digest do not change. The plan, the PM's read and the apply on **Monday 2026-11-16 or
+Tuesday 2026-11-17, never a Wednesday**, then the
+[read-back](#the-read-back-before-the-next-scheduled-run) and the
+[one-off dry run](#the-request-proved-in-dev-before-wednesday-a-one-off-dry-run) of
+[The schedule passes --scheduled](#the-schedule-passes---scheduled-v1-e40-t48-once) the same day.
+
+**If it is not applied by Tuesday night**, Wednesday's 06:00 start is refused: the run scheduler role may
+run `:17` alone and the schedule asks for `:15`. Expect a launch-refused email for each refused try (up
+to four within the hour) and then the dead-letter queue's alarm. After 06:00 Chicago on Wednesday, start
+the week by hand with [Step 8's "One run by hand"](#step-8--the-seed-bucket-mode-and-one-run-by-hand-at-the-cutover-after-v1-e40-t04),
+which starts the family's newest ACTIVE revision, `:17`, without `--scheduled`.
+
+**The worktree, with the fix merged.**
+
+**Operator command** (expected runtime seconds)
+Where: `$WT`
+```bash
+cd "$WT"
+git fetch origin
+git switch --detach origin/dev
+grep -q 'TaskDefinition       = aws_ecs_task_definition.run' infrastructure/modules/caselist_run/run_task.tf && grep -q -- '--run-schedule-only' ops/caselist_run/check_image_plan.py && echo "ok: $(pwd) at origin/dev $(git rev-parse --short HEAD), the PascalCase fix merged" || echo "NOT MERGED: origin/dev has no PascalCase fix; wait for it to merge"
+git status --porcelain | grep -v 'owner.auto.tfvars' | head -3
+```
+Success looks like `ok: <the worktree> at origin/dev <commit>, the PascalCase fix merged`, and nothing
+after it.
+
+**The run schedule as it stands**, before the plan: its target, the revision it starts and its state,
+and nothing else of it.
+
+**Operator command** (expected runtime seconds)
+Where: `$WT`
+```bash
+cd "$WT"
+AWS_PROFILE=debate-admin aws scheduler get-schedule --region us-east-1 --group-name debate-dev-caselist-run --name debate-dev-caselist-run --output json > /tmp/caselist-run-schedule-before-fix.json && python3 -I - /tmp/caselist-run-schedule-before-fix.json <<'STATE'
+import json, sys
+schedule = json.load(open(sys.argv[1]))
+target = schedule.get("Target") or {}
+arn = str(target.get("Arn", ""))
+if arn.endswith(":scheduler:::aws-sdk:ecs:runTask"):
+    print("target: " + arn)
+    try:
+        revision = str(json.loads(target["Input"]).get("TaskDefinition", ""))
+    except (KeyError, TypeError, ValueError):
+        revision = ""
+else:
+    print("target: the ECS template, cluster " + arn.rpartition("/")[2])
+    revision = str((target.get("EcsParameters") or {}).get("TaskDefinitionArn", ""))
+print("revision: " + (revision.rpartition("task-definition/")[2] or "(none)"))
+print("state: " + str(schedule.get("State", "")))
+STATE
+```
+Success looks like `target: the ECS template, cluster debate-dev-caselist-run`, then `revision:
+debate-dev-caselist-run:15`, then `state: ENABLED`: the state the plan below is checked against. Anything
+else goes to the PM before the plan.
+
+**The plan.** It saves the plan, writes it as JSON and checks it with
+`ops/caselist_run/check_image_plan.py --run-schedule-only`. The plan knows the run schedule's whole
+Input this time, because its revision is already in state, so the check reads it key by key and the PM
+reads the command in the plan's diff. The plan's text stays in
+`/tmp/caselist-run-schedule-alone-plan.txt` for the PM.
+
+**Operator command** (expected runtime ~2 min)
+Where: `$WT`
+```bash
+cd "$WT"
+rm -f infrastructure/envs/dev/caselist-run-schedule-alone.tfplan /tmp/caselist-run-schedule-alone-plan.json
+if env | grep -qE '^(TF_VAR_|TF_WORKSPACE=|TF_DATA_DIR=|TF_CLI_ARGS)'; then echo "STOP: a Terraform override is set in this shell"; else AWS_PROFILE=debate-admin terraform -chdir=infrastructure/envs/dev init -input=false >/dev/null && AWS_PROFILE=debate-admin terraform -chdir=infrastructure/envs/dev plan -input=false -no-color -out=caselist-run-schedule-alone.tfplan | tee /tmp/caselist-run-schedule-alone-plan.txt | tail -3; fi
+AWS_PROFILE=debate-admin terraform -chdir=infrastructure/envs/dev show -json caselist-run-schedule-alone.tfplan > /tmp/caselist-run-schedule-alone-plan.json
+python3 -I ops/caselist_run/check_image_plan.py /tmp/caselist-run-schedule-alone-plan.json infrastructure/envs/dev/owner.auto.tfvars --run-schedule-only
+```
+
+**What to read, and what stops you.** Send the PM the check's lines, the plan's `Plan:` line and
+`/tmp/caselist-run-schedule-alone-plan.txt`. Apply only after the PM's word. The only lines that pass:
+
+* without `v1-e05-t20`, `Plan: 0 to add, 1 to change, 0 to destroy.` and one line:
+  `PLAN OK: 0 to add, 1 to change, 0 to destroy; the run schedule alone moved onto Scheduler's universal RunTask target, starting debate-dev-caselist-run:17 with --json caselist pull --scheduled on its cluster, network and launch settings as before, and its role and every other target setting as before; the run scheduler role's policy names that revision, which runs the image sha256:764f9ba4f621...; the run schedule ENABLED throughout; nothing else changes`
+* with `v1-e05-t20` merged, `Plan: 0 to add, 2 to change, 0 to destroy.` and two lines:
+  `PLAN OK: 0 to add, 2 to change, 0 to destroy; the run schedule alone moved onto Scheduler's universal RunTask target, starting debate-dev-caselist-run:17 with --json caselist pull --scheduled on its cluster, network and launch settings as before, and its role and every other target setting as before; the run scheduler role's policy names that revision, which runs the image sha256:764f9ba4f621...; the run schedule ENABLED throughout; nothing else in module.caselist_run changes`
+  and `PLAN OK, outside module.caselist_run: module.bedrock_access.aws_ssoadmin_permission_set_inline_policy.invoker[0] updated in place, its inline_policy alone (v1-e05-t20's grant): read its diff in the plan`.
+  The PM reads both, the grant's diff included.
+
+`PLAN STOP: ...` names each change that is not that shape and goes to the PM before any apply: an Input
+in another casing or naming another revision, another command, cluster, network or count, the run
+task definition changing, the run scheduler policy naming another revision, another image, any other
+change in the module, and anything from `module.bedrock_access` but its inline policy's update in
+place (a replace, an account assignment, its permission set). An Identity Center change is never
+applied otherwise.
+
+**The apply, after the PM's word, never on a Wednesday.** It refuses a Wednesday in Chicago, a
+Terraform override in the shell, and a task running on the run's cluster.
+
+**Operator command** (expected runtime ~1 min)
+Where: `$WT`, after the PM's word, on Monday 2026-11-16 or Tuesday 2026-11-17, never a Wednesday
+```bash
+cd "$WT"
+RUNNING="$(AWS_PROFILE=debate-admin aws ecs list-tasks --region us-east-1 --cluster debate-dev-caselist-run --desired-status RUNNING --query 'length(taskArns)' --output text)" || RUNNING="unknown"
+if [ "$(TZ=America/Chicago date +%A)" = "Wednesday" ]; then echo "STOP: it is Wednesday in Chicago, the run's day; apply on another day"; elif env | grep -qE '^(TF_VAR_|TF_WORKSPACE=|TF_DATA_DIR=|TF_CLI_ARGS)'; then echo "STOP: a Terraform override is set in this shell"; elif [ "$RUNNING" = "0" ]; then AWS_PROFILE=debate-admin terraform -chdir=infrastructure/envs/dev apply -input=false caselist-run-schedule-alone.tfplan; else echo "STOP: ${RUNNING} tasks running on debate-dev-caselist-run, or the count could not be read; apply when it is 0"; fi
+AWS_PROFILE=debate-admin terraform -chdir=infrastructure/envs/dev output caselist_run_schedule_state
+```
+Success looks like `Apply complete! Resources: 0 added, 1 changed, 0 destroyed.` (`2 changed` beside
+`v1-e05-t20`), then `"ENABLED"`. No `-login-task-changed` email is expected: the login does not change.
+Then the [read-back](#the-read-back-before-the-next-scheduled-run), which must print `target:
+arn:aws:scheduler:::aws-sdk:ecs:runTask` and `command: ["--json", "caselist", "pull", "--scheduled"]`,
+and the [one-off dry run](#the-request-proved-in-dev-before-wednesday-a-one-off-dry-run) the same day,
+its CloudTrail line and the task's exit `0` its evidence.
 
 ## A failed parse stage
 

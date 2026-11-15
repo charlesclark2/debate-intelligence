@@ -29,5 +29,21 @@ reproduces the card's evidence from the offsets. CI never sees a snapshot. A sou
 paywalled, private (behind a login) or disallowed by robots is dropped from the corpus, not kept
 as a case with a local snapshot.
 
+## What each case holds
+
+| File | What it is | Written by |
+|---|---|---|
+| `team-card.docx` | The coach's card, scrubbed | `import_golden_card.py import` |
+| `case.json` | Event, season, source type, length, cut, research need, the coach's attestation, and `snapshot`: the digests, URL, fetch date and access status | `import`, then `import_golden_card.py record` |
+| `expected.json` | The card: its segments and its underline and highlight spans as offsets into the snapshot, and the team's tag, cite and research need. Never evidence text | `label_golden_card.py` |
+| `expected.docx` | The card rendered in `team-default` from `expected.json` and the snapshot, with the verifier's verdict | `label_golden_card.py --render-expected` |
+
+The span labels are the coach's own: every card is one the coach cut or re-cut, so its underlining
+and highlighting are carried over as they are, onto the snapshot's characters. A span's purpose
+is left null, because a card's runs say how text is marked, not what work it does. CI checks the
+structure (`tests/golden/test_corpus_structure.py`) and the scrub
+(`tests/golden/test_fixture_scrubbed.py`); only the operator's `import_golden_card.py check
+--snapshots` can check the offsets against the snapshots.
+
 `v1-e04-t06`'s rule that every fixture is synthetic, and `v1-e04-t07`'s prohibition on committing
 a real page, hold here as everywhere.

@@ -130,7 +130,12 @@ class SnapshotReference(BaseModel):
     )
     extractor_version: NonEmptyText = Field(description="The extractor version the text was produced under.")
     retrieved_at: UtcDatetime = Field(description="When the retrieval happened, in UTC.")
-    canonical_url: HttpUrlStr = Field(description="The URL actually retrieved, after redirects.")
+    canonical_url: HttpUrlStr = Field(
+        description=(
+            "The snapshot's canonical URL: its article's, with no tracking parameters (`v1-e04-t10`). A "
+            "snapshot stored before then is named by the URL that was retrieved, as its record still is."
+        )
+    )
 
     @classmethod
     def of(cls, snapshot: SourceSnapshot) -> SnapshotReference:

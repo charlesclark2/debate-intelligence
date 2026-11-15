@@ -49,9 +49,12 @@ publisher or the publication. With no typed organization, `authors` stays missin
 
 **The platform's retrieval record** (`retrieval`, `v1-e06-t02`) is the accessed date, the snapshot's
 `retrieved_at` with the timestamp as `raw`, and the URL of last resort: the retrieved URL,
-canonicalized, when the page declares no canonical URL of its own. Like any explicit source it is
-verified exactly when the platform retrieved the text, so an open-access PDF, or a page with no
-canonical link, can verify; under any other provenance it is a record of what the user said.
+canonicalized, when the page declares no canonical URL of its own. The retrieved URL is the
+snapshot's `retrieved_url`, or for a snapshot stored before `v1-e04-t10` its `canonical_url`, which
+held it then; a user's text has no retrieved URL, and its snapshot's `canonical_url` stands in.
+Like any explicit source it is verified exactly when the platform retrieved the text, so an
+open-access PDF, or a page with no canonical link, can verify; under any other provenance it is a
+record of what the user said.
 
 ## A student's edits (ac5)
 
@@ -108,7 +111,7 @@ from debate_core.application.ports.card_edit_log import CardEditLog
 from debate_core.application.ports.doi_metadata import DoiMetadataSource, DoiWork
 from debate_core.application.ports.persistence import ArticleRepository
 from debate_core.application.snapshot_service import LoadedSnapshot, SnapshotService
-from debate_core.domain import Article, Card, Citation, CitationField, ProvenanceMode
+from debate_core.domain import Article, Card, Citation, CitationField, ProvenanceMode, SourceSnapshot
 from debate_core.domain.citation import CITATION_FIELD_NAMES
 from debate_core.domain.enums import CitationFieldSource, DatePrecision
 from debate_core.evidence.edits import EditKind
@@ -471,7 +474,7 @@ class CitationService:
         mode = snapshot.provenance_mode
         if mode is ProvenanceMode.PUBLISHER_RETRIEVED:
             candidates = harvest_page(
-                source.raw_bytes, content_type=snapshot.content_type, retrieved_url=snapshot.canonical_url
+                source.raw_bytes, content_type=snapshot.content_type, retrieved_url=_retrieved_url(snapshot)
             )
         else:
             candidates = harvest_url(snapshot.canonical_url)
@@ -540,6 +543,11 @@ _PROVENANCE_NOTES: Final = {
 }
 NO_AUTHOR: Final = "[no author]"
 NO_DATE: Final = "ND"
+
+
+def _retrieved_url(snapshot: SourceSnapshot) -> str:
+    """The URL a publisher snapshot's bytes were read from: before `v1-e04-t10`, its `canonical_url`."""
+    return snapshot.retrieved_url if snapshot.retrieved_url is not None else snapshot.canonical_url
 
 
 def format_cite(citation: Citation, *, provenance_mode: ProvenanceMode) -> FormattedCite:

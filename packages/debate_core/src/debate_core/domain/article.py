@@ -188,7 +188,22 @@ class SourceSnapshot(DomainEntity):
     owner_id: Ulid | None = Field(default=None, description=OWNER_ID_FIELD)
     organization_id: Ulid | None = Field(default=None, description=ORGANIZATION_ID_FIELD)
     article_id: Ulid = Field(description="The article this snapshot was taken of.")
-    canonical_url: HttpUrlStr = Field(description="The URL actually retrieved, after redirects.")
+    canonical_url: HttpUrlStr = Field(
+        description=(
+            "The canonical URL of the article this snapshot was taken of, as the article records it "
+            "(`v1-e04-t10`). A snapshot stored before then holds the URL retrieved here instead, and "
+            "keeps it: snapshots are never rewritten."
+        )
+    )
+    retrieved_url: HttpUrlStr | None = Field(
+        default=None,
+        exclude_if=lambda value: value is None,
+        description=(
+            "The URL actually retrieved, after redirects, tracking parameters and all (`v1-e04-t10`). None "
+            "for text a user supplied, which nothing retrieved, and for a snapshot stored before then, "
+            "whose `canonical_url` holds it. Left out of the stored record when None."
+        ),
+    )
     retrieved_at: UtcDatetime = Field(description="When the retrieval happened, in UTC.")
     access_status: AccessStatus = Field(description="How the retrieval was classified.")
     provenance_mode: ProvenanceMode = Field(description="Whether the platform or a user supplied this text.")

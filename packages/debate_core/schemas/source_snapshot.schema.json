@@ -317,9 +317,22 @@
       "type": "string"
     },
     "canonical_url": {
-      "description": "The URL actually retrieved, after redirects.",
+      "description": "The canonical URL of the article this snapshot was taken of, as the article records it (`v1-e04-t10`). A snapshot stored before then holds the URL retrieved here instead, and keeps it: snapshots are never rewritten.",
       "title": "Canonical Url",
       "type": "string"
+    },
+    "retrieved_url": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "The URL actually retrieved, after redirects, tracking parameters and all (`v1-e04-t10`). None for text a user supplied, which nothing retrieved, and for a snapshot stored before then, whose `canonical_url` holds it. Left out of the stored record when None.",
+      "title": "Retrieved Url"
     },
     "retrieved_at": {
       "description": "When the retrieval happened, in UTC.",

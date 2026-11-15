@@ -35,9 +35,13 @@ storage arrive in its constructor (architecture proposal §6), and the compositi
 9. **Upsert the article** under the identity key, with `access_status` ACCESSIBLE and the
    identifiers its URLs state.
 
-**Both URLs are kept.** The article's `canonical_url` is the identity key; the snapshot's
-`canonical_url` is, as its field says, the URL actually retrieved, after redirects. The outcome
-carries the URL as given, the URL fetched and the URL that answered as well.
+**Both URLs are kept.** The article's `canonical_url` is the identity key, and a new snapshot's
+`canonical_url` is the same key, so the two agree; the snapshot's `retrieved_url` is the URL that
+answered, after redirects, tracking parameters and all (`v1-e04-t10`). Until then the snapshot's
+`canonical_url` held the URL that answered, and a snapshot stored so keeps it: snapshots are never
+rewritten, and a reused one is reused as stored. Text a user supplied is named by its key and has no
+`retrieved_url`. The outcome carries the URL as given, the URL fetched and the URL that answered as
+well.
 
 **Last readable retrieval** is the article's `updated_at` while its `access_status` is ACCESSIBLE:
 this service sets both on every readable retrieval, including one that reused a snapshot, so a
@@ -326,7 +330,7 @@ class ArticleService:
         identity = rel_canonical.canonical_url if rel_canonical is not None else key
         stored = known if identity == key else await self._articles.find_by_canonical_url(identity)
         article_id = stored.article_id if stored is not None else self._id_generator.new_id()
-        snapshot, reused = await self._publisher_snapshot(article_id, fetched, content)
+        snapshot, reused = await self._publisher_snapshot(article_id, identity, fetched, content)
         article = await self._save_readable(
             stored, article_id, identity, content, urls=(url, target, fetched.final_url, identity)
         )
@@ -375,9 +379,13 @@ class ArticleService:
         return next((snapshot for snapshot in snapshots if snapshot.provenance_mode is provenance), None)
 
     async def _publisher_snapshot(
-        self, article_id: str, fetched: FetchResult, content: ExtractedContent
+        self, article_id: str, identity: str, fetched: FetchResult, content: ExtractedContent
     ) -> tuple[SourceSnapshot, bool]:
-        """The newest publisher snapshot when its text is unchanged, else a new one (not yet saved)."""
+        """The newest publisher snapshot when its text is unchanged, else a new one (not yet saved).
+
+        A new one is named by `identity`, the article's canonical URL, and records the URL that
+        answered as its `retrieved_url`.
+        """
         newest = await self._newest(article_id, ProvenanceMode.PUBLISHER_RETRIEVED)
         if newest is not None and _same_text(newest, content.text):
             return newest, True
@@ -385,7 +393,8 @@ class ArticleService:
             article_id=article_id,
             raw_bytes=fetched.body,
             extracted_text=content.text,
-            canonical_url=fetched.final_url,
+            canonical_url=identity,
+            retrieved_url=fetched.final_url,
             retrieved_at=fetched.fetched_at,
             extractor_version=f"{content.extractor_name}/{content.extractor_version}",
             provenance_mode=ProvenanceMode.PUBLISHER_RETRIEVED,

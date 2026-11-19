@@ -403,7 +403,8 @@ called from `budgets.tf`. Spec:
 Its filter is the services and usage types model calls are billed under, as Cost Explorer reports
 them, with no tag: model charges carry no cost allocation tag. Claude and Cohere models bill as AWS
 Marketplace services named after the model, so **a model that has never been billed is not in the
-filter**. After a new model's first billed call (the 5.5 models of prod's routes, `v1-e05-t17`),
+filter**. After a new model's first billed call (the 5.x models, `v1-e41-t20`; prod's routes since
+`v1-e05-t20` are dev's Haiku 4.5 and Sonnet 4.6, already in the filter),
 re-run the counts below, add the new names to the module's lists and to its test, and apply. The
 budget notifies; it never stops spend. What refuses a call is `models.budget_usd_monthly`
 (`v1-e05-t15`).

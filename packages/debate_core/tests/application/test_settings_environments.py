@@ -144,19 +144,58 @@ def test_both_routing_files_exist_and_load() -> None:
     assert set(production.routes) == set(TaskClass)
 
 
-def test_dev_routes_every_text_class_to_a_cheaper_model_than_prod() -> None:
+QUOTAS_HELD_AT_ZERO = frozenset(
+    {"anthropic.claude-haiku-5-5", "anthropic.claude-sonnet-5-5", "anthropic.claude-opus-5-5"}
+)
+"""The models whose cross-region tokens-per-minute quotas the account holds at 0.0: the operator's readings
+of 2026-10-27 and 2026-11-04 (docs/runbooks/bedrock-access.md step 5). Bedrock refuses every call to them."""
+
+PROD_ROUTES_ON_THE_4X_MODELS = {
+    # v1-e05-t20: v1.2 ships on the models dev already routes to (Charlie's decision of 2026-11-04),
+    # class for class. Written by hand from the task spec and config/model_routing.dev.yaml.
+    TaskClass.COMPLEX_REASONING: (
+        "anthropic.claude-haiku-4-5-20251001-v1:0",
+        "us.anthropic.claude-haiku-4-5-20251001-v1:0",
+    ),
+    TaskClass.HIGH_VOLUME: (
+        "anthropic.claude-haiku-4-5-20251001-v1:0",
+        "us.anthropic.claude-haiku-4-5-20251001-v1:0",
+    ),
+    TaskClass.DEEP_AUDIT: ("anthropic.claude-sonnet-4-6", "us.anthropic.claude-sonnet-4-6"),
+    TaskClass.EMBEDDINGS: ("amazon.titan-embed-text-v2:0", None),
+    TaskClass.RERANK: ("cohere.rerank-v3-5:0", None),
+}
+
+
+def test_prod_routes_each_class_to_the_model_dev_routes_it_to() -> None:
+    """v1-e05-t20 ac1: the same model and profile per class, and each route's region, cap and timeout kept."""
     development = RoutingPolicy.load(CONFIG / "model_routing.dev.yaml").routes
     production = RoutingPolicy.load(CONFIG / "model_routing.prod.yaml").routes
 
-    # Hand-written from the two files: dev drops each class one tier. Families, not identifiers,
-    # so the next model release changes the files and not this test (PM ruling, 2026-10-16).
-    assert "claude-haiku" in development[TaskClass.COMPLEX_REASONING].model_id
-    assert "claude-sonnet" in production[TaskClass.COMPLEX_REASONING].model_id
-    assert "claude-sonnet" in development[TaskClass.DEEP_AUDIT].model_id
-    assert "claude-opus" in production[TaskClass.DEEP_AUDIT].model_id
-    # Embeddings and rerank stay the same model, so a dev index is comparable with a prod one.
-    assert development[TaskClass.EMBEDDINGS] == production[TaskClass.EMBEDDINGS]
-    assert development[TaskClass.RERANK] == production[TaskClass.RERANK]
+    assert {
+        task_class: (route.model_id, route.inference_profile) for task_class, route in production.items()
+    } == PROD_ROUTES_ON_THE_4X_MODELS
+    assert production == development
+    # Kept from prod's routes before v1-e05-t20, by hand: only the model changed.
+    assert {
+        task_class: (route.region, route.max_tokens, route.timeout_seconds)
+        for task_class, route in production.items()
+    } == {
+        TaskClass.COMPLEX_REASONING: ("us-east-1", 8192, 300),
+        TaskClass.HIGH_VOLUME: ("us-east-1", 2048, 60),
+        TaskClass.DEEP_AUDIT: ("us-east-1", 16384, 600),
+        TaskClass.EMBEDDINGS: ("us-east-1", None, 30),
+        TaskClass.RERANK: ("us-east-1", None, 30),
+    }
+
+
+@pytest.mark.parametrize("name", ["model_routing.dev.yaml", "model_routing.prod.yaml"])
+def test_no_environment_routes_to_a_model_whose_quota_is_held_at_zero(name: str) -> None:
+    """The task spec forbids a route to a model the account's quotas hold at zero (v1-e05-t20)."""
+    routes = RoutingPolicy.load(CONFIG / name).routes
+
+    assert {route.model_id for route in routes.values()} & QUOTAS_HELD_AT_ZERO == set()
+    assert not any("5-5" in (route.inference_profile or "") for route in routes.values())
 
 
 @pytest.mark.parametrize("environment", ["dev", "prod"])

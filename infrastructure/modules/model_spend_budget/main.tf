@@ -24,8 +24,9 @@ locals {
   # different keys. Amazon Bedrock also bills Nova Micro tokens that are not this project's, and the
   # usage-type key is what leaves them out.
   #
-  # A model that has never been billed has no name here yet. The 5.5 models of prod's routes are
-  # added by v1-e05-t17, after their first billed call, by re-running the same counts.
+  # A model that has never been billed has no name here yet. Since v1-e05-t20 prod routes to the
+  # same Haiku 4.5 and Sonnet 4.6 as dev, which are already here; its operator re-runs the counts
+  # after prod's first billed calls, and the 5.x models are added the same way by v1-e41-t20.
   model_services = [
     "Amazon Bedrock",
     "Claude Haiku 4.5 (Amazon Bedrock Edition)",

@@ -5,35 +5,49 @@
 # explains each task class, where the identifiers come from and why no Claude route sets a
 # temperature.
 #
-# Each class gets the model whose quality it needs, under the prod daily budget
-# (models.budget_usd_daily in config/profiles/prod.toml). config/model_routing.dev.yaml routes the
-# same classes one tier cheaper. Dev and prod must never share this file (the task spec forbids
-# it). Identifiers checked against the AWS Bedrock model cards on 2026-10-16
-# (v1-e05-t01-model-router-port).
+# Each class is routed under the prod daily and monthly budgets (models.budget_usd_daily and
+# models.budget_usd_monthly in config/profiles/prod.toml, $50 a month). Dev and prod must never share
+# this file (v1-e01-t09's spec forbids it). Identifiers checked against the AWS Bedrock model cards on
+# 2026-10-16 (v1-e05-t01-model-router-port).
+#
+# Prod routes every class to the model dev routes it to (v1-e05-t20-prod-routes-on-the-4x-models).
+# The account's cross-region tokens-per-minute quotas for Claude Haiku, Sonnet and Opus 5.5 are held
+# at 0.0, and AWS declined on 2026-11-04 to restore them until the account shows sustained usage, so
+# v1.2 ships on Claude Haiku 4.5 and Sonnet 4.6 (Charlie's decision of 2026-11-04). The operator read
+# their quotas on 2026-11-15: Haiku 4.5 5,000,000 and Sonnet 4.6 6,000,000 tokens a minute,
+# cross-region and global, in us-east-1, us-east-2 and us-west-2. complex_reasoning (card selection)
+# and high_volume go to Haiku 4.5, and deep_audit, which no V1 command calls, to Sonnet 4.6, each
+# route keeping its region, max_tokens and timeout. Prices are config/model_pricing.yaml's. The move to
+# the 5.x models is v1-e41-t20.
+#
+# complex_reasoning on Haiku 4.5 is confirmed for now, not final (the PM's ruling of 2026-11-15): card
+# selection is the core of what students get, so v1-e09-t03's and v1-e09-t04's golden evaluation decides
+# whether it moves to Sonnet 4.6 before the student release. The grant already names both models
+# (infrastructure/modules/bedrock_access reads this file), so that move is a routing change only.
 
 version: 1
 
 routes:
   complex_reasoning:
     provider: bedrock
-    model_id: anthropic.claude-sonnet-5-5
-    inference_profile: us.anthropic.claude-sonnet-5-5
+    model_id: anthropic.claude-haiku-4-5-20251001-v1:0
+    inference_profile: us.anthropic.claude-haiku-4-5-20251001-v1:0
     region: us-east-1
     max_tokens: 8192
     timeout_seconds: 300
 
   high_volume:
     provider: bedrock
-    model_id: anthropic.claude-haiku-5-5
-    inference_profile: us.anthropic.claude-haiku-5-5
+    model_id: anthropic.claude-haiku-4-5-20251001-v1:0
+    inference_profile: us.anthropic.claude-haiku-4-5-20251001-v1:0
     region: us-east-1
     max_tokens: 2048
     timeout_seconds: 60
 
   deep_audit:
     provider: bedrock
-    model_id: anthropic.claude-opus-5-5
-    inference_profile: us.anthropic.claude-opus-5-5
+    model_id: anthropic.claude-sonnet-4-6
+    inference_profile: us.anthropic.claude-sonnet-4-6
     region: us-east-1
     max_tokens: 16384
     timeout_seconds: 600

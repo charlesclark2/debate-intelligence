@@ -23,18 +23,17 @@ each plan before its apply.
 | What it may do | `bedrock:InvokeModel`, nothing else | the same |
 
 **What it may call** is read from `config/model_routing.dev.yaml` and `config/model_routing.prod.yaml`
-by both roots, so both sets grant the same twenty-two resources:
+by both roots, so both sets grant the same ten resources:
 
-* the five `us.` inference profiles in us-east-1: prod's `us.anthropic.claude-haiku-5-5`,
-  `us.anthropic.claude-sonnet-5-5` and `us.anthropic.claude-opus-5-5`, and dev's
-  `us.anthropic.claude-haiku-4-5-20251001-v1:0` and `us.anthropic.claude-sonnet-4-6`, which dev routes
-  to while the account's 5.5 quotas are held at zero (`v1-e05-t13`);
-* the five Claude models behind them, in us-east-1, us-east-2 and us-west-2, and only through those
+* the two `us.` inference profiles in us-east-1, `us.anthropic.claude-haiku-4-5-20251001-v1:0` and
+  `us.anthropic.claude-sonnet-4-6`, which dev (`v1-e05-t13`) and prod (`v1-e05-t20`) both route to
+  while the account's 5.5 quotas are held at zero;
+* the two Claude models behind them, in us-east-1, us-east-2 and us-west-2, and only through those
   profiles (the condition `bedrock:InferenceProfileArn`);
 * `amazon.titan-embed-text-v2:0` and `cohere.rerank-v3-5:0` in us-east-1.
 
-When dev goes back to the 5.5 models, the grant shrinks to the fourteen resources of prod's three
-profiles again, and the counts below change with it.
+From `v1-e05-t13` to `v1-e05-t20` it was twenty-two: prod's three 5.5 profiles and models as well.
+When the routes move to the 5.x models (`v1-e41-t20`), the counts below change with them.
 
 **Every Bedrock call is signed with `models.aws_profile`, never with `AWS_PROFILE`.** The client
 reads no profile from the environment, so a shell left holding `debate-dev-evidence`, or the other
@@ -123,15 +122,19 @@ permission set, its inline policy and your account assignment. Anything else sto
 plan (`/tmp/bedrock-access-dev-plan.txt`) to the PM and do not apply. No plan line at all means the
 plan failed: read the end of the file.
 
-**When the set already exists** (a routing change after the first apply, such as `v1-e05-t13`'s), the
-first `grep` prints exactly `Plan: 0 to add, 1 to change, 0 to destroy.` instead, and the rest reads
-the same: the one change is the inline policy, updated in place. Step 2 then has a block of its own.
+**When the set already exists** (a routing change after the first apply, such as `v1-e05-t13`'s or
+`v1-e05-t20`'s), the first `grep` prints exactly `Plan: 0 to add, 1 to change, 0 to destroy.` instead,
+and the rest reads the same: the one change is the inline policy, updated in place. Step 2 then has a
+block of its own. Prod's first plan after `v1-e05-t20` also adds your account assignment, since prod's
+set was applied on 2026-11-03 with nobody assigned: `Plan: 1 to add, 1 to change, 0 to destroy.` When
+it rides in a promotion's prod plan, the plan's own totals are the promotion's, and step 2's block
+reads the `module.bedrock_access` part alone.
 
 ## Step 2 — The plan checked against exactly that shape
 
 **The first apply.** `PLAN OK` only for those three resources created, nothing else in the account
-changed, and a policy of `bedrock:InvokeModel` alone on twenty-two resources, fifteen of them through
-the five profiles. It prints no account id. When the set already exists, skip this block and run
+changed, and a policy of `bedrock:InvokeModel` alone on ten resources, six of them through the two
+profiles (since `v1-e05-t20`; both sets exist, so it is for a set made again). It prints no account id. When the set already exists, skip this block and run
 [the next one](#when-the-set-already-exists-one-inline-policy-updated).
 
 **Operator command** (expected runtime ~1 min)
@@ -174,55 +177,106 @@ conditioned = [r for s in statements if "Condition" in s for r in s["Resource"]]
 profiles = [r for r in resources if ":inference-profile/" in r]
 if actions != ["bedrock:InvokeModel"]:
     problems.append("actions are " + str(actions))
-if len(resources) != 22 or len(set(resources)) != 22 or any("*" in r for r in resources):
-    problems.append(str(len(resources)) + " resources, " + str(len(set(resources))) + " distinct, expected 22 and no wildcard")
-if len(profiles) != 5 or len(conditioned) != 15 or not all(":foundation-model/anthropic." in r for r in conditioned):
-    problems.append(str(len(profiles)) + " profiles and " + str(len(conditioned)) + " models through them, expected 5 and 15")
+if len(resources) != 10 or len(set(resources)) != 10 or any("*" in r for r in resources):
+    problems.append(str(len(resources)) + " resources, " + str(len(set(resources))) + " distinct, expected 10 and no wildcard")
+if len(profiles) != 2 or len(conditioned) != 6 or not all(":foundation-model/anthropic." in r for r in conditioned):
+    problems.append(str(len(profiles)) + " profiles and " + str(len(conditioned)) + " models through them, expected 2 and 6")
 if any(s.get("Effect") != "Allow" or "NotAction" in s or "NotResource" in s for s in statements):
     problems.append("a statement that is not a plain Allow")
-print("PLAN OK: 3 to create, nothing else; bedrock:InvokeModel on 22 resources, 15 Claude models through the 5 profiles" if not problems else "PLAN STOP: " + "; ".join(problems))
+print("PLAN OK: 3 to create, nothing else; bedrock:InvokeModel on 10 resources, 6 Claude models through the 2 profiles" if not problems else "PLAN STOP: " + "; ".join(problems))
 BEDROCKPLAN
 ```
-Success looks like `PLAN OK: 3 to create, nothing else; bedrock:InvokeModel on 22 resources, 15
-Claude models through the 5 profiles`. **`PLAN STOP` stops everything**: send its line and the plan
+Success looks like `PLAN OK: 3 to create, nothing else; bedrock:InvokeModel on 10 resources, 6
+Claude models through the 2 profiles`. **`PLAN STOP` stops everything**: send its line and the plan
 to the PM. Either way the PM reads the plan before step 3.
 
 ### When the set already exists: one inline policy updated
 
-A routing change after the first apply changes the grant and nothing else. `PLAN OK` only for exactly
-one change in the account, the set's inline policy updated in place; a new policy of
-`bedrock:InvokeModel` alone on twenty-two resources, fifteen of them through the five profiles, each
-of those models conditioned on exactly those profiles; every resource the old policy granted still
-granted; and exactly the eight resources `v1-e05-t13` adds: the Haiku 4.5 and Sonnet 4.6 profiles in
-us-east-1, and those two models in us-east-1, us-east-2 and us-west-2. It prints the account id as
-`<account-id>`.
+A routing change after the first apply changes the grant and nothing else. This block is
+`v1-e05-t20`'s: the routes move from the 5.5 models to dev's Haiku 4.5 and Sonnet 4.6, so the grant
+loses twelve resources and gains none. It reads only the changes under `module.bedrock_access`, so it
+works on a plan of its own and on a larger plan the change rides in (a promotion's prod plan, or
+another task's dev plan), whose other changes that plan's own checks read; it counts those others and
+names none of them. Over the whole plan it refuses one thing more: a permission set or an account
+assignment destroyed or replaced, wherever it is. Creating one is expected, and is what the PM reads
+the plan for.
 
-**Operator command** (expected runtime ~1 min)
-Where: `$WT`
+`PLAN OK` only when, under `module.bedrock_access`, the set's inline policy is updated in place and
+nothing else changes, except an account assignment created for `$SSO_USER_NAME` (prod's first plan
+after `v1-e05-t20`); a new policy of `bedrock:InvokeModel` alone on ten resources, six of them through
+the two profiles, each of those models conditioned on exactly those profiles; nothing added; exactly
+the twelve resources of the 5.5 models removed: the Haiku, Sonnet and Opus 5.5 profiles in us-east-1,
+and those three models in us-east-1, us-east-2 and us-west-2; and no permission set or account
+assignment anywhere in the plan destroyed or replaced. It prints the account id as `<account-id>` and
+every user name as `<name>`.
+
+**Which plan it reads.** Set `PLAN_JSON` by the one of these three that fits, then run the check.
+
+*A plan of its own* (step 1's `bedrock-access.tfplan`), in `$WT`:
+
 ```bash
 cd "$WT"
-AWS_PROFILE=debate-admin terraform -chdir="infrastructure/envs/${ENVIRONMENT}" show -json bedrock-access.tfplan > "/tmp/bedrock-access-${ENVIRONMENT}-plan.json"
-python3 -I - "/tmp/bedrock-access-${ENVIRONMENT}-plan.json" <<'BEDROCKPOLICYUPDATE'
+PLAN_JSON="/tmp/bedrock-access-${ENVIRONMENT}-plan.json"
+AWS_PROFILE=debate-admin terraform -chdir="infrastructure/envs/${ENVIRONMENT}" show -json bedrock-access.tfplan > "$PLAN_JSON"
+```
+
+*Dev's change riding in `v1-e40-t48`'s Monday dev plan* (the PM's ruling of 2026-11-15: never a
+second dev plan the same day). In t48's apply worktree and shell, after t48's block 7 has written its
+plan's JSON, and only when that worktree carries this task:
+
+```bash
+cd "$WT"
+grep -q 'claude-haiku-4-5' config/model_routing.prod.yaml && echo "ok: $(git rev-parse --short HEAD) carries v1-e05-t20" || echo "STOP: this worktree has no v1-e05-t20; its plan holds no bedrock change"
+PLAN_JSON=/tmp/caselist-schedule-scheduled-plan.json
+```
+
+*Prod's change riding in the promotion's prod plan*, in the worktree the promotion plans prod from.
+`PROMOTION_PLAN` is that plan's saved file, relative to `infrastructure/envs/prod`:
+
+```bash
+PROMOTION_PLAN='the-promotions-saved-plan.tfplan'
+PLAN_JSON=/tmp/bedrock-access-prod-plan.json
+AWS_PROFILE=debate-admin terraform -chdir=infrastructure/envs/prod show -json "$PROMOTION_PLAN" > "$PLAN_JSON"
+```
+
+**The check.**
+
+**Operator command** (expected runtime seconds)
+Where: the same shell
+```bash
+test -s "$PLAN_JSON" || echo "STOP: no plan JSON at $PLAN_JSON"
+python3 -I - "$PLAN_JSON" "$SSO_USER_NAME" <<'BEDROCKPOLICYUPDATE'
 import json, re, sys
 plan = json.load(open(sys.argv[1]))
-policy_address = "module.bedrock_access.aws_ssoadmin_permission_set_inline_policy.invoker[0]"
-expected_added = sorted(
-    ["arn:aws:bedrock:us-east-1:<account-id>:inference-profile/us.anthropic." + m for m in ("claude-haiku-4-5-20251001-v1:0", "claude-sonnet-4-6")]
-    + ["arn:aws:bedrock:" + r + "::foundation-model/anthropic." + m for r in ("us-east-1", "us-east-2", "us-west-2") for m in ("claude-haiku-4-5-20251001-v1:0", "claude-sonnet-4-6")]
+user = sys.argv[2]
+prefix = "module.bedrock_access."
+policy_address = prefix + "aws_ssoadmin_permission_set_inline_policy.invoker[0]"
+assignment_address = prefix + 'aws_ssoadmin_account_assignment.invokers["' + user + '"]'
+access_types = ("aws_ssoadmin_permission_set", "aws_ssoadmin_account_assignment")
+expected_removed = sorted(
+    ["arn:aws:bedrock:us-east-1:<account-id>:inference-profile/us.anthropic.claude-" + m + "-5-5" for m in ("haiku", "sonnet", "opus")]
+    + ["arn:aws:bedrock:" + r + "::foundation-model/anthropic.claude-" + m + "-5-5" for r in ("us-east-1", "us-east-2", "us-west-2") for m in ("haiku", "sonnet", "opus")]
 )
-def masked(arns):
-    return sorted(re.sub(r":[0-9]{12}:", ":<account-id>:", a) for a in arns)
+def masked(texts):
+    return sorted(re.sub(r'\["[^"]*"\]', '["<name>"]', re.sub(r":[0-9]{12}:", ":<account-id>:", t)) for t in texts)
 def listed(value):
     return [value] if isinstance(value, str) else list(value or [])
 def statements_of(change, side):
     text = (change.get(side) or {}).get("inline_policy")
     return json.loads(text)["Statement"] if isinstance(text, str) else None
 changes = [c for c in plan.get("resource_changes", []) if c["change"]["actions"] not in (["no-op"], ["read"])]
+ours = [c for c in changes if c["address"].startswith(prefix)]
+elsewhere = len(changes) - len(ours)
 problems = []
-summary = sorted(c["address"] + " " + "/".join(c["change"]["actions"]) for c in changes)
-if summary != [policy_address + " update"]:
-    problems.append("changes are " + str(masked(summary)) + ", expected the inline policy's update alone")
-change = next((c["change"] for c in changes if c["address"] == policy_address), {})
+dropped = [c["address"] + " " + "/".join(c["change"]["actions"]) for c in changes if c.get("type") in access_types and "delete" in c["change"]["actions"]]
+created = [c for c in changes if c.get("type") in access_types and c["change"]["actions"] == ["create"]]
+if dropped:
+    problems.append("permission sets or account assignments destroyed or replaced: " + str(masked(dropped)))
+summary = sorted(c["address"] + " " + "/".join(c["change"]["actions"]) for c in ours)
+allowed = [sorted([policy_address + " update"]), sorted([policy_address + " update", assignment_address + " create"])]
+if summary not in allowed:
+    problems.append("module.bedrock_access changes are " + str(masked(summary)) + ", expected the inline policy's update, and at most the assignment for the user named")
+change = next((c["change"] for c in ours if c["address"] == policy_address), {})
 before, after = statements_of(change, "before"), statements_of(change, "after")
 if after is None:
     problems.append("the new inline policy is not known at plan time")
@@ -238,27 +292,43 @@ profiles = sorted(r for r in resources if ":inference-profile/" in r)
 through = sorted({p for s in after if "Condition" in s for p in listed(s["Condition"].get("StringEquals", {}).get("bedrock:InferenceProfileArn"))})
 if actions != ["bedrock:InvokeModel"]:
     problems.append("actions are " + str(actions))
-if len(resources) != 22 or len(set(resources)) != 22 or any("*" in r for r in resources):
-    problems.append(str(len(resources)) + " resources, " + str(len(set(resources))) + " distinct, expected 22 and no wildcard")
-if len(profiles) != 5 or len(conditioned) != 15 or not all(":foundation-model/anthropic." in r for r in conditioned):
-    problems.append(str(len(profiles)) + " profiles and " + str(len(conditioned)) + " models through them, expected 5 and 15")
+if len(resources) != 10 or len(set(resources)) != 10 or any("*" in r for r in resources):
+    problems.append(str(len(resources)) + " resources, " + str(len(set(resources))) + " distinct, expected 10 and no wildcard")
+if len(profiles) != 2 or len(conditioned) != 6 or not all(":foundation-model/anthropic." in r for r in conditioned):
+    problems.append(str(len(profiles)) + " profiles and " + str(len(conditioned)) + " models through them, expected 2 and 6")
 if through != profiles:
     problems.append("the models are conditioned on " + str(masked(through)) + ", not on the profiles granted")
 if any(s.get("Effect") != "Allow" or "NotAction" in s or "NotResource" in s for s in after):
     problems.append("a statement that is not a plain Allow")
 removed = masked(set(old_resources) - set(resources))
 added = masked(set(resources) - set(old_resources))
-if removed:
-    problems.append("no longer granted " + str(removed))
-if added != expected_added:
-    problems.append("added " + str(added) + ", expected " + str(expected_added))
-print("PLAN OK: 1 to update, nothing else; bedrock:InvokeModel on 22 resources, 15 Claude models through the 5 profiles; 8 added, none removed" if not problems else "PLAN STOP: " + "; ".join(problems))
+if added:
+    problems.append("newly granted " + str(added))
+if removed != expected_removed:
+    problems.append("removed " + str(removed) + ", expected " + str(expected_removed))
+assigned = "and your assignment created" if len(summary) == 2 else "no assignment created"
+counts = "changes outside module.bedrock_access: " + str(elsewhere) + "; permission sets or account assignments created in the whole plan: " + str(len(created)) + ", none destroyed or replaced" if not dropped else "changes outside module.bedrock_access: " + str(elsewhere)
+print(("PLAN OK: module.bedrock_access: 1 policy update, " + assigned + "; bedrock:InvokeModel on 10 resources, 6 Claude models through the 2 profiles; 12 removed, none added" if not problems else "PLAN STOP: " + "; ".join(problems)) + "; " + counts)
 BEDROCKPOLICYUPDATE
 ```
-Success looks like `PLAN OK: 1 to update, nothing else; bedrock:InvokeModel on 22 resources, 15
-Claude models through the 5 profiles; 8 added, none removed`. **`PLAN STOP` stops everything**: send
-its line and the plan to the PM. Either way the PM reads the plan before step 3. A later routing
-change adds or removes other resources, so its task rewrites `expected_added` and the counts here.
+
+**What it prints for each plan:**
+
+* **A plan of its own, in dev:** `PLAN OK: module.bedrock_access: 1 policy update, no assignment
+  created; bedrock:InvokeModel on 10 resources, 6 Claude models through the 2 profiles; 12 removed,
+  none added; changes outside module.bedrock_access: 0; permission sets or account assignments created
+  in the whole plan: 0, none destroyed or replaced`.
+* **In `v1-e40-t48`'s dev plan:** the same, with t48's own changes as the outside count. t48's plan
+  then reads one change more than t48 alone, and t48's own check is told by the PM to expect it. One
+  apply, t48's, applies both, and this runbook's step 3 is not run for dev.
+* **In the promotion's prod plan:** `... 1 policy update, and your assignment created; ...`, with the
+  promotion's other changes as the outside count. The assignment is one of the permission sets or
+  account assignments created in the whole plan, and the rest are the promotion's own. That plan's
+  apply is the promotion's, in place of step 3.
+
+**`PLAN STOP` stops everything**: send its line and the plan to the PM. Either way the PM reads the
+plan before any apply. A later routing change adds or removes other resources, so its task rewrites
+`expected_removed`, the check on what is added, and the counts here.
 
 ## Step 3 — The apply
 
@@ -275,7 +345,9 @@ AWS_PROFILE=debate-admin terraform -chdir="infrastructure/envs/${ENVIRONMENT}" o
 Success looks like `Apply complete! Resources: 3 added, 0 changed, 0 destroyed.`, then
 `"DebateDevBedrockInvoker"` and `"debate-dev-bedrock"`. When the set already existed, it reads
 `Apply complete! Resources: 0 added, 1 changed, 0 destroyed.` instead, with the same two names, and
-steps 4 to 6 are not repeated: go on to step 7. `Saved plan is stale` means something changed
+steps 4 to 6 are not repeated: go on to step 7. Prod's first apply after `v1-e05-t20` reads `1 added,
+1 changed` (the assignment and the policy), or the promotion's totals when it rides in one, and step 4
+is run for prod. `Saved plan is stale` means something changed
 in between: go back to step 1. Never `-target`, and never create a permission set by hand.
 
 ## Step 4 — The profile
@@ -356,8 +428,12 @@ aws bedrock-runtime invoke-model --profile debate-admin --region us-east-1 --mod
 **Operator command** (expected runtime ~1 min)
 Where: your Mac, anywhere
 ```bash
-aws service-quotas list-service-quotas --profile debate-admin --region us-east-1 --service-code bedrock --query "Quotas[?contains(QuotaName, 'Cross-region model inference tokens per minute for Anthropic Claude')].[QuotaName, Value]" --output text
+aws service-quotas list-service-quotas --no-cli-pager --profile debate-admin --region us-east-1 --service-code bedrock --query "Quotas[?contains(QuotaName, 'Cross-region model inference tokens per minute for Anthropic Claude')].[QuotaName, Value]" --output text
 ```
+
+`--no-cli-pager` keeps a long answer from opening in a pager. The operator's reading of 2026-11-15,
+before prod's routes moved (`v1-e05-t20`): Haiku 4.5 5,000,000 and Sonnet 4.6 6,000,000 tokens a
+minute, both cross-region and global cross-region, in each of us-east-1, us-east-2 and us-west-2.
 
 **What the account says about each model**, read-only, after the first calls. Each line is one
 model and four fields.
@@ -367,6 +443,8 @@ Where: your Mac, anywhere
 ```bash
 for model in anthropic.claude-haiku-5-5 anthropic.claude-sonnet-5-5 anthropic.claude-opus-5-5 amazon.titan-embed-text-v2:0 cohere.rerank-v3-5:0; do echo "== $model"; aws bedrock get-foundation-model-availability --profile debate-admin --region us-east-1 --model-id "$model" --query '[agreementAvailability.status, authorizationStatus, entitlementAvailability, regionAvailability]' --output text; done
 ```
+Since `v1-e05-t20` no route names a 5.5 model; for the routed ones, put
+`anthropic.claude-haiku-4-5-20251001-v1:0` and `anthropic.claude-sonnet-4-6` in the list instead.
 Each model is followed by `AVAILABLE AUTHORIZED AVAILABLE AVAILABLE` once its first call has been
 answered. `NOT_AVAILABLE` agreement before then is expected. `Invalid choice` or an
 unknown-operation error means this AWS CLI is older than the command: update it, or skip this block.
@@ -451,6 +529,18 @@ refusal as `AccessDeniedException`, each 5.5 model's six probes read `not tried`
 `accepted` and every 5.5 refusal names the account rather than `bedrock:InvokeModel`. Send the PM the
 whole file either way.
 
+**Prod's first calls, after `v1-e05-t20`.** Prod's set had nobody assigned until its first apply after
+this task, so prod's routes have never answered a call. Run the block in [Prod](#prod)'s worktree at
+`origin/main` after the promotion that carries `v1-e05-t20`, with `ENVIRONMENT=prod`, reading prod's
+routing file alone (the block in [Prod](#prod) has it). That checkout is the stable build's code and
+its routing file, and the call is signed with `debate-prod-bedrock`, so it is the credential and the
+routes the stable build will use; nothing here installs a build. It asks the two Claude models seven
+requests each, one embedding and one rerank: 16 requests, about five cents at 300 output tokens a
+request and about 30 at the cap (`config/model_pricing.yaml`'s prices). The run is good when the first
+line names `debate-prod-bedrock` and `DEBATE_ENV=prod`, both models' adapter calls read `accepted`,
+the embedding and the rerank are accepted, and the block prints `first call exit=0`. A refused probe
+other than the adapter's call is a finding, as in dev; `effort low` was refused in dev on 2026-10-27.
+
 **When the adapter's own call is refused:**
 
 * `AccessDeniedException` naming `aws-marketplace` or a subscription: the model's Marketplace offer is
@@ -523,12 +613,42 @@ again.
 
 ## Prod
 
-After the release carrying this task is promoted to `main`, from a worktree at `origin/main`, with the
-prod root's `owner.auto.tfvars` copied from the checkout that last applied prod. Set the variables,
-then run steps 1 to 4 as written: every block reads `$WT` and `$ENVIRONMENT`. Step 1 expects the same
-`Plan: 3 to add, 0 to change, 0 to destroy.`, step 2 the same `PLAN OK`, and step 3 prints
-`"DebateProdBedrockInvoker"` and `"debate-prod-bedrock"`. Steps 5, 6 and 8 are the account's and are not
-repeated; step 7 is run again only if the PM asks for prod's own answers.
+Prod's set, `DebateProdBedrockInvoker`, was created by the promotion's step 11 on 2026-11-03
+([evidence-search.md](evidence-search.md#step-11--prod)) with nobody assigned, granting the twenty-two
+resources of the time. `v1-e05-t20` narrows it to the ten above and assigns it, in this order:
+
+1. **The promotion carrying `v1-e05-t20` is cut** (`dev` promoted to `main`). If this task merged into
+   `dev` before that cut, prod's change rides in that promotion's prod plan, and no separate prod plan
+   is made that weekend. If it merged after, it waits for the next promotion's prod plan: prod's
+   current set already grants Haiku 4.5 and Sonnet 4.6, and what that promotion brings is the stable
+   build's new routing file. Never two prod plans the same weekend, and never on a Wednesday.
+2. **Before that prod plan**, prod's `owner.auto.tfvars` gains your `bedrock_invoker_user_names` line,
+   by [Before you start](#before-you-start)'s second block with `ENVIRONMENT=prod`, in the worktree the
+   promotion plans from, so the assignment is created in that same plan (the PM's ruling of
+   2026-11-15). Without it the set stays assigned to nobody (the root's `check` warns). The name is
+   never pasted into a session or a chat: the block prints a count.
+3. **The prod plan**, with step 2's check run on it ([the promotion's case](#when-the-set-already-exists-one-inline-policy-updated)):
+   `PLAN OK` with `and your assignment created`. A plan that destroys or replaces a permission set or
+   an account assignment anywhere is refused; creating one is expected, and is what the PM reads for.
+4. **The apply**, the promotion's (or step 3 for a plan of its own), then the profile (step 4) with
+   `ENVIRONMENT=prod`.
+5. **Prod's first calls** (step 7, [Prod's first calls](#step-7--the-first-real-call-on-each-claude-route)),
+   from the same worktree, with the block below in place of step 7's: it reads prod's routing file
+   alone. Steps 5, 6 and 8 are the account's and are not repeated.
+6. **The next day, the spend names** ([aws-account-baseline.md](aws-account-baseline.md#counting-what-model-calls-are-billed-under)):
+   Cost Explorer shows a day's charges up to a day late. Prod's calls bill under the same names as
+   dev's, which the budget already lists, so the expected result is nothing new.
+
+**Dev's plan for the same policy update** is a dev plan, not a prod one, and is never a second dev plan
+the same day (the PM's ruling of 2026-11-15):
+
+* if `v1-e40-t48`'s fix has not been applied when `v1-e05-t20` merges, dev's change rides in t48's
+  Monday dev plan: step 2's check in [t48's case](#when-the-set-already-exists-one-inline-policy-updated)
+  on t48's plan JSON, and t48's apply applies both;
+* otherwise it is a plan of its own: Before you start and steps 1 to 3 with `ENVIRONMENT=dev`, the
+  check printing `no assignment created` and `changes outside module.bedrock_access: 0`.
+
+The worktree, from `origin/main`:
 
 ```bash
 WT="$HOME/Documents/debate/debate-intelligence-tool/debate-intelligence-worktrees/bedrock-access-prod"
@@ -538,9 +658,22 @@ SSO_USER_NAME='your-identity-center-user-name'
 cd "$WT" || echo "STOP: the worktree is missing: $WT"
 git fetch origin
 git switch --detach origin/main
-test -f infrastructure/envs/prod/bedrock_access.tf && echo "ok: $(pwd) at origin/main $(git rev-parse --short HEAD), bedrock_access promoted" || echo "NOT PROMOTED: origin/main has no v1-e05-t08"
+grep -q 'claude-haiku-4-5' config/model_routing.prod.yaml && echo "ok: $(pwd) at origin/main $(git rev-parse --short HEAD), prod routes on the 4.x models" || echo "NOT PROMOTED: origin/main has no v1-e05-t20"
 git status --porcelain | grep -v 'owner.auto.tfvars' | head -3
 ```
-Success looks like `ok: <the worktree> at origin/main <commit>, bedrock_access promoted`, and nothing
-after it. Make the worktree first, if `git worktree list` does not show it, from the kept `dev-preview`
-worktree: `git worktree add --detach ../bedrock-access-prod origin/main`.
+Success looks like `ok: <the worktree> at origin/main <commit>, prod routes on the 4.x models`, and
+nothing after it. Make the worktree first, if `git worktree list` does not show it, from the kept
+`dev-preview` worktree: `git worktree add --detach ../bedrock-access-prod origin/main`. When the
+promotion's own worktree plans prod, use that one instead, so there is one prod plan.
+
+**Prod's first calls**, after the apply and step 4:
+
+**Operator command** (expected runtime ~2 min)
+Where: `$WT`
+```bash
+cd "$WT"
+aws sso login --sso-session debate
+if env | grep -q '^DEBATE_'; then echo "STOP: DEBATE_ overrides are set in this shell:"; env | grep -oE '^DEBATE_[A-Z_]*'; else env -u AWS_PROFILE DEBATE_ENV=prod uv run python -m debate_core.integrations.bedrock.first_call --routing-file config/model_routing.prod.yaml > /tmp/bedrock-first-call-prod.md; echo "first call exit=$?"; cat /tmp/bedrock-first-call-prod.md; fi
+```
+Success looks like [Prod's first calls](#step-7--the-first-real-call-on-each-claude-route) says. Send
+the PM the whole file, `/tmp/bedrock-first-call-prod.md`.

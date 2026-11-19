@@ -6,7 +6,7 @@
 | Spec | [`plan_specs/v1/e07-discovery-adapters/t27-openalex-answers-a-crossed-search.yaml`](../../plan_specs/v1/e07-discovery-adapters/t27-openalex-answers-a-crossed-search.yaml) |
 | Epic / release | `v1-e07-discovery-adapters` / `v1.4` |
 | Branch | `task/v1-e07-t27-openalex-answers-a-crossed-search` |
-| Session status | PARTIAL: stopped for the PM's ruling on the fix (item 4). The Goal stays `InProgress` <!-- COMPLETE / PARTIAL / BLOCKED --> |
+| Session status | PARTIAL: the PM ruled on 2026-11-16 (Q1 to Q3), and the fix follows from the operator's probe output, which hasn't come back yet. The Goal stays `InProgress` <!-- COMPLETE / PARTIAL / BLOCKED --> |
 
 ## Summary
 
@@ -283,6 +283,30 @@ Q3. Keep the split's stop when both halves are refused (no further asking)? Reco
     reason now says why.
 ```
 
+### The PM's ruling (2026-11-16)
+
+- **Q1: yes.** The operator runs the probe first. It prints OpenAlex's own messages, sanitized as built,
+  and each request's status. It never prints a key or a URL query.
+- **Q2: decided in advance by the probe's answer.** The session builds without stopping again:
+  - a message that names a limit: **A**;
+  - `keywords` refused with joined searches: **B**. The guide's narrowing section says suggestions come
+    from single-query searches only, and so does the footer when a joined search is why there are none;
+  - `page=` refused with joined searches: **C**, with the shortfall named;
+  - joining refused as such: **D is its own task**. The session stops and reports, the PM files the
+    task, and this one ends at item 3's message and the probe's record;
+  - an ambiguous probe, or two causes at once: the session stops for the PM.
+- **Q3: yes.** The stop stays when both halves are refused, and the reason now says why.
+
+How I'll read the probe's rows against the ruling:
+
+| Probe rows | Reading | Next |
+|---|---|---|
+| `ac3-first-request` 400 with a message naming a size, group or clause limit | a limit | A |
+| 400, and only `select-without-keywords` answers 200 | `keywords` with joining | B |
+| 400, and only `no-page-parameter` answers 200 | `page=` with joining | C |
+| 400, `one-crossed-query` 200, `two-queries-joined` 400, and the variants of the 24-query request still 400 | joining as such | stop: D is the PM's new task |
+| more than one variant answers 200, only `no-date-window` does, `ac3-first-request` answers 200, or `plain-control` is refused | ambiguous, two causes, or OpenAlex has changed again | stop for the PM |
+
 ## Files changed
 
 - `packages/debate_core/src/debate_core/integrations/discovery/openalex.py`: `refusal_message`,
@@ -334,7 +358,7 @@ Q3. Keep the split's stop when both halves are refused (no further asking)? Reco
 
 ## Operator follow-ups
 
-**Before the PM's ruling (recommended, Q1): the refusal probe** (seconds, 7 OpenAlex requests)
+**Now (ruled, Q1): the refusal probe** (seconds, 7 OpenAlex requests)
 
 Where: your Mac, any terminal, with the installed v1.1.0-dev.439 or later. The probe is
 `openalex_crossed_refusal_probe.py` in this session's scratchpad. Its full text is in the

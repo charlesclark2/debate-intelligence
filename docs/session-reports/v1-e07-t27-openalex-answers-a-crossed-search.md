@@ -6,7 +6,7 @@
 | Spec | [`plan_specs/v1/e07-discovery-adapters/t27-openalex-answers-a-crossed-search.yaml`](../../plan_specs/v1/e07-discovery-adapters/t27-openalex-answers-a-crossed-search.yaml) |
 | Epic / release | `v1-e07-discovery-adapters` / `v1.4` |
 | Branch | `task/v1-e07-t27-openalex-answers-a-crossed-search` |
-| Session status | PARTIAL: the PM ruled on 2026-11-16 (Q1 to Q3), and the fix follows from the operator's probe output, which hasn't come back yet. The Goal stays `InProgress` <!-- COMPLETE / PARTIAL / BLOCKED --> |
+| Session status | PARTIAL: the ac3 search turns out to have run on dev.413, whose single 2,272-character request is the refusal v1-e08-t20 fixed (Deviation 4). The probe on dev.445 is the operator's, and then this goes back to the PM. The Goal stays `InProgress` <!-- COMPLETE / PARTIAL / BLOCKED --> |
 
 ## Summary
 
@@ -130,7 +130,7 @@ Offline, the refusal is consistent with four causes, and the operator's probe be
    (its search pages were rewritten on 2026-11-13);
 4. a limit OpenAlex added that its documentation does not state.
 
-### If the ac3 search ran on dev.413 (found 2026-11-19)
+### The ac3 search ran on dev.413 (found 2026-11-19)
 
 The spec records the ac3 search as run on `v1.1.0-dev.439`. On 2026-11-19 the operator's installed
 build was `v1.1.0-dev.413`, installed on 2026-11-12 for v1-e07-t20's Semantic Scholar smoke. Nothing
@@ -158,6 +158,15 @@ the cause is already fixed on dev, and the repeat on dev.445 is the test of it. 
 for the operator's saved files to say. `--save` writes the search payload, and from dev.423 on (v1-e08-t15,
 `2d4a097`) that payload carries a `narrowing` key that dev.413 never writes. The block is under
 [Operator follow-ups](#operator-follow-ups).
+
+**The saved file's answer (operator, 2026-11-19):** `~/Desktop/search-policy-nhi-crossing.json` was
+written on `2026-11-14T23:21` and has `narrowing key False`. Its OpenAlex entry reads `outcome error`,
+`queries 37`, `failed 37`, `results 0`, `reasons ['HTTP 400: the provider refused the request']`.
+The `/tmp` copy is gone. In `v1.1.0-dev.439`, `search.py:262` and `search.py:265` write
+`search_payload(...)` to `--save`, and `search_presenter.py:359` always puts `narrowing` in it.
+dev.413's presenter has no `narrowing` at all. So a build older than dev.423 wrote the file: the
+installed dev.413. The refused request was dev.413's single 2,272-character search, the refusal t20
+fixed. The 24-query and 13-query requests measured above for dev.439 have never been sent.
 
 ## 2. OpenAlex's documentation (read 2026-11-15)
 
@@ -373,6 +382,13 @@ How I'll read the probe's rows against the ruling:
 3. **The message falls back to the JSON `error`** when `message` is missing or blank. The brief says
    "its JSON message field when there is one". The error is a short title ("Invalid query"), and it
    still says more than the bare status.
+4. **The spec's premise names the wrong build.** The spec says the ac3 search of 2026-11-14 ran on
+   `v1.1.0-dev.439`. Its saved file has no `narrowing` key, so a build older than dev.423 wrote it,
+   and the Mac was on dev.413 until at least 2026-11-19
+   ([The ac3 search ran on dev.413](#the-ac3-search-ran-on-dev413-found-2026-11-19)). The refusal it
+   recorded is the one v1-e08-t20 already fixed. Whether this task still needs a fix beyond item 3
+   is for the PM, once the probe has run on dev.445. The spec text is left as it is, for the PM to
+   amend.
 
 ## Decisions and assumptions
 

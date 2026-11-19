@@ -130,6 +130,35 @@ Offline, the refusal is consistent with four causes, and the operator's probe be
    (its search pages were rewritten on 2026-11-13);
 4. a limit OpenAlex added that its documentation does not state.
 
+### If the ac3 search ran on dev.413 (found 2026-11-19)
+
+The spec records the ac3 search as run on `v1.1.0-dev.439`. On 2026-11-19 the operator's installed
+build was `v1.1.0-dev.413`, installed on 2026-11-12 for v1-e07-t20's Semantic Scholar smoke. Nothing
+records an install since then. The probe, run on that build, stopped before sending anything:
+`STOP: the first joined request carries 37 queries, not 24`.
+
+dev.413's own code and taxonomy (`git archive v1.1.0-dev.413`, `scratchpad/dev413_requests.py`, no
+call) send the ac3 search like this:
+
+| | dev.413 | dev.439 to dev.445 |
+|---|---|---|
+| Taxonomy, queries, windows | 1.6.0, 37, 1 | 1.6.0, 37, 1 |
+| Requests per page | **1**, carrying all 37 | 2, carrying 24 and 13 |
+| Search characters | **2,272** (37 OR groups) | 1,473 and 795 |
+| URL characters | 2,686 | 1,846 and 1,124 |
+| Split limit | `MAX_URL_CHARS` 3,500 only | `MAX_SEARCH_CHARS` 1,500 and `MAX_URL_CHARS` 3,500 |
+| A 400 | fails the one request, so all 37 queries | halved, then stops when both halves are refused |
+| `keywords` in `select=` | no | yes |
+| Added characters | 37 `(` and 37 `)` | the same per request |
+
+On dev.413, then, the search is 2,272 characters, over the 1,500 that OpenAlex's own message named on
+2026-11-12. That is the refusal v1-e08-t20 (`daa5563`, first in `v1.1.0-dev.423`) fixed by
+splitting, and it gives exactly the recorded `queries 37, failed 37`. If the ac3 search ran there,
+the cause is already fixed on dev, and the repeat on dev.445 is the test of it. Which build ran it is
+for the operator's saved files to say. `--save` writes the search payload, and from dev.423 on (v1-e08-t15,
+`2d4a097`) that payload carries a `narrowing` key that dev.413 never writes. The block is under
+[Operator follow-ups](#operator-follow-ups).
+
 ## 2. OpenAlex's documentation (read 2026-11-15)
 
 `docs.openalex.org` answers `301 Moved Permanently` to `help.openalex.org` (its own host), so the
@@ -357,6 +386,16 @@ How I'll read the probe's rows against the ruling:
   configured values, but the adapter's own tests run it unwrapped.
 
 ## Operator follow-ups
+
+**First: which build wrote the ac3 search's files** (seconds, reads two local files, sends nothing)
+
+Where: your Mac, any terminal. It prints each file's time, whether it has the `narrowing` key
+(`True` means dev.423 or later, `False` dev.413 or earlier) and OpenAlex's provider entry. It prints no
+titles and no queries.
+
+```bash
+cd "$HOME" && python3 -I -c 'import datetime, json, os, sys; [print(p, "missing") if not os.path.exists(p) else (lambda e: (lambda d: print(p, "written", datetime.datetime.fromtimestamp(os.path.getmtime(p)).isoformat(timespec="minutes"), "narrowing key", "narrowing" in d, "openalex", [x for x in d.get("providers") or [] if x.get("provider") == "openalex"]))(e.get("data") or (e.get("error") or {}).get("details") or e))(json.load(open(p))) for p in sys.argv[1:]]' "$HOME/Desktop/search-policy-nhi-crossing.json" /tmp/search-policy-nhi-crossing.json
+```
 
 **Now (ruled, Q1): the refusal probe** (seconds, 7 OpenAlex requests)
 

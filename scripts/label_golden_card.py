@@ -447,6 +447,9 @@ def label_case(
         "cite": {"short_cite": card.short_cite, "full_cite": card.full_cite},
         "research_need": case["research_need"],
         "segments": segments,
+        # PM ruling of 2026-11-16: a purpose only where the team's format profile defines what a
+        # markup kind means, never invented. SpanPurpose is claim, warrant, internal link or
+        # impact, and no profile maps underline or highlight to one, so every purpose is null.
         "spans": [
             {"start": span.start, "end": span.end, "style": span.style.value, "purpose": None}
             for span in sorted(markup_spans, key=lambda span: (span.start, span.style.value))

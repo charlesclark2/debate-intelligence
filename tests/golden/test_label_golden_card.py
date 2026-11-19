@@ -9,6 +9,7 @@ highlighted warrant is the invented page's own occurrence of `WARRANT`.
 from __future__ import annotations
 
 import json
+import shutil
 import sys
 import zipfile
 from pathlib import Path
@@ -358,6 +359,20 @@ def test_check_flags_a_person_named_in_a_render(rendered: World, capsys: pytest.
 
     assert golden.main(["check", "--fixtures", str(rendered.fixtures)]) == 1
     assert "docProps/core.xml creator is set" in capsys.readouterr().out
+
+
+def test_the_renderers_name_is_allowed_in_expected_docx_only(
+    rendered: World, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # PM ruling 3 of 2026-11-16: the allowance covers expected.docx and nothing else, so a render
+    # standing in for a team card fails on the renderer's own author and manifest parts.
+    case_dir = rendered.fixtures / rendered.case_for("marked")
+    shutil.copyfile(case_dir / label.EXPECTED_RENDER_NAME, case_dir / golden.EXCERPT_NAME)
+
+    assert golden.main(["check", "--fixtures", str(rendered.fixtures)]) == 1
+    out = capsys.readouterr().out
+    assert "docProps/core.xml creator is set" in out
+    assert "customXml/item1.xml is present" in out
 
 
 # ------------------------------------------------------------------------------------------------

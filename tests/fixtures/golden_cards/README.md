@@ -16,6 +16,11 @@ rulings of 2026-11-14. `INDEX.md` lists the cases; `scripts/import_golden_card.p
   That attestation is the control on names. A roster denylist is optional and off by default.
 * Every import strips the document metadata, comments and tracked-change authors and the cutter
   mark at the end of the cite, and `import_golden_card.py check` fails on any metadata it finds.
+* One allowance, in `expected.docx` only (PM ruling of 2026-11-16): the renderer's own name,
+  `debate-research`, as author and last editor, and its three card-manifest custom XML parts
+  (`customXml/item1.xml`, `customXml/itemProps1.xml`, `customXml/_rels/item1.xml.rels`). Any
+  person's name, any other metadata, and the same name or parts in `team-card.docx` still fail.
+  `tests/golden/test_label_golden_card.py` pins both halves.
 
 ## The source pages are not
 
@@ -40,7 +45,15 @@ as a case with a local snapshot.
 
 The span labels are the coach's own: every card is one the coach cut or re-cut, so its underlining
 and highlighting are carried over as they are, onto the snapshot's characters. A span's purpose
-is left null, because a card's runs say how text is marked, not what work it does. CI checks the
+is recorded only where the team's format profile defines what a markup kind means, and is never
+invented (PM ruling of 2026-11-16). Today every purpose is null: `team-default` sets sizes and a
+highlight colour that its style profile counts as a reading colour, but a span's purpose can only
+be claim, warrant, internal link or impact, and no profile maps a markup kind to one of those.
+
+`expected.docx` carries the verifier's real verdict. The cite is the team's, typed by hand, so no
+citation field is verified and every render is UNVERIFIED (`CITATION_UNVERIFIED`) with its banner.
+Nothing sets VERIFIED by hand. If citations are later harvested from the snapshots, the renders are
+regenerated with `label_golden_card.py --render-expected`, never edited. CI checks the
 structure (`tests/golden/test_corpus_structure.py`) and the scrub
 (`tests/golden/test_fixture_scrubbed.py`); only the operator's `import_golden_card.py check
 --snapshots` can check the offsets against the snapshots.

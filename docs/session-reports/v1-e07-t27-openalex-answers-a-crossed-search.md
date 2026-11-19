@@ -367,6 +367,20 @@ request, a label, the OR groups, the search length, the URL length and the statu
 refusal, OpenAlex's message with any URL query and the key removed. It writes nothing and stops on a
 429. The first command checks the build:
 
+On 2026-11-19 the installed build was `v1.1.0-dev.413`. That build predates v1-e08-t15's `keywords`
+(`2d4a097`) and v1-e08-t20's split, so it does not send the measured request. The newest dev
+pre-release, `v1.1.0-dev.445`, does. `git diff --stat v1.1.0-dev.439 v1.1.0-dev.445` over
+`integrations/discovery/`, `config/`, `query_expansion.py`, `federated_search.py` and `build_info.py`
+prints nothing. It is installed first, the runbook's way (`scripts/install_channel.sh`,
+[caselist-scheduled-sync.md](../runbooks/caselist-scheduled-sync.md), "Checking an installed
+build"), from this task's worktree, whose installer is the same as dev.445's:
+
+```bash
+cd "$HOME/Documents/debate/debate-intelligence-tool/debate-intelligence-worktrees/v1-e07-t27-openalex-answers-a-crossed-search" && scripts/install_channel.sh v1.1.0-dev.445 2>&1 | tail -5
+```
+
+Then the check, which should print `v1.1.0-dev.445`:
+
 ```bash
 debate-research --json --version | python3 -I -c 'import json, sys; print(json.load(sys.stdin)["data"]["tag"])'
 ```

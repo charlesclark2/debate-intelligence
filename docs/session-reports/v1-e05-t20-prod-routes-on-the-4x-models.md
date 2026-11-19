@@ -336,9 +336,45 @@ the PM before its apply.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-11-16
 
 **Notes:**
+
+Accepted for a partial merge. ac1 and the node pass. ac2 is NOT APPLICABLE by the PM's ruling Q1,
+which the PM amends in the next batch, and ac3 is the operator's, so the Goal stays `InProgress`.
+
+* **The quotas were read first**, and none is zero: Haiku 4.5 at 5,000,000 and Sonnet 4.6 at
+  6,000,000 in us-east-1, us-east-2 and us-west-2. Decision 2 is right that dev and prod share one
+  account's quotas (ADR-0010).
+* **The routing is class for class, as ruled.** `deep_audit` goes from Opus 5.5 to Sonnet 4.6, with no
+  caller in V1, and `complex_reasoning` to Haiku 4.5, confirmed for now and decided by v1-e09-t03 and
+  t04's golden evaluation before the student release (Q2). The routing file's comment says so. Every
+  model is already priced, and the $50 limit is unchanged.
+* **The grant narrows from 22 resources to 10**, read from both routing files, with no wildcard and no
+  5.5 resource. It is pinned at apply and at plan time, with red runs first (Python 3 of 4,
+  Terraform 7 of 11). All 7 mutants were caught, the PM's two among them.
+* **Deviation 2 is a useful correction of the spec's reading.** Prod's set has existed since
+  2026-11-03 with nobody assigned, so prod's plan is one policy update plus the operator's first
+  assignment.
+* **Step 2's check, exercised on eight synthetic plans,** refuses a destroyed or replaced permission
+  set or assignment anywhere, masks names, and passes only the update and the operator's own
+  assignment.
+* **The order for dev: case (b), not case (a).** v1-e40-t48's fix plan is made today, Monday, as soon
+  as t48 merges, because Wednesday's run depends on it. So dev's grant update is its own plan, on
+  Tuesday 2026-11-17 at the earliest: never the same day as another dev plan, and never a Wednesday.
+  Case (a) as written names Sunday's JSON file (`/tmp/caselist-schedule-scheduled-plan.json`); the fix
+  plan's is `/tmp/caselist-run-schedule-alone-plan.json`. It is not used, so no edit is needed.
+* **Prod:** the grant and the operator's assignment ride in the promotion's prod plan, which the PM
+  reads (Q3, Q4). Then step 4's profile read, the first calls from an `origin/main` checkout with
+  `DEBATE_ENV=prod` (16 billed requests, about five cents), and the next day's spend names, which
+  print names only.
+* **Follow-up 2 is taken:** a `doctor --routing-file` read on the installed stable build joins the
+  promotion's smoke list, in the promotion's PR body.
+* **The checks.** The affected set (227 files) goes to `ci` under agreement 10. The changed areas and
+  the always-run list are green, and so are `terraform_checks.sh`, pyright and the import contracts.
+  If `scripts/task pr` asks, `scripts/task sync`.
+
+`scripts/task pr --partial`

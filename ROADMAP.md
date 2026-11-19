@@ -337,7 +337,7 @@ Weekly argument-landscape reports show which positions are being read and with w
 | [Dev back on the 5.5 models, and prod's Bedrock grant applied, once the quotas are restored](plan_specs/v1/e05-model-router/t17-switch-back-to-the-5-5-models.yaml) `v1-e05-t17-switch-back-to-the-5-5-models` | Cancelled | 3 | 2.0 |
 | [The cost allocation tags are active by Terraform, so the budgets that filter on them never read zero again](plan_specs/v1/e05-model-router/t18-cost-allocation-tags-in-terraform.yaml) `v1-e05-t18-cost-allocation-tags-in-terraform` | Succeeded | 1 | 1.0 |
 | [The cost allocation tags' import blocks are removed once both tags are in state](plan_specs/v1/e05-model-router/t19-cost-allocation-tag-imports-removed.yaml) `v1-e05-t19-cost-allocation-tag-imports-removed` | Succeeded | 1 | 0.5 |
-| [Prod's model routes, grant and first calls on the models dev already uses](plan_specs/v1/e05-model-router/t20-prod-routes-on-the-4x-models.yaml) `v1-e05-t20-prod-routes-on-the-4x-models` | Pending | 2 | 3.0 |
+| [Prod's model routes, grant and first calls on the models dev already uses](plan_specs/v1/e05-model-router/t20-prod-routes-on-the-4x-models.yaml) `v1-e05-t20-prod-routes-on-the-4x-models` | InProgress | 2 | 3.0 |
 
 #### [E32 — Argument Landscape Reports](plan_specs/v1/e32-argument-landscape/epic.yaml)
 

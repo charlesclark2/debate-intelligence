@@ -184,33 +184,8 @@ class CaseLabel:
 # --------------------------------------------------------------------------------------------
 
 
-def _comparison_view(text: str, offset: int = 0) -> tuple[str, list[int]]:
-    """`text` in comparison form, and the position in `text` (plus `offset`) of each of its characters.
-
-    The same string :func:`golden_snapshots.comparison_form` gives; a gap's one space stands at the
-    gap's first character.
-    """
-    characters: list[str] = []
-    positions: list[int] = []
-    in_gap = False
-    for position, character in enumerate(text):
-        if character in _GAP_CHARACTERS:
-            if characters and not in_gap:
-                characters.append(" ")
-                positions.append(position + offset)
-            in_gap = True
-        else:
-            characters.append(character)
-            positions.append(position + offset)
-            in_gap = False
-    if characters and characters[-1] == " ":
-        characters.pop()
-        positions.pop()
-    return "".join(characters), positions
-
-
-def _team_stretches(normalized: str, markers: Sequence[str]) -> list[tuple[str, list[int]]]:
-    """The normalized card split at its omission markers: each stretch's view and positions."""
+def _team_stretches(normalized: str, markers: Sequence[str]) -> list[snapshots.ComparisonView]:
+    """The normalized card split at its omission markers, each stretch in comparison form."""
     ordered = sorted({marker for marker in markers if marker}, key=len, reverse=True)
     pattern = re.compile("|".join(re.escape(marker) for marker in ordered)) if ordered else None
     bounds: list[tuple[int, int]] = []
@@ -219,13 +194,8 @@ def _team_stretches(normalized: str, markers: Sequence[str]) -> list[tuple[str, 
         bounds.append((start, match.start()))
         start = match.end()
     bounds.append((start, len(normalized)))
-    views = [_comparison_view(normalized[a:b], a) for a, b in bounds]
-    return [(view, positions) for view, positions in views if view]
-
-
-def _word_ends(view: str) -> list[int]:
-    """Where each whole-word prefix of `view` ends: before each space, and at the end."""
-    return [index for index, character in enumerate(view) if character == " "] + [len(view)]
+    views = [snapshots.comparison_view(normalized[a:b], a) for a, b in bounds]
+    return [view for view in views if view.text]
 
 
 @dataclass
@@ -235,54 +205,58 @@ class _Alignment:
     unmarked_cuts: int = 0
 
 
-def _align(snapshot_text: str, stretches: Sequence[tuple[str, list[int]]]) -> _Alignment:
-    page, page_positions = _comparison_view(snapshot_text)
+def _align(snapshot_text: str, stretches: Sequence[snapshots.ComparisonView]) -> _Alignment:
+    """Find each stretch of the card in the snapshot, in order, both in comparison form.
+
+    A stretch the snapshot does not hold whole is matched by its longest prefix of at least
+    :data:`MINIMUM_UNMARKED_WORDS` words, and the rest is looked for after it: a cut the cutter did
+    not mark. Whitespace is not compared, so a word count is the only measure of how much matched.
+    """
+    page = snapshots.comparison_view(snapshot_text)
     alignment = _Alignment()
     cursor = 0
-    for number, (view, positions) in enumerate(stretches, start=1):
-        remaining, remaining_positions = view, positions
+    for number, stretch in enumerate(stretches, start=1):
+        done = 0
         after_unmarked_cut = False
-        matched = 0
-        while remaining:
+        while done < len(stretch.text):
+            remaining = stretch.text[done:]
+            ends = [end - done for end in stretch.word_ends if end > done]
             # Both sides of a cut the cutter did not mark need the minimum: a short tail found
             # anywhere after the head is no evidence of where the rest of the card is. (A tail that
             # short has no usable prefix either, so it is refused below.)
-            too_short = after_unmarked_cut and len(_word_ends(remaining)) < MINIMUM_UNMARKED_WORDS
-            found = -1 if too_short else page.find(remaining, cursor)
+            too_short = after_unmarked_cut and len(ends) < MINIMUM_UNMARKED_WORDS
+            found = -1 if too_short else page.text.find(remaining, cursor)
             if found >= 0:
                 taken = len(remaining)
             else:
-                ends = _word_ends(remaining)
                 usable = ends[MINIMUM_UNMARKED_WORDS - 1 : -1]
                 low, high, best = 0, len(usable) - 1, -1
                 while low <= high:
                     middle = (low + high) // 2
-                    if page.find(remaining[: usable[middle]], cursor) >= 0:
+                    if page.text.find(remaining[: usable[middle]], cursor) >= 0:
                         best, low = middle, middle + 1
                     else:
                         high = middle - 1
                 if best < 0:
                     raise LabelRefused(
                         LabelProblem.NOT_FOUND,
-                        f"stretch {number} of {len(stretches)}, {matched} of {len(view)} characters found",
+                        f"stretch {number} of {len(stretches)}, "
+                        f"{done} of {len(stretch.text)} characters found",
                     )
                 taken = usable[best]
-                found = page.find(remaining[:taken], cursor)
+                found = page.text.find(remaining[:taken], cursor)
                 alignment.unmarked_cuts += 1
                 after_unmarked_cut = True
             for index in range(taken):
-                alignment.to_snapshot[remaining_positions[index]] = page_positions[found + index]
-            start, end = page_positions[found], page_positions[found + taken - 1] + 1
+                alignment.to_snapshot[stretch.positions[done + index]] = page.positions[found + index]
+            start, end = page.positions[found], page.positions[found + taken - 1] + 1
             if alignment.segments and start <= alignment.segments[-1][1]:
                 # A marker with nothing of the snapshot between its two sides (inside a word): the
                 # extractor would join the two into one segment, which no longer reads as the card.
                 raise LabelRefused(LabelProblem.NOTHING_OMITTED, f"after stretch {number - 1}")
             alignment.segments.append((start, end))
             cursor = found + taken
-            matched += taken
-            rest, rest_positions = remaining[taken:], remaining_positions[taken:]
-            skipped = len(rest) - len(rest.lstrip(" "))
-            remaining, remaining_positions = rest[skipped:], rest_positions[skipped:]
+            done += taken
     return alignment
 
 

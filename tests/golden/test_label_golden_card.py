@@ -46,6 +46,7 @@ LINKS = {
     "emphasised": "https://www.heritage.org/report/emphasised-grid",
     "stray": "https://www.cato.org/study/stray-grid",
     "split": "https://www.aei.org/research/split-grid",
+    "typeset": "https://www.urban.org/research/typeset-grid",
 }
 
 #: The card's body with its cut unmarked: the cutter dropped "words the cutter skipped" with no `…`.
@@ -65,6 +66,13 @@ SPACED_WARRANTS = (f" {WARRANT} ", f" {WARRANT}")
 #: A body whose last two words, "leaves out.", the page holds only in its closing line: two words
 #: are too few to call the rest of the card found there.
 STRAY_BODY = (f"A second paragraph {FILLER} {{warrant}} leaves out.",)
+#: The standard card as a cutter might lay it out: a word in capitals, a word broken at a line end
+#: as a PDF copy keeps it, no space before the warrant, and the two paragraphs condensed into one
+#: with Verbatim's pilcrow between them. One paragraph holds one marked warrant, so the second
+#: paragraph's warrant is plain text here.
+TYPESET_BODY = (
+    f"PLAIN wo- rds {FILLER}{{warrant}} and more … after the cut.¶A second paragraph {FILLER} {WARRANT}.",
+)
 #: A body whose omission marker sits inside a word, with nothing of the page left out around it.
 SPLIT_BODY = (f"Plain wo…rds {FILLER} {{warrant}} and more words the cutter skipped after the cut.",)
 
@@ -95,6 +103,7 @@ def labelled_world(
                 card("emphasised", LINKS["emphasised"], emphasis=True),
                 card("stray", LINKS["stray"], STRAY_BODY),
                 card("split", LINKS["split"], SPLIT_BODY),
+                card("typeset", LINKS["typeset"], TYPESET_BODY),
             ],
         ),
     )
@@ -149,7 +158,7 @@ def test_the_coachs_underlines_and_highlights_become_snapshot_offsets(
         f"{labelled_world.case_for('marked')}: 2 segments (0 unmarked cuts), 2 underlines, 2 highlights, "
         "0 highlighted characters outside the underlining"
     ) in out
-    assert "labelled 5, not labelled 3" in out
+    assert "labelled 6, not labelled 3" in out
 
 
 def test_a_cut_the_cutter_did_not_mark_is_found_and_counted(
@@ -200,6 +209,16 @@ def test_spans_follow_the_normalizer_and_keep_no_space_at_their_edges(
     assert expected["spans"] == _expected(labelled_world, "marked")["spans"]
 
 
+def test_case_quotes_spacing_line_end_hyphens_and_pilcrows_do_not_stop_a_label(
+    labelled_world: World, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _label(labelled_world)
+
+    expected = _expected(labelled_world, "typeset")
+    assert expected["segments"] == SEGMENTS
+    assert expected["spans"] == [_span(FIRST_WARRANT, "highlight"), _span(FIRST_WARRANT, "underline")]
+
+
 def test_verbatims_emphasis_is_underlining(labelled_world: World, capsys: pytest.CaptureFixture[str]) -> None:
     _label(labelled_world)
 
@@ -217,8 +236,9 @@ def test_a_few_words_found_elsewhere_do_not_finish_a_card(
     _label(labelled_world)
 
     case_id = labelled_world.case_for("stray")
-    found = len(f"A second paragraph {FILLER} {WARRANT}")
-    whole = len(f"A second paragraph {FILLER} {WARRANT} leaves out.")
+    # Whitespace is not compared, so the counts are of the characters that are.
+    found = len(snaps.comparison_form(f"A second paragraph {FILLER} {WARRANT}"))
+    whole = len(snaps.comparison_form(f"A second paragraph {FILLER} {WARRANT} leaves out."))
     assert (
         f"{case_id}: NOT LABELLED: a stretch of the card is not in the snapshot "
         f"(stretch 1 of 1, {found} of {whole} characters found)"
@@ -248,7 +268,7 @@ def test_every_label_passes_the_operators_check_and_the_structure_test(
         golden.shutil.rmtree(labelled_world.fixtures / labelled_world.case_for(name))
 
     assert labelled_world.check() == 0
-    assert "snapshots verified: 5 of 5\nevidence reproduced: 5 of 5" in capsys.readouterr().out
+    assert "snapshots verified: 6 of 6\nevidence reproduced: 6 of 6" in capsys.readouterr().out
     for case_dir in sorted(p for p in labelled_world.fixtures.iterdir() if p.is_dir()):
         expected = json.loads((case_dir / golden.EXPECTED_NAME).read_text(encoding="utf-8"))
         assert snaps.expected_structure_problems(expected, case_dir.name) == []
@@ -305,7 +325,7 @@ def test_the_render_check_passes_on_the_renders_it_wrote(
     rendered: World, capsys: pytest.CaptureFixture[str]
 ) -> None:
     assert _label(rendered, "--render-expected", "--check") == 0
-    assert "rendered and compared 5, differ 0, not rendered 0" in capsys.readouterr().out
+    assert "rendered and compared 6, differ 0, not rendered 0" in capsys.readouterr().out
 
 
 def test_the_render_check_fails_when_a_label_changes_or_a_render_is_missing(
@@ -393,9 +413,9 @@ def test_the_review_sheet_lists_every_case_and_the_sign_off_questions(
         f"| `{marked}` | Policy | 2025-26 | think tank | Demand growth strains the marked reserve margin "
         f"| 2 | 2 | 2 | `{rendered.fixtures / marked}` |"
     ) in text
-    assert "5 cases: Policy 2, LD 0, PF 3." in text
+    assert "6 cases: Policy 2, LD 0, PF 4." in text
     assert text.endswith(f"3. {golden.REVIEW_QUESTIONS[2]}\n")
-    assert capsys.readouterr().out == "review sheet: 5 cases\n"
+    assert capsys.readouterr().out == "review sheet: 6 cases\n"
 
 
 def test_the_review_sheet_is_never_written_inside_the_repository(capsys: pytest.CaptureFixture[str]) -> None:

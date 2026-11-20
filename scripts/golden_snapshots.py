@@ -39,14 +39,25 @@ they give the team card's evidence. Both sides are compared in one form (:func:`
 
 * the team card's body as the parser copied it, put through the evidence normalizer, then each of
   the format profile's omission markers (`…`, `...`, `[…]`, `[...]`, `***`) read as a word break;
-* the snapshot's segments, each read as written, with a word break between two segments (a card
-  stores no joiner; its render shows an omission marker there);
-* in both, every whitespace gap, a space or a paragraph break, read as one space, and nothing else
-  changed: no case folding, no quote or dash folding.
+* the snapshot's segments, each read as written, one after another (a card stores no joiner; its
+  render shows an omission marker there);
+* in both, each character put through the platform's matching normalization, the one exact card
+  fingerprints use (`debate_core.evidence.fingerprints.normalize_for_matching`: NFKC, so a
+  ligature is its letters; casefold; every quotation mark one `'` or `"`; every dash `-`;
+  invisible characters removed), one character at a time, so each compared character still names
+  the snapshot character it came from;
+* and in both, three things that only lay text out are not compared: whitespace (a space, a
+  paragraph break, or a space missing between words), the pilcrow `¶` that Verbatim's condense
+  leaves where it ran a card's paragraphs together, and a hyphen that breaks a word at a line end
+  (`eco- nomic`, a letter, a hyphen and a gap), which a PDF's text keeps and a cutter's copy may
+  not, or the other way round.
 
-Paragraph breaks are not compared because a cutter routinely runs a source's paragraphs together,
-and the parser joins a card's own paragraphs with a line break, which the normalizer reads as a
-space. Every other character must be the same.
+The normalization policy keeps quote styles, dashes, case and line-end hyphens in quoted text and
+leaves matching across them to the fingerprint normalizer (`docs/evidence/normalization.md`, "What
+is deliberately not changed"); this is that matching, and it changes nothing that is stored. The
+evidence a case holds is always the snapshot's own characters at its offsets. Every letter, digit
+and other punctuation mark must be the same: a changed, added or dropped word, number or full stop
+still fails.
 
 Owned by `v1-e09-t01-golden-card-fixtures`.
 """
@@ -69,6 +80,7 @@ from typing import Any, Final
 
 from debate_core.application.snapshot_service import LoadedSnapshot, SnapshotService
 from debate_core.domain import AccessStatus, ProvenanceMode, SpanPurpose, SpanStyle
+from debate_core.evidence.fingerprints import normalize_for_matching
 from debate_core.evidence.hashing import sha256_text
 from debate_core.evidence.normalization import NORMALIZER_VERSION, normalize
 from debate_core.evidence.snapshot_text import (
@@ -91,6 +103,8 @@ __all__ = [
     "EXPECTED_FORMAT",
     "NORMALIZED_NAME",
     "RAW_NAME",
+    "WORD_BREAKS",
+    "ComparisonView",
     "FetchOutcome",
     "FetchReading",
     "SnapshotProblem",
@@ -99,6 +113,7 @@ __all__ = [
     "StoreError",
     "case_structure_problems",
     "comparison_form",
+    "comparison_view",
     "expected_structure_problems",
     "load_from_store",
     "load_recorded_snapshot",
@@ -413,13 +428,56 @@ def load_recorded_snapshot(folder: Path, record: SnapshotRecord) -> SnapshotText
 # Reproducing the evidence
 # --------------------------------------------------------------------------------------------
 
-#: The only whitespace normalized text holds (rule 6 of `evidence-normalizer-v1`).
-_GAP: Final = re.compile(r"[ \n]+")
+#: What separates words and is not compared: the only whitespace normalized text holds (rule 6 of
+#: `evidence-normalizer-v1`), and the pilcrow Verbatim's condense leaves between paragraphs.
+WORD_BREAKS: Final = frozenset(" \n\u00b6")
+#: A hyphen that, after a letter and before a word break, breaks a word at a line end.
+_LINE_END_HYPHENS: Final = frozenset("-\u2010")
+
+
+@dataclass(frozen=True)
+class ComparisonView:
+    """Text in comparison form, the snapshot (or card) position of each of its characters, and
+    where each of its words ends."""
+
+    text: str
+    positions: tuple[int, ...]
+    word_ends: tuple[int, ...]
+
+
+def comparison_view(text: str, offset: int = 0) -> ComparisonView:
+    """`text` in comparison form (module docstring), each character's position in `text` plus
+    `offset`, and the end of each word: a word ends where a word break or a line-end hyphen was."""
+    characters: list[str] = []
+    positions: list[int] = []
+    word_ends: list[int] = []
+
+    def end_word() -> None:
+        if characters and (not word_ends or word_ends[-1] != len(characters)):
+            word_ends.append(len(characters))
+
+    for index, character in enumerate(text):
+        if character in WORD_BREAKS:
+            end_word()
+            continue
+        if (
+            character in _LINE_END_HYPHENS
+            and index > 0
+            and text[index - 1].isalpha()
+            and index + 1 < len(text)
+            and text[index + 1] in WORD_BREAKS
+        ):
+            continue
+        for folded in normalize_for_matching(character):
+            characters.append(folded)
+            positions.append(index + offset)
+    end_word()
+    return ComparisonView("".join(characters), tuple(positions), tuple(word_ends))
 
 
 def comparison_form(text: str) -> str:
-    """Normalized text with every whitespace gap, a space or a paragraph break, read as one space."""
-    return _GAP.sub(" ", text).strip(" ")
+    """`text` as it is compared (module docstring); never stored, displayed or written back."""
+    return comparison_view(text).text
 
 
 def team_segments(evidence_text: str, omission_markers: Iterable[str]) -> list[str]:
@@ -432,13 +490,13 @@ def team_segments(evidence_text: str, omission_markers: Iterable[str]) -> list[s
 
 
 def team_comparison_text(evidence_text: str, omission_markers: Iterable[str]) -> str:
-    """The team card's body in comparison form: each omission marker read as a word break."""
-    return " ".join(team_segments(evidence_text, omission_markers))
+    """The team card's body in comparison form, its omission markers left out."""
+    return "".join(team_segments(evidence_text, omission_markers))
 
 
 def reproduced_text(snapshot_text: str, segments: Sequence[Sequence[int]]) -> str:
-    """The case's segments of the snapshot, in comparison form, a word break between two."""
-    return " ".join(comparison_form(snapshot_text[start:end]) for start, end in segments)
+    """The case's segments of the snapshot, in comparison form, one after another."""
+    return "".join(comparison_form(snapshot_text[start:end]) for start, end in segments)
 
 
 def reproduces(

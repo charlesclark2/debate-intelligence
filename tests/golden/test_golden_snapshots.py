@@ -50,25 +50,48 @@ from debate_core.testing.builders import readable_id  # noqa: E402
 # ------------------------------------------------------------------------------------------------
 
 
-def test_comparison_form_reads_every_whitespace_gap_as_one_space() -> None:
-    assert snaps.comparison_form("One  two\nthree\n\nfour ") == "One two three four"
+def test_comparison_form_compares_no_whitespace_and_folds_as_card_fingerprints_do() -> None:
+    assert snaps.comparison_form("One  two\nthree\n\nfour ") == "onetwothreefour"
+    # NFKC (the ligature), casefold, one single and one double quotation mark, one dash.
+    assert snaps.comparison_form("\ufb01ne GROWTH \u2018a\u2019 \u201cb\u201d c\u2013d e\u2014f") == (
+        "finegrowth'a'\"b\"c-de-f"
+    )
+    # The pilcrow Verbatim's condense leaves, and a hyphen that breaks a word at a line end.
+    assert snaps.comparison_form("end.\u00b6Next eco- nomic eco-\nnomic") == "end.nexteconomiceconomic"
+
+
+def test_a_hyphen_is_dropped_only_where_it_breaks_a_word_at_a_line_end() -> None:
+    # Inside a word, after a space or after a digit, a hyphen is punctuation and is compared.
+    assert snaps.comparison_form("well-known - 1990- x -y") == "well-known-1990-x-y"
+
+
+def test_the_comparison_view_names_each_characters_position_and_each_words_end() -> None:
+    view = snaps.comparison_view("Ab \ufb01 c-\nd", offset=10)
+
+    assert view.text == "abficd"
+    # The ligature's two letters both name it; the line-end hyphen and the gaps name nothing.
+    assert view.positions == (10, 11, 13, 13, 15, 18)
+    assert view.word_ends == (2, 4, 5, 6)
 
 
 @pytest.mark.parametrize("marker", MARKERS)
 def test_the_team_card_splits_at_each_omission_marker(marker: str) -> None:
     body = f"Before the cut {marker} after the cut.\nNext paragraph."
 
-    assert snaps.team_segments(body, MARKERS) == ["Before the cut", "after the cut. Next paragraph."]
+    assert snaps.team_segments(body, MARKERS) == [
+        snaps.comparison_form("Before the cut"),
+        snaps.comparison_form("after the cut. Next paragraph."),
+    ]
 
 
 def test_a_longer_marker_is_read_whole_not_as_the_shorter_one_inside_it() -> None:
     # "[...]" holds "...": read as "..." first, it would leave "[" and "]" in the text.
-    assert snaps.team_segments("Before [...] after.", MARKERS) == ["Before", "after."]
+    assert snaps.team_segments("Before [...] after.", MARKERS) == ["before", "after."]
 
 
 def test_the_team_card_is_put_through_the_evidence_normalizer() -> None:
     # A no-break space and a tab are whitespace gaps; a zero-width space is removed (rule 4).
-    assert snaps.team_comparison_text("One two\tthree four​five", MARKERS) == "One two three fourfive"
+    assert snaps.team_comparison_text("One two\tthree four​five", MARKERS) == "onetwothreefourfive"
 
 
 def test_segments_reproduce_the_card_across_a_cut_and_a_run_together_paragraph() -> None:
@@ -82,13 +105,31 @@ def test_segments_reproduce_the_card_across_a_cut_and_a_run_together_paragraph()
 @pytest.mark.parametrize(
     "evidence",
     [
-        "Plain “words” stay.",  # curly quotes are not folded to straight ones
-        'plain "words" stay.',  # nor is case
-        'Plain "words" stay',  # nor is a full stop dropped
+        "Plain \u201cwords\u201d stay put.",  # curly quotes
+        'PLAIN "words" stay put.',  # case
+        'Plain"words" stay\u00b6put.',  # a missing space; a pilcrow
+        'Plain "wo- rds" stay put.',  # a line-end hyphen
     ],
 )
-def test_nothing_but_whitespace_is_read_loosely(evidence: str) -> None:
-    page = 'Plain "words" stay.'
+def test_what_only_lays_text_out_is_not_compared(evidence: str) -> None:
+    page = 'Plain "words" stay put.'
+
+    assert snaps.reproduces(page, [[0, len(page)]], evidence, MARKERS)
+
+
+@pytest.mark.parametrize(
+    "evidence",
+    [
+        'Plain "words" stay put',  # a full stop dropped
+        'Plain "word" stay put.',  # a letter dropped
+        'Plain "words" stay put 2.',  # a number added
+        'Plain "words" stay, put.',  # a comma added
+        'Plain "words" stays put.',  # a word changed
+        'Plain "wo-rds" stay put.',  # a hyphen inside a word is punctuation
+    ],
+)
+def test_every_letter_digit_and_other_mark_is_compared(evidence: str) -> None:
+    page = 'Plain "words" stay put.'
 
     assert not snaps.reproduces(page, [[0, len(page)]], evidence, MARKERS)
 

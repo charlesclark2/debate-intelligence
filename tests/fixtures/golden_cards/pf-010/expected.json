@@ -1,0 +1,54 @@
+{
+  "format": "golden-card-expected/1",
+  "case_id": "pf-010",
+  "tag": "People don’t trust the government to use data",
+  "cite": {
+    "short_cite": "Raine ’18",
+    "full_cite": "Raine ’18[By Raine, ; 6-4-2018; \"How Americans have viewed government surveillance and privacy since Snowden leaks\"; Pew Research Center; https://www.pewresearch.org/short-reads/2018/06/04/how-americans-have-viewed-government-surveillance-and-privacy-since-snowden-leaks/; accessed 10-30-2025] baybay"
+  },
+  "research_need": "People don’t trust the government to use data",
+  "segments": [
+    [
+      564,
+      4999
+    ]
+  ],
+  "spans": [
+    {
+      "start": 2077,
+      "end": 2178,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 2077,
+      "end": 2178,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 3392,
+      "end": 3490,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 3392,
+      "end": 3490,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 3491,
+      "end": 3499,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 3491,
+      "end": 3499,
+      "style": "underline",
+      "purpose": null
+    }
+  ]
+}

@@ -1,0 +1,30 @@
+{
+  "case_id": "ld-009",
+  "candidate_id": "ld-1da58b9dae",
+  "event": "LD",
+  "season": "2024-25",
+  "source_type": "government",
+  "length_band": "multi-paragraph",
+  "omission_cut": true,
+  "coach_cut_and_reviewed_for_names": true,
+  "research_need": "‘Living wage’ applies to everyone. The aff doesn’t.",
+  "source_link": "https://www.ilo.org/media/520776/download",
+  "parser_version": "2026.11.03-docx-9",
+  "imported_on": "2026-11-20",
+  "snapshot": {
+    "url": "https://www.ilo.org/media/520776/download",
+    "canonical_url": "https://www.ilo.org/media/520776/download",
+    "final_url": "https://www.ilo.org/media/520776/download",
+    "fetched_on": "2026-11-20",
+    "access_status": "ACCESSIBLE",
+    "provenance_mode": "PUBLISHER_RETRIEVED",
+    "raw_sha256": "40345b770c51e2808aa8b3bfe456d06895073637a41a633c6f9b13165491079c",
+    "raw_byte_size": 166082,
+    "normalized_text_sha256": "8824586cbba96bbff41c105b6ca966c6e02fbe81be7959f9d7e0f0492e0c98f4",
+    "normalized_document_sha256": "58ee429300a5f1cc15900c1da2faf7231511278e9f2c244d40619cd0d1999bc7",
+    "normalizer_version": "evidence-normalizer-v1",
+    "extractor_version": "pypdf/pdf-layout-1+pypdf-6.21.2",
+    "content_type": "application/pdf",
+    "paragraph_count": 190
+  }
+}

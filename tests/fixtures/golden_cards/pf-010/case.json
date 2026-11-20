@@ -1,0 +1,30 @@
+{
+  "case_id": "pf-010",
+  "candidate_id": "pf-0254273109",
+  "event": "PF",
+  "season": "2025-26",
+  "source_type": "think tank",
+  "length_band": "short",
+  "omission_cut": false,
+  "coach_cut_and_reviewed_for_names": true,
+  "research_need": "People don’t trust the government to use data",
+  "source_link": "https://www.pewresearch.org/short-reads/2018/06/04/how-americans-have-viewed-government-surveillance-and-privacy-since-snowden-leaks/",
+  "parser_version": "2026.11.03-docx-9",
+  "imported_on": "2026-11-20",
+  "snapshot": {
+    "url": "https://www.pewresearch.org/short-reads/2018/06/04/how-americans-have-viewed-government-surveillance-and-privacy-since-snowden-leaks/",
+    "canonical_url": "https://www.pewresearch.org/short-reads/2018/06/04/how-americans-have-viewed-government-surveillance-and-privacy-since-snowden-leaks/",
+    "final_url": "https://www.pewresearch.org/short-reads/2018/06/04/how-americans-have-viewed-government-surveillance-and-privacy-since-snowden-leaks/",
+    "fetched_on": "2026-11-20",
+    "access_status": "ACCESSIBLE",
+    "provenance_mode": "PUBLISHER_RETRIEVED",
+    "raw_sha256": "3ee4121ca338ef87cd7f7734689705ea32d19e50d6617f115ea20e112f5af726",
+    "raw_byte_size": 367134,
+    "normalized_text_sha256": "17bb9db39b437d3e19809ec180794769bc1af723796174a7132764712df07623",
+    "normalized_document_sha256": "9531f0871e16e653e8f20f26ce89eeca4a7011c1c99525f15f652e8f607c0450",
+    "normalizer_version": "evidence-normalizer-v1",
+    "extractor_version": "trafilatura/html-1+trafilatura-2.3.1+readability-lxml-0.9+lxml-6.1.3",
+    "content_type": "text/html; charset=UTF-8",
+    "paragraph_count": 15
+  }
+}

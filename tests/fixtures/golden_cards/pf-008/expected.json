@@ -1,0 +1,254 @@
+{
+  "format": "golden-card-expected/1",
+  "case_id": "pf-008",
+  "tag": "Unfortunately, perception of US support kills Taiwanesne self-defense - politicians use US presence to justify other spending",
+  "cite": {
+    "short_cite": null,
+    "full_cite": "Tom Rogan, 8-29-2024 No, Taiwan isn’t spending enough on defense, https://www.washingtonexaminer.com/opinion/beltway-confidential/3135300/no-taiwan-isnt-spending-enough-defense/ //wenzhuo"
+  },
+  "research_need": "Unfortunately, perception of US support kills Taiwanesne self-defense - politicians use US presence to justify other spending",
+  "segments": [
+    [
+      2672,
+      3973
+    ],
+    [
+      3976,
+      4123
+    ],
+    [
+      4126,
+      7489
+    ]
+  ],
+  "spans": [
+    {
+      "start": 2767,
+      "end": 2804,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 2805,
+      "end": 2830,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 2831,
+      "end": 2889,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 3609,
+      "end": 3615,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 3609,
+      "end": 3626,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 3627,
+      "end": 3631,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 3627,
+      "end": 3631,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 3632,
+      "end": 3652,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 5815,
+      "end": 5817,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 5818,
+      "end": 5857,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 5858,
+      "end": 5887,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 5888,
+      "end": 5928,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 5929,
+      "end": 5937,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 5929,
+      "end": 5961,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 5962,
+      "end": 5988,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 5962,
+      "end": 5988,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 5990,
+      "end": 6009,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 6010,
+      "end": 6028,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 6029,
+      "end": 6054,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 6073,
+      "end": 6127,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 6470,
+      "end": 6504,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 6967,
+      "end": 6973,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 6967,
+      "end": 6973,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 7065,
+      "end": 7076,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 7077,
+      "end": 7084,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 7077,
+      "end": 7084,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 7085,
+      "end": 7090,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 7091,
+      "end": 7140,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 7091,
+      "end": 7192,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 7194,
+      "end": 7198,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 7199,
+      "end": 7206,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 7199,
+      "end": 7235,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 7236,
+      "end": 7249,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 7250,
+      "end": 7285,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 7250,
+      "end": 7311,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 7312,
+      "end": 7324,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 7325,
+      "end": 7335,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 7325,
+      "end": 7377,
+      "style": "underline",
+      "purpose": null
+    }
+  ]
+}

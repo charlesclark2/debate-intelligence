@@ -1,0 +1,570 @@
+{
+  "format": "golden-card-expected/1",
+  "case_id": "policy-011",
+  "tag": "Fundamentals check and their causality is empirically wrong.",
+  "cite": {
+    "short_cite": null,
+    "full_cite": "Sam Boughedda, 2026 – market reporter for Investing.com and StreetInsider who has extensive experience covering US equity markets. “Would a stock market crash trigger a global recession? Here’s what CE says” Yahoo Finance, 2/11, https://finance.yahoo.com/news/stock-market-crash-trigger-global-140713814.html"
+  },
+  "research_need": "Fundamentals check and their causality is empirically wrong.",
+  "segments": [
+    [
+      17,
+      1876
+    ]
+  ],
+  "spans": [
+    {
+      "start": 19,
+      "end": 24,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 25,
+      "end": 37,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 25,
+      "end": 37,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 38,
+      "end": 48,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 38,
+      "end": 48,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 81,
+      "end": 89,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 81,
+      "end": 89,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 90,
+      "end": 92,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 90,
+      "end": 92,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 93,
+      "end": 100,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 93,
+      "end": 112,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 113,
+      "end": 122,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 113,
+      "end": 122,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 271,
+      "end": 283,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 284,
+      "end": 297,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 298,
+      "end": 314,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 315,
+      "end": 348,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 349,
+      "end": 358,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 349,
+      "end": 365,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 366,
+      "end": 372,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 373,
+      "end": 382,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 373,
+      "end": 386,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 387,
+      "end": 394,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 387,
+      "end": 394,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 395,
+      "end": 397,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 395,
+      "end": 397,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 398,
+      "end": 405,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 398,
+      "end": 421,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 422,
+      "end": 431,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 566,
+      "end": 574,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 575,
+      "end": 603,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 604,
+      "end": 612,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 613,
+      "end": 654,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 655,
+      "end": 686,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 858,
+      "end": 860,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 861,
+      "end": 866,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 863,
+      "end": 865,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 867,
+      "end": 871,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 869,
+      "end": 871,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 872,
+      "end": 875,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 872,
+      "end": 875,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 876,
+      "end": 898,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 878,
+      "end": 880,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 899,
+      "end": 902,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 899,
+      "end": 920,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 904,
+      "end": 911,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 921,
+      "end": 927,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 921,
+      "end": 927,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 928,
+      "end": 935,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 928,
+      "end": 939,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 940,
+      "end": 948,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 940,
+      "end": 952,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 953,
+      "end": 959,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 953,
+      "end": 980,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 981,
+      "end": 988,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 989,
+      "end": 992,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 989,
+      "end": 995,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 996,
+      "end": 1018,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 996,
+      "end": 1018,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 1019,
+      "end": 1026,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 1555,
+      "end": 1572,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 1573,
+      "end": 1584,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 1585,
+      "end": 1595,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 1596,
+      "end": 1685,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 1686,
+      "end": 1690,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 1686,
+      "end": 1692,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 1693,
+      "end": 1742,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 1703,
+      "end": 1724,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 1726,
+      "end": 1740,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 1743,
+      "end": 1752,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 1743,
+      "end": 1755,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 1756,
+      "end": 1767,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 1768,
+      "end": 1777,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 1768,
+      "end": 1777,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 1778,
+      "end": 1784,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 1778,
+      "end": 1784,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 1785,
+      "end": 1792,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 1785,
+      "end": 1792,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 1793,
+      "end": 1799,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 1793,
+      "end": 1799,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 1800,
+      "end": 1810,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 1800,
+      "end": 1810,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 1811,
+      "end": 1819,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 1811,
+      "end": 1824,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 1825,
+      "end": 1832,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 1825,
+      "end": 1839,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 1840,
+      "end": 1843,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 1840,
+      "end": 1848,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 1849,
+      "end": 1858,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 1849,
+      "end": 1867,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 1868,
+      "end": 1875,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 1868,
+      "end": 1876,
+      "style": "underline",
+      "purpose": null
+    }
+  ]
+}

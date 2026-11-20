@@ -1,0 +1,30 @@
+{
+  "case_id": "ld-017",
+  "candidate_id": "ld-0ae640c5fc",
+  "event": "LD",
+  "season": "2024-25",
+  "source_type": "think tank",
+  "length_band": "multi-paragraph",
+  "omission_cut": true,
+  "coach_cut_and_reviewed_for_names": true,
+  "research_need": "Successful invasion causes extinction from a litany of crises. ",
+  "source_link": "https://www.taipeitimes.com/News/feat/archives/2023/07/14/2003803158",
+  "parser_version": "2026.11.03-docx-9",
+  "imported_on": "2026-11-20",
+  "snapshot": {
+    "url": "https://www.taipeitimes.com/News/feat/archives/2023/07/14/2003803158",
+    "canonical_url": "https://www.taipeitimes.com/News/feat/archives/2023/07/14/2003803158",
+    "final_url": "https://www.taipeitimes.com/News/feat/archives/2023/07/14/2003803158",
+    "fetched_on": "2026-11-20",
+    "access_status": "ACCESSIBLE",
+    "provenance_mode": "PUBLISHER_RETRIEVED",
+    "raw_sha256": "706462f684691eb0007832f2f1282ae29324f017f090c2e2ed8ebc15e81e2fb2",
+    "raw_byte_size": 60473,
+    "normalized_text_sha256": "5e2cc8bcd3a30b5609a1174ee5c65564322e4320dde28b6c572803dfde1eedfd",
+    "normalized_document_sha256": "d78e7c4453cb5d024bff62cfa26ade74175863801deeb3c47f28c5bc8b73496d",
+    "normalizer_version": "evidence-normalizer-v1",
+    "extractor_version": "trafilatura/html-1+trafilatura-2.3.1+readability-lxml-0.9+lxml-6.1.3",
+    "content_type": "text/html; charset=UTF-8",
+    "paragraph_count": 58
+  }
+}

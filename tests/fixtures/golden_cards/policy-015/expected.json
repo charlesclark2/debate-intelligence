@@ -1,0 +1,312 @@
+{
+  "format": "golden-card-expected/1",
+  "case_id": "policy-015",
+  "tag": "Safeguards are empirically ineffective",
+  "cite": {
+    "short_cite": "Blase 26",
+    "full_cite": "Blase 26, President of Paragon Health Institute (Brian Blase, PhD, 6-24-2026, \"Protecting Patients and Taxpayers: Combating Healthcare Fraud and Leakage to Strengthen Program Integrity\" Written Testimony in front of the United States Congress Joint Economic Committee https://paragoninstitute.org/private-health/protecting-patients-and-taxpayers-combating-healthcare-fraud-and-leakage-to-strengthen-program-integrity/) wtk"
+  },
+  "research_need": "Safeguards are empirically ineffective",
+  "segments": [
+    [
+      15566,
+      17350
+    ]
+  ],
+  "spans": [
+    {
+      "start": 15566,
+      "end": 15635,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 15669,
+      "end": 15704,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 15856,
+      "end": 15873,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 15957,
+      "end": 15998,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 16033,
+      "end": 16036,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 16033,
+      "end": 16036,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 16071,
+      "end": 16074,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 16071,
+      "end": 16074,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 16080,
+      "end": 16131,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 16080,
+      "end": 16140,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 16141,
+      "end": 16147,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 16141,
+      "end": 16156,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 16157,
+      "end": 16199,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 16157,
+      "end": 16199,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 16200,
+      "end": 16247,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 16200,
+      "end": 16247,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 16248,
+      "end": 16273,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 16248,
+      "end": 16273,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 16274,
+      "end": 16281,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 16274,
+      "end": 16281,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 16282,
+      "end": 16315,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 16296,
+      "end": 16315,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 16376,
+      "end": 16415,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 16376,
+      "end": 16415,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 16416,
+      "end": 16444,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 16416,
+      "end": 16444,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 16445,
+      "end": 16450,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 16445,
+      "end": 16450,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 16459,
+      "end": 16461,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 16459,
+      "end": 16461,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 16462,
+      "end": 16485,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 16462,
+      "end": 16485,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 16486,
+      "end": 16488,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 16496,
+      "end": 16502,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 16518,
+      "end": 16687,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 16777,
+      "end": 16853,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 16777,
+      "end": 16853,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 16854,
+      "end": 16920,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 16854,
+      "end": 16920,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 16923,
+      "end": 16951,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 16923,
+      "end": 16964,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 16965,
+      "end": 17022,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 16965,
+      "end": 17033,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 17034,
+      "end": 17043,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 17034,
+      "end": 17043,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 17289,
+      "end": 17299,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 17289,
+      "end": 17334,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 17335,
+      "end": 17350,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 17335,
+      "end": 17350,
+      "style": "underline",
+      "purpose": null
+    }
+  ]
+}

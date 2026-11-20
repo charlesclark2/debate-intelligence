@@ -1,0 +1,30 @@
+{
+  "case_id": "pf-004",
+  "candidate_id": "pf-0039c9bd7b",
+  "event": "PF",
+  "season": "2025-26",
+  "source_type": "think tank",
+  "length_band": "multi-paragraph",
+  "omission_cut": true,
+  "coach_cut_and_reviewed_for_names": true,
+  "research_need": "China’s investment of Africa consistently traps countries in debt, causing financial troubles and widespread instability. ",
+  "source_link": "https://www.wilsoncenter.org/blog-post/debt-distress-road-belt-and-road",
+  "parser_version": "2026.11.03-docx-9",
+  "imported_on": "2026-11-19",
+  "snapshot": {
+    "url": "https://www.wilsoncenter.org/blog-post/debt-distress-road-belt-and-road",
+    "canonical_url": "https://www.wilsoncenter.org/blog-post/debt-distress-road-belt-and-road",
+    "final_url": "https://www.wilsoncenter.org/blog-post/debt-distress-road-belt-and-road",
+    "fetched_on": "2026-11-20",
+    "access_status": "ACCESSIBLE",
+    "provenance_mode": "PUBLISHER_RETRIEVED",
+    "raw_sha256": "9fab8967ce63d78aad05e90cdb2781862b67b47b10d51c48e3e028a4545f37a4",
+    "raw_byte_size": 84862,
+    "normalized_text_sha256": "d79edb8cde1c5b68acbb2f3b45267e3b3b07433b18f203cbc9224fbc1968706a",
+    "normalized_document_sha256": "2f673ee9f0596364b4dde2f3bd121bcc77d8e485df72b8178a720766ea8ceb35",
+    "normalizer_version": "evidence-normalizer-v1",
+    "extractor_version": "trafilatura/html-1+trafilatura-2.3.1+readability-lxml-0.9+lxml-6.1.3",
+    "content_type": "text/html; charset=UTF-8",
+    "paragraph_count": 11
+  }
+}

@@ -1,0 +1,252 @@
+{
+  "format": "golden-card-expected/1",
+  "case_id": "ld-013",
+  "tag": "Helium 3 provides key REEs and renewable energy back on earth.",
+  "cite": {
+    "short_cite": null,
+    "full_cite": "Kaleigh Harrison Environmental writer says 2025 [contributing writer with Environment Energy Leader, “Mining the Moon: Helium-3 and the Future of Fusion Power ,” E+ELeader, 1/16/26, https://www.environmentenergyleader.com/stories/mining-the-moon-helium-3-and-the-future-of-fusion-power,111846, DOA: 7/28]"
+  },
+  "research_need": "Helium 3 provides key REEs and renewable energy back on earth.",
+  "segments": [
+    [
+      1067,
+      2685
+    ]
+  ],
+  "spans": [
+    {
+      "start": 1067,
+      "end": 1076,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 1067,
+      "end": 1077,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 1078,
+      "end": 1092,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 1078,
+      "end": 1103,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 1104,
+      "end": 1121,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 1104,
+      "end": 1125,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 1126,
+      "end": 1134,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 1126,
+      "end": 1134,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 1135,
+      "end": 1153,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 1135,
+      "end": 1153,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 1154,
+      "end": 1161,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 1154,
+      "end": 1180,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 1181,
+      "end": 1198,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 1181,
+      "end": 1251,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 1292,
+      "end": 1342,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 1343,
+      "end": 1348,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 1343,
+      "end": 1354,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 1355,
+      "end": 1382,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 1355,
+      "end": 1383,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 1698,
+      "end": 1741,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 1742,
+      "end": 1750,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 1742,
+      "end": 1756,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 1757,
+      "end": 1765,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 1757,
+      "end": 1779,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 1780,
+      "end": 1857,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 1780,
+      "end": 1857,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 1882,
+      "end": 1924,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 1925,
+      "end": 1951,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 1925,
+      "end": 1957,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 1958,
+      "end": 1962,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 1958,
+      "end": 1972,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 1973,
+      "end": 1984,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 1973,
+      "end": 2069,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 2375,
+      "end": 2383,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 2375,
+      "end": 2386,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 2387,
+      "end": 2393,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 2387,
+      "end": 2395,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 2396,
+      "end": 2496,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 2396,
+      "end": 2496,
+      "style": "underline",
+      "purpose": null
+    }
+  ]
+}

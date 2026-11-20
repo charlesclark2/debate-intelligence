@@ -1,0 +1,678 @@
+{
+  "format": "golden-card-expected/1",
+  "case_id": "pf-014",
+  "tag": "China needs absolute certainty and will indefinitely delay invasion",
+  "cite": {
+    "short_cite": "Ford 22",
+    "full_cite": "Ford 22 [Christopher Ford: Distinguished Policy Advisor at MITRE Labs, and a Visiting Fellow at Stanford University’s Hoover Institution. February 2022, “Defending Taiwan: Defense and Deterrence”, National Institute for Public Policy, https://nipp.org/wp-content/uploads/2022/02/Vol.-2-No.-2-Ford.pdf  .//. DOA: 10/31/24]"
+  },
+  "research_need": "China needs absolute certainty and will indefinitely delay invasion",
+  "segments": [
+    [
+      124605,
+      124983
+    ],
+    [
+      125006,
+      125391
+    ],
+    [
+      125394,
+      126862
+    ],
+    [
+      127077,
+      128642
+    ]
+  ],
+  "spans": [
+    {
+      "start": 124676,
+      "end": 124681,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 124676,
+      "end": 124681,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 124682,
+      "end": 124693,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 124694,
+      "end": 124719,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 124694,
+      "end": 124719,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 124720,
+      "end": 124731,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 124725,
+      "end": 124731,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 124732,
+      "end": 124752,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 124753,
+      "end": 124771,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 124753,
+      "end": 124771,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 124772,
+      "end": 124804,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 125019,
+      "end": 125053,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 125054,
+      "end": 125075,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 125054,
+      "end": 125075,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 125076,
+      "end": 125094,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 125566,
+      "end": 125569,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 125570,
+      "end": 125573,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 125570,
+      "end": 125573,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 125574,
+      "end": 125682,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 125683,
+      "end": 125697,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 125683,
+      "end": 125697,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 125698,
+      "end": 125701,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 125702,
+      "end": 125708,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 125702,
+      "end": 125708,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 125709,
+      "end": 125715,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 125716,
+      "end": 125719,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 125716,
+      "end": 125719,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 125720,
+      "end": 125722,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 125723,
+      "end": 125728,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 125723,
+      "end": 125728,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 125729,
+      "end": 125733,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 125734,
+      "end": 125754,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 125734,
+      "end": 125754,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 125755,
+      "end": 125763,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 125764,
+      "end": 125795,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 125764,
+      "end": 125796,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 125983,
+      "end": 125988,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 125989,
+      "end": 125992,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 125989,
+      "end": 125992,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 125993,
+      "end": 126008,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 126009,
+      "end": 126015,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 126009,
+      "end": 126015,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 126016,
+      "end": 126022,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 126023,
+      "end": 126041,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 126023,
+      "end": 126041,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 126042,
+      "end": 126072,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 126073,
+      "end": 126081,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 126073,
+      "end": 126081,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 126082,
+      "end": 126143,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 126144,
+      "end": 126157,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 126144,
+      "end": 126157,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 126158,
+      "end": 126163,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 126164,
+      "end": 126181,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 126164,
+      "end": 126181,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 126182,
+      "end": 126190,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 127236,
+      "end": 127237,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 127238,
+      "end": 127263,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 127238,
+      "end": 127263,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 127264,
+      "end": 127272,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 127273,
+      "end": 127274,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 127273,
+      "end": 127279,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 127280,
+      "end": 127281,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 127280,
+      "end": 127323,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 127324,
+      "end": 127339,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 127324,
+      "end": 127339,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 127340,
+      "end": 127351,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 127382,
+      "end": 127468,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 127469,
+      "end": 127500,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 127469,
+      "end": 127500,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 127501,
+      "end": 127532,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 127533,
+      "end": 127541,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 127533,
+      "end": 127616,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 127703,
+      "end": 127705,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 127706,
+      "end": 127722,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 127706,
+      "end": 127722,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 127723,
+      "end": 127727,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 127728,
+      "end": 127759,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 127728,
+      "end": 127759,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 127760,
+      "end": 127780,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 127815,
+      "end": 127892,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 127893,
+      "end": 127907,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 127893,
+      "end": 127907,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 127908,
+      "end": 127926,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 127913,
+      "end": 127926,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 127927,
+      "end": 127964,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 127965,
+      "end": 127972,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 127965,
+      "end": 127972,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 127973,
+      "end": 127990,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 127991,
+      "end": 127994,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 127991,
+      "end": 127994,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 127995,
+      "end": 128015,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 128016,
+      "end": 128021,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 128016,
+      "end": 128021,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 128022,
+      "end": 128038,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 128039,
+      "end": 128044,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 128039,
+      "end": 128057,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 128058,
+      "end": 128089,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 128058,
+      "end": 128094,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 128095,
+      "end": 128096,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 128095,
+      "end": 128112,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 128113,
+      "end": 128118,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 128113,
+      "end": 128118,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 128119,
+      "end": 128135,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 128136,
+      "end": 128142,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 128136,
+      "end": 128142,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 128143,
+      "end": 128203,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 128187,
+      "end": 128202,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 128528,
+      "end": 128642,
+      "style": "underline",
+      "purpose": null
+    }
+  ]
+}

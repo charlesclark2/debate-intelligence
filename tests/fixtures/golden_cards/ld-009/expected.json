@@ -1,0 +1,484 @@
+{
+  "format": "golden-card-expected/1",
+  "case_id": "ld-009",
+  "tag": "‘Living wage’ applies to everyone. The aff doesn’t.",
+  "cite": {
+    "short_cite": "ILO ’24",
+    "full_cite": "ILO ’24 [International Labor Organization, including Patrick Oakford, the Principal Deputy Assistant Secretary of Labor for Policy of the United States AND Basel Saleh, the Chief International Economist from the US Department of Labor; “February 19-23; “Meeting of experts on wage policies, including living wages,” https://www.ilo.org/media/520776/download] brett"
+  },
+  "research_need": "‘Living wage’ applies to everyone. The aff doesn’t.",
+  "segments": [
+    [
+      12332,
+      12874
+    ],
+    [
+      12894,
+      12987
+    ],
+    [
+      12990,
+      13967
+    ],
+    [
+      13968,
+      14106
+    ],
+    [
+      14107,
+      14593
+    ]
+  ],
+  "spans": [
+    {
+      "start": 12335,
+      "end": 12351,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 12352,
+      "end": 12368,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 12373,
+      "end": 12376,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 12377,
+      "end": 12401,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 12403,
+      "end": 12406,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 12438,
+      "end": 12441,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 12442,
+      "end": 12479,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 12481,
+      "end": 12485,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 12488,
+      "end": 12523,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 12524,
+      "end": 12527,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 12524,
+      "end": 12527,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 12528,
+      "end": 12539,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 12528,
+      "end": 12539,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 12540,
+      "end": 12542,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 12540,
+      "end": 12542,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 12570,
+      "end": 12582,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 12583,
+      "end": 12617,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 12618,
+      "end": 12629,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 12651,
+      "end": 12670,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 12675,
+      "end": 12697,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 12902,
+      "end": 12922,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 12923,
+      "end": 12943,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 12944,
+      "end": 12971,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 13223,
+      "end": 13239,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 13223,
+      "end": 13239,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 13254,
+      "end": 13266,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 13254,
+      "end": 13270,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 13271,
+      "end": 13272,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 13286,
+      "end": 13287,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 13298,
+      "end": 13299,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 13308,
+      "end": 13309,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 13319,
+      "end": 13320,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 13328,
+      "end": 13329,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 13336,
+      "end": 13348,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 13336,
+      "end": 13348,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 13350,
+      "end": 13369,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 13350,
+      "end": 13369,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 13371,
+      "end": 13384,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 13371,
+      "end": 13384,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 13385,
+      "end": 13402,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 13385,
+      "end": 13402,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 13403,
+      "end": 13405,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 13403,
+      "end": 13422,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 13423,
+      "end": 13431,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 13423,
+      "end": 13431,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 13432,
+      "end": 13442,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 13432,
+      "end": 13456,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 13457,
+      "end": 13461,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 13457,
+      "end": 13461,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 13463,
+      "end": 13475,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 13496,
+      "end": 13510,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 13511,
+      "end": 13525,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 13511,
+      "end": 13525,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 13526,
+      "end": 13537,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 13526,
+      "end": 13537,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 13553,
+      "end": 13557,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 13562,
+      "end": 13574,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 13562,
+      "end": 13574,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 13575,
+      "end": 13621,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 13784,
+      "end": 13891,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 13968,
+      "end": 13980,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 13990,
+      "end": 14014,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 14024,
+      "end": 14027,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 14037,
+      "end": 14047,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 14440,
+      "end": 14455,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 14457,
+      "end": 14470,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 14457,
+      "end": 14470,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 14477,
+      "end": 14481,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 14483,
+      "end": 14489,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 14483,
+      "end": 14489,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 14491,
+      "end": 14510,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 14512,
+      "end": 14535,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 14537,
+      "end": 14551,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 14552,
+      "end": 14564,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 14565,
+      "end": 14592,
+      "style": "underline",
+      "purpose": null
+    }
+  ]
+}

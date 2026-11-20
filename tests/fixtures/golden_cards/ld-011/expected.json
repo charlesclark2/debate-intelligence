@@ -1,0 +1,240 @@
+{
+  "format": "golden-card-expected/1",
+  "case_id": "ld-011",
+  "tag": "Judicial independence high now.",
+  "cite": {
+    "short_cite": null,
+    "full_cite": "Mcginniss 8-12-24 [Michael S. Mcginniss, \"Declaring Independence To Secure Integrity: The Supreme Court Justices' Code Of Conduct,\" No Publication, 8-12-2024, https://fedsoc.org/fedsoc-review/declaring-independence-to-secure-integrity-the-supreme-court-justices-code-of-conduct, Bittner]"
+  },
+  "research_need": "Judicial independence high now.",
+  "segments": [
+    [
+      484,
+      3337
+    ]
+  ],
+  "spans": [
+    {
+      "start": 498,
+      "end": 529,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 530,
+      "end": 556,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 530,
+      "end": 631,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 634,
+      "end": 659,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 634,
+      "end": 659,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 697,
+      "end": 770,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 774,
+      "end": 809,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 810,
+      "end": 1008,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 1224,
+      "end": 1265,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 1266,
+      "end": 1292,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 1266,
+      "end": 1294,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 1295,
+      "end": 1330,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 1295,
+      "end": 1330,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 1331,
+      "end": 1355,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 1335,
+      "end": 1355,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 1356,
+      "end": 1358,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 1356,
+      "end": 1362,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 1363,
+      "end": 1370,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 1363,
+      "end": 1381,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 1382,
+      "end": 1415,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 1382,
+      "end": 1432,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 1433,
+      "end": 1445,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 1433,
+      "end": 1513,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 1808,
+      "end": 1847,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 1814,
+      "end": 1847,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 1848,
+      "end": 1892,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 1862,
+      "end": 1892,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 1893,
+      "end": 1912,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 1898,
+      "end": 1912,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 1913,
+      "end": 1943,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 1931,
+      "end": 1943,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 1944,
+      "end": 1972,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 1951,
+      "end": 1972,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 1973,
+      "end": 2004,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 1980,
+      "end": 2004,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 2010,
+      "end": 2265,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 3133,
+      "end": 3318,
+      "style": "underline",
+      "purpose": null
+    }
+  ]
+}

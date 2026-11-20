@@ -1,0 +1,180 @@
+{
+  "format": "golden-card-expected/1",
+  "case_id": "policy-014",
+  "tag": "Tens of thousands of people die every year due to coverage gaps in healthcare",
+  "cite": {
+    "short_cite": null,
+    "full_cite": "Jackson Diianni, 2024 -  is a freelance writer who has published political essays in Salon.com, as well as cultural criticism in Passion of the Weiss and Culture Catch \"Single-Payer Healthcare Would Save Money and Lives\" Common Dreams, 3/26, https://www.commondreams.org/opinion/single-payer-save-money-lives"
+  },
+  "research_need": "Tens of thousands of people die every year due to coverage gaps in healthcare",
+  "segments": [
+    [
+      2527,
+      5035
+    ]
+  ],
+  "spans": [
+    {
+      "start": 2664,
+      "end": 2707,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 2709,
+      "end": 2758,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 2709,
+      "end": 2773,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 2782,
+      "end": 2802,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 2782,
+      "end": 2802,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 2803,
+      "end": 2862,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 2803,
+      "end": 2862,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 2876,
+      "end": 2947,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 3169,
+      "end": 3232,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 3169,
+      "end": 3235,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 3236,
+      "end": 3260,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 3236,
+      "end": 3260,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 4392,
+      "end": 4416,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 4417,
+      "end": 4492,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 4417,
+      "end": 4492,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 4561,
+      "end": 4615,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 4561,
+      "end": 4615,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 4668,
+      "end": 4704,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 4668,
+      "end": 4706,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 4707,
+      "end": 4719,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 4707,
+      "end": 4727,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 4728,
+      "end": 4739,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 4728,
+      "end": 4774,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 4775,
+      "end": 4779,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 4775,
+      "end": 4779,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 4780,
+      "end": 4815,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 4780,
+      "end": 4815,
+      "style": "underline",
+      "purpose": null
+    }
+  ]
+}

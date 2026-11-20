@@ -1,0 +1,30 @@
+{
+  "case_id": "policy-011",
+  "candidate_id": "policy-1da9ac11d8",
+  "event": "Policy",
+  "season": "2026-27",
+  "source_type": "news",
+  "length_band": "multi-paragraph",
+  "omission_cut": false,
+  "coach_cut_and_reviewed_for_names": true,
+  "research_need": "Fundamentals check and their causality is empirically wrong.",
+  "source_link": "https://finance.yahoo.com/news/stock-market-crash-trigger-global-140713814.html",
+  "parser_version": "2026.11.03-docx-9",
+  "imported_on": "2026-11-20",
+  "snapshot": {
+    "url": "https://finance.yahoo.com/news/stock-market-crash-trigger-global-140713814.html",
+    "canonical_url": "https://finance.yahoo.com/news/stock-market-crash-trigger-global-140713814.html",
+    "final_url": "https://finance.yahoo.com/news/stock-market-crash-trigger-global-140713814.html",
+    "fetched_on": "2026-11-20",
+    "access_status": "ACCESSIBLE",
+    "provenance_mode": "PUBLISHER_RETRIEVED",
+    "raw_sha256": "65241e71fc2004b80aecfdacd731d379f2e2a81b8c64ebd7126e2f525ec0a342",
+    "raw_byte_size": 1028413,
+    "normalized_text_sha256": "96b236474fbdabfe8e83a02943ee93b2235e4e276ccb548a3dfa4d0c9a47dc16",
+    "normalized_document_sha256": "90b00ba24d94ad9d1103d0e6f4a3aec70de2e5eb5082a0fb109f64b868789d61",
+    "normalizer_version": "evidence-normalizer-v1",
+    "extractor_version": "trafilatura/html-1+trafilatura-2.3.1+readability-lxml-0.9+lxml-6.1.3",
+    "content_type": "text/html; charset=utf-8",
+    "paragraph_count": 10
+  }
+}

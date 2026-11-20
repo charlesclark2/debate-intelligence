@@ -1,0 +1,220 @@
+{
+  "format": "golden-card-expected/1",
+  "case_id": "ld-015",
+  "tag": "Single payer lowers pharma prices",
+  "cite": {
+    "short_cite": "O’Neal, 17",
+    "full_cite": "O’Neal, 17-- Lydia O'Neal, writer, 6-19-2017, \"How To Stop Drug Prices From Rising? New Study Points To Single-Payer Health Care System,\" International Business Times, http://www.ibtimes.com/political-capital/how-stop-drug-prices-rising-new-study-points-single-payer-health-care-system,"
+  },
+  "research_need": "Single payer lowers pharma prices",
+  "segments": [
+    [
+      0,
+      1103
+    ],
+    [
+      1105,
+      1377
+    ]
+  ],
+  "spans": [
+    {
+      "start": 105,
+      "end": 122,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 105,
+      "end": 137,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 138,
+      "end": 145,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 138,
+      "end": 145,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 161,
+      "end": 164,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 161,
+      "end": 164,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 169,
+      "end": 170,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 169,
+      "end": 170,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 183,
+      "end": 184,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 183,
+      "end": 184,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 191,
+      "end": 192,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 191,
+      "end": 192,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 201,
+      "end": 233,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 201,
+      "end": 241,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 246,
+      "end": 266,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 246,
+      "end": 266,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 275,
+      "end": 281,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 275,
+      "end": 281,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 654,
+      "end": 699,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 654,
+      "end": 699,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 752,
+      "end": 772,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 752,
+      "end": 772,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 783,
+      "end": 844,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 783,
+      "end": 852,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 853,
+      "end": 867,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 853,
+      "end": 867,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 872,
+      "end": 897,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 872,
+      "end": 897,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 907,
+      "end": 964,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 907,
+      "end": 964,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 1002,
+      "end": 1010,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 1016,
+      "end": 1057,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 1105,
+      "end": 1145,
+      "style": "underline",
+      "purpose": null
+    }
+  ]
+}

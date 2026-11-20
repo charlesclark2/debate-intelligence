@@ -1,0 +1,30 @@
+{
+  "case_id": "ld-007",
+  "candidate_id": "ld-0062377a70",
+  "event": "LD",
+  "season": "2026-27",
+  "source_type": "think tank",
+  "length_band": "short",
+  "omission_cut": false,
+  "coach_cut_and_reviewed_for_names": true,
+  "research_need": "Colonization risks causing suffering for extraterrestrial sentient life.",
+  "source_link": "https://pdf.stafforini.com/kovic-2021-risks-space-colonization.pdf",
+  "parser_version": "2026.11.03-docx-9",
+  "imported_on": "2026-11-19",
+  "snapshot": {
+    "url": "https://pdf.stafforini.com/kovic-2021-risks-space-colonization.pdf",
+    "canonical_url": "https://pdf.stafforini.com/kovic-2021-risks-space-colonization.pdf",
+    "final_url": "https://pdf.stafforini.com/kovic-2021-risks-space-colonization.pdf",
+    "fetched_on": "2026-11-20",
+    "access_status": "ACCESSIBLE",
+    "provenance_mode": "PUBLISHER_RETRIEVED",
+    "raw_sha256": "5b5c8115add834a1dd4797d3e82db6996c80c748ab5819c775846f9303abcc83",
+    "raw_byte_size": 196533,
+    "normalized_text_sha256": "83508274464bcfa1cd17fd611d10f85bf2706087e657a60efdabcaa2332e2ef3",
+    "normalized_document_sha256": "296dfa6a3a78e2825871c0962d5193eaecd960eff246e082cc8e89a9f15e4b00",
+    "normalizer_version": "evidence-normalizer-v1",
+    "extractor_version": "pypdf/pdf-layout-1+pypdf-6.21.2",
+    "content_type": "application/pdf",
+    "paragraph_count": 193
+  }
+}

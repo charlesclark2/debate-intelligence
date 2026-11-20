@@ -1,0 +1,130 @@
+{
+  "format": "golden-card-expected/1",
+  "case_id": "pf-001",
+  "tag": "3. T: Without commitments to Taiwan, the US can strengthen allied commitments",
+  "cite": {
+    "short_cite": "Sher 22",
+    "full_cite": "Sher 22 (Nathaniel Sher, research analyst at the Carnegie Endowment for International Peace. He completed master's degrees from Tsinghua University and the University of Chicago. His work has been published in Foreign Policy, The Wire China, and The Tsinghua International Relations Review. 4 May 2022, “The real lesson of the war in Ukraine for Taiwan”, Responsible Statecraft, https://responsiblestatecraft.org/2022/05/04/the-real-lesson-of-the-war-in-ukraine-for-taiwan/, DOA 11/4/2024)"
+  },
+  "research_need": "3. T: Without commitments to Taiwan, the US can strengthen allied commitments",
+  "segments": [
+    [
+      4167,
+      4701
+    ],
+    [
+      4705,
+      7601
+    ]
+  ],
+  "spans": [
+    {
+      "start": 4324,
+      "end": 4444,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 4625,
+      "end": 4630,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 4947,
+      "end": 4958,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 5018,
+      "end": 5035,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 5091,
+      "end": 5345,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 5091,
+      "end": 5345,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 5692,
+      "end": 5703,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 5742,
+      "end": 5750,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 5787,
+      "end": 5910,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 5922,
+      "end": 5930,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 6208,
+      "end": 6290,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 6332,
+      "end": 6339,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 6358,
+      "end": 6369,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 6592,
+      "end": 6610,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 6611,
+      "end": 6619,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 6620,
+      "end": 6685,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 6686,
+      "end": 6691,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 6692,
+      "end": 6705,
+      "style": "underline",
+      "purpose": null
+    }
+  ]
+}

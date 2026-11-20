@@ -1,0 +1,184 @@
+{
+  "format": "golden-card-expected/1",
+  "case_id": "policy-003",
+  "tag": "No existential risk from engineered pathogens – too many barriers and no data supports it",
+  "cite": {
+    "short_cite": null,
+    "full_cite": "David Thorstad, 2023 – professor of philosophy at Vanderbilt University. Before that, I was a research fellow at the Global Priorities Institute and Kellogg College, Oxford. “Exaggerating the risks (Part 13: Ord on Biorisk)” 12/29, https://reflectivealtruism.com/2023/12/29/exaggerating-the-risks-part-13-ord-on-biorisk/"
+  },
+  "research_need": "No existential risk from engineered pathogens – too many barriers and no data supports it",
+  "segments": [
+    [
+      14070,
+      17063
+    ],
+    [
+      17066,
+      17188
+    ]
+  ],
+  "spans": [
+    {
+      "start": 14131,
+      "end": 14223,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 14131,
+      "end": 14223,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 14922,
+      "end": 14993,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 14922,
+      "end": 14994,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 15445,
+      "end": 15481,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 15482,
+      "end": 15543,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 15544,
+      "end": 15582,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 15544,
+      "end": 15583,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 16037,
+      "end": 16047,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 16062,
+      "end": 16089,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 16098,
+      "end": 16173,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 16236,
+      "end": 16293,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 16236,
+      "end": 16293,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 16405,
+      "end": 16447,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 16405,
+      "end": 16447,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 16458,
+      "end": 16467,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 16458,
+      "end": 16467,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 16483,
+      "end": 16573,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 16483,
+      "end": 16573,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 16685,
+      "end": 16761,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 16685,
+      "end": 16761,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 16762,
+      "end": 16779,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 16762,
+      "end": 16779,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 16780,
+      "end": 16918,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 16780,
+      "end": 16918,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 16919,
+      "end": 16942,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 16919,
+      "end": 16942,
+      "style": "underline",
+      "purpose": null
+    }
+  ]
+}

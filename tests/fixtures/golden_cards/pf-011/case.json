@@ -1,0 +1,30 @@
+{
+  "case_id": "pf-011",
+  "candidate_id": "pf-06b7132cdb",
+  "event": "PF",
+  "season": "2024-25",
+  "source_type": "think tank",
+  "length_band": "multi-paragraph",
+  "omission_cut": false,
+  "coach_cut_and_reviewed_for_names": true,
+  "research_need": "Selloffs cause Middle East war.",
+  "source_link": "https://carnegieendowment.org/posts/2021/04/the-most-urgent-north-korean-nuclear-threat-isnt-what-you-think?lang=en",
+  "parser_version": "2026.11.03-docx-9",
+  "imported_on": "2026-11-20",
+  "snapshot": {
+    "url": "https://carnegieendowment.org/posts/2021/04/the-most-urgent-north-korean-nuclear-threat-isnt-what-you-think?lang=en",
+    "canonical_url": "https://carnegieendowment.org/posts/2021/04/the-most-urgent-north-korean-nuclear-threat-isnt-what-you-think",
+    "final_url": "https://carnegieendowment.org/posts/2021/04/the-most-urgent-north-korean-nuclear-threat-isnt-what-you-think",
+    "fetched_on": "2026-11-20",
+    "access_status": "ACCESSIBLE",
+    "provenance_mode": "PUBLISHER_RETRIEVED",
+    "raw_sha256": "6d248b94bcdc7c1557460ae7abdb3efc34363d3a0b366f3f8494d338a29d153e",
+    "raw_byte_size": 229525,
+    "normalized_text_sha256": "ab91491f330b7720551ac94a5d0529aec8af3ada8d33cdf5dac184a734b36d51",
+    "normalized_document_sha256": "ac0cd754d76ad704c4fce8e544e16c1c454dbd2b55542216c1bcef8b2633b1f7",
+    "normalizer_version": "evidence-normalizer-v1",
+    "extractor_version": "trafilatura/html-1+trafilatura-2.3.1+readability-lxml-0.9+lxml-6.1.3",
+    "content_type": "text/html; charset=utf-8",
+    "paragraph_count": 35
+  }
+}

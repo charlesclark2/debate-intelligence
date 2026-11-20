@@ -208,6 +208,27 @@ def test_the_dry_run_reads_everything_and_writes_nothing(
     assert "dry run: nothing written" in out
 
 
+def test_drop_errors_drops_only_a_case_whose_retry_failed_again(
+    world: World, capsys: pytest.CaptureFixture[str]
+) -> None:
+    errored = world.case_for("errored")
+    kept = {name: world.case_for(name) for name in ("accessible", "unreported", "mislinked")}
+
+    # The dry run says so and writes nothing; the other outcomes are untouched by the flag.
+    before = tree(world.fixtures)
+    assert world.record("--drop-errors") == 1
+    out = capsys.readouterr().out
+    assert tree(world.fixtures) == before
+    assert f"  {errored}: ERROR" in out
+    assert "would drop: 2" in out
+    assert "not recorded: 2" in out
+
+    assert world.record("--drop-errors", "--execute") == 1
+    capsys.readouterr()
+    remaining = {path.parent.name for path in world.fixtures.glob(f"*/{golden.CASE_NAME}")}
+    assert remaining == set(kept.values())
+
+
 def test_record_counts_each_source_type_by_access_status_and_lists_every_type(
     world: World, capsys: pytest.CaptureFixture[str]
 ) -> None:

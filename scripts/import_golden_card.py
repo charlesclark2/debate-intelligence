@@ -151,7 +151,9 @@ for every case, `record` reads each case's report:
 * **PAYWALLED, BLOCKED, ROBOTS_DISALLOWED, NOT_FOUND or UNSUPPORTED_TYPE**: the case is dropped from
   the corpus, its folder removed. A metered, truncated or registration-walled page is PAYWALLED;
 * **ERROR**, a missing or unreadable report, or a report for another link: nothing happens to the
-  case; fetch it again.
+  case; fetch it again. An ERROR case is fetched again once (the PM's ruling of 2026-11-19), and
+  `--drop-errors`, given after that retry, drops a case whose report is still ERROR. It changes
+  nothing else.
 
 Without `--execute` it is a dry run: it reads the reports and the store and prints what it would
 do, and writes nothing (working agreement 11). The store's database is opened read-only. The
@@ -211,6 +213,7 @@ from debate_core.domain.debate_files import (  # noqa: E402
     ParsedCard,
     ParsedDocument,
 )
+from debate_core.domain.enums import AccessStatus  # noqa: E402
 from debate_core.domain.style_profile import StructuralUnit  # noqa: E402
 from debate_core.evidence.docx_manifest_part import (  # noqa: E402
     MANIFEST_PART_NAME,
@@ -1581,16 +1584,27 @@ class RecordReport:
 
 
 def record_sources(
-    fixtures_dir: Path, fetches_dir: Path, store_dir: Path, snapshot_folder: Path, *, execute: bool
+    fixtures_dir: Path,
+    fetches_dir: Path,
+    store_dir: Path,
+    snapshot_folder: Path,
+    *,
+    execute: bool,
+    drop_errors: bool = False,
 ) -> RecordReport:
-    """Record every case's snapshot from its fetch report, or drop it; without `execute`, plan only."""
+    """Record every case's snapshot from its fetch report, or drop it; without `execute`, plan only.
+
+    `drop_errors` is for after an ERROR case's one retry (the PM's ruling of 2026-11-19): a case
+    whose report is still ERROR is dropped too. Every other outcome is unchanged by it.
+    """
     report = RecordReport()
     for case in sorted(_existing_cases(fixtures_dir), key=lambda case: case["case_id"]):
         case_id = case["case_id"]
         reading = snapshots.read_fetch_report(fetches_dir / f"{case_id}.json", case.get("source_link") or "")
         report.statuses[reading.access_status or "no report"] += 1
         report.by_source_type[case["source_type"]][reading.access_status or "no report"] += 1
-        if reading.outcome is snapshots.FetchOutcome.DROP:
+        errored_again = drop_errors and reading.access_status == AccessStatus.ERROR.value
+        if reading.outcome is snapshots.FetchOutcome.DROP or errored_again:
             assert reading.access_status is not None
             report.dropped.append((case_id, reading.access_status))
             if execute:
@@ -1738,6 +1752,11 @@ def _build_parser() -> argparse.ArgumentParser:
         help="the local snapshot folder, outside the repository and every worktree",
     )
     recording.add_argument("--execute", action="store_true", help="record and drop; without it, a dry run")
+    recording.add_argument(
+        "--drop-errors",
+        action="store_true",
+        help="after the one retry of the ERROR cases: drop a case whose fetch failed again",
+    )
     recording.add_argument("--fixtures", type=Path, default=FIXTURES_DIR, help=argparse.SUPPRESS)
 
     reviewing = commands.add_parser("review", help="write the coach's review sheet outside the repo")
@@ -1804,6 +1823,7 @@ def main(
             arguments.store,
             folder,
             execute=arguments.execute,
+            drop_errors=arguments.drop_errors,
         )
         for line in record_lines(recorded, execute=arguments.execute):
             print(line)

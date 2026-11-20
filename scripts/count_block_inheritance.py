@@ -75,7 +75,7 @@ from debate_core.application.coach_sample_labels_file import read_labels_file
 from debate_core.application.errors import DomainError
 from debate_core.application.landscape_model_evaluation import LabelledCard, read_coach_sample
 from debate_core.application.landscape_seeding import SeedReading, read_seed_sources
-from debate_core.arguments.landscape.evaluation_breakdown import NO_POSITION_LABEL, scored_stance
+from debate_core.arguments.landscape.evaluation_breakdown import NO_POSITION_LABEL, related, scored_stance
 from debate_core.arguments.landscape.headings import NormalizedHeading
 from debate_core.arguments.landscape.holdout_mark import holdout_header
 from debate_core.arguments.landscape.link_chains import heading_roles, tag_role
@@ -115,8 +115,11 @@ LEVELS: Final = ("run", "section", "parent", "nearest", "document")
 PLACED: Final = ("counted", "counted+keyword")
 AGREEMENTS: Final = ("unanimous", "two-thirds")
 MINIMUMS: Final = (1, 2, 3)
+OWN: Final = ("any", "naming-nothing")
 ROLES: Final = ("answer-heading", "block")
-REFERENCE_RULE: Final = "level=nearest,placed=counted,agreement=unanimous,minimum=1,role=answer-heading"
+REFERENCE_RULE: Final = (
+    "level=nearest,placed=counted,agreement=unanimous,minimum=1,own=any,role=answer-heading"
+)
 """The rule the descriptive counts (answer headings, link-shaped tags) are given for."""
 
 _LINK_ROLES: Final = frozenset({ChainRole.LINK, ChainRole.INTERNAL_LINK, ChainRole.UNIQUENESS})
@@ -149,6 +152,9 @@ class CardRecord:
     path: tuple[str, ...] = field(repr=False)
     """The raw headings over it, as the reader cut them: the section item's path."""
     answers: tuple[bool, ...]
+    names_nothing: tuple[bool, ...]
+    """Per raw heading of `path`, whether it names nothing: it normalizes to no words, or the coach ruled it
+    names no position (`solvency`, `link`)."""
     """Per raw heading of `path`, whether it is an answer heading (`AT:`)."""
     run: int
     """The card's run in its document: cards next to each other with equal paths share one."""
@@ -192,6 +198,7 @@ def read_cards(
     """Every card of `reading` placed by the matcher, and the review queue's items: its sections by item id,
     and its cards in the order of the cards left for review."""
     names = CaselistNames(reading.caselist_names)
+    ruled_none = {rule.heading for rule in matcher.overrides.overrides if rule.position_id is None}
     placed_by_fingerprint: dict[str, ClassificationResult] = {}
     records: list[CardRecord] = []
     queued_sections: dict[str, QueuedItem] = {}
@@ -232,6 +239,7 @@ def read_cards(
                     item_id=card_item_id(source.sha256, card.first_element_index or 0),
                     path=path,
                     answers=tuple(one.answer for one in levels),
+                    names_nothing=tuple(not one.text or one.text in ruled_none for one in levels),
                     run=run,
                     status=_status(result.method, position, result.confidence, threshold),
                     placed=None
@@ -317,7 +325,7 @@ def block_members(card: CardRecord, blocks: DocumentBlocks, level: str, placed: 
     """The placed cards of `card`'s block at `level`, and the depth of the section that decides (the
     number of raw headings it shares with the card; -1 for a run)."""
     if level == "run":
-        return _without_self(blocks.by_run[placed].get(card.run, Counter()), card), -1
+        return _without_self(blocks.by_run[placed].get(card.run, Counter()), card), len(card.path)
     prefixes = blocks.by_prefix[placed]
     depth = len(card.path)
     if level == "section":
@@ -375,13 +383,15 @@ class Rule:
     placed: str
     agreement: str
     minimum: int
+    own: str = "any"
+    """`naming-nothing`: inherit only when each heading over it below the deciding section names none."""
     role: str = "answer-heading"
 
     @property
     def name(self) -> str:
         return (
             f"level={self.level},placed={self.placed},agreement={self.agreement},"
-            f"minimum={self.minimum},role={self.role}"
+            f"minimum={self.minimum},own={self.own},role={self.role}"
         )
 
     @classmethod
@@ -393,6 +403,7 @@ class Rule:
                 placed=fields["placed"],
                 agreement=fields["agreement"],
                 minimum=int(fields["minimum"]),
+                own=fields.get("own", "any"),
                 role=fields.get("role", "answer-heading"),
             )
         except (KeyError, ValueError):
@@ -402,6 +413,7 @@ class Rule:
             or rule.placed not in PLACED
             or rule.agreement not in AGREEMENTS
             or rule.minimum not in MINIMUMS
+            or rule.own not in OWN
             or rule.role not in ROLES
         ):
             raise Refused(f"the rule {text!r} is not one of the grid's")
@@ -416,7 +428,7 @@ class Rule:
 
 
 def grid() -> list[Rule]:
-    return [Rule(*one) for one in product(LEVELS, PLACED, AGREEMENTS, MINIMUMS)]
+    return [Rule(*one) for one in product(LEVELS, PLACED, AGREEMENTS, MINIMUMS, OWN)]
 
 
 @dataclass(frozen=True, slots=True)
@@ -445,6 +457,8 @@ def inherit_from(card: CardRecord, read: CardBlock, rule: Rule) -> Inherited | N
     """The position `card` inherits from its block, read as `read`, under `rule`; None for nothing."""
     block = read.block
     if not rule.agrees(block) or block.position_id is None or block.kind is None or block.role is None:
+        return None
+    if rule.own == "naming-nothing" and not all(card.names_nothing[max(read.shared_depth, 0) :]):
         return None
     role = block.role
     if rule.role == "answer-heading" and card.under_answer_heading:
@@ -600,6 +614,41 @@ def score_sample(
         inherited += 1
         inherited_correct += names_a_label(taxonomy, one, got.position_id, got.role, card.sides)
     return SampleScore(len(labelled), found, counted, correct, inherited, inherited_correct)
+
+
+def inherited_outcomes(
+    taxonomy: Taxonomy,
+    labelled: Sequence[LabelledCard],
+    index_of: Mapping[str, int],
+    readings: BlockReadings,
+    rule: Rule,
+) -> dict[str, int]:
+    """First sample only: what each inherited placement is against the coach's label, as the evaluation's
+    outcomes read it: right, the label's position with the other stance, a position related to it (an aff and
+    its advantage), another of its kind, another kind, or a card labelled none."""
+    inherited_by = readings.inherited(rule)
+    found: Counter[str] = Counter()
+    for one in labelled:
+        index = index_of.get(one.item_id)
+        got = inherited_by.get(index) if index is not None else None
+        if index is None or got is None:
+            continue
+        card = readings.cards[index]
+        if one.label == NO_POSITION_LABEL:
+            found["labelled_none"] += 1
+        elif names_a_label(taxonomy, one, got.position_id, got.role, card.sides):
+            found["correct"] += 1
+        elif got.position_id in (one.label, one.also):
+            found["wrong_stance"] += 1
+        elif related(taxonomy, got.position_id, one.label) or (
+            one.also is not None and related(taxonomy, got.position_id, one.also)
+        ):
+            found["related"] += 1
+        elif got.kind == taxonomy.resolve(one.label).kind.value:
+            found["same_kind"] += 1
+        else:
+            found["other_kind"] += 1
+    return dict(sorted(found.items()))
 
 
 # ------------------------------------------------------------------------------------------------
@@ -890,7 +939,13 @@ async def _count(arguments: argparse.Namespace) -> dict[str, object]:
                     written = score_sample(
                         taxonomy, first, index_of, readings, replace(rule, role=role)
                     ).as_json()
-                    scored[role] = {"inherited": written["inherited"], "after": written["after"]}
+                    scored[role] = {
+                        "inherited": written["inherited"],
+                        "after": written["after"],
+                        "outcomes": inherited_outcomes(
+                            taxonomy, first, index_of, readings, replace(rule, role=role)
+                        ),
+                    }
                 one["first_sample"] = scored
             rules[rule.name.rsplit(",role=", 1)[0]] = one
         entry["rules"] = rules

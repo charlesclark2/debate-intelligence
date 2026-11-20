@@ -81,8 +81,8 @@ NEG_ONE = "School One/CodeOne/School One-CodeOne-Neg-Sample Invitational-Round 1
 AFF_TWO = "School Two/CodeTwo/School Two-CodeTwo-Aff-Sample Invitational-Round 1.docx"
 NEG_THREE = "School Three/CodeThree/School Three-CodeThree-Neg-Sample Invitational-Round 2.docx"
 
-REFERENCE = "level=nearest,placed=counted,agreement=unanimous,minimum=1"
-WITH_KEYWORDS = "level=nearest,placed=counted+keyword,agreement=unanimous,minimum=1"
+REFERENCE = "level=nearest,placed=counted,agreement=unanimous,minimum=1,own=any"
+WITH_KEYWORDS = "level=nearest,placed=counted+keyword,agreement=unanimous,minimum=1,own=any"
 
 
 class World:
@@ -232,9 +232,15 @@ def test_a_disagreeing_block_gives_nothing_and_an_agreeing_one_its_position(
         "decided_cards_that_would_inherit_if_eligible": 0,
     }
     assert (
-        rules["level=document,placed=counted,agreement=unanimous,minimum=1"]["population"]["inherited"] == 0
+        rules["level=document,placed=counted,agreement=unanimous,minimum=1,own=any"]["population"][
+            "inherited"
+        ]
+        == 0
     )
-    assert rules["level=nearest,placed=counted,agreement=unanimous,minimum=2"]["population"]["inherited"] == 0
+    assert (
+        rules["level=nearest,placed=counted,agreement=unanimous,minimum=2,own=any"]["population"]["inherited"]
+        == 0
+    )
     assert rules[WITH_KEYWORDS]["population"]["inherited"] == 3
 
 
@@ -375,3 +381,31 @@ def test_a_caselist_on_no_topic_is_refused_and_the_others_still_counted(
         "refused": "topics.yaml puts hsld99 on 2026-09-30 on no topic with a taxonomy"
     }
     assert out["caselists"][CASELIST]["cards"] == 9
+
+
+def test_naming_nothing_keeps_a_card_under_a_heading_of_its_own_from_inheriting(
+    world: World, capsys: pytest.CaptureFixture[str]
+) -> None:
+    sample, rows = world.first_sample()
+    _, out = world.run(capsys, "--sample", str(sample), "--sample-rows", str(rows))
+    rules = out["caselists"][CASELIST]["rules"]
+    assert rules[REFERENCE.replace("own=any", "own=naming-nothing")]["population"]["inherited"] == 0
+    keyword = rules[WITH_KEYWORDS.replace("own=any", "own=naming-nothing")]
+    assert keyword["population"]["inherited"] == 1
+    assert keyword["first_sample"]["answer-heading"]["outcomes"] == {"labelled_none": 1}
+
+
+def test_each_inherited_card_of_the_first_sample_has_an_outcome(
+    world: World, capsys: pytest.CaptureFixture[str]
+) -> None:
+    sample, rows = world.first_sample()
+    _, out = world.run(capsys, "--sample", str(sample), "--sample-rows", str(rows))
+    scored = out["caselists"][CASELIST]["rules"][REFERENCE]["first_sample"]
+    assert scored["answer-heading"]["outcomes"] == {"correct": 2}
+    assert scored["block"]["outcomes"] == {"correct": 1, "wrong_stance": 1}
+    assert out["caselists"][CASELIST]["rules"][WITH_KEYWORDS]["first_sample"]["answer-heading"][
+        "outcomes"
+    ] == {
+        "correct": 2,
+        "labelled_none": 1,
+    }

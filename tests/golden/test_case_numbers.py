@@ -161,3 +161,14 @@ def test_existing_case_ids_are_kept_as_they_are(numbered: World, capsys: pytest.
 
     after = {path.name for path in numbered.fixtures.iterdir() if path.is_dir()}
     assert after == (before - {dropped}) | {late}
+
+
+def test_a_number_below_the_highest_is_not_given_again_even_with_no_retired_line(
+    numbered: World, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # A folder removed by hand leaves no retired ID; the next number still follows the highest,
+    # never the first free one (the ruling's own words).
+    lowest = min(numbered.case_for("accessible"), numbered.case_for("paywalled"))
+    golden.shutil.rmtree(numbered.fixtures / lowest)
+
+    assert _import_late_card(numbered) == "policy-003"

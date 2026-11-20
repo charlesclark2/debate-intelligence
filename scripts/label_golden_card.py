@@ -19,20 +19,22 @@ read back and checked (`golden_snapshots.load_recorded_snapshot`) and the team c
 `team-card.docx` by the platform's parser. Then:
 
 * **segments.** The card's body is normalized and split at its omission markers, and each stretch
-  is found in the snapshot's text, in order, in the comparison form `golden_snapshots` defines (a
-  whitespace gap is one space; nothing else is loosened). A stretch the snapshot does not hold
-  whole is split at the longest run of whole words it does hold, at least
-  :data:`MINIMUM_UNMARKED_WORDS` words, and the rest is looked for after it: a cut the cutter made
-  without a marker. Each found stretch is a segment, `[start, end)` of the snapshot's text. A
-  stretch that cannot be found leaves the case unlabelled, with the stretch's number and how much
-  of it was found;
+  is found in the snapshot's text, in order, in the comparison form `golden_snapshots` defines
+  (below). A stretch the snapshot does not hold whole is split at the longest run of whole words
+  it does hold, at least :data:`MINIMUM_UNMARKED_WORDS` words, and the rest is looked for after
+  it: a cut the cutter made without a marker. Each found stretch is a segment, `[start, end)` of
+  the snapshot's text. A stretch that cannot be found leaves the case unlabelled, with the
+  stretch's number and how many of its compared characters were found;
 * **spans.** Each underline (Verbatim's underline and its `Emphasis`, which is underlined) and each
   highlight of the card is carried through the normalizer's offset map onto the characters of the
   snapshot the alignment matched, one span per segment it touches, trimmed of whitespace, merged
   where one style's spans meet. A highlight outside the underlining is cut back to the underlining,
   as the platform's markup requires (a highlight is emphasis within underlined text), and the
-  characters cut back are counted. Purposes are `null`: a Verbatim card's runs say how a stretch is
-  marked, never what argumentative work it does (`SpanPurpose`);
+  characters cut back are counted. Purposes are `null` (the PM's rulings of 2026-11-16 and
+  2026-11-19): a purpose is recorded only where the team's format profile defines what a markup
+  kind means, and none maps one to a `SpanPurpose` (claim, warrant, internal link, impact); a
+  "read aloud" purpose would be a later task's change to the card model, after which this script
+  regenerates `expected.json` and `expected.docx`;
 * an omission marker with nothing of the snapshot between its two sides (one inside a word) leaves
   the case unlabelled: the platform's extractor would join the two segments into one, which no
   longer reads as the card. Whether the segments reproduce the card is `check --snapshots`'s to
@@ -42,6 +44,22 @@ read back and checked (`golden_snapshots.load_recorded_snapshot`) and the team c
 `expected.json` holds the format, the case ID, the team's tag, its cite (short and full, as the
 excerpt holds them), the research need, the segments and the spans: offsets into the recorded
 snapshot and the team's own words, never evidence text (the spec's forbidden list).
+
+## What "the offsets reproduce the card" means
+
+The PM's ruling of 2026-11-20 (ac2): the segments reproduce the card's evidence in the platform's
+card-fingerprint matching form, the normalization
+`debate_core.evidence.fingerprints.normalize_for_matching` applies before an exact card
+fingerprint is taken: Unicode NFKC, casefold, every quotation mark one `'` or `"`, every dash `-`,
+invisible characters removed. It is applied one character at a time, so each compared character
+still names the snapshot character it came from, and three things that only lay text out are not
+compared: whitespace, the pilcrow `¶` Verbatim's condense leaves between paragraphs, and a hyphen
+that breaks a word at a line end. Every letter, digit and other punctuation mark must match.
+
+This is matching only. The offsets point only into the snapshot, and the evidence a case holds,
+renders and is verified on is always the snapshot's own characters at those offsets, never the
+folded form and never the team card's text. The alignment here and `import_golden_card.py check
+--snapshots` compare in the same form (`golden_snapshots.comparison_view`).
 
 ## Rendering: `expected.docx`
 

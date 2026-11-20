@@ -333,7 +333,9 @@ def test_record_drops_the_unreadable_case_and_keeps_the_ones_to_fetch_again(
 
     remaining = sorted(path.parent.name for path in world.fixtures.glob(f"*/{golden.CASE_NAME}"))
     assert remaining == sorted([world.case_for("accessible"), *kept.values()])
-    assert dropped not in (world.fixtures / golden.INDEX_NAME).read_text(encoding="utf-8")
+    index = (world.fixtures / golden.INDEX_NAME).read_text(encoding="utf-8")
+    assert f"| `{dropped}` |" not in index
+    assert index.endswith(f"\nRetired: {dropped}.\n")
     assert "4 cases." in (world.fixtures / golden.INDEX_NAME).read_text(encoding="utf-8")
     for case_id in kept.values():
         assert "snapshot" not in json.loads((world.fixtures / case_id / golden.CASE_NAME).read_text())

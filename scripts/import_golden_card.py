@@ -83,6 +83,12 @@ bytes changed since the listing), finds the card again, and writes `<case_id>/te
 `<case_id>/case.json` under the fixtures folder, case ids numbered per event (`policy-001`,
 `ld-001`, `pf-001`), then rewrites `INDEX.md`. The corpus's terms are in its `README.md`.
 
+**A number is never given twice** (the PM's ruling of 2026-11-20). Each new case takes the number
+after the highest ever given in its event: the highest of the corpus's cases and of the retired IDs
+`INDEX.md`'s last line lists. A case leaves the corpus only by `record` (its source dropped) or
+`retire` (below), and both add its ID to that line, so an ID in an earlier report always names the
+card it named then.
+
 The excerpt is the source package cut down to the card's own paragraphs: the source's style table,
 numbering, theme and settings are kept, so the card looks as it was cut, and every other part
 is left behind (headers and footers, comments, `people.xml`, custom XML, footnotes, media, the
@@ -160,7 +166,16 @@ do, and writes nothing (working agreement 11). The store's database is opened re
 snapshot folder must be outside the repository and every worktree. It prints counts and case IDs,
 never a page's text, title or host: the reports by access status, then by the case's source type
 and access status (every source type listed, so a kind with no surviving case shows), then each
-case dropped or not recorded.
+case dropped or not recorded. A dropped case's ID is retired (`INDEX.md`'s last line).
+
+## `retire`: take cases out of the corpus
+
+    uv run python scripts/import_golden_card.py retire ld-014 pf-017 --execute
+
+For a case that is in the corpus but cannot stay in it, such as one `label_golden_card.py` does
+not label: removes its folder and adds its ID to `INDEX.md`'s retired line, so the number is never
+given again. Every ID must be a case in the corpus, or nothing is retired (exit 2). Without
+`--execute` it is a dry run that prints what it would retire. It prints case IDs only.
 
 ## `review`: the coach's sign-off sheet
 
@@ -1219,10 +1234,11 @@ def _existing_cases(fixtures_dir: Path) -> list[dict[str, Any]]:
 
 
 def _next_case_id(event: str, taken: set[str]) -> str:
-    number = 1
-    while f"{_EVENT_SLUGS[event]}-{number:03d}" in taken:
-        number += 1
-    return f"{_EVENT_SLUGS[event]}-{number:03d}"
+    """The number after the highest ever given in `event`: `taken` holds every case ID in the
+    corpus and every retired one (the PM's ruling of 2026-11-20), so no number is given twice."""
+    prefix = f"{_EVENT_SLUGS[event]}-"
+    numbers = [int(case_id[len(prefix) :]) for case_id in taken if case_id.startswith(prefix)]
+    return f"{prefix}{max(numbers, default=0) + 1:03d}"
 
 
 def _spans(card: ParsedCard) -> list[tuple[str, int, int, str | None]]:
@@ -1333,7 +1349,7 @@ def import_candidates(
     """
     by_id = {candidate.candidate_id: candidate for candidate in shortlist}
     existing = _existing_cases(fixtures_dir)
-    taken = {case["case_id"] for case in existing}
+    taken = {case["case_id"] for case in existing} | set(retired_ids(fixtures_dir))
     imported_ids = {case["candidate_id"] for case in existing}
     parser = DebateDocxParser()
     imported: list[ImportedCase] = []
@@ -1384,7 +1400,30 @@ def _cell(text: str) -> str:
     return " ".join(text.split()).replace("|", "\\|")
 
 
-def render_index(fixtures_dir: Path) -> str:
+#: INDEX.md's last line: every case ID that has left the corpus, so none is given to another card.
+_RETIRED_PREFIX: Final = "Retired: "
+
+
+def retired_ids(fixtures_dir: Path) -> list[str]:
+    """The IDs INDEX.md lists as retired, or none when it has no such line (or no INDEX.md)."""
+    index = fixtures_dir / INDEX_NAME
+    if not index.is_file():
+        return []
+    for line in index.read_text(encoding="utf-8").splitlines():
+        if line.startswith(_RETIRED_PREFIX):
+            listed = line[len(_RETIRED_PREFIX) :].removesuffix(".")
+            return [] if listed == "none" else listed.split(", ")
+    return []
+
+
+def render_index(fixtures_dir: Path, retired: Iterable[str] = ()) -> str:
+    """INDEX.md: the cases, their counts, and every retired ID, those it lists already and
+    `retired`. A retired ID that is still a case in the corpus is an error."""
+    present = {case["case_id"] for case in _existing_cases(fixtures_dir)}
+    all_retired = sorted(set(retired_ids(fixtures_dir)) | set(retired))
+    for case_id in all_retired:
+        if case_id in present:
+            raise ValueError(f"{case_id} is a case in the corpus, not retired")
     rows = [
         f"| `{case['case_id']}` | {case['event']} | {case['season']} | {case['source_type']} | "
         f"{case['length_band']} | {'yes' if case['omission_cut'] else 'no'} | "
@@ -1396,6 +1435,7 @@ def render_index(fixtures_dir: Path) -> str:
         + "".join(f"{row}\n" for row in rows)
         + "\n"
         + "".join(f"{line}\n" for line in corpus_count_lines(_existing_cases(fixtures_dir)))
+        + f"{_RETIRED_PREFIX}{', '.join(all_retired) or 'none'}.\n"
     )
 
 
@@ -1430,9 +1470,22 @@ def corpus_size_problems(cases: Sequence[Mapping[str, Any]]) -> list[str]:
     return problems
 
 
-def write_index(fixtures_dir: Path) -> None:
+def write_index(fixtures_dir: Path, retired: Iterable[str] = ()) -> None:
+    """Rewrite INDEX.md, keeping every ID it lists as retired and adding `retired`."""
+    text = render_index(fixtures_dir, retired)
     fixtures_dir.mkdir(parents=True, exist_ok=True)
-    (fixtures_dir / INDEX_NAME).write_text(render_index(fixtures_dir), encoding="utf-8")
+    (fixtures_dir / INDEX_NAME).write_text(text, encoding="utf-8")
+
+
+def retire_cases(fixtures_dir: Path, case_ids: Sequence[str]) -> None:
+    """Remove each case from the corpus and list its ID as retired; every ID must be a case."""
+    present = {case["case_id"] for case in _existing_cases(fixtures_dir)}
+    missing = [case_id for case_id in case_ids if case_id not in present]
+    if missing:
+        raise ValueError(f"{missing[0]} is not a case in the corpus")
+    for case_id in case_ids:
+        shutil.rmtree(fixtures_dir / case_id)
+    write_index(fixtures_dir, retired=case_ids)
 
 
 # --------------------------------------------------------------------------------------------
@@ -1665,7 +1718,7 @@ def record_sources(
             )
         report.recorded.append(case_id)
     if execute:
-        write_index(fixtures_dir)
+        write_index(fixtures_dir, retired=[case_id for case_id, _ in report.dropped])
     return report
 
 
@@ -1799,6 +1852,10 @@ def _build_parser() -> argparse.ArgumentParser:
     reviewing.add_argument("--output", type=Path, required=True, help="the sheet, outside the repository")
     reviewing.add_argument("--fixtures", type=Path, default=FIXTURES_DIR, help=argparse.SUPPRESS)
 
+    retiring = commands.add_parser("retire", help="take cases out of the corpus; their IDs are never reused")
+    retiring.add_argument("case_ids", nargs="+", metavar="CASE_ID", help="a case ID in the corpus")
+    retiring.add_argument("--execute", action="store_true", help="retire them; without it, a dry run")
+    retiring.add_argument("--fixtures", type=Path, default=FIXTURES_DIR, help=argparse.SUPPRESS)
     indexing = commands.add_parser("index", help="rewrite INDEX.md from the cases")
     indexing.add_argument("--fixtures", type=Path, default=FIXTURES_DIR, help=argparse.SUPPRESS)
     return parser
@@ -1831,6 +1888,21 @@ def main(
         write_shortlist(arguments.output, shortlist)
         for line in count_lines(listing, shortlist):
             print(line)
+        return 0
+    if arguments.command == "retire":
+        case_ids = list(dict.fromkeys(arguments.case_ids))
+        present = {case["case_id"] for case in _existing_cases(arguments.fixtures)}
+        for case_id in case_ids:
+            if case_id not in present:
+                print(f"{case_id} is not a case in the corpus; nothing retired", file=sys.stderr)
+                return 2
+        if arguments.execute:
+            retire_cases(arguments.fixtures, case_ids)
+        print(f"{'retired' if arguments.execute else 'would retire'}: {len(case_ids)}")
+        for case_id in case_ids:
+            print(f"  {case_id}")
+        if not arguments.execute:
+            print("dry run: nothing written; run again with --execute to retire")
         return 0
     if arguments.command == "index":
         write_index(arguments.fixtures)

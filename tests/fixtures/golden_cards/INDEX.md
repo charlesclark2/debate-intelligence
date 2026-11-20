@@ -18,3 +18,4 @@ edit it by hand. The research need is the card's tag, which says what the card i
 0 cases.
 By event: Policy 0, LD 0, PF 0.
 By source type: news 0, think tank 0, government 0, journal 0, unknown 0.
+Retired: none.

@@ -50,6 +50,21 @@ invented (PM ruling of 2026-11-16). Today every purpose is null: `team-default` 
 highlight colour that its style profile counts as a reading colour, but a span's purpose can only
 be claim, warrant, internal link or impact, and no profile maps a markup kind to one of those.
 
+**What "reproduce" means** (ac2, the PM's ruling of 2026-11-20). A case's offsets reproduce the
+coach's card in the platform's card-fingerprint matching form, the normalization
+`debate_core.evidence.fingerprints.normalize_for_matching` applies to exact card fingerprints:
+Unicode NFKC, casefold, every quotation mark one `'` or `"`, every dash `-`, invisible characters
+removed. Whitespace, Verbatim's condense pilcrow `¶` and a hyphen that breaks a word at a line end
+are not compared, and every letter, digit and other punctuation mark must match. It is matching
+only: the offsets point only into the snapshot, and a case's evidence is always the snapshot's own
+characters. `label_golden_card.py` and `import_golden_card.py check --snapshots` compare in the
+same form.
+
+**Case IDs are never reused** (the PM's ruling of 2026-11-20). The importer numbers each event's
+cases after the highest number ever given in it, and `INDEX.md`'s last line lists every retired
+ID: a case whose source `record` dropped, or one `import_golden_card.py retire` took out because
+it does not label. An ID in an earlier report therefore always names the card it named then.
+
 `expected.docx` carries the verifier's real verdict. The cite is the team's, typed by hand, so no
 citation field is verified and every render is UNVERIFIED (`CITATION_UNVERIFIED`) with its banner.
 Nothing sets VERIFIED by hand. If citations are later harvested from the snapshots, the renders are

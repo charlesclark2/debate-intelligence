@@ -452,6 +452,7 @@ def test_import_numbers_cases_per_event_and_writes_the_index(
     assert index.endswith(
         "\n3 cases.\nBy event: Policy 2, LD 1, PF 0.\n"
         "By source type: news 1, think tank 1, government 0, journal 1, unknown 0.\n"
+        "Retired: none.\n"
     )
 
 

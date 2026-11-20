@@ -443,11 +443,12 @@ Q4. Small items:
 | Command | Result |
 |---|---|
 | `uv run scripts/affected_tests.py` | 128 test files |
-| `.venv/bin/python scripts/hard_stop.py 115 uv run scripts/affected_tests.py --run --slow` | Stopped at its 115-second limit (exit 124) at 53%, with no failure mark. **Over two minutes, so under agreement 10 it is left to the pull request's `ci` check**, not handed over. |
+| `.venv/bin/python scripts/hard_stop.py 115 uv run scripts/affected_tests.py --run --slow` | Stopped at its 115-second limit (exit 124) at 53%, with no failure mark. After the docstring commit `72413e6` (2026-11-19, load 3.0) it ran again: 128 files, stopped at 85%, with no `F` or `E` in its 65 progress lines. **Over two minutes, so under agreement 10 it is left to the pull request's `ci` check**, not handed over. |
 | `hard_stop.py 115 .venv/bin/python -m pytest packages/debate_core/tests/integrations/discovery packages/debate_core/tests/application/test_query_expansion.py tests/architecture tests/specs -n auto -m "not live"` | `1676 passed in 10.42s` (the changed test directory, the expansion tests that pin the OpenAlex split, and the always-run list) |
 | `hard_stop.py 115 .venv/bin/python -m pytest packages/debate_cli/tests/test_search_command.py packages/debate_cli/tests/commands/test_doctor_providers.py packages/debate_cli/tests/test_daily_command.py packages/debate_cli/tests/test_search_narrowing_presenter.py -n auto -m "not live"` | `202 passed in 7.37s` |
 | `uv run ruff format --check packages` / `uv run ruff check packages` | `1200 files already formatted` / `All checks passed!` |
 | `uv run pyright packages/debate_core` | `0 errors, 0 warnings, 0 informations` |
+| `uv run pyright` (whole project, after `72413e6`) / `uv run lint-imports` | `0 errors, 0 warnings, 0 informations` / `Contracts: 20 kept, 0 broken.`; the node's `-k openalex` selection: `232 passed in 2.16s` |
 | `uv run lint-imports` | `Contracts: 20 kept, 0 broken.` |
 | `uv run scripts/validate_specs.py` | `OK: 690 files, 41 epics, 627 tasks, 22 releases` (the Goal left `InProgress`) |
 | `uv run scripts/check_command_blocks.py --base HEAD` | `OK: no # comments in 736 shell code blocks in 262 Markdown files (1 session reports changed since HEAD)` |

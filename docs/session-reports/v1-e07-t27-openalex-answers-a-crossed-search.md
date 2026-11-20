@@ -703,7 +703,9 @@ class Recorder(httpx.AsyncBaseTransport):
         response = await self.inner.handle_async_request(request)
         self.body = await response.aread()
         self.status = response.status_code
-        return httpx.Response(response.status_code, headers=response.headers, content=self.body, request=request)
+        return httpx.Response(
+            response.status_code, headers=response.headers, content=self.body, request=request
+        )
 
     async def aclose(self) -> None:
         await self.inner.aclose()
@@ -750,7 +752,11 @@ def the_queries() -> tuple[tuple[ProviderQuery, ...], list[str]]:
     queries = provider_queries(expansion, request.filters)
     if len(queries) != 37 or len({query.filters for query in queries}) != 1:
         sys.exit("STOP: this build does not expand the search into 37 queries sharing one window")
-    crossed = [q.query for q, e in zip(queries, expansion.queries, strict=True) if (e.template_id or "").count("/") == 3]
+    crossed = [
+        q.query
+        for q, e in zip(queries, expansion.queries, strict=True)
+        if (e.template_id or "").count("/") == 3
+    ]
     return queries, crossed
 
 
@@ -770,7 +776,9 @@ async def main(offline: bool) -> None:
         key = settings.providers.openalex_api_key
         if key is None or not key.get_secret_value().strip():
             sys.exit("STOP: no OpenAlex key reaches this build's settings; run `debate-research config show`")
-    build = openalex.openalex_factory(settings.http, version=package_version(), clock=Clock(), transport=recorder)
+    build = openalex.openalex_factory(
+        settings.http, version=package_version(), clock=Clock(), transport=recorder
+    )
     provider = build(settings.providers.model_copy(update={"openalex_api_key": key}))
     plain_key = key.get_secret_value() if key is not None else None
     selected = openalex.SELECTED_FIELDS

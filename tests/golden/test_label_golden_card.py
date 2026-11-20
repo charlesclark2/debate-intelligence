@@ -214,6 +214,8 @@ def test_case_quotes_spacing_line_end_hyphens_and_pilcrows_do_not_stop_a_label(
 ) -> None:
     _label(labelled_world)
 
+    case_id = labelled_world.case_for("typeset")
+    assert f"{case_id}: 2 segments (0 unmarked cuts), 1 underlines, 1 highlights" in capsys.readouterr().out
     expected = _expected(labelled_world, "typeset")
     assert expected["segments"] == SEGMENTS
     assert expected["spans"] == [_span(FIRST_WARRANT, "highlight"), _span(FIRST_WARRANT, "underline")]

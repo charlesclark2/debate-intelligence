@@ -435,6 +435,7 @@ Q4. Small items:
 - `packages/debate_core/tests/integrations/discovery/test_openalex.py`: the tests above.
 - `packages/debate_core/tests/fixtures/discovery/openalex/`: the two refusal recordings and their
   README entries.
+- `openalex.py`'s `MAX_SEARCH_CHARS` docstring: the rewritten pages no longer state the limit, which still binds (ruling Q4a).
 - `docs/session-reports/v1-e07-t27-openalex-answers-a-crossed-search.md`: this report.
 
 ## Checks run before the report
@@ -470,7 +471,18 @@ Q4. Small items:
    ([The ac3 search ran on dev.413](#the-ac3-search-ran-on-dev413-found-2026-11-19)). The refusal it
    recorded is the one v1-e08-t20 already fixed. Whether this task still needs a fix beyond item 3
    is for the PM, once the probe has run on dev.445. The spec text is left as it is, for the PM to
-   amend.
+   amend. The PM's ruling of 2026-11-19 (Q1): the PM amends the description's dev.439 to dev.413 in
+   the next batch.
+5. **ac2's "ruled fix … shown failing first" is met with no new fix code** (PM ruling, 2026-11-19,
+   Q1). The refused request was dev.413's, and v1-e08-t20's split already refuses it. Three things
+   stand for ac2's tests:
+   - item 3 (OpenAlex's message kept, sanitized and cut; red first in `f70b680`);
+   - this record;
+   - the mutant against t20's tests: with `_fits`' search-length check deleted, 5 existing tests fail,
+     the per-preset pin among them ([The probe on dev.445](#the-probe-on-dev445-operator-2026-11-19)).
+
+   The PM amends ac2's wording in the next batch. Its operator half, the repeat on dev.445, is
+   recorded under the closing check.
 
 ## Decisions and assumptions
 
@@ -534,7 +546,7 @@ ends the probe early: paste it as it is.
 
 **The closing check (ac2): v1-e08-t16's ac3 search repeated, on dev.445 or later** (under a minute)
 
-When this runs, now on dev.445 or after the merge, is in the PM's second ruling (Q2). It makes the same
+Ruled (Q2, 2026-11-19): now, on dev.445, before the PR. Only OpenAlex's entry and the result count are recorded. It makes the same
 live calls as v1-e08-t16's ac3: OpenAlex, the publisher feeds, Crossref, the Federal Register and
 GovInfo. It writes only to dev's local data directory, to a new Desktop file (the dev.413 file is
 kept as evidence) and to `/tmp`. It prints the error code, whether the payload has `narrowing` (a
@@ -550,22 +562,39 @@ OpenAlex's entry with an outcome other than `error` and `results` above zero. `e
 `SEARCH_PARTIAL` is expected, because Crossref cannot reach all 37 queries (v1-e08-t16 ruling 3A).
 The summary line was run on two invented envelopes in the session scratchpad.
 
+**v1-e08-t16's ac3 sheet, made again from the dev.445 repeat** (ruling Q3, seconds, then the coach's
+time)
+
+Where: the same terminal, after the closing check saved its file. It is v1-e08-t16's command 3 with
+new file names. The dev.413 files stay as they are. It writes `labels-policy-nhi-crossing-dev445.csv`,
+for the coach, and `key-policy-nhi-crossing-dev445.csv`, for the scoring session only.
+
+```bash
+python3 -I -c 'import csv, json, sys; d = json.load(open(sys.argv[1])); r = d["results"]; top = {x["rank"] for x in sorted(r, key=lambda x: x["rank"])[:10]} | {x["rank"] for x in sorted(r, key=lambda x: x["provider_order"])[:10]}; rows = sorted((x for x in r if x["rank"] in top), key=lambda x: ((x["title"] or "").casefold(), x["url"] or "")); s = csv.writer(open(sys.argv[2], "w", newline="")); k = csv.writer(open(sys.argv[3], "w", newline="")); s.writerow(["item", "title", "url", "relevant"]); k.writerow(["item", "rank", "provider_order"]); [(s.writerow([i, x["title"], x["url"], ""]), k.writerow([i, x["rank"], x["provider_order"]])) for i, x in enumerate(rows, start=1)]; print(sys.argv[2], len(rows), "rows; key", sys.argv[3])' "$HOME/Desktop/search-policy-nhi-crossing-dev445.json" "$HOME/Desktop/labels-policy-nhi-crossing-dev445.csv" "$HOME/Desktop/key-policy-nhi-crossing-dev445.csv"
+```
+
+Success looks like one line naming the labels file, with between 10 and 20 rows, and the key file. The
+coach gets the labels file only, under the criterion of 2026-11-08. The key stays with you until the
+coach has answered. The filled labels, the key and the saved search then go to the PM for t16's ac3.
+
 ## Follow-up work
 
 - **The cutover runbook's install success text is stale.** [caselist-cutover.md](../runbooks/caselist-cutover.md)
   says `install_channel.sh … | tail -5` ends with a `complete` line and `The build runs on the Python
   at …, which uv manages.` dev.445's installer ends with `Installed debate-research <version> from
   <tag> at <path>.` (`scripts/install_channel.sh:344`), after the check table. I copied the stale text
-  into this session's hand-off. It is a runbook edit, for the PM to file or fold in.
+  into this session's hand-off. The PM edits the runbook in the next batch (ruling 2026-11-19, Q4b).
 - **v1-e08-t16's ac3 has to be done again.** Its saved search was written by dev.413 with OpenAlex at
   `error` and 0 results, so the coach's sheet from it had no OpenAlex works, and its nDCG cannot be
-  set against v1-e08-t14's. The repeat on dev.445 below serves t16's ac3 and this task's ac2.
+  set against v1-e08-t14's. The repeat on dev.445 below serves t16's ac3 and this task's ac2. Ruling
+  Q3: t16's sheet is made again from the dev.445 repeat, with new file names. The dev.413 file stays
+  as it is, and the dev.413 search's sheet is not labelled.
 
 - **t14's report names the wrong build for its ac3** (`v1.1.0-dev.342`, which predates t14's merge;
-  `dev.358` is the merge). It is a record slip, for the PM to correct if it matters.
-- **`MAX_SEARCH_CHARS`' docstring cites a limit OpenAlex no longer documents.** Whatever the ruling,
-  its docstring should say the rewritten pages of 2026-11-13 no longer state it. That edit goes with
-  the fix.
+  `dev.358` is the merge). The PM adds a correction note in the next batch (ruling 2026-11-19, Q4c).
+- **`MAX_SEARCH_CHARS`' docstring** now says that the rewritten pages of 2026-11-13 no longer state
+  the limit, and that a 1,473-character request was answered on 2026-11-19 (`72413e6`, ruling Q4a).
+- **A recorded build comes from the operator's printed tag** (Q4d), accepted as the PM's practice.
 
 ## Appendix: the refusal probe
 

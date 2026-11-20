@@ -824,9 +824,46 @@ if __name__ == "__main__":
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-11-19
 
 **Notes:**
+
+Accepted. ac1, ac2 (by the PM's ruling of 2026-11-19) and the node pass, and the Goal is `Succeeded`.
+
+* **The real cause was found, and the PM's premise corrected.** The spec named dev.439. The saved
+  file has no `narrowing` key, which proves a build older than dev.423 wrote it: the Mac's installed
+  dev.413. That build sends one request of all 37 queries, 2,272 search characters, over OpenAlex's
+  1,500, with no halving, so one 400 failed them all. v1-e08-t20's split had already fixed it. The PM
+  recorded the build without asking for the printed tag; Q4 (d) is now the PM's practice.
+* **The measurement and the documentation are thorough.**
+  * The joined requests are described down to their characters, with t14's and t20's requests set
+    beside them.
+  * The footer's "37 failed" is explained from the code.
+  * OpenAlex's rewritten pages are cited with their dates. Reading them through help.openalex.org,
+    and never api.openalex.org, was what the brief asked (Deviation 2).
+* **The probe settled it.** On dev.445, all 7 requests answered 200, the ac3 search's own first
+  request included. The mutant that deletes `_fits`' length check rebuilds dev.413's refused request,
+  and 5 of t20's existing tests catch it, the per-preset pin `('policy-2026-27-nhi', 'politics-da',
+  [37])` among them.
+* **Item 3 is a real improvement.** A refusal now carries OpenAlex's own message, sanitized and cut to
+  200 characters, with 429s unchanged. It was red first (7 of 12), with 8 mutants and the one
+  survivor closed by a case. The secrecy test replays the key-quoting refusal across every surface.
+* **ac2's operator half:** the repeat on dev.445 recorded OpenAlex `ok`, 37 queries, 0 failed, 7,355
+  results, with 200 results returned. The rebuilt sheet for v1-e08-t16's ac3 (19 rows) is with the
+  coach.
+* **Deviations 1 to 5 are accepted.** In the next batch the PM amends:
+  * ac2's wording, and the description's dev.439 to dev.413;
+  * the cutover runbook's install success text (Q4 b);
+  * a correction note on v1-e08-t14's report (Q4 c).
+* **The checks.** The affected set (128 files) stopped at its bound with no failure and goes to `ci`
+  under agreement 10. The discovery, expansion and CLI search tests, pyright and the import contracts
+  are green. The spec's validate line was run before the phase was set: if `scripts/task pr` reports
+  the phase is not `Succeeded`, the session sets it and commits that one change. If it asks to sync,
+  `scripts/task sync`.
+* **Follow-up:** the Federal Register's 429s on a 37-query search go on the PM's V1.x list as a p3
+  (E07). The breaker and back-off worked as built, and the search stayed PARTIAL.
+
+`scripts/task pr`

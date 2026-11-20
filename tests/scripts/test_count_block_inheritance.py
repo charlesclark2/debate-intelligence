@@ -364,3 +364,14 @@ def test_nothing_printed_holds_a_heading_or_a_tag(world: World, capsys: pytest.C
         world.one,
     ):
         assert word not in text
+
+
+def test_a_caselist_on_no_topic_is_refused_and_the_others_still_counted(
+    world: World, capsys: pytest.CaptureFixture[str]
+) -> None:
+    code, out = world.run(capsys, "--caselist", "hsld99")
+    assert code == 0
+    assert out["caselists"]["hsld99"] == {
+        "refused": "topics.yaml puts hsld99 on 2026-09-30 on no topic with a taxonomy"
+    }
+    assert out["caselists"][CASELIST]["cards"] == 9

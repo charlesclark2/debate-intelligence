@@ -843,7 +843,11 @@ async def _count(arguments: argparse.Namespace) -> dict[str, object]:
     caselists: dict[str, object] = {}
     for caselist in arguments.caselist:
         begun = time.perf_counter()
-        reading, taxonomy, matcher = await _reading(arguments, caselist)
+        try:
+            reading, taxonomy, matcher = await _reading(arguments, caselist)
+        except Refused as refused:
+            caselists[caselist] = {"refused": str(refused)}
+            continue
         cards, sections, queued = read_cards(reading, taxonomy, matcher, threshold=arguments.threshold)
         readings = BlockReadings(cards, blocks_of(cards))
         index_of = {card.item_id: index for index, card in enumerate(cards)}

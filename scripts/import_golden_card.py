@@ -1391,7 +1391,43 @@ def render_index(fixtures_dir: Path) -> str:
         f"{_cell(case['research_need'])} |"
         for case in sorted(_existing_cases(fixtures_dir), key=lambda case: case["case_id"])
     ]
-    return _INDEX_HEADER + "".join(f"{row}\n" for row in rows) + f"\n{len(rows)} cases.\n"
+    return (
+        _INDEX_HEADER
+        + "".join(f"{row}\n" for row in rows)
+        + "\n"
+        + "".join(f"{line}\n" for line in corpus_count_lines(_existing_cases(fixtures_dir)))
+    )
+
+
+# The PM's ruling of 2026-11-20: a floor, not a share. At least 24 cases, and at least a third of
+# that minimum in each event, however many cases the other events end with.
+MINIMUM_CASES: Final = 24
+MINIMUM_CASES_PER_EVENT: Final = MINIMUM_CASES // len(EVENTS)
+
+
+def corpus_count_lines(cases: Sequence[Mapping[str, Any]]) -> list[str]:
+    """The corpus's size, by event and by source type, every one listed so a zero shows."""
+    events = Counter(case["event"] for case in cases)
+    types = Counter(case["source_type"] for case in cases)
+    return [
+        f"{len(cases)} cases.",
+        "By event: " + ", ".join(f"{event} {events[event]}" for event in EVENTS) + ".",
+        "By source type: " + ", ".join(f"{kind.value} {types[kind.value]}" for kind in SourceType) + ".",
+    ]
+
+
+def corpus_size_problems(cases: Sequence[Mapping[str, Any]]) -> list[str]:
+    """What keeps the corpus under ac1's floor: fewer than 24 cases, or fewer than 8 in an event."""
+    problems = []
+    if len(cases) < MINIMUM_CASES:
+        problems.append(f"{len(cases)} cases, fewer than {MINIMUM_CASES}")
+    events = Counter(case["event"] for case in cases)
+    problems += [
+        f"{event}: {events[event]} cases, fewer than {MINIMUM_CASES_PER_EVENT}"
+        for event in EVENTS
+        if events[event] < MINIMUM_CASES_PER_EVENT
+    ]
+    return problems
 
 
 def write_index(fixtures_dir: Path) -> None:

@@ -189,3 +189,51 @@ def test_every_committed_case_has_its_expected_card_and_no_evidence_text() -> No
         for case in _committed()
     }
     assert {name: found for name, found in problems.items() if found} == {}
+
+
+# ------------------------------------------------------------------------------------------------
+# ac1's floor (the PM's ruling of 2026-11-20): at least 24 cases, and at least 8 in each event
+# ------------------------------------------------------------------------------------------------
+
+
+def _corpus(policy: int, ld: int, pf: int) -> list[dict[str, str]]:
+    counts = {"Policy": policy, "LD": ld, "PF": pf}
+    return [{"event": event, "source_type": "news"} for event, n in counts.items() for _ in range(n)]
+
+
+@pytest.mark.parametrize(
+    ("counts", "problems"),
+    [
+        ((8, 8, 8), []),
+        # More than a third elsewhere is fine: a quarter rule would fail Policy here (8 of 36).
+        ((8, 14, 14), []),
+        ((7, 9, 8), ["Policy: 7 cases, fewer than 8"]),
+        ((8, 8, 7), ["23 cases, fewer than 24", "PF: 7 cases, fewer than 8"]),
+        ((0, 20, 20), ["Policy: 0 cases, fewer than 8"]),
+        (
+            (0, 0, 0),
+            ["0 cases, fewer than 24", *(f"{e}: 0 cases, fewer than 8" for e in ("Policy", "LD", "PF"))],
+        ),
+    ],
+)
+def test_the_corpus_floor_is_24_cases_and_8_per_event(
+    counts: tuple[int, int, int], problems: list[str]
+) -> None:
+    assert golden.corpus_size_problems(_corpus(*counts)) == problems
+
+
+def test_the_count_lines_list_every_event_and_source_type_with_zeros() -> None:
+    cases = [*_corpus(1, 0, 2), {"event": "LD", "source_type": "journal"}]
+
+    assert golden.corpus_count_lines(cases) == [
+        "4 cases.",
+        "By event: Policy 1, LD 1, PF 2.",
+        "By source type: news 3, think tank 0, government 0, journal 1, unknown 0.",
+    ]
+
+
+def test_the_committed_corpus_meets_the_floor_and_its_index_counts_it() -> None:
+    cases = [json.loads((case / golden.CASE_NAME).read_text(encoding="utf-8")) for case in _committed()]
+
+    assert golden.corpus_size_problems(cases) == []
+    assert (FIXTURES / golden.INDEX_NAME).read_text(encoding="utf-8") == golden.render_index(FIXTURES)

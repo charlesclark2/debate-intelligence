@@ -6,7 +6,7 @@
 | Spec | [`plan_specs/v1/e07-discovery-adapters/t27-openalex-answers-a-crossed-search.yaml`](../../plan_specs/v1/e07-discovery-adapters/t27-openalex-answers-a-crossed-search.yaml) |
 | Epic / release | `v1-e07-discovery-adapters` / `v1.4` |
 | Branch | `task/v1-e07-t27-openalex-answers-a-crossed-search` |
-| Session status | PARTIAL: the ac3 search turns out to have run on dev.413, whose single 2,272-character request is the refusal v1-e08-t20 fixed (Deviation 4). The probe on dev.445 is the operator's, and then this goes back to the PM. The Goal stays `InProgress` <!-- COMPLETE / PARTIAL / BLOCKED --> |
+| Session status | PARTIAL: the ac3 search ran on dev.413, and its refusal is the one v1-e08-t20 fixed. On dev.445 the probe's seven requests were all answered. Stopped for the PM's second ruling. The Goal stays `InProgress` <!-- COMPLETE / PARTIAL / BLOCKED --> |
 
 ## Summary
 
@@ -41,7 +41,7 @@ I stopped there for the PM's ruling.
 | Criterion | Status | Evidence (command → result) |
 |---|---|---|
 | ac1: the offline measurement and the documentation's limits are recorded, and the proposal is ruled on by the PM before code | NOT RUN | The measurement and the documentation are recorded below. The proposal is under [The proposal](#the-proposal-item-4-for-the-pms-ruling), awaiting the ruling. No fix code is written. The kept message (item 3) is code the PM's brief asked for before the stop ([Deviations](#deviations-from-the-spec) 1). |
-| ac2: the ruled fix holds by tests on recorded-shape fixtures shown failing first, and the operator's repeat of v1-e08-t16's ac3 search records openalex with an outcome other than error and results above zero (operator) | NOT RUN | After the ruling, and the operator's repeat after the merge. |
+| ac2: the ruled fix holds by tests on recorded-shape fixtures shown failing first, and the operator's repeat of v1-e08-t16's ac3 search records openalex with an outcome other than error and results above zero (operator) | NOT RUN | No new fix is needed: the refusal was dev.413's, and t20 fixed it ([The probe on dev.445](#the-probe-on-dev445-operator-2026-11-19)). The mutant that rebuilds the refused request fails 5 existing tests. How ac2 closes, and the repeat, are for the PM's second ruling. |
 | Node: `uv run pytest packages/debate_core/tests/integrations/discovery -k openalex` | PASS for today's code | `hard_stop.py 115 .venv/bin/python -m pytest packages/debate_core/tests/integrations/discovery -k openalex -q` → `232 passed in 2.68s`. Run again once the fix is in. |
 
 ## 1. The offline measurement (no call)
@@ -345,6 +345,88 @@ How I'll read the probe's rows against the ruling:
 | 400, `one-crossed-query` 200, `two-queries-joined` 400, and the variants of the 24-query request still 400 | joining as such | stop: D is the PM's new task |
 | more than one variant answers 200, only `no-date-window` does, `ac3-first-request` answers 200, or `plain-control` is refused | ambiguous, two causes, or OpenAlex has changed again | stop for the PM |
 
+## The probe on dev.445 (operator, 2026-11-19)
+
+The operator installed `v1.1.0-dev.445`. The installer's last line was `Installed debate-research
+1.1.0.dev445 from v1.1.0-dev.445 at /Users/charlesclark/.local/bin/debate-research.`, and the check
+table read `Integrations failing none`. The tag check then printed `v1.1.0-dev.445`. The probe:
+
+```text
+label or_groups search_length url_length status
+ac3-first-request 24 1473 1846 200
+no-page-parameter 24 1473 1839 200
+select-without-keywords 24 1473 1835 200
+no-date-window 24 1473 1804 200
+one-crossed-query 1 72 349 200
+two-queries-joined 2 100 385 200
+plain-control 1 25 251 200
+requests sent 7
+exit 0
+```
+
+**Every request was answered, the ac3 search's own first request included.** Today's code sends a
+request OpenAlex accepts. The refusal of 2026-11-14 was dev.413's single 2,272-character request (see
+[The ac3 search ran on dev.413](#the-ac3-search-ran-on-dev413-found-2026-11-19)), which v1-e08-t20's
+split already fixed. None of the ruling's branches A to D applies, so, as my reading table says, the
+session stops for the PM.
+
+**The mutant that rebuilds the refused request** (item 5). I deleted `_fits`' search-length check
+(`openalex.py:526` to `527`), so the ac3 search is again dev.413's one request of 37 queries. Its
+2,686 URL characters still fit `MAX_URL_CHARS`. I ran `hard_stop.py 115 pytest
+packages/debate_core/tests/integrations/discovery packages/debate_core/tests/application/test_query_expansion.py
+packages/debate_cli/tests/test_search_command.py`, and got `5 failed, 1456 passed in 8.45s`:
+
+| Test (line) | Failure |
+|---|---|
+| `test_openalex.py:975` | `assert 1 == 2` |
+| `test_openalex.py:935` | `['1', '2'] == ['1', '2', '1', '2']` |
+| `test_openalex.py:954` | `assert False` |
+| `test_query_expansion.py:1819`, the per-preset pin of every DA's link search | `('policy-2026-27-nhi', 'politics-da', [37])`, which is the ac3 search itself |
+| `test_search_command.py:860` | the joined `search=` list differs |
+
+Then I restored the file with `git checkout --` and checked it with `git diff --quiet`. So t20's tests already
+refuse the request OpenAlex refused, on recorded-shape and hand-written data. No new fix code is
+needed for it.
+
+### Second relay to the PM (2026-11-19)
+
+```text
+v1-e07-t27 (OpenAlex refuses the crossed search): second stop. The refusal was dev.413's, and t20 fixed it.
+
+Found: the ac3 search of 2026-11-14 ran on dev.413, not dev.439. Its saved file (written 2026-11-14
+23:21) has no "narrowing" key, which every build from dev.423 writes into --save, and the Mac stayed
+on dev.413 (installed 2026-11-12) until today. On dev.413 the search is ONE request of all 37 queries,
+2,272 search characters, over the 1,500 OpenAlex named on 2026-11-12, with no halving, so one 400
+failed all 37. v1-e08-t20's split (dev.423 on) is the fix, and the 24/13 requests I measured had
+never been sent.
+Probe on dev.445 (installed today): all 7 requests answered 200, including the ac3 search's own
+first request (24 groups, 1,473 characters, 1,846 URL). None of your branches A to D applies.
+Mutant that rebuilds the refused request (_fits' search-length check deleted): 5 existing tests fail,
+including the per-preset pin ('policy-2026-27-nhi', 'politics-da', [37]). Restored.
+Item 3 (OpenAlex's message kept, sanitized and cut) is done and stays.
+
+Q1. Close this task with no new fix code: item 3, this record, and the mutant against t20's tests
+    standing for ac2's "tests shown failing first"? That means amending ac2 to say so, and the spec's
+    description to say dev.413.
+    Recommended: yes. A new fix would guard a request that is already guarded.
+Q2. The closing repeat (v1-e08-t16's ac3 search, OpenAlex's entry and the result count only): run it
+    now on dev.445, or after this merge?
+    Recommended: now. dev.445 carries the split, and item 3 changes only a refusal's text. If OpenAlex
+    answers, ac2 is recorded before the PR. The block is in the report.
+Q3. v1-e08-t16's ac3 sheet was built from a dev.413 search with OpenAlex at error and 0 results. Make it
+    again from the dev.445 repeat? Its command 3 takes the new file names.
+    Recommended: yes. The repeat saves to a new Desktop file and keeps the dev.413 one.
+Q4. Small items:
+    (a) MAX_SEARCH_CHARS' docstring: say the 2026-11-13 pages no longer state 1,500, and that a
+        1,473-character request was answered on 2026-11-19;
+    (b) the cutover runbook's install success text is stale (the installer now ends with
+        "Installed debate-research ... at ...");
+    (c) t14's report names dev.342 for its ac3, but dev.358 is the merge;
+    (d) a record's build comes from the operator's printed tag, never from the newest release.
+    Recommended: (a) in this task, since it is a docstring in scope; (b) and (c) filed or folded in;
+    (d) yours.
+```
+
 ## Files changed
 
 - `packages/debate_core/src/debate_core/integrations/discovery/openalex.py`: `refusal_message`,
@@ -450,10 +532,34 @@ Success looks like seven rows and then `requests sent 7`, with `ac3-first-reques
 followed by OpenAlex's message, and `plain-control` at `200`. Paste the rows back. A `STOP:` line
 ends the probe early: paste it as it is.
 
-**After the merge (ac2): v1-e08-t16's ac3 search, OpenAlex's entry and the result count only.** I'll
-write this block with the fix, because it depends on the ruling.
+**The closing check (ac2): v1-e08-t16's ac3 search repeated, on dev.445 or later** (under a minute)
+
+When this runs, now on dev.445 or after the merge, is in the PM's second ruling (Q2). It makes the same
+live calls as v1-e08-t16's ac3: OpenAlex, the publisher feeds, Crossref, the Federal Register and
+GovInfo. It writes only to dev's local data directory, to a new Desktop file (the dev.413 file is
+kept as evidence) and to `/tmp`. It prints the error code, whether the payload has `narrowing` (a
+build from dev.423 on), the result count and OpenAlex's provider entry. It prints no titles. Where:
+your Mac, any terminal.
+
+```bash
+if env | grep -q '^DEBATE_'; then echo "STOP: DEBATE_ overrides are set in this shell"; else cd "$HOME" && env DEBATE_ENV=dev debate-research --json search "national health insurance" --argument politics-da --need link --topic policy-2026-27-nhi --max-results 200 --save "$HOME/Desktop/search-policy-nhi-crossing-dev445.json" > /tmp/search-policy-nhi-crossing-dev445.json; echo "exit $?"; python3 -I -c 'import json, sys; e = json.load(open(sys.argv[1])); r = e.get("error") or {}; d = e.get("data") or r.get("details") or {}; print("code", r.get("code"), "narrowing key", "narrowing" in d, "results", len(d.get("results") or [])); print("openalex", [p for p in d.get("providers") or [] if p.get("provider") == "openalex"])' /tmp/search-policy-nhi-crossing-dev445.json; fi
+```
+
+Success looks like `exit 0` or `exit 6`, then `narrowing key True` and `results` above zero, and
+OpenAlex's entry with an outcome other than `error` and `results` above zero. `exit 6` with
+`SEARCH_PARTIAL` is expected, because Crossref cannot reach all 37 queries (v1-e08-t16 ruling 3A).
+The summary line was run on two invented envelopes in the session scratchpad.
 
 ## Follow-up work
+
+- **The cutover runbook's install success text is stale.** [caselist-cutover.md](../runbooks/caselist-cutover.md)
+  says `install_channel.sh … | tail -5` ends with a `complete` line and `The build runs on the Python
+  at …, which uv manages.` dev.445's installer ends with `Installed debate-research <version> from
+  <tag> at <path>.` (`scripts/install_channel.sh:344`), after the check table. I copied the stale text
+  into this session's hand-off. It is a runbook edit, for the PM to file or fold in.
+- **v1-e08-t16's ac3 has to be done again.** Its saved search was written by dev.413 with OpenAlex at
+  `error` and 0 results, so the coach's sheet from it had no OpenAlex works, and its nDCG cannot be
+  set against v1-e08-t14's. The repeat on dev.445 below serves t16's ac3 and this task's ac2.
 
 - **t14's report names the wrong build for its ac3** (`v1.1.0-dev.342`, which predates t14's merge;
   `dev.358` is the merge). It is a record slip, for the PM to correct if it matters.

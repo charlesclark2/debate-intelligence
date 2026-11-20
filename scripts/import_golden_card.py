@@ -156,7 +156,9 @@ for every case, `record` reads each case's report:
 Without `--execute` it is a dry run: it reads the reports and the store and prints what it would
 do, and writes nothing (working agreement 11). The store's database is opened read-only. The
 snapshot folder must be outside the repository and every worktree. It prints counts and case IDs,
-never a page's text or title.
+never a page's text, title or host: the reports by access status, then by the case's source type
+and access status (every source type listed, so a kind with no surviving case shows), then each
+case dropped or not recorded.
 
 ## `review`: the coach's sign-off sheet
 
@@ -1573,6 +1575,9 @@ class RecordReport:
     dropped: list[tuple[str, str]] = field(default_factory=list)
     not_recorded: list[tuple[str, str]] = field(default_factory=list)
     statuses: Counter[str] = field(default_factory=Counter)
+    by_source_type: dict[str, Counter[str]] = field(
+        default_factory=lambda: {source_type.value: Counter() for source_type in SourceType}
+    )
 
 
 def record_sources(
@@ -1584,6 +1589,7 @@ def record_sources(
         case_id = case["case_id"]
         reading = snapshots.read_fetch_report(fetches_dir / f"{case_id}.json", case.get("source_link") or "")
         report.statuses[reading.access_status or "no report"] += 1
+        report.by_source_type[case["source_type"]][reading.access_status or "no report"] += 1
         if reading.outcome is snapshots.FetchOutcome.DROP:
             assert reading.access_status is not None
             report.dropped.append((case_id, reading.access_status))
@@ -1617,6 +1623,12 @@ def record_lines(report: RecordReport, *, execute: bool) -> list[str]:
     """What `record` prints: counts and case IDs, safe to send."""
     verb = ("recorded", "dropped") if execute else ("would record", "would drop")
     lines = _table("fetch reports by access status:", report.statuses)
+    # The PM's request of 2026-11-19: which kinds of source survive, so the coach can lean his next
+    # picks toward them. Every source type is listed, a type with no case as "no case".
+    lines.append("fetch reports by source type and access status:")
+    for source_type, statuses in report.by_source_type.items():
+        counts = ", ".join(f"{status} {count}" for status, count in sorted(statuses.items()))
+        lines.append(f"  {source_type}: {counts or 'no case'}")
     lines.append(f"{verb[0]}: {len(report.recorded)}")
     lines.append(f"{verb[1]}: {len(report.dropped)}")
     lines += [f"  {case_id}: {status}" for case_id, status in report.dropped]

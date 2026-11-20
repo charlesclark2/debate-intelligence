@@ -208,6 +208,26 @@ def test_the_dry_run_reads_everything_and_writes_nothing(
     assert "dry run: nothing written" in out
 
 
+def test_record_counts_each_source_type_by_access_status_and_lists_every_type(
+    world: World, capsys: pytest.CaptureFixture[str]
+) -> None:
+    world.record()
+    out = capsys.readouterr().out
+
+    # brookings, rand and cfr are think tanks; nytimes and reuters are news. The other-link case
+    # counts under its report's status, and the unreported one as "no report".
+    assert (
+        "fetch reports by source type and access status:\n"
+        "  news: ERROR 1, PAYWALLED 1\n"
+        "  think tank: ACCESSIBLE 2, no report 1\n"
+        "  government: no case\n"
+        "  journal: no case\n"
+        "  unknown: no case\n"
+    ) in out
+    for link in LINKS.values():
+        assert link.split("/")[2] not in out
+
+
 def test_record_copies_the_accessible_snapshot_and_records_its_digests(
     world: World, capsys: pytest.CaptureFixture[str]
 ) -> None:

@@ -65,10 +65,18 @@ OpenAlex answers `429` both to more requests a second than the plan allows and t
 budget, so a spent budget looks like any other rate limit: :class:`ProviderRateLimited`, carrying
 the `Retry-After` when OpenAlex sends one, and the wrapper's exponential backoff when it does not
 (v1-e07-t22): 2 s, then 4 s, and the third 429 in a row opens the breaker for its cool-down.
+
+**A refusal says why** (v1-e07-t27). On 2026-11-14 every request of a crossed search was refused with
+a bare "HTTP 400: the provider refused the request", which named no cause. OpenAlex's refusal body is a
+JSON `error` and `message`; any refusal other than a 429 now keeps the message (or the error when it
+has none) after its reason, as `...; OpenAlex said: <message>`, sanitized and cut to 200 characters by
+:func:`refusal_message`: no URL query, no key, one line. A body that is not OpenAlex's JSON keeps
+today's reason. A 429's reason is unchanged.
 """
 
 from __future__ import annotations
 
+import json
 import math
 import re
 import time
@@ -97,11 +105,12 @@ from debate_core.domain.discovery import (
 from debate_core.domain.enums import SourceType
 from debate_core.integrations.discovery.feeds import query_terms, text_matches_terms
 from debate_core.integrations.discovery.http_failures import provider_error_for_status
-from debate_core.integrations.discovery.redaction import logger, protect_logs
+from debate_core.integrations.discovery.redaction import REDACTED, logger, protect_logs, redact
 
 __all__ = [
     "MAX_PAGED_RESULTS",
     "MAX_PER_PAGE",
+    "MAX_REFUSAL_MESSAGE_CHARS",
     "MAX_SEARCH_CHARS",
     "MAX_URL_CHARS",
     "OPENALEX_WORKS_URL",
@@ -117,6 +126,7 @@ __all__ = [
     "joined_search",
     "openalex_factory",
     "rebuild_abstract",
+    "refusal_message",
     "source_type_for",
     "subjects_of",
     "works_parameters",
@@ -145,7 +155,13 @@ first N of the NHI politics DA link search's 37 queries: 24 (a search of 1,473 c
 the limit is 1500)". The same 25 were refused without the key and on page 2; their words in 13 groups
 (1,476 characters) and 25 groups of one word each (338) were answered, so neither the number of OR
 groups nor the URL is what OpenAlex refused. OpenAlex says a paid plan takes longer searches. The 37
-queries' 2,272 characters, under :data:`MAX_URL_CHARS` at 2,686 of URL, were refused on 2026-11-11."""
+queries' 2,272 characters, under :data:`MAX_URL_CHARS` at 2,686 of URL, were refused on 2026-11-11.
+
+OpenAlex's searching pages, rewritten on 2026-11-13 (help.openalex.org/api/searching, read 2026-11-15),
+no longer state this limit: the only one they give is 8,190 bytes of URL. It still binds as measured.
+On 2026-11-19 (v1-e07-t27, v1.1.0-dev.445) the 24-query request of 1,473 characters, with `keywords` in
+`select=` and `page=1`, was answered. The ac3 search's refusal of 2026-11-14 was dev.413's single
+37-query request, sent before this limit existed."""
 
 MAX_URL_CHARS: Final = 3_500
 """The longest request URL sent. OpenAlex refuses one over about 4 KB with `400` and suggests splitting
@@ -717,11 +733,21 @@ class OpenAlexProvider:
         failure = provider_error_for_status(
             self.name, response.status_code, response.headers, now=self._clock.now()
         )
+        if isinstance(failure, ProviderUnavailable):
+            failure = self._saying_why(failure, response)
         if failure is not None and response.status_code == 400:
             raise _Refused(failure)
         if failure is not None:
             raise failure
         return self._read(response)
+
+    def _saying_why(self, failure: ProviderUnavailable, response: httpx.Response) -> ProviderUnavailable:
+        """`failure` with OpenAlex's own message added, when its body carries one (v1-e07-t27)."""
+        secrets = () if self._api_key is None else (self._api_key.get_secret_value(),)
+        said = refusal_message(response.content, secrets=secrets)
+        if said is None:
+            return failure
+        return ProviderUnavailable(self.name, f"{_reason(failure)}; OpenAlex said: {said}")
 
     def _read(self, response: httpx.Response) -> tuple[list[CandidateResult], int]:
         try:
@@ -764,6 +790,64 @@ class _Asked:
 def _reason(error: ProviderError) -> str:
     """The error's message without the provider name it starts with."""
     return str(error).removeprefix(f"{error.provider}: ")
+
+
+MAX_REFUSAL_MESSAGE_CHARS: Final = 200
+"""The most of OpenAlex's own error message a reason keeps, `...` included (v1-e07-t27)."""
+
+_URL_QUERY: Final = re.compile(r"""(\b[a-z][a-z0-9+.-]*://[^\s?#"'<>]*)\?[^\s#"'<>]*""", re.IGNORECASE)
+"""A URL's query string, which can carry a key or a contact email; the URL before it is kept."""
+
+_CREDENTIAL_PARAMETER: Final = re.compile(r"\b(api_key|mailto|key|token)=[^\s&\"'<>]+", re.IGNORECASE)
+"""A credential written as a parameter outside a URL, as `api_key=...`."""
+
+_BEARER: Final = re.compile(r"\bBearer\s+\S+", re.IGNORECASE)
+
+
+def refusal_message(content: bytes, *, secrets: Sequence[str] = ()) -> str | None:
+    """OpenAlex's own reason for refusing a request, safe to keep in a provider's reasons; `None` when
+    its body carries none.
+
+    OpenAlex answers a refusal with a JSON object of an `error` (a short title) and a `message` (why,
+    and what to do), as help.openalex.org/api/searching shows (read 2026-11-15). The message is kept,
+    or the error when the message is missing or blank; a body that is not such an object, such as a
+    proxy's HTML page, gives `None`. What is kept carries no URL query string, no credential parameter
+    or bearer token, and none of `secrets` (in any of their URL spellings); its whitespace is single
+    spaces and its other control characters are dropped. It is cut at a word boundary to at most
+    :data:`MAX_REFUSAL_MESSAGE_CHARS` characters, ending in `...` when cut.
+    """
+    try:
+        document: object = json.loads(content)
+    except ValueError:
+        return None
+    if not isinstance(document, Mapping):
+        return None
+    fields = cast(Mapping[str, object], document)
+    for key in ("message", "error"):
+        said = _safe_text(fields.get(key), secrets)
+        if said is not None:
+            return _cut(said)
+    return None
+
+
+def _safe_text(value: object, secrets: Sequence[str]) -> str | None:
+    if not isinstance(value, str):
+        return None
+    text = _URL_QUERY.sub(r"\1", value)
+    text = _CREDENTIAL_PARAMETER.sub(rf"\1={REDACTED}", text)
+    text = _BEARER.sub(f"Bearer {REDACTED}", text)
+    text = redact(text, secrets)
+    text = "".join(character if character.isprintable() else " " for character in text)
+    text = " ".join(text.split())
+    return text or None
+
+
+def _cut(text: str) -> str:
+    if len(text) <= MAX_REFUSAL_MESSAGE_CHARS:
+        return text
+    room = text[: MAX_REFUSAL_MESSAGE_CHARS - 3]
+    head = room.rsplit(" ", 1)[0] if " " in room else room
+    return f"{head.rstrip()}..."
 
 
 def openalex_factory(

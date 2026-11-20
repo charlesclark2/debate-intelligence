@@ -155,7 +155,13 @@ first N of the NHI politics DA link search's 37 queries: 24 (a search of 1,473 c
 the limit is 1500)". The same 25 were refused without the key and on page 2; their words in 13 groups
 (1,476 characters) and 25 groups of one word each (338) were answered, so neither the number of OR
 groups nor the URL is what OpenAlex refused. OpenAlex says a paid plan takes longer searches. The 37
-queries' 2,272 characters, under :data:`MAX_URL_CHARS` at 2,686 of URL, were refused on 2026-11-11."""
+queries' 2,272 characters, under :data:`MAX_URL_CHARS` at 2,686 of URL, were refused on 2026-11-11.
+
+OpenAlex's searching pages, rewritten on 2026-11-13 (help.openalex.org/api/searching, read 2026-11-15),
+no longer state this limit: the only one they give is 8,190 bytes of URL. It still binds as measured.
+On 2026-11-19 (v1-e07-t27, v1.1.0-dev.445) the 24-query request of 1,473 characters, with `keywords` in
+`select=` and `page=1`, was answered. The ac3 search's refusal of 2026-11-14 was dev.413's single
+37-query request, sent before this limit existed."""
 
 MAX_URL_CHARS: Final = 3_500
 """The longest request URL sent. OpenAlex refuses one over about 4 KB with `400` and suggests splitting

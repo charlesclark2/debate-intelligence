@@ -59,6 +59,7 @@ import asyncio
 import io
 import json
 import math
+import re
 import sys
 import time
 from collections import Counter, defaultdict
@@ -78,8 +79,9 @@ from debate_core.application.landscape_seeding import SeedReading, read_seed_sou
 from debate_core.arguments.landscape.evaluation_breakdown import NO_POSITION_LABEL, related, scored_stance
 from debate_core.arguments.landscape.headings import NormalizedHeading
 from debate_core.arguments.landscape.holdout_mark import holdout_header
+from debate_core.arguments.landscape.impacts import tag_opening
 from debate_core.arguments.landscape.link_chains import heading_roles, tag_role
-from debate_core.arguments.landscape.matcher import PositionMatcher, read_items
+from debate_core.arguments.landscape.matcher import PositionMatcher, read_items, tag_words
 from debate_core.arguments.landscape.review_queue import (
     DEFAULT_MINIMUM_REVIEW_TEAMS,
     DEFAULT_REVIEW_THRESHOLD,
@@ -167,6 +169,8 @@ class CardRecord:
     """Its tag opens as a link, internal link or uniqueness card, or a heading over it labels one."""
     sections: tuple[str, ...] = field(default=(), repr=False)
     """The section item ids over it, outermost first: one per prefix of `path`."""
+    opens_shell: bool = False
+    """Its tag opens a new shell (:func:`opens_a_shell`): where a carry forward ends."""
 
     @property
     def eligible(self) -> bool:
@@ -247,6 +251,7 @@ def read_cards(
                     else Placed(position, taxonomy.resolve(position).kind.value, result.role),
                     sides=sides,
                     link_shaped=_link_shaped(card.tag, levels),
+                    opens_shell=opens_a_shell(card.tag),
                     sections=tuple(
                         section_item_id(source.sha256, path[:depth]) for depth in range(1, len(path) + 1)
                     ),
@@ -267,6 +272,41 @@ def _link_shaped(tag: str | None, levels: Sequence[NormalizedHeading]) -> bool:
         for one in levels
         if one.text
     )
+
+
+_CP_OR_PLAN_LABEL: Final = re.compile(
+    r"^\s*(?:(?:the\s+)?(?:cp|counterplan|plan|pt)(?:\s+text)?|(?:the\s+)?text)\s*[:\-\u2013\u2014]\s*\S",
+    re.IGNORECASE,
+)
+"""`Text:`, `CP Text:`, `Counterplan:`, `Plan:`, `Plan Text -`: the CP text label of `v1-e32-t11` and the plan
+text label of `v1-e32-t09`, inline at a tag's start."""
+_BARE_TEXT_LABELS: Final = frozenset(
+    {
+        "text",
+        "texts",
+        "the text",
+        "cp text",
+        "counterplan text",
+        "plan",
+        "plan text",
+        "the plan",
+        "the plan text",
+    }
+)
+_INTERPRETATION_OPENINGS: Final = ("interpretation", "interp", "our interpretation")
+
+
+def opens_a_shell(tag: str | None) -> bool:
+    """Whether a tag opens a new shell, where a carry forward ends (the PM's ruling of 2026-11-20): a plan or
+    counterplan text (`Text:`, `CP:`, `Plan:`, or the label alone), an interpretation, or uniqueness."""
+    if not tag:
+        return False
+    if _CP_OR_PLAN_LABEL.match(tag) or tag_words(tag) in _BARE_TEXT_LABELS:
+        return True
+    opening = tag_opening(tag)
+    if any(opening == one or opening.startswith(f"{one} ") for one in _INTERPRETATION_OPENINGS):
+        return True
+    return tag_role(tag) is ChainRole.UNIQUENESS
 
 
 # ------------------------------------------------------------------------------------------------
@@ -824,6 +864,185 @@ def label_kinds_of_inheriting(
 
 
 # ------------------------------------------------------------------------------------------------
+# Carrying forward in file order (the PM's ruling of 2026-11-20)
+# ------------------------------------------------------------------------------------------------
+
+
+DISTANCES: Final = ("adjacent", "one-gap", "until-stop")
+"""How far back the placed card may be: right before the card, with one unplaced card between, or any
+distance until the carry ends."""
+SHELLS: Final = ("list", "none")
+SCOPES: Final = ("section", "document")
+_GAPS: Final = {"adjacent": 0, "one-gap": 1, "until-stop": None}
+
+
+@dataclass(frozen=True, slots=True)
+class Carry:
+    """One carry-forward variant."""
+
+    distance: str
+    shells: str
+    scope: str
+
+    @property
+    def name(self) -> str:
+        return f"distance={self.distance},shells={self.shells},scope={self.scope}"
+
+
+def carry_variants() -> list[Carry]:
+    return [Carry(*one) for one in product(DISTANCES, SHELLS, SCOPES)]
+
+
+def _placed_source(card: CardRecord) -> bool:
+    """Placed by its headings (counted) or by its tag keyword alone: what a carry starts from."""
+    return card.placed is not None and card.status in ("counted", "keyword")
+
+
+def carried(
+    cards: Sequence[CardRecord], position: int, variant: Carry, deepest: int
+) -> tuple[Placed, CardRecord] | None:
+    """What `cards[position]` takes from the cards before it in its document (`cards`, in file order) under
+    `variant`, with the card it takes it from; None when it takes nothing.
+
+    The scope's section is the deepest section over the card holding a placed card before it, `deepest` raw
+    headings deep (the document only for a card under no heading); with `scope=document`, the document. Within
+    it, walking back in file order, the nearest card placed by its headings or tag keyword is the source. The
+    carry ends at a card that opens a shell (`shells=list`, the card itself included), and at more unplaced
+    cards between than the distance allows. Under an answer heading the card carries as answering."""
+    card = cards[position]
+    if variant.shells == "list" and card.opens_shell:
+        return None
+    if variant.scope == "document" or not card.path:
+        prefix: tuple[str, ...] = ()
+    else:
+        if deepest == 0:
+            return None
+        prefix = card.path[:deepest]
+    limit = _GAPS[variant.distance]
+    gap = 0
+    for back in range(position - 1, -1, -1):
+        one = cards[back]
+        if one.path[: len(prefix)] != prefix:
+            continue
+        if _placed_source(one) and one.placed is not None:
+            role = PositionRole.ANSWERS if card.under_answer_heading else one.placed.role
+            return Placed(one.placed.position_id, one.placed.kind, role), one
+        if variant.shells == "list" and one.opens_shell:
+            return None
+        gap += 1
+        if limit is not None and gap > limit:
+            return None
+    return None
+
+
+def carried_all(
+    cards: Sequence[CardRecord], variant: Carry, *, statuses: Iterable[str]
+) -> dict[int, tuple[Placed, CardRecord]]:
+    """Every card of `statuses` that `variant` carries a position to, by index."""
+    wanted = frozenset(statuses)
+    by_document: dict[str, list[int]] = defaultdict(list)
+    for index, card in enumerate(cards):
+        by_document[card.document].append(index)
+    found: dict[int, tuple[Placed, CardRecord]] = {}
+    for indices in by_document.values():
+        ordered = [cards[index] for index in indices]
+        seen: set[tuple[str, ...]] = set()
+        for position, index in enumerate(indices):
+            card = ordered[position]
+            if card.status in wanted:
+                deepest = max(
+                    (depth for depth in range(1, len(card.path) + 1) if card.path[:depth] in seen), default=0
+                )
+                got = carried(ordered, position, variant, deepest)
+                if got is not None:
+                    found[index] = got
+            if _placed_source(card):
+                seen.update(card.path[:depth] for depth in range(1, len(card.path) + 1))
+    return found
+
+
+def outcome_of(taxonomy: Taxonomy, labelled: LabelledCard, placed: Placed, sides: Sequence[str]) -> str:
+    """A placement against the coach's label, by the breakdown the grid used."""
+    if labelled.label == NO_POSITION_LABEL:
+        return "labelled_none"
+    if names_a_label(taxonomy, labelled, placed.position_id, placed.role, sides):
+        return "correct"
+    if placed.position_id in (labelled.label, labelled.also):
+        return "wrong_stance"
+    if related(taxonomy, placed.position_id, labelled.label) or (
+        labelled.also is not None and related(taxonomy, placed.position_id, labelled.also)
+    ):
+        return "related"
+    if placed.kind == taxonomy.resolve(labelled.label).kind.value:
+        return "same_kind"
+    return "other_kind"
+
+
+def carry_counts(
+    taxonomy: Taxonomy,
+    cards: Sequence[CardRecord],
+    first: Sequence[LabelledCard],
+    index_of: Mapping[str, int],
+) -> dict[str, object]:
+    """Each variant: what it carries over the caselist, and, with the first sample, how its carried labelled
+    cards score."""
+    total = len(cards)
+    counted = sum(card.status == "counted" for card in cards)
+    found: dict[str, object] = {}
+    for variant in carry_variants():
+        got = carried_all(cards, variant, statuses=("unplaced",))
+        decided = carried_all(cards, variant, statuses=("decided",))
+        entry: dict[str, object] = {
+            "population": {
+                "carried": len(got),
+                "carried_by_kind": dict(sorted(Counter(placed.kind for placed, _ in got.values()).items())),
+                "from_a_keyword_placed_card": sum(source.status == "keyword" for _, source in got.values()),
+                "carried_under_an_answer_heading": sum(cards[index].under_answer_heading for index in got),
+                "placed_share_before": _ratio(counted, total),
+                "placed_share_after": _ratio(counted + len(got), total),
+                "decided_cards_that_would_carry_if_eligible": len(decided),
+            }
+        }
+        if first:
+            outcomes: Counter[str] = Counter()
+            found_labelled = counted_before = correct_before = 0
+            for one in first:
+                index = index_of.get(one.item_id)
+                if index is None:
+                    continue
+                found_labelled += 1
+                card = cards[index]
+                if card.status == "counted" and card.placed is not None:
+                    counted_before += 1
+                    correct_before += names_a_label(
+                        taxonomy, one, card.placed.position_id, card.placed.role, card.sides
+                    )
+                    continue
+                if index in got:
+                    outcomes[outcome_of(taxonomy, one, got[index][0], card.sides)] += 1
+            carried_labelled = sum(outcomes.values())
+            right = outcomes["correct"]
+            entry["first_sample"] = {
+                "labelled": len(first),
+                "found": found_labelled,
+                "carried": carried_labelled,
+                "carried_right": right,
+                "carried_right_share": _ratio(right, carried_labelled),
+                "interval_95": wilson(right, carried_labelled),
+                "over_a_third_right": carried_labelled > 0 and 3 * right > carried_labelled,
+                "outcomes": dict(sorted(outcomes.items())),
+                "before": {"counted": counted_before, "correct": correct_before},
+                "after": {
+                    "counted": counted_before + carried_labelled,
+                    "correct": correct_before + right,
+                    "coverage": _ratio(counted_before + carried_labelled, len(first)),
+                },
+            }
+        found[variant.name] = entry
+    return found
+
+
+# ------------------------------------------------------------------------------------------------
 # Wiring
 # ------------------------------------------------------------------------------------------------
 
@@ -888,6 +1107,10 @@ async def _count(arguments: argparse.Namespace) -> dict[str, object]:
         )
     if (arguments.sample is None) != (arguments.sample_rows is None):
         raise Refused("the first sample is read from --sample and --sample-rows together")
+    if arguments.carry_forward and arguments.holdout_sample is not None:
+        raise Refused(
+            "the carry-forward variants are measured on the first sample only; the holdout is not read"
+        )
     reference = Rule.parse(REFERENCE_RULE)
     caselists: dict[str, object] = {}
     for caselist in arguments.caselist:
@@ -905,6 +1128,21 @@ async def _count(arguments: argparse.Namespace) -> dict[str, object]:
             raise Refused("the queued cards and the cards left for review are not the same count")
         queued_cards = dict(zip(eligible, queued, strict=True))
         statuses = Counter(card.status for card in cards)
+        if arguments.carry_forward:
+            first_here: tuple[LabelledCard, ...] = ()
+            if caselist == arguments.labelled_caselist and arguments.sample and arguments.sample_rows:
+                first_here = _labelled(arguments.sample, arguments.sample_rows, taxonomy, holdout=False)
+            caselists[caselist] = {
+                "version": reading.version,
+                "topic_id": reading.topic_id,
+                "taxonomy_version": taxonomy.taxonomy_version,
+                "sources": len(reading.sources),
+                "cards": len(cards),
+                "cards_by_status": dict(sorted(statuses.items())),
+                "carry_forward": carry_counts(taxonomy, cards, first_here, index_of),
+                "seconds": round(time.perf_counter() - begun, 1),
+            }
+            continue
         entry: dict[str, object] = {
             "version": reading.version,
             "topic_id": reading.topic_id,
@@ -949,7 +1187,7 @@ async def _count(arguments: argparse.Namespace) -> dict[str, object]:
                 one["first_sample"] = scored
             rules[rule.name.rsplit(",role=", 1)[0]] = one
         entry["rules"] = rules
-        if labelled_here and holdout_rule is not None:
+        if labelled_here and holdout_rule is not None and arguments.holdout_sample and arguments.holdout_rows:
             held = _labelled(arguments.holdout_sample, arguments.holdout_rows, taxonomy, holdout=True)
             entry["holdout"] = {
                 "rule": holdout_rule.name,
@@ -984,6 +1222,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument(
         "--holdout-rule",
         help=f"The one rule, chosen on the first sample, to score the holdout with: {REFERENCE_RULE}.",
+    )
+    parser.add_argument(
+        "--carry-forward",
+        action="store_true",
+        help="Measure the carry-forward variants in file order instead of the grid (first sample only).",
     )
     arguments = parser.parse_args(argv)
     arguments.caselist = arguments.caselist or list(DEFAULT_CASELISTS)

@@ -86,9 +86,14 @@ WITH_KEYWORDS = "level=nearest,placed=counted+keyword,agreement=unanimous,minimu
 
 
 class World:
-    def __init__(self, tmp_path: Path) -> None:
+    def __init__(self, tmp_path: Path, *, planted: bool = True) -> None:
         self.data_dir = tmp_path / "data"
         store = PlantedCaselist(self.data_dir, CASELIST)
+        self.three = ""
+        if not planted:
+            self.one = self.two = ""
+            self._config(tmp_path)
+            return
         self.one = store.source(
             "one",
             [
@@ -107,6 +112,9 @@ class World:
             [PlantedCard((), tag="Fifty states solve"), PlantedCard(())],
             disclosures=[("2026-09-15", NEG_THREE)],
         )
+        self._config(tmp_path)
+
+    def _config(self, tmp_path: Path) -> None:
         self.config_dir = tmp_path / "config"
         (self.config_dir / "taxonomies").mkdir(parents=True)
         (self.config_dir / "overrides").mkdir()
@@ -409,3 +417,134 @@ def test_each_inherited_card_of_the_first_sample_has_an_outcome(
         "correct": 2,
         "labelled_none": 1,
     }
+
+
+# ------------------------------------------------------------------------------------------------
+# Carrying forward in file order (the PM's ruling of 2026-11-20)
+# ------------------------------------------------------------------------------------------------
+#
+# One invented document, disclosed by a negative and an affirmative team so its roles are the matcher's:
+#
+#   card  path                 tag                                    the matcher
+#   0     1NC                  Text: The fifty states should act      states-cp by its keyword (0.5)
+#   1     1NC                  States solve                           unplaced
+#   2     1NC                  Net benefit                            unplaced
+#   3     1NC                  Uniqueness: economy high               unplaced, opens a shell
+#   4     1NC                  Link: spending                         unplaced
+#   5     1NC > Spending DA    (invented claim)                       spending-da, ALIAS (counted)
+#   6     1NC > AT: Perm       (invented claim)                       unplaced, under an answer heading
+#   7     Case                 (invented claim)                       unplaced, under no heading that names
+
+
+CARRY_CARDS = [
+    PlantedCard(("1NC",), tag="Text: The fifty states should act"),
+    PlantedCard(("1NC",), tag="States solve"),
+    PlantedCard(("1NC",), tag="Net benefit"),
+    PlantedCard(("1NC",), tag="Uniqueness: economy high"),
+    PlantedCard(("1NC",), tag="Link: spending"),
+    PlantedCard(("1NC", "Spending DA")),
+    PlantedCard(("1NC", "AT: Perm")),
+    PlantedCard(("Case",)),
+]
+
+
+@pytest.fixture
+def carry_world(tmp_path: Path) -> World:
+    world = World(tmp_path, planted=False)
+    world.three = PlantedCaselist(world.data_dir, CASELIST).source(
+        "three", CARRY_CARDS, disclosures=[("2026-09-22", NEG_THREE), ("2026-09-22", AFF_TWO)]
+    )
+    return world
+
+
+def carry(world: World, capsys: pytest.CaptureFixture[str], *extra: str) -> dict[str, Any]:
+    code, out = world.run(capsys, "--carry-forward", *extra)
+    assert code == 0
+    return out["caselists"][CASELIST]["carry_forward"]
+
+
+def test_a_tag_opens_a_shell_when_it_is_a_text_an_interpretation_or_uniqueness() -> None:
+    for tag in (
+        "Text: The states should",
+        "CP: The states should",
+        "Plan Text - The USFG should",
+        "The text",
+        "Interpretation: topical affs",
+        "Uniqueness - the economy is high",
+        "UQ: no war now",
+    ):
+        assert script.opens_a_shell(tag), tag
+    for tag in ("Link: spending", "Plan solves", "Textbook evidence", "States solve", None, ""):
+        assert not script.opens_a_shell(tag), tag
+
+
+def test_each_carry_variant_carries_as_worked_out_by_hand(
+    carry_world: World, capsys: pytest.CaptureFixture[str]
+) -> None:
+    variants = carry(carry_world, capsys)
+    assert len(variants) == 12
+    expected = {
+        ("adjacent", "list", "section"): 2,
+        ("adjacent", "none", "section"): 2,
+        ("one-gap", "list", "section"): 3,
+        ("one-gap", "none", "section"): 3,
+        ("until-stop", "list", "section"): 3,
+        ("until-stop", "none", "section"): 5,
+        ("adjacent", "list", "document"): 2,
+        ("adjacent", "none", "document"): 2,
+        ("one-gap", "list", "document"): 4,
+        ("one-gap", "none", "document"): 4,
+        ("until-stop", "list", "document"): 4,
+        ("until-stop", "none", "document"): 6,
+    }
+    for (distance, shells, scope), count in expected.items():
+        population = variants[f"distance={distance},shells={shells},scope={scope}"]["population"]
+        assert population["carried"] == count, (distance, shells, scope)
+    widest = variants["distance=until-stop,shells=none,scope=document"]["population"]
+    assert widest["carried_by_kind"] == {"cp": 4, "da": 2}
+    assert widest["from_a_keyword_placed_card"] == 4
+    assert widest["carried_under_an_answer_heading"] == 1
+
+
+def test_the_first_sample_scores_each_carry_variant(
+    carry_world: World, capsys: pytest.CaptureFixture[str]
+) -> None:
+    three = carry_world.three
+    sample, rows = carry_world.sample(
+        "carry",
+        [
+            (carry_world.card(three, 1), "states-cp"),
+            (carry_world.card(three, 2), "spending-da"),
+            (carry_world.card(three, 4), "spending-da"),
+            (carry_world.card(three, 6), "at:spending-da"),
+            (carry_world.card(three, 7), "none"),
+        ],
+        holdout=False,
+    )
+    variants = carry(carry_world, capsys, "--sample", str(sample), "--sample-rows", str(rows))
+    narrow = variants["distance=one-gap,shells=list,scope=section"]["first_sample"]
+    assert (narrow["carried"], narrow["carried_right"]) == (3, 2)
+    assert narrow["outcomes"] == {"correct": 2, "other_kind": 1}
+    assert narrow["over_a_third_right"] is True
+    assert narrow["after"]["coverage"] == 0.6
+    wide = variants["distance=until-stop,shells=none,scope=document"]["first_sample"]
+    assert wide["outcomes"] == {"correct": 2, "labelled_none": 1, "other_kind": 2}
+
+
+def test_the_carry_forward_never_reads_the_holdout(
+    carry_world: World, capsys: pytest.CaptureFixture[str]
+) -> None:
+    sample, rows = carry_world.sample(
+        "held", [(carry_world.card(carry_world.one, 1), "states-cp")], holdout=True
+    )
+    code, _ = carry_world.run(
+        capsys,
+        "--carry-forward",
+        "--holdout-sample",
+        str(sample),
+        "--holdout-rows",
+        str(rows),
+        "--holdout-rule",
+        f"{REFERENCE},role=answer-heading",
+    )
+    assert code == 2

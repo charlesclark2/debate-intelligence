@@ -106,6 +106,16 @@ Not recommended: building the chosen rule off by default, or as a suggestion col
 Reply with: a ruling on (a), (b) and (c), and any amendment text for the spec.
 ```
 
+## Checks run (2026-11-20)
+
+* `uv run scripts/affected_tests.py --run --slow` (59 files), bounded with `scripts/hard_stop.py 115`: stopped
+  at its limit at 96% with no failure printed. Over two minutes, so left to the pull request's `ci`
+  (agreement 10).
+* `pytest tests/architecture tests/specs tests/scripts/test_count_block_inheritance.py`: 351 passed.
+* `ruff format --check`, `ruff check`, `pyright scripts/count_block_inheritance.py tests/scripts/test_count_block_inheritance.py`
+  (0 errors), `lint-imports` (20 kept), `scripts/validate_specs.py` (OK), `scripts/check_command_blocks.py --base
+  origin/dev` (OK), `scripts/docs_index.py --check-descriptions` (OK).
+
 ## Operator follow-ups
 
 None outstanding. The three runs done are listed here for the record. Each ran from the task worktree, with the

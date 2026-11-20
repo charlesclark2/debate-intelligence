@@ -6,43 +6,45 @@
 | Spec | [`plan_specs/v1/e07-discovery-adapters/t27-openalex-answers-a-crossed-search.yaml`](../../plan_specs/v1/e07-discovery-adapters/t27-openalex-answers-a-crossed-search.yaml) |
 | Epic / release | `v1-e07-discovery-adapters` / `v1.4` |
 | Branch | `task/v1-e07-t27-openalex-answers-a-crossed-search` |
-| Session status | PARTIAL: the ac3 search ran on dev.413, and its refusal is the one v1-e08-t20 fixed. On dev.445 the probe's seven requests were all answered. Stopped for the PM's second ruling. The Goal stays `InProgress` <!-- COMPLETE / PARTIAL / BLOCKED --> |
+| Session status | COMPLETE: the Goal is `Succeeded` <!-- COMPLETE / PARTIAL / BLOCKED --> |
 
 ## Summary
 
-The refused requests were not too long, and the crossed templates add no special characters. Since
-v1-e08-t20, the ac3 search goes to OpenAlex as two joined requests per page. They are 24 and 13
-queries: 1,473 and 795 search characters, 1,846 and 1,124 URL characters. Their only added
-characters are the joiner's own `(`, `)` and ` OR `. The first half the split then sent, 12 queries
-and 727 characters, is exactly the request v1-e08-t20's probe saw answered on 2026-11-12. Two things
-differ from that day:
+OpenAlex refused the ac3 search of 2026-11-14 because that search ran on **v1.1.0-dev.413**, not on
+the dev.439 that the spec records. dev.413 sends the search as one request of all 37 queries:
+2,272 search characters, over the 1,500 that OpenAlex's own message named on 2026-11-12. It has no
+halving, so one `400` failed every query, which is the footer's `failed 37`. v1-e08-t20's split
+(dev.423 on) had already fixed that. The search's saved file showed which build wrote it: it has no
+`narrowing` key, and every build from dev.423 on writes one.
 
-- the `select=` now names `keywords`, which v1-e08-t15 added after that measurement;
-- OpenAlex's searching documentation was rewritten on 2026-11-13. It now gives one limit only, 8,190
-  bytes of URL. The 1,500-character search limit that OpenAlex's own message named on 2026-11-12 is
-  gone from it.
+On dev.445 the operator's seven-request probe was answered `200` throughout, the ac3 search's own
+24-query first request included. The closing repeat of the ac3 search recorded OpenAlex at `outcome
+ok`, with 37 queries, 0 failed and 7,355 results, and the search returned 200 results.
 
-The documentation states nothing that explains this refusal, and the old adapter threw away the one
-thing that would: OpenAlex's message. So the adapter now keeps that message in the provider's
-reasons. It is sanitized (no URL query, no key, one line) and cut to 200 characters, and tests on two
-hand-written recordings in OpenAlex's documented `{error, message}` shape pin it. They were shown
-failing first, and 8 mutants were run against it. I propose a 7-request probe from the installed
-build, which reads the message and isolates the cause, and the fix that follows from each answer.
-I stopped there for the PM's ruling.
+Offline, the crossed templates add no special characters, only the joiner's `(`, `)` and ` OR `.
+OpenAlex's documentation, rewritten on 2026-11-13, states no limit that explains a refusal. So the
+adapter now keeps OpenAlex's own message in a refusal's reasons, sanitized (no URL query, no key,
+one line) and cut to 200 characters. Hand-written recordings in the documented `{error, message}`
+shape pin it, shown failing first, and 8 mutants were run against it.
+
+By the PM's ruling of 2026-11-19 (Deviation 5) there is no new fix code. A mutant that rebuilds the
+refused request fails 5 of t20's existing tests, the per-preset pin among them, and that stands for
+ac2's tests. `MAX_SEARCH_CHARS`' docstring now says that the rewritten pages no longer state the limit,
+and that it still binds.
 
 ## Plan nodes
 
 | Node | Status | Notes |
 |---|---|---|
-| `openalex-answers-a-crossed-search`: OpenAlex crossed search | In progress | Offline measurement, documentation and the kept message done (`f70b680` red, `54c436a`, `3856438`). The fix waits for the PM's ruling. |
+| `openalex-answers-a-crossed-search`: OpenAlex crossed search | Done | The measurement, the documentation and the kept message (`f70b680` red, `54c436a`, `3856438`). The cause was found on the installed build (dev.413), and the probe and the repeat ran on dev.445. The docstring is `72413e6`. |
 
 ## Acceptance criteria
 
 | Criterion | Status | Evidence (command → result) |
 |---|---|---|
-| ac1: the offline measurement and the documentation's limits are recorded, and the proposal is ruled on by the PM before code | NOT RUN | The measurement and the documentation are recorded below. The proposal is under [The proposal](#the-proposal-item-4-for-the-pms-ruling), awaiting the ruling. No fix code is written. The kept message (item 3) is code the PM's brief asked for before the stop ([Deviations](#deviations-from-the-spec) 1). |
-| ac2: the ruled fix holds by tests on recorded-shape fixtures shown failing first, and the operator's repeat of v1-e08-t16's ac3 search records openalex with an outcome other than error and results above zero (operator) | NOT RUN | No new fix is needed: the refusal was dev.413's, and t20 fixed it ([The probe on dev.445](#the-probe-on-dev445-operator-2026-11-19)). The mutant that rebuilds the refused request fails 5 existing tests. How ac2 closes, and the repeat, are for the PM's second ruling. |
-| Node: `uv run pytest packages/debate_core/tests/integrations/discovery -k openalex` | PASS for today's code | `hard_stop.py 115 .venv/bin/python -m pytest packages/debate_core/tests/integrations/discovery -k openalex -q` → `232 passed in 2.68s`. Run again once the fix is in. |
+| ac1: the offline measurement and the documentation's limits are recorded, and the proposal is ruled on by the PM before code | PASS | The measurement ([1](#1-the-offline-measurement-no-call)), the dev.413 measurement ([The ac3 search ran on dev.413](#the-ac3-search-ran-on-dev413-found-2026-11-19)) and the documentation ([2](#2-openalexs-documentation-read-2026-11-15)) are recorded. The PM ruled on the proposal on 2026-11-16 and on the second stop on 2026-11-19. No fix code was written before a ruling. Item 3 came first because the brief ordered it (Deviation 1). |
+| ac2: the ruled fix holds by tests on recorded-shape fixtures shown failing first, and the operator's repeat of v1-e08-t16's ac3 search records openalex with an outcome other than error and results above zero (operator) | PASS, by the PM's ruling of 2026-11-19 (Deviation 5) | Tests: item 3's recorded-shape tests, red first (`f70b680`: 7 failed, 5 passed). The mutant that rebuilds the refused request fails 5 of t20's tests, among them `('policy-2026-27-nhi', 'politics-da', [37])`. The repeat (operator, 2026-11-19, v1.1.0-dev.445): `exit 6`, `code SEARCH_PARTIAL narrowing key True results 200`, `openalex [{'provider': 'openalex', 'outcome': 'ok', 'queries': 37, 'failed': 0, 'results': 7355, 'reasons': []}]`. |
+| Node: `uv run pytest packages/debate_core/tests/integrations/discovery -k openalex` | PASS | `hard_stop.py 115 .venv/bin/python -m pytest packages/debate_core/tests/integrations/discovery -k openalex -q` → `232 passed in 2.16s` after the last code commit (`72413e6`). |
 
 ## 1. The offline measurement (no call)
 
@@ -563,6 +565,19 @@ OpenAlex's entry with an outcome other than `error` and `results` above zero. `e
 `SEARCH_PARTIAL` is expected, because Crossref cannot reach all 37 queries (v1-e08-t16 ruling 3A).
 The summary line was run on two invented envelopes in the session scratchpad.
 
+**The closing check's result** (operator, 2026-11-19, v1.1.0-dev.445). Recorded as ruled: OpenAlex's
+entry and the result count.
+
+```text
+exit 6
+code SEARCH_PARTIAL narrowing key True results 200
+openalex [{'provider': 'openalex', 'outcome': 'ok', 'queries': 37, 'failed': 0, 'results': 7355, 'reasons': []}]
+```
+
+The run's stderr also showed `federal_register: HTTP 429` four times, Federal Register's circuit
+breaker open until `2026-11-20 01:27:42 UTC`, and one `crossref: HTTP 429`. These are other providers,
+and Crossref's shortfall is t16's ruling 3A. See [Follow-up work](#follow-up-work).
+
 **v1-e08-t16's ac3 sheet, made again from the dev.445 repeat** (ruling Q3, seconds, then the coach's
 time)
 
@@ -577,6 +592,10 @@ python3 -I -c 'import csv, json, sys; d = json.load(open(sys.argv[1])); r = d["r
 Success looks like one line naming the labels file, with between 10 and 20 rows, and the key file. The
 coach gets the labels file only, under the criterion of 2026-11-08. The key stays with you until the
 coach has answered. The filled labels, the key and the saved search then go to the PM for t16's ac3.
+
+The operator ran it on 2026-11-19: `/Users/charlesclark/Desktop/labels-policy-nhi-crossing-dev445.csv
+19 rows; key /Users/charlesclark/Desktop/key-policy-nhi-crossing-dev445.csv`. The labelling is the
+coach's, for t16's ac3.
 
 ## Follow-up work
 
@@ -596,6 +615,11 @@ coach has answered. The filled labels, the key and the saved search then go to t
 - **`MAX_SEARCH_CHARS`' docstring** now says that the rewritten pages of 2026-11-13 no longer state
   the limit, and that a 1,473-character request was answered on 2026-11-19 (`72413e6`, ruling Q4a).
 - **A recorded build comes from the operator's printed tag** (Q4d), accepted as the PM's practice.
+- **The Federal Register rate-limits the 37-query search** (E07, for the PM to file or not). The
+  closing repeat on 2026-11-19 hit four `HTTP 429`s, and its breaker opened until 01:27 UTC. That
+  search sends it 37 requests (t16's operator note). v1-e07-t22's back-off and breaker worked as
+  built: the breaker opened and the search stayed PARTIAL. No spec on dev rules on the Federal
+  Register's share of a 37-query search; Crossref's single 429 is t16's ruling 3A.
 
 ## Appendix: the refusal probe
 

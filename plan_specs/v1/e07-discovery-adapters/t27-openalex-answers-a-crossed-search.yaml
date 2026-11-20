@@ -51,7 +51,7 @@ spec:
         operator's repeat of v1-e08-t16's ac3 search records openalex with an outcome other
         than error and results above zero (operator).
 status:
-  phase: InProgress
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

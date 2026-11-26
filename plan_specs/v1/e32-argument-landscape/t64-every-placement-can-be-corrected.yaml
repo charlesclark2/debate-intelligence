@@ -50,7 +50,7 @@ spec:
         and the review queue's own decisions behave as before, by tests on synthetic
         disclosures shown failing first.
 status:
-  phase: InProgress
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

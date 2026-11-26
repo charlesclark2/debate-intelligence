@@ -6,25 +6,26 @@
 | Spec | [`plan_specs/v1/e32-argument-landscape/t64-every-placement-can-be-corrected.yaml`](../../plan_specs/v1/e32-argument-landscape/t64-every-placement-can-be-corrected.yaml) |
 | Epic / release | `v1-e32-argument-landscape` / `v1.2` |
 | Branch | `task/v1-e32-t64-every-placement-can-be-corrected` |
-| Session status | IN PROGRESS: measured, proposal sent, waiting for the PM's ruling before code (ac1) <!-- COMPLETE / PARTIAL / BLOCKED --> |
+| Session status | COMPLETE: measured, ruled on by the PM, built as ruled; the Goal is Succeeded <!-- COMPLETE / PARTIAL / BLOCKED --> |
 
 ## Summary
 
-The measurement is done and the proposal is sent. No listing code has been written yet, as the spec and the
-PM's context of 2026-11-25 ask.
+The coach can now correct any heading's placement. The ruling came after the measurement and before any listing
+code.
 
-`scripts/count_heading_placements.py` places every item of hspolicy26 at 2026-11-03 (parsed at
-`2026.10.27-docx-7`, taxonomy 1.5.1) with the real matcher, then counts the headings that place them. The
-operator ran it once, in 39.1 s, and it printed counts only. Its totals match `v1-e32-t65`'s for the same store:
-* 126,681 cards;
-* 64,661 counted;
-* 1,329 placed by a tag keyword alone;
-* 4,888 decided by the coach's no-position rulings;
-* 57,132 queued, in 1,308 rows.
+* **The listing.** Every classification run writes a placements listing beside the review queue: every
+  normalized heading that places cards, or that the coach ruled names no position. It has the queue's columns
+  plus `placed_by`, `position`, `cards_inherited` and `cards_tag_names_another`, placed rows first, most cards
+  first. At hspolicy26's 2026-11-03 snapshot it would hold 337 rows, where the queue holds 1,308.
+* **The queue is unchanged**, byte for byte, pinned by a test committed alone before the change.
+* **Correcting.** A decision written in the listing goes through the same apply step and becomes an override,
+  which the matcher reads before any alias. So it replaces an alias's placement from the next run.
+* **The safeguard the PM added.** `apply-decisions` now shows, for each changed decision, how many cards move
+  where, and writes only with `--execute`.
 
-A placements listing would hold 337 rows: 292 placed and 45 ruled none. The 25 largest rows hold 59.6% of the
-listed cards. The matcher already reads an override before an alias, and `apply_decisions` already accepts any
-heading. So most of the work is the listing itself.
+What the PM should look at first:
+* the apply step's new two-step command, which applies to the queue's decisions too (Deviation 2);
+* the smoke check outside the packages the ruling added (Deviation 1).
 
 ## The measurement (2026-11-25)
 
@@ -150,47 +151,208 @@ Scope: writing the file goes through the classification store (debate_core.integ
 Reply with: a ruling on 1-7 (or changes), and the scope amendment.
 ```
 
-## Plan nodes
+### The PM's ruling (2026-11-25), as received
 
-<!-- One row per Plan graph node, in the order they were completed. -->
+```text
+PM ruling, v1-e32-t64, 2026-11-25.
+
+1. Accepted: the queue's columns plus placed_by, position, cards_inherited and cards_tag_names_another. No school, team, path, file or tag.
+
+2. Accepted: its own file, <data dir>/landscape/review/<caselist>/<topic id>-placements.csv, written by the same run as the queue. The queue stays byte for byte as it is, pinned by a test.
+
+3. Accepted: no new command. Every classification run writes both files and prints the listing's location and row count beside the queue's. apply-decisions takes either file.
+
+4. Accepted. A decision that repeats an alias's own position is counted unchanged and written nowhere. A decision naming no taxonomy position is refused before anything is written. Two different decisions for one heading's reading and answer rows are refused.
+
+5. Accepted, with one safeguard. Keep today's rule for "none" on a placed heading. But one "none" on a large heading moves tens of thousands of cards: 50,420 of 64,661 on today's counts would go to the queue. So before anything is written, apply-decisions shows, for each decision that changes a placement, its heading and how many cards it moves where: to a heading above's position (same or other), to their tag keyword (the queue), to the queue, or decided. Follow the apply step's existing pattern: if it already has a dry run, the summary is the dry run's and writing needs the existing confirmation; if it has none, print the summary and write only with --execute. Test it, including a mutant that writes without the summary.
+
+6. Accepted: nothing finer than a heading in V1. The cards_tag_names_another column is how the coach finds a heading that is right as a heading but wrong for some cards. Name that use in the guide. A per-card correction is a follow-up only if he finds one.
+
+7. Accepted: placed rows by cards, most first, then the none rows by cards. No CLI filter.
+
+Scope: debate_core.integrations, scripts and tests/scripts join constraints.packages. Record them as a Deviation citing this ruling; the PM amends the spec in the next batch.
+
+The guide (the review section docs/guides/landscape-taxonomy.md or the queue's guide uses) says how to correct a placement, what "none" on a placed heading does, and that the summary shows the effect before anything is written.
+```
+
+## What was built after the ruling
+
+* **The listing.** Every classification run now writes
+  `<data dir>/landscape/review/<caselist>/<topic id>-placements.csv` beside the queue. That covers the classify
+  script and `debate-research landscape report`; a dry run writes neither file. It has the queue's columns plus
+  `placed_by`, `position`, `cards_inherited` and `cards_tag_names_another`. Placed rows come first, by cards,
+  then the none rows, by cards. Rows under `minimum_teams` are left out and counted.
+  * The classify script prints the listing's location, its rows (placed and ruled none) and the headings left
+    out.
+  * The report command prints `Placements listing: N rows (<path>).` and adds a `placements` key to its JSON.
+* **The queue is unchanged**, byte for byte. The pin was committed alone first (`1d8fe86`) and passed on the
+  pre-change code. It passes after the change too, including on the run after a placement is corrected.
+* **The apply step.** `apply-decisions` takes either file, because the queue's reader reads only
+  `normalized_heading` and `decision`. It now also takes `--caselist`, and optionally `--snapshot`,
+  `--data-dir`, `--version` and `--threshold`. It runs in this order:
+  1. It refuses a caselist that topics.yaml puts on another topic, then a decision naming no position of the
+     taxonomy. Both happen before the store is read.
+  2. It places the caselist's cards under today's rules and under the new ones, and prints one line per
+     changed decision: the heading, what decided it before, what it names now, and where its cards go.
+  3. Without `--execute` it ends `Dry run: nothing written.` With `--execute` it prints the same summary, then
+     writes the overrides file.
+* **Confirmations are not written.** A decision repeating an alias's own position is counted unchanged.
+* **The guide.** `docs/guides/landscape-taxonomy.md`'s review section now has
+  [Correcting a placement](../guides/landscape-taxonomy.md#correcting-a-placement):
+  * the listing's columns and order, and how to find the wrong rows;
+  * the use of `cards_tag_names_another`;
+  * what each value written in `decision` does, `none` on a placed heading included;
+  * the two-step apply, as two command blocks (working agreement 11).
+
+## Plan nodes
 
 | Node | Status | Notes |
 |---|---|---|
-| | | |
+| `every-placement-can-be-corrected` (Correct a placement) | DONE | Measured, proposed, ruled on, then built as the ruling says. |
 
 ## Acceptance criteria
 
-<!-- Goal criteria (ac1…) and every node criterion. Status: PASS / FAIL / NOT RUN. -->
-
 | Criterion | Status | Evidence (command → result) |
 |---|---|---|
-| | | |
+| ac1: the proposal, with its counts, is ruled on by the PM before code | PASS | The operator's measurement of 2026-11-25 (39.1 s, `OK`) and the relay prompt above. The PM's ruling of 2026-11-25 is quoted above. Before the ruling the branch held only the measurement script, its tests and the report (`b91062b`, `6d87655`); the listing code starts at `1d8fe86`. |
+| ac2: a decision on a heading an alias placed replaces that placement from the next run, and the review queue's own decisions behave as before, by tests on synthetic disclosures shown failing first | PASS | `test_placement_override_on_a_heading_an_alias_placed_replaces_it_next_run`: the alias-placed cards are `OVERRIDE`/`INHERITED` under the decision's position on the next run, and the queue's bytes are unchanged. The queue's own decision tests in `test_position_classification.py` and `test_classify_landscape_positions.py` pass, and so does the byte pin. The red run is below. |
+| Node criterion: `uv run pytest packages/debate_core/tests -k "override or placement"` | PASS | 187 passed in 82.72 s (bounded with `scripts/hard_stop.py 115`). |
+| Ruling 4: a decision naming no position is refused before anything is written | PASS | `test_placement_override_naming_no_position_on_an_alias_heading_is_refused`, `test_apply_decisions_refuses_a_decision_naming_no_position` (the overrides directory is never created). |
+| Ruling 5: the summary before anything is written, `--execute` to write | PASS | `test_apply_decisions_without_execute_prints_the_summary_and_writes_nothing`, `test_apply_decisions_on_a_placed_heading_shows_where_its_cards_go`, `test_apply_decisions_writes_overrides_that_place_the_heading_next_run` (summary lines before `Applied`), and the planted breaks below. |
+
+### Red run (tests against a skeleton that builds nothing and writes without the summary)
+
+The skeleton:
+* the placements module had its real types, with bodies that built nothing;
+* `ClassificationRun` had empty defaults;
+* `apply-decisions` accepted the new flags, wrote as before and printed no summary.
+
+The run (`pytest test_placements.py test_position_classification.py test_classify_landscape_positions.py -n 0`):
+17 failed, 60 passed. Every new test failed. 15 failed at an assertion on the empty listing or the missing
+summary. Two failed by error, each because the skeleton never wrote the listing:
+* the decision reader refused an empty file ("a decisions file is a review queue CSV");
+* the service test read the empty location as a directory.
+
+The queue's own tests and the byte pin passed throughout.
+
+### Planted breaks (one at a time, each restored from HEAD; the three test files above)
+
+| Break | Result |
+|---|---|
+| An alias wins over the coach's decision (the matcher reads the alias first on an alias heading) | Caught: 4 failed, including the next-run test (`('spending-da', 'ALIAS', 1.0)` where the decision's `states-cp` was expected) |
+| The `minimum_teams` rule dropped from the listing | Caught: 5 failed (the hand-written listing, the left-out count, the service's bytes, the classify line) |
+| The dry run writes without `--execute` | Caught: 2 failed |
+| `--execute` writes without the summary | Caught: 1 failed (`test_apply_decisions_writes_overrides_that_place_the_heading_next_run`) |
+| A repeat of an alias's own position is written | Caught: 2 failed |
+| A change counted under the outermost changed heading, not the nearest | Survived the first run: no planted card sat under two changed headings. `test_placement_changes_count_a_card_under_the_nearest_changed_heading` was added (`3d11108`), and the break then failed it |
+| A none row counts cards a nearer heading places | Caught: 1 failed |
+| A tag naming the placement's own line counts as another position | Caught: 1 failed |
+| None rows sorted among the placed rows | Caught: 2 failed |
+
+Every failure was at an assertion. The measurement script's five breaks before the ruling were also each
+caught (see above).
+
+## Checks run (2026-11-25)
+
+* **Affected set.** `uv run scripts/affected_tests.py --run --slow` chose 341 test files. Bounded with
+  `scripts/hard_stop.py 115`, it stopped at its limit at 51%, with no failure printed. It is over two minutes,
+  so it is left to the pull request's `ci` (agreement 10).
+* **Within the bound instead:**
+  * the test directories of what changed: `debate_core` `arguments/landscape`, `integrations/landscape`, and
+    the landscape run and classification tests under `application`, with both script test files. 1635 passed
+    in 5.18 s.
+  * the always-run list (`tests/architecture`, `tests/specs`, the CLI's wiring tests), with
+    `packages/debate_cli/tests/test_landscape_command.py` and `tests/smoke/test_landscape_smoke.py`. 520 passed
+    in 28.69 s.
+* **Linters and checks:**
+  * `ruff format --check .`: 2160 files already formatted;
+  * `ruff check .`: clean;
+  * `pyright` (whole project): 0 errors;
+  * `lint-imports`: 20 kept, 0 broken;
+  * `scripts/check_thin_handlers.py`: OK;
+  * `scripts/check_links.py`: OK;
+  * `scripts/docs_index.py --check-descriptions`: OK;
+  * `scripts/check_command_blocks.py --base origin/dev`: OK;
+  * `scripts/validate_specs.py`: OK, 690 files.
+* **The spec against `origin/dev`** (fetched 2026-11-25): it matches apart from the phase.
 
 ## Files changed
 
-<!-- Group by package or directory; one line on why each group changed. -->
+* `packages/debate_core/src/debate_core/arguments/landscape/placements.py` (new): the listing (rows, counts,
+  CSV) and the apply step's summary (`placement_changes`). Pure.
+* `arguments/landscape/matcher.py`: public `heading_placement`, `heading_rule`, `ruled_none` and `lineage`
+  (cached), so the listing reads the matcher's own rule rather than repeating it.
+* `arguments/landscape/review_queue.py`: `apply_decisions` counts a repeat of an alias's position unchanged and
+  returns the headings whose rule changed.
+* `application/position_classification.py`, `application/ports/classification_store.py`,
+  `application/landscape_run.py`: the service builds and writes the listing through a new
+  `ClassificationStore.write_placements`. A dry run's read-only store writes nothing.
+* `integrations/landscape/classification_store.py`: `write_placements` and `placements_path`.
+* `packages/debate_cli/src/debate_cli/commands/landscape.py`: the report's `placements` JSON key and its line.
+* `scripts/classify_landscape_positions.py`: the listing line in `classify`, and `apply-decisions`' summary and
+  `--execute`.
+* `scripts/count_heading_placements.py` (new): the measurement, counts only.
+* Tests:
+  * `packages/debate_core/tests/arguments/landscape/test_placements.py` (new);
+  * new tests and the queue's byte pin in `packages/debate_core/tests/application/test_position_classification.py`;
+  * the new apply flow in `tests/scripts/test_classify_landscape_positions.py`;
+  * `tests/scripts/test_count_heading_placements.py` (new);
+  * `packages/debate_cli/tests/test_landscape_command.py`;
+  * `tests/smoke/test_landscape_smoke.py`.
+* `docs/guides/landscape-taxonomy.md`: correcting a placement, and the two-step apply.
+* The task spec: the Goal set Succeeded.
 
 ## Deviations from the spec
 
-None.
+1. **Packages outside `constraints.packages`.** The PM's ruling of 2026-11-25 adds `debate_core.integrations`,
+   `scripts` and `tests/scripts` to the packages and amends the spec in the next batch; this session did not
+   edit the constraint. One more path is outside both the spec and the ruling: `tests/smoke/test_landscape_smoke.py`.
+   It checks that the report run writes the listing with headings and counts only. Working agreement 5 asks for
+   a smoke check on a changed user-facing surface. It is the PM's to confirm.
+2. **apply-decisions' command changed for the queue too.** The apply step had no dry run, so, as the ruling
+   says, it now writes only with `--execute`, and it needs `--caselist` to count cards. This holds for a filled
+   review queue as for the listing. What a queue decision does is unchanged, and its tests pass. The guide's
+   single apply block is now two.
+3. **The measurement's snapshot** is this Mac's store at 2026-11-03, parsed at `2026.10.27-docx-7`, not the
+   newest hspolicy26 snapshot the spec names. The PM's context of 2026-11-25 asked for it, as `v1-e32-t65` used.
 
 ## Decisions and assumptions
 
-<!-- Choices the spec left open, with the reasoning. -->
+* **A row's `position`** is the placing heading's own position. A card that its tag moves to a child of that
+  position is still counted in the row; there are 82 such cards on hspolicy26, all under 1 heading.
+* **`cards_tag_names_another`** counts a card whose tag holds a keyword of a position outside the line of the
+  card's own placement (the position, its ancestors and its descendants). A tag naming the row's child is
+  therefore not "another".
+* **Candidates on a placed row** leave out the row's own position. So after a correction, the alias's old
+  position shows as a candidate (`spending da` → `states-cp` lists `spending-da`).
+* **The summary counts cards only**, not sections, and puts each moved card under the nearest heading over it
+  whose decision changed. A decision that moves no card in that caselist is counted on one line. Its wording is
+  "under a heading above, the same position" / "another position", "to their tag keyword (the queue)", "to the
+  queue", and "decided (every heading over them ruled none)".
+* **Order of refusals in apply-decisions:** first the caselist's topic, then the decisions file and its ids.
+  The store is read only after both, so a typo is refused in seconds rather than after a 40-second read.
+* **A decision that names a position for a heading already decided by an override with the alias's own
+  position** replaces the override, as any changed decision does; only a heading no override decides is
+  "confirmed" and not written.
 
 ## Operator follow-ups
 
-<!-- Commands the operator must run (anything over ~2 minutes), with where to run them, the exact
-command, expected runtime and what success looks like. Also GitHub/AWS settings to change. -->
+None outstanding. The one run done is listed for the record. It ran from the task worktree, with the check that no
+`DEBATE_` variable was set, and wrote counts-only JSON to the session's scratchpad:
 
-None.
+```bash
+uv run python scripts/count_heading_placements.py --snapshot 2026-11-03 --caselist hspolicy26
+```
+
+Once this merges, the coach's next pass of decisions is applied in two steps, as the guide says: the dry run
+first, then the same command with `--execute`.
 
 ## Follow-up work
 
-<!-- Bugs, gaps or ideas outside this task's scope, each with the task or epic it belongs to.
-The PM decides whether they become spec changes or new tasks. -->
-
-None.
+* **Per-card corrections:** none built, by the ruling (6). A task only if the coach finds a heading that is right
+  as a heading but wrong for some of its cards, through `cards_tag_names_another`.
+* **The spec amendment** the ruling names: `debate_core.integrations`, `scripts`, `tests/scripts` (and, if the PM
+  agrees, `tests/smoke`) in `constraints.packages`.
 
 ## PM review
 

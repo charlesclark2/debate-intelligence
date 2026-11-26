@@ -561,6 +561,25 @@ One entry per placing. The comment at the top of the file lists every field. In 
        students: [Jordan Rivera, Sam Okafor]
    ```
 
+   A **speaker award** (`top speaker`, `second speaker` to `tenth speaker`) is an individual's
+   award, so it names **the speaker alone**, in Public Forum and Policy too, never their partner
+   (the policy's [Results and awards](../policies/website-publishing.md#results-and-awards) 1,
+   version 1.4):
+
+   ```yaml
+     - tournament: Marquette University High School
+       date: 2027-02-06
+       event: policy
+       division: varsity
+       placing: third speaker
+       students: [Jordan Rivera]
+   ```
+
+   The page prints it as "Third speaker, Varsity Policy debate: Jordan Rivera (2028)". If both
+   partners won a speaker award, that is two entries, one for each speaker. Every other placing
+   in Public Forum or Policy (a place, a round reached, a state qualifying leg) still names both
+   partners or neither.
+
 2. **Two awards at one tournament are two entries**, for example first place and top speaker. The
    page shows both under the one tournament. Never combine them into one line, and never add up a
    student's results across tournaments: a record is something this site does not publish.
@@ -579,14 +598,17 @@ One entry per placing. The comment at the top of the file lists every field. In 
 ### The team-level form
 
 Leave `students` out and the result is published without a name: "Quarterfinalist, Varsity
-Lincoln-Douglas: a Whitefish Bay debater", or "a Whitefish Bay team" for a partner event. It is
-always allowed, and the page shows it exactly like a named result, never as something lesser.
+Lincoln-Douglas: a Whitefish Bay debater", or "a Whitefish Bay team" for a partner event. A
+speaker award is always "a Whitefish Bay debater", in a partner event too: "Top speaker, Varsity
+Public Forum: a Whitefish Bay debater". It is always allowed, and the page shows it exactly like a
+named result, never as something lesser.
 
 Use it when:
 
 - the student's media-consent form for this season is not confirmed, or you are not sure;
 - the student or their family asked for a first name only, or for no name;
-- one partner of a partnership may not be named, because then neither is;
+- one partner of a partnership may not be named, because then neither is (a speaker award names
+  only its speaker, so only the speaker's consent matters there);
 - anything about naming them gives you pause.
 
 **You never write a team-level line yourself.** Leaving `students` out is all it takes. The build
@@ -634,7 +656,8 @@ naming the entry, the field and the policy rule. It never repeats a student's na
 It refuses:
 
 - a student in `students` with no entry at all in `site/content/media-consent.yaml`;
-- a Public Forum or Policy result naming one partner, or a Lincoln-Douglas result naming two;
+- a Public Forum or Policy result naming one partner, unless it is a speaker award;
+- a speaker award naming two students, in any event, and a Lincoln-Douglas result naming two;
 - a placing that is not on the list, and says so when it describes a loss ("lost in
   quarterfinals") or a record ("went 5-1", "ranked second", a points total, bids);
 - a capitalised name in `tournament` or `placing`, because the build cannot tell it from an

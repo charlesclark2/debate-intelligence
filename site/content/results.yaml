@@ -17,10 +17,24 @@
 #   - No opponent student is ever named (rule 5). Opponent schools may be.
 #   - A student is named only with a current-season entry in content/media-consent.yaml. Lincoln-
 #     Douglas names one student; Policy and Public Forum name both partners or neither (rule 1).
+#   - A speaker award (top speaker, second speaker to tenth speaker) is an individual's award. It
+#     names the one speaker, in Policy and Public Forum too, never their partner, and when both
+#     partners won one, each is an entry of its own (rule 1, policy version 1.4). For example:
+#
+#       - tournament: Marquette University High School
+#         date: 2027-02-06
+#         event: policy
+#         division: varsity
+#         placing: third speaker
+#         students: [Jordan Rivera]
+#
+#     which the page prints as "Third speaker, Varsity Policy debate: Jordan Rivera (2028)".
 #   - Leave `students` out and the result is published in team-level form ("a Whitefish Bay
-#     debater", "a Whitefish Bay team"), which is always allowed (rule 2). The build also uses the
-#     team-level form by itself whenever a named student's consent entry is not current for the
-#     season or asks for less than the full name, so a lapsed form never needs an edit here.
+#     debater" for Lincoln-Douglas and for every speaker award, "a Whitefish Bay team" for any
+#     other Policy or Public Forum placing), which is always allowed (rule 2). The build also
+#     uses the team-level form by itself whenever a named student's consent entry is not current
+#     for the season or asks for less than the full name, so a lapsed form never needs an edit
+#     here.
 #
 # Each entry:
 #
@@ -36,7 +50,8 @@
 #               the Wisconsin State Debate Tournament earned there; never numbered or counted,
 #               policy version 1.2).
 #   students    Optional. The student's name exactly as content/media-consent.yaml publishes it,
-#               or both partners' names. The page adds the graduation year.
+#               or both partners' names; a speaker award names the speaker alone, in any event.
+#               The page adds the graduation year.
 #
 # Two awards at one tournament are two entries: the page shows them together under the
 # tournament. The order of entries does not matter: the page puts the newest tournament first.

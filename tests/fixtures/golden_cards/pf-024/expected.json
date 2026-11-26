@@ -1,0 +1,162 @@
+{
+  "format": "golden-card-expected/1",
+  "case_id": "pf-024",
+  "tag": "People of color will be targeted. Professor Friedman of the University of Southern California notes that",
+  "cite": {
+    "short_cite": "Friedman 25",
+    "full_cite": "Friedman 25 [Brittany Friedman (Sociology Professor @ the University of Southern California, PhD in Sociology from Northwestern University), 2-21-2025, \"We study mass surveillance for social control, and we see Trump laying the groundwork to ‘contain’ people of color and immigrants,\" News and Events, accessed 10-28-2025, https://dornsife.usc.edu/news/stories/laying-groundwork-to-contain-people-of-color-and-immigrants/ //vh 🍓]"
+  },
+  "research_need": "People of color will be targeted. Professor Friedman of the University of Southern California notes that",
+  "segments": [
+    [
+      0,
+      8062
+    ]
+  ],
+  "spans": [
+    {
+      "start": 0,
+      "end": 16,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 17,
+      "end": 97,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 98,
+      "end": 113,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 114,
+      "end": 140,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 141,
+      "end": 143,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 144,
+      "end": 185,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 187,
+      "end": 499,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 501,
+      "end": 725,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 726,
+      "end": 765,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 1006,
+      "end": 1273,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 1341,
+      "end": 1760,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 2526,
+      "end": 2684,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 2686,
+      "end": 3044,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 3488,
+      "end": 3646,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 3648,
+      "end": 3964,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 6672,
+      "end": 6686,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 6687,
+      "end": 6833,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 6863,
+      "end": 6887,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 6888,
+      "end": 6941,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 6942,
+      "end": 7205,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 7260,
+      "end": 7623,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 7625,
+      "end": 7820,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 7822,
+      "end": 8032,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 8033,
+      "end": 8062,
+      "style": "underline",
+      "purpose": null
+    }
+  ]
+}

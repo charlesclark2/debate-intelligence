@@ -1,0 +1,30 @@
+{
+  "case_id": "pf-022",
+  "candidate_id": "pf-025b74edc7",
+  "event": "PF",
+  "season": "2024-25",
+  "source_type": "unknown",
+  "length_band": "short",
+  "omission_cut": false,
+  "coach_cut_and_reviewed_for_names": true,
+  "research_need": "No country dares recklessly start conflict now",
+  "source_link": "https://moderndiplomacy.eu/2024/07/04/a-legal-and-diplomatic-analysis-of-somalilands-quest-for-international-recognition/",
+  "parser_version": "2026.11.03-docx-9",
+  "imported_on": "2026-11-25",
+  "snapshot": {
+    "url": "https://moderndiplomacy.eu/2024/07/04/a-legal-and-diplomatic-analysis-of-somalilands-quest-for-international-recognition/",
+    "canonical_url": "https://moderndiplomacy.eu/2024/07/04/a-legal-and-diplomatic-analysis-of-somalilands-quest-for-international-recognition/",
+    "final_url": "https://moderndiplomacy.eu/2024/07/04/a-legal-and-diplomatic-analysis-of-somalilands-quest-for-international-recognition/",
+    "fetched_on": "2026-11-26",
+    "access_status": "ACCESSIBLE",
+    "provenance_mode": "PUBLISHER_RETRIEVED",
+    "raw_sha256": "847027cb1daab2ddf6c5228396103c61209c1aee9737168d94f172b09f37d614",
+    "raw_byte_size": 540744,
+    "normalized_text_sha256": "95a5fe19219dfe7b00204a76481b7c03fe60d4f72f863993dc421ec5ef191a9d",
+    "normalized_document_sha256": "5afabb920a50c36e481e2b0ef1322c61481df5033459c0f711aef1f270c378f7",
+    "normalizer_version": "evidence-normalizer-v1",
+    "extractor_version": "trafilatura/html-1+trafilatura-2.3.1+readability-lxml-0.9+lxml-6.1.3",
+    "content_type": "text/html; charset=UTF-8",
+    "paragraph_count": 118
+  }
+}

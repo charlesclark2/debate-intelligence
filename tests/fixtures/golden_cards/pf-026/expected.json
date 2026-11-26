@@ -1,0 +1,360 @@
+{
+  "format": "golden-card-expected/1",
+  "case_id": "pf-026",
+  "tag": "4. Cartels aren’t dependent on the US",
+  "cite": {
+    "short_cite": "Pachico ’12",
+    "full_cite": "Pachico ’12 [Elyssa Pachico; Media Engagement Specialist at the America Immigration Council, Human rights advocate; 9-19-2012, \"Mexico Cartels Operate in 16 Countries: Report,\" InSight Crime, https://insightcrime.org/news/analysis/mexico-cartels-connections-abroad/, accessed: 10-21-2025] william"
+  },
+  "research_need": "4. Cartels aren’t dependent on the US",
+  "segments": [
+    [
+      0,
+      760
+    ]
+  ],
+  "spans": [
+    {
+      "start": 0,
+      "end": 8,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 0,
+      "end": 8,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 9,
+      "end": 21,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 9,
+      "end": 21,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 22,
+      "end": 25,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 26,
+      "end": 32,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 26,
+      "end": 32,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 33,
+      "end": 41,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 33,
+      "end": 41,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 42,
+      "end": 44,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 42,
+      "end": 44,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 45,
+      "end": 57,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 45,
+      "end": 57,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 58,
+      "end": 72,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 73,
+      "end": 84,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 153,
+      "end": 158,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 159,
+      "end": 167,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 159,
+      "end": 167,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 168,
+      "end": 176,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 168,
+      "end": 176,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 177,
+      "end": 181,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 182,
+      "end": 193,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 182,
+      "end": 193,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 194,
+      "end": 199,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 200,
+      "end": 218,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 200,
+      "end": 227,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 228,
+      "end": 230,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 228,
+      "end": 230,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 231,
+      "end": 246,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 231,
+      "end": 246,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 248,
+      "end": 334,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 335,
+      "end": 338,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 335,
+      "end": 338,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 339,
+      "end": 353,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 339,
+      "end": 353,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 354,
+      "end": 357,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 354,
+      "end": 361,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 362,
+      "end": 368,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 369,
+      "end": 409,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 410,
+      "end": 424,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 410,
+      "end": 424,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 425,
+      "end": 437,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 425,
+      "end": 462,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 463,
+      "end": 466,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 467,
+      "end": 469,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 470,
+      "end": 518,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 664,
+      "end": 667,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 664,
+      "end": 667,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 668,
+      "end": 673,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 668,
+      "end": 673,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 674,
+      "end": 699,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 700,
+      "end": 711,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 712,
+      "end": 722,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 712,
+      "end": 722,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 723,
+      "end": 727,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 723,
+      "end": 727,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 728,
+      "end": 760,
+      "style": "underline",
+      "purpose": null
+    }
+  ]
+}

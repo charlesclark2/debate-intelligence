@@ -30,6 +30,13 @@ edit it by hand. The research need is the card's tag, which says what the card i
 | `pf-010` | PF | 2025-26 | think tank | short | no | People don’t trust the government to use data |
 | `pf-011` | PF | 2024-25 | think tank | multi-paragraph | no | Selloffs cause Middle East war. |
 | `pf-014` | PF | 2024-25 | think tank | short | yes | China needs absolute certainty and will indefinitely delay invasion |
+| `pf-021` | PF | 2024-25 | journal | short | no | Xi has to respond --- Lai’s rhetoric decks legitimacy and causes secessionist chaos while harming perceptions of China in Taiwan. |
+| `pf-022` | PF | 2024-25 | unknown | short | no | No country dares recklessly start conflict now |
+| `pf-024` | PF | 2025-26 | news | multi-paragraph | no | People of color will be targeted. Professor Friedman of the University of Southern California notes that |
+| `pf-026` | PF | 2025-26 | think tank | multi-paragraph | no | 4. Cartels aren’t dependent on the US |
+| `pf-027` | PF | 2024-25 | journal | short | no | Alliances are strong even after Trump’s victory. |
+| `pf-033` | PF | 2024-25 | think tank | multi-paragraph | no | Extinction. |
+| `pf-035` | PF | 2025-26 | unknown | multi-paragraph | no | Circumventing encryption threatens democracy through bulk surveillance |
 | `policy-002` | Policy | 2026-27 | think tank | short | yes | Isolationism increases the risk of global nuclear conflict |
 | `policy-003` | Policy | 2026-27 | think tank | multi-paragraph | yes | No existential risk from engineered pathogens – too many barriers and no data supports it |
 | `policy-005` | Policy | 2026-27 | unknown | short | no | Power vacuums cause nuke wars. |
@@ -39,7 +46,7 @@ edit it by hand. The research need is the card's tag, which says what the card i
 | `policy-015` | Policy | 2026-27 | think tank | multi-paragraph | no | Safeguards are empirically ineffective |
 | `policy-016` | Policy | 2026-27 | think tank | short | yes | Isolationism increases the risk of global nuclear conflict |
 
-24 cases.
-By event: Policy 8, LD 9, PF 7.
-By source type: news 5, think tank 12, government 2, journal 0, unknown 5.
-Retired: ld-001, ld-002, ld-004, ld-005, ld-008, ld-010, ld-012, ld-014, ld-018, pf-002, pf-005, pf-006, pf-007, pf-009, pf-012, pf-013, pf-015, pf-016, pf-017, pf-018, pf-019, policy-001, policy-004, policy-007, policy-008, policy-009, policy-010, policy-012, policy-013, policy-017.
+31 cases.
+By event: Policy 8, LD 9, PF 14.
+By source type: news 6, think tank 14, government 2, journal 2, unknown 7.
+Retired: ld-001, ld-002, ld-004, ld-005, ld-008, ld-010, ld-012, ld-014, ld-018, pf-002, pf-005, pf-006, pf-007, pf-009, pf-012, pf-013, pf-015, pf-016, pf-017, pf-018, pf-019, pf-020, pf-023, pf-025, pf-028, pf-029, pf-030, pf-031, pf-032, pf-034, pf-036, policy-001, policy-004, policy-007, policy-008, policy-009, policy-010, policy-012, policy-013, policy-017.

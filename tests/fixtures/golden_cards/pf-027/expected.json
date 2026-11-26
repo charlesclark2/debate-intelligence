@@ -1,0 +1,582 @@
+{
+  "format": "golden-card-expected/1",
+  "case_id": "pf-027",
+  "tag": "Alliances are strong even after Trump’s victory.",
+  "cite": {
+    "short_cite": "Suh '24",
+    "full_cite": "Suh '24 [Liviu Horovitz; Senior Associate Researcher at the Centre for Security, Diplomacy and Strategy; Elisabeth Suh; research fellow in DGAP's Center for Security and Defense; 08-21-2024; \"Trump II and US Nuclear Assurances in the Indo-Pacific\"; SWP; https://www.swp-berlin.org/10.18449/2024C36/; accessed 11-04-2024] leon"
+  },
+  "research_need": "Alliances are strong even after Trump’s victory.",
+  "segments": [
+    [
+      0,
+      906
+    ]
+  ],
+  "spans": [
+    {
+      "start": 115,
+      "end": 126,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 115,
+      "end": 126,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 127,
+      "end": 129,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 127,
+      "end": 129,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 130,
+      "end": 140,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 130,
+      "end": 140,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 141,
+      "end": 151,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 141,
+      "end": 151,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 152,
+      "end": 154,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 152,
+      "end": 163,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 158,
+      "end": 160,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 164,
+      "end": 170,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 164,
+      "end": 172,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 173,
+      "end": 178,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 173,
+      "end": 180,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 181,
+      "end": 186,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 181,
+      "end": 186,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 187,
+      "end": 189,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 187,
+      "end": 189,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 190,
+      "end": 200,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 190,
+      "end": 200,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 201,
+      "end": 203,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 201,
+      "end": 203,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 204,
+      "end": 228,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 204,
+      "end": 228,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 230,
+      "end": 233,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 234,
+      "end": 247,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 234,
+      "end": 247,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 248,
+      "end": 249,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 248,
+      "end": 261,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 255,
+      "end": 256,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 262,
+      "end": 276,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 262,
+      "end": 280,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 281,
+      "end": 302,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 281,
+      "end": 307,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 308,
+      "end": 312,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 308,
+      "end": 312,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 313,
+      "end": 323,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 313,
+      "end": 323,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 324,
+      "end": 330,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 331,
+      "end": 343,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 344,
+      "end": 351,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 352,
+      "end": 358,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 360,
+      "end": 364,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 365,
+      "end": 373,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 374,
+      "end": 381,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 382,
+      "end": 400,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 392,
+      "end": 400,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 401,
+      "end": 403,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 401,
+      "end": 412,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 413,
+      "end": 426,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 413,
+      "end": 426,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 427,
+      "end": 431,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 427,
+      "end": 433,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 434,
+      "end": 454,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 434,
+      "end": 454,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 455,
+      "end": 465,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 455,
+      "end": 469,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 470,
+      "end": 472,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 470,
+      "end": 472,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 473,
+      "end": 483,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 473,
+      "end": 483,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 484,
+      "end": 486,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 484,
+      "end": 486,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 487,
+      "end": 494,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 487,
+      "end": 494,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 495,
+      "end": 500,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 495,
+      "end": 502,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 503,
+      "end": 507,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 508,
+      "end": 509,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 510,
+      "end": 530,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 510,
+      "end": 530,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 531,
+      "end": 546,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 531,
+      "end": 546,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 547,
+      "end": 557,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 558,
+      "end": 565,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 585,
+      "end": 594,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 595,
+      "end": 624,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 625,
+      "end": 635,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 636,
+      "end": 654,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 655,
+      "end": 662,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 663,
+      "end": 675,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 676,
+      "end": 683,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 685,
+      "end": 692,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 685,
+      "end": 692,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 693,
+      "end": 709,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 703,
+      "end": 709,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 710,
+      "end": 714,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 710,
+      "end": 714,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 715,
+      "end": 721,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 715,
+      "end": 721,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 722,
+      "end": 737,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 722,
+      "end": 737,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 738,
+      "end": 759,
+      "style": "underline",
+      "purpose": null
+    }
+  ]
+}

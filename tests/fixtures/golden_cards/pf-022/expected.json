@@ -1,0 +1,90 @@
+{
+  "format": "golden-card-expected/1",
+  "case_id": "pf-022",
+  "tag": "No country dares recklessly start conflict now",
+  "cite": {
+    "short_cite": "Idaan 24",
+    "full_cite": "Idaan 24 (Gulaid Yusuf Idaan is a distinguished senior lecturer at universities in Somaliland, specializing in diplomacy, politics, and international relations in the Horn of Africa. His independent scholarly work and extensive publications have established him as a leading expert in regional dynamics and diplomatic relations. In addition to his significant professional contributions, Gulaid is an aspiring university lecturer, holding multiple Master's Degrees in International Law and Diplomacy, and International Relations. July 4 2024, “A Legal and Diplomatic Analysis of Somaliland’s Quest for International Recognition”, Modern Diplomacy, https://moderndiplomacy.eu/2024/07/04/a-legal-and-diplomatic-analysis-of-somalilands-quest-for-international-recognition/, DOA 12/2/24)"
+  },
+  "research_need": "No country dares recklessly start conflict now",
+  "segments": [
+    [
+      33751,
+      34944
+    ]
+  ],
+  "spans": [
+    {
+      "start": 34303,
+      "end": 34413,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 34303,
+      "end": 34413,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 34414,
+      "end": 34665,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 34666,
+      "end": 34729,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 34666,
+      "end": 34729,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 34730,
+      "end": 34789,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 34790,
+      "end": 34856,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 34790,
+      "end": 34856,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 34857,
+      "end": 34877,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 34878,
+      "end": 34889,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 34878,
+      "end": 34889,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 34890,
+      "end": 34944,
+      "style": "underline",
+      "purpose": null
+    }
+  ]
+}

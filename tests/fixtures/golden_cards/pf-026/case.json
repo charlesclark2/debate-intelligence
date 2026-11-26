@@ -1,0 +1,30 @@
+{
+  "case_id": "pf-026",
+  "candidate_id": "pf-1a02205a0f",
+  "event": "PF",
+  "season": "2025-26",
+  "source_type": "think tank",
+  "length_band": "multi-paragraph",
+  "omission_cut": false,
+  "coach_cut_and_reviewed_for_names": true,
+  "research_need": "4. Cartels aren’t dependent on the US",
+  "source_link": "https://insightcrime.org/news/analysis/mexico-cartels-connections-abroad/",
+  "parser_version": "2026.11.03-docx-9",
+  "imported_on": "2026-11-25",
+  "snapshot": {
+    "url": "https://insightcrime.org/news/analysis/mexico-cartels-connections-abroad/",
+    "canonical_url": "https://insightcrime.org/news/analysis/mexico-cartels-connections-abroad/",
+    "final_url": "https://insightcrime.org/news/analysis/mexico-cartels-connections-abroad/",
+    "fetched_on": "2026-11-26",
+    "access_status": "ACCESSIBLE",
+    "provenance_mode": "PUBLISHER_RETRIEVED",
+    "raw_sha256": "d0144b1e4431816653b1337d8e418774d8074700af888cf3a74a7ed4d7c017b2",
+    "raw_byte_size": 360093,
+    "normalized_text_sha256": "f4821108935868d7f051d2e1810f6331ca2fd05ef5d458bd6f4dfa23c68622b5",
+    "normalized_document_sha256": "5d06e189d6dc94c856e71a8ac969f21357034caefb326d7da0f0a240ef382dd5",
+    "normalizer_version": "evidence-normalizer-v1",
+    "extractor_version": "trafilatura/html-1+trafilatura-2.3.1+readability-lxml-0.9+lxml-6.1.3",
+    "content_type": "text/html; charset=UTF-8",
+    "paragraph_count": 10
+  }
+}

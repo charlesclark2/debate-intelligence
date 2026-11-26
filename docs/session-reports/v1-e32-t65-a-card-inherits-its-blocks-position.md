@@ -227,9 +227,45 @@ uv run python scripts/count_block_inheritance.py --carry-forward --snapshot 2026
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-11-25
 
 **Notes:**
+
+Accepted. ac1, the amended ac2 and the amended node criterion pass, and the Goal is `Succeeded` on
+the measurement, as the PM's ruling of 2026-11-20 provided.
+
+* **The answer is unambiguous, and it was reached honestly.**
+  * The 120-rule set-agreement grid inherits 0 right on the first sample.
+  * The one rule chosen there inherits 0 of 10 on the holdout, scored once.
+  * The 12 carry-forward variants in file order, run on the first sample only with the holdout not
+    read, carry 0 right of 3 to 14 each.
+
+  Every wrong answer is another position: another kind, or the same kind's other position. The
+  holdout was used once in all, and every parameter was chosen before it was read.
+* **The finding that matters most for later work is recorded:** the parser keeps heading paths, not
+  heading paragraphs, so the store has no block boundaries. Run-mates share every heading, and a
+  card's placed neighbours in the wider sections read other arguments. Any later block work starts
+  from paths and file order, and the data document says so.
+* **Deviations 1 to 7 are accepted.**
+  * The snapshot, LD's counts and the first sample's read date follow the PM's context and ruling.
+  * The counts came back as counts-only JSON read from the scratchpad, never pasted.
+  * The second grid run before the holdout added only the breakdown and a choice, on the first
+    sample.
+  * **The node criterion: keep it.** The original selected tests of matcher code the ruling means is
+    never written. `tests/scripts/test_count_block_inheritance.py`'s 16 tests are what this task
+    built, checked against planted documents with hand-worked counts. The PM records the amended node
+    in the next batch.
+* **The checks.** The affected set (59 files) stopped past 96% with no failure and goes to `ci` under
+  agreement 10. The measurement's tests, the spec tests, pyright and the import contracts are green.
+  If `scripts/task pr` asks, `scripts/task sync`.
+* **Follow-ups:**
+  * `v1-e32-t64` needs no `BLOCK_INHERITED`.
+  * `v1-e32-t66`'s premise, a block that "t65's inheritance leaves unplaced", is amended by the PM
+    in the next batch: the block is taken from file order within the deciding section, and its
+    proposal must show on the first sample alone that a model reading the tags in order does better
+    than the per-card stage, before any build.
+
+`scripts/task pr`

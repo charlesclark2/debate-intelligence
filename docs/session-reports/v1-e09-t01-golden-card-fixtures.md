@@ -967,9 +967,55 @@ Both were ruled on 2026-11-25, and none is open.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-11-25
 
 **Notes:**
+
+Accepted for a partial merge. ac1 to ac4 and every node but the sign-off pass. ac5, the coach's
+sign-off, is open, so the Goal stays `InProgress`.
+
+* **The corpus is complete and meets the floor:** 31 cases (Policy 8, LD 9, PF 14). By source:
+  think tank 14, unknown 7, news 6, government 2, journal 2. Every case is coach-attested, scrubbed
+  and labelled.
+* **The operator's checks are clean:**
+  * `check --snapshots`: 31 of 31 snapshots verified, 31 of 31 evidence reproduced;
+  * `check`: 62 DOCX files clean;
+  * the renders: byte-identical on every run.
+* **Every ruling of 2026-11-14 to 2026-11-25 is built as given** (Deviations 6 to 17):
+  * the public-repository rule (no snapshot committed);
+  * the attestation in place of the denylist;
+  * the matching form;
+  * purpose null, and the real UNVERIFIED verdict;
+  * the renderer allowance in `expected.docx` only;
+  * numbers never reused, with the retired line;
+  * the per-event floor.
+* **The evidence, with its gaps stated.**
+  * The 2026-11-15 tooling (`record`, `check --snapshots`, labels, renders) has no recorded red run
+    against a skeleton. That is a gap against the practice, accepted because 36 mutants cover it, of
+    which 3 survivors led to code changes and none is open.
+  * One mutant crashed rather than failing an assertion; it is not counted as a catch, and that is
+    the right way to report it.
+  * Every change from 2026-11-19 on was shown failing first.
+* **The two slips are handled.**
+  * The `git add -A` that swept case folders into a commit was undone before anything left the
+    machine. The branch history now holds exactly the 31 present cases, and none of the 40 retired
+    IDs appears in any commit. That matters in a public repository.
+  * The `git fetch` is noted; later sessions leave it to the operator.
+* **Labelling the cards in the session (Deviation 17) is accepted.** It read only public article
+  snapshots in the local folder, printed counts and IDs only, and no test reads a path outside the
+  repository.
+* **The checks.** The affected set ran in full within the bound (76 files, 3,623 passed) and so did
+  its slow tier (13 passed). Pyright, the import contracts and the spec validator are clean. **Dev
+  has moved, so `scripts/task sync` before the PR.**
+* **Next.**
+  * ac5: the coach reads the review sheet and signs, or names case IDs to change.
+  * The PM's batch amends the description's size, ac2's matching form, ac3's null purpose, ac4's
+    allowance and record-sources' artifact.
+  * Then the Goal is `Succeeded`.
+* **Follow-ups:** citation harvesting stays on the V1.x list. A "read aloud" purpose and a file of
+  imported candidate IDs are filed only if wanted.
+
+`scripts/task pr --partial`

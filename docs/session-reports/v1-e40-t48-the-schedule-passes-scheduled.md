@@ -1204,3 +1204,16 @@ are the operator's, so the Goal stays `InProgress`.
 * **Follow-ups:** none new. `v1-e41-t13` stays a ready p3.
 
 `scripts/task pr --partial`
+
+## Operator records (recorded by the PM, 2026-11-25)
+
+| Criterion | Was | Now | Record |
+|---|---|---|---|
+| ac2: the operator's first scheduled run after the apply records a pull started with `--scheduled` | NOT RUN | PASS | Wednesday 2026-11-25: CloudTrail shows the schedule's RunTask by `debate-dev-caselist-run-scheduler` at 12:00:27 UTC (06:00 Chicago), with no error, and the run record `20261125T120719Z` completed (4 downloaded). The command it started is the applied target's: its read-back of 2026-11-19 shows the universal RunTask target with `["--json", "caselist", "pull", "--scheduled"]`. CloudTrail redacts the container command override, and `describe-tasks` read after the task stopped returned `null`, so the flag itself is read from the target, not the event |
+
+**The miss of Wednesday 2026-11-18.** The first scheduled run after the merge was refused with `AccessDenied`
+against revision `:15`: the corrected target had not been applied before that morning. It was applied on
+2026-11-19, and a catch-up one-off pulled the week. Nothing was lost. The runbook's ac2 section now says that
+CloudTrail redacts the command, and names the evidence that holds.
+
+Every criterion passes, so the Goal is `Succeeded`.

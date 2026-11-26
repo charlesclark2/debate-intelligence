@@ -701,5 +701,25 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e08-t28-an-auto-cut-bundle-that-verifies-clean-end-to-end
+    - id: t29
+      kind: Task
+      name: 'On a crossed search, the ranking puts the coach''s relevant results above the providers'' own order'
+      description: >-
+        On a crossed search, the ranking puts the coach's relevant results above the providers' own order.
+      inputs:
+        specRef: plan_specs/v1/e08-research-workflows/t29-the-ranking-beats-provider-order-on-a-crossed-search.yaml
+        goalRef: v1-e08-t29-the-ranking-beats-provider-order-on-a-crossed-search
+      dependsOn:
+      - t16
+      - t24
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e08-t29-the-ranking-beats-provider-order-on-a-crossed-search reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e08-t29-the-ranking-beats-provider-order-on-a-crossed-search
 status:
   phase: Pending

@@ -885,3 +885,17 @@ No argument entry changed, and the comments say what the crossing does and the 4
    0.438 ranked and 0.746 in provider order.
 8. **Merge:** `scripts/task pr --partial` once `ci` is green. The Goal stays `InProgress` until ac3 is
    recorded.
+
+## Operator records (recorded by the PM, 2026-11-25)
+
+| Criterion | Was | Now | Record |
+|---|---|---|---|
+| ac3: the operator repeats the Policy search and the coach labels it blind; the PM records nDCG@10 and the relevant count against v1-e08-t14's ac3 | NOT RUN | PASS | v1.1.0-dev.445, the search of 2026-11-19 (`v1-e07-t27`'s repeat: OpenAlex `ok`, 37 queries, 200 results), labelled blind by the coach on 2026-11-25 under his criterion of 2026-11-08 (the ranked and provider-order top tens merged, sorted by title, no rank shown). **11 relevant of 19 rows** (t14: 6 of 19; t05: 3 of 20). nDCG@10 **0.568** ranked against **0.679** in provider order (t14: 0.438 against 0.746). Both orders put 6 relevant results in their top ten |
+
+How the PM scored it: binary relevance, DCG over each order's top ten with a log2(position + 1) discount, and
+the ideal ordering of the 11 relevant rows (capped at ten). The provider-order top ten is the first ten saved
+results by `provider_order`, whose numbering has gaps where duplicates merged.
+
+Every criterion passes, so the Goal is `Succeeded`. The crossing nearly doubled the relevant share. The ranking
+still trails the providers' own order on a crossed search, for the second search running: that is
+`v1-e08-t29`, filed in the same batch.

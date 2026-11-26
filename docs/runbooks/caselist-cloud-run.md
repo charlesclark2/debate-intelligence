@@ -1432,6 +1432,13 @@ whether to fix forward with the other casing or apply the templated target again
 
 ### Wednesday 2026-11-18: the first scheduled run (`v1-e40-t48` ac2)
 
+**What happened (PM, 2026-11-25).** The 2026-11-18 run was refused with `AccessDenied` against revision
+`:15`, because the corrected target had not been applied that morning. It was applied on 2026-11-19 with a
+catch-up one-off. ac2 was recorded on the next scheduled run, 2026-11-25. **CloudTrail redacts the container
+command override**, so the read below prints `["***REDACTED***"]` where the command was. The evidence that
+the run passed `--scheduled` is the read-back's command on the applied target (above), the scheduler role's
+RunTask in the read below, and the run record.
+
 The same CloudTrail read, over the morning of the run: the schedule's RunTask at 06:00 Chicago
 (12:00 UTC), with its retries if any.
 
@@ -1464,8 +1471,8 @@ else:
     print("none: no RunTask by " + role + " in the window")
 RUNTASK
 ```
-Success looks like `2026-11-18T12:00:<ss>Z  debate-dev-caselist-run-scheduler  ["--json", "caselist",
-"pull", "--scheduled"]  <task id>`. **And that week's run record:**
+Success looks like `<date>T12:00:<ss>Z  debate-dev-caselist-run-scheduler  ["***REDACTED***"]  <task id>`:
+the role and the time are the evidence, since CloudTrail redacts the command. **And that week's run record:**
 
 **Operator command** (expected runtime ~1 min)
 Where: your Mac, the installed build

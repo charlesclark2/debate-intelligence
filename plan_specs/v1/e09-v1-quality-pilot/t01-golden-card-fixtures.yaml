@@ -34,6 +34,9 @@ spec:
     fetch date and access status and the card's offsets, and the snapshots stay in a local folder
     outside the repository. ac2's integrity check is the operator's import_golden_card.py check over
     that folder, not a test. CI runs a structure test, the metadata scrub and the tooling tests.
+    (PM amendment 2026-11-25, from the rulings of 2026-11-16 to 2026-11-20.) The corpus size is a
+    floor, not 24-30 or a third each: every case that labels and checks clean is kept, with at
+    least 24 in all and 8 per event. Case IDs are never reused, and INDEX.md keeps a retired line.
   priority: 1
   constraints:
     packages: [tests/fixtures/golden_cards, tests/golden, scripts]
@@ -49,28 +52,34 @@ spec:
   acceptanceCriteria:
     - id: ac1
       description: >-
-        tests/fixtures/golden_cards contains at least 24 cases with a balanced split across Policy, LD and PF
-        and an INDEX.md listing case id, event, season, source type and research need.
+        tests/fixtures/golden_cards contains at least 24 cases, at least 8 of each of Policy, LD and
+        PF, and an INDEX.md listing case id, event, season, source type and research need, with its
+        retired line (PM amendment 2026-11-25).
     - id: ac2
       description: >-
-        Each case's expected evidence offsets reproduce the team card's evidence text exactly from the
-        recorded snapshot under the current normalizer, by the operator's import_golden_card.py check
+        Each case's expected evidence offsets reproduce the team card's evidence text from the
+        recorded snapshot in the matching form (debate_core.evidence.fingerprints.normalize_for_matching:
+        NFKC, casefold, quotes, dashes and invisibles; whitespace, the pilcrow and a line-end hyphen
+        are not compared; ruling of 2026-11-20), by the operator's import_golden_card.py check
         over the local snapshot folder, which also verifies each snapshot's SHA-256 (PM amendment
         2026-11-14).
     - id: ac3
       description: >-
         Each case has a coach-authored span label set (underline and highlight ranges with purpose) derived
-        from the team's original card markup.
+        from the team's original card markup. Every purpose is null: no format profile maps a markup
+        kind to claim, warrant, internal link or impact (PM amendment 2026-11-25, rulings of
+        2026-11-16 and 2026-11-19).
     - id: ac4
       description: >-
         A scrub test confirms no fixture DOCX carries author or lastModifiedBy metadata, comments or
         tracked-change authors, and every case carries the coach's attestation (PM amendment
-        2026-11-14; no roster denylist is required).
+        2026-11-14; no roster denylist is required). The renderer's name and its 3 manifest parts
+        are allowed in expected.docx only (PM amendment 2026-11-25, ruling of 2026-11-16).
     - id: ac5
       description: >-
         Charlie signs off that the corpus is representative of how the team actually cuts cards.
 status:
-  phase: InProgress
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan
@@ -114,8 +123,8 @@ spec:
         estimatedEffort: 3h
         acceptanceCriteria:
           - type: artifact_exists
-            name: Snapshot recorded for cases
-            path: tests/fixtures/golden_cards/policy-001/case.json
+            name: Corpus structure test exists (PM amendment 2026-11-25; policy-001 is retired)
+            path: tests/golden/test_corpus_structure.py
       - id: label-offsets
         kind: Task
         name: Convert original markup to offset labels

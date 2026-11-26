@@ -1,0 +1,74 @@
+# TASK v1-e41-t30-site-test-criteria-pass-their-filter-to-vitest - A site task's test criterion hands vitest its filter, not a literal --
+# Epic: E41 — Delivery Tooling Upkeep | Release: v1.8 (Weekly caselist run in the cloud) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e41-t30-site-test-criteria-pass-their-filter-to-vitest
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.8
+    debate/epic: v1-e41-delivery-tooling-upkeep
+  annotations:
+    debate/title: "A site task's test criterion hands vitest its filter, not a literal --"
+spec:
+  # Filed by the PM, 2026-11-25, from v1-e37-t17's deviation.
+  description: >-
+    v1-e37-t17 found that a criterion written as pnpm --dir site test -- results hands vitest a
+    literal --, after which results is not read as a filter, so the command runs the whole site
+    suite. It passes, but it does not mean what it says. The same form appears in about 44
+    criterion lines of plan_specs/, most of them V2 and V3 UI tasks. Count them by file and
+    release, confirm the behaviour on the site's pinned pnpm and vitest with no network, and
+    rewrite each criterion to a form that runs only the named tests (for example pnpm --dir site
+    exec vitest run <file>), or the whole suite where that is what is meant. Have
+    validate_specs.py refuse the literal -- form from then on, with a test shown failing first.
+  priority: 3
+  constraints:
+    packages: [plan_specs, scripts, tests/specs]
+    forbidden:
+      - A criterion changed to run fewer tests than its task's own tests
+      - An update of pnpm or of the site's lockfile
+  context:
+    - kind: TaskRef
+      name: v1-e37-t17-a-speaker-award-names-the-speaker-alone
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        Every site criterion that passed a literal -- runs what it names, and validate_specs.py
+        refuses the form, by a test shown failing first.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e41-t30-site-test-criteria-pass-their-filter-to-vitest-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.8
+    debate/epic: v1-e41-delivery-tooling-upkeep
+spec:
+  description: >-
+    A site task's test criterion hands vitest its filter, not a literal --.
+  goalRef:
+    name: v1-e41-t30-site-test-criteria-pass-their-filter-to-vitest
+  graph:
+    nodes:
+      - id: site-test-criteria-pass-their-filter-to
+        kind: Task
+        name: Site criteria filters
+        description: >-
+          A site task's test criterion hands vitest its filter, not a literal --.
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Site criteria filters tests pass
+            command: uv
+            args: [run, pytest, tests/specs, -k, criterion]
+status:
+  phase: Pending

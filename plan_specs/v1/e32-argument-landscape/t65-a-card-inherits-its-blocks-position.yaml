@@ -48,13 +48,14 @@ spec:
       description: >-
         The measurement, and the proposed rule with its score on the first sample and once
         on the holdout, are ruled on by the PM before code.
+    # PM ruling, 2026-11-20: no set-agreement rule is built; if no carry-forward variant gets more
+    # than a third of the first sample's inherited cards right, inheritance is closed and ac2 reads
+    # as below. Every variant got 0 right (docs/data/landscape-block-inheritance.md).
     - id: ac2
       description: >-
-        A card inherits its block's position only as ruled, and every inherited placement is
-        named as inherited in the report and the review queue, by tests on synthetic
-        disclosures shown failing first.
+        The measurement is recorded and the PM rules no inheritance.
 status:
-  phase: Pending
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan
@@ -81,10 +82,11 @@ spec:
           A card the matcher could not place inherits the position of the block it is read
           in, measured first.
         estimatedEffort: 3h
+        # Amended in the session with ac2 (no matcher code is built): the measurement's own tests.
         acceptanceCriteria:
           - type: test_passes
-            name: Block inheritance tests pass
+            name: Block inheritance measurement tests pass
             command: uv
-            args: [run, pytest, packages/debate_core/tests, -k, inherit]
+            args: [run, pytest, tests/scripts/test_count_block_inheritance.py]
 status:
   phase: Pending

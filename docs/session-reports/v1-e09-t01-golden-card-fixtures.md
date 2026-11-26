@@ -700,7 +700,8 @@ text, a tag, a school or a student.
   * `label_golden_card.py` writes `expected.json` from the coach's own underline, highlight and
     Emphasis runs, and `--render-expected` writes `expected.docx`;
   * `retire` takes out a case that does not label;
-  * `review` writes the coach's sign-off sheet outside the repository.
+  * `review` writes the coach's sign-off sheet, one row per case and a sign-off line, outside
+    the repository.
 * **Three pick rounds**, all run by the operator with the coach answering each attestation:
 
   | Round | List | Picked | Imported | Dropped at record | Labelled | Retired for not labelling |
@@ -721,10 +722,10 @@ text, a tag, a school or a student.
 | Node | Status | Notes |
 |---|---|---|
 | `select-and-copy` | Done | 71 imported over three rounds; 31 remain. |
-| `record-sources` | Done; its spec artifact FAILS as written | `record` built and run by the operator. The node's artifact, `policy-001/case.json`, no longer exists: `policy-001`'s source was dropped (Deviation 7). |
+| `record-sources` | Done; PASS on the amended criterion (PM ruling of 2026-11-25) | `record` built and run by the operator. The spec's artifact, `policy-001/case.json`, no longer exists: `policy-001`'s source was dropped (Deviation 7). |
 | `label-offsets` | Done | 31 of 31 labelled; operator's check clean. |
 | `expected-renders` | Done | 31 renders, byte-identical on every run. |
-| `scrub-and-signoff` | Scrub done; sign-off NOT RUN | The coach's review sheet is the next operator step. |
+| `scrub-and-signoff` | Scrub done; sign-off NOT RUN | The review sheet is built as the PM ruled on 2026-11-25; the coach's reading of it is the next operator step. |
 
 ### Acceptance criteria
 
@@ -734,9 +735,9 @@ text, a tag, a school or a student.
 | ac2: each case's offsets reproduce the team card's evidence from the recorded snapshot, and each snapshot's SHA-256 is verified, by the operator's check | PASS, in the matching form of the PM's ruling of 2026-11-20 | Operator, 2026-11-25: `uv run python scripts/import_golden_card.py check --snapshots ~/.debate-intelligence/golden-snapshots` → `docx checked: 62, other files checked: 64`, `denylist: off`, `snapshots verified: 31 of 31`, `evidence reproduced: 31 of 31`, `clean`. |
 | ac3: a coach-authored span label set per case (underline and highlight ranges with purpose) from the team's original markup | PASS, with every purpose null (PM rulings of 2026-11-16 and 2026-11-19) | `uv run scripts/label_golden_card.py --snapshots ~/.debate-intelligence/golden-snapshots` (session, 2026-11-25) → `labelled 31, not labelled 5`, the 5 then retired. Every `expected.json` passes the structure test: offsets only, spans inside one segment, highlights inside the underlining. |
 | ac4: no fixture DOCX carries author or lastModifiedBy metadata, comments or tracked-change authors, and every case carries the coach's attestation | PASS | `uv run pytest tests/golden/test_fixture_scrubbed.py` → `19 passed`. `uv run python scripts/import_golden_card.py check` → `docx checked: 62`, `clean`. The renderer's own name and its 3 manifest parts are allowed in `expected.docx` only (PM ruling of 2026-11-16). |
-| ac5: the coach signs off that the corpus is representative | NOT RUN | The review sheet is the next operator step (Operator follow-ups). |
+| ac5: the coach signs off that the corpus is representative | NOT RUN | The task merges as a partial on ac5 (PM ruling of 2026-11-25). The review sheet, one row per case and a sign-off line, is written to a local file outside the repository by the operator's command (Operator follow-ups); nothing from it goes into this report or the repository. |
 | Node `select-and-copy`: `INDEX.md` exists | PASS | `test -f tests/fixtures/golden_cards/INDEX.md` → exists. |
-| Node `record-sources`: `tests/fixtures/golden_cards/policy-001/case.json` exists | FAIL as written; PASS as ruled | `test -f` → absent. `policy-001` was dropped at record (Deviation 7). By the PM's ruling of 2026-11-19 the node is checked by `tests/golden/test_corpus_structure.py`, which requires every case's whole snapshot record → `38 passed`. |
+| Node `record-sources`: amended to `tests/golden/test_corpus_structure.py` (PM rulings of 2026-11-19 and 2026-11-25; the spec's text, `policy-001/case.json`, is amended in the next PM batch) | PASS on the amended criterion | `uv run pytest tests/golden/test_corpus_structure.py` → `38 passed`; it requires every case's whole snapshot record. The spec's artifact as still written is absent (`test -f` exits 1): `policy-001` was dropped at record (Deviation 7). |
 | Node `label-offsets`: `uv run pytest tests/golden` | PASS | `211 passed in 3.07s` |
 | Node `label-offsets`: the operator's integrity check is clean | PASS | as ac2 |
 | Node `expected-renders`: `uv run scripts/label_golden_card.py --render-expected --check` | PASS | `rendered and compared 31, differ 0, not rendered 0`, exit 0 |
@@ -810,6 +811,7 @@ practice; the tests were checked by mutants only.
 | `--drop-errors` | | 2, both CAUGHT: the option doing nothing, and the option dropping every unrecorded case |
 | ac1's floor and `INDEX.md`'s counts | On a copy of the committed tree, the floor test failed with `0 cases, fewer than 24` | 4, all CAUGHT: a per-event floor of 6, a floor growing with the corpus, no check on the total, a source type with no case left out |
 | The matching form (ruling 1 of 2026-11-20) | Before the change, the label refused 6 cards over typography only, from the class-only diagnosis; the 18 earlier labels came out byte-identical after it | 8, all CAUGHT by assertion failures: no matching normalization (9 failed), no line-end hyphen rule (6), pilcrow compared (5), a hyphen after any character (1), a hyphen before any character (2), whitespace compared (21), segments joined with a space (3), a ligature's second letter unpositioned (1). Four of them (no matching normalization, no line-end hyphen rule, pilcrow compared, whitespace compared) also had 7 setup errors each, where a world's labelling broke. The first run showed the typeset card's test reading a missing `expected.json` (a crash), so it now asserts its label line first (`a8c7702`). |
+| The review sheet (PM ruling of 2026-11-25): one row per case with ID, event, season, source type, research need and tag, then a sign-off line | The rewritten test failed against the old sheet on its header assertion (`'\| Case \| Event \| Season \| Source type \| Research need \| Tag \|...' in ...`) | 4, all CAUGHT on assertions: the tag column filled from the research need (the test rewrites one case's need so the two differ), no sign-off line, the first case left out, the research-need column left out |
 | Numbers never reused (ruling 3 of 2026-11-20) | **7 of 8 new tests failed** against the old importer; the eighth, existing IDs kept, passes as it should. A probe printed `dropped policy-001 -> late card numbered policy-001`, and the first test failed on `'policy-001' == 'policy-003'` | 6. **CAUGHT (5):** record retires nothing (3 failed), a rewrite forgets the listed IDs (3), the retire dry run writes (1), a present case may be retired (1), and retired IDs not counted as taken (1, through `write_index`'s own refusal `policy-002 is a case in the corpus, not retired`, a deliberate refusal rather than a crash). **SURVIVED, then CAUGHT (1):** the first free number was equivalent while every departure is retired. `test_a_number_below_the_highest_is_not_given_again_even_with_no_retired_line` (a folder removed by hand) now catches it (`79c625c`). |
 
 ### Before the report (2026-11-25)
@@ -817,6 +819,7 @@ practice; the tests were checked by mutants only.
 | Check | Result |
 |---|---|
 | `.venv/bin/python scripts/hard_stop.py 115 uv run scripts/affected_tests.py --run` | 71 test files, **2720 passed in 64.21s**, exit 0 (load 2.9) |
+| the same, again after the review sheet's change and this report's edits | 76 test files, **3623 passed in 86.73s**, exit 0 (load 3.2); then `ruff format --check`, `ruff check`, `lint-imports`, `check_links.py`, `check_command_blocks.py` and `validate_specs.py` clean as below. `pyright` (whole project) was run after the sheet's last format: 0 errors. `tests/golden`: 211 passed. |
 | the same with `--slow` | fast tier as above; slow tier 5 test files, **13 passed in 13.11s** |
 | `uv run --frozen ruff format --check .` / `ruff check .` | 2140 files already formatted / All checks passed |
 | `uv run --frozen pyright` (whole project, after the last format) | 0 errors, 0 warnings, 0 informations |
@@ -909,44 +912,51 @@ Numbered on from the first session's five.
   network call that is the operator's under the PM's rule. It fetched refs from the project's own
   remote, no page and no model, and it changed nothing in the worktree. The spec is unchanged on
   dev, and dev has moved past the branch's base, so the sync before the PR is the operator's.
+  *Noted by the PM on 2026-11-25:* it stays in this report, and later sessions leave fetches to the
+  operator.
 
 ### Questions for the PM
 
-1. **Spec amendments still to make**, from the rulings:
-   * the description's "24-30" and "roughly a third each" become the floor;
-   * ac2's "exactly" becomes the matching form;
-   * ac3's "with purpose" holds with purpose null;
-   * ac4 gains the renderer allowance in `expected.docx`;
-   * `record-sources`' artifact `policy-001/case.json` becomes `tests/golden/test_corpus_structure.py`.
+Both were ruled on 2026-11-25, and none is open.
 
-   Until they are made, `record-sources`' criterion fails as written.
-2. **A retired card can be picked again.** The retired line keeps only case IDs, as ruled, so the
-   importer cannot recognise a retired card if the coach picks it again in a later round. This
-   round worked around it with a filtered list. Options:
-   * A) keep the workaround for any later round;
-   * B) keep the candidate IDs ever imported in a local file outside the repository, read by the
-     importer.
+1. **The spec amendments are the PM's, in the next PM batch:**
+   * the description's "24-30" and "roughly a third each" become the floor (24 in all, at least 8
+     per event);
+   * ac2's "exactly" becomes the card-fingerprint matching form;
+   * ac3 holds with purpose null;
+   * ac4 gains the renderer allowance in `expected.docx` only;
+   * `record-sources`' artifact becomes `tests/golden/test_corpus_structure.py`.
 
-   Recommendation: A while the corpus is built. B is a small change if rounds continue.
+   Until that batch merges, `record-sources` is recorded as passing on the amended criterion,
+   citing the ruling (above).
+2. **A retired card can be picked again:** *ruled A.* The filtered-list practice stays. The corpus
+   is complete at 31 and no further round is planned. Option B, a local file of every candidate ID
+   imported, is a small follow-up if a round is ever needed.
 
 ### Operator follow-ups (resume)
 
-* **The coach's review sheet (ac5).** Writes `review.md` outside the repository, a few seconds.
-  The coach reads it with the cards and answers its three questions:
+* **The coach's review sheet (ac5).** Writes `review.md` to a local folder outside the repository
+  and opens it, a few seconds. One row per case (ID, event, season, source type, research need,
+  tag), then the sign-off line. The coach opens each case's `team-card.docx` beside its
+  `expected.docx` and signs the line:
 
   ```bash
   cd /Users/charlesclark/Documents/debate/debate-intelligence-tool/debate-intelligence-worktrees/v1-e09-t01-golden-card-fixtures
-  uv run python scripts/import_golden_card.py review --output ~/golden-card-shortlist/review.md
+  uv run python scripts/import_golden_card.py review --output ~/golden-card-shortlist/review.md && open ~/golden-card-shortlist/review.md
   ```
 
-  Success: `review sheet: 31 cases`. Send back only whether the coach signs off, and any case IDs
-  he wants changed.
+  Success: `review sheet: 31 cases`, and the sheet opens. Send back only whether the coach signs
+  off, and the IDs of any cases he wants changed. Never paste the sheet: it holds the cards'
+  tags.
 * **Sync before the PR.** Dev has moved since the branch's base. `scripts/task sync` is the
   operator's.
 
 ### Follow-up work
 
-* The coach's sign-off (ac5). The Goal goes to `Succeeded` after it and the PM's amendments.
+* The coach's sign-off (ac5), after this partial merge. The Goal goes to `Succeeded` after it
+  and the PM's amendments.
+* If a pick round is ever needed again: a local file of every candidate ID imported, read by the
+  importer (ruling 2B of 2026-11-25).
 * V1.x: harvest citations from the snapshots, so cards whose metadata verifies render VERIFIED
   (ruling 1B of 2026-11-16).
 * A later card-model task, if wanted: a "read aloud" span purpose; then regenerate the expected

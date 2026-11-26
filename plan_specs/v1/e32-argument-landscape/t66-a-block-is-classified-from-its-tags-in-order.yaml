@@ -16,17 +16,26 @@ metadata:
 spec:
   # Filed by the PM, 2026-11-14, from the product owner's decision of 2026-11-14 that context-based classification is wanted in V1 if it meets the bar.
   description: >-
-    Where v1-e32-t65's inheritance leaves a block unplaced, the model sees the block, not one
-    card: its headings and its cards' tags in file order (a counterplan's text as written, per
-    data-use policy 1.23), never an evidence body, a school, a team code, a team name or a
-    debater name. Proposal first: the block's definition (t65's), the prompt (a new version of
-    landscape.classify_position or its own id), the batch shape, the cost at the committed
-    prices, and how a block's answer scores per card against the coach's existing labels (each
-    card takes its block's answer). Stop for the PM's ruling. Then build it; tune only on
-    v1-e32-t21's first sample, and score once on v1-e32-t50's holdout against the 0.85 bar.
-    Every record run is the operator's, after the PM authorizes it, and the hold on other live
-    runs stands. If the holdout misses the bar, the stage stays off by default and the score is
-    recorded in docs/data/landscape-model-evaluation.md.
+    (PM amendment 2026-11-25: the premise is rewritten, because v1-e32-t65 closed with no
+    inheritance.) For a card the deterministic matcher left unplaced, the model sees its block,
+    not the card alone: the cards in file order within its deciding section (t65's definition,
+    the deepest section over the card holding a placed card; the proposal gives the fallback
+    where none does, with counts), its headings and its cards' tags in file order, and a
+    counterplan's or plan's text as written (data-use policy 1.23). Never an evidence body, a
+    cite, a school, a team code, a team name or a debater name. Each card takes its block's
+    answer for it, scored per card against the coach's existing labels. Proposal first: the
+    block's definition with counts, the prompt (a new version of landscape.classify_position or
+    its own id), the batch shape and the cost of one first-sample record run at the committed
+    prices. Stop for the PM's ruling. Then build only what a first-sample record run needs, in
+    at most three prompt rounds, each recorded by the operator after the PM authorizes it. Go
+    or no-go is on v1-e32-t21's first sample: unless a round scores at least 0.85 there (the
+    cancelled per-card stage scored 0.684 there and 0.571 on the holdout), stop, leave the
+    holdout unread and the stage off by default, and record the scores in
+    docs/data/landscape-model-evaluation.md. Only after a round meets 0.85 on the first sample
+    is the stage wired and v1-e32-t50's holdout recorded once and scored against 0.85.
+    ClassificationKey names the model (the route's model id), so a cached answer is reused
+    only under the same model and prompt, and prod reads dev's classifications only under
+    that key (v1-e05-t20's ac2). The hold on other live runs stands.
   priority: 2
   constraints:
     packages: [debate_core.arguments, debate_core.application, debate_core.domain, prompts, packages/debate_core/tests, packages/debate_cli/tests, docs/data]
@@ -45,9 +54,11 @@ spec:
         The proposal is ruled on by the PM before code.
     - id: ac2
       description: >-
-        Replayed from the operator's recordings, the holdout's per-card score is recorded
-        against the 0.85 bar with the input and cassette scans clean, and the stage is on by
-        default only if the bar is met.
+        Replayed from the operator's recordings, with the input and cassette scans clean, the
+        first sample's per-card score is recorded for each prompt round. If a round meets 0.85
+        there, the holdout's per-card score is recorded once against the 0.85 bar, and the stage
+        is on by default only if the holdout meets it. If none does, the holdout is not read and
+        the stage stays off (PM amendment 2026-11-25).
 status:
   phase: Pending
 ---

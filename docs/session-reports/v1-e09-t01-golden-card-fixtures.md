@@ -1019,3 +1019,14 @@ sign-off, is open, so the Goal stays `InProgress`.
   imported candidate IDs are filed only if wanted.
 
 `scripts/task pr --partial`
+
+## Operator records (recorded by the PM, 2026-11-25)
+
+| Criterion | Was | Now | Record |
+|---|---|---|---|
+| ac5: the coach signs off that the corpus is representative | NOT RUN | PASS | 2026-11-25: the coach read the review sheet (31 cases: Policy 8, LD 9, PF 14) and signed off, with no case changed |
+| Node `scrub-and-signoff`: the coach approves the corpus | NOT RUN | PASS | as ac5 |
+
+Every criterion passes, so the Goal is `Succeeded`. The PM batch of 2026-11-25 amends the description's size,
+ac1's floor, ac2's matching form, ac3's null purpose, ac4's renderer allowance and `record-sources`' artifact,
+as the rulings of 2026-11-16 to 2026-11-20 say.

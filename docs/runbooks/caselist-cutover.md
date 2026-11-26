@@ -204,7 +204,7 @@ Where: `$WT`, in the shell that set `TAG`
 cd "$WT"
 if [ -z "$TAG" ]; then echo "STOP: TAG is not set; run the release block first"; else scripts/install_channel.sh "$TAG" 2>&1 | tail -5; fi
 ```
-Success ends with the build's `complete` line and `The build runs on the Python at …, which uv manages.`
+Success ends, after the check table, with `Installed debate-research <version> from <tag> at <path>.`
 
 **Every build this Mac can run is one with the lock** (ADR-0020's residual risk: a build older than
 the lock, run by hand against the bucket, would not know the lock). Each `debate-research` on your

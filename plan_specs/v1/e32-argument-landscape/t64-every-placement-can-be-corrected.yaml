@@ -31,7 +31,7 @@ spec:
     the command's shape; stop for the PM's ruling before code.
   priority: 2
   constraints:
-    packages: [debate_core.arguments, debate_core.application, debate_cli, packages/debate_core/tests, packages/debate_cli/tests, docs/guides]
+    packages: [debate_core.arguments, debate_core.application, debate_core.integrations, debate_cli, scripts, packages/debate_core/tests, packages/debate_cli/tests, tests/scripts, tests/smoke, docs/guides]
     forbidden:
       - A school, team code, team name, path or file name in the listing
       - A decision applied that names no position of the taxonomy

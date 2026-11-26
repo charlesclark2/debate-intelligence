@@ -26,12 +26,16 @@ spec:
     landscape's state would live in bucket mode. Propose to the PM before building. Then, as
     ruled, wire the stage, fix the stale reason line, and bundle what the image needs.
     (PM amendment 2026-11-14, the product owner's landscape decision.) V1's weekly landscape
-    stage runs the deterministic matcher and the review queue, with v1-e32-t65's inheritance once it is
-    built; it makes no model call, so the count's model-cost part is zero for V1. v1-e32-t07 is
-    cancelled and no longer a prerequisite.
+    stage runs the deterministic matcher and the review queue; it makes no model call, so the
+    count's model-cost part is zero for V1. v1-e32-t07 is cancelled and no longer a
+    prerequisite. (PM amendment 2026-11-25, the ruling of the same day.) v1-e32-t65 closed with
+    no inheritance. Two topics have a taxonomy (policy-2026-27-nhi and hsld26's de-extinction
+    topic). Dev's AWS budget is ADR-0010's $25 a month; the $50 is the profile's model-spend
+    cap. The landscape's state lives in the dev bucket under reports/, restored and saved by
+    the stage under the run lock, as the ruling says.
   priority: 2
   constraints:
-    packages: [debate_core.application, debate_core.integrations, debate_cli, scripts, ops, packages/debate_core/tests, packages/debate_cli/tests, tests/scripts, tests/smoke, docs/runbooks]
+    packages: [debate_core.application, debate_core.integrations, debate_cli, scripts, ops, packages/debate_core/tests, packages/debate_cli/tests, tests/scripts, tests/smoke, docs/runbooks, docs/architecture]
     forbidden:
       - A model call made in a week the budget would refuse
       - A card classified a second time

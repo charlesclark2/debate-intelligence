@@ -1,0 +1,88 @@
+# TASK v1-e08-t29-the-ranking-beats-provider-order-on-a-crossed-search - On a crossed search, the ranking puts the coach's relevant results above the providers' own order
+# Epic: E08 Federated Research Workflows | Release: v1.4 (Federated research from the CLI) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e08-t29-the-ranking-beats-provider-order-on-a-crossed-search
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.4
+    debate/epic: v1-e08-research-workflows
+  annotations:
+    debate/title: "On a crossed search, the ranking puts the coach's relevant results above the providers' own order"
+spec:
+  # Filed by the PM, 2026-11-25, from v1-e08-t16's ac3 and v1-e08-t24's follow-up.
+  description: >-
+    Two labelled crossed searches now show the ranking below the providers' own order: v1-e08-t14's
+    (0.438 ranked against 0.746 in provider order, 0.459 after v1-e08-t24's recency change) and
+    v1-e08-t16's on v1.1.0-dev.445 (0.568 ranked against 0.679, 11 relevant of 19 rows; both
+    orders put 6 relevant results in their top ten, and the ranking's first result is not
+    relevant). v1-e08-t05's earlier search had the ranking ahead (0.767 against 0.000). Measure
+    first, offline, from the three labelled sheets and their saved searches: the operator runs a
+    block that prints, for each labelled row, its ranked and provider positions, the query or
+    queries that found it, every ranking feature and the coach's mark (positions, features and
+    marks only, never a title or URL), and nDCG@10 both ways for each search. Say which features
+    put irrelevant rows above relevant ones on the two crossed searches, and propose a change
+    scored offline on all three searches by an operator replay block with no provider call. A
+    change may not lower v1-e08-t05's replayed score. Stop for the PM's ruling, then build it
+    and record all three replayed scores beside today's.
+  priority: 2
+  constraints:
+    packages: [debate_core.application, debate_core.domain, config, scripts, packages/debate_core/tests, packages/debate_cli/tests, tests/scripts, docs/data]
+    forbidden:
+      - A title, URL or label from a coach's sheet in a report, a commit or a fixture
+      - A live provider call by a session or in a test
+      - A change that lowers v1-e08-t05's replayed nDCG@10
+      - Tuning on any search other than the three labelled ones
+  context:
+    - kind: TaskRef
+      name: v1-e08-t16-mechanism-queries-cross-the-chosen-link-templates
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e08-t24-the-ranking-keeps-a-multi-query-searchs-relevant-results-up
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        The operator's positions block has run on the three labelled searches, and the proposal is
+        ruled on by the PM before any code.
+    - id: ac2
+      description: >-
+        The ruled change holds by tests on fixtures shown failing first, and all three searches'
+        replayed nDCG@10 are recorded beside today's (operator).
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e08-t29-the-ranking-beats-provider-order-on-a-crossed-search-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.4
+    debate/epic: v1-e08-research-workflows
+spec:
+  description: >-
+    On a crossed search, the ranking puts the coach's relevant results above the providers' own order.
+  goalRef:
+    name: v1-e08-t29-the-ranking-beats-provider-order-on-a-crossed-search
+  graph:
+    nodes:
+      - id: the-ranking-beats-provider-order-on-a-cr
+        kind: Task
+        name: Ranking on a crossed search
+        description: >-
+          On a crossed search, the ranking puts the coach's relevant results above the providers' own order.
+        estimatedEffort: 4h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Ranking on a crossed search tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application, -k, ranking]
+status:
+  phase: Pending

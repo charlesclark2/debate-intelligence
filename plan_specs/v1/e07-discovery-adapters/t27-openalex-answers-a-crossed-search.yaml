@@ -16,7 +16,8 @@ metadata:
 spec:
   # Filed by the PM, 2026-11-14, from the operator's searches of 2026-11-14.
   description: >-
-    On 2026-11-14, on v1.1.0-dev.439, v1-e08-t16's ac3 search ('national health insurance',
+    On 2026-11-14, on v1.1.0-dev.413 (PM amendment 2026-11-25: the description first said
+    dev.439; the saved file has no narrowing key, so dev.413 wrote it), v1-e08-t16's ac3 search ('national health insurance',
     --argument politics-da --need link, --topic policy-2026-27-nhi, --max-results 200: 37
     queries, 30 of them crossed) recorded openalex as outcome error, queries 37, failed 37,
     results 0, reasons 'HTTP 400: the provider refused the request'. A plain search ('national
@@ -49,7 +50,10 @@ spec:
       description: >-
         The ruled fix holds by tests on recorded-shape fixtures shown failing first, and the
         operator's repeat of v1-e08-t16's ac3 search records openalex with an outcome other
-        than error and results above zero (operator).
+        than error and results above zero (operator). (PM amendment 2026-11-25, ruling of
+        2026-11-19 Q1.) The refused request was dev.413's, which v1-e08-t20's split already
+        refuses, so no new fix code is built: OpenAlex's message kept (shown failing first),
+        the record and a mutant against t20's tests stand for the tests.
 status:
   phase: Succeeded
 ---

@@ -60,7 +60,10 @@ spec:
     - id: ac2
       description: >-
         Prod makes no model call for an item dev has classified at the same prompt version
-        and model, by test, before prod's first live call.
+        and model, by test, before prod's first live call. (PM amendment 2026-11-25, ruling of
+        2026-11-15 Q1.) Not applicable while no landscape model stage is on in prod: V1's
+        landscape makes no model call. The reuse condition moves to v1-e32-t66, whose
+        ClassificationKey names the model, so prod reads dev's classifications only under it.
     - id: ac3
       description: >-
         Prod's plan and apply, the PM reading the plan, the first call answered on each prod

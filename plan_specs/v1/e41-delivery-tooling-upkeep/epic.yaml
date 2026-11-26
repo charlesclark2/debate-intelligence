@@ -772,5 +772,32 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e41-t29-a-pull-requests-ci-runs-the-slow-tests-it-reaches
+    - id: ext-v1-e37-t17-a-speaker-award-names-the-speaker-alone
+      kind: External
+      name: 'Prerequisite from E37: A speaker award in a partner event names the speaker alone'
+      description: >-
+        Cross-epic prerequisite owned by v1-e37-calendar-and-announcements (release v1.6).
+      inputs:
+        goalRef: v1-e37-t17-a-speaker-award-names-the-speaker-alone
+        specRef: plan_specs/v1/e37-calendar-and-announcements/t17-a-speaker-award-names-the-speaker-alone.yaml
+    - id: t30
+      kind: Task
+      name: 'A site task''s test criterion hands vitest its filter, not a literal --'
+      description: >-
+        A site task's test criterion hands vitest its filter, not a literal --.
+      inputs:
+        specRef: plan_specs/v1/e41-delivery-tooling-upkeep/t30-site-test-criteria-pass-their-filter-to-vitest.yaml
+        goalRef: v1-e41-t30-site-test-criteria-pass-their-filter-to-vitest
+      dependsOn:
+      - ext-v1-e37-t17-a-speaker-award-names-the-speaker-alone
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e41-t30-site-test-criteria-pass-their-filter-to-vitest reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e41-t30-site-test-criteria-pass-their-filter-to-vitest
 status:
   phase: Pending

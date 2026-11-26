@@ -402,21 +402,33 @@ def test_the_renderers_name_is_allowed_in_expected_docx_only(
 # ------------------------------------------------------------------------------------------------
 
 
-def test_the_review_sheet_lists_every_case_and_the_sign_off_questions(
+def test_the_review_sheet_has_one_row_per_case_and_ends_with_the_sign_off_line(
     rendered: World, capsys: pytest.CaptureFixture[str]
 ) -> None:
+    # The PM's ruling of 2026-11-25: case ID, event, season, source type, research need and the
+    # card's tag, then a sign-off line. The need is rewritten here so the two columns differ; in
+    # the corpus today the need is the tag.
+    marked = rendered.case_for("marked")
+    case_path = rendered.fixtures / marked / golden.CASE_NAME
+    case = json.loads(case_path.read_text(encoding="utf-8"))
+    case["research_need"] = "Why the reserve margin matters"
+    case_path.write_text(json.dumps(case, indent=2) + "\n", encoding="utf-8")
     sheet = rendered.root / "outside" / "review.md"
 
     assert golden.main(["review", "--output", str(sheet), "--fixtures", str(rendered.fixtures)]) == 0
 
     text = sheet.read_text(encoding="utf-8")
-    marked = rendered.case_for("marked")
     assert (
-        f"| `{marked}` | Policy | 2025-26 | think tank | Demand growth strains the marked reserve margin "
-        f"| 2 | 2 | 2 | `{rendered.fixtures / marked}` |"
+        "| Case | Event | Season | Source type | Research need | Tag |\n|---|---|---|---|---|---|\n" in text
+    )
+    assert (
+        f"| `{marked}` | Policy | 2025-26 | think tank | Why the reserve margin matters "
+        "| Demand growth strains the marked reserve margin |\n"
     ) in text
+    rows = [line for line in text.splitlines() if line.startswith("| `")]
+    assert len(rows) == 6
     assert "6 cases: Policy 2, LD 0, PF 4." in text
-    assert text.endswith(f"3. {golden.REVIEW_QUESTIONS[2]}\n")
+    assert text.endswith(golden.REVIEW_SIGN_OFF + "\n")
     assert capsys.readouterr().out == "review sheet: 6 cases\n"
 
 

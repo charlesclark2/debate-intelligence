@@ -181,9 +181,9 @@ given again. Every ID must be a case in the corpus, or nothing is retired (exit 
 
     uv run python scripts/import_golden_card.py review --output ~/golden-card-shortlist/review.md
 
-Writes, outside the repository, a sheet listing every case (ID, event, season, source type,
-research need, its segment and span counts and its folder) and the sign-off questions of ac5. It
-holds the cards' tags, so it refuses a path inside the repository, and prints only the case count.
+Writes, outside the repository, ac5's sheet: one row per case (ID, event, season, source type,
+research need and the card's tag), then a sign-off line (the PM's ruling of 2026-11-25). It holds
+the cards' tags, so it refuses a path inside the repository, and prints only the case count.
 
 Owned by `v1-e09-t01-golden-card-fixtures`.
 """
@@ -1742,59 +1742,49 @@ def record_lines(report: RecordReport, *, execute: bool) -> list[str]:
     return lines
 
 
-REVIEW_QUESTIONS: Final = (
-    "Does this corpus represent how the team actually cuts cards, across Policy, LD and PF? "
-    "(yes or no, and what is missing if no)",
-    "For each case, do the underlines and highlights of `expected.docx` match your card in "
-    "`team-card.docx`? (list the case IDs that do not, and what differs)",
-    "Is any case one you would not want the platform measured on? (list the case IDs)",
+# The PM's ruling of 2026-11-25: one row per case, then one sign-off line, in the words of the
+# scrub-and-signoff node's criterion.
+REVIEW_SIGN_OFF: Final = (
+    "Sign-off: I confirm this corpus represents how the team cuts cards across Policy, LD and PF, "
+    "and that the span labels match my original cards. Signed: ____________  Date: ____________"
 )
 
 
 def render_review(fixtures_dir: Path) -> str:
-    """The coach's review sheet: every case with its event, source type and research need, then the
-    sign-off questions. It holds the cards' tags, so it is written outside the repository."""
+    """The coach's review sheet: one row per case (ID, event, season, source type, research need and
+    the card's tag), then the sign-off line. It holds the cards' tags, so it is written outside the
+    repository."""
     cases = sorted(_existing_cases(fixtures_dir), key=lambda case: case["case_id"])
     lines = [
         "# Golden corpus: the coach's review",
         "",
         "Local to this machine: never commit, paste or send this file. It holds the cards' tags.",
         "",
-        "For each case, open its two documents side by side: `team-card.docx`, your card as it was",
-        "imported, and `expected.docx`, the card as the platform renders it from the recorded source",
-        "page, with your underlining and highlighting carried over. Then answer the questions at the end.",
+        f"Each case's folder is under `{fixtures_dir}`. Open its `team-card.docx`, your card as it was",
+        "imported, beside its `expected.docx`, the card as the platform renders it from the recorded",
+        "source page with your underlining and highlighting carried over.",
         "",
-        "| Case | Event | Season | Source type | Research need "
-        "| Segments | Underlines | Highlights | Folder |",
-        "|---|---|---|---|---|---|---|---|---|",
+        "| Case | Event | Season | Source type | Research need | Tag |",
+        "|---|---|---|---|---|---|",
     ]
     for case in cases:
-        folder = fixtures_dir / case["case_id"]
-        expected_path = folder / EXPECTED_NAME
-        expected = json.loads(expected_path.read_text(encoding="utf-8")) if expected_path.is_file() else None
-        spans = expected["spans"] if expected else []
-        counts = (
-            (
-                str(len(expected["segments"])),
-                str(sum(1 for span in spans if span["style"] == "underline")),
-                str(sum(1 for span in spans if span["style"] == "highlight")),
-            )
-            if expected
-            else ("not labelled", "", "")
+        expected_path = fixtures_dir / case["case_id"] / EXPECTED_NAME
+        tag = (
+            json.loads(expected_path.read_text(encoding="utf-8"))["tag"]
+            if expected_path.is_file()
+            else "not labelled"
         )
         lines.append(
             f"| `{case['case_id']}` | {case['event']} | {case['season']} | {case['source_type']} | "
-            f"{_cell(case['research_need'])} | {' | '.join(counts)} | `{folder}` |"
+            f"{_cell(case['research_need'])} | {_cell(tag)} |"
         )
     by_event = Counter(case["event"] for case in cases)
     lines += [
         "",
         f"{len(cases)} cases: " + ", ".join(f"{event} {by_event[event]}" for event in EVENTS) + ".",
         "",
-        "## Sign-off",
-        "",
+        REVIEW_SIGN_OFF,
     ]
-    lines += [f"{number}. {question}" for number, question in enumerate(REVIEW_QUESTIONS, start=1)]
     return "\n".join(lines) + "\n"
 
 

@@ -27,6 +27,7 @@ from typing import NamedTuple, Protocol, Self, runtime_checkable
 
 from pydantic import Field, model_validator
 
+from debate_core.arguments.landscape.placements import PlacementRow
 from debate_core.arguments.landscape.review_queue import ReviewRow
 from debate_core.domain.base import DomainModel, NonEmptyText, Sha256Hex
 from debate_core.domain.landscape import PositionId, TaxonomyVersion
@@ -94,5 +95,12 @@ class ClassificationStore(Protocol):
         """Write `caselist`'s queue CSV on `topic_id`, replacing the last one; return where it went.
 
         `suggestions` writes the local proxy model's suggestion column, for a queue it ordered (`v1-e32-t26`).
+        """
+        ...
+
+    async def write_placements(self, caselist: str, topic_id: str, rows: Sequence[PlacementRow]) -> str:
+        """Write `caselist`'s placements listing on `topic_id` (`v1-e32-t64`), replacing the last one.
+
+        Returns where it went.
         """
         ...

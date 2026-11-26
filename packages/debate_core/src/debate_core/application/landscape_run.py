@@ -127,6 +127,7 @@ from debate_core.application.position_classification import ClassificationRun, P
 from debate_core.application.review_queue_order import ReviewQueueOrdering
 from debate_core.application.sync_runs import SyncRunLog
 from debate_core.arguments.landscape.analytic_texts import CounterplanActors
+from debate_core.arguments.landscape.placements import PlacementRow
 from debate_core.arguments.landscape.review_queue import DEFAULT_REVIEW_THRESHOLD, ReviewRow
 from debate_core.domain.landscape import LateDisclosures, Taxonomy, Topic
 from debate_core.domain.landscape_classification import OverrideRules, PositionClassification
@@ -180,6 +181,8 @@ the only files naming schools and team codes, and the only ones naming tournamen
 rest, they go to the local `reports/` directory and the private bucket only."""
 
 DRY_RUN_QUEUE_LOCATION: Final = "(not written: dry run)"
+DRY_RUN_PLACEMENTS_LOCATION: Final = DRY_RUN_QUEUE_LOCATION
+"""The placements listing's location in a dry run (`v1-e32-t64`): not written either."""
 
 
 class LandscapeModelMode(StrEnum):
@@ -885,6 +888,9 @@ class _ReadOnlyClassifications:
         self, caselist: str, topic_id: str, rows: Sequence[ReviewRow], *, suggestions: bool = False
     ) -> str:
         return DRY_RUN_QUEUE_LOCATION
+
+    async def write_placements(self, caselist: str, topic_id: str, rows: Sequence[PlacementRow]) -> str:
+        return DRY_RUN_PLACEMENTS_LOCATION
 
 
 def _topic_range(topic: Topic, caselist: str, snapshot: date) -> tuple[date, date] | None:

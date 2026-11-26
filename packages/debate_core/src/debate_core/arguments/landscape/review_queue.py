@@ -312,6 +312,9 @@ class AppliedDecisions:
     added: int
     changed: int
     unchanged: int
+    changed_headings: tuple[str, ...] = ()
+    """The headings whose rule a decision added or changed, in the decisions' order: what the apply step's
+    summary counts cards for (`v1-e32-t64`)."""
 
 
 def apply_decisions(
@@ -319,20 +322,34 @@ def apply_decisions(
 ) -> AppliedDecisions:
     """`current` with `decisions` applied: new headings added, changed ones replaced, all checked.
 
-    The existing rules keep their order and new ones follow by heading, so the file's diff is the
-    decisions. Raises `ValueError` naming the first decision `taxonomy` cannot count under.
+    A decision on a heading no override decides that names the position an alias of that heading already
+    places it under (`v1-e32-t64`'s placements listing, a row the coach confirmed) is counted unchanged and
+    written nowhere, so the overrides file holds corrections, not confirmations. The existing rules keep
+    their order and new ones follow by heading, so the file's diff is the decisions. Raises `ValueError`
+    naming the first decision `taxonomy` cannot count under.
     """
     rules = current.rules_by_heading()
+    aliases = _alias_positions(taxonomy)
     added = changed = unchanged = 0
+    changed_headings: list[str] = []
     for decision in decisions:
         before = rules.get(decision.heading)
         if before is not None and before.position_id == decision.position_id:
+            unchanged += 1
+            continue
+        if (
+            before is None
+            and decision.position_id is not None
+            and aliases.get(decision.heading) is not None
+            and aliases.get(decision.heading) == _resolved(taxonomy, decision.position_id)
+        ):
             unchanged += 1
             continue
         if before is None:
             added += 1
         else:
             changed += 1
+        changed_headings.append(decision.heading)
         rules[decision.heading] = HeadingOverride(
             heading=decision.heading, position_id=decision.position_id, decided=decided
         )
@@ -345,4 +362,28 @@ def apply_decisions(
     except ValidationError as error:
         raise ValueError(str(error)) from error
     updated.check_against(taxonomy)
-    return AppliedDecisions(rules=updated, added=added, changed=changed, unchanged=unchanged)
+    return AppliedDecisions(
+        rules=updated,
+        added=added,
+        changed=changed,
+        unchanged=unchanged,
+        changed_headings=tuple(dict.fromkeys(changed_headings)),
+    )
+
+
+def _alias_positions(taxonomy: Taxonomy) -> dict[str, str | None]:
+    """Each alias with the active position it places under; None for one retired with nowhere to go."""
+    found: dict[str, str | None] = {}
+    for position in taxonomy.positions:
+        resolved = taxonomy.resolve(position.id)
+        for alias in position.aliases:
+            found[alias] = None if resolved.deprecated else resolved.id
+    return found
+
+
+def _resolved(taxonomy: Taxonomy, position_id: str) -> str | None:
+    """The active id `position_id` counts under; None for an id the taxonomy lacks (refused later)."""
+    try:
+        return taxonomy.resolve(position_id).id
+    except KeyError:
+        return None

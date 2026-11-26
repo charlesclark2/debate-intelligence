@@ -29,6 +29,7 @@ from typing import Final
 from pydantic import ValidationError
 
 from debate_core.application.ports.classification_store import CachedClassification
+from debate_core.arguments.landscape.placements import PlacementRow, write_placements_csv
 from debate_core.arguments.landscape.review_queue import ReviewRow, write_review_queue_csv
 from debate_core.integrations.file_streaming import atomic_replacement
 from debate_core.integrations.local.refusals import refused_as_access_denied
@@ -40,6 +41,7 @@ __all__ = [
     "REVIEW_DIRECTORY",
     "LocalClassificationStore",
     "LocalQueueOrderModelStore",
+    "placements_path",
     "queue_order_model_path",
     "review_queue_path",
 ]
@@ -57,6 +59,11 @@ _MODEL_ROLE: Final = "the review-order model"
 def review_queue_path(data_dir: Path, caselist: str, topic_id: str) -> Path:
     """`<data_dir>/landscape/review/<caselist>/<topic id>-review-queue.csv`."""
     return data_dir / LANDSCAPE_DIRECTORY / REVIEW_DIRECTORY / caselist / f"{topic_id}-review-queue.csv"
+
+
+def placements_path(data_dir: Path, caselist: str, topic_id: str) -> Path:
+    """`<data_dir>/landscape/review/<caselist>/<topic id>-placements.csv` (`v1-e32-t64`)."""
+    return data_dir / LANDSCAPE_DIRECTORY / REVIEW_DIRECTORY / caselist / f"{topic_id}-placements.csv"
 
 
 def queue_order_model_path(data_dir: Path, caselist: str, topic_id: str) -> Path:
@@ -118,6 +125,16 @@ class LocalClassificationStore:
         buffer = io.StringIO(newline="")
         write_review_queue_csv(rows, buffer, suggestions=suggestions)
         path = review_queue_path(self._data_dir, caselist, topic_id)
+        with refused_as_access_denied("write", _ROLE):
+            path.parent.mkdir(parents=True, exist_ok=True)
+            with atomic_replacement(path) as incoming:
+                incoming.write_text(buffer.getvalue(), encoding="utf-8", newline="")
+        return str(path)
+
+    async def write_placements(self, caselist: str, topic_id: str, rows: Sequence[PlacementRow]) -> str:
+        buffer = io.StringIO(newline="")
+        write_placements_csv(rows, buffer)
+        path = placements_path(self._data_dir, caselist, topic_id)
         with refused_as_access_denied("write", _ROLE):
             path.parent.mkdir(parents=True, exist_ok=True)
             with atomic_replacement(path) as incoming:

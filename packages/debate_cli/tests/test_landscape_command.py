@@ -83,7 +83,11 @@ from debate_core.domain.landscape_classification import ModelStancedPositionAnsw
 from debate_core.domain.landscape_pages import PAGE_FRAME_ALLOWANCE
 from debate_core.domain.model_contracts import ModelParams, ModelPrompt, ModelResponse, TaskClass
 from debate_core.integrations.docx_parser import DebateDocxParser
-from debate_core.integrations.landscape.classification_store import queue_order_model_path, review_queue_path
+from debate_core.integrations.landscape.classification_store import (
+    placements_path,
+    queue_order_model_path,
+    review_queue_path,
+)
 from debate_core.integrations.landscape.yaml_taxonomy_repository import YamlTaxonomyRepository
 from debate_core.integrations.local.parsed_store import LocalParsedStore
 from debate_core.integrations.local.suppression_list import local_suppression_list_file
@@ -3176,3 +3180,32 @@ def test_json_has_no_late_disclosures_key_when_the_range_has_no_earlier_topic(wo
 
     assert result.exit_code == ExitCode.OK, result.output
     assert "late_disclosures" not in _data(result)
+
+
+# ------------------------------------------------------------------------------------------------
+# The placements listing beside the queue (v1-e32-t64)
+# ------------------------------------------------------------------------------------------------
+
+
+def test_a_report_run_writes_the_placements_listing_beside_the_queue(world: SyntheticRun) -> None:
+    """Counted by hand from `synthetic26`: `spending da` places three cards of teams ZT and PX, and `costs
+    advantage` two of teams QW and PX; `single payer` and `states cp` are one team's each, left out."""
+    result = landscape(world, "--caselist", CASELIST, "--no-publish")
+    assert result.exit_code == ExitCode.OK, result.output
+    path = placements_path(world.data_dir, CASELIST, SYNTHETIC_RUN_TOPIC)
+    assert _data(result)["placements"] == {
+        "rows": 2,
+        "placed_rows": 2,
+        "none_rows": 0,
+        "left_out_below_minimum_teams": 2,
+        "location": str(path),
+    }
+    assert path.read_text(encoding="utf-8").splitlines() == [
+        "normalized_heading,answer,placed_by,position,documents,teams,aff_teams,neg_teams,cards,"
+        "cards_inherited,cards_tag_names_another,candidate_positions,decision",
+        "spending da,false,alias,spending-da,2,2,0,2,3,0,0,,",
+        "costs advantage,false,alias,costs-advantage,2,2,2,0,2,0,0,,",
+    ]
+    text = landscape(world, "--caselist", CASELIST, "--no-publish", json_output=False)
+    assert text.exit_code == ExitCode.OK, text.output
+    assert f"Placements listing: 2 rows ({path})." in text.output.splitlines()

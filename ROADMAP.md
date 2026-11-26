@@ -62,13 +62,13 @@ v2.3's extension work.
 |---|---|---|---|---|---|
 | [v1.0](plan_specs/releases/v1.0.yaml) | Foundation & verified evidence core | 3 | 55 | 55 | 252 |
 | [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 4 | 125 | 107 | 550 |
-| [v1.2](plan_specs/releases/v1.2.yaml) | Argument landscape & file building | 3 | 102 | 85 | 376 |
+| [v1.2](plan_specs/releases/v1.2.yaml) | Argument landscape & file building | 3 | 102 | 86 | 376 |
 | [v1.3](plan_specs/releases/v1.3.yaml) | URL → verified card | 2 | 27 | 22 | 131 |
-| [v1.4](plan_specs/releases/v1.4.yaml) | Federated research from the CLI | 2 | 55 | 35 | 168 |
-| [v1.5](plan_specs/releases/v1.5.yaml) | V1 quality gate & team pilot | 1 | 7 | 1 | 66 |
-| [v1.6](plan_specs/releases/v1.6.yaml) | Public team website | 3 | 32 | 22 | 170 |
+| [v1.4](plan_specs/releases/v1.4.yaml) | Federated research from the CLI | 2 | 56 | 36 | 172 |
+| [v1.5](plan_specs/releases/v1.5.yaml) | V1 quality gate & team pilot | 1 | 7 | 2 | 66 |
+| [v1.6](plan_specs/releases/v1.6.yaml) | Public team website | 3 | 32 | 23 | 170 |
 | [v1.7](plan_specs/releases/v1.7.yaml) | Team evidence search pilot | 1 | 32 | 25 | 102 |
-| [v1.8](plan_specs/releases/v1.8.yaml) | Weekly caselist run in the cloud | 2 | 79 | 50 | 144 |
+| [v1.8](plan_specs/releases/v1.8.yaml) | Weekly caselist run in the cloud | 2 | 80 | 51 | 145 |
 | [v2.0](plan_specs/releases/v2.0.yaml) | Cloud platform foundation | 3 | 17 | 0 | 164 |
 | [v2.1](plan_specs/releases/v2.1.yaml) | Web app, debate tub & async jobs | 3 | 18 | 0 | 198 |
 | [v2.2](plan_specs/releases/v2.2.yaml) | Research workspace | 2 | 12 | 0 | 117 |
@@ -406,7 +406,7 @@ Weekly argument-landscape reports show which positions are being read and with w
 | [A labels sitting keeps a copy of the file it writes, not only the one it replaces](plan_specs/v1/e32-argument-landscape/t61-a-sitting-keeps-the-file-it-writes.yaml) `v1-e32-t61-a-sitting-keeps-the-file-it-writes` | Pending | 1 | 1.0 |
 | [The note on withheld tags carries its counts on a line of their own, so the scan passes over its text](plan_specs/v1/e32-argument-landscape/t62-the-withheld-tags-notes-counts-on-a-line-of-their-own.yaml) `v1-e32-t62-the-withheld-tags-notes-counts-on-a-line-of-their-own` | Pending | 1 | 1.0 |
 | [The bundle scan passes over every kind of term on the report's own fixed lines, not only a tournament](plan_specs/v1/e32-argument-landscape/t63-every-scan-kind-passed-over-on-the-reports-own-lines.yaml) `v1-e32-t63-every-scan-kind-passed-over-on-the-reports-own-lines` | Pending | 1 | 1.0 |
-| [The coach can correct any heading's placement, not only the headings the review queue lists](plan_specs/v1/e32-argument-landscape/t64-every-placement-can-be-corrected.yaml) `v1-e32-t64-every-placement-can-be-corrected` | Pending | 1 | 3.0 |
+| [The coach can correct any heading's placement, not only the headings the review queue lists](plan_specs/v1/e32-argument-landscape/t64-every-placement-can-be-corrected.yaml) `v1-e32-t64-every-placement-can-be-corrected` | Succeeded | 1 | 3.0 |
 | [A card the matcher could not place inherits the position of the block it is read in, measured first](plan_specs/v1/e32-argument-landscape/t65-a-card-inherits-its-blocks-position.yaml) `v1-e32-t65-a-card-inherits-its-blocks-position` | Succeeded | 2 | 3.0 |
 | [A block of cards the matcher left unplaced is classified as a whole from its tags in order, scored on the coach's labels](plan_specs/v1/e32-argument-landscape/t66-a-block-is-classified-from-its-tags-in-order.yaml) `v1-e32-t66-a-block-is-classified-from-its-tags-in-order` | Pending | 1 | 4.0 |
 
@@ -529,7 +529,7 @@ A student can run `debate-research cut <URL>` and receive a verified, tagged, ci
 | [An expansion on a topic only a feed file names falls back cleanly, and a pair's templates are capped](plan_specs/v1/e08-research-workflows/t13-topic-expansion-fallback-and-templates-per-pair.yaml) `v1-e08-t13-topic-expansion-fallback-and-templates-per-pair` | Pending | 2 | 1.0 |
 | [A disadvantage's link queries name the plan's mechanism and the United States](plan_specs/v1/e08-research-workflows/t14-da-links-name-the-plans-mechanism-in-the-united-states.yaml) `v1-e08-t14-da-links-name-the-plans-mechanism-in-the-united-states` | Succeeded | 2 | 3.0 |
 | [LD research starts broad and narrows from what the first page turns up](plan_specs/v1/e08-research-workflows/t15-ld-research-starts-broad-and-narrows-from-the-first-page.yaml) `v1-e08-t15-ld-research-starts-broad-and-narrows-from-the-first-page` | Succeeded | 1 | 3.0 |
-| [A DA's mechanism queries cross the link templates the coach chose, and a preset may name more mechanisms](plan_specs/v1/e08-research-workflows/t16-mechanism-queries-cross-the-chosen-link-templates.yaml) `v1-e08-t16-mechanism-queries-cross-the-chosen-link-templates` | InProgress | 2 | 3.0 |
+| [A DA's mechanism queries cross the link templates the coach chose, and a preset may name more mechanisms](plan_specs/v1/e08-research-workflows/t16-mechanism-queries-cross-the-chosen-link-templates.yaml) `v1-e08-t16-mechanism-queries-cross-the-chosen-link-templates` | Succeeded | 2 | 3.0 |
 | [`--max-cost` is one limit for the whole command, whatever routers it builds](plan_specs/v1/e08-research-workflows/t17-one-max-cost-across-every-router-a-command-builds.yaml) `v1-e08-t17-one-max-cost-across-every-router-a-command-builds` | Succeeded | 1 | 2.0 |
 | [An auto-cut run's report does not replace the last run's in the same directory](plan_specs/v1/e08-research-workflows/t18-auto-cut-report-names-per-run.yaml) `v1-e08-t18-auto-cut-report-names-per-run` | Succeeded | 2 | 1.0 |
 | [A batching provider's footer counts the distinct works it returned, not one per query](plan_specs/v1/e08-research-workflows/t19-a-batching-providers-footer-counts-distinct-works.yaml) `v1-e08-t19-a-batching-providers-footer-counts-distinct-works` | Pending | 1 | 1.0 |
@@ -542,6 +542,7 @@ A student can run `debate-research cut <URL>` and receive a verified, tagged, ci
 | [The end-to-end auto-cut tests follow v1-e08-t24's ranking, so validate-dev is green again](plan_specs/v1/e08-research-workflows/t26-the-end-to-end-auto-cut-test-follows-the-multi-query-ranking.yaml) `v1-e08-t26-the-end-to-end-auto-cut-test-follows-the-multi-query-ranking` | InProgress | 1 | 1.0 |
 | [`search --within` narrows a saved search's results locally, with no provider call](plan_specs/v1/e08-research-workflows/t27-search-within-a-saved-search.yaml) `v1-e08-t27-search-within-a-saved-search` | Pending | 1 | 2.0 |
 | [An end-to-end auto-cut bundle of VERIFIED cards only verifies with exit 0](plan_specs/v1/e08-research-workflows/t28-an-auto-cut-bundle-that-verifies-clean-end-to-end.yaml) `v1-e08-t28-an-auto-cut-bundle-that-verifies-clean-end-to-end` | Succeeded | 1 | 1.0 |
+| [On a crossed search, the ranking puts the coach's relevant results above the providers' own order](plan_specs/v1/e08-research-workflows/t29-the-ranking-beats-provider-order-on-a-crossed-search.yaml) `v1-e08-t29-the-ranking-beats-provider-order-on-a-crossed-search` | Pending | 2 | 4.0 |
 
 
 ### v1.5 — V1 quality gate & team pilot
@@ -552,7 +553,7 @@ Golden-card and LLM evaluations gate prompt/model changes; the CLI is packaged a
 
 | Task | Status | Prereqs | Est. hours |
 |---|---|---|---|
-| [Golden card fixtures from team files](plan_specs/v1/e09-v1-quality-pilot/t01-golden-card-fixtures.yaml) `v1-e09-t01-golden-card-fixtures` | InProgress | 1 | 12.0 |
+| [Golden card fixtures from team files](plan_specs/v1/e09-v1-quality-pilot/t01-golden-card-fixtures.yaml) `v1-e09-t01-golden-card-fixtures` | Succeeded | 1 | 12.0 |
 | [Golden DOCX regression tests](plan_specs/v1/e09-v1-quality-pilot/t02-docx-golden-tests.yaml) `v1-e09-t02-docx-golden-tests` | Pending | 1 | 7.0 |
 | [Card selection and underlining eval harness](plan_specs/v1/e09-v1-quality-pilot/t03-span-eval-harness.yaml) `v1-e09-t03-span-eval-harness` | Pending | 2 | 9.0 |
 | [Prompt/model promotion gate](plan_specs/v1/e09-v1-quality-pilot/t04-prompt-promotion-gate.yaml) `v1-e09-t04-prompt-promotion-gate` | Pending | 3 | 5.5 |
@@ -602,7 +603,7 @@ Whitefish Bay Debate has a public, mobile-friendly team website: team informatio
 | [A check dated after the season says so, and the schedule and results use one season end](plan_specs/v1/e37-calendar-and-announcements/t14-season-end-warning-and-one-definition.yaml) `v1-e37-t14-season-end-warning-and-one-definition` | Pending | 1 | 1.0 |
 | [News is in the header navigation and stays in the footer](plan_specs/v1/e37-calendar-and-announcements/t15-news-in-the-header-and-the-footer.yaml) `v1-e37-t15-news-in-the-header-and-the-footer` | Succeeded | 2 | 1.0 |
 | [Announcement guard follow-ups: a name's published form in free text, an image that exists, and names after the season rolls over](plan_specs/v1/e37-calendar-and-announcements/t16-announcement-guard-follow-ups.yaml) `v1-e37-t16-announcement-guard-follow-ups` | Pending | 2 | 2.0 |
-| [A speaker award in a partner event names the speaker alone](plan_specs/v1/e37-calendar-and-announcements/t17-a-speaker-award-names-the-speaker-alone.yaml) `v1-e37-t17-a-speaker-award-names-the-speaker-alone` | Pending | 1 | 1.0 |
+| [A speaker award in a partner event names the speaker alone](plan_specs/v1/e37-calendar-and-announcements/t17-a-speaker-award-names-the-speaker-alone.yaml) `v1-e37-t17-a-speaker-award-names-the-speaker-alone` | Succeeded | 1 | 1.0 |
 
 #### [E38 — Team Donations](plan_specs/v1/e38-donations/epic.yaml)
 
@@ -710,7 +711,7 @@ The weekly caselist run (pull, import, publish, parse, search index) runs in the
 | [The run lock tells a test when a writer starts waiting, so the shared-renewal test is not a thread race](plan_specs/v1/e40-cloud-caselist-run/t45-run-lock-offers-a-test-hook-when-a-writer-waits.yaml) `v1-e40-t45-run-lock-offers-a-test-hook-when-a-writer-waits` | Pending | 1 | 1.0 |
 | [A backfile with no directory at the running parser version is named](plan_specs/v1/e40-cloud-caselist-run/t46-a-backfile-without-the-running-parsers-directory-is-named.yaml) `v1-e40-t46-a-backfile-without-the-running-parsers-directory-is-named` | Succeeded | 1 | 1.0 |
 | [Prod receives each backfile once, by hand, before the run's home moves](plan_specs/v1/e40-cloud-caselist-run/t47-prods-one-time-backfile-publish.yaml) `v1-e40-t47-prods-one-time-backfile-publish` | Pending | 2 | 2.0 |
-| [The weekly schedule starts its pull with --scheduled, so the recent-run guard is live](plan_specs/v1/e40-cloud-caselist-run/t48-the-schedule-passes-scheduled.yaml) `v1-e40-t48-the-schedule-passes-scheduled` | InProgress | 1 | 2.0 |
+| [The weekly schedule starts its pull with --scheduled, so the recent-run guard is live](plan_specs/v1/e40-cloud-caselist-run/t48-the-schedule-passes-scheduled.yaml) `v1-e40-t48-the-schedule-passes-scheduled` | Succeeded | 1 | 2.0 |
 | [A smoke check reads caselist runs --remote's backfile parser line on an installed build](plan_specs/v1/e40-cloud-caselist-run/t49-a-smoke-check-for-the-backfile-parser-line.yaml) `v1-e40-t49-a-smoke-check-for-the-backfile-parser-line` | Pending | 1 | 1.0 |
 | [A cloud run stopped on a token error, or refused its secret, emails the cure a person can act on](plan_specs/v1/e40-cloud-caselist-run/t50-a-stopped-run-notice-for-a-token-error-gives-the-cloud-cure.yaml) `v1-e40-t50-a-stopped-run-notice-for-a-token-error-gives-the-cloud-cure` | Succeeded | 1 | 2.0 |
 
@@ -747,6 +748,7 @@ The weekly caselist run (pull, import, publish, parse, search index) runs in the
 | [The spec validator refuses an unfinished task with no prerequisites unless it says why](plan_specs/v1/e41-delivery-tooling-upkeep/t27-a-task-names-its-prerequisites-or-why-it-has-none.yaml) `v1-e41-t27-a-task-names-its-prerequisites-or-why-it-has-none` | Succeeded | 1 | 2.0 |
 | [The IANA time zone database ships with the build on every platform, not only Windows](plan_specs/v1/e41-delivery-tooling-upkeep/t28-tzdata-installed-on-every-platform.yaml) `v1-e41-t28-tzdata-installed-on-every-platform` | Pending | 1 | 0.5 |
 | [A pull request's ci runs the slow tests its affected set reaches](plan_specs/v1/e41-delivery-tooling-upkeep/t29-a-pull-requests-ci-runs-the-slow-tests-it-reaches.yaml) `v1-e41-t29-a-pull-requests-ci-runs-the-slow-tests-it-reaches` | Succeeded | 1 | 2.0 |
+| [A site task's test criterion hands vitest its filter, not a literal --](plan_specs/v1/e41-delivery-tooling-upkeep/t30-site-test-criteria-pass-their-filter-to-vitest.yaml) `v1-e41-t30-site-test-criteria-pass-their-filter-to-vitest` | Pending | 1 | 1.0 |
 
 
 ## V2

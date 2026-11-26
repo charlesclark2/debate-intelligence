@@ -16,18 +16,29 @@ how the operator classifies a snapshot and turns the coach's review into overrid
   ordered by the local proxy model when the caselist has one that stands (`v1-e32-t26`), with its
   suggestions, and kept in today's order otherwise; a line says which and why. It exits 1 when it read
   no source, so an empty store never looks like a run.
-* **`apply-decisions`** reads a review queue CSV whose `decision` column the coach filled (a
-  position id, or `none` for a heading that names no position) and writes the topic's overrides to
-  `config/landscape/overrides/<topic id>.yaml`, refusing a decision naming no position of the
-  taxonomy before anything is written. Commit that file after `tests/config` passes.
+  Beside the queue it writes the placements listing (`v1-e32-t64`),
+  `<data dir>/landscape/review/<caselist>/<topic id>-placements.csv`: every heading that places cards,
+  or that the coach ruled names no position, so a confident but wrong placement can be corrected.
+* **`apply-decisions`** reads a review queue CSV or a placements listing whose `decision` column the
+  coach filled (a position id, or `none` for a heading that names no position), and refuses a decision
+  naming no position of the taxonomy before anything is written. It then reads `--caselist` as it
+  stood at the snapshot and prints, for each decision that changes the rules, how many cards it moves
+  where (`v1-e32-t64`): under its position, under a heading above, to their tag keyword or the queue,
+  or decided. Without `--execute` that summary is all it does; with it, it prints the summary and
+  writes the topic's overrides to `config/landscape/overrides/<topic id>.yaml`. Commit that file after
+  `tests/config` passes.
 
 The queue and the decisions file hold headings from real disclosures, so neither may be inside the
 repository; the script refuses a data directory or a decisions path there. Read-only for every store
-but the cache and the queue.
+but the cache, the queue and the placements listing.
 
     uv run python scripts/classify_landscape_positions.py classify --caselist hspolicy26
     uv run python scripts/classify_landscape_positions.py apply-decisions --topic policy-2026-27-nhi \\
-        --decisions ~/Documents/debate/landscape-review/policy-2026-27-nhi-decisions.csv
+        --caselist hspolicy26 --decisions ~/Documents/debate/landscape-review/policy-2026-27-nhi-decisions.csv
+    uv run python scripts/classify_landscape_positions.py apply-decisions --topic policy-2026-27-nhi \\
+        --caselist hspolicy26 \\
+        --decisions ~/Documents/debate/landscape-review/policy-2026-27-nhi-decisions.csv \\
+        --execute
 """
 
 from __future__ import annotations
@@ -43,7 +54,7 @@ from pathlib import Path
 from debate_core.application.caselist.evidence_listing import LocalEvidence
 from debate_core.application.caselist.suppression import RecordedSuppressionList
 from debate_core.application.errors import DomainError
-from debate_core.application.landscape_seeding import read_seed_sources
+from debate_core.application.landscape_seeding import SeedReading, read_seed_sources
 from debate_core.application.landscape_staleness import LandscapeStalenessCheck
 from debate_core.application.position_classification import (
     DECIDED_NO_POSITION,
@@ -52,12 +63,16 @@ from debate_core.application.position_classification import (
     PositionClassificationService,
 )
 from debate_core.application.review_queue_order import ReviewQueueOrdering
+from debate_core.arguments.landscape.matcher import HeadingRule, PositionMatcher
+from debate_core.arguments.landscape.placements import DecisionEffect, Destination, placement_changes
 from debate_core.arguments.landscape.review_queue import (
     DEFAULT_MINIMUM_REVIEW_TEAMS,
     DEFAULT_REVIEW_THRESHOLD,
     apply_decisions,
     read_decisions_csv,
 )
+from debate_core.arguments.landscape.source_headings import CaselistNames
+from debate_core.domain.landscape import TopicResolution
 from debate_core.integrations.landscape.classification_store import (
     LocalClassificationStore,
     LocalQueueOrderModelStore,
@@ -115,6 +130,12 @@ def _print_run(run: ClassificationRun, seconds: float, show_unplaced: int) -> No
         f"{queue.left_out_below_minimum_teams} headings left out as used by too few teams."
     )
     print(f"Wrote the review queue to {run.review_queue_location}.")
+    listed = run.placements.counts
+    print(
+        f"Wrote the placements listing to {run.placements_location}: {listed.rows} rows "
+        f"({listed.placed_rows} placed, {listed.none_rows} ruled none), "
+        f"{listed.left_out_below_minimum_teams} headings left out as used by too few teams."
+    )
     if run.review_queue_order is not None:
         print(run.review_queue_order)
     print(
@@ -136,12 +157,18 @@ def _print_run(run: ClassificationRun, seconds: float, show_unplaced: int) -> No
     print(f"Runtime {seconds:.1f} s.")
 
 
-async def _classify(arguments: argparse.Namespace) -> int:
-    started = time.perf_counter()
-    data_dir = _outside_the_repository(arguments.data_dir, "--data-dir")
-    repository = YamlTaxonomyRepository.load(arguments.config_dir)
+async def _snapshot(
+    arguments: argparse.Namespace,
+    repository: YamlTaxonomyRepository,
+    data_dir: Path,
+    *,
+    topic: str | None = None,
+) -> tuple[date, TopicResolution]:
+    """The snapshot to read (the newest weekly one unless given) and the topic topics.yaml puts it on.
+
+    With `topic`, a caselist topics.yaml puts on another topic at the snapshot is refused.
+    """
     objects = FsEvidenceObjectStore(data_dir)
-    blobs = FsEvidenceObjectStore(data_dir, subdirectory=BLOB_DIRECTORY.parent)
     snapshot = arguments.snapshot
     if snapshot is None:
         snapshot = await LandscapeStalenessCheck(objects=objects, run_log=None).newest_snapshot(
@@ -152,25 +179,51 @@ async def _classify(arguments: argparse.Namespace) -> int:
     resolved = repository.resolve(arguments.caselist, snapshot)
     if resolved is None or resolved.taxonomy is None:
         raise Refused(f"topics.yaml puts {arguments.caselist} on {snapshot} on no topic with a taxonomy")
-    suppression = RecordedSuppressionList(local_suppression_list_file(data_dir))
-    reading = await read_seed_sources(
+    if topic is not None and resolved.topic.id != topic:
+        raise Refused(
+            f"topics.yaml puts {arguments.caselist} on {snapshot} on {resolved.topic.id}, not {topic}: "
+            "give the caselist the decisions are on"
+        )
+    return snapshot, resolved
+
+
+async def _read(
+    arguments: argparse.Namespace,
+    repository: YamlTaxonomyRepository,
+    data_dir: Path,
+    snapshot: date,
+    resolved: TopicResolution,
+) -> SeedReading:
+    """The caselist's sources on its topic as they stood at the snapshot."""
+    objects = FsEvidenceObjectStore(data_dir)
+    blobs = FsEvidenceObjectStore(data_dir, subdirectory=BLOB_DIRECTORY.parent)
+    return await read_seed_sources(
         store=LocalParsedStore(data_dir),
         local=LocalEvidence(
             objects=objects, blobs=blobs, object_path_for=objects.path_for, blob_path_for=blobs.path_for
         ),
-        suppression=suppression,
+        suppression=RecordedSuppressionList(local_suppression_list_file(data_dir)),
         topic=resolved.topic,
         caselist=arguments.caselist,
         version=arguments.version,
         through=snapshot,
         topic_map=repository.topic_map(),
     )
+
+
+async def _classify(arguments: argparse.Namespace) -> int:
+    started = time.perf_counter()
+    data_dir = _outside_the_repository(arguments.data_dir, "--data-dir")
+    repository = YamlTaxonomyRepository.load(arguments.config_dir)
+    snapshot, resolved = await _snapshot(arguments, repository, data_dir)
+    reading = await _read(arguments, repository, data_dir, snapshot, resolved)
+    suppression = RecordedSuppressionList(local_suppression_list_file(data_dir))
     print(
         f"Read {arguments.caselist} {reading.version} through {snapshot}: {reading.entries} source entries, "
-        f"{reading.parsed} parsed, {len(reading.sources)} on {resolved.topic.id}."
+        f"{reading.parsed} parsed, {len(reading.sources)} on {reading.topic_id}."
     )
     if not reading.sources:
-        print(f"FAILED: 0 sources read for {resolved.topic.id}; nothing was classified.", file=sys.stderr)
+        print(f"FAILED: 0 sources read for {reading.topic_id}; nothing was classified.", file=sys.stderr)
         return 1
     service = PositionClassificationService(
         taxonomies=repository,
@@ -188,18 +241,70 @@ async def _classify(arguments: argparse.Namespace) -> int:
     return 0
 
 
-def _apply_decisions(arguments: argparse.Namespace) -> int:
+_WHERE: dict[Destination, str] = {
+    Destination.HEADING_ABOVE_SAME_POSITION: "under a heading above, the same position",
+    Destination.HEADING_ABOVE_OTHER_POSITION: "under a heading above, another position",
+    Destination.TAG_KEYWORD: "to their tag keyword (the queue)",
+    Destination.QUEUE: "to the queue",
+    Destination.DECIDED: "decided (every heading over them ruled none)",
+}
+
+
+def _rule(rule: HeadingRule) -> str:
+    if rule.kind == "alias":
+        return f"alias of {rule.position_id}"
+    if rule.kind == "override":
+        return f"your decision {rule.position_id}"
+    return "ruled none" if rule.kind == "none" else "undecided"
+
+
+def effect_line(effect: DecisionEffect) -> str:
+    """One changed decision as the apply step prints it: the heading, before and after, and its cards."""
+    after = effect.after or "none"
+    moves = ", ".join(
+        f"{cards} {f'to {after}' if destination is Destination.DECISION else _WHERE[destination]}"
+        for destination, cards in effect.moves.items()
+    )
+    return f"  {effect.heading}: {_rule(effect.before)} -> {after}: {effect.cards} cards: {moves}."
+
+
+async def _apply_decisions(arguments: argparse.Namespace) -> int:
     decisions_path = _outside_the_repository(arguments.decisions, "--decisions")
+    data_dir = _outside_the_repository(arguments.data_dir, "--data-dir")
     repository = YamlTaxonomyRepository.load(arguments.config_dir)
+    snapshot, resolved = await _snapshot(arguments, repository, data_dir, topic=arguments.topic)
     with decisions_path.open(encoding="utf-8", newline="") as stream:
         decisions = read_decisions_csv(stream)
-    applied = apply_decisions(
-        repository.overrides(arguments.topic),
-        decisions,
-        repository.taxonomy(arguments.topic),
-        decided=arguments.today,
+    taxonomy = repository.taxonomy(arguments.topic)
+    current = repository.overrides(arguments.topic)
+    applied = apply_decisions(current, decisions, taxonomy, decided=arguments.today)
+    reading = await _read(arguments, repository, data_dir, snapshot, resolved)
+    effects = placement_changes(
+        reading.sources,
+        CaselistNames(reading.caselist_names),
+        PositionMatcher(taxonomy, current),
+        PositionMatcher(taxonomy, applied.rules),
+        applied.changed_headings,
+        threshold=arguments.threshold,
     )
+    print(
+        f"Read {len(decisions)} decisions: {applied.added} added, {applied.changed} changed, "
+        f"{applied.unchanged} unchanged."
+    )
+    print(
+        f"Before anything is written, what each changed decision does to {arguments.caselist}'s cards "
+        f"through {snapshot}:"
+    )
+    for effect in effects:
+        if effect.cards:
+            print(effect_line(effect))
+    still = sum(1 for effect in effects if not effect.cards)
+    if still:
+        print(f"  {still} {'decision moves' if still == 1 else 'decisions move'} no card here.")
     target = arguments.config_dir / OVERRIDE_DIRECTORY / f"{arguments.topic}.yaml"
+    if not arguments.execute:
+        print(f"Dry run: nothing written. Run it again with --execute to write {target}.")
+        return 0
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(render_override_file(applied.rules), encoding="utf-8")
     print(
@@ -246,18 +351,40 @@ def main(argv: Sequence[str] | None = None) -> int:
         "--show-unplaced", type=int, default=0, help="Print the queue's first N headings. Default: 0."
     )
     apply = commands.add_parser(
-        "apply-decisions", help="Turn a filled review queue into the topic's overrides."
+        "apply-decisions",
+        help="Show what a filled queue or placements listing changes; with --execute, write the overrides.",
     )
     apply.add_argument("--topic", required=True, help="The topic id, as topics.yaml names it.")
-    apply.add_argument("--decisions", type=Path, required=True, help="The filled review queue CSV.")
+    apply.add_argument(
+        "--decisions", type=Path, required=True, help="The filled review queue or placements listing CSV."
+    )
     apply.add_argument(
         "--today", type=date.fromisoformat, default=date.today(), help="The decision date. Default: today."
+    )
+    apply.add_argument(
+        "--caselist", required=True, help="The caselist whose cards the summary counts, on --topic."
+    )
+    apply.add_argument(
+        "--snapshot", type=date.fromisoformat, help="YYYY-MM-DD. Default: the newest weekly snapshot."
+    )
+    apply.add_argument(
+        "--data-dir", type=Path, default=DEFAULT_DATA_DIR, help="The data directory. Default: the dev one."
+    )
+    apply.add_argument("--version", help="The parsed store's version directory. Default: the newest.")
+    apply.add_argument(
+        "--threshold",
+        type=float,
+        default=DEFAULT_REVIEW_THRESHOLD,
+        help=f"A card placed less surely than this goes to the queue. Default: {DEFAULT_REVIEW_THRESHOLD}.",
+    )
+    apply.add_argument(
+        "--execute", action="store_true", help="Write the overrides. Without it, only the summary is printed."
     )
     arguments = parser.parse_args(argv)
     try:
         if arguments.command == "classify":
             return asyncio.run(_classify(arguments))
-        return _apply_decisions(arguments)
+        return asyncio.run(_apply_decisions(arguments))
     except (Refused, DomainError, ValueError, OSError) as error:
         print(f"Refused: {error}", file=sys.stderr)
         return 2

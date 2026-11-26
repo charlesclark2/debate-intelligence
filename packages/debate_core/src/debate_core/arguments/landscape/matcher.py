@@ -80,6 +80,8 @@ __all__ = [
     "OVERRIDE_CONFIDENCE",
     "TAG_KEYWORD_ALONE_CONFIDENCE",
     "TAG_KEYWORD_UNDER_PARENT_CONFIDENCE",
+    "HeadingPlacement",
+    "HeadingRule",
     "MatchItem",
     "PositionMatcher",
     "read_items",
@@ -206,6 +208,26 @@ def _fingerprint(headings: Sequence[NormalizedHeading], tag: str | None) -> str:
 
 
 @dataclass(frozen=True, slots=True)
+class HeadingPlacement:
+    """Which heading over an item places it, under what, and whether by the coach's override."""
+
+    index: int
+    """The placing heading's index in the item's headings, outermost first."""
+    position_id: str
+    """The position the heading names: the alias's or the override's, before any tag keyword refines it."""
+    by_override: bool
+
+
+@dataclass(frozen=True, slots=True)
+class HeadingRule:
+    """What decides one normalized heading today: the coach's override, an alias, or nothing."""
+
+    kind: str
+    """`override`, `none` (the coach ruled it names no position), `alias` or `undecided`."""
+    position_id: str | None
+
+
+@dataclass(frozen=True, slots=True)
 class _Placement:
     position_id: str
     method: ClassificationMethod
@@ -243,6 +265,7 @@ class PositionMatcher:
                 self._children[taxonomy.resolve(position.parent).id].append(position.id)
         self._parents = {position.id: position.parent for position in active}
         self._heading_candidates: dict[str, tuple[str, ...]] = {}
+        self._lineages: dict[str, frozenset[str]] = {}
         self._by_word: dict[str, set[str]] = defaultdict(set)
         for alias, position_id in self._aliases.items():
             if position_id is not None:
@@ -302,6 +325,45 @@ class PositionMatcher:
         """
         placement = self._placement([NormalizedHeading(text=one, answer=False) for one in headings])
         return None if placement is None else placement.depth
+
+    def heading_placement(self, headings: Sequence[NormalizedHeading]) -> HeadingPlacement | None:
+        """The heading :meth:`place` places an item under `headings` by, or None when no heading does."""
+        placement = self._placement(headings)
+        if placement is None:
+            return None
+        return HeadingPlacement(
+            index=placement.depth,
+            position_id=placement.position_id,
+            by_override=placement.matched in self._overrides,
+        )
+
+    def heading_rule(self, heading: str) -> HeadingRule:
+        """What decides `heading` (normalized): the coach's override first, then an alias."""
+        if heading in self._overrides:
+            position_id = self._overrides[heading]
+            return HeadingRule("none" if position_id is None else "override", position_id)
+        position_id = self._aliases.get(heading)
+        return HeadingRule("undecided" if position_id is None else "alias", position_id)
+
+    def ruled_none(self, heading: str) -> bool:
+        """Whether the coach ruled `heading` (normalized) names no position."""
+        return heading in self._overrides and self._overrides[heading] is None
+
+    def lineage(self, position_id: str) -> frozenset[str]:
+        """`position_id` with its ancestors and descendants among the active positions.
+
+        A card's tag naming any of them agrees with a placement under `position_id`.
+        """
+        known = self._lineages.get(position_id)
+        if known is None:
+            found = {position_id, *self._ancestors(position_id)}
+            found.update(
+                one
+                for one in self._parents
+                if one != position_id and position_id in set(self._ancestors(one))
+            )
+            known = self._lineages[position_id] = frozenset(found)
+        return known
 
     def heading_candidates(self, heading: str) -> tuple[str, ...]:
         """Positions the review queue offers for an undecided heading: up to three, best first.

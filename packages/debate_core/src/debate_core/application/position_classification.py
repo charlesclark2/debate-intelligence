@@ -27,7 +27,10 @@ parsed sources on the topic, with their disclosing teams):
    topic's results under any other taxonomy version and, with a model stage, under any other prompt
    version: a prompt version bump misses only MODEL results;
 6. builds the review queue from the items nothing placed or placed below the threshold, and writes its
-   CSV to the data directory. Built with a
+   CSV to the data directory. Beside it, it writes the placements listing (`v1-e32-t64`,
+   :mod:`~debate_core.arguments.landscape.placements`): every heading that places something, or that the
+   coach ruled names no position, so a confident but wrong placement can be corrected through the same
+   decisions. The queue's file is the same with the listing as without it. Built with a
    :class:`~debate_core.application.review_queue_order.ReviewQueueOrdering` (`v1-e32-t26`), it orders
    the queue by the local proxy model's confidence when the caselist has a model that stands, with its
    suggestions, and otherwise leaves it in today's order; either way the run carries one line saying
@@ -68,6 +71,12 @@ from debate_core.application.ports.taxonomy_repository import TaxonomyRepository
 from debate_core.application.review_queue_order import ReviewQueueOrdering
 from debate_core.arguments.landscape.matcher import MatchItem, PositionMatcher, read_items
 from debate_core.arguments.landscape.model_stage import ModelCandidate, places_nothing, sent_headings
+from debate_core.arguments.landscape.placements import (
+    PlacedItem,
+    PlacementListing,
+    build_placement_listing,
+    placed_item,
+)
 from debate_core.arguments.landscape.queue_order import (
     Prediction,
     QueueOrderModel,
@@ -184,6 +193,9 @@ class ClassificationRun:
     None when the service was built without a :class:`ReviewQueueOrdering`."""
     review_queue_ordered: bool = False
     """Whether the local proxy model ordered the queue."""
+    placements: PlacementListing = field(kw_only=True, repr=False)
+    """Every heading that places something or is ruled none, for the coach to correct (`v1-e32-t64`)."""
+    placements_location: str = field(kw_only=True, repr=False)
 
 
 class PositionClassificationService:
@@ -245,6 +257,7 @@ class PositionClassificationService:
         classifications: list[PositionClassification] = []
         queued: list[QueuedItem] = []
         queued_reads: list[_Read] = []
+        listed: list[PlacedItem] = []
         by_kind: dict[ItemKind, Counter[str]] = {ItemKind.SECTION: Counter(), ItemKind.CARD: Counter()}
         below = counted = 0
         for one in read:
@@ -255,6 +268,7 @@ class PositionClassificationService:
             )
             item = one.item
             classifications.append(_classification(item, result))
+            listed.append(placed_item(matcher, item, result, one.source.teams))
             by_kind[item.kind][_count_key(result)] += 1
             review = needs_review(result, self._threshold)
             if item.kind is ItemKind.CARD:
@@ -309,6 +323,12 @@ class PositionClassificationService:
             if ordered
             else await self._store.write_review_queue(reading.caselist, reading.topic_id, queue.rows)
         )
+        placements = build_placement_listing(
+            listed, heading_candidates=matcher.heading_candidates, minimum_teams=self._minimum_review_teams
+        )
+        placements_location = await self._store.write_placements(
+            reading.caselist, reading.topic_id, placements.rows
+        )
         outcome = model.outcome
         return ClassificationRun(
             caselist=reading.caselist,
@@ -345,6 +365,8 @@ class PositionClassificationService:
             ),
             review_queue_order=order,
             review_queue_ordered=ordered,
+            placements=placements,
+            placements_location=placements_location,
         )
 
     async def _model_stage_run(

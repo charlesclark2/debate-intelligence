@@ -1476,6 +1476,7 @@ def run_summary(
     header = result.report.header
     unclassified = result.report.unclassified
     queue = result.classification.review_queue.counts
+    listed = result.classification.placements.counts
     publish = result.publish
     return {
         "caselist": result.caselist,
@@ -1555,6 +1556,13 @@ def run_summary(
             "items": queue.queued_items,
             "location": result.classification.review_queue_location,
             "order": result.classification.review_queue_order,
+        },
+        "placements": {
+            "rows": listed.rows,
+            "placed_rows": listed.placed_rows,
+            "none_rows": listed.none_rows,
+            "left_out_below_minimum_teams": listed.left_out_below_minimum_teams,
+            "location": result.classification.placements_location,
         },
         "text_caches": {
             "plan_texts": _text_cache(result.plan_texts),
@@ -1695,6 +1703,8 @@ def _display(result: LandscapeRunResult, settings: Settings) -> str:
         f"Review queue: {result.classification.review_queue.counts.rows} rows "
         f"({result.classification.review_queue_location}).",
         *([result.classification.review_queue_order] if result.classification.review_queue_order else []),
+        f"Placements listing: {result.classification.placements.counts.rows} rows "
+        f"({result.classification.placements_location}).",
         _trends_line(result.trends),
         f"School view: {result.schools.schools} school(s), {result.schools.teams} team code(s), "
         f"{len(result.schools.rows)} row(s).",

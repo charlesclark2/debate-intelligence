@@ -101,6 +101,15 @@ def test_landscape_report_writes_the_bundle_offline_with_no_model(
     assert data["school_view"] == {"schools": 3, "team_codes": 3, "rows": 7}
     assert data["staleness"]["failed_run"] is None
     assert data["scan"]["hits"] == []
+    # `v1-e32-t64`: the placements listing beside the review queue, headings and counts only.
+    listing = Path(data["placements"]["location"])
+    assert (data["placements"]["rows"], data["placements"]["placed_rows"]) == (2, 2)
+    assert listing.read_text(encoding="utf-8").splitlines()[1:] == [
+        "spending da,false,alias,spending-da,2,2,0,2,3,0,0,,",
+        "costs advantage,false,alias,costs-advantage,2,2,2,0,2,0,0,,",
+    ]
+    for identity in ("Quillmere", "Brindle", "Harrowgate", "Lantern", "Thistle", "QW", "PX", "ZT"):
+        assert identity not in listing.read_text(encoding="utf-8")
     # `v1-e32-t57`: every page the pilot cuts from schools.md, measured, and none over ADR-0019's budget.
     pages = data["pages"]
     assert (pages["budget"], pages["frame_allowance"], pages["checked"], pages["over_budget"]) == (

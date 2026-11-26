@@ -1430,3 +1430,108 @@ async def test_own_side_the_model_s_answer_reads_on_its_own_side_and_answers_on_
     assert {one.method for one in found.classifications if one.item_kind is ItemKind.CARD} == {
         ClassificationMethod.MODEL
     }
+
+
+# ------------------------------------------------------------------------------------------------
+# The review queue beside the placements listing (`v1-e32-t64`)
+# ------------------------------------------------------------------------------------------------
+
+QUEUE_BYTES = (
+    b"normalized_heading,answer,documents,teams,aff_teams,neg_teams,cards,candidate_positions,decision\r\n"
+    b"fed key,false,2,2,1,1,2,,\r\n"
+    b"spending cliff da,false,2,2,0,2,2,spending-da,\r\n"
+)
+"""The queue of FIRST, SECOND and THIRD, written by hand: `fed key` (teams one and two) and `spending cliff
+da` (teams one and three), most teams, documents and cards first, then by heading; the answer row of
+`spending cliff da`, `impact` and `solo heading` are one team's each and left out."""
+
+
+@pytest.mark.anyio
+async def test_placements_leave_the_review_queue_byte_for_byte_as_it_was(tmp_path: Path) -> None:
+    found = await run(tmp_path, repository(taxonomy()), FIRST, SECOND, THIRD)
+    assert Path(found.review_queue_location).read_bytes() == QUEUE_BYTES
+
+
+PLACEMENTS_BYTES = (
+    b"normalized_heading,answer,placed_by,position,documents,teams,aff_teams,neg_teams,cards,cards_inherited,"
+    b"cards_tag_names_another,candidate_positions,decision\r\n"
+    b"spending da,false,alias,spending-da,2,2,0,2,3,1,0,,\r\n"
+)
+"""The placements of FIRST, SECOND and THIRD, written by hand: `spending da` places FIRST's cards 0 and 1
+(the second from further up) and THIRD's card 1, teams one and three; `sample plan` is team two's alone and
+left out. No heading is ruled none, so there is no none row."""
+
+
+def placements_path(data_dir: Path) -> Path:
+    return data_dir / "landscape" / "review" / CASELIST / f"{TOPIC}-placements.csv"
+
+
+@pytest.mark.anyio
+async def test_placements_listing_is_written_beside_the_queue(tmp_path: Path) -> None:
+    found = await run(tmp_path, repository(taxonomy()), FIRST, SECOND, THIRD)
+    assert found.placements_location == str(placements_path(tmp_path))
+    assert placements_path(tmp_path).read_bytes() == PLACEMENTS_BYTES
+    counts = found.placements.counts
+    assert (counts.headings, counts.rows, counts.placed_rows, counts.none_rows) == (2, 1, 1, 0)
+    assert counts.left_out_below_minimum_teams == 1
+
+
+@pytest.mark.anyio
+async def test_placement_override_on_a_heading_an_alias_placed_replaces_it_next_run(tmp_path: Path) -> None:
+    repo = repository(taxonomy())
+    first = await run(tmp_path, repo, FIRST, SECOND, THIRD)
+    assert methods(first)["1:0"] == ("spending-da", "ALIAS", 1.0)
+    filled = Path(first.placements_location).read_text(encoding="utf-8")
+    filled = filled.replace(
+        "spending da,false,alias,spending-da,2,2,0,2,3,1,0,,",
+        "spending da,false,alias,spending-da,2,2,0,2,3,1,0,,states-cp",
+    )
+    applied = apply_decisions(
+        repo.overrides(TOPIC),
+        read_decisions_csv(io.StringIO(filled)),
+        repo.taxonomy(TOPIC),
+        decided=date(2026, 11, 25),
+    )
+    assert (applied.added, applied.changed, applied.unchanged) == (1, 0, 0)
+    assert applied.changed_headings == ("spending da",)
+    second = await run(tmp_path, repository(taxonomy(), overrides=[applied.rules]), FIRST, SECOND, THIRD)
+    placed = methods(second)
+    assert (placed["1:0"], placed["1:1"], placed["3:1"]) == (
+        ("states-cp", "OVERRIDE", 1.0),
+        ("states-cp", "INHERITED", 0.9),
+        ("states-cp", "OVERRIDE", 1.0),
+    )
+    assert second.counts.cards_by_method == {
+        "ALIAS": 1,
+        "INHERITED": 1,
+        "OVERRIDE": 2,
+        "TAG_KEYWORD": 1,
+        "UNPLACED": 5,
+    }
+    assert Path(second.placements_location).read_bytes() == PLACEMENTS_BYTES.replace(
+        b"spending da,false,alias,spending-da,2,2,0,2,3,1,0,,",
+        b"spending da,false,override,states-cp,2,2,0,2,3,1,0,spending-da,",
+    )
+    assert Path(second.review_queue_location).read_bytes() == QUEUE_BYTES
+
+
+def test_placement_override_repeating_an_aliass_own_position_is_unchanged_and_not_written() -> None:
+    repo = repository(taxonomy())
+    decisions = read_decisions_csv(
+        io.StringIO("normalized_heading,decision\nspending da,spending-da\nsample plan,states-cp\n")
+    )
+    applied = apply_decisions(
+        repo.overrides(TOPIC), decisions, repo.taxonomy(TOPIC), decided=date(2026, 11, 25)
+    )
+    assert (applied.added, applied.changed, applied.unchanged) == (1, 0, 1)
+    assert applied.changed_headings == ("sample plan",)
+    assert [(one.heading, one.position_id) for one in applied.rules.overrides] == [
+        ("sample plan", "states-cp")
+    ]
+
+
+def test_placement_override_naming_no_position_on_an_alias_heading_is_refused() -> None:
+    repo = repository(taxonomy())
+    decisions = read_decisions_csv(io.StringIO("normalized_heading,decision\nspending da,medicaid-da\n"))
+    with pytest.raises(ValueError, match="not a position"):
+        apply_decisions(repo.overrides(TOPIC), decisions, repo.taxonomy(TOPIC), decided=date(2026, 11, 25))

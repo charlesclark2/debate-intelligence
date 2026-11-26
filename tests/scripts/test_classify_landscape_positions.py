@@ -5,6 +5,10 @@ counts each run prints were worked out by hand from those cards (working agreeme
 two placed by alias and two under `Fed Key`, which no alias names; seven distinct cache keys. The
 second run is all hits; after the coach's decision on `fed key`, two keys miss and the rest hit.
 
+The placements listing (`v1-e32-t64`) has two headings, `spending da` read by the negative team and
+answered by the affirmative one, each one team's, so both are left out and the file has no row.
+apply-decisions shows each decision's cards before it writes anything, and writes only with `--execute`.
+
 Every school, team code, tournament and heading here is invented.
 """
 
@@ -86,6 +90,40 @@ def classify(world: tuple[Path, Path], *extra: str) -> int:
     )
 
 
+def apply(world: tuple[Path, Path], decisions: Path, *extra: str) -> int:
+    data_dir, config_dir = world
+    return script.main(
+        [
+            "--config-dir",
+            str(config_dir),
+            "apply-decisions",
+            "--topic",
+            TOPIC,
+            "--caselist",
+            CASELIST,
+            "--data-dir",
+            str(data_dir),
+            "--decisions",
+            str(decisions),
+            "--today",
+            "2026-10-24",
+            *extra,
+        ]
+    )
+
+
+BEFORE = (
+    f"Before anything is written, what each changed decision does to {CASELIST}'s cards through 2026-09-15:"
+)
+SUMMARY = [
+    "Read 1 decisions: 1 added, 0 changed, 0 unchanged.",
+    BEFORE,
+    "  fed key: undecided -> states-cp: 2 cards: 2 to states-cp.",
+]
+"""What apply-decisions prints for `fed key` -> states-cp, by hand: the two cards under `Fed Key` (one in
+each source) go from unplaced to the decision's position."""
+
+
 def printed(capsys: pytest.CaptureFixture[str]) -> list[str]:
     return [line for line in capsys.readouterr().out.splitlines() if not line.startswith("Runtime")]
 
@@ -95,6 +133,7 @@ def test_classify_prints_counts_and_a_second_run_is_all_cache_hits(
 ) -> None:
     data_dir, _ = world
     queue = data_dir / "landscape" / "review" / CASELIST / f"{TOPIC}-review-queue.csv"
+    placements = data_dir / "landscape" / "review" / CASELIST / f"{TOPIC}-placements.csv"
     assert classify(world) == 0
     assert printed(capsys) == [
         f"Read {CASELIST} 2026.10.20-docx-6 through 2026-09-15: 2 source entries, 2 parsed, 2 on {TOPIC}.",
@@ -110,6 +149,8 @@ def test_classify_prints_counts_and_a_second_run_is_all_cache_hits(
         "Review queue: 5 items (2 cards, 1 under no heading) under 1 headings; 1 rows written, "
         "0 headings left out as used by too few teams.",
         f"Wrote the review queue to {queue}.",
+        f"Wrote the placements listing to {placements}: 0 rows (0 placed, 0 ruled none), "
+        "2 headings left out as used by too few teams.",
         f"Review queue order: off, today's order kept: no review-order model is trained for {CASELIST} on "
         f"{TOPIC} (`scripts/compare_local_classifier.py train-queue-order`).",
         "Cache: 7 distinct keys, 0 hits (0.0%), 7 placed (0 cached results refused); written.",
@@ -176,24 +217,13 @@ def test_apply_decisions_writes_overrides_that_place_the_heading_next_run(
         ),
         encoding="utf-8",
     )
-    code = script.main(
-        [
-            "--config-dir",
-            str(config_dir),
-            "apply-decisions",
-            "--topic",
-            TOPIC,
-            "--decisions",
-            str(decisions),
-            "--today",
-            "2026-10-24",
-        ]
-    )
-    assert code == 0
+    assert apply(world, decisions, "--execute") == 0
     target = config_dir / "overrides" / f"{TOPIC}.yaml"
-    assert capsys.readouterr().out.splitlines()[0] == (
-        f"Applied 1 decisions to {TOPIC}: 1 added, 0 changed, 0 unchanged; 1 overrides in {target}."
-    )
+    assert capsys.readouterr().out.splitlines() == [
+        *SUMMARY,
+        f"Applied 1 decisions to {TOPIC}: 1 added, 0 changed, 0 unchanged; 1 overrides in {target}.",
+        "Run `uv run pytest tests/config` before committing it.",
+    ]
     assert "heading: fed key\n    position_id: states-cp\n    decided: '2026-10-24'" in target.read_text(
         encoding="utf-8"
     )
@@ -210,10 +240,7 @@ def test_apply_decisions_refuses_a_decision_naming_no_position(
     _, config_dir = world
     decisions = tmp_path / "decisions.csv"
     decisions.write_text("normalized_heading,decision\nfed key,medicaid-da\n", encoding="utf-8")
-    code = script.main(
-        ["--config-dir", str(config_dir), "apply-decisions", "--topic", TOPIC, "--decisions", str(decisions)]
-    )
-    assert code == 2
+    assert apply(world, decisions, "--execute") == 2
     assert "not a position" in capsys.readouterr().err
     assert not (config_dir / "overrides").exists()
 
@@ -223,8 +250,96 @@ def test_apply_decisions_refuses_a_decisions_file_inside_the_repository(
 ) -> None:
     _, config_dir = world
     inside = script.REPO_ROOT / "decisions.csv"
+    assert apply(world, inside, "--execute") == 2
+    assert "outside the repository" in capsys.readouterr().err
+
+
+def filled_queue(world: tuple[Path, Path], tmp_path: Path, decision: str) -> Path:
+    data_dir, _ = world
+    queue = data_dir / "landscape" / "review" / CASELIST / f"{TOPIC}-review-queue.csv"
+    decisions = tmp_path / "decisions.csv"
+    decisions.write_text(
+        queue.read_text(encoding="utf-8").replace(
+            "fed key,false,2,2,1,1,2,,", f"fed key,false,2,2,1,1,2,,{decision}"
+        ),
+        encoding="utf-8",
+    )
+    return decisions
+
+
+def test_apply_decisions_without_execute_prints_the_summary_and_writes_nothing(
+    world: tuple[Path, Path], tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _, config_dir = world
+    assert classify(world) == 0
+    capsys.readouterr()
+    assert apply(world, filled_queue(world, tmp_path, "states-cp")) == 0
+    target = config_dir / "overrides" / f"{TOPIC}.yaml"
+    assert capsys.readouterr().out.splitlines() == [
+        *SUMMARY,
+        f"Dry run: nothing written. Run it again with --execute to write {target}.",
+    ]
+    assert not target.exists()
+
+
+def test_apply_decisions_on_a_placed_heading_shows_where_its_cards_go(
+    world: tuple[Path, Path], tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """`spending da` ruled none: `1NC` normalizes to nothing, so the negative's `1NC > Spending DA` card and
+    the affirmative's `AT: Spending DA` card are each under that heading alone, and both are decided."""
+    _, config_dir = world
+    decisions = tmp_path / "decisions.csv"
+    decisions.write_text("normalized_heading,decision\nspending da,none\n", encoding="utf-8")
+    assert apply(world, decisions) == 0
+    assert capsys.readouterr().out.splitlines() == [
+        "Read 1 decisions: 1 added, 0 changed, 0 unchanged.",
+        BEFORE,
+        "  spending da: alias of spending-da -> none: 2 cards: "
+        "2 decided (every heading over them ruled none).",
+        "Dry run: nothing written. Run it again with --execute to write "
+        f"{config_dir / 'overrides' / TOPIC}.yaml.",
+    ]
+
+
+def test_apply_decisions_counts_a_decision_moving_no_card_here(
+    world: tuple[Path, Path], tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    decisions = tmp_path / "decisions.csv"
+    decisions.write_text(
+        "normalized_heading,decision\nstates cp,spending-da\nspending da,spending-da\n", encoding="utf-8"
+    )
+    assert apply(world, decisions) == 0
+    lines = capsys.readouterr().out.splitlines()
+    assert lines[:3] == [
+        "Read 2 decisions: 1 added, 0 changed, 1 unchanged.",
+        BEFORE,
+        "  1 decision moves no card here.",
+    ]
+
+
+def test_apply_decisions_refuses_a_caselist_on_another_topic(
+    world: tuple[Path, Path], tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _, config_dir = world
+    decisions = tmp_path / "decisions.csv"
+    decisions.write_text("normalized_heading,decision\nfed key,states-cp\n", encoding="utf-8")
+    data_dir, _ = world
     code = script.main(
-        ["--config-dir", str(config_dir), "apply-decisions", "--topic", TOPIC, "--decisions", str(inside)]
+        [
+            "--config-dir",
+            str(config_dir),
+            "apply-decisions",
+            "--topic",
+            "ld-sample-topic",
+            "--caselist",
+            CASELIST,
+            "--data-dir",
+            str(data_dir),
+            "--decisions",
+            str(decisions),
+            "--execute",
+        ]
     )
     assert code == 2
-    assert "outside the repository" in capsys.readouterr().err
+    assert f"puts {CASELIST}" in capsys.readouterr().err
+    assert not (config_dir / "overrides").exists()

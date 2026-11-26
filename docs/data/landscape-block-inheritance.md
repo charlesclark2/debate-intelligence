@@ -3,12 +3,18 @@
 
 The product owner's point of 2026-11-14 was that a card's argument comes from the block it is read in. Before
 any rule was built, `scripts/count_block_inheritance.py` measured it: the operator ran it three times on
-2026-11-20, in their terminal, over this Mac's store. Counts, position kinds and scores only. No tag,
-heading, cite, school, team, row or item id is written here or was printed.
+2026-11-20 and once on 2026-11-25, in their terminal, over this Mac's store. Counts, position kinds and scores
+only. No tag, heading, cite, school, team, row or item id is written here or was printed.
 
 **The finding:** on the coach's labels, inheritance from the block is never right. It scored 0 of up to 19
 inherited cards on `v1-e32-t21`'s first sample, for every rule of a 120-rule grid, and 0 of 10 on
-`v1-e32-t50`'s holdout, under the one rule chosen on the first sample.
+`v1-e32-t50`'s holdout, under the one rule chosen on the first sample. The PM then asked for one more try on
+the first sample: carrying a placed card's position forward in file order. All 12 variants carried 0 right
+cards, out of 3 to 14. **The PM ruled no inheritance (2026-11-20): none is built.**
+
+**The parser gives no block boundaries.** The parsed store keeps each card's heading path, not the heading
+paragraphs, so where a block starts and ends is never recorded. Every block below is approximated from those
+paths, or from file order.
 
 ## What was read
 
@@ -120,6 +126,59 @@ under an answer heading), scored once:
 | Before (headings alone) | 0 | 0 | none | 0 |
 | Inherited | 10 | 0 | 0.0 (0.0 to 0.278) | 0.090 |
 
+### Carry-forward in file order, on the first sample only
+
+The PM's ruling of 2026-11-20 ruled out the set-agreement rules above and asked for one last measurement on
+the first sample, with the holdout not read (the script refuses it in this mode). A card left for review
+takes the position of the nearest earlier card in file order placed by its headings or by a tag keyword.
+Under an answer heading it carries as answering. The PM's bar: inheritance stays open only if a variant gets
+more than a third of its carried cards right.
+
+The 12 variants cross three settings:
+* **distance:** the placed card is the one right before (`adjacent`), or one unplaced card may lie between
+  (`one-gap`), or any number may, up to a stop (`until-stop`);
+* **shells:** a card that opens a shell stops the carry and is not carried to (`list`), or nothing stops it
+  (`none`). The list is a plan or counterplan text (`Text:`, `CP:`, `Plan:` or the label alone), an
+  interpretation and uniqueness;
+* **scope:** the carry stays in the deciding section (the deepest section over the card holding an earlier
+  placed card), or runs across the whole document.
+
+A decided card is not carried to. The script counts separately how many of them would be.
+
+**No variant carries a right card.** The `shells` setting changed nothing on the first sample, and `scope`
+changed one card, so the table pairs them:
+
+| Distance | Scope | First sample: carried, right | Wrong: another kind, same kind | 95% upper bound | Coverage (before 0.085) |
+|---|---|---|---|---|---|
+| adjacent | either | 3, 0 | 2, 1 | 0.561 | 0.149 |
+| one-gap | either | 4, 0 | 3, 1 | 0.490 | 0.170 |
+| until-stop | section | 13, 0 | 7, 6 | 0.228 | 0.362 |
+| until-stop | document | 14, 0 | 8, 6 | 0.215 | 0.383 |
+
+As in the grid, no carried card has the label's position with the other stance or a related one, and no card
+labelled `none` was carried.
+
+What each variant would carry across hspolicy26 (placed share before 0.510):
+
+| Variant | Carried | From a keyword-placed card | Under an answer heading | Decided cards that would carry | Placed share after |
+|---|---|---|---|---|---|
+| adjacent, list, section | 2,855 | 797 | 304 | 239 | 0.533 |
+| adjacent, none, section | 2,860 | 798 | 306 | 240 | 0.533 |
+| adjacent, list, document | 3,403 | 824 | 359 | 315 | 0.537 |
+| adjacent, none, document | 3,417 | 825 | 362 | 317 | 0.537 |
+| one-gap, list, section | 5,210 | 1,451 | 548 | 435 | 0.552 |
+| one-gap, none, section | 5,222 | 1,454 | 552 | 438 | 0.552 |
+| one-gap, list, document | 6,254 | 1,522 | 657 | 569 | 0.560 |
+| one-gap, none, document | 6,284 | 1,525 | 663 | 575 | 0.560 |
+| until-stop, list, section | 15,011 | 4,533 | 1,447 | 1,627 | 0.629 |
+| until-stop, none, section | 15,092 | 4,569 | 1,453 | 1,651 | 0.630 |
+| until-stop, list, document | 21,274 | 5,437 | 2,299 | 2,447 | 0.678 |
+| until-stop, none, document | 21,632 | 5,508 | 2,327 | 2,507 | 0.681 |
+
+By kind, the widest variant (until-stop, none, document) carries 8,828 cards to an advantage, 5,697 to an aff,
+3,294 to a DA, 1,625 to a CP, 914 to a K, 859 to T and 415 to theory. The shell list removes at most 358 carries
+in any pairing (until-stop, document).
+
 ## What the chosen rule would do to the caselist
 
 * **Inherited:** 6,491 cards: 4,611 under an advantage, 535 a DA, 527 theory, 466 a K, 173 T, 113 a CP and 66 an
@@ -161,5 +220,6 @@ the team named its own way, which is a different argument from its neighbours.
 
 The `naming-nothing` rules test exactly that, and it is not the whole story. They keep only cards with no such
 heading, and their inherited cards are still never right: 2 of 2 on the first sample and 10 of 10 on the holdout
-are wrong. Where the labelled cards went wrong is counted (another kind, or another position of the same kind);
+are wrong. Carrying forward in file order, which needs no agreement at all, is wrong for all 14 cards it
+carries at its widest. Where the labelled cards went wrong is counted (another kind, or another position of the same kind);
 why is not. Reading the cards would say, and that is a sitting with the coach, not a count.

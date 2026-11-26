@@ -183,9 +183,39 @@ as the task's description says.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-11-25
 
 **Notes:**
+
+Accepted. ac1 and the node criterion pass, and the Goal is `Succeeded`.
+
+* **The rule is policy 1.4's, and nothing more.**
+  * A speaker placing names at most one student in any event.
+  * In a partner event, a speaker award naming nobody prints `labels.individual`.
+  * Every other partner-event placing still names both partners or neither.
+  * Consent is unchanged: an unconsented speaker is refused, and a lapsed or first-name-only entry gives
+    the team-level form.
+* **The evidence is thorough.**
+  * Red: 32 failed against the pre-task file, each for the right reason.
+  * Every speaker placing is tested in both partner events, and every other placing in three forms.
+  * Six planted breaks covered the four asked for, with consent split in two. All were caught at an
+    assertion or a refusal.
+  * Removing the capitalised-placing test before the rule was written was right: the existing
+    opponent-name check refuses capitals in `placing`.
+* **The PM checked:**
+  * `results.yaml`'s non-comment lines are byte-identical to `origin/dev`'s (same digest). Only the
+    header comment changed.
+  * The six test names appear nowhere under `site/content/`.
+  * The example name in the comment and the guide is the policy's own invented example, already there.
+* **Deviation accepted.** `pnpm --dir site test -- results` passes `--` through, so the criterion runs
+  the whole site suite: a superset, and green. The same `test, --,` form is in 44 lines of specs, almost
+  all V2 and V3 UI tasks. The PM files the fix as E41 upkeep rather than editing a Succeeded spec.
+* **Checks.** The whole site suite (1,216), typecheck, lint, build and the doc checks are clean. The
+  Python affected set stopped at 83% of its bound with no failure. It changed no Python, so it is left to
+  the pull request's `ci`. **Merge on a green `ci`.**
+* **Next.** After the merge, the PM adds the two real speaker awards to `results.yaml` in the PM batch.
+
+`scripts/task pr`

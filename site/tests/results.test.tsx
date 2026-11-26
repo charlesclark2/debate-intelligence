@@ -302,6 +302,158 @@ describe('what the build refuses', () => {
   })
 })
 
+/*
+ * Policy version 1.4, Results and awards 1 (v1-e37-t17): a speaker award is an individual's
+ * award. In a partner event too it names the speaker alone, and its team-level form is "a
+ * Whitefish Bay debater", never "a Whitefish Bay team". Every other placing in a partner event
+ * still names both partners or neither, and every consent rule is unchanged.
+ *
+ * The speaker placings are written out here by hand from the policy and the placing list in the
+ * results file's header, not read from src/lib/results.ts, so a loader that treated one placing
+ * too many or too few as a speaker award disagrees with one of the tests below.
+ */
+const SPEAKER_PLACINGS = [
+  'top speaker',
+  'second speaker',
+  'third speaker',
+  'fourth speaker',
+  'fifth speaker',
+  'sixth speaker',
+  'seventh speaker',
+  'eighth speaker',
+  'ninth speaker',
+  'tenth speaker',
+]
+
+const EVENT_NAMES = { policy: 'Policy debate', 'public-forum': 'Public Forum' } as const
+const PARTNER_EVENTS = Object.keys(EVENT_NAMES) as Array<keyof typeof EVENT_NAMES>
+
+function capitalised(placing: string): string {
+  return placing.charAt(0).toUpperCase() + placing.slice(1)
+}
+
+describe('a speaker award names the speaker alone, in a partner event too (policy 1.4)', () => {
+  function onlyResult(yaml: string, students = Object.values(STUDENTS)) {
+    const [group] = loadResults(resultsContent(yaml, students)).groups
+    return group!.results[0]!
+  }
+
+  it('every speaker placing is a placing the site publishes', () => {
+    for (const placing of SPEAKER_PLACINGS) {
+      expect(PLACINGS, placing).toContain(placing)
+    }
+  })
+
+  it('prints the one speaker named in a Policy entry, with the graduation year', () => {
+    const result = onlyResult(oneResult({ event: 'policy', placing: 'third speaker', students: '[Sam Okafor]' }))
+    expect(resultLine(result)).toBe('Third speaker, Varsity Policy debate: Sam Okafor (2027)')
+    expect(result.named).toBe(true)
+  })
+
+  it('prints the one speaker named in a Public Forum entry, with the graduation year', () => {
+    const result = onlyResult(
+      oneResult({ event: 'public-forum', division: 'novice', placing: 'top speaker', students: '[Avery Chen]' }),
+    )
+    expect(resultLine(result)).toBe('Top speaker, Novice Public Forum: Avery Chen (2029)')
+    expect(result.named).toBe(true)
+  })
+
+  it.each(PARTNER_EVENTS.flatMap((event) => SPEAKER_PLACINGS.map((placing) => [event, placing] as const)))(
+    'names one speaker in %s for "%s"',
+    (event, placing) => {
+      const result = onlyResult(oneResult({ event, placing: `'${placing}'`, students: '[Morgan Blake]' }))
+      expect(resultLine(result)).toBe(`${capitalised(placing)}, Varsity ${EVENT_NAMES[event]}: Morgan Blake (2028)`)
+    },
+  )
+
+  it.each(PARTNER_EVENTS)('prints "a Whitefish Bay debater", never "a team", for a %s speaker award naming nobody', (event) => {
+    const result = onlyResult(oneResult({ event, placing: 'fifth speaker' }), [])
+    expect(resultLine(result)).toBe(`Fifth speaker, Varsity ${EVENT_NAMES[event]}: a Whitefish Bay debater`)
+    expect(result.named).toBe(false)
+  })
+
+  it.each(PARTNER_EVENTS)('refuses a %s speaker award naming two students, naming neither of them', (event) => {
+    const message = loadError(
+      resultsContent(oneResult({ event, placing: 'top speaker', students: '[Sam Okafor, Avery Chen]' })),
+    )
+    expect(message).toMatch(
+      /result 1 \(Birchwood Invitational, 2026-10-17\), field students: names 2 students for a speaker award\. A speaker award is an individual's award and names the one speaker/,
+    )
+    expect(message).toMatch(/Results and awards 1\)/)
+    for (const word of ['Sam', 'Okafor', 'Avery', 'Chen']) {
+      expect(message).not.toContain(word)
+    }
+  })
+
+  it('refuses a Lincoln-Douglas speaker award naming two students', () => {
+    expect(
+      loadError(resultsContent(oneResult({ placing: 'top speaker', students: '[Sam Okafor, Avery Chen]' }))),
+    ).toMatch(/field students: names 2 students for a speaker award/)
+  })
+
+  it('still refuses a speaker with no consent entry at all', () => {
+    const message = loadError(
+      resultsContent(oneResult({ event: 'policy', placing: 'top speaker', students: '[Taylor Brooks]' })),
+    )
+    expect(message).toMatch(
+      /field students\.0: names a student with no entry in content\/media-consent\.yaml.*Students 2; Results and awards 1, 2 and 5/,
+    )
+    expect(message).not.toContain('Taylor')
+  })
+
+  it('prints the team-level form for a speaker whose consent entry is from last season', () => {
+    const result = onlyResult(oneResult({ event: 'public-forum', placing: 'second speaker', students: '[Riley Moss]' }))
+    expect(resultLine(result)).toBe('Second speaker, Varsity Public Forum: a Whitefish Bay debater')
+    expect(result.named).toBe(false)
+  })
+
+  it('prints the team-level form for a speaker whose family asked for the first name only', () => {
+    const result = onlyResult(oneResult({ event: 'policy', placing: 'second speaker', students: '[Casey Park]' }))
+    expect(resultLine(result)).toBe('Second speaker, Varsity Policy debate: a Whitefish Bay debater')
+  })
+
+  it('passes the publishing-policy guard in the words the page prints', () => {
+    const directory = resultsContent(oneResult({ event: 'policy', placing: 'top speaker', students: '[Sam Okafor]' }))
+    const { errors } = checkPublishingPolicy({
+      pages: resultsGuardedContent(directory),
+      settings: loadSiteSettings(),
+      consent: loadMediaConsent(directory),
+    })
+    expect(errors).toEqual([])
+  })
+})
+
+describe('every other placing in a partner event still names both partners or neither', () => {
+  const otherPlacings = PLACINGS.filter((placing) => !SPEAKER_PLACINGS.includes(placing))
+  const cases = PARTNER_EVENTS.flatMap((event) => otherPlacings.map((placing) => [event, placing] as const))
+
+  it('leaves the placings that are not speaker awards to the partnership rule', () => {
+    expect(otherPlacings).toHaveLength(PLACINGS.length - SPEAKER_PLACINGS.length)
+    expect(otherPlacings).toContain('first place')
+    expect(otherPlacings).toContain('state qualifying leg')
+  })
+
+  it.each(cases)('refuses %s "%s" naming one partner', (event, placing) => {
+    expect(
+      loadError(resultsContent(oneResult({ event, placing: `'${placing}'`, students: '[Sam Okafor]' }))),
+    ).toMatch(/field students: names one partner of a partnership.*Results and awards 1 and 2\)/)
+  })
+
+  it.each(cases)('names both partners in %s "%s"', (event, placing) => {
+    const [group] = loadResults(
+      resultsContent(oneResult({ event, placing: `'${placing}'`, students: '[Sam Okafor, Avery Chen]' })),
+    ).groups
+    expect(resultLine(group!.results[0]!)).toBe(
+      `${capitalised(placing)}, Varsity ${EVENT_NAMES[event]}: Sam Okafor (2027) and Avery Chen (2029)`,
+    )
+  })
+
+  it.each(cases)('prints "a Whitefish Bay team" for %s "%s" naming neither', (event, placing) => {
+    const [group] = loadResults(resultsContent(oneResult({ event, placing: `'${placing}'` }), [])).groups
+    expect(resultLine(group!.results[0]!)).toBe(`${capitalised(placing)}, Varsity ${EVENT_NAMES[event]}: a Whitefish Bay team`)
+  })
+})
+
 /* acceptance criterion 3: tournaments on and off the schedule. */
 describe('the tournament a result was won at', () => {
   it('shows the name and date of a tournament that has come off the schedule', () => {
@@ -451,6 +603,19 @@ describe('the /results/ page', () => {
     renderResults()
     expect(document.getElementById('lakeshore-2026')).not.toBeNull()
     expect(document.getElementById('birchwood-invitational-2026-10-17')).not.toBeNull()
+  })
+
+  it('prints a speaker award in a partner event with the speaker alone (policy 1.4)', () => {
+    renderResults(
+      [
+        oneResult({ event: 'policy', placing: 'third speaker', students: '[Sam Okafor]' }),
+        oneResult({ event: 'public-forum', placing: 'top speaker' }),
+      ].join('\n\n'),
+    )
+    expect([...document.querySelectorAll('.results-group__result')].map((line) => line.textContent)).toEqual([
+      'Third speaker, Varsity Policy debate: Sam Okafor (2027)',
+      'Top speaker, Varsity Public Forum: a Whitefish Bay debater',
+    ])
   })
 
   it('says so, rather than showing an empty list, before the season has a result', () => {

@@ -30,7 +30,9 @@ export { RESULTS_SLUG }
  * docs/policies/website-publishing.md, Results and awards, by the build rather than by a reviewer:
  *
  *   - Who it names. Lincoln-Douglas names one student and a partner event both partners or
- *     neither (rule 1). A name with no consent entry at all fails the build. A name whose entry
+ *     neither, except a speaker award, which is an individual's award and names the one speaker
+ *     in any event, its team-level form "a Whitefish Bay debater" (rule 1, policy version 1.4).
+ *     A name with no consent entry at all fails the build. A name whose entry
  *     is not current for the season, or asks for less than the full name, is published in
  *     team-level form by the build itself (rule 2), so a lapsed form or a reduced-name request
  *     takes the name off every result with an edit to content/media-consent.yaml alone. Nobody
@@ -75,6 +77,16 @@ const ORDINALS = [
 ] as const
 
 /**
+ * The speaker awards: top speaker, then second speaker to tenth speaker. A speaker award is an
+ * individual's award (policy version 1.4, Results and awards 1), so it names one student in any
+ * event, a partner event too, and its team-level form is labels.individual.
+ */
+export const SPEAKER_PLACINGS: readonly string[] = [
+  'top speaker',
+  ...ORDINALS.slice(1).map((ordinal) => `${ordinal} speaker`),
+]
+
+/**
  * Every placing the site publishes: a place, a speaker award, how far the debater advanced, or a
  * state qualifying leg earned at the tournament (policy version 1.2).
  * Each one is a single placing at a single tournament. The list is closed on purpose: a free
@@ -82,8 +94,7 @@ const ORDINALS = [
  */
 export const PLACINGS: readonly string[] = [
   ...ORDINALS.map((ordinal) => `${ordinal} place`),
-  'top speaker',
-  ...ORDINALS.slice(1).map((ordinal) => `${ordinal} speaker`),
+  ...SPEAKER_PLACINGS,
   'champion',
   'finalist',
   'semifinalist',
@@ -330,15 +341,22 @@ function checkPublishedText(
 /**
  * Who a result names, or the team-level words, decided by the build from the consent manifest.
  * Refuses a name that is not a name, a name with no consent entry, and a result naming the wrong
- * number of students for its event.
+ * number of students for its placing and event: one at most for a speaker award in any event
+ * (policy version 1.4) and in Lincoln-Douglas, and otherwise both partners or neither in a
+ * partner event.
  */
 function whoPlaced(
   entry: string,
   value: ResultEntry,
+  placing: string,
   partnerEvent: boolean,
   consent: MediaConsent,
   labels: ResultsLabels,
 ): { who: string; named: boolean } {
+  const speakerAward = SPEAKER_PLACINGS.includes(placing)
+  // A speaker award is an individual's award, so in a partner event it is counted, named and
+  // put in team-level form as an individual event's result is (Results and awards 1).
+  const partnership = partnerEvent && !speakerAward
   const students = value.students ?? []
   const consentByName = new Map(
     consent.students.map((student) => [student.publishedName.toLowerCase(), student]),
@@ -362,7 +380,16 @@ function whoPlaced(
   if (new Set(students.map((name) => name.trim().toLowerCase())).size !== students.length) {
     throw entryError(entry, 'students', 'names the same student twice.')
   }
-  if (!partnerEvent && students.length > 1) {
+  if (speakerAward && students.length > 1) {
+    throw entryError(
+      entry,
+      'students',
+      `names ${students.length} students for a speaker award. A speaker award is an ` +
+        "individual's award and names the one speaker, in a partner event too; each partner's " +
+        `speaker award is an entry of its own ${rule('Results and awards 1')}.`,
+    )
+  }
+  if (!partnership && students.length > 1) {
     throw entryError(
       entry,
       'students',
@@ -370,7 +397,7 @@ function whoPlaced(
         `student who placed ${rule('Results and awards 1')}.`,
     )
   }
-  if (partnerEvent && students.length === 1) {
+  if (partnership && students.length === 1) {
     throw entryError(
       entry,
       'students',
@@ -379,7 +406,7 @@ function whoPlaced(
         `${rule('Results and awards 1 and 2')}.`,
     )
   }
-  if (partnerEvent && students.length > 2) {
+  if (partnership && students.length > 2) {
     throw entryError(
       entry,
       'students',
@@ -402,7 +429,7 @@ function whoPlaced(
     return found
   })
 
-  const teamLevel = { who: partnerEvent ? labels.partners : labels.individual, named: false }
+  const teamLevel = { who: partnership ? labels.partners : labels.individual, named: false }
   if (entries.length === 0 || !entries.every((student) => canBeNamed(student, consent))) {
     return teamLevel
   }
@@ -536,7 +563,7 @@ export function loadResults(contentDirectory: string = defaultContentDirectory()
       divisionLabel: labels.divisions[value.division],
       placing,
       placingLabel: capitalise(placing),
-      ...whoPlaced(entry, value, partnerEvent, consent, labels),
+      ...whoPlaced(entry, value, placing, partnerEvent, consent, labels),
     }
   })
 

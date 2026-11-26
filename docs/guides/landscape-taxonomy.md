@@ -14,7 +14,7 @@ Where things are:
 | Which topic each caselist snapshot is on | [`config/landscape/topics.yaml`](../../config/landscape/topics.yaml) |
 | A topic's positions | `config/landscape/taxonomies/<topic id>.yaml`, e.g. [`policy-2026-27-nhi.yaml`](../../config/landscape/taxonomies/policy-2026-27-nhi.yaml) |
 | Positions every topic of an event shares: generic Ks, framework, theory | [`config/landscape/taxonomies/generic.yaml`](../../config/landscape/taxonomies/generic.yaml) |
-| Your decisions on headings the matcher could not place | `config/landscape/overrides/<topic id>.yaml`, written for you from the review queue ([below](#the-review-queue-and-your-decisions)) |
+| Your decisions on headings, the ones the matcher could not place and corrections of the ones it did | `config/landscape/overrides/<topic id>.yaml`, written for you from the review queue or the placements listing ([below](#the-review-queue-and-your-decisions)) |
 | When a plan text that names no aff names the resolutional aff | `config/landscape/plan_texts/<topic id>.yaml`, e.g. [`policy-2026-27-nhi.yaml`](../../config/landscape/plan_texts/policy-2026-27-nhi.yaml) ([below](#the-resolutional-plan)) |
 | Words for a plan's mechanisms, which mark a block of a CP file `files suggest` drafts | `config/landscape/plan_mechanisms/<topic id>.yaml`, e.g. [`policy-2026-27-nhi.yaml`](../../config/landscape/plan_mechanisms/policy-2026-27-nhi.yaml); yours to edit, as [the file-recipes guide](file-recipes.md#drafting-a-counterplan-file) says. No report reads it |
 | The ids published reports have released, which no edit may delete or change | [`config/landscape/released.yaml`](../../config/landscape/released.yaml), written for you ([below](#released-ids-and-the-lock-file)) |
@@ -385,6 +385,9 @@ the way an alias is written, and:
    keyword its tag holds, and stays with the parent when no child's does, or when two do.
 4. **A heading that matches nothing stays unplaced.** It is never guessed into the nearest-looking
    position, and a card under nothing but such headings goes to the review queue.
+
+A heading an alias places wrongly is corrected with a decision, like a heading nothing placed: the
+placements listing shows every heading that places cards ([below](#correcting-a-placement)).
 
 ## How an affirmative round's aff is identified
 
@@ -834,17 +837,74 @@ column, `decision`, for the rows you want to settle:
 | `none` | The heading names no position: a block label such as `link`, `impact` or `solvency`. It stops coming back to the queue, and cards under it still count under a heading above it. It still labels their role in the link chain below, and never names a scenario |
 | Nothing | You have not decided. The row comes back next run |
 
-Then the operator applies the file, which writes `config/landscape/overrides/<topic id>.yaml` and
-refuses an id the taxonomy does not have before writing anything:
+Then the operator applies the file in two steps. The first refuses an id the taxonomy does not have,
+reads the caselist's store as it stood at the newest snapshot, and prints what each decision that
+changes the rules does to its cards. It writes nothing:
 
 ```bash
-uv run python scripts/classify_landscape_positions.py apply-decisions --topic policy-2026-27-nhi --decisions ~/Documents/debate/landscape-review/policy-2026-27-nhi-decisions.csv
+uv run python scripts/classify_landscape_positions.py apply-decisions --topic policy-2026-27-nhi --caselist hspolicy26 --decisions ~/Documents/debate/landscape-review/policy-2026-27-nhi-decisions.csv
 ```
+
+It ends with `Dry run: nothing written.` Read the summary above that line first. Each changed decision
+gets one line: the heading, what decided it before and what it names now, and how many cards go where:
+
+* to the position the decision names;
+* under a heading above, to the same position or another;
+* to their tag keyword alone, which is under the review threshold, so to the queue;
+* to the queue;
+* decided, because every heading over them is now ruled none.
+
+Stop if a line moves more cards than you expected, or moves them where you did not mean them to go.
+Otherwise run it again with `--execute`, which prints the same summary and then writes
+`config/landscape/overrides/<topic id>.yaml`:
+
+```bash
+uv run python scripts/classify_landscape_positions.py apply-decisions --topic policy-2026-27-nhi --caselist hspolicy26 --decisions ~/Documents/debate/landscape-review/policy-2026-27-nhi-decisions.csv --execute
+```
+
+A decision that names the position an alias of the heading already places it under is counted
+unchanged and written nowhere. The overrides file holds corrections, not confirmations. One heading
+has one decision: when its reading row and its answer row are given different ones, the file is
+refused.
 
 The overrides file is checked like a taxonomy file (`uv run pytest tests/config`), including for team
 codes and school names, since a decision copies a heading teams wrote into the repository. A heading
 that names a school or a team, by any form, gets no decision: leave it blank. A decision changes
 counts from the next run without a `taxonomy_version` bump.
+
+### Correcting a placement
+
+The queue lists only the headings nothing placed. A heading an alias placed wrongly, or one you ruled
+on earlier and now see differently, is in the **placements listing**. Each run writes it beside the
+queue, at `~/.debate-research/dev/landscape/review/<caselist>/<topic id>-placements.csv`. Like the
+queue, it holds headings teams wrote, so it stays on the Mac and out of the repository. It has the
+queue's columns and four more:
+
+| Column | What it says |
+|---|---|
+| `placed_by` | `alias` (a taxonomy alias places the heading), `override` (your decision does), or `none` (you ruled it names no position) |
+| `position` | The position the heading places its cards under; blank for `none` |
+| `cards_inherited` | Of `cards`, those it places from further up: the heading over them names nothing, so this one decides |
+| `cards_tag_names_another` | Of `cards`, those whose tag holds a keyword of another position (not the row's own, nor its parent or children) |
+
+For a `none` row, `cards` counts the cards under it that no nearer heading places: the ones a position
+written there would move. The rows with a position come first, most cards first, then the `none`
+rows. At hspolicy26's 2026-11-03 snapshot the listing had 337 rows, and its 100 largest held 89% of
+the placed cards, so read from the top. Sorting the sheet by `position` lets you check one position's headings together.
+
+**A heading right as a heading but wrong for some of its cards.** `cards_tag_names_another` is how you
+find one: a row where it is high has cards whose tags argue something else. A decision applies to
+every card under a heading, so it cannot move just those cards. If you find such a heading, tell the
+PM; correcting single cards is a later task if it is needed.
+
+To correct a row, write in its `decision` and apply the file as above:
+
+| Write in `decision` | What happens from the next run |
+|---|---|
+| Another position id | Every card the heading places moves there. Your decision is read before any alias, so it wins over the taxonomy's own alias for that heading |
+| `none` | The heading is passed over, as any heading ruled none is. Each card under it goes to a heading further up if one names a position, otherwise to its tag keyword or the queue, or is decided when every heading over it is ruled none. On a large alias heading that sends most of its cards to the queue: run the first step and read its line before `--execute` |
+| The row's own `position` | Nothing: you have confirmed it, and nothing is written |
+| Nothing | Nothing changes |
 
 ## Your labelled sample of cards
 

@@ -1,0 +1,30 @@
+{
+  "case_id": "pf-001",
+  "candidate_id": "pf-112736a9e6",
+  "event": "PF",
+  "season": "2024-25",
+  "source_type": "news",
+  "length_band": "short",
+  "omission_cut": true,
+  "coach_cut_and_reviewed_for_names": true,
+  "research_need": "3. T: Without commitments to Taiwan, the US can strengthen allied commitments",
+  "source_link": "https://responsiblestatecraft.org/2022/05/04/the-real-lesson-of-the-war-in-ukraine-for-taiwan/",
+  "parser_version": "2026.11.03-docx-9",
+  "imported_on": "2026-11-19",
+  "snapshot": {
+    "url": "https://responsiblestatecraft.org/2022/05/04/the-real-lesson-of-the-war-in-ukraine-for-taiwan/",
+    "canonical_url": "https://responsiblestatecraft.org/2022/05/04/the-real-lesson-of-the-war-in-ukraine-for-taiwan/",
+    "final_url": "https://responsiblestatecraft.org/2022/05/04/the-real-lesson-of-the-war-in-ukraine-for-taiwan/",
+    "fetched_on": "2026-11-20",
+    "access_status": "ACCESSIBLE",
+    "provenance_mode": "PUBLISHER_RETRIEVED",
+    "raw_sha256": "1646a37c603f5f5fde64565b69f82fdcda91a3585b627ca70329c5b32e9790e4",
+    "raw_byte_size": 309504,
+    "normalized_text_sha256": "a4b5921c8ebcb1d632451814a947da644724f7e04564c372e28fe1566f02410b",
+    "normalized_document_sha256": "f9aa75119d844b6f3994976fa817cfaa7065243b3bb8ab0ea9a5bb92dd8bc4d4",
+    "normalizer_version": "evidence-normalizer-v1",
+    "extractor_version": "trafilatura/html-1+trafilatura-2.3.1+readability-lxml-0.9+lxml-6.1.3",
+    "content_type": "text/html; charset=utf-8",
+    "paragraph_count": 15
+  }
+}

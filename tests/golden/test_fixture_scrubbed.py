@@ -126,12 +126,21 @@ def test_every_committed_fixture_docx_carries_no_author_metadata() -> None:
     packages = sorted(FIXTURES.rglob("*.docx"))
     cases = sorted(FIXTURES.glob(f"*/{golden.CASE_NAME}"))
 
-    # Not vacuous by accident: every case has its excerpt, and no excerpt is outside a case. Until
-    # the coach's picks are imported both lists are empty, and the index says "0 cases".
-    assert [path.parent for path in packages] == [path.parent for path in cases]
-    assert [(path.parent.name, golden.metadata_problems(path.read_bytes())) for path in packages] == [
-        (path.parent.name, []) for path in packages
+    # Not vacuous by accident: every case has its excerpt, and no document is outside a case or
+    # named anything but the excerpt or the expected render.
+    assert [path.parent for path in packages if path.name == golden.EXCERPT_NAME] == [
+        path.parent for path in cases
     ]
+    assert {path.name for path in packages} <= {golden.EXCERPT_NAME, golden.EXPECTED_RENDER_NAME}
+    assert {path.parent for path in packages} <= {path.parent for path in cases}
+    # The excerpt carries no author at all; the render only the renderer's own name and manifest.
+    assert [
+        (
+            path.relative_to(FIXTURES).as_posix(),
+            golden.metadata_problems(path.read_bytes(), rendered=path.name == golden.EXPECTED_RENDER_NAME),
+        )
+        for path in packages
+    ] == [(path.relative_to(FIXTURES).as_posix(), []) for path in packages]
 
 
 def test_the_committed_index_is_what_the_importer_writes() -> None:

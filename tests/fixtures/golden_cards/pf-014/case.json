@@ -1,0 +1,30 @@
+{
+  "case_id": "pf-014",
+  "candidate_id": "pf-625895cf01",
+  "event": "PF",
+  "season": "2024-25",
+  "source_type": "think tank",
+  "length_band": "short",
+  "omission_cut": true,
+  "coach_cut_and_reviewed_for_names": true,
+  "research_need": "China needs absolute certainty and will indefinitely delay invasion",
+  "source_link": "https://nipp.org/wp-content/uploads/2022/02/Vol.-2-No.-2-Ford.pdf",
+  "parser_version": "2026.11.03-docx-9",
+  "imported_on": "2026-11-20",
+  "snapshot": {
+    "url": "https://nipp.org/wp-content/uploads/2022/02/Vol.-2-No.-2-Ford.pdf",
+    "canonical_url": "https://nipp.org/wp-content/uploads/2022/02/Vol.-2-No.-2-Ford.pdf",
+    "final_url": "https://nipp.org/wp-content/uploads/2022/02/Vol.-2-No.-2-Ford.pdf",
+    "fetched_on": "2026-11-20",
+    "access_status": "ACCESSIBLE",
+    "provenance_mode": "PUBLISHER_RETRIEVED",
+    "raw_sha256": "7aacbcba7d0db6637ddeaee5577c9aac7408d9ff460775cbdac7cf6516a6c4dd",
+    "raw_byte_size": 765794,
+    "normalized_text_sha256": "8a22d9a0a2dd1d62439a41645f9abb6503d3241e0bef58a7451fabcae9840e4f",
+    "normalized_document_sha256": "7cc024c3434a23738c8e49e19a7beb56afe009acacaa15d93ce0a1ba0f3d41d6",
+    "normalizer_version": "evidence-normalizer-v1",
+    "extractor_version": "pypdf/pdf-layout-1+pypdf-6.21.2",
+    "content_type": "application/pdf",
+    "paragraph_count": 479
+  }
+}

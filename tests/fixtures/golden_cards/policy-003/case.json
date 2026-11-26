@@ -1,0 +1,30 @@
+{
+  "case_id": "policy-003",
+  "candidate_id": "policy-12c30bbd24",
+  "event": "Policy",
+  "season": "2026-27",
+  "source_type": "think tank",
+  "length_band": "multi-paragraph",
+  "omission_cut": true,
+  "coach_cut_and_reviewed_for_names": true,
+  "research_need": "No existential risk from engineered pathogens – too many barriers and no data supports it",
+  "source_link": "https://reflectivealtruism.com/2023/12/29/exaggerating-the-risks-part-13-ord-on-biorisk/",
+  "parser_version": "2026.11.03-docx-9",
+  "imported_on": "2026-11-19",
+  "snapshot": {
+    "url": "https://reflectivealtruism.com/2023/12/29/exaggerating-the-risks-part-13-ord-on-biorisk/",
+    "canonical_url": "https://reflectivealtruism.com/2023/12/29/exaggerating-the-risks-part-13-ord-on-biorisk/",
+    "final_url": "https://reflectivealtruism.com/2023/12/29/exaggerating-the-risks-part-13-ord-on-biorisk/",
+    "fetched_on": "2026-11-20",
+    "access_status": "ACCESSIBLE",
+    "provenance_mode": "PUBLISHER_RETRIEVED",
+    "raw_sha256": "4c1f67e0950fa9a4f7cb467903fdc922a3cc3314d7c49fee4bce619468d6f673",
+    "raw_byte_size": 152061,
+    "normalized_text_sha256": "d381740fd041c6e8b9574792f73c86ae6b49e8838df8a6d6e531fb353209f1db",
+    "normalized_document_sha256": "3b4547e76bac5c3ab77b2bd3f8ec0d712e2db1a889f4f7d3ca3d35fc1e07448f",
+    "normalizer_version": "evidence-normalizer-v1",
+    "extractor_version": "trafilatura/html-1+trafilatura-2.3.1+readability-lxml-0.9+lxml-6.1.3",
+    "content_type": "text/html; charset=UTF-8",
+    "paragraph_count": 63
+  }
+}

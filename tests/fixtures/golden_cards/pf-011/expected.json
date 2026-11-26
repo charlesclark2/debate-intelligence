@@ -1,0 +1,576 @@
+{
+  "format": "golden-card-expected/1",
+  "case_id": "pf-011",
+  "tag": "Selloffs cause Middle East war.",
+  "cite": {
+    "short_cite": "Dalton ‘21",
+    "full_cite": "Dalton ‘21 [Toby Dalton; Senior fellow & co-director at the Nuclear Policy Program; 04-15-2021; \"The Most Urgent North Korean Nuclear Threat Isn’t What You Think\"; https://carnegieendowment.org/posts/2021/04/the-most-urgent-north-korean-nuclear-threat-isnt-what-you-think?lang=en; accessed 4-2-2024] TM + leon"
+  },
+  "research_need": "Selloffs cause Middle East war.",
+  "segments": [
+    [
+      3996,
+      6552
+    ]
+  ],
+  "spans": [
+    {
+      "start": 3996,
+      "end": 3998,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 3996,
+      "end": 4001,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 4002,
+      "end": 4004,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 4002,
+      "end": 4009,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 4007,
+      "end": 4009,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 4010,
+      "end": 4016,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 4010,
+      "end": 4023,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 4024,
+      "end": 4027,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 4024,
+      "end": 4027,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 4028,
+      "end": 4033,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 4028,
+      "end": 4033,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 4034,
+      "end": 4041,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 4034,
+      "end": 4042,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 4043,
+      "end": 4050,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 4051,
+      "end": 4054,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 4055,
+      "end": 4068,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 4069,
+      "end": 4073,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 4074,
+      "end": 4083,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 4084,
+      "end": 4097,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 4098,
+      "end": 4100,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 4101,
+      "end": 4107,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 4108,
+      "end": 4114,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 4115,
+      "end": 4125,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 4126,
+      "end": 4133,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 4134,
+      "end": 4150,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 4151,
+      "end": 4175,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 4176,
+      "end": 4180,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 4998,
+      "end": 5009,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 5010,
+      "end": 5030,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 5031,
+      "end": 5042,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 5043,
+      "end": 5047,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 5048,
+      "end": 5057,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 5058,
+      "end": 5065,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 5066,
+      "end": 5091,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 5092,
+      "end": 5116,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 5117,
+      "end": 5125,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 5126,
+      "end": 5135,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 5136,
+      "end": 5138,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 5139,
+      "end": 5149,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 5150,
+      "end": 5167,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 5168,
+      "end": 5184,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 5185,
+      "end": 5187,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 5188,
+      "end": 5197,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 5198,
+      "end": 5218,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 5219,
+      "end": 5228,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 5229,
+      "end": 5239,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 5406,
+      "end": 5410,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 5411,
+      "end": 5433,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 5411,
+      "end": 5433,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 5434,
+      "end": 5447,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 5434,
+      "end": 5456,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 5457,
+      "end": 5469,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 5457,
+      "end": 5469,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 5470,
+      "end": 5477,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 5470,
+      "end": 5477,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 5478,
+      "end": 5483,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 5478,
+      "end": 5483,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 5484,
+      "end": 5498,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 5499,
+      "end": 5501,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 5499,
+      "end": 5501,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 5502,
+      "end": 5522,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 5523,
+      "end": 5525,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 5526,
+      "end": 5529,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 5526,
+      "end": 5529,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 5530,
+      "end": 5552,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 5530,
+      "end": 5561,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 5562,
+      "end": 5571,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 5562,
+      "end": 5571,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 5572,
+      "end": 5578,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 5577,
+      "end": 5578,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 5610,
+      "end": 5615,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 5616,
+      "end": 5626,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 5627,
+      "end": 5641,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 5642,
+      "end": 5654,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 5642,
+      "end": 5660,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 5661,
+      "end": 5665,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 5661,
+      "end": 5665,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 5666,
+      "end": 5683,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 5666,
+      "end": 5683,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 6419,
+      "end": 6435,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 6436,
+      "end": 6449,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 6450,
+      "end": 6481,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 6482,
+      "end": 6487,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 6488,
+      "end": 6490,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 6491,
+      "end": 6500,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 6491,
+      "end": 6500,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 6501,
+      "end": 6502,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 6503,
+      "end": 6517,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 6509,
+      "end": 6517,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 6518,
+      "end": 6524,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 6525,
+      "end": 6536,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 6537,
+      "end": 6545,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 6546,
+      "end": 6551,
+      "style": "underline",
+      "purpose": null
+    }
+  ]
+}

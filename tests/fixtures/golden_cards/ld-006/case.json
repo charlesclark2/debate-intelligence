@@ -1,0 +1,30 @@
+{
+  "case_id": "ld-006",
+  "candidate_id": "ld-0040ef8521",
+  "event": "LD",
+  "season": "2024-25",
+  "source_type": "news",
+  "length_band": "short",
+  "omission_cut": false,
+  "coach_cut_and_reviewed_for_names": true,
+  "research_need": "Independently, deep sea mining obliterates tuna populations",
+  "source_link": "https://insideclimatenews.org/news/11072023/tuna-deep-sea-mining/",
+  "parser_version": "2026.11.03-docx-9",
+  "imported_on": "2026-11-19",
+  "snapshot": {
+    "url": "https://insideclimatenews.org/news/11072023/tuna-deep-sea-mining/",
+    "canonical_url": "https://insideclimatenews.org/news/11072023/tuna-deep-sea-mining/",
+    "final_url": "https://insideclimatenews.org/news/11072023/tuna-deep-sea-mining/",
+    "fetched_on": "2026-11-20",
+    "access_status": "ACCESSIBLE",
+    "provenance_mode": "PUBLISHER_RETRIEVED",
+    "raw_sha256": "acbfb151a631872d9ecebf00e4347601c1db2ed7c476f4c713121651d51ded44",
+    "raw_byte_size": 157020,
+    "normalized_text_sha256": "25ca8c691f9ac3f5bdecec51922b1b99ac2b7ce9e29b44c4c7614137c8e09f61",
+    "normalized_document_sha256": "00c42f0b494f148b997121c827efa3413d4e7dfe6575ad1023a7214ce2b0a73f",
+    "normalizer_version": "evidence-normalizer-v1",
+    "extractor_version": "trafilatura/html-1+trafilatura-2.3.1+readability-lxml-0.9+lxml-6.1.3",
+    "content_type": "text/html; charset=UTF-8",
+    "paragraph_count": 34
+  }
+}

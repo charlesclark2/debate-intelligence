@@ -1,0 +1,514 @@
+{
+  "format": "golden-card-expected/1",
+  "case_id": "policy-016",
+  "tag": "Isolationism increases the risk of global nuclear conflict",
+  "cite": {
+    "short_cite": null,
+    "full_cite": "Matt Lensing, 2024 - is an active duty infantry officer who has served in the U.S. Army since 2007. “Impact of the US Exiting Its Alliances? Potential Rise in Nuclear-Armed Nations, Global Conflict, and Excessive Costs for Large-Scale Combat” Mountain Tactical Institute, 11/8, https://mtntactical.com/knowledge/impact-of-the-us-exiting-it-alliances-potential-rise-in-nuclear-armed-nations-global-conflict-and-excessive-costs-for-large-scale-combat/"
+  },
+  "research_need": "Isolationism increases the risk of global nuclear conflict",
+  "segments": [
+    [
+      34,
+      4867
+    ],
+    [
+      4869,
+      9485
+    ]
+  ],
+  "spans": [
+    {
+      "start": 34,
+      "end": 57,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 34,
+      "end": 57,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 63,
+      "end": 64,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 63,
+      "end": 64,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 71,
+      "end": 78,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 71,
+      "end": 78,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 99,
+      "end": 161,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 99,
+      "end": 161,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 162,
+      "end": 177,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 162,
+      "end": 177,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 188,
+      "end": 201,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 188,
+      "end": 207,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 208,
+      "end": 212,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 208,
+      "end": 221,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 222,
+      "end": 247,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 222,
+      "end": 247,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 253,
+      "end": 254,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 253,
+      "end": 254,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 264,
+      "end": 282,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 264,
+      "end": 282,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 294,
+      "end": 313,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 294,
+      "end": 313,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 468,
+      "end": 479,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 480,
+      "end": 489,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 480,
+      "end": 491,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 492,
+      "end": 521,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 492,
+      "end": 521,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 522,
+      "end": 562,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 522,
+      "end": 562,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 760,
+      "end": 783,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 760,
+      "end": 783,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 803,
+      "end": 822,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 803,
+      "end": 829,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 830,
+      "end": 833,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 830,
+      "end": 843,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 844,
+      "end": 864,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 844,
+      "end": 864,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 982,
+      "end": 1062,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 982,
+      "end": 1062,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 1125,
+      "end": 1144,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 1125,
+      "end": 1144,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 1145,
+      "end": 1153,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 1145,
+      "end": 1153,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 1166,
+      "end": 1171,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 1166,
+      "end": 1171,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 1172,
+      "end": 1214,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 1172,
+      "end": 1214,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 3265,
+      "end": 3275,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 3265,
+      "end": 3313,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 3314,
+      "end": 3345,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 3314,
+      "end": 3355,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 3356,
+      "end": 3386,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 3356,
+      "end": 3386,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 4686,
+      "end": 4703,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 4686,
+      "end": 4703,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 4704,
+      "end": 4726,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 4704,
+      "end": 4726,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 4727,
+      "end": 4772,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 4727,
+      "end": 4779,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 4780,
+      "end": 4844,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 4780,
+      "end": 4861,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 4862,
+      "end": 4867,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 4862,
+      "end": 4867,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 4869,
+      "end": 4902,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 4869,
+      "end": 4902,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 6305,
+      "end": 6336,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 6337,
+      "end": 6350,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 6351,
+      "end": 6364,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 9040,
+      "end": 9176,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 9040,
+      "end": 9176,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 9204,
+      "end": 9206,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 9204,
+      "end": 9206,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 9207,
+      "end": 9262,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 9207,
+      "end": 9288,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 9326,
+      "end": 9342,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 9326,
+      "end": 9342,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 9343,
+      "end": 9355,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 9343,
+      "end": 9355,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 9356,
+      "end": 9374,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 9356,
+      "end": 9413,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 9454,
+      "end": 9484,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 9454,
+      "end": 9484,
+      "style": "underline",
+      "purpose": null
+    }
+  ]
+}

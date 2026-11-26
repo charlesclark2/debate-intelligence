@@ -1,0 +1,36 @@
+{
+  "format": "golden-card-expected/1",
+  "case_id": "ld-007",
+  "tag": "Colonization risks causing suffering for extraterrestrial sentient life.",
+  "cite": {
+    "short_cite": "Kovic 21",
+    "full_cite": "Kovic 21 Marko Kovic, PhD in communication science and researcher/president at ZIPAR, Zurich Institute of Public Affairs Research, “Risks of Space Colonization,” Futures, Vol. 126, January 2021, Article 102638, https://pdf.stafforini.com/kovic-2021-risks-space-colonization.pdf."
+  },
+  "research_need": "Colonization risks causing suffering for extraterrestrial sentient life.",
+  "segments": [
+    [
+      29262,
+      31896
+    ]
+  ],
+  "spans": [
+    {
+      "start": 29262,
+      "end": 29699,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 30516,
+      "end": 30977,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 31087,
+      "end": 31854,
+      "style": "underline",
+      "purpose": null
+    }
+  ]
+}

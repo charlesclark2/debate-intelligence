@@ -1,0 +1,472 @@
+{
+  "format": "golden-card-expected/1",
+  "case_id": "policy-006",
+  "tag": "Claims of a Mortality gap from lack of insurance are based on a small study, a larger study over a longer time period disprove it.",
+  "cite": {
+    "short_cite": null,
+    "full_cite": "Jack Salmon, 2026 - Research Fellow and Gibbs Scholar at the Mercatus Center at George Mason University “Do 68,000 People Die Every Year From Lack of Health Insurance? Probably Not” The Unseen and the Unsaid, https://www.theunseenandtheunsaid.com/p/do-68000-people-die-every-year-from"
+  },
+  "research_need": "Claims of a Mortality gap from lack of insurance are based on a small study, a larger study over a longer time period disprove it.",
+  "segments": [
+    [
+      0,
+      2146
+    ],
+    [
+      2149,
+      2319
+    ]
+  ],
+  "spans": [
+    {
+      "start": 10,
+      "end": 20,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 21,
+      "end": 29,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 21,
+      "end": 33,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 34,
+      "end": 48,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 34,
+      "end": 48,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 56,
+      "end": 58,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 56,
+      "end": 62,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 83,
+      "end": 96,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 83,
+      "end": 96,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 118,
+      "end": 155,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 426,
+      "end": 429,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 430,
+      "end": 440,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 430,
+      "end": 440,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 698,
+      "end": 703,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 698,
+      "end": 708,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 709,
+      "end": 741,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 709,
+      "end": 743,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 744,
+      "end": 757,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 744,
+      "end": 757,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 758,
+      "end": 773,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 774,
+      "end": 788,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 774,
+      "end": 788,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 790,
+      "end": 800,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 811,
+      "end": 825,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 831,
+      "end": 901,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 1064,
+      "end": 1066,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 1067,
+      "end": 1077,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 1067,
+      "end": 1077,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 1082,
+      "end": 1092,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 1082,
+      "end": 1094,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 1095,
+      "end": 1105,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 1095,
+      "end": 1105,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 1106,
+      "end": 1114,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 1106,
+      "end": 1116,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 1117,
+      "end": 1126,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 1117,
+      "end": 1126,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 1127,
+      "end": 1132,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 1127,
+      "end": 1132,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 1133,
+      "end": 1144,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 1176,
+      "end": 1180,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 1176,
+      "end": 1184,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 1185,
+      "end": 1213,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 1185,
+      "end": 1276,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 1316,
+      "end": 1324,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 1316,
+      "end": 1329,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 1330,
+      "end": 1342,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 1330,
+      "end": 1350,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 1351,
+      "end": 1352,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 1351,
+      "end": 1352,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 1353,
+      "end": 1366,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 1353,
+      "end": 1366,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 1367,
+      "end": 1379,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 1367,
+      "end": 1388,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 1389,
+      "end": 1402,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 1389,
+      "end": 1408,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 1409,
+      "end": 1419,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 1409,
+      "end": 1432,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 1433,
+      "end": 1456,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 1457,
+      "end": 1473,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 1457,
+      "end": 1485,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 1486,
+      "end": 1507,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 1486,
+      "end": 1507,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 1510,
+      "end": 1519,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 1520,
+      "end": 1525,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 1520,
+      "end": 1567,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 1568,
+      "end": 1580,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 1581,
+      "end": 1641,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 1658,
+      "end": 1667,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 1763,
+      "end": 1814,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 1815,
+      "end": 1817,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 1815,
+      "end": 1817,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 1818,
+      "end": 1856,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 1844,
+      "end": 1856,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 1857,
+      "end": 1897,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 2053,
+      "end": 2145,
+      "style": "underline",
+      "purpose": null
+    }
+  ]
+}

@@ -1,0 +1,30 @@
+{
+  "case_id": "pf-027",
+  "candidate_id": "pf-1e7773b2e9",
+  "event": "PF",
+  "season": "2024-25",
+  "source_type": "journal",
+  "length_band": "short",
+  "omission_cut": false,
+  "coach_cut_and_reviewed_for_names": true,
+  "research_need": "Alliances are strong even after Trump’s victory.",
+  "source_link": "https://www.swp-berlin.org/10.18449/2024C36/",
+  "parser_version": "2026.11.03-docx-9",
+  "imported_on": "2026-11-25",
+  "snapshot": {
+    "url": "https://www.swp-berlin.org/10.18449/2024C36/",
+    "canonical_url": "https://www.swp-berlin.org/10.18449/2024C36/",
+    "final_url": "https://www.swp-berlin.org/10.18449/2024C36/",
+    "fetched_on": "2026-11-26",
+    "access_status": "ACCESSIBLE",
+    "provenance_mode": "PUBLISHER_RETRIEVED",
+    "raw_sha256": "af1f0c5c8f6aee37828d98ac0a59f19cd12dc715d734641c03670fa871b23956",
+    "raw_byte_size": 287013,
+    "normalized_text_sha256": "dc48f1a8657752fe6cf40e6d03138960513bd3d9d2d50569c2e8d6644ac18b4a",
+    "normalized_document_sha256": "e3617caaf7386d00600a70925dc937f79f21323e155e43006addad2e960afd76",
+    "normalizer_version": "evidence-normalizer-v1",
+    "extractor_version": "trafilatura/html-1+trafilatura-2.3.1+readability-lxml-0.9+lxml-6.1.3",
+    "content_type": "text/html; charset=utf-8",
+    "paragraph_count": 48
+  }
+}

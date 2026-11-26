@@ -1,0 +1,30 @@
+{
+  "case_id": "pf-003",
+  "candidate_id": "pf-2420fa14f8",
+  "event": "PF",
+  "season": "2024-25",
+  "source_type": "think tank",
+  "length_band": "short",
+  "omission_cut": true,
+  "coach_cut_and_reviewed_for_names": true,
+  "research_need": "Piracy in the Strait of Hormuz risks reducing SLOCS",
+  "source_link": "https://warontherocks.com/2018/10/geopolitical-gerrymandering-and-the-importance-of-key-maritime-terrain/",
+  "parser_version": "2026.11.03-docx-9",
+  "imported_on": "2026-11-19",
+  "snapshot": {
+    "url": "https://warontherocks.com/2018/10/geopolitical-gerrymandering-and-the-importance-of-key-maritime-terrain/",
+    "canonical_url": "https://warontherocks.com/geopolitical-gerrymandering-and-the-importance-of-key-maritime-terrain/",
+    "final_url": "https://warontherocks.com/geopolitical-gerrymandering-and-the-importance-of-key-maritime-terrain/",
+    "fetched_on": "2026-11-20",
+    "access_status": "ACCESSIBLE",
+    "provenance_mode": "PUBLISHER_RETRIEVED",
+    "raw_sha256": "edfa1f0110d3c05cb7a9670bf3692b2ede3a4e88cdb2be40528cfabc5fb383f8",
+    "raw_byte_size": 122441,
+    "normalized_text_sha256": "2bcdb98e87b55333c0a733187f314a5e2e88d69053f044a9f20e8ac74a551557",
+    "normalized_document_sha256": "ba3d765114d5d64e3ed72dbd0d64e81902e9d1c4cdf37ab5369614bd234819ba",
+    "normalizer_version": "evidence-normalizer-v1",
+    "extractor_version": "trafilatura/html-1+trafilatura-2.3.1+readability-lxml-0.9+lxml-6.1.3",
+    "content_type": "text/html; charset=UTF-8",
+    "paragraph_count": 26
+  }
+}

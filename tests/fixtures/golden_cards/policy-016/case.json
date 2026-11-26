@@ -1,0 +1,30 @@
+{
+  "case_id": "policy-016",
+  "candidate_id": "policy-a68dd6de4a",
+  "event": "Policy",
+  "season": "2026-27",
+  "source_type": "think tank",
+  "length_band": "short",
+  "omission_cut": true,
+  "coach_cut_and_reviewed_for_names": true,
+  "research_need": "Isolationism increases the risk of global nuclear conflict",
+  "source_link": "https://mtntactical.com/knowledge/impact-of-the-us-exiting-it-alliances-potential-rise-in-nuclear-armed-nations-global-conflict-and-excessive-costs-for-large-scale-combat/",
+  "parser_version": "2026.11.03-docx-9",
+  "imported_on": "2026-11-20",
+  "snapshot": {
+    "url": "https://mtntactical.com/knowledge/impact-of-the-us-exiting-it-alliances-potential-rise-in-nuclear-armed-nations-global-conflict-and-excessive-costs-for-large-scale-combat/",
+    "canonical_url": "https://mtntactical.com/knowledge/impact-of-the-us-exiting-it-alliances-potential-rise-in-nuclear-armed-nations-global-conflict-and-excessive-costs-for-large-scale-combat/",
+    "final_url": null,
+    "fetched_on": "2026-11-20",
+    "access_status": "ACCESSIBLE",
+    "provenance_mode": "PUBLISHER_RETRIEVED",
+    "raw_sha256": "3010b00ee625e99cfb4ae8cc91d326b33fa3482155238940b2e43b5757595df0",
+    "raw_byte_size": 172962,
+    "normalized_text_sha256": "198acf2ccac05c9b4795e7dfa47ef0148a35a694601ebc9c8e94ee614194ee7e",
+    "normalized_document_sha256": "90c043d9cf27b720870e39cfe02289c993dc1026b611f8df295d8fc3eadec944",
+    "normalizer_version": "evidence-normalizer-v1",
+    "extractor_version": "trafilatura/html-1+trafilatura-2.3.1+readability-lxml-0.9+lxml-6.1.3",
+    "content_type": "text/html; charset=UTF-8",
+    "paragraph_count": 36
+  }
+}

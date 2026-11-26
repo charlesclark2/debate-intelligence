@@ -83,6 +83,12 @@ bytes changed since the listing), finds the card again, and writes `<case_id>/te
 `<case_id>/case.json` under the fixtures folder, case ids numbered per event (`policy-001`,
 `ld-001`, `pf-001`), then rewrites `INDEX.md`. The corpus's terms are in its `README.md`.
 
+**A number is never given twice** (the PM's ruling of 2026-11-20). Each new case takes the number
+after the highest ever given in its event: the highest of the corpus's cases and of the retired IDs
+`INDEX.md`'s last line lists. A case leaves the corpus only by `record` (its source dropped) or
+`retire` (below), and both add its ID to that line, so an ID in an earlier report always names the
+card it named then.
+
 The excerpt is the source package cut down to the card's own paragraphs: the source's style table,
 numbering, theme and settings are kept, so the card looks as it was cut, and every other part
 is left behind (headers and footers, comments, `people.xml`, custom XML, footnotes, media, the
@@ -123,8 +129,61 @@ inside the repository is an error**: asking for a check and getting none would p
 
 Reads every file under the fixtures folder: each `.docx` must carry no author or `lastModifiedBy`,
 no company or manager, no comments or people part, and no tracked-change author but `Redacted`.
+The one author allowed is the renderer's own name, `debate-research`, and only in a case's
+`expected.docx`, which the platform's renderer wrote and which names the tool, never a person.
 With `--denylist`, no file may hold a listed entry either. It prints counts, whether a denylist was
 used, and the case paths that fail, never what matched.
+
+With `--snapshots <folder>` it also checks every case against its source snapshot, the integrity
+check of ac2 (the PM's amendment of 2026-11-14): each case's copy in the folder must be there and
+hash to the digests `case.json` records, its text must be what the current normalizer makes of it,
+and the case's `expected.json` offsets must reproduce the team card's evidence from it
+(`scripts/golden_snapshots.py` says how both sides are compared). A missing snapshot, a changed
+digest, a case with no offsets and offsets that do not reproduce the card each fail the check, by
+case ID and reason, never by text.
+
+## `record`: each case's source snapshot, copied out of the store
+
+    uv run python scripts/import_golden_card.py record --fetches ~/golden-card-fetches \\
+        --store ~/.debate-research/dev --snapshots ~/.debate-intelligence/golden-snapshots
+
+After the operator has run `debate-research fetch <source link> --json > <fetches>/<case_id>.json`
+for every case, `record` reads each case's report:
+
+* **ACCESSIBLE**, retrieved from the publisher: the snapshot is loaded from the store, every hash
+  checked, its copy is written to `<snapshots>/<case_id>/`, and `case.json` gets its record
+  (`snapshot`: URL, canonical and final URL, fetch date, access status, the raw bytes' SHA-256 and
+  size, the normalized text's and the stored document's SHA-256, versions, paragraph count);
+* **PAYWALLED, BLOCKED, ROBOTS_DISALLOWED, NOT_FOUND or UNSUPPORTED_TYPE**: the case is dropped from
+  the corpus, its folder removed. A metered, truncated or registration-walled page is PAYWALLED;
+* **ERROR**, a missing or unreadable report, or a report for another link: nothing happens to the
+  case; fetch it again. An ERROR case is fetched again once (the PM's ruling of 2026-11-19), and
+  `--drop-errors`, given after that retry, drops a case whose report is still ERROR. It changes
+  nothing else.
+
+Without `--execute` it is a dry run: it reads the reports and the store and prints what it would
+do, and writes nothing (working agreement 11). The store's database is opened read-only. The
+snapshot folder must be outside the repository and every worktree. It prints counts and case IDs,
+never a page's text, title or host: the reports by access status, then by the case's source type
+and access status (every source type listed, so a kind with no surviving case shows), then each
+case dropped or not recorded. A dropped case's ID is retired (`INDEX.md`'s last line).
+
+## `retire`: take cases out of the corpus
+
+    uv run python scripts/import_golden_card.py retire ld-014 pf-017 --execute
+
+For a case that is in the corpus but cannot stay in it, such as one `label_golden_card.py` does
+not label: removes its folder and adds its ID to `INDEX.md`'s retired line, so the number is never
+given again. Every ID must be a case in the corpus, or nothing is retired (exit 2). Without
+`--execute` it is a dry run that prints what it would retire. It prints case IDs only.
+
+## `review`: the coach's sign-off sheet
+
+    uv run python scripts/import_golden_card.py review --output ~/golden-card-shortlist/review.md
+
+Writes, outside the repository, ac5's sheet: one row per case (ID, event, season, source type,
+research need and the card's tag), then a sign-off line (the PM's ruling of 2026-11-25). It holds
+the cards' tags, so it refuses a path inside the repository, and prints only the case count.
 
 Owned by `v1-e09-t01-golden-card-fixtures`.
 """
@@ -136,6 +195,7 @@ import hashlib
 import json
 import os
 import re
+import shutil
 import sys
 import tempfile
 import zipfile
@@ -157,6 +217,7 @@ REPO_ROOT: Final = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT))
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
 
+import golden_snapshots as snapshots  # noqa: E402
 import scrub_docx_fixture as scrub  # noqa: E402
 from analyze_team_formatting import select_files  # noqa: E402
 from tests.evals.parser.digests import MissingDigestKeyError, keyed_digest, require_key  # noqa: E402
@@ -167,7 +228,13 @@ from debate_core.domain.debate_files import (  # noqa: E402
     ParsedCard,
     ParsedDocument,
 )
+from debate_core.domain.enums import AccessStatus  # noqa: E402
 from debate_core.domain.style_profile import StructuralUnit  # noqa: E402
+from debate_core.evidence.docx_manifest_part import (  # noqa: E402
+    MANIFEST_PART_NAME,
+    MANIFEST_PROPERTIES_PART_NAME,
+)
+from debate_core.evidence.docx_renderer import DOCUMENT_AUTHOR  # noqa: E402
 from debate_core.integrations.docx_file_writer.base_template import load_base_template  # noqa: E402
 from debate_core.integrations.docx_file_writer.package_writer import write_package  # noqa: E402
 from debate_core.integrations.docx_file_writer.run_copier import (  # noqa: E402
@@ -199,6 +266,7 @@ __all__ = [
     "SourceType",
     "build_excerpt",
     "check_fixtures",
+    "check_snapshots",
     "choose_shortlist",
     "classify_source",
     "count_lines",
@@ -210,9 +278,13 @@ __all__ = [
     "main",
     "metadata_problems",
     "read_shortlist",
+    "record_lines",
+    "record_sources",
     "render_index",
+    "render_review",
     "source_link",
     "strip_cutter_mark",
+    "team_card",
     "write_index",
     "write_shortlist",
 ]
@@ -232,6 +304,19 @@ OPENING_WORDS: Final = 15
 CANDIDATE_DIGEST_LENGTH: Final = 10
 
 EXCERPT_NAME: Final = "team-card.docx"
+#: A case's expected render (`label_golden_card.py --render-expected`), written by the platform's
+#: renderer, which names itself, :data:`RENDERER_AUTHOR`, as the document's author.
+EXPECTED_RENDER_NAME: Final = "expected.docx"
+RENDERER_AUTHOR: Final = DOCUMENT_AUTHOR
+#: The parts a render embeds its card manifest in, and their relationships: ids, offsets and the
+#: card the render shows, never a person.
+RENDERER_PARTS: Final = frozenset(
+    {
+        MANIFEST_PART_NAME.lstrip("/"),
+        MANIFEST_PROPERTIES_PART_NAME.lstrip("/"),
+        "customXml/_rels/item1.xml.rels",
+    }
+)
 CASE_NAME: Final = "case.json"
 INDEX_NAME: Final = "INDEX.md"
 SHORTLIST_NAME: Final = "shortlist.md"
@@ -1149,10 +1234,11 @@ def _existing_cases(fixtures_dir: Path) -> list[dict[str, Any]]:
 
 
 def _next_case_id(event: str, taken: set[str]) -> str:
-    number = 1
-    while f"{_EVENT_SLUGS[event]}-{number:03d}" in taken:
-        number += 1
-    return f"{_EVENT_SLUGS[event]}-{number:03d}"
+    """The number after the highest ever given in `event`: `taken` holds every case ID in the
+    corpus and every retired one (the PM's ruling of 2026-11-20), so no number is given twice."""
+    prefix = f"{_EVENT_SLUGS[event]}-"
+    numbers = [int(case_id[len(prefix) :]) for case_id in taken if case_id.startswith(prefix)]
+    return f"{prefix}{max(numbers, default=0) + 1:03d}"
 
 
 def _spans(card: ParsedCard) -> list[tuple[str, int, int, str | None]]:
@@ -1263,7 +1349,7 @@ def import_candidates(
     """
     by_id = {candidate.candidate_id: candidate for candidate in shortlist}
     existing = _existing_cases(fixtures_dir)
-    taken = {case["case_id"] for case in existing}
+    taken = {case["case_id"] for case in existing} | set(retired_ids(fixtures_dir))
     imported_ids = {case["candidate_id"] for case in existing}
     parser = DebateDocxParser()
     imported: list[ImportedCase] = []
@@ -1296,9 +1382,10 @@ _INDEX_HEADER: Final = """# Golden card corpus
 The cases E09's tests and evaluations are measured on (`v1-e09-t01-golden-card-fixtures`). Each
 folder holds one card the coach cut or re-cut and reviewed for names: `team-card.docx`, the card's
 own paragraphs copied out of the team file and scrubbed (document metadata, comments,
-tracked-change authors and cutter marks), and `case.json`, what the table below says about it.
-Later steps add the source snapshot's digests and the card's offsets to `case.json` (the snapshot
-itself stays outside the repository), `expected.json` and the expected render. What the corpus
+tracked-change authors and cutter marks), and `case.json`, what the table below says about it and
+the source snapshot's digests, URL, fetch date and access status (the snapshot itself stays outside
+the repository). Once labelled, a case also holds `expected.json`, the card's segments and spans as
+offsets into that snapshot, and `expected.docx`, the card as the renderer draws it. What the corpus
 keeps, and what it never does, is in `README.md`.
 
 Written by `scripts/import_golden_card.py`, which rewrites this file after every import; do not
@@ -1313,19 +1400,92 @@ def _cell(text: str) -> str:
     return " ".join(text.split()).replace("|", "\\|")
 
 
-def render_index(fixtures_dir: Path) -> str:
+#: INDEX.md's last line: every case ID that has left the corpus, so none is given to another card.
+_RETIRED_PREFIX: Final = "Retired: "
+
+
+def retired_ids(fixtures_dir: Path) -> list[str]:
+    """The IDs INDEX.md lists as retired, or none when it has no such line (or no INDEX.md)."""
+    index = fixtures_dir / INDEX_NAME
+    if not index.is_file():
+        return []
+    for line in index.read_text(encoding="utf-8").splitlines():
+        if line.startswith(_RETIRED_PREFIX):
+            listed = line[len(_RETIRED_PREFIX) :].removesuffix(".")
+            return [] if listed == "none" else listed.split(", ")
+    return []
+
+
+def render_index(fixtures_dir: Path, retired: Iterable[str] = ()) -> str:
+    """INDEX.md: the cases, their counts, and every retired ID, those it lists already and
+    `retired`. A retired ID that is still a case in the corpus is an error."""
+    present = {case["case_id"] for case in _existing_cases(fixtures_dir)}
+    all_retired = sorted(set(retired_ids(fixtures_dir)) | set(retired))
+    for case_id in all_retired:
+        if case_id in present:
+            raise ValueError(f"{case_id} is a case in the corpus, not retired")
     rows = [
         f"| `{case['case_id']}` | {case['event']} | {case['season']} | {case['source_type']} | "
         f"{case['length_band']} | {'yes' if case['omission_cut'] else 'no'} | "
         f"{_cell(case['research_need'])} |"
         for case in sorted(_existing_cases(fixtures_dir), key=lambda case: case["case_id"])
     ]
-    return _INDEX_HEADER + "".join(f"{row}\n" for row in rows) + f"\n{len(rows)} cases.\n"
+    return (
+        _INDEX_HEADER
+        + "".join(f"{row}\n" for row in rows)
+        + "\n"
+        + "".join(f"{line}\n" for line in corpus_count_lines(_existing_cases(fixtures_dir)))
+        + f"{_RETIRED_PREFIX}{', '.join(all_retired) or 'none'}.\n"
+    )
 
 
-def write_index(fixtures_dir: Path) -> None:
+# The PM's ruling of 2026-11-20: a floor, not a share. At least 24 cases, and at least a third of
+# that minimum in each event, however many cases the other events end with.
+MINIMUM_CASES: Final = 24
+MINIMUM_CASES_PER_EVENT: Final = MINIMUM_CASES // len(EVENTS)
+
+
+def corpus_count_lines(cases: Sequence[Mapping[str, Any]]) -> list[str]:
+    """The corpus's size, by event and by source type, every one listed so a zero shows."""
+    events = Counter(case["event"] for case in cases)
+    types = Counter(case["source_type"] for case in cases)
+    return [
+        f"{len(cases)} cases.",
+        "By event: " + ", ".join(f"{event} {events[event]}" for event in EVENTS) + ".",
+        "By source type: " + ", ".join(f"{kind.value} {types[kind.value]}" for kind in SourceType) + ".",
+    ]
+
+
+def corpus_size_problems(cases: Sequence[Mapping[str, Any]]) -> list[str]:
+    """What keeps the corpus under ac1's floor: fewer than 24 cases, or fewer than 8 in an event."""
+    problems = []
+    if len(cases) < MINIMUM_CASES:
+        problems.append(f"{len(cases)} cases, fewer than {MINIMUM_CASES}")
+    events = Counter(case["event"] for case in cases)
+    problems += [
+        f"{event}: {events[event]} cases, fewer than {MINIMUM_CASES_PER_EVENT}"
+        for event in EVENTS
+        if events[event] < MINIMUM_CASES_PER_EVENT
+    ]
+    return problems
+
+
+def write_index(fixtures_dir: Path, retired: Iterable[str] = ()) -> None:
+    """Rewrite INDEX.md, keeping every ID it lists as retired and adding `retired`."""
+    text = render_index(fixtures_dir, retired)
     fixtures_dir.mkdir(parents=True, exist_ok=True)
-    (fixtures_dir / INDEX_NAME).write_text(render_index(fixtures_dir), encoding="utf-8")
+    (fixtures_dir / INDEX_NAME).write_text(text, encoding="utf-8")
+
+
+def retire_cases(fixtures_dir: Path, case_ids: Sequence[str]) -> None:
+    """Remove each case from the corpus and list its ID as retired; every ID must be a case."""
+    present = {case["case_id"] for case in _existing_cases(fixtures_dir)}
+    missing = [case_id for case_id in case_ids if case_id not in present]
+    if missing:
+        raise ValueError(f"{missing[0]} is not a case in the corpus")
+    for case_id in case_ids:
+        shutil.rmtree(fixtures_dir / case_id)
+    write_index(fixtures_dir, retired=case_ids)
 
 
 # --------------------------------------------------------------------------------------------
@@ -1333,19 +1493,30 @@ def write_index(fixtures_dir: Path) -> None:
 # --------------------------------------------------------------------------------------------
 
 
-def metadata_problems(package: bytes) -> list[str]:
-    """What in `package` still names a person: never the value, only where it is."""
+def metadata_problems(package: bytes, *, rendered: bool = False) -> list[str]:
+    """What in `package` still names a person: never the value, only where it is.
+
+    `rendered` is for a document the platform's renderer wrote (a case's `expected.docx`): it names
+    the tool as author and last editor (:data:`RENDERER_AUTHOR`), never a person, and embeds its
+    card manifest as custom XML (:data:`RENDERER_PARTS`). Those two, by exact value and exact part
+    name, are all it allows that a team file's excerpt may not hold.
+    """
+    tool_author = RENDERER_AUTHOR if rendered else None
+    allowed_parts = RENDERER_PARTS if rendered else frozenset()
     problems: list[str] = []
     with zipfile.ZipFile(BytesIO(package)) as archive:
         names = [info.filename for info in archive.infolist() if not info.is_dir()]
         for name in names:
+            if name in allowed_parts:
+                continue
             if name in scrub.DROPPED_PARTS or name.startswith(scrub.DROPPED_PART_PREFIXES):
                 problems.append(f"{name} is present")
         if "docProps/core.xml" in names:
             core = _parse_xml(archive.read("docProps/core.xml"))
             for namespace, tag in ((DC_NS, "creator"), (CORE_NS, "lastModifiedBy")):
                 for element in core.iter(f"{{{namespace}}}{tag}"):
-                    if (element.text or "").strip():
+                    value = (element.text or "").strip()
+                    if value and value != tool_author:
                         problems.append(f"docProps/core.xml {tag} is set")
         if "docProps/app.xml" in names:
             app = _parse_xml(archive.read("docProps/app.xml"))
@@ -1406,7 +1577,10 @@ def check_fixtures(fixtures_dir: Path, denylist: scrub.ReplacementList) -> Check
         if path.suffix == ".docx":
             report.docx_checked += 1
             content = path.read_bytes()
-            report.metadata_problems += [(relative, problem) for problem in metadata_problems(content)]
+            rendered = path.name == EXPECTED_RENDER_NAME
+            report.metadata_problems += [
+                (relative, problem) for problem in metadata_problems(content, rendered=rendered)
+            ]
             hits += _denylist_hits_in_package(content, denylist)
         else:
             report.text_files_checked += 1
@@ -1415,6 +1589,203 @@ def check_fixtures(fixtures_dir: Path, denylist: scrub.ReplacementList) -> Check
         if hits:
             report.denylist_hits.append((relative, hits))
     return report
+
+
+EXPECTED_NAME: Final = "expected.json"
+
+NO_SNAPSHOT_RECORD: Final = "no snapshot record in case.json"
+NO_OFFSETS: Final = "no expected.json offsets yet"
+TEAM_CARD_UNREADABLE: Final = "the team card does not read as one card"
+NOT_REPRODUCED: Final = "the offsets do not reproduce the team card's evidence"
+
+
+def team_card(case_dir: Path, parser: DebateDocxParser) -> ParsedCard | None:
+    """The one card a case's `team-card.docx` holds, as the parser reads it, or None."""
+    document = _parse(parser, (case_dir / EXCERPT_NAME).read_bytes())
+    if document is None or len(document.cards) != 1:
+        return None
+    return document.cards[0]
+
+
+@dataclass
+class SnapshotCheck:
+    """What `check --snapshots` found: counts, and each failing case's ID and reason, no text."""
+
+    cases: int = 0
+    snapshots_verified: int = 0
+    evidence_reproduced: int = 0
+    problems: list[tuple[str, str]] = field(default_factory=list)
+
+    @property
+    def clean(self) -> bool:
+        return self.cases > 0 and not self.problems
+
+
+def check_snapshots(fixtures_dir: Path, snapshot_folder: Path) -> SnapshotCheck:
+    """Every case against its local snapshot copy: digests, then its offsets against the team card."""
+    report = SnapshotCheck()
+    parser = DebateDocxParser()
+    markers = parser.profile.cite.wiki_ellipsis_markers
+    for case in sorted(_existing_cases(fixtures_dir), key=lambda case: case["case_id"]):
+        case_id = case["case_id"]
+        report.cases += 1
+        if not isinstance(case.get("snapshot"), dict):
+            report.problems.append((case_id, NO_SNAPSHOT_RECORD))
+            continue
+        try:
+            text = snapshots.load_recorded_snapshot(
+                snapshot_folder / case_id, snapshots.SnapshotRecord.from_json(case["snapshot"])
+            )
+        except snapshots.SnapshotProblem as problem:
+            report.problems.append((case_id, problem.code.value))
+            continue
+        except KeyError:
+            report.problems.append((case_id, NO_SNAPSHOT_RECORD))
+            continue
+        report.snapshots_verified += 1
+        expected_path = fixtures_dir / case_id / EXPECTED_NAME
+        if not expected_path.is_file():
+            report.problems.append((case_id, NO_OFFSETS))
+            continue
+        card = team_card(fixtures_dir / case_id, parser)
+        if card is None:
+            report.problems.append((case_id, TEAM_CARD_UNREADABLE))
+            continue
+        segments = json.loads(expected_path.read_text(encoding="utf-8")).get("segments") or []
+        if snapshots.reproduces(text.text, segments, card.evidence_text, markers):
+            report.evidence_reproduced += 1
+        else:
+            report.problems.append((case_id, NOT_REPRODUCED))
+    return report
+
+
+@dataclass
+class RecordReport:
+    """What `record` did, or would do: each case's outcome by ID, and the access statuses seen."""
+
+    recorded: list[str] = field(default_factory=list)
+    dropped: list[tuple[str, str]] = field(default_factory=list)
+    not_recorded: list[tuple[str, str]] = field(default_factory=list)
+    statuses: Counter[str] = field(default_factory=Counter)
+    by_source_type: dict[str, Counter[str]] = field(
+        default_factory=lambda: {source_type.value: Counter() for source_type in SourceType}
+    )
+
+
+def record_sources(
+    fixtures_dir: Path,
+    fetches_dir: Path,
+    store_dir: Path,
+    snapshot_folder: Path,
+    *,
+    execute: bool,
+    drop_errors: bool = False,
+) -> RecordReport:
+    """Record every case's snapshot from its fetch report, or drop it; without `execute`, plan only.
+
+    `drop_errors` is for after an ERROR case's one retry (the PM's ruling of 2026-11-19): a case
+    whose report is still ERROR is dropped too. Every other outcome is unchanged by it.
+    """
+    report = RecordReport()
+    for case in sorted(_existing_cases(fixtures_dir), key=lambda case: case["case_id"]):
+        case_id = case["case_id"]
+        reading = snapshots.read_fetch_report(fetches_dir / f"{case_id}.json", case.get("source_link") or "")
+        report.statuses[reading.access_status or "no report"] += 1
+        report.by_source_type[case["source_type"]][reading.access_status or "no report"] += 1
+        errored_again = drop_errors and reading.access_status == AccessStatus.ERROR.value
+        if reading.outcome is snapshots.FetchOutcome.DROP or errored_again:
+            assert reading.access_status is not None
+            report.dropped.append((case_id, reading.access_status))
+            if execute:
+                shutil.rmtree(fixtures_dir / case_id)
+                shutil.rmtree(snapshot_folder / case_id, ignore_errors=True)
+            continue
+        if reading.outcome is not snapshots.FetchOutcome.RECORD:
+            report.not_recorded.append((case_id, reading.outcome.value))
+            continue
+        assert reading.snapshot_id is not None
+        try:
+            loaded = snapshots.load_from_store(store_dir, reading.snapshot_id)
+        except snapshots.StoreError as error:
+            report.not_recorded.append((case_id, str(error)))
+            continue
+        record = snapshots.SnapshotRecord.of(loaded, url=case["source_link"], final_url=reading.final_url)
+        if execute:
+            snapshots.write_snapshot_copy(loaded, snapshot_folder / case_id)
+            case["snapshot"] = record.to_json()
+            (fixtures_dir / case_id / CASE_NAME).write_text(
+                json.dumps(case, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
+            )
+        report.recorded.append(case_id)
+    if execute:
+        write_index(fixtures_dir, retired=[case_id for case_id, _ in report.dropped])
+    return report
+
+
+def record_lines(report: RecordReport, *, execute: bool) -> list[str]:
+    """What `record` prints: counts and case IDs, safe to send."""
+    verb = ("recorded", "dropped") if execute else ("would record", "would drop")
+    lines = _table("fetch reports by access status:", report.statuses)
+    # The PM's request of 2026-11-19: which kinds of source survive, so the coach can lean his next
+    # picks toward them. Every source type is listed, a type with no case as "no case".
+    lines.append("fetch reports by source type and access status:")
+    for source_type, statuses in report.by_source_type.items():
+        counts = ", ".join(f"{status} {count}" for status, count in sorted(statuses.items()))
+        lines.append(f"  {source_type}: {counts or 'no case'}")
+    lines.append(f"{verb[0]}: {len(report.recorded)}")
+    lines.append(f"{verb[1]}: {len(report.dropped)}")
+    lines += [f"  {case_id}: {status}" for case_id, status in report.dropped]
+    lines.append(f"not recorded: {len(report.not_recorded)}")
+    lines += [f"  {case_id}: {reason}" for case_id, reason in report.not_recorded]
+    if not execute:
+        lines.append("dry run: nothing written; run again with --execute to record and drop")
+    return lines
+
+
+# The PM's ruling of 2026-11-25: one row per case, then one sign-off line, in the words of the
+# scrub-and-signoff node's criterion.
+REVIEW_SIGN_OFF: Final = (
+    "Sign-off: I confirm this corpus represents how the team cuts cards across Policy, LD and PF, "
+    "and that the span labels match my original cards. Signed: ____________  Date: ____________"
+)
+
+
+def render_review(fixtures_dir: Path) -> str:
+    """The coach's review sheet: one row per case (ID, event, season, source type, research need and
+    the card's tag), then the sign-off line. It holds the cards' tags, so it is written outside the
+    repository."""
+    cases = sorted(_existing_cases(fixtures_dir), key=lambda case: case["case_id"])
+    lines = [
+        "# Golden corpus: the coach's review",
+        "",
+        "Local to this machine: never commit, paste or send this file. It holds the cards' tags.",
+        "",
+        f"Each case's folder is under `{fixtures_dir}`. Open its `team-card.docx`, your card as it was",
+        "imported, beside its `expected.docx`, the card as the platform renders it from the recorded",
+        "source page with your underlining and highlighting carried over.",
+        "",
+        "| Case | Event | Season | Source type | Research need | Tag |",
+        "|---|---|---|---|---|---|",
+    ]
+    for case in cases:
+        expected_path = fixtures_dir / case["case_id"] / EXPECTED_NAME
+        tag = (
+            json.loads(expected_path.read_text(encoding="utf-8"))["tag"]
+            if expected_path.is_file()
+            else "not labelled"
+        )
+        lines.append(
+            f"| `{case['case_id']}` | {case['event']} | {case['season']} | {case['source_type']} | "
+            f"{_cell(case['research_need'])} | {_cell(tag)} |"
+        )
+    by_event = Counter(case["event"] for case in cases)
+    lines += [
+        "",
+        f"{len(cases)} cases: " + ", ".join(f"{event} {by_event[event]}" for event in EVENTS) + ".",
+        "",
+        REVIEW_SIGN_OFF,
+    ]
+    return "\n".join(lines) + "\n"
 
 
 # --------------------------------------------------------------------------------------------
@@ -1446,7 +1817,35 @@ def _build_parser() -> argparse.ArgumentParser:
     checking = commands.add_parser("check", help="no fixture carries metadata (or a denylist entry)")
     checking.add_argument("--denylist", type=Path, default=None, help="an optional denylist; off by default")
     checking.add_argument("--fixtures", type=Path, default=FIXTURES_DIR, help=argparse.SUPPRESS)
+    checking.add_argument(
+        "--snapshots", type=Path, default=None, help="the local snapshot folder: verify digests and offsets"
+    )
 
+    recording = commands.add_parser("record", help="copy each case's snapshot out of the store, or drop it")
+    recording.add_argument("--fetches", type=Path, required=True, help="the folder of fetch reports")
+    recording.add_argument("--store", type=Path, required=True, help="the data folder the fetches used")
+    recording.add_argument(
+        "--snapshots",
+        type=Path,
+        default=snapshots.DEFAULT_SNAPSHOT_FOLDER,
+        help="the local snapshot folder, outside the repository and every worktree",
+    )
+    recording.add_argument("--execute", action="store_true", help="record and drop; without it, a dry run")
+    recording.add_argument(
+        "--drop-errors",
+        action="store_true",
+        help="after the one retry of the ERROR cases: drop a case whose fetch failed again",
+    )
+    recording.add_argument("--fixtures", type=Path, default=FIXTURES_DIR, help=argparse.SUPPRESS)
+
+    reviewing = commands.add_parser("review", help="write the coach's review sheet outside the repo")
+    reviewing.add_argument("--output", type=Path, required=True, help="the sheet, outside the repository")
+    reviewing.add_argument("--fixtures", type=Path, default=FIXTURES_DIR, help=argparse.SUPPRESS)
+
+    retiring = commands.add_parser("retire", help="take cases out of the corpus; their IDs are never reused")
+    retiring.add_argument("case_ids", nargs="+", metavar="CASE_ID", help="a case ID in the corpus")
+    retiring.add_argument("--execute", action="store_true", help="retire them; without it, a dry run")
+    retiring.add_argument("--fixtures", type=Path, default=FIXTURES_DIR, help=argparse.SUPPRESS)
     indexing = commands.add_parser("index", help="rewrite INDEX.md from the cases")
     indexing.add_argument("--fixtures", type=Path, default=FIXTURES_DIR, help=argparse.SUPPRESS)
     return parser
@@ -1480,10 +1879,53 @@ def main(
         for line in count_lines(listing, shortlist):
             print(line)
         return 0
+    if arguments.command == "retire":
+        case_ids = list(dict.fromkeys(arguments.case_ids))
+        present = {case["case_id"] for case in _existing_cases(arguments.fixtures)}
+        for case_id in case_ids:
+            if case_id not in present:
+                print(f"{case_id} is not a case in the corpus; nothing retired", file=sys.stderr)
+                return 2
+        if arguments.execute:
+            retire_cases(arguments.fixtures, case_ids)
+        print(f"{'retired' if arguments.execute else 'would retire'}: {len(case_ids)}")
+        for case_id in case_ids:
+            print(f"  {case_id}")
+        if not arguments.execute:
+            print("dry run: nothing written; run again with --execute to retire")
+        return 0
     if arguments.command == "index":
         write_index(arguments.fixtures)
         print(f"{INDEX_NAME}: {len(_existing_cases(arguments.fixtures))} cases")
         return 0
+    if arguments.command == "review":
+        if _inside_repository(arguments.output):
+            print("the review sheet holds the cards' tags; write it outside the repository", file=sys.stderr)
+            return 2
+        output = arguments.output.expanduser()
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_text(render_review(arguments.fixtures), encoding="utf-8")
+        print(f"review sheet: {len(_existing_cases(arguments.fixtures))} cases")
+        return 0
+    if arguments.command == "record":
+        folder = arguments.snapshots.expanduser()
+        if not snapshots.outside_every_checkout(folder, REPO_ROOT):
+            print("the snapshot folder must be outside the repository and every worktree", file=sys.stderr)
+            return 2
+        if _inside_repository(arguments.fetches):
+            print("the fetch reports name pages; keep them outside the repository", file=sys.stderr)
+            return 2
+        recorded = record_sources(
+            arguments.fixtures,
+            arguments.fetches.expanduser(),
+            arguments.store,
+            folder,
+            execute=arguments.execute,
+            drop_errors=arguments.drop_errors,
+        )
+        for line in record_lines(recorded, execute=arguments.execute):
+            print(line)
+        return 0 if not recorded.not_recorded else 1
     try:
         denylist = NO_DENYLIST if arguments.denylist is None else load_denylist(arguments.denylist)
     except DenylistError as error:
@@ -1514,8 +1956,16 @@ def main(
     print(
         "denylist: off" if arguments.denylist is None else f"denylist: {len(denylist.replacements)} entries"
     )
-    print("clean" if report.clean else "NOT CLEAN")
-    return 0 if report.clean else 1
+    clean = report.clean
+    if arguments.snapshots is not None:
+        against = check_snapshots(arguments.fixtures, arguments.snapshots.expanduser())
+        print(f"snapshots verified: {against.snapshots_verified} of {against.cases}")
+        print(f"evidence reproduced: {against.evidence_reproduced} of {against.cases}")
+        for case_id, problem in against.problems:
+            print(f"snapshot: {case_id}: {problem}")
+        clean = clean and against.clean
+    print("clean" if clean else "NOT CLEAN")
+    return 0 if clean else 1
 
 
 if __name__ == "__main__":  # pragma: no cover

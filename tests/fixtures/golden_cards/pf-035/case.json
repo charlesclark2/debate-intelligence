@@ -1,0 +1,30 @@
+{
+  "case_id": "pf-035",
+  "candidate_id": "pf-3af4cf64f0",
+  "event": "PF",
+  "season": "2025-26",
+  "source_type": "unknown",
+  "length_band": "multi-paragraph",
+  "omission_cut": false,
+  "coach_cut_and_reviewed_for_names": true,
+  "research_need": "Circumventing encryption threatens democracy through bulk surveillance",
+  "source_link": "https://www.context.news/surveillance/opinion/breaking-encryption-or-breaking-democracy",
+  "parser_version": "2026.11.03-docx-9",
+  "imported_on": "2026-11-25",
+  "snapshot": {
+    "url": "https://www.context.news/surveillance/opinion/breaking-encryption-or-breaking-democracy",
+    "canonical_url": "https://www.context.news/surveillance/opinion/breaking-encryption-or-breaking-democracy",
+    "final_url": "https://www.context.news/surveillance/opinion/breaking-encryption-or-breaking-democracy",
+    "fetched_on": "2026-11-26",
+    "access_status": "ACCESSIBLE",
+    "provenance_mode": "PUBLISHER_RETRIEVED",
+    "raw_sha256": "d7d53456ca84211b2423fc795cfef405adc8e97f9683866df6cf03ccd83eb0c6",
+    "raw_byte_size": 108657,
+    "normalized_text_sha256": "5a0754e3e66bc33e106c6b61f344e81125bc72a69cb36935085f27b36c483016",
+    "normalized_document_sha256": "8bb94eed40c776547ff6ace108412b2b13896a29ba17aa70e1662997facc8f8d",
+    "normalizer_version": "evidence-normalizer-v1",
+    "extractor_version": "trafilatura/html-1+trafilatura-2.3.1+readability-lxml-0.9+lxml-6.1.3",
+    "content_type": "text/html; charset=UTF-8",
+    "paragraph_count": 14
+  }
+}

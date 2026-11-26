@@ -1,0 +1,30 @@
+{
+  "case_id": "pf-021",
+  "candidate_id": "pf-0e14cd3ae2",
+  "event": "PF",
+  "season": "2024-25",
+  "source_type": "journal",
+  "length_band": "short",
+  "omission_cut": false,
+  "coach_cut_and_reviewed_for_names": true,
+  "research_need": "Xi has to respond --- Lai’s rhetoric decks legitimacy and causes secessionist chaos while harming perceptions of China in Taiwan.  ",
+  "source_link": "https://yris.yira.org/essays/why-is-taiwan-so-important-the-manipulation-of-nationalism-in-legitimizing%E2%80%8B-one-party-rule-in-china/",
+  "parser_version": "2026.11.03-docx-9",
+  "imported_on": "2026-11-25",
+  "snapshot": {
+    "url": "https://yris.yira.org/essays/why-is-taiwan-so-important-the-manipulation-of-nationalism-in-legitimizing%E2%80%8B-one-party-rule-in-china/",
+    "canonical_url": "https://yris.yira.org/asia/why-is-taiwan-so-important-the-manipulation-of-nationalism-in-legitimizing-one-party-rule-in-china/",
+    "final_url": "https://yris.yira.org/asia/why-is-taiwan-so-important-the-manipulation-of-nationalism-in-legitimizing-one-party-rule-in-china/",
+    "fetched_on": "2026-11-26",
+    "access_status": "ACCESSIBLE",
+    "provenance_mode": "PUBLISHER_RETRIEVED",
+    "raw_sha256": "957457ce15a8889bb77d8376b034d51e2e6280307dcc5774f23131a6723e9612",
+    "raw_byte_size": 139277,
+    "normalized_text_sha256": "c375507bb561cf176ea7e5b54db0e7daed04407170d2b8542ab8dd54f8672c2c",
+    "normalized_document_sha256": "b545e199751b5a74bed1f4c142438407bbc1a9cee98d7731ac7d751d5cfd2bd1",
+    "normalizer_version": "evidence-normalizer-v1",
+    "extractor_version": "trafilatura/html-1+trafilatura-2.3.1+readability-lxml-0.9+lxml-6.1.3",
+    "content_type": "text/html; charset=UTF-8",
+    "paragraph_count": 139
+  }
+}

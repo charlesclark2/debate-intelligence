@@ -1,0 +1,30 @@
+{
+  "case_id": "policy-006",
+  "candidate_id": "policy-4d038362d7",
+  "event": "Policy",
+  "season": "2026-27",
+  "source_type": "unknown",
+  "length_band": "multi-paragraph",
+  "omission_cut": true,
+  "coach_cut_and_reviewed_for_names": true,
+  "research_need": "Claims of a Mortality gap from lack of insurance are based on a small study, a larger study over a longer time period disprove it.",
+  "source_link": "https://www.theunseenandtheunsaid.com/p/do-68000-people-die-every-year-from",
+  "parser_version": "2026.11.03-docx-9",
+  "imported_on": "2026-11-19",
+  "snapshot": {
+    "url": "https://www.theunseenandtheunsaid.com/p/do-68000-people-die-every-year-from",
+    "canonical_url": "https://www.theunseenandtheunsaid.com/p/do-68000-people-die-every-year-from",
+    "final_url": "https://www.theunseenandtheunsaid.com/p/do-68000-people-die-every-year-from",
+    "fetched_on": "2026-11-20",
+    "access_status": "ACCESSIBLE",
+    "provenance_mode": "PUBLISHER_RETRIEVED",
+    "raw_sha256": "d1cc25afe13c5838bcbaf3c118ca26f9eec408f396ef659404af5d7c45ecf353",
+    "raw_byte_size": 151901,
+    "normalized_text_sha256": "a7eee7a93b5094578f33823ae48cc189921c940ffbb1915af1331c19c53f9e82",
+    "normalized_document_sha256": "49bad1da37a50cc1f213df38e2bca44032122eca548182d3a68ab58bef83b436",
+    "normalizer_version": "evidence-normalizer-v1",
+    "extractor_version": "trafilatura/html-1+trafilatura-2.3.1+readability-lxml-0.9+lxml-6.1.3",
+    "content_type": "text/html; charset=utf-8",
+    "paragraph_count": 15
+  }
+}

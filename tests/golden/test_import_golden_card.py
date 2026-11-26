@@ -449,7 +449,11 @@ def test_import_numbers_cases_per_event_and_writes_the_index(
         "| `policy-001` | Policy | 2025-26 | think tank | multi-paragraph | yes | Policy think tank |"
         in index
     )
-    assert index.endswith("\n3 cases.\n")
+    assert index.endswith(
+        "\n3 cases.\nBy event: Policy 2, LD 1, PF 0.\n"
+        "By source type: news 1, think tank 1, government 0, journal 1, unknown 0.\n"
+        "Retired: none.\n"
+    )
 
 
 def test_import_refuses_an_unknown_id_a_repeat_and_a_changed_file(

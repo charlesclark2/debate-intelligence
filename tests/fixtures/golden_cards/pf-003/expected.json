@@ -1,0 +1,324 @@
+{
+  "format": "golden-card-expected/1",
+  "case_id": "pf-003",
+  "tag": "Piracy in the Strait of Hormuz risks reducing SLOCS",
+  "cite": {
+    "short_cite": "Garard 18",
+    "full_cite": "Garard 18 [Olivia A. Garard is a Marine Unmanned Aircraft Systems Officer currently serving in the Ellis Group at the Marine Corps Warfighting Lab. Additionally, she is an Associate Editor for The Strategy Bridge and a member of the Military Writers Guild], 10-3-2018, \"Geopolitical Gerrymandering and the Importance of Key Maritime Terrain\", War on the Rocks, https://warontherocks.com/2018/10/geopolitical-gerrymandering-and-the-importance-of-key-maritime-terrain/ ]"
+  },
+  "research_need": "Piracy in the Strait of Hormuz risks reducing SLOCS",
+  "segments": [
+    [
+      1938,
+      3539
+    ],
+    [
+      3575,
+      6673
+    ],
+    [
+      6727,
+      6871
+    ],
+    [
+      6874,
+      11388
+    ]
+  ],
+  "spans": [
+    {
+      "start": 5275,
+      "end": 5502,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 7191,
+      "end": 7320,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 8174,
+      "end": 8182,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 8183,
+      "end": 8199,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 8183,
+      "end": 8292,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 8293,
+      "end": 8316,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 8293,
+      "end": 8316,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 8317,
+      "end": 8337,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 9816,
+      "end": 9825,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 9826,
+      "end": 9834,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 9826,
+      "end": 9834,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 9835,
+      "end": 9863,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 9864,
+      "end": 9879,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 9864,
+      "end": 10032,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 10033,
+      "end": 10042,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 10033,
+      "end": 10042,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 10043,
+      "end": 10044,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 10045,
+      "end": 10065,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 10045,
+      "end": 10065,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 10198,
+      "end": 10207,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 10198,
+      "end": 10207,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 10208,
+      "end": 10214,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 10215,
+      "end": 10229,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 10215,
+      "end": 10257,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 10258,
+      "end": 10264,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 10258,
+      "end": 10264,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 10265,
+      "end": 10276,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 10277,
+      "end": 10293,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 10277,
+      "end": 10293,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 10294,
+      "end": 10306,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 10307,
+      "end": 10316,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 10307,
+      "end": 10316,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 10317,
+      "end": 10392,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 10393,
+      "end": 10399,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 10393,
+      "end": 10444,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 10445,
+      "end": 10453,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 10445,
+      "end": 10458,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 10459,
+      "end": 10477,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 10459,
+      "end": 10477,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 10478,
+      "end": 10492,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 10493,
+      "end": 10502,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 10493,
+      "end": 10502,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 10503,
+      "end": 10509,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 10510,
+      "end": 10518,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 10510,
+      "end": 10518,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 10519,
+      "end": 10530,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 10531,
+      "end": 10537,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 10531,
+      "end": 10537,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 10538,
+      "end": 10695,
+      "style": "underline",
+      "purpose": null
+    }
+  ]
+}

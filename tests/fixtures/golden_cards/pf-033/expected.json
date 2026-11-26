@@ -1,0 +1,192 @@
+{
+  "format": "golden-card-expected/1",
+  "case_id": "pf-033",
+  "tag": "Extinction.",
+  "cite": {
+    "short_cite": "Starr 15",
+    "full_cite": "Starr 15 [Steven Starr, 2/28/2015, Steven is an Associate member of the Nuclear Age Peace Foundation and has been published by the Bulletin of the Atomic Scientists. Starr is also an expert on the environmental consequences of nuclear war, Nuclear War: An Unrecognized Mass Extinction Event Waiting to Happen, Symposium: The Dynamics of Possible Nuclear Extinction, https://ratical.org/radiation/NuclearExtinction/StevenStarr022815.html)"
+  },
+  "research_need": "Extinction.",
+  "segments": [
+    [
+      468,
+      2649
+    ]
+  ],
+  "spans": [
+    {
+      "start": 509,
+      "end": 681,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 1236,
+      "end": 1237,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 1236,
+      "end": 1237,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 1238,
+      "end": 1243,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 1244,
+      "end": 1255,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 1244,
+      "end": 1310,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 1311,
+      "end": 1346,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 1311,
+      "end": 1346,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 1371,
+      "end": 1382,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 1383,
+      "end": 1391,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 1383,
+      "end": 1391,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 1392,
+      "end": 1400,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 1401,
+      "end": 1403,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 1401,
+      "end": 1403,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 1404,
+      "end": 1408,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 1409,
+      "end": 1419,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 1409,
+      "end": 1419,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 1426,
+      "end": 1462,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 1463,
+      "end": 1469,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 1463,
+      "end": 1474,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 1486,
+      "end": 1530,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 1531,
+      "end": 1536,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 1531,
+      "end": 1536,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 1537,
+      "end": 1543,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 1544,
+      "end": 1550,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 1544,
+      "end": 1550,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 1551,
+      "end": 1558,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 1715,
+      "end": 1734,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 1852,
+      "end": 2048,
+      "style": "underline",
+      "purpose": null
+    }
+  ]
+}

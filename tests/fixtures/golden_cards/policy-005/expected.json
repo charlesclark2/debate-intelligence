@@ -1,0 +1,252 @@
+{
+  "format": "golden-card-expected/1",
+  "case_id": "policy-005",
+  "tag": "Power vacuums cause nuke wars. ",
+  "cite": {
+    "short_cite": null,
+    "full_cite": "Charles E. Ziegler 24, professor of political science and university scholar at the University of Louisville, Fall 2024, “Filling the Void Left by Great-Power Retrenchment: Russia, Central Asia, and the U.S. Withdrawal from Afghanistan,” Texas National Security Review, 7(4), https://tnsr.org/2024/08/filling-the-void-left-by-great-power-retrenchment-russia-central-asia-and-the-u-s-withdrawal-from-afghanistan"
+  },
+  "research_need": "Power vacuums cause nuke wars. ",
+  "segments": [
+    [
+      3550,
+      4593
+    ]
+  ],
+  "spans": [
+    {
+      "start": 3711,
+      "end": 3731,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 3732,
+      "end": 3761,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 3762,
+      "end": 3774,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 3762,
+      "end": 3787,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 3788,
+      "end": 3792,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 3788,
+      "end": 3792,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 3793,
+      "end": 3802,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 3793,
+      "end": 3802,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 3803,
+      "end": 3805,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 3803,
+      "end": 3805,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 3806,
+      "end": 3829,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 3806,
+      "end": 3829,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 3830,
+      "end": 3839,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 3830,
+      "end": 3845,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 3850,
+      "end": 3855,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 3850,
+      "end": 3895,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 3896,
+      "end": 3902,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 3896,
+      "end": 3908,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 3909,
+      "end": 3915,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 3909,
+      "end": 3917,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 3926,
+      "end": 3944,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 3926,
+      "end": 3970,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 3976,
+      "end": 3992,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 3993,
+      "end": 4016,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 4018,
+      "end": 4030,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 4018,
+      "end": 4034,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 4035,
+      "end": 4042,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 4035,
+      "end": 4042,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 4043,
+      "end": 4058,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 4059,
+      "end": 4077,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 4059,
+      "end": 4119,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 4120,
+      "end": 4128,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 4129,
+      "end": 4136,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 4129,
+      "end": 4136,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 4137,
+      "end": 4148,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 4149,
+      "end": 4168,
+      "style": "highlight",
+      "purpose": null
+    },
+    {
+      "start": 4149,
+      "end": 4223,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 4224,
+      "end": 4249,
+      "style": "underline",
+      "purpose": null
+    },
+    {
+      "start": 4254,
+      "end": 4282,
+      "style": "underline",
+      "purpose": null
+    }
+  ]
+}

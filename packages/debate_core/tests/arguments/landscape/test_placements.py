@@ -302,3 +302,26 @@ def test_placement_changes_list_a_decision_that_moves_no_card() -> None:
             heading="fed key", before=HeadingRule("undecided", None), after="states-cp", cards=0, moves={}
         ),
     )
+
+
+def test_placement_changes_count_a_card_under_the_nearest_changed_heading() -> None:
+    """`Politics > Spending DA` with both headings decided anew: Spending DA, directly over the card, now
+    places it under cap-k, so the card is Spending DA's decision's, and Politics' moves none."""
+    under_both = (source(5, ONE, (("Politics", "Spending DA"), "Deficits rise")),)
+    after = rules(("politics", "states-cp"), ("solvency", None), ("spending da", "cap-k"))
+    assert effects(after, {"politics", "spending da"}, under_both) == (
+        DecisionEffect(
+            heading="spending da",
+            before=HeadingRule("alias", "spending-da"),
+            after="cap-k",
+            cards=1,
+            moves={Destination.DECISION: 1},
+        ),
+        DecisionEffect(
+            heading="politics",
+            before=HeadingRule("override", "spending-da"),
+            after="states-cp",
+            cards=0,
+            moves={},
+        ),
+    )

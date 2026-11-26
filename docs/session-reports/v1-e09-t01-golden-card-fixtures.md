@@ -823,7 +823,7 @@ practice; the tests were checked by mutants only.
 | `lint-imports` / `check_thin_handlers.py` | 20 kept, 0 broken / 74 handlers within 25 statements |
 | `docs_index.py --check-descriptions` / `check_links.py` / `check_command_blocks.py --base origin/dev` | 72 documents described / 3902 links OK / no `#` comments in 721 blocks |
 | `pre-commit run check-merge-conflict --all-files` | Passed |
-| `uv run scripts/validate_specs.py` | below, after the report's commit |
+| `uv run scripts/validate_specs.py` (phase left InProgress) | OK: 690 files, 41 epics, 627 tasks, 22 releases |
 | Branch history | The case folders in `merge-base..HEAD` are exactly the 31 present cases; none of the 40 retired IDs appears in any commit. |
 
 The README correction of this section's commit (offsets are in `expected.json`, not `case.json`)

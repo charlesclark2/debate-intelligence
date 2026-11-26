@@ -30,6 +30,7 @@ regenerates it on `dev` ([`v1-e01-t16`](../plan_specs/v1/e01-repo-foundation/t16
 | [data/evidence-search-pilot.md](data/evidence-search-pilot.md) | The student search pilot's evidence: early sessions, the promotion checklist, the beta and the go or no-go |
 | [data/federated-ranking-labelled-searches.md](data/federated-ranking-labelled-searches.md) | The coach's labelled federated searches and each ranking change's nDCG@10 on them (counts and scores only) |
 | [data/file-publish-log.md](data/file-publish-log.md) | Every operator publish of built files to the evidence buckets: keys, counts and statuses, no team codes (v1-e33-t05) |
+| [data/landscape-block-inheritance.md](data/landscape-block-inheritance.md) | What a card's block could give the cards the landscape matcher leaves unplaced, measured on hspolicy26 and scored on the coach's labels (counts only) |
 | [data/landscape-model-evaluation.md](data/landscape-model-evaluation.md) | The landscape model stage's evaluations against the coach's labels, broken down: counts and taxonomy ids only |
 | [data/landscape/first-run-policy.md](data/landscape/first-run-policy.md) | Counts from the first Policy argument landscape reports on hspolicy26 (`v1-e32-t05`): classification coverage, review queue and scan; aggregates only |
 | [data/openev-release-manifest.md](data/openev-release-manifest.md) | The camp release manifest's member-row fields, including OpenEv's own camp word from the pull's listing |

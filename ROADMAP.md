@@ -62,9 +62,9 @@ v2.3's extension work.
 |---|---|---|---|---|---|
 | [v1.0](plan_specs/releases/v1.0.yaml) | Foundation & verified evidence core | 3 | 55 | 55 | 252 |
 | [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 4 | 125 | 107 | 550 |
-| [v1.2](plan_specs/releases/v1.2.yaml) | Argument landscape & file building | 3 | 102 | 84 | 376 |
+| [v1.2](plan_specs/releases/v1.2.yaml) | Argument landscape & file building | 3 | 102 | 85 | 376 |
 | [v1.3](plan_specs/releases/v1.3.yaml) | URL → verified card | 2 | 27 | 22 | 131 |
-| [v1.4](plan_specs/releases/v1.4.yaml) | Federated research from the CLI | 2 | 55 | 34 | 168 |
+| [v1.4](plan_specs/releases/v1.4.yaml) | Federated research from the CLI | 2 | 55 | 35 | 168 |
 | [v1.5](plan_specs/releases/v1.5.yaml) | V1 quality gate & team pilot | 1 | 7 | 1 | 66 |
 | [v1.6](plan_specs/releases/v1.6.yaml) | Public team website | 3 | 32 | 22 | 170 |
 | [v1.7](plan_specs/releases/v1.7.yaml) | Team evidence search pilot | 1 | 32 | 25 | 102 |
@@ -407,7 +407,7 @@ Weekly argument-landscape reports show which positions are being read and with w
 | [The note on withheld tags carries its counts on a line of their own, so the scan passes over its text](plan_specs/v1/e32-argument-landscape/t62-the-withheld-tags-notes-counts-on-a-line-of-their-own.yaml) `v1-e32-t62-the-withheld-tags-notes-counts-on-a-line-of-their-own` | Pending | 1 | 1.0 |
 | [The bundle scan passes over every kind of term on the report's own fixed lines, not only a tournament](plan_specs/v1/e32-argument-landscape/t63-every-scan-kind-passed-over-on-the-reports-own-lines.yaml) `v1-e32-t63-every-scan-kind-passed-over-on-the-reports-own-lines` | Pending | 1 | 1.0 |
 | [The coach can correct any heading's placement, not only the headings the review queue lists](plan_specs/v1/e32-argument-landscape/t64-every-placement-can-be-corrected.yaml) `v1-e32-t64-every-placement-can-be-corrected` | Pending | 1 | 3.0 |
-| [A card the matcher could not place inherits the position of the block it is read in, measured first](plan_specs/v1/e32-argument-landscape/t65-a-card-inherits-its-blocks-position.yaml) `v1-e32-t65-a-card-inherits-its-blocks-position` | Pending | 2 | 3.0 |
+| [A card the matcher could not place inherits the position of the block it is read in, measured first](plan_specs/v1/e32-argument-landscape/t65-a-card-inherits-its-blocks-position.yaml) `v1-e32-t65-a-card-inherits-its-blocks-position` | Succeeded | 2 | 3.0 |
 | [A block of cards the matcher left unplaced is classified as a whole from its tags in order, scored on the coach's labels](plan_specs/v1/e32-argument-landscape/t66-a-block-is-classified-from-its-tags-in-order.yaml) `v1-e32-t66-a-block-is-classified-from-its-tags-in-order` | Pending | 1 | 4.0 |
 
 #### [E33 — Evidence File Builder](plan_specs/v1/e33-file-builder/epic.yaml)
@@ -508,7 +508,7 @@ A student can run `debate-research cut <URL>` and receive a verified, tagged, ci
 | [The no-provider hint fits a provider enabled but unbuilt, and the partial message names only the providers that count](plan_specs/v1/e07-discovery-adapters/t24-the-no-provider-hint-and-the-partial-message-name-only-what-counts.yaml) `v1-e07-t24-the-no-provider-hint-and-the-partial-message-name-only-what-counts` | Pending | 1 | 1.0 |
 | [Semantic Scholar's bulk search is weighed against relevance search, and its pace keeps a margin under one a second](plan_specs/v1/e07-discovery-adapters/t25-semantic-scholar-bulk-search-weighed-and-a-pace-margin.yaml) `v1-e07-t25-semantic-scholar-bulk-search-weighed-and-a-pace-margin` | Pending | 1 | 2.0 |
 | [Semantic Scholar goes back to HTTPS once its keyed HTTPS endpoint works, and prod enables it](plan_specs/v1/e07-discovery-adapters/t26-semantic-scholar-back-on-https-and-enabled-in-prod.yaml) `v1-e07-t26-semantic-scholar-back-on-https-and-enabled-in-prod` | Blocked | 1 | 1.0 |
-| [OpenAlex answers a crossed search instead of refusing every query with HTTP 400](plan_specs/v1/e07-discovery-adapters/t27-openalex-answers-a-crossed-search.yaml) `v1-e07-t27-openalex-answers-a-crossed-search` | Pending | 1 | 2.0 |
+| [OpenAlex answers a crossed search instead of refusing every query with HTTP 400](plan_specs/v1/e07-discovery-adapters/t27-openalex-answers-a-crossed-search.yaml) `v1-e07-t27-openalex-answers-a-crossed-search` | Succeeded | 1 | 2.0 |
 
 #### [E08 — Federated Research Workflows](plan_specs/v1/e08-research-workflows/epic.yaml)
 

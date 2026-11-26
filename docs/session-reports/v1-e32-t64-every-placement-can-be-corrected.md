@@ -359,9 +359,46 @@ first, then the same command with `--execute`.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-11-25
 
 **Notes:**
+
+Accepted. ac1, ac2, the node criterion and rulings 4 and 5 pass, and the Goal is `Succeeded`.
+
+* **The order was kept.** The measurement and its report came before the ruling (`b91062b`, `6d87655`),
+  and the listing code starts at `1d8fe86`, the queue's byte pin committed alone and passing on the
+  pre-change code.
+* **The measurement reconciles.**
+  * The ten placement classes sum to the 126,681 cards read.
+  * The `none` simulation's four outcomes sum to the 64,661 placed cards.
+  * The listed placed rows' 64,526 cards plus the 135 left out are the same 64,661.
+  * 292 placed rows plus 45 none rows make the 337-row listing.
+  * The tags naming another position, 910 plus 50, are the relay's 960 in 122 rows.
+  * One count is not explained: `cards_inherited` on the listed alias rows is 21,173, against 21,094
+    cards `INHERITED` from an alias. It is consistent with the 82 tag-refined cards being counted as
+    inherited, less 3 left out. Not blocking: the column's rule is tested on hand-counted plants. A later
+    session touching the listing states it.
+* **Built as ruled, 1 to 7.** The listing's columns, its own file, no new command, confirmations not
+  written, refusals before the store is read, and the summary with `--execute`.
+* **The evidence.**
+  * Red run: 17 failed, 15 at an assertion. The 2 errors come from the skeleton writing no listing, and
+    the report says so.
+  * Planted breaks: 9. Eight were caught the first time. The survivor, the nearest-heading rule, got a
+    new test (`3d11108`), which then caught it.
+  * The ruling's mutant (`--execute` writing without the summary) is among them, and caught.
+* **Deviations accepted.**
+  * **1:** the packages per the ruling, and `tests/smoke` too, since working agreement 5 asks for the
+    smoke check. All four go in the next batch's amendment.
+  * **2:** the queue's apply now takes `--caselist` and writes only with `--execute`. That is the
+    ruling's pattern, since the step had no dry run. The guide carries both blocks. No other doc gives a
+    stale one-step command: `first-run-policy.md` is a historical record, and `v1-e32-t05` is Succeeded.
+  * **3:** the 2026-11-03 snapshot, as the PM's context asked.
+* **The checks.** The affected set stopped at 51% of its 115-second bound with no failure, so the pull
+  request's `ci` is the full run (agreement 10). **Merge only on a green `ci`.**
+* **Follow-ups.** Per-card corrections are filed only if the coach finds a heading that is right as a
+  heading but wrong for some of its cards.
+
+`scripts/task pr`

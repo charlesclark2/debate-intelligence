@@ -30,7 +30,7 @@ how the operator classifies a snapshot and turns the coach's review into overrid
 
 The queue and the decisions file hold headings from real disclosures, so neither may be inside the
 repository; the script refuses a data directory or a decisions path there. Read-only for every store
-but the cache and the queue.
+but the cache, the queue and the placements listing.
 
     uv run python scripts/classify_landscape_positions.py classify --caselist hspolicy26
     uv run python scripts/classify_landscape_positions.py apply-decisions --topic policy-2026-27-nhi \\

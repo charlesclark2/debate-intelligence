@@ -1430,3 +1430,23 @@ async def test_own_side_the_model_s_answer_reads_on_its_own_side_and_answers_on_
     assert {one.method for one in found.classifications if one.item_kind is ItemKind.CARD} == {
         ClassificationMethod.MODEL
     }
+
+
+# ------------------------------------------------------------------------------------------------
+# The review queue beside the placements listing (`v1-e32-t64`)
+# ------------------------------------------------------------------------------------------------
+
+QUEUE_BYTES = (
+    b"normalized_heading,answer,documents,teams,aff_teams,neg_teams,cards,candidate_positions,decision\r\n"
+    b"fed key,false,2,2,1,1,2,,\r\n"
+    b"spending cliff da,false,2,2,0,2,2,spending-da,\r\n"
+)
+"""The queue of FIRST, SECOND and THIRD, written by hand: `fed key` (teams one and two) and `spending cliff
+da` (teams one and three), most teams, documents and cards first, then by heading; the answer row of
+`spending cliff da`, `impact` and `solo heading` are one team's each and left out."""
+
+
+@pytest.mark.anyio
+async def test_placements_leave_the_review_queue_byte_for_byte_as_it_was(tmp_path: Path) -> None:
+    found = await run(tmp_path, repository(taxonomy()), FIRST, SECOND, THIRD)
+    assert Path(found.review_queue_location).read_bytes() == QUEUE_BYTES

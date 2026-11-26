@@ -26,7 +26,8 @@ rulings of 2026-11-14. `INDEX.md` lists the cases; `scripts/import_golden_card.p
 
 The repository is public, so **no source page or snapshot enters it**, in this folder or anywhere
 else. Each case's `case.json` records what identifies the page instead: the snapshot's SHA-256, raw
-and normalized, its URL, the fetch date and access status, and the card's offsets into it.
+and normalized, its URL, the fetch date and access status. Its `expected.json` holds the card's
+offsets into it.
 
 The snapshots themselves live in a local fixtures folder outside the repository, on the operator's
 machine. The operator's `import_golden_card.py check`, given that folder, verifies each digest and

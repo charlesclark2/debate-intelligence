@@ -680,3 +680,286 @@ Accepted for a partial merge. Both changes are done, and the Goal stays `InProgr
   and scrub-and-signoff nodes, the packages, and v1-e09-t02 to t04.
 
 `scripts/task pr --partial`
+
+## Resumed 2026-11-15 to 2026-11-25: the corpus, its snapshots, labels and renders
+
+Session status: **PARTIAL.** The Goal stays **InProgress**: ac1 to ac4 pass, and ac5, the coach's
+sign-off, is the one criterion left. This section names cases only by ID and counts, never a card's
+text, a tag, a school or a student.
+
+### Summary
+
+* **The corpus is committed: 31 cases**, Policy 8, LD 9, PF 14. By source type: news 6, think tank
+  14, government 2, journal 2, unknown 7. Each case holds `case.json` (with its snapshot record),
+  `team-card.docx`, `expected.json` and `expected.docx`. No source page or snapshot is in the
+  repository.
+* **The tooling the resume added:**
+  * `record` copies each case's snapshot from the dev store to the local folder
+    `~/.debate-intelligence/golden-snapshots/<case_id>/` and records its digests in `case.json`;
+  * `check --snapshots` is ac2's operator check;
+  * `label_golden_card.py` writes `expected.json` from the coach's own underline, highlight and
+    Emphasis runs, and `--render-expected` writes `expected.docx`;
+  * `retire` takes out a case that does not label;
+  * `review` writes the coach's sign-off sheet outside the repository.
+* **Three pick rounds**, all run by the operator with the coach answering each attestation:
+
+  | Round | List | Picked | Imported | Dropped at record | Labelled | Retired for not labelling |
+  |---|---|---|---|---|---|---|
+  | 1 | 45 | 26 | 25 (1 not attested) | 11, then 1 more after its retry | | |
+  | 2 | 90 | 30 | 29 (1 already imported) | 10 more (4 after their one retry) | | |
+  | 1 and 2 together | | | 54 | 22 | 24 of 32 | 8 |
+  | 3 (PF) | 150 (98 new) | 17 | 17 | 5 | 7 of 12 | 5 |
+  | **All** | | **73** | **71** | **27** | **31** | **13** |
+
+  71 imported, less 27 dropped and 13 retired, is the 31 cases. The 40 retired IDs are on
+  `INDEX.md`'s last line.
+* **The PM's rulings of 2026-11-16, 2026-11-19 and 2026-11-20 are built in**, and listed under
+  Deviations below.
+
+### Plan nodes
+
+| Node | Status | Notes |
+|---|---|---|
+| `select-and-copy` | Done | 71 imported over three rounds; 31 remain. |
+| `record-sources` | Done; its spec artifact FAILS as written | `record` built and run by the operator. The node's artifact, `policy-001/case.json`, no longer exists: `policy-001`'s source was dropped (Deviation 7). |
+| `label-offsets` | Done | 31 of 31 labelled; operator's check clean. |
+| `expected-renders` | Done | 31 renders, byte-identical on every run. |
+| `scrub-and-signoff` | Scrub done; sign-off NOT RUN | The coach's review sheet is the next operator step. |
+
+### Acceptance criteria
+
+| Criterion | Status | Evidence (command → result) |
+|---|---|---|
+| ac1: at least 24 cases, balanced across Policy, LD and PF, `INDEX.md` with case id, event, season, source type and research need | PASS, read as the PM's floor of 2026-11-20 (at least 24 in all, at least 8 per event) | `uv run pytest tests/golden/test_corpus_structure.py` → `38 passed`, including `test_the_committed_corpus_meets_the_floor_and_its_index_counts_it`, which failed at 24 cases (PF 7) and passes at 31 (Policy 8, LD 9, PF 14). `INDEX.md` has the five columns, the counts by event and source type, and the retired line. The spec's "24-30" and "balanced" await the PM's amendment (Questions). |
+| ac2: each case's offsets reproduce the team card's evidence from the recorded snapshot, and each snapshot's SHA-256 is verified, by the operator's check | PASS, in the matching form of the PM's ruling of 2026-11-20 | Operator, 2026-11-25: `uv run python scripts/import_golden_card.py check --snapshots ~/.debate-intelligence/golden-snapshots` → `docx checked: 62, other files checked: 64`, `denylist: off`, `snapshots verified: 31 of 31`, `evidence reproduced: 31 of 31`, `clean`. |
+| ac3: a coach-authored span label set per case (underline and highlight ranges with purpose) from the team's original markup | PASS, with every purpose null (PM rulings of 2026-11-16 and 2026-11-19) | `uv run scripts/label_golden_card.py --snapshots ~/.debate-intelligence/golden-snapshots` (session, 2026-11-25) → `labelled 31, not labelled 5`, the 5 then retired. Every `expected.json` passes the structure test: offsets only, spans inside one segment, highlights inside the underlining. |
+| ac4: no fixture DOCX carries author or lastModifiedBy metadata, comments or tracked-change authors, and every case carries the coach's attestation | PASS | `uv run pytest tests/golden/test_fixture_scrubbed.py` → `19 passed`. `uv run python scripts/import_golden_card.py check` → `docx checked: 62`, `clean`. The renderer's own name and its 3 manifest parts are allowed in `expected.docx` only (PM ruling of 2026-11-16). |
+| ac5: the coach signs off that the corpus is representative | NOT RUN | The review sheet is the next operator step (Operator follow-ups). |
+| Node `select-and-copy`: `INDEX.md` exists | PASS | `test -f tests/fixtures/golden_cards/INDEX.md` → exists. |
+| Node `record-sources`: `tests/fixtures/golden_cards/policy-001/case.json` exists | FAIL as written; PASS as ruled | `test -f` → absent. `policy-001` was dropped at record (Deviation 7). By the PM's ruling of 2026-11-19 the node is checked by `tests/golden/test_corpus_structure.py`, which requires every case's whole snapshot record → `38 passed`. |
+| Node `label-offsets`: `uv run pytest tests/golden` | PASS | `211 passed in 3.07s` |
+| Node `label-offsets`: the operator's integrity check is clean | PASS | as ac2 |
+| Node `expected-renders`: `uv run scripts/label_golden_card.py --render-expected --check` | PASS | `rendered and compared 31, differ 0, not rendered 0`, exit 0 |
+| Node `scrub-and-signoff`: `uv run pytest tests/golden/test_fixture_scrubbed.py` | PASS | `19 passed in 2.11s` |
+| Node `scrub-and-signoff`: the coach approves the corpus | NOT RUN | as ac5 |
+
+### The labels, in counts
+
+* **Segments:** 31 cases. 7 unmarked cuts (cuts made with no marker) in 4 cases: `ld-009`,
+  `ld-017`, `pf-003` and `pf-014`.
+* **Highlights cut back to the underlining:** 69 characters in 17 cases. A highlight outside the
+  underlining cannot be stored (the card model requires every highlight inside it), so those
+  characters are cut back.
+* **Why cards did not label** (13 in all, every one retired):
+  * Rounds 1 and 2 (8 cases), diagnosed by a class-only comparison that printed no text:
+    * 5 hold text the page does not (a changed page or the cutter's own words);
+    * 2 carry PDF footnote digits;
+    * 1, `pf-017`, recorded a page that is not the article.
+  * Round 3 (5 cases): a stretch of the card is not in the snapshot. Characters found:
+    * `pf-025`: 1090 of 1224;
+    * `pf-028`: 2024 of 3282;
+    * `pf-029`: 0 of 1627;
+    * `pf-032`: 205 of 2891;
+    * `pf-036`: 553 of 3761.
+
+    These were not diagnosed further, since the corpus is over its floor without them.
+
+### Evidence: red runs and mutants
+
+Each mutant was applied to the committed tree and its tests run at `-n 0`, and the file was
+restored afterwards (`git checkout HEAD --`). The tree was clean after each set.
+
+**The 2026-11-15 tooling** (`record`, `check --snapshots`, labels, renders). No red run against a
+do-nothing skeleton was recorded for this part, which is a gap against the PM's red-run-first
+practice; the tests were checked by mutants only.
+
+* **Snapshot half, 18 mutants, all CAUGHT:**
+  * the snapshot's digests and size: raw digest, raw size, document key, text digest;
+  * the comparison: normalizer idempotence, case folding, team markers, segment join, no offsets
+    counted as reproduced;
+  * fetch reports: another link, PAYWALLED;
+  * the store and folders: the WAL read, worktrees, dry-run deletes;
+  * the structure rules: access status, text keys, highlight outside the underlining, a span
+    across segments.
+* **Label half, 18 mutants:**
+  * **CAUGHT (13):** no unmarked search, one word enough, short tail, edge spaces, raw offsets,
+    Emphasis, highlight cut-back, cut-back count, span ids, render check writes, parts allowance,
+    author everywhere, and a marker that omits nothing accepted.
+  * **SURVIVED, then the code changed (3):**
+    * the label's own markup check and its reproduction check could never fire, so both were
+      removed;
+    * the touching-segment merge was replaced by a refusal (`NOTHING_OMITTED`), which its mutant
+      fails.
+  * **Equivalent (1):** "render not verified" (`verify` for `verify_and_record`). No citation field
+    is verified, so the card is UNVERIFIED either way.
+  * **Crashed (1):** "render skips markup" crashed rather than failing an assertion, so it is not
+    counted as a catch.
+* **Three bugs the tests found:**
+  * the dry run left SQLite side files in the store (now opened `immutable=1` when there is no
+    `-wal`);
+  * two stray words from a later paragraph could finish a card (the four-word minimum now applies
+    on both sides of an unmarked cut);
+  * an omission marker inside a word was merged away.
+
+**2026-11-19 and 2026-11-20 changes:**
+
+| Change | Shown failing | Mutants |
+|---|---|---|
+| The renderer's name and parts fail in `team-card.docx` (ruling 3 of 2026-11-16) | The new test failed with `check` changed to accept the name in every file | |
+| `record` counts by source type and access status | The test failed with a counter that lists only the types seen | 1, CAUGHT |
+| `--drop-errors` | | 2, both CAUGHT: the option doing nothing, and the option dropping every unrecorded case |
+| ac1's floor and `INDEX.md`'s counts | On a copy of the committed tree, the floor test failed with `0 cases, fewer than 24` | 4, all CAUGHT: a per-event floor of 6, a floor growing with the corpus, no check on the total, a source type with no case left out |
+| The matching form (ruling 1 of 2026-11-20) | Before the change, the label refused 6 cards over typography only, from the class-only diagnosis; the 18 earlier labels came out byte-identical after it | 8, all CAUGHT by assertion failures: no matching normalization (9 failed), no line-end hyphen rule (6), pilcrow compared (5), a hyphen after any character (1), a hyphen before any character (2), whitespace compared (21), segments joined with a space (3), a ligature's second letter unpositioned (1). Four of them (no matching normalization, no line-end hyphen rule, pilcrow compared, whitespace compared) also had 7 setup errors each, where a world's labelling broke. The first run showed the typeset card's test reading a missing `expected.json` (a crash), so it now asserts its label line first (`a8c7702`). |
+| Numbers never reused (ruling 3 of 2026-11-20) | **7 of 8 new tests failed** against the old importer; the eighth, existing IDs kept, passes as it should. A probe printed `dropped policy-001 -> late card numbered policy-001`, and the first test failed on `'policy-001' == 'policy-003'` | 6. **CAUGHT (5):** record retires nothing (3 failed), a rewrite forgets the listed IDs (3), the retire dry run writes (1), a present case may be retired (1), and retired IDs not counted as taken (1, through `write_index`'s own refusal `policy-002 is a case in the corpus, not retired`, a deliberate refusal rather than a crash). **SURVIVED, then CAUGHT (1):** the first free number was equivalent while every departure is retired. `test_a_number_below_the_highest_is_not_given_again_even_with_no_retired_line` (a folder removed by hand) now catches it (`79c625c`). |
+
+### Before the report (2026-11-25)
+
+| Check | Result |
+|---|---|
+| `.venv/bin/python scripts/hard_stop.py 115 uv run scripts/affected_tests.py --run` | 71 test files, **2720 passed in 64.21s**, exit 0 (load 2.9) |
+| the same with `--slow` | fast tier as above; slow tier 5 test files, **13 passed in 13.11s** |
+| `uv run --frozen ruff format --check .` / `ruff check .` | 2140 files already formatted / All checks passed |
+| `uv run --frozen pyright` (whole project, after the last format) | 0 errors, 0 warnings, 0 informations |
+| `lint-imports` / `check_thin_handlers.py` | 20 kept, 0 broken / 74 handlers within 25 statements |
+| `docs_index.py --check-descriptions` / `check_links.py` / `check_command_blocks.py --base origin/dev` | 72 documents described / 3902 links OK / no `#` comments in 721 blocks |
+| `pre-commit run check-merge-conflict --all-files` | Passed |
+| `uv run scripts/validate_specs.py` | below, after the report's commit |
+| Branch history | The case folders in `merge-base..HEAD` are exactly the 31 present cases; none of the 40 retired IDs appears in any commit. |
+
+The README correction of this section's commit (offsets are in `expected.json`, not `case.json`)
+is prose only. After it, `tests/golden` and `check_links.py` were run again.
+
+### Files changed (resume)
+
+* **`scripts/golden_snapshots.py`** (new): fetch-report reading, the read-only store loader, the
+  local snapshot copy, the snapshot checks, the matching form (`comparison_view`) and the
+  structure validators.
+* **`scripts/import_golden_card.py`**: the `record`, `check --snapshots`, `retire` and `review`
+  commands. Also `--drop-errors`, the source-type counts, ac1's floor, `INDEX.md`'s counts and
+  retired line, never-reused numbering, and the renderer allowance in `metadata_problems`.
+* **`scripts/label_golden_card.py`** (new): labels and renders.
+* **Tests:**
+  * `tests/golden/snapshot_world.py` (new): an invented store, pages and fetch reports;
+  * `test_golden_snapshots.py`, `test_label_golden_card.py`, `test_corpus_structure.py` and
+    `test_case_numbers.py` (new);
+  * `test_fixture_scrubbed.py`, `test_import_golden_card.py` and `synthetic_team_files.py`
+    (changed).
+* **`tests/fixtures/golden_cards/`**: 31 case folders, `INDEX.md`, and `README.md`, which covers
+  each case's files, the renderer allowance, the purpose rule, the UNVERIFIED verdict, what
+  "reproduce" means and the never-reused IDs.
+
+### Deviations from the spec (resume)
+
+Numbered on from the first session's five.
+
+6. **The offsets are in `expected.json`, not `case.json`.** The amendment of 2026-11-14 puts "the
+   card's offsets" in `case.json`. They sit with the spans they belong to, in `expected.json`,
+   which the spec's description names. `case.json` holds the snapshot record. The corpus README's
+   first section said `case.json`, and this section's commit corrects it.
+7. **`record-sources`'s artifact is `policy-001/case.json`, a case that no longer exists.**
+   `policy-001`'s source was dropped at record, and numbers are never reused. *Ruled 2026-11-19:*
+   the node is checked by `tests/golden/test_corpus_structure.py`; the PM amends the node.
+8. **BLOCKED is dropped, and ERROR gets one retry.** *Ruled 2026-11-19.* `--drop-errors` drops a
+   case still ERROR after its one retry and changes nothing else.
+9. **Corpus size: a floor, not "24-30" or a share.** *Ruled 2026-11-20:* every case that labels and
+   checks clean is kept, and the CI test requires at least 24 in all and 8 per event. The PM
+   amends "24 to 30" and "balanced". Today: 31 cases, Policy 8, LD 9, PF 14.
+10. **ac2's "exactly" is the matching form.** *Ruled 2026-11-20:* card and snapshot are compared
+    under `debate_core.evidence.fingerprints.normalize_for_matching` (NFKC, casefold, quotes,
+    dashes, invisibles). Whitespace, the pilcrow and a line-end hyphen are not compared. Offsets
+    point only into the snapshot, and the evidence is the snapshot's own characters.
+11. **Every span purpose is null.** *Ruled 2026-11-16 (2A) and 2026-11-19 (A):* no format profile
+    maps a markup kind to claim, warrant, internal link or impact. A "read aloud" value would be a
+    later task's change to the card model, and the script then regenerates the expected files.
+12. **Every render is UNVERIFIED (`CITATION_UNVERIFIED`).** *Ruled 2026-11-16 (1A):* the cite is the
+    team's, typed by hand, so no citation field verifies. Harvesting citations is on the V1.x list,
+    and renders are regenerated, never edited.
+13. **The renderer's name and 3 manifest parts are allowed in `expected.docx` only.** *Ruled
+    2026-11-16 (3)*, named in the README and pinned by a test both ways.
+14. **Case IDs are never reused; INDEX.md keeps a retired line.** *Ruled 2026-11-20 (3).* `retire`
+    takes out a case that does not label, as a dry run until `--execute`. The 8 cases removed in
+    round 2 were deleted by hand, before `retire` existed. Their IDs went on the retired line when
+    it was introduced, and none of them was ever committed.
+15. **Journal sources: 2, both PF**, from the coach's round-3 picks (ruling 2A of 2026-11-20). The
+    description keeps "journal", and no amendment is needed.
+16. **A script uses `debate_core.testing` fakes.** `render_case` verifies each card with the real
+    `EvidenceVerifier` over `InMemoryArticleRepository` and `InMemorySnapshotStore`, so the render
+    carries the verifier's real verdict without a store. Nothing in `debate_core` changed.
+17. **The session ran the label and render steps itself** after the operator's first run in round
+    2: after the comparison change, and for round 3. They read the local
+    snapshot folder outside the repository and make no network or model call, and only counts and
+    IDs were printed. The PM's rule is that a *test* reads no path outside the repository; no test
+    does.
+
+### Decisions and slips
+
+* **Unmarked cuts are allowed and counted.** A stretch the page does not hold whole is matched by
+  its longest prefix of at least 4 words, and the rest after a cut of at least 4 words. A card
+  that still does not fit is refused, never guessed.
+* **Highlights are cut back to the underlining** and the characters counted (69, above).
+* **Round 3's list was filtered for the coach.** The importer refuses a card whose case is
+  present, but a retired case's folder is gone, so it would take a re-picked retired card under a
+  new number. 52 of the 150 cards were in the corpus or picked before. The session wrote a copy of
+  `shortlist.md` without them in the list's own folder outside the repository (98 cards), and
+  checked the 17 picks against the list and earlier rounds by ID before the import.
+* **Slip, 2026-11-20:** a `git add -A` swept the 25 imported case folders into a wip commit. It was
+  undone with a soft reset before anything left the machine. Since then, commits stage named paths
+  only, and the branch history holds only the 31 present cases (above).
+* **Slip, 2026-11-25:** the session ran `git fetch origin dev` to compare the spec with dev, a
+  network call that is the operator's under the PM's rule. It fetched refs from the project's own
+  remote, no page and no model, and it changed nothing in the worktree. The spec is unchanged on
+  dev, and dev has moved past the branch's base, so the sync before the PR is the operator's.
+
+### Questions for the PM
+
+1. **Spec amendments still to make**, from the rulings:
+   * the description's "24-30" and "roughly a third each" become the floor;
+   * ac2's "exactly" becomes the matching form;
+   * ac3's "with purpose" holds with purpose null;
+   * ac4 gains the renderer allowance in `expected.docx`;
+   * `record-sources`' artifact `policy-001/case.json` becomes `tests/golden/test_corpus_structure.py`.
+
+   Until they are made, `record-sources`' criterion fails as written.
+2. **A retired card can be picked again.** The retired line keeps only case IDs, as ruled, so the
+   importer cannot recognise a retired card if the coach picks it again in a later round. This
+   round worked around it with a filtered list. Options:
+   * A) keep the workaround for any later round;
+   * B) keep the candidate IDs ever imported in a local file outside the repository, read by the
+     importer.
+
+   Recommendation: A while the corpus is built. B is a small change if rounds continue.
+
+### Operator follow-ups (resume)
+
+* **The coach's review sheet (ac5).** Writes `review.md` outside the repository, a few seconds.
+  The coach reads it with the cards and answers its three questions:
+
+  ```bash
+  cd /Users/charlesclark/Documents/debate/debate-intelligence-tool/debate-intelligence-worktrees/v1-e09-t01-golden-card-fixtures
+  uv run python scripts/import_golden_card.py review --output ~/golden-card-shortlist/review.md
+  ```
+
+  Success: `review sheet: 31 cases`. Send back only whether the coach signs off, and any case IDs
+  he wants changed.
+* **Sync before the PR.** Dev has moved since the branch's base. `scripts/task sync` is the
+  operator's.
+
+### Follow-up work
+
+* The coach's sign-off (ac5). The Goal goes to `Succeeded` after it and the PM's amendments.
+* V1.x: harvest citations from the snapshots, so cards whose metadata verifies render VERIFIED
+  (ruling 1B of 2026-11-16).
+* A later card-model task, if wanted: a "read aloud" span purpose; then regenerate the expected
+  files.
+
+## PM review
+
+<!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
+this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
+
+**Verdict:** PENDING
+<!-- ACCEPTED / CHANGES_REQUESTED -->
+
+**Reviewed by / date:**
+
+**Notes:**
